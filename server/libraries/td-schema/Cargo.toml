@@ -1,0 +1,53 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata SQL Schema"
+edition = { workspace = true }
+name = "td-schema"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+
+[lib]
+
+[features]
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+test_logging = []
+test_tower_metadata = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "td-build", "td-schema", "toml"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+# External dependencies
+
+[dependencies]
+
+# Internal dependencies
+
+## Macros
+
+## Libraries
+
+# External dependencies
+
+sqlx = { workspace = true }
+
+[dev-dependencies]
+td-schema = { workspace = true, features = ["td-test"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

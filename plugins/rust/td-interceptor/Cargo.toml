@@ -1,0 +1,51 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Interceptor Plugin Implementation - Standard"
+edition = { workspace = true }
+name = "td-interceptor"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+build = "build.rs"
+
+[[example]]
+name = "td-interceptor"
+path = "examples/interceptor.rs"
+
+[lib]
+
+[features]
+
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+test_logging = []
+test_tower_metadata = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "td-common"]
+
+[dependencies]
+
+# Internal dependencies
+
+td-common = { workspace = true }
+td-execution = { workspace = true }
+td-interceptor-api = { workspace = true }
+
+# External dependencies
+
+petgraph = { workspace = true }
+
+[dev-dependencies]
+td-interceptor-api = { workspace = true, features = ["td-test"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

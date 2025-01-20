@@ -1,0 +1,14 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[build]
+
+pre-build = [
+    "echo Showing croos docker container current folder contents...",
+    "echo _____",
+    "pwd",
+    "echo _____",
+    "ls -lah .",
+    "echo _____",
+]

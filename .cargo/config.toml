@@ -1,0 +1,17 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[alias]
+xtask = "run --manifest-path ./devutils/automation/tasks/makers/td-xtask/Cargo.toml --"
+
+[build]
+# Uncomment if you want to enable the tokio_console feature.
+# rustflags = ["--cfg", "tokio_unstable"]
+
+# Enable this setting if you need to develop Windoes-specific code.
+# (run first: 'rustup target add x86_64-pc-windows-gnu')
+# target = "x86_64-pc-windows-gnu"
+
+[env]
+SWAGGER_UI_OVERWRITE_FOLDER = { value = "server/binaries/td-server/resources/swagger", relative = true, force = true }

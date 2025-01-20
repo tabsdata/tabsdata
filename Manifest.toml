@@ -1,0 +1,19 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[features]
+
+# Test compound feature for all features than should normally be always activated when running tests.
+td-test = ["dummy", "mock-env", "test-utils"]
+
+# Noop feature to simplify features passing to cargo make.
+dummy = []
+
+# In crate td-common, module env contains some functions that behave differently in test and regular execution.
+# We use this feature to make sure all tests in other crates use the test behaviour of these functions.
+mock-env = []
+
+# Some crates require extra functionalities in order to be tested in other crates. It is exposed through this
+# feature.
+test-utils = []

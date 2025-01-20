@@ -1,0 +1,26 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+---
+version: 1
+disable_existing_loggers: False
+formatters:
+  simple:
+    format: "%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: DEBUG
+    formatter: simple
+    stream: ext://sys.stdout
+
+loggers:
+  filelock:
+    level: WARNING
+    propagate: False
+
+root:
+  level: DEBUG
+  handlers: [console]

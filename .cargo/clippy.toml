@@ -1,0 +1,12 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+disallowed-macros = [
+    # Macros tracing::log::*! for logging and tracing shouldn't be used. Use macros tracing::*! instead.
+    "tracing::log::trace",
+    "tracing::log::debug",
+    "tracing::log::info",
+    "tracing::log::warn",
+    "tracing::log::error",
+]

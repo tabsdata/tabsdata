@@ -1,0 +1,49 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Build Library"
+name = "td-build"
+publish = false
+edition = "2021"
+homepage = "https://www.tabsdata.com"
+license = ""
+readme = "README.md"
+repository = "https://github.com/tabsdata/tabsdata"
+rust-version = { workspace = true }
+version = "0.9.0"
+authors = [
+    "Aleix Lascorz Guiu   (tabsleix)   <aleix@tabsdata.com>",
+    "Alejandro Abdelnur   (tucu0)      <tucu@tabsdata.com>",
+    "Arvind Prabhakar     (aptabs)     <arvind@tabsdata.com>",
+    "David Sánchez Frías  (tabsdavid)  <david@tabsdata.com>",
+    "Dimas Cabré i Chacón (aoinokimi)  <dragon@tabsdata.com>",
+    "Joaquín Bo Díaz      (joaquin041) <joaquin@tabsdata.com>"
+]
+
+[lib]
+
+[package.metadata.cargo-machete]
+ignored = ["openssl"]
+
+[features]
+
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+test-utils = []
+
+[dependencies]
+
+# Internal dependencies
+
+# External dependencies
+
+duct = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true }
+toml = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

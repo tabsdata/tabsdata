@@ -1,0 +1,257 @@
+//
+//  Copyright 2024 Tabs Data Inc.
+//
+
+/// Create a router with the given routes.
+///
+/// # Examples
+///
+/// ```rust
+/// use axum::routing::get;
+/// use tabsdatalib::router;
+///
+/// async fn test() -> String {
+///    String::from("test")
+/// }
+///
+/// router! {
+///     paths => {{
+///         "/test" => get(test),
+///     }}
+/// }
+///
+/// let router = router();
+/// ```
+#[macro_export]
+macro_rules! router {
+    (
+        $(config => { $config:ty },)?
+        $(state => { $( $state:ident ),* $(,)? },)?
+        paths => {
+            $(
+                {
+                    $(
+                        $path:expr => $method:ident($handler:ident)
+                    ),* $(,)?
+                }
+                $(.layer => $layer:expr),*
+            ),* $(,)?
+        }
+    ) => {
+        paste::paste! {
+            pub fn router(
+                $( [< $config:snake >]: $config, )?
+                $( $([< $state:snake >]: $state,)* )?
+            ) -> axum::Router {
+                #[allow(unused_imports)]
+                let _config = ($( [< $config:snake >] )?);
+                let mut router = axum::Router::new();
+                $(
+                    #[allow(unused_mut)]
+                    let mut sub_router = axum::Router::new();
+                    $(
+                        sub_router = sub_router.route($path, $method($handler));
+                    )*
+                    $(
+                        sub_router = sub_router.layer($layer(&_config));
+                    )*
+                    router = router.merge(sub_router);
+                )*
+                router$( .with_state(($([< $state:snake >]),*)) )?
+            }
+        }
+    };
+}
+
+/// Create a router with the given routes and optional layers.
+#[macro_export]
+macro_rules! routers {
+    (
+        $(config => { $config:ident },)?
+        $(state => { $( $state:ident ),* $(,)? },)?
+        $(router => { $($router_file:ident => {
+            $(config ($($router_config:expr ),*))?
+            $(,)?
+            $(state ($($router_state:expr ),*))?
+        }),* $(,)? }
+        $(.layer => $layer:expr)*),* $(,)?
+    ) => {
+        #[allow(non_snake_case)]
+        pub fn router(
+            $( $config: $config, )?
+            $( $($state: $state,)* )?
+        ) -> axum::Router {
+            let mut router = axum::Router::new();
+            $(
+                let mut group_router = axum::Router::new();
+                $( group_router = group_router.merge(
+                    $router_file::router($($($router_config.clone()),*,)? $($($router_state.clone()),*)?)
+                ); )*
+                $( group_router = group_router.layer($layer); )*
+                router = router.merge(group_router);
+            )*
+            router
+        }
+    };
+}
+
+/// Create an API server with the given routers and optional layers.
+///
+/// This macro helps in setting up an API server by combining multiple routers and applying
+/// optional middleware layer to them.
+///
+/// # Examples
+///
+/// ```rust
+/// use axum::routing::get;
+/// use axum::Router;
+///
+/// use tabsdatalib::api_server;
+///
+/// mod test {
+///     use axum::routing::get;
+///     use tabsdatalib::router;
+///
+///     async fn test() -> String {
+///         String::from("test")
+///     }
+///
+///     router! {
+///         paths => {{
+///             "/test" => get(test),
+///         }}
+///     }
+/// }
+///
+/// let _ = async {
+///     api_server! {
+///         my_server {
+///             router => {
+///                 test => {}
+///             },
+///         }
+///     }
+///
+///     let api_server = my_server;
+/// };
+/// ```
+#[macro_export]
+macro_rules! api_server {
+    ($fn_name:ident {
+        $(addresses => $addresses:expr,)?
+        $(router => { $($router_file:ident => {
+            $(config ($($router_config:expr ),*))?
+            $(,)?
+            $(state ($($router_state:expr ),*))?
+        }),* $(,)? }
+        $(.layer => $layer:expr)*),* $(,)?}
+    $(.layer => $general_layer:expr $(,)?)*
+    ) => {
+        let $fn_name = async {
+            let mut router = axum::Router::new();
+            $(
+                let mut group_router = axum::Router::new();
+                $( group_router = group_router.merge(
+                    $router_file::router($($($router_config),*,)? $($($router_state),*)?)
+                ); )*
+                $( group_router = group_router.layer($layer); )*
+                router = router.merge(group_router);
+            )*
+            $( router = router.layer($general_layer); )*
+
+            let mut addresses_if_any = Vec::new();
+            $(if !$addresses.is_empty() {
+                addresses_if_any = $addresses.clone();
+            })?
+
+            $crate::logic::apisrv::api_server
+                ::ApiServerBuilder::new(addresses_if_any, router).build().await.unwrap()
+        }.await;
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::{to_bytes, Body};
+    use reqwest::Client;
+    use tower::ServiceExt;
+
+    use crate::logic::apisrv::api_macros::tests::test::Server;
+    use crate::logic::apisrv::api_server::tests::wait_for_server;
+
+    mod test {
+        use axum::routing::get;
+
+        use crate::logic::apisrv::api_macros::tests::test;
+        use crate::logic::apisrv::api_server::{localhost_address, ApiServer};
+
+        async fn test_handler() -> &'static str {
+            "test"
+        }
+
+        router! {
+            paths => {{
+                "/test" => get(test_handler),
+            }}
+        }
+
+        pub struct Server;
+        impl Server {
+            pub async fn build() -> ApiServer {
+                api_server! {
+                    server {
+                        addresses => vec![localhost_address(0)],
+                        router => {
+                            test => {}
+                        },
+                    }
+                }
+                server
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_router() {
+        let router = test::router();
+
+        let response = router
+            .oneshot(
+                hyper::Request::builder()
+                    .uri("/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), hyper::StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(body, "test");
+    }
+
+    #[tokio::test]
+    async fn test_api_server_routes() {
+        let server = Server::build().await;
+        let addr = server.listeners().first().unwrap().local_addr().unwrap();
+
+        tokio::spawn(async move {
+            server.run().await;
+        });
+
+        let _ = wait_for_server(addr, 100, 10).await;
+
+        let client = Client::new();
+        let response = client
+            .get(format!("http://{}:{}/test", addr.ip(), addr.port()))
+            .send()
+            .await
+            .expect("Failed to send request");
+
+        assert_eq!(response.status(), 200);
+
+        let body = response.text().await.expect("Failed to read response body");
+        assert_eq!(body, "test");
+    }
+}

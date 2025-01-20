@@ -1,0 +1,66 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+import logging
+from typing import Optional, Tuple
+
+import polars as pl
+
+import tabsdata as td
+
+# noinspection PyProtectedMember
+import tabsdata.utils.tableframe._helpers as td_helpers
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+def pretty_polars():
+    pl.Config.set_tbl_cols(1024)
+    pl.Config.set_tbl_rows(1024)
+    pl.Config.set_fmt_table_cell_list_len(1024)
+    pl.Config.set_tbl_width_chars(4096)
+    pl.Config.set_fmt_str_lengths(4096)
+
+
+def load_simple_dataframe(
+    token: Optional[str] = None,
+) -> Tuple[pl.LazyFrame, pl.DataFrame, td.TableFrame]:
+    data = {
+        "intColumn": [1, 2, 3],
+        "stringColumn": ["a", "b", "c"],
+    }
+    lazy_frame = enrich_dataframe(pl.LazyFrame(data), token=token)
+
+    data_frame = pl.DataFrame(lazy_frame.collect())
+    table_frame = td.TableFrame.__build__(lazy_frame)
+    return lazy_frame, data_frame, table_frame
+
+
+def load_complex_dataframe(
+    token: Optional[str] = None,
+) -> Tuple[pl.LazyFrame, pl.DataFrame, td.TableFrame]:
+    data = (
+        "https://raw.githubusercontent.com/jeroenjanssens/"
+        "python-polars-the-definitive-guide/main/data/penguins.csv"
+    )
+
+    lazy_frame = enrich_dataframe(pl.scan_csv(data), token=token)
+    data_frame = pl.DataFrame(lazy_frame.collect())
+    table_frame = td.TableFrame.__build__(lazy_frame)
+    return lazy_frame, data_frame, table_frame
+
+
+def enrich_dataframe(ldf: pl.LazyFrame, token: Optional[str] = None) -> pl.LazyFrame:
+    ldf = ldf.with_columns(
+        [
+            (
+                pl.format(
+                    f"{token}_{{}}" if token else "{}", pl.int_range(0, pl.len())
+                ).cast(pl.String)
+            ).alias(column)
+            for column in td_helpers.REQUIRED_COLUMNS
+        ]
+    )
+    return ldf

@@ -1,0 +1,36 @@
+{
+  "ignore": [
+    {
+      "id": "CVE-2023-1255",
+      "reason": "Affects crate openssl. This vulnerability is currently awaiting reanalysis. The vulnerability affects the AES-XTS cipher decryption implementation for 64 bit ARM platform."
+    },
+    {
+      "id": "CVE-2023-2975",
+      "reason": "Affects crate openssl. This vulnerability is currently awaiting reanalysis. The vulnerability affects the AES-SIV cipher implementation."
+    },
+    {
+      "id": "CVE-2023-5363",
+      "reason": "Affects crate sqlx for mysql. The vulnerability affects the processing of key and initialisation vector (IV) lengths. The OpenSSL SSL/TLS implementation is not affected by this issue. The OpenSSL 3.0 and 3.1 FIPS providers are not affected."
+    },
+    {
+      "id": "CVE-2023-49092",
+      "reason": "Affects crate sqlx for mysql. The vulnerability affects only MySQL, nou used in this project."
+    },
+    {
+      "id": "CVE-2024-3296",
+      "reason": "Affects crate openssl. This vulnerability is currently awaiting analysis. The vulnerability affects the legacy PKCS#1v1.5 RSA encryption padding mode."
+    },
+    {
+      "id": "CVE-2024-11738",
+      "reason": "Software rustls does not handle or incorrectly handles an exceptional condition."
+    },
+    {
+      "id": "CVE-2024-45311",
+      "reason": "Quinn implementation of IETF QUIC transport protocol makes possible, calling `retry()` on an unvalidated connection, to exposes the server to a likely panic."
+    },
+    {
+      "id": "CVE-2024-47609",
+      "reason": "When using tonic::transport::Server there is a remote DoS attack that can cause the server to exit cleanly on accepting a TCP/TLS stream"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[run]
+source =
+    tabsdata
+    tabsserver
+parallel = True
+
+[report]
+show_missing = True

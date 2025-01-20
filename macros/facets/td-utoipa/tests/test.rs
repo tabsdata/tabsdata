@@ -1,0 +1,90 @@
+//
+//  Copyright 2024 Tabs Data Inc.
+//
+
+mod test_server;
+
+#[cfg(test)]
+mod tests {
+    use utoipa::openapi::path::Operation;
+    use utoipa::{Modify, OpenApi};
+
+    use crate::test_server::{TEST_GET, TEST_POST};
+    use td_utoipa::api_server_docs;
+
+    struct SecurityAddon;
+    impl Modify for SecurityAddon {
+        fn modify(&self, _openapi: &mut utoipa::openapi::OpenApi) {}
+    }
+
+    #[api_server_docs(
+        title = "tests",
+        version = "1",
+        modifier = &SecurityAddon,
+        tags_attribute = api_server_tag,
+        paths_attribute = api_server_path,
+        schemas_attribute = api_server_schema,
+        root_dir = "facets/td-utoipa/tests"
+    )]
+    pub struct Docs;
+
+    #[test]
+    fn test_title_and_version() {
+        let openapi = Docs::openapi();
+        assert_eq!(openapi.info.title, "tests");
+        assert_eq!(openapi.info.version, "1");
+    }
+
+    #[test]
+    fn test_paths() {
+        let openapi = Docs::openapi();
+        assert_eq!(openapi.paths.paths.len(), 2);
+
+        if let Some(path_item) = &openapi.paths.paths.get(TEST_GET) {
+            assert!(path_item.get.is_some());
+            let operation = path_item.get.clone().unwrap();
+            assert_test_path(&operation);
+        } else {
+            panic!("Path {} not found", TEST_GET);
+        }
+
+        if let Some(path_item) = &openapi.paths.paths.get(TEST_POST) {
+            assert!(path_item.post.is_some());
+            let operation = path_item.post.clone().unwrap();
+            assert_test_path(&operation);
+        } else {
+            panic!("Path {} not found", TEST_GET);
+        }
+    }
+
+    fn assert_test_path(operation: &Operation) {
+        assert_eq!(operation.tags, Some(vec![String::from("Test")]));
+        assert_eq!(operation.security.clone().unwrap().len(), 1);
+        assert_eq!(operation.parameters.clone().unwrap().len(), 2);
+
+        let params = operation.parameters.clone().unwrap();
+        assert_eq!(params.len(), 2);
+        assert!(params.iter().any(|param| param.name == "tid"));
+        assert!(params.iter().any(|param| param.name == "page"));
+
+        let request = operation.request_body.clone().unwrap().content;
+        assert_eq!(request.len(), 1);
+        assert!(request.contains_key("application/json"));
+
+        let responses = operation.responses.clone().responses;
+        assert_eq!(responses.len(), 2);
+        assert!(responses.contains_key("200"));
+        assert!(responses.contains_key("500"));
+    }
+
+    #[test]
+    fn test_components() {
+        let openapi = Docs::openapi();
+        let components = openapi.components.as_ref().expect("Components not found");
+
+        let schemas = &components.schemas;
+        assert!(schemas.contains_key("TestRequest"));
+        assert!(schemas.contains_key("TestResponse"));
+        assert!(schemas.contains_key("TestErrorResponse"));
+    }
+}

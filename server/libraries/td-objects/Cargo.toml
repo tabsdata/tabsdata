@@ -1,0 +1,82 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Objects Structures"
+edition = { workspace = true }
+name = "td-objects"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+
+[lib]
+
+[features]
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+sqlx_log = []
+test_logging = []
+test_tower_metadata = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "strum_macros", "td-build", "td-schema", "thiserror", "toml"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+# External dependencies
+
+[dependencies]
+
+# Internal dependencies
+
+## Macros
+
+td-error = { workspace = true }
+td-typing = { workspace = true }
+td-utoipa = { workspace = true }
+
+## Libraries
+
+td-common = { workspace = true }
+td-database = { workspace = true }
+td-security = { workspace = true }
+td-storage = { workspace = true }
+td-tower = { workspace = true }
+td-transaction = { workspace = true }
+
+# External dependencies
+
+axum = { workspace = true }
+bytes = { workspace = true }
+constcat = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+derive_builder = { workspace = true }
+futures-util = { workspace = true }
+getset = { workspace = true }
+itertools = { workspace = true }
+polars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_valid = { workspace = true }
+sqlx = { workspace = true }
+strum_macros = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+utoipa = { workspace = true, features = ["axum_extras", "preserve_order"] }
+
+[dev-dependencies]
+td-database = { workspace = true, features = ["td-test"] }
+td-schema = { workspace = true, features = ["td-test"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

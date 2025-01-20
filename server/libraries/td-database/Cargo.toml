@@ -1,0 +1,71 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Database Features"
+edition = { workspace = true }
+name = "td-database"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+
+[lib]
+
+[features]
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+sqlx_log = []
+test_logging = []
+test_tower_metadata = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "strum_macros", "td-build", "td-database", "thiserror", "toml"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+# External dependencies
+
+[dependencies]
+
+# Internal dependencies
+
+## Macros
+
+td-error = { workspace = true }
+
+## Libraries
+
+td-common = { workspace = true }
+td-schema = { workspace = true }
+
+# External dependencies
+
+derive_builder = { workspace = true }
+futures-util = { workspace = true }
+getset = { workspace = true }
+itertools = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+sqlx = { workspace = true }
+strum_macros = { workspace = true }
+testdir = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+url = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+td-schema = { workspace = true, features = ["td-test"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

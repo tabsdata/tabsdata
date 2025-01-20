@@ -1,0 +1,80 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[advisories]
+
+# Dependnecies with these advisories are one way or another unmaitained.
+# They should be replaced whenever possible, although some of them are transitive dependencies.
+
+# Warning: These ignored advisories are also specified in .cargo/audit.toml.
+
+ignore = [
+    # These are obsolescencese vulnerabilities. Eventually, we should be moving to alternative crates.
+    "RUSTSEC-2019-0036",
+    "RUSTSEC-2020-0036",
+    "RUSTSEC-2024-0320",
+    "RUSTSEC-2024-0370",
+    # These are real vulnerabilities! We should be observing if updated crates remove them.
+    "RUSTSEC-2023-0086",
+    "RUSTSEC-2024-0376",
+    "RUSTSEC-2024-0379",
+    "RUSTSEC-2024-0399",
+    "RUSTSEC-2024-0402",
+    "RUSTSEC-2025-0003"
+]
+
+[bans]
+
+deny = [{ crate = "log", reason = "We use 'tracing' crate instead, which has equivalent macros to the ones in 'log' crate", wrappers = [
+    "globset",
+    "ignore",
+    "mio",
+    "native-tls",
+    "opentelemetry-appender-log",
+    "reqwest",
+    "sqlx-core",
+    "sqlx-sqlite",
+    "tracing",
+    "tracing-log",
+    "wasm-bindgen-backend",
+    "zopfli"] }]
+
+[licenses]
+
+# Valid licenses are the ones in Category A in https://www.apache.org/legal/resolved.html
+
+allow = [
+    "Apache-2.0",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "MPL-2.0",
+    "OpenSSL",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Unlicense",
+    "Zlib"]
+
+unused-allowed-license = "allow"
+confidence-threshold = 1.0
+
+[[licenses.clarify]]
+crate = "polars-arrow-format"
+expression = "Apache-2.0"
+license-files = [
+    { path = "LICENSE", hash = 0xf454c5a9 }
+]
+
+[[licenses.clarify]]
+crate = "ring"
+expression = "OpenSSL"
+license-files = [
+    { path = "LICENSE", hash = 0xbd0eed23 }
+]
+
+[licenses.private]
+ignore = true

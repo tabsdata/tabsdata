@@ -1,0 +1,42 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Transaction Interceptor Plugin Implementation - Standard"
+edition = { workspace = true }
+name = "td-transaction-interceptor"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+build = "build.rs"
+
+[lib]
+
+[features]
+
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl"]
+
+[dependencies]
+
+# Internal dependencies
+
+td-common = { workspace = true }
+
+# External dependencies
+
+serde = { workspace = true, features = ["derive"] }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

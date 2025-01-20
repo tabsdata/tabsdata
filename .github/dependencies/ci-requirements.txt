@@ -1,0 +1,11 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+# Required packages to set up the continuous integration environment.
+
+build
+setuptools
+tk==0.1.0
+tzdata==2024.2
+wheel

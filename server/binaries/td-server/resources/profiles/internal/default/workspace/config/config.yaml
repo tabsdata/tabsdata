@@ -1,0 +1,46 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+name: tabsdata
+controllers:
+  init:
+    concurrency: 1
+    workers:
+      - name: bootloader
+        kind: processor
+        location: relative
+        program: bootloader
+        inherit:
+          - instance
+          - repository
+          - workspace
+          - profile
+  regular:
+    concurrency: 0
+    workers:
+      - name: apisrv
+        kind: processor
+        location: relative
+        program: apisrv
+        parameters:
+          - database-url: file://${TD_REPOSITORY}/database/tabsdata.db
+          - storage-url: file://${TD_REPOSITORY}/storage
+  ephemeral:
+    concurrency: 8
+    workers:
+      - name: dataset
+        kind: processor
+        location: system
+        program: tdmain
+        concurrency: 8
+        retries: 2
+        arguments:
+          - locks-folder
+          - logs-folder
+          - bin-folder
+          - request-folder
+          - response-folder
+          - input-folder
+          - output-folder
+          - current-instance

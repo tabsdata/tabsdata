@@ -1,0 +1,191 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Server"
+edition = { workspace = true }
+name = "td-server"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+build = "build.rs"
+
+[[bin]]
+name = "tdserver"
+path = "src/bin/tdserver.rs"
+
+[[bin]]
+name = "bootloader"
+path = "src/bin/bootloader.rs"
+
+[[bin]]
+name = "importer"
+path = "src/bin/importer.rs"
+
+[[bin]]
+name = "supervisor"
+path = "src/bin/supervisor.rs"
+
+[[bin]]
+name = "transporter"
+path = "src/bin/transporter.rs"
+
+[[example]]
+name = "interceptor"
+path = "examples/interceptor/interceptor.rs"
+
+[[example]]
+name = "simple_server"
+path = "examples/server/simple_server.rs"
+
+[[example]]
+name = "log_file"
+path = "examples/telemetry/log_file.rs"
+
+[[example]]
+name = "log_stdout"
+path = "examples/telemetry/log_stdout.rs"
+
+[[example]]
+name = "service"
+path = "examples/tower/service.rs"
+
+[[example]]
+name = "hal"
+path = "examples/dummy/hal.rs"
+
+[[example]]
+name = "tars"
+path = "examples/dummy/tars.rs"
+
+[lib]
+name = "tabsdatalib"
+path = "src/lib/lib.rs"
+
+[features]
+
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+sqlx_log = []
+test_logging = []
+test_tower_metadata = ["td-tower/test_tower_metadata"]
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "strum", "td-build", "td-schema", "toml"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+td-build = { workspace = true }
+
+# External dependencies
+
+toml = { workspace = true }
+
+[dependencies]
+
+# Internal dependencies
+
+## Macros
+
+td-attach = { workspace = true }
+td-concrete = { workspace = true }
+td-error = { workspace = true }
+td-utoipa = { workspace = true }
+
+## Libraries
+
+td-common = { workspace = true }
+td-database = { workspace = true }
+td-execution = { workspace = true }
+td-interceptor = { workspace = true }
+td-interceptor-api = { workspace = true }
+td-objects = { workspace = true }
+td-security = { workspace = true }
+td-storage = { workspace = true }
+td-tower = { workspace = true }
+td-transaction = { workspace = true }
+
+# External dependencies
+
+argon2 = { workspace = true }
+async-trait = { workspace = true }
+atomic_enum = { workspace = true }
+axum = { workspace = true, features = ["macros"] }
+axum-extra = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+clap_derive = { workspace = true }
+colored = { workspace = true }
+config = { workspace = true, features = ["yaml"] }
+derive_builder = { workspace = true }
+dirs = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+getset = { workspace = true }
+glob = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+hyper = { workspace = true, features = ["full"] }
+indicatif = { workspace = true }
+ignore = { workspace = true }
+include_dir = { workspace = true }
+indexmap = { workspace = true }
+itertools = { workspace = true }
+jsonwebtoken = { workspace = true }
+lazy_static = { workspace = true }
+linemux = { workspace = true }
+num-format = { workspace = true }
+object_store = { workspace = true, features = ["aws", "azure", "gcp", "http"] }
+paste = { workspace = true }
+polars = { workspace = true, features = ["lazy", "parquet", "csv", "json", "polars-lazy", "streaming", "cloud", "aws", "azure", "gcp", "cloud_write"] }
+regex = { workspace = true }
+reqwest = { workspace = true }
+sha2 = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+sqlx = { workspace = true, features = ["sqlite", "runtime-tokio", "macros", "chrono"] }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+sysinfo = { workspace = true }
+tabled = { workspace = true }
+tempfile = { workspace = true }
+testdir = { workspace = true }
+textwrap = { workspace = true }
+terminal_size = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true }
+tower = { workspace = true, features = ["buffer", "limit", "make", "timeout", "util"] }
+tower-http = { workspace = true, features = ["cors", "timeout", "trace"] }
+tower-service = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true, features = ["serde"] }
+utoipa = { workspace = true, features = ["axum_extras", "preserve_order"] }
+utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
+walkdir = { workspace = true }
+wildmatch = { workspace = true }
+windows = { workspace = true, features = ["Win32", "Win32_System_Threading"] }
+
+[dev-dependencies]
+td-common = { workspace = true, features = ["td-test"] }
+td-schema = { workspace = true, features = ["td-test"] }
+td-database = { workspace = true, features = ["td-test"] }
+td-interceptor = { workspace = true, features = ["td-test"] }
+td-interceptor-api = { workspace = true, features = ["td-test"] }
+td-objects = { workspace = true, features = ["td-test"] }
+td-server = { workspace = true, features = ["td-test"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

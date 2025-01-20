@@ -1,0 +1,25 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+#!@duckscript
+# (env_project_root_folder.ds)
+
+current_folder = pwd
+echo "Current project folder is: ${current_folder}"
+ko = set true
+while eq ${ko} true
+    git_folder = concat ${current_folder} "/.git"
+    if is_dir ${git_folder}
+        echo "Root project folder is: ${current_folder}"
+        set_env ROOT_PROJECT_FOLDER ${current_folder}
+        ko = set false
+    else
+        parent_folder = dirname ${current_folder}
+        if eq ${current_folder} ${parent_folder}
+            assert_fail "Current folder not inside a Git repository"
+        else
+            current_folder = set ${parent_folder}
+        end
+    end
+end

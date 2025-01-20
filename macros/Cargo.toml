@@ -1,0 +1,142 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Macros"
+name = "td-macros"
+publish = false
+edition = "2021"
+homepage = "https://www.tabsdata.com"
+license = ""
+readme = "../README.md"
+repository = "https://github.com/tabsdata/tabsdata"
+rust-version = "1.84.0"
+version = "0.9.0"
+authors = [
+    "Aleix Lascorz Guiu   (tabsleix)   <aleix@tabsdata.com>",
+    "Alejandro Abdelnur   (tucu0)      <tucu@tabsdata.com>",
+    "Arvind Prabhakar     (aptabs)     <arvind@tabsdata.com>",
+    "David Sánchez Frías  (tabsdavid)  <david@tabsdata.com>",
+    "Dimas Cabré i Chacón (aoinokimi)  <dragon@tabsdata.com>",
+    "Joaquín Bo Díaz      (joaquin041) <joaquin@tabsdata.com>"
+]
+
+[workspace.package]
+edition = "2021"
+homepage = "https://www.tabsdata.com"
+license = ""
+readme = "../README.md"
+repository = "https://github.com/tabsdata/tabsdata"
+rust-version = "1.84.0"
+version = "0.9.0"
+authors = [
+    "Aleix Lascorz Guiu   (tabsleix)   <aleix@tabsdata.com>",
+    "Alejandro Abdelnur   (tucu0)      <tucu@tabsdata.com>",
+    "Arvind Prabhakar     (aptabs)     <arvind@tabsdata.com>",
+    "David Sánchez Frías  (tabsdavid)  <david@tabsdata.com>",
+    "Dimas Cabré i Chacón (aoinokimi)  <dragon@tabsdata.com>",
+    "Joaquín Bo Díaz      (joaquin041) <joaquin@tabsdata.com>"
+]
+
+[workspace]
+members = [
+    "helpers/td-shared",
+    "facets/td-attach",
+    "facets/td-concrete",
+    "facets/td-error",
+    "facets/td-typing",
+    "facets/td-utoipa",
+]
+
+[[bin]]
+name = "auto"
+path = "auto.rs"
+
+[profile.integration]
+inherits = "release"
+codegen-units = 16
+incremental = true
+lto = false
+opt-level = 0
+
+[profile.assembly]
+inherits = "release"
+codegen-units = 1
+debug = 0
+incremental = false
+lto = "fat"
+opt-level = "z"
+panic = "abort"
+strip = "debuginfo"
+
+[package.metadata.cargo-machete]
+ignored = ["td-interceptor-api"]
+
+[features]
+
+td-test = ["dummy"]
+dummy = []
+
+# Internal dependencies
+
+## Libraries
+
+[workspace.dependencies.td-build]
+path = "../devutils/automation/tasks/cargo/td-build"
+version = "0.9.0"
+
+[workspace.dependencies.td-shared]
+path = "helpers/td-shared"
+version = "0.9.0"
+
+# External dependencies
+
+[workspace.dependencies.axum]
+version = "0.8.1"
+
+[workspace.dependencies.darling]
+version = "0.20.10"
+
+[workspace.dependencies.derive_builder]
+version = "0.20.2"
+
+[workspace.dependencies.duct]
+version = "0.13"
+
+[workspace.dependencies.getset]
+version = "0.1.4"
+
+[workspace.dependencies.openssl]
+version = "0.10.70"
+features = ["vendored"]
+
+[workspace.dependencies.proc-macro-crate]
+version = "3.2.0"
+
+[workspace.dependencies.proc-macro2]
+version = "1.0.93"
+
+[workspace.dependencies.quote]
+version = "1.0.38"
+
+[workspace.dependencies.serde]
+version = "1.0.217"
+features = ["derive"]
+
+[workspace.dependencies.syn]
+version = "2.0.98"
+features = ["full"]
+
+[workspace.dependencies.utoipa]
+version = "5.3.1"
+features = ["axum_extras", "preserve_order"]
+
+[workspace.dependencies.walkdir]
+version = "2.5.0"
+
+[build-dependencies]
+
+# Internal dependencies
+
+td-build = { workspace = true }

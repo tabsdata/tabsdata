@@ -1,0 +1,54 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Transaction Features"
+edition = { workspace = true }
+name = "td-transaction"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+
+[lib]
+
+[features]
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "strum_macros", "thiserror"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+# External dependencies
+
+[dependencies]
+
+# Internal dependencies
+
+## Macros
+
+td-error = { workspace = true }
+
+## Libraries
+
+td-common = { workspace = true }
+td-transaction-interceptor = { workspace = true }
+
+# External dependencies
+
+strum_macros = { workspace = true }
+thiserror = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

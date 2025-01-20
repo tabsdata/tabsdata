@@ -1,0 +1,44 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+# Example of an input.yaml for tabsserver main function. Used in
+# test_tabsserver/test_yaml_parsing.py::test_parse_input_yaml
+
+!V1
+info:
+  function_bundle:
+    uri: file:///users/tucu/.tdserver/default/s/ID1/d/ID2/f/ID3.f
+    env_prefix: null
+input:
+  - !Table
+    name: $td.initial_values                                           # table name, $td.initial_values is a system table, not passed to the DS function
+    location: null                                                     # Null if not available
+  - !TableVersions                                      # the dependency refers to multiple versions, a dataframe per each will be
+    - name: users
+      table: td://eu/users/$td.initial_values/HEAD
+      table_id: td://ID1/ID2/$td.initial_values/ID4
+      location:
+        uri: file:///users/tucu/.tdserver/default/s/ID1/d/ID2/v/ID3/ID4/t/.initial_values.t
+        env_prefix: null
+    - name: users
+      table: td://eu/users/$td.initial_values/HEAD^
+      table_id: td://ID1/ID2/$td.initial_values/IDX
+      location:
+        uri: file:///users/tucu/.tdserver/default/s/ID1/d/ID2/v/ID3/IDX/t/.initial_values.t
+        env_prefix: null
+    - name: users
+      table: td://eu/users/$td.initial_values/HEAD^^
+      table_id: null                                   # this version does not exist, a NULL data frame will be provided to the function
+      location: null
+output:
+  - !Table
+    name: users
+    location:
+      uri: file:///users/tucu/.tdserver/default/s/ID1/d/ID2/v/ID3/IDA/t/users.f
+      env_prefix: null
+  - !Table
+    name: .initial_values
+    location:
+      uri: file:///users/tucu/.tdserver/default/s/ID1/d/ID2/v/ID3/IDA/t/.initial_values.t
+      env_prefix: null

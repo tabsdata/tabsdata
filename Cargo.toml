@@ -1,0 +1,517 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata is a publish-subscribe (pub/sub) server for tables."
+name = "tabsdata"
+publish = false
+edition = "2021"
+homepage = "https://www.tabsdata.com"
+license = ""
+readme = "README.md"
+repository = "https://github.com/tabsdata/tabsdata"
+rust-version = "1.84.0"
+version = "0.9.0"
+authors = [
+    "Aleix Lascorz Guiu   (tabsleix)   <aleix@tabsdata.com>",
+    "Alejandro Abdelnur   (tucu0)      <tucu@tabsdata.com>",
+    "Arvind Prabhakar     (aptabs)     <arvind@tabsdata.com>",
+    "David Sánchez Frías  (tabsdavid)  <david@tabsdata.com>",
+    "Dimas Cabré i Chacón (aoinokimi)  <dragon@tabsdata.com>",
+    "Joaquín Bo Díaz      (joaquin041) <joaquin@tabsdata.com>"
+]
+build = "build.rs"
+
+[workspace.package]
+edition = "2021"
+homepage = "https://www.tabsdata.com"
+license = ""
+readme = "README.md"
+repository = "https://github.com/tabsdata/tabsdata"
+rust-version = "1.84.0"
+version = "0.9.0"
+authors = [
+    "Aleix Lascorz Guiu   (tabsleix)   <aleix@tabsdata.com>",
+    "Alejandro Abdelnur   (tucu0)      <tucu@tabsdata.com>",
+    "Arvind Prabhakar     (aptabs)     <arvind@tabsdata.com>",
+    "David Sánchez Frías  (tabsdavid)  <david@tabsdata.com>",
+    "Dimas Cabré i Chacón (aoinokimi)  <dragon@tabsdata.com>",
+    "Joaquín Bo Díaz      (joaquin041) <joaquin@tabsdata.com>"
+]
+
+[workspace]
+members = [
+    "devutils/automation/tasks/cargo/td-build",
+    "devutils/automation/tasks/makers/td-xtask",
+    "server/libraries/td-common",
+    "server/libraries/td-database",
+    "server/libraries/td-execution",
+    "plugins/rust/td-interceptor",
+    "server/libraries/td-interceptor-api",
+    "server/libraries/td-objects",
+    "server/libraries/td-schema",
+    "server/libraries/td-storage",
+    "server/libraries/td-security",
+    "server/binaries/td-server",
+    "server/libraries/td-tower",
+    "plugins/rust/td-transaction-interceptor",
+    "server/libraries/td-transaction"
+]
+exclude = [
+    "macros",
+    "macros/helpers/td-shared",
+    "macros/facets/td-attach",
+    "macros/facets/td-concrete",
+    "macros/facets/td-error",
+    "macros/facets/td-typing",
+    "macros/facets/td-utoipa"
+]
+
+[[bin]]
+name = "auto"
+path = "auto.rs"
+
+[features]
+
+# This feature enbles enterprise functionalities not available in the standard implementation.
+# It should be normally used only for cross-crates tests.
+enterprise = []
+
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+test-utils = []
+
+# Enable this feature to enable logging of crate sqlx, that can be very verbose and potentially exposing sensitive data.
+sqlx_log = []
+
+# Tests for the logging system can break other tests. Activate this feature to run the logging tests. They must run in
+# an isolated process. Use command "cargo test --features test_logging -- test_logging" to run the logging tests.
+# All logging tests' name must start with "test-logging", as shown in the Makefile command.
+test_logging = []
+
+# Tower metadata tests skip actual logic execution, and therefore need its own feature. Use command
+# "cargo test --features test_tower_metadata -- test_tower_metadata" to run the tower metadata tests. All tower
+# metadata tests' name must start with "test_tower_metadata", as shown in the Makefile command.
+test_tower_metadata = []
+
+# Enable this feature to generate binaries where you can track Tokio tasks using tokio console, with the steps:
+#   cargo install --locked tokio-console
+#   tdserver start
+#   tokio conosle
+tokio_console = []
+
+[profile.integration]
+inherits = "release"
+codegen-units = 16
+incremental = true
+lto = false
+opt-level = 0
+
+[profile.assembly]
+inherits = "release"
+codegen-units = 1
+debug = 0
+incremental = false
+lto = "fat"
+opt-level = "z"
+panic = "abort"
+strip = "debuginfo"
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "toml"]
+
+# Internal dependencies
+
+## Macros
+
+[workspace.dependencies.td-attach]
+path = "macros/facets/td-attach"
+version = "0.9.0"
+
+[workspace.dependencies.td-build]
+path = "devutils/automation/tasks/cargo/td-build"
+version = "0.9.0"
+
+[workspace.dependencies.td-concrete]
+path = "macros/facets/td-concrete"
+version = "0.9.0"
+
+[workspace.dependencies.duct]
+version = "0.13"
+
+[workspace.dependencies.td-error]
+path = "macros/facets/td-error"
+version = "0.9.0"
+
+[workspace.dependencies.td-typing]
+path = "macros/facets/td-typing"
+version = "0.9.0"
+
+[workspace.dependencies.td-utoipa]
+path = "macros/facets/td-utoipa"
+version = "0.9.0"
+
+## Libraries
+
+[workspace.dependencies.td-common]
+path = "server/libraries/td-common"
+version = "0.9.0"
+
+[workspace.dependencies.td-database]
+path = "server/libraries/td-database"
+version = "0.9.0"
+
+[workspace.dependencies.td-execution]
+path = "server/libraries/td-execution"
+version = "0.9.0"
+
+[workspace.dependencies.td-interceptor]
+path = "plugins/rust/td-interceptor"
+version = "0.9.0"
+
+[workspace.dependencies.td-interceptor-api]
+path = "server/libraries/td-interceptor-api"
+version = "0.9.0"
+
+[workspace.dependencies.td-objects]
+path = "server/libraries/td-objects"
+version = "0.9.0"
+
+[workspace.dependencies.td-security]
+path = "server/libraries/td-security"
+version = "0.9.0"
+
+[workspace.dependencies.td-schema]
+path = "server/libraries/td-schema"
+version = "0.9.0"
+
+[workspace.dependencies.td-storage]
+path = "server/libraries/td-storage"
+version = "0.9.0"
+
+[workspace.dependencies.td-server]
+path = "server/binaries/td-server"
+version = "0.9.0"
+
+[workspace.dependencies.td-tower]
+path = "server/libraries/td-tower"
+version = "0.9.0"
+
+[workspace.dependencies.td-transaction-interceptor]
+path = "plugins/rust/td-transaction-interceptor"
+version = "0.9.0"
+
+[workspace.dependencies.td-transaction]
+path = "server/libraries/td-transaction"
+version = "0.9.0"
+
+# External dependencies
+
+[workspace.dependencies.anyhow]
+version = "1.0.95"
+
+[workspace.dependencies.aquamarine]
+version = "0.6.0"
+
+[workspace.dependencies.argon2]
+version = "0.5.3"
+
+[workspace.dependencies.async-trait]
+version = "0.1.86"
+
+[workspace.dependencies.atomic_enum]
+version = "0.3.0"
+
+[workspace.dependencies.axum]
+version = "0.8.1"
+
+[workspace.dependencies.axum-extra]
+version = "0.10.0"
+
+[workspace.dependencies.bimap]
+version = "0.6.3"
+features = ["serde"]
+
+[workspace.dependencies.bytes]
+version = "1.10.0"
+
+[workspace.dependencies.clap]
+version = "4.5.28"
+features = ["derive"]
+
+[workspace.dependencies.clap_derive]
+version = "4.5.28"
+
+[workspace.dependencies.chrono]
+version = "0.4.39"
+
+[workspace.dependencies.colored]
+version = "2.2.0"
+
+[workspace.dependencies.color-eyre]
+version = "0.6.3"
+
+[workspace.dependencies.config]
+version = "0.14.1"
+features = ["yaml"]
+
+[workspace.dependencies.crossterm]
+version = "0.28.1"
+
+[workspace.dependencies.crossterm_terminal]
+version = "0.3.2"
+
+[workspace.dependencies.console-subscriber]
+version = "0.4.1"
+
+[workspace.dependencies.constcat]
+version = "0.5.1"
+
+[workspace.dependencies.const_format]
+version = "0.2.34"
+
+[workspace.dependencies.data-encoding]
+version = "2.7.0"
+
+[workspace.dependencies.derive-new]
+version = "0.7.0"
+
+[workspace.dependencies.dirs]
+version = "5.0.1"
+
+[workspace.dependencies.derive_builder]
+version = "0.20.2"
+
+[workspace.dependencies.futures]
+version = "0.3.31"
+
+[workspace.dependencies.futures-util]
+version = "0.3.31"
+
+[workspace.dependencies.getset]
+version = "0.1.4"
+
+[workspace.dependencies.hex]
+version = "0.4.3"
+
+[workspace.dependencies.glob]
+version = "0.3.2"
+
+[workspace.dependencies.graphviz-rust]
+version = "0.9.3"
+
+[workspace.dependencies.homedir]
+version = "0.3.4"
+
+[workspace.dependencies.http]
+version = "1.2.0"
+
+[workspace.dependencies.hyper]
+version = "1.6.0"
+features = ["full"]
+
+[workspace.dependencies.indicatif]
+version = "0.17.11"
+
+[workspace.dependencies.ignore]
+version = "0.4.23"
+
+[workspace.dependencies.include_dir]
+version = "0.7.4"
+
+[workspace.dependencies.indexmap]
+version = "2.7.1"
+
+[workspace.dependencies.itertools]
+version = "0.13.0"
+
+[workspace.dependencies.jsonwebtoken]
+version = "9.3.0"
+
+[workspace.dependencies.lazy_static]
+version = "1.5.0"
+
+[workspace.dependencies.linemux]
+version = "0.3.0"
+
+[workspace.dependencies.libc]
+version = "0.2.169"
+
+[workspace.dependencies.nix]
+version = "0.29.0"
+features = ["process"]
+
+[workspace.dependencies.num-format]
+version = "0.4"
+
+[workspace.dependencies.object_store]
+version = "0.11.2"
+features = ["aws", "azure", "gcp", "http"]
+
+[workspace.dependencies.once_cell]
+version = "1.20.2"
+
+[workspace.dependencies.openssl]
+version = "0.10.70"
+features = ["vendored"]
+
+[workspace.dependencies.opentelemetry_sdk]
+version = "0.26.0"
+
+[workspace.dependencies.opentelemetry-stdout]
+version = "0.26.0"
+
+[workspace.dependencies.paste]
+version = "1.0.15"
+
+[workspace.dependencies.petgraph]
+version = "0.7.1"
+features = ["serde", "serde_derive"]
+
+[workspace.dependencies.pico-args]
+version = "0.5.0"
+
+[workspace.dependencies.polars]
+version = "0.44.2"
+features = ["lazy", "parquet", "csv", "json", "polars-lazy", "streaming", "cloud", "aws", "azure", "gcp", "cloud_write"]
+
+[workspace.dependencies.ratatui]
+version = "0.28.1"
+
+[workspace.dependencies.regex]
+version = "1.11.1"
+
+[workspace.dependencies.reqwest]
+version = "0.12.12"
+
+[workspace.dependencies.sha2]
+version = "0.10.8"
+
+[workspace.dependencies.serde]
+version = "1.0.217"
+features = ["derive"]
+
+[workspace.dependencies.serde_json]
+version = "1.0.138"
+
+[workspace.dependencies.serde_valid]
+version = "0.25.1"
+
+[workspace.dependencies.serde_yaml]
+version = "0.9.34"
+
+[workspace.dependencies.sqlx]
+version = "0.8.3"
+features = ["sqlite", "runtime-tokio", "macros", "chrono"]
+
+[workspace.dependencies.strum]
+version = "0.26.3"
+
+[workspace.dependencies.strum_macros]
+version = "0.26.4"
+
+[workspace.dependencies.sysinfo]
+version = "0.32.0"
+
+[workspace.dependencies.tempfile]
+version = "3.16.0"
+
+[workspace.dependencies.testdir]
+version = "0.9.3"
+
+[workspace.dependencies.textwrap]
+version = "0.16.1"
+
+[workspace.dependencies.terminal_size]
+ version = "0.4.1"
+
+[workspace.dependencies.thiserror]
+version = "2.0.11"
+
+[workspace.dependencies.tokio]
+version = "1.43.0"
+features = ["full"]
+
+[workspace.dependencies.tokio-util]
+version = "0.7.13"
+
+[workspace.dependencies.toml]
+version = "0.8.19"
+
+[workspace.dependencies.tower]
+version = "0.5.2"
+features = ["make", "util"]
+
+[workspace.dependencies.tower-layer]
+version = "0.3.3"
+
+[workspace.dependencies.tower-service]
+version = "0.3.3"
+
+[workspace.dependencies.tower-http]
+version = "0.6.2"
+features = ["cors", "timeout", "trace"]
+
+[workspace.dependencies.tabled]
+version = "0.17.0"
+
+[workspace.dependencies.tracing]
+version = "0.1.41"
+
+[workspace.dependencies.tracing-subscriber]
+version = "0.3.19"
+
+[workspace.dependencies.utoipa]
+version = "5.3.1"
+features = ["axum_extras", "preserve_order"]
+
+[workspace.dependencies.utoipa-swagger-ui]
+version = "9.0.0"
+features = ["axum", "reqwest"]
+
+[workspace.dependencies.url]
+version = "2.5.4"
+features = ["serde"]
+
+[workspace.dependencies.uuid]
+version = "1.12.1"
+features = ["v7"]
+
+[workspace.dependencies.walkdir]
+version = "2.5.0"
+
+[workspace.dependencies.whoami]
+version = "1.5.2"
+
+[workspace.dependencies.wildmatch]
+version = "2.4.0"
+
+[workspace.dependencies.windows]
+version = "0.59.0"
+features = ["Win32", "Win32_System_Threading"]
+
+[build-dependencies]
+
+# Internal dependencies
+
+td-build = { workspace = true }
+
+# External dependencies
+
+toml = { workspace = true }
+
+[dependencies]
+
+# Internal dependencies
+
+## Libraries
+
+td-interceptor = { workspace = true }
+td-interceptor-api = { workspace = true }
+
+# External dependencies
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

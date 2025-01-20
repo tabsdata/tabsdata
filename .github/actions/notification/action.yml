@@ -1,0 +1,56 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+name: Notification
+description: Notifies the execution status to github of integration and release builds
+
+inputs:
+  working-directory:
+    required: false
+    default: .
+  shell:
+    required: false
+    default: bash
+
+defaults:
+  run:
+    shell: bash
+    working-directory: .
+  github_token:
+    description: "GitHub Token from Secret"
+    required: true
+
+runs:
+  using: "composite"
+
+  steps:
+
+    - name: GitHub Actions CI Passed - Review +1
+      id: ga_passed
+      if: success() &&
+        github.event_name == 'pull_request'
+
+      shell: ${{ inputs.shell }}
+      run: |
+        gh pr review ${{ github.event.number }} \
+          --repo ${{ github.repository }} \
+          --approve \
+          --body "CI Passed - ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: GitHub Actions CI Failed - Review -1
+      id: ga_failed
+      if: failure() &&
+        github.event_name == 'pull_request'
+      shell: ${{ inputs.shell }}
+      run: |
+        gh pr review ${{ github.event.number }} \
+          --repo ${{ github.repository }} \
+          --comment \
+          --body "CI Failed - ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      working-directory: ${{ inputs.working-directory }}

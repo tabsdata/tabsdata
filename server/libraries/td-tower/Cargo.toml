@@ -1,0 +1,65 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Tower Features"
+edition = { workspace = true }
+name = "td-tower"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+
+[lib]
+
+[features]
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+test_logging = []
+test_tower_metadata = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "strum_macros", "td-build", "thiserror", "toml"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+# External dependencies
+
+[dependencies]
+
+# Internal dependencies
+
+## Macros
+
+td-error = { workspace = true }
+
+## Libraries
+
+td-common = { workspace = true }
+td-database = { workspace = true }
+
+# External dependencies
+
+async-trait = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+sqlx = { workspace = true }
+strum_macros = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tower = { workspace = true }
+tower-layer = { workspace = true }
+tower-service = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

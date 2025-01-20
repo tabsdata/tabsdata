@@ -1,0 +1,47 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Utoipa Automations Macro"
+edition = { workspace = true }
+name = "td-utoipa"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+
+[lib]
+proc-macro = true
+
+[package.metadata.cargo-machete]
+ignored = ["openssl"]
+
+[features]
+
+td-test = ["dummy"]
+dummy = []
+
+[dependencies]
+
+# Internal dependencies
+
+## Libraries
+
+td-shared = { workspace = true }
+
+# External dependencies
+
+axum = { workspace = true }
+darling = { workspace = true }
+getset = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+syn = { workspace = true, features = ["full", "visit"] }
+utoipa = { workspace = true }
+walkdir = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

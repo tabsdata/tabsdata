@@ -1,0 +1,19 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+# storage_url: null # by default given by supervisor
+addresses:
+  - 127.0.0.1:2457
+jwt_secret: "4eit1if2NZ6r7YXorh3YqVNlSZFXZuDO0BWKhOI9xtnLVYxA3U"
+access_jwt_expiration: 36288000
+refresh_jwt_expiration: 36288000
+request_timeout: 60
+database:
+  #  url: null # by default given by supervisor
+  min_connections: 1
+  max_connections: 10
+  acquire_timeout: 30
+  max_lifetime: 3600
+  idle_timeout: 60
+  test_before_acquire: true

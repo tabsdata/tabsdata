@@ -1,0 +1,36 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Error Utilities Macro"
+edition = { workspace = true }
+name = "td-error"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+
+[lib]
+proc-macro = true
+
+[package.metadata.cargo-machete]
+ignored = ["openssl"]
+
+[features]
+
+td-test = ["dummy"]
+dummy = []
+
+[dependencies]
+
+# Internal dependencies
+
+# External dependencies
+
+quote = { workspace = true }
+syn = { workspace = true, features = ["full"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

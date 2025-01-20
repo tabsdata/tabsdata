@@ -1,0 +1,98 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Common Features"
+edition = { workspace = true }
+name = "td-common"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+build = "build.rs"
+
+[lib]
+
+[features]
+
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+test_logging = []
+test_tower_metadata = []
+test-utils = []
+tokio_console = ["console-subscriber"]
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "td-build", "td-common", "toml"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+td-build = { workspace = true }
+
+# External dependencies
+
+toml = { workspace = true }
+
+[dependencies]
+
+# Internal dependencies
+
+## Macros
+
+td-error = { workspace = true }
+
+# External dependencies
+
+anyhow = { workspace = true }
+aquamarine = { workspace = true }
+async-trait = { workspace = true }
+bimap = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+clap_derive = { workspace = true }
+config = { workspace = true, features = ["yaml"] }
+console-subscriber = { workspace = true, optional = true }
+chrono = { workspace = true, features = ["serde"] }
+const_format = { workspace = true }
+data-encoding = { workspace = true }
+derive_builder = { workspace = true }
+derive-new = { workspace = true }
+getset = { workspace = true }
+homedir = { workspace = true }
+http = { workspace = true }
+itertools = { workspace = true }
+lazy_static = { workspace = true }
+libc = { workspace = true }
+nix = { workspace = true, features = ["process"] }
+num-format = { workspace = true }
+once_cell = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-stdout = { workspace = true }
+pico-args = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+sysinfo = { workspace = true }
+testdir = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tower = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true, features = ["serde"] }
+uuid = { workspace = true }
+whoami = { workspace = true }
+windows = { workspace = true, features = ["Win32", "Win32_System_Threading"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }
