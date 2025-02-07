@@ -4,19 +4,13 @@ Copyright 2025 Tabs Data Inc.
 
 ![Tabsdata](assets/images/tabsdata.png)
 
-<p style="text-align:center;">
-    <a href="https://tabsdata.com">Tabsdata</a>
-    |
-    <a href="https://github.com/tabsdata/tabsdata">GitHub Repository</a>
-    |
-    <a href="https://github.com/tabsdata/tabsdata/discussions">GitHub Discussions</a>
-    |
-    <a href="https://github.com/tabsdata/tabsdata/issues">GitHub Issues</a>
-    |
-    <a href="https://stackoverflow.com/questions/tagged/tabsdata">StackOverflow</a>
-    |
-    <a href="https://discord.com/invite/5stJks6W">Discord</a>
-</p>
+<div align="center">
+    <a href="https://tabsdata.com">Tabsdata</a> |
+    <a href="https://github.com/tabsdata/tabsdata">GitHub Repository</a> |
+    <a href="https://github.com/tabsdata/tabsdata/discussions">GitHub Discussions</a> |
+    <a href="https://github.com/tabsdata/tabsdata/issues">GitHub Issues</a> |
+    <a href="https://discord.gg/5stJks6W">Discord</a>
+</div>
 
 # Tabsdata Pub/Sub for Tables
 
