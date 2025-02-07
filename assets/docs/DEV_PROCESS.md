@@ -31,10 +31,13 @@ issue that could be useful to understand the issue to somebody
 looking at the commit messages. It should also described how the
 issue has been addressed and what kind of testing has been done.
 
-Finally, the commit message should end with:
+Finally, the commit message should end with `fixes` (for bugfixes), 
+`resolves` (for new features and tasks):
+
+For example:
 
 ```
-  fixes #GH_ISSUE#
+  resolves #5
 ```
 
 This will trigger the closing of the issue as soon as the pull request is merge.
