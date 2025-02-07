@@ -275,6 +275,22 @@ class TdLazyFrame:
     def inspect(self, fmt: str = "{}") -> TdLazyFrame:
         return TdLazyFrame.__build__(self._lf.inspect(fmt=fmt))
 
+    def item(self) -> Any:
+        lf = self._lf.drop(["$td.id", "$td.src"]) #all sys columns
+        if lf.collect_schema().len() == 1:
+            lf = lf.select(pl.first().alias("item"))
+            lf = lf.with_columns(
+                pl.col("item").min().alias("min"),
+                    pl.col("item").max().alias("max"),
+                    pl.col("item").count().alias("count"),
+                    pl.col("item").null_count().alias("null_count"),
+                 )
+            lf = lf.limit(1)
+            df = lf.collect()
+            if df[0, 1] == df[0, 2]:
+                return df[0, 0]
+        raise TableFrameError(ErrorCode.TF3)
+
     """ Transformation Functions """
 
     # ToDo: proper expressions handling.

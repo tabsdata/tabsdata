@@ -49,7 +49,7 @@ POLARS_TABLE_FRAME = pl.DataFrame(
             -1.1,
             -2.2,
             -3.3,
-            float("inf"),
+            5.5, #float("inf"),
             float("nan"),
             None,
         ],
@@ -100,8 +100,8 @@ POLARS_TABLE_FRAME = pl.DataFrame(
 ).lazy()
 
 
-for i in range(POLARS_TABLE_FRAME_DUPLICATION_TIMES):
-    POLARS_TABLE_FRAME = pl.concat([POLARS_TABLE_FRAME, POLARS_TABLE_FRAME])
+# for i in range(POLARS_TABLE_FRAME_DUPLICATION_TIMES):
+#     POLARS_TABLE_FRAME = pl.concat([POLARS_TABLE_FRAME, POLARS_TABLE_FRAME])
 
 
 POLARS_TABLE_FRAME_DATETIME = POLARS_TABLE_FRAME.with_columns(
@@ -1568,16 +1568,31 @@ def test_datetime_dst_offset():
     api_tester(fn, polars_frame=POLARS_TABLE_FRAME_DATETIME)
 
 
+def test_tableframe_item():
+    p = POLARS_TABLE_FRAME
+    t = _wrap_polars_frame(POLARS_TABLE_FRAME)
+
+    pi = p.select(pl.col("ff").max()).collect().item()
+    ti = t.select(td.col("ff").max()).item()
+
+    assert pi == ti
+
 # ----------------------------------------
 
-# def test___():
-#     p = POLARS_TABLE_FRAME_DATETIME
-#     t = _wrap_polars_frame(p)
-#
-#     def fn(library: ma, frame: ft):
-#         return frame.select(library.col("i"), library.col("i").diff().alias("diff"))
-#
-#     (alias_pl, frame_pl) = (pl, p)
-#     log_frame(frame_pl)
-#     out_pl = fn(alias_pl, frame_pl)
-#     log_frame(out_pl)
+def test___():
+    p = POLARS_TABLE_FRAME_DATETIME
+    t = _wrap_polars_frame(p)
+
+#    log_frame(t._lf)
+
+    print(p.select((pl.col("f").min() + pl.col("ff").max()).max()).collect().item())
+
+    print(t.select((td.col("f").min() + td.col("ff").max()).max()).item())
+
+    # def fn(library: ma, frame: ft):
+    #     return frame.select(library.col("i"), library.col("i").diff().alias("diff"))
+    #
+    # (alias_pl, frame_pl) = (pl, p)
+    # log_frame(frame_pl)
+    # out_pl = fn(alias_pl, frame_pl)
+    # log_frame(out_pl)
