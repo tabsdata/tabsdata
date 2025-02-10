@@ -11,6 +11,7 @@ use object_store::path::Path;
 use regex::Regex;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
+use std::path::MAIN_SEPARATOR;
 use td_error::td_error;
 use tracing::{trace, warn};
 use url::Url;
@@ -87,13 +88,13 @@ impl SPath {
                 "path cannot be empty".to_string(),
             ));
         }
-        if !path.starts_with('/') {
+        if !path.starts_with(MAIN_SEPARATOR) {
             return Err(StorageError::InvalidPath(
                 path.to_string(),
                 "path must be absolute".to_string(),
             ));
         }
-        if path.len() > 1 && path.ends_with('/') {
+        if path.len() > 1 && path.ends_with(MAIN_SEPARATOR) {
             return Err(StorageError::InvalidPath(
                 path.to_string(),
                 "path cannot end with /".to_string(),
