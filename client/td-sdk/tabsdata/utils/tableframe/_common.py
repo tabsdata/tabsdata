@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal, TypeAlias
 
 import polars as pl
 from polars import DataFrame
@@ -14,6 +14,11 @@ import tabsdata.tableframe._typing as td_typing
 import tabsdata.utils.tableframe._constants as td_constants
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata.exceptions import ErrorCode, TableFrameError
+
+DropColumnsStrategy: TypeAlias = Literal[
+    "drop",
+    "select",
+]
 
 
 def check_column(name: str):
@@ -111,7 +116,23 @@ def generate_system_column(
     return pl.Series(column, values, dtype=dtype)
 
 
-def drop_system_columns(ldf: pl.LazyFrame, ignore_missing: bool = True) -> pl.LazyFrame:
+def drop_system_columns(
+    ldf: pl.LazyFrame,
+    strategy: DropColumnsStrategy = "select",
+    ignore_missing: bool = True,
+) -> pl.LazyFrame:
+    match strategy:
+        case "drop":
+            return drop_system_columns_drop(ldf, ignore_missing)
+        case "select":
+            return drop_system_columns_select(ldf, ignore_missing)
+        case _:
+            raise ValueError(f"Unknown drop column strategy: {strategy}")
+
+
+def drop_system_columns_drop(
+    ldf: pl.LazyFrame, ignore_missing: bool = True
+) -> pl.LazyFrame:
     columns_to_remove = list(td_helpers.SYSTEM_COLUMNS)
     columns = ldf.collect_schema().names()
     dtypes = ldf.collect_schema().dtypes()
@@ -133,4 +154,28 @@ def drop_system_columns(ldf: pl.LazyFrame, ignore_missing: bool = True) -> pl.La
         # ToDo: ⚠️ Dimas: There should be a better way...
         validate_output_schema=False,
     )
+    return ldf
+
+
+def drop_system_columns_select(
+    ldf: pl.LazyFrame, ignore_missing: bool = True
+) -> pl.LazyFrame:
+    system_columns = set(td_helpers.SYSTEM_COLUMNS)
+    source_columns = ldf.collect_schema().names()
+    target_columns = [col for col in source_columns if col not in system_columns]
+    if not ignore_missing:
+        missing_columns = system_columns - set(source_columns)
+        if missing_columns:
+            raise ValueError(f"Missing expected system columns: {missing_columns}")
+    schema = {col: ldf.collect_schema().get(col) for col in target_columns}
+    schema = pl.Schema(schema)
+    ldf = ldf.map_batches(
+        lambda batch: batch.select(target_columns),
+        predicate_pushdown=True,
+        streamable=True,
+        schema=schema,
+        # ToDo: ⚠️ Dimas: There should be a better way...
+        validate_output_schema=False,
+    )
+
     return ldf

@@ -189,7 +189,7 @@ class TestTableFrame(unittest.TestCase):
         column = rows["letters_uppercase"]
         assert all(value.isupper() for value in column)
 
-    def test__sink(self):
+    def test_sink(self):
         lf = pl.LazyFrame(
             {
                 "letters": ["a", "b", "c"],
@@ -198,3 +198,15 @@ class TestTableFrame(unittest.TestCase):
         )
         tf = td.TableFrame.__build__(lf)
         tf._lf.sink_ndjson(os.path.join(tempfile.gettempdir(), "delete.sink.json"))
+
+    def test_item(self):
+        lf = pl.LazyFrame(
+            {
+                "letters": ["a", "b", "c"],
+                "numbers": [1, 2, 3],
+            }
+        )
+        tf = td.TableFrame.__build__(lf)
+
+        item = tf.select(td.col("numbers").mean()).item()
+        assert item == 2.0
