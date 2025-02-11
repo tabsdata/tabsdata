@@ -8,10 +8,10 @@ from enum import Enum
 from typing import Any, Type
 
 import polars as pl
-from ta_interceptor.api.api import InterceptorPlugin
 
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._constants as td_constants
+from ta_interceptor.api.api import InterceptorPlugin
 from td_features.features import Feature, FeaturesManager
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ REQUIRED_COLUMNS_METADATA = {
 
 class Interceptor(InterceptorPlugin, ABC):
     name = "Interceptor Plugin (Standard)"
-    version = "0.9.0"
+    version = "0.9.1"
 
     def __init__(self) -> None:
         FeaturesManager.instance().disable(Feature.ENTERPRISE)

@@ -10,7 +10,7 @@ from ta_interceptor.api.api_test import InterceptorTestPlugin
 
 class InterceptorTest(InterceptorTestPlugin, ABC):
     name = "Interceptor Test Plugin (Standard)"
-    version = "0.9.0"
+    version = "0.9.1"
 
     @classmethod
     def instance(cls) -> "InterceptorTest":
