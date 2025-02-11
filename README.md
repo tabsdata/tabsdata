@@ -6,10 +6,7 @@ Copyright 2025 Tabs Data Inc.
 
 <div align="center">
     <a href="https://tabsdata.com">Tabsdata</a> |
-    <a href="https://github.com/tabsdata/tabsdata">GitHub Repository</a> |
-    <a href="https://github.com/tabsdata/tabsdata/discussions">GitHub Discussions</a> |
-    <a href="https://github.com/tabsdata/tabsdata/issues">GitHub Issues</a> |
-    <a href="https://discord.gg/5stJks6W">Discord</a>
+    <a href="https://github.com/tabsdata/tabsdata">GitHub Repository</a>
 </div>
 
 # Tabsdata Pub/Sub for Tables
