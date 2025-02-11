@@ -12,7 +12,7 @@ license = ""
 readme = "README.md"
 repository = "https://github.com/tabsdata/tabsdata"
 rust-version = "1.84.0"
-version = "0.9.0"
+version = "0.9.1"
 authors = [
     "Aleix Lascorz Guiu   (tabsleix)   <aleix@tabsdata.com>",
     "Alejandro Abdelnur   (tucu0)      <tucu@tabsdata.com>",
@@ -30,7 +30,7 @@ license = ""
 readme = "README.md"
 repository = "https://github.com/tabsdata/tabsdata"
 rust-version = "1.84.0"
-version = "0.9.0"
+version = "0.9.1"
 authors = [
     "Aleix Lascorz Guiu   (tabsleix)   <aleix@tabsdata.com>",
     "Alejandro Abdelnur   (tucu0)      <tucu@tabsdata.com>",
@@ -128,84 +128,84 @@ ignored = ["openssl", "toml"]
 
 [workspace.dependencies.td-attach]
 path = "macros/facets/td-attach"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-build]
 path = "devutils/automation/tasks/cargo/td-build"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-concrete]
 path = "macros/facets/td-concrete"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.duct]
 version = "0.13"
 
 [workspace.dependencies.td-error]
 path = "macros/facets/td-error"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-typing]
 path = "macros/facets/td-typing"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-utoipa]
 path = "macros/facets/td-utoipa"
-version = "0.9.0"
+version = "0.9.1"
 
 ## Libraries
 
 [workspace.dependencies.td-common]
 path = "server/libraries/td-common"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-database]
 path = "server/libraries/td-database"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-execution]
 path = "server/libraries/td-execution"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-interceptor]
 path = "plugins/rust/td-interceptor"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-interceptor-api]
 path = "server/libraries/td-interceptor-api"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-objects]
 path = "server/libraries/td-objects"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-security]
 path = "server/libraries/td-security"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-schema]
 path = "server/libraries/td-schema"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-storage]
 path = "server/libraries/td-storage"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-server]
 path = "server/binaries/td-server"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-tower]
 path = "server/libraries/td-tower"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-transaction-interceptor]
 path = "plugins/rust/td-transaction-interceptor"
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.td-transaction]
 path = "server/libraries/td-transaction"
-version = "0.9.0"
+version = "0.9.1"
 
 # External dependencies
 
@@ -425,7 +425,7 @@ version = "0.9.3"
 version = "0.16.1"
 
 [workspace.dependencies.terminal_size]
- version = "0.4.1"
+version = "0.4.1"
 
 [workspace.dependencies.thiserror]
 version = "2.0.11"

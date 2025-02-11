@@ -29,7 +29,7 @@ const PROFILE_DEV: &str = "dev";
 const PROFILE_DEBUG: &str = "debug";
 
 #[derive(clap_derive::Parser)]
-#[command(name = "Tabsdata X-task", version = "0.9.0")]
+#[command(name = "Tabsdata X-task", version = "0.9.1")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
