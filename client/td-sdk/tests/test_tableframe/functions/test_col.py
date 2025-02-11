@@ -11,7 +11,7 @@ import pytest
 
 import tabsdata as td
 from tabsdata.exceptions import ErrorCode, TabsDataException
-from tabsdata.tableframe.expr.expr import TdExpr
+from tabsdata.tableframe.expr.expr import Expr
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._helpers import system_columns
@@ -37,15 +37,15 @@ def test_reserved_column():
 
 
 def test_common_column():
-    assert isinstance(td.col("my_column"), TdExpr)
-    assert isinstance(td.col("^my_column"), TdExpr)
-    assert isinstance(td.col("$my_column"), TdExpr)
-    assert isinstance(td.col("my_column^"), TdExpr)
-    assert isinstance(td.col("my_column$"), TdExpr)
-    assert isinstance(td.col("$my_column^"), TdExpr)
-    assert isinstance(td.col("*my_column"), TdExpr)
-    assert isinstance(td.col("my*column"), TdExpr)
-    assert isinstance(td.col("*my_column*"), TdExpr)
+    assert isinstance(td.col("my_column"), Expr)
+    assert isinstance(td.col("^my_column"), Expr)
+    assert isinstance(td.col("$my_column"), Expr)
+    assert isinstance(td.col("my_column^"), Expr)
+    assert isinstance(td.col("my_column$"), Expr)
+    assert isinstance(td.col("$my_column^"), Expr)
+    assert isinstance(td.col("*my_column"), Expr)
+    assert isinstance(td.col("my*column"), Expr)
+    assert isinstance(td.col("*my_column*"), Expr)
 
 
 def test_polars_examples():

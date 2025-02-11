@@ -25,12 +25,13 @@ from polars._typing import (
     ClosedInterval,
     FillNullStrategy,
     NumericLiteral,
-    PolarsDataType,
     PythonLiteral,
     RankMethod,
     TemporalLiteral,
 )
 
+# noinspection PyProtectedMember
+import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.string as td_string
 import tabsdata.tableframe.functions.datetime as td_datetime
 
@@ -40,17 +41,18 @@ import tabsdata.utils.tableframe._common as td_common
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._translator as td_translator
 from tabsdata.exceptions import ErrorCode, TableFrameError
+from tabsdata.utils.annotations import pydoc
 
 T = TypeVar("T")
 P = ParamSpec("P")
 
 
 @accessify
-class TdExpr:
-    def __init__(self, expr: pl.Expr | TdExpr) -> None:
+class Expr:
+    def __init__(self, expr: pl.Expr | Expr) -> None:
         if isinstance(expr, pl.Expr):
             self._expr = expr
-        elif isinstance(expr, TdExpr):
+        elif isinstance(expr, Expr):
             self._expr = expr._expr
         else:
             raise TableFrameError(ErrorCode.TF5, type(expr))
@@ -66,123 +68,121 @@ class TdExpr:
     def __bool__(self) -> NoReturn:
         return self._expr.__bool__()
 
-    def __abs__(self) -> TdExpr:
-        return TdExpr(self._expr.__abs__())
+    def __abs__(self) -> Expr:
+        return Expr(self._expr.__abs__())
 
-    def __add__(self, other: IntoTdExpr) -> TdExpr:
+    def __add__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__add__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__add__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __radd__(self, other: IntoTdExpr) -> TdExpr:
+    def __radd__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__add__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__add__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __and__(self, other: IntoTdExprColumn | int | bool) -> TdExpr:
+    def __and__(self, other: IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__and__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__and__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rand__(self, other: IntoTdExprColumn | int | bool) -> TdExpr:
+    def __rand__(self, other: IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__and__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__and__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __eq__(self, other: IntoTdExpr) -> TdExpr:  # type: ignore[override]
+    def __eq__(self, other: IntoExpr) -> Expr:  # type: ignore[override]
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__eq__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__eq__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __floordiv__(self, other: IntoTdExpr) -> TdExpr:
+    def __floordiv__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__floordiv__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__floordiv__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rfloordiv__(self, other: IntoTdExpr) -> TdExpr:
+    def __rfloordiv__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(
-            self._expr.__rfloordiv__(td_translator._unwrap_into_tdexpr(other))
-        )
+        return Expr(self._expr.__rfloordiv__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __ge__(self, other: IntoTdExpr) -> TdExpr:
+    def __ge__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__ge__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__ge__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __gt__(self, other: IntoTdExpr) -> TdExpr:
+    def __gt__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__gt__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__gt__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __invert__(self) -> TdExpr:
-        return TdExpr(self._expr.__invert__())
+    def __invert__(self) -> Expr:
+        return Expr(self._expr.__invert__())
 
-    def __le__(self, other: IntoTdExpr) -> TdExpr:
+    def __le__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__le__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__le__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __lt__(self, other: IntoTdExpr) -> TdExpr:
+    def __lt__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__lt__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__lt__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __mod__(self, other: IntoTdExpr) -> TdExpr:
+    def __mod__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__mod__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__mod__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rmod__(self, other: IntoTdExpr) -> TdExpr:
+    def __rmod__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__mod__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__mod__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __mul__(self, other: IntoTdExpr) -> TdExpr:
+    def __mul__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__mul__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__mul__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rmul__(self, other: IntoTdExpr) -> TdExpr:
+    def __rmul__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__mul__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__mul__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __ne__(self, other: IntoTdExpr) -> TdExpr:  # type: ignore[override]
+    def __ne__(self, other: IntoExpr) -> Expr:  # type: ignore[override]
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__ne__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__ne__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __neg__(self) -> TdExpr:
-        return TdExpr(-self._expr)
+    def __neg__(self) -> Expr:
+        return Expr(-self._expr)
 
-    def __or__(self, other: IntoTdExprColumn | int | bool) -> TdExpr:
+    def __or__(self, other: IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__or__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__or__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __ror__(self, other: IntoTdExprColumn | int | bool) -> TdExpr:
+    def __ror__(self, other: IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__or__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__or__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __pos__(self) -> TdExpr:
-        return TdExpr(self._expr + self._expr)
+    def __pos__(self) -> Expr:
+        return Expr(self._expr + self._expr)
 
-    def __pow__(self, exponent: IntoTdExprColumn | int | float) -> TdExpr:
+    def __pow__(self, exponent: IntoExprColumn | int | float) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr ** td_translator._unwrap_into_tdexpr(exponent))
+        return Expr(self._expr ** td_translator._unwrap_into_tdexpr(exponent))
 
-    def __rpow__(self, base: IntoTdExprColumn | int | float) -> TdExpr:
+    def __rpow__(self, base: IntoExprColumn | int | float) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr ** td_translator._unwrap_into_tdexpr(base))
+        return Expr(self._expr ** td_translator._unwrap_into_tdexpr(base))
 
-    def __sub__(self, other: IntoTdExpr) -> TdExpr:
+    def __sub__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__sub__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__sub__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rsub__(self, other: IntoTdExpr) -> TdExpr:
+    def __rsub__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__sub__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__sub__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __truediv__(self, other: IntoTdExpr) -> TdExpr:
+    def __truediv__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__truediv__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__truediv__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rtruediv__(self, other: IntoTdExpr) -> TdExpr:
+    def __rtruediv__(self, other: IntoExpr) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__truediv__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__truediv__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __xor__(self, other: IntoTdExprColumn | int | bool) -> TdExpr:
+    def __xor__(self, other: IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__xor__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__xor__(td_translator._unwrap_into_tdexpr(other)))
 
-    def __rxor__(self, other: IntoTdExprColumn | int | bool) -> TdExpr:
+    def __rxor__(self, other: IntoExprColumn | int | bool) -> Expr:
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.__xor__(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.__xor__(td_translator._unwrap_into_tdexpr(other)))
 
     def __getstate__(self) -> bytes:
         return self._expr.__getstate__()
@@ -192,13 +192,15 @@ class TdExpr:
 
     """ Object Operations """
 
-    def abs(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def abs(self) -> Expr:
         """
         Return the abso lute value of the expression.
         """
-        return TdExpr(self._expr.abs())
+        return Expr(self._expr.abs())
 
-    def add(self, other: Any) -> TdExpr:
+    @pydoc(categories="numeric")
+    def add(self, other: Any) -> Expr:
         """
         Equivalent to the `+` operator.
 
@@ -231,9 +233,10 @@ class TdExpr:
         └──────┴──────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.add(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.add(td_translator._unwrap_into_tdexpr(other)))
 
-    def alias(self, name: str) -> TdExpr:
+    @pydoc(categories="manipulation")
+    def alias(self, name: str) -> Expr:
         """
         Set the name for a column or expression.
 
@@ -265,9 +268,10 @@ class TdExpr:
         """
         # TODO: check name matches the regex in pydoc
         td_common.check_column(name)
-        return TdExpr(self._expr.alias(name))
+        return Expr(self._expr.alias(name))
 
-    def and_(self, *others: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def and_(self, *others: Any) -> Expr:
         """
         Bitwise `and` operator with the given expressions.
         It can be used with integer and bool types.
@@ -298,9 +302,10 @@ class TdExpr:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.and_(td_translator._unwrap_into_tdexpr(*others)))
+        return Expr(self._expr.and_(td_translator._unwrap_into_tdexpr(*others)))
 
-    def arccos(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def arccos(self) -> Expr:
         """
         Calculate the inverse cosine of the element value.
 
@@ -326,9 +331,10 @@ class TdExpr:
         │ null ┆ null     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.arccos())
+        return Expr(self._expr.arccos())
 
-    def arccosh(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def arccosh(self) -> Expr:
         """
         Calculate the inverse hyperbolic cosine of the element value.
 
@@ -354,9 +360,10 @@ class TdExpr:
         │ null ┆ null     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.arccosh())
+        return Expr(self._expr.arccosh())
 
-    def arcsin(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def arcsin(self) -> Expr:
         """
         Calculate the inverse sine of the element value.
 
@@ -382,9 +389,10 @@ class TdExpr:
         │ null ┆ null     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.arcsin())
+        return Expr(self._expr.arcsin())
 
-    def arcsinh(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def arcsinh(self) -> Expr:
         """
         Calculate the inverse hyperbolic sine of the element value.
 
@@ -410,9 +418,10 @@ class TdExpr:
         │ null ┆ null     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.arcsinh())
+        return Expr(self._expr.arcsinh())
 
-    def arctan(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def arctan(self) -> Expr:
         """
         Calculate the inverse tangent of the element value.
 
@@ -438,9 +447,10 @@ class TdExpr:
         │ null ┆ null     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.arctan())
+        return Expr(self._expr.arctan())
 
-    def arctanh(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def arctanh(self) -> Expr:
         """
         Calculate the inverse hyperbolic tangent of the element value.
 
@@ -466,15 +476,16 @@ class TdExpr:
         │ null ┆ null     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.arctanh())
+        return Expr(self._expr.arctanh())
 
+    @pydoc(categories="type_casting")
     def cast(
         self,
-        dtype: PolarsDataType | type[Any],
+        dtype: td_typing.TdDataType | type[Any],
         *,
         strict: bool = True,
         wrap_numerical: bool = False,
-    ) -> TdExpr:
+    ) -> Expr:
         # noinspection PyShadowingNames
         """
         Cast a value to d different type.
@@ -509,11 +520,12 @@ class TdExpr:
         │ null ┆ null │
         └──────┴──────┘
         """
-        return TdExpr(
+        return Expr(
             self._expr.cast(dtype, strict=strict, wrap_numerical=wrap_numerical)
         )
 
-    def cbrt(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def cbrt(self) -> Expr:
         """
         Calculate the cub root of the element value.
 
@@ -539,9 +551,10 @@ class TdExpr:
         │ null ┆ null     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.cbrt())
+        return Expr(self._expr.cbrt())
 
-    def ceil(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def ceil(self) -> Expr:
         """
         Round up the expression to the next integer value.
 
@@ -562,13 +575,14 @@ class TdExpr:
         │ 1.1  ┆  2.0    │
         └──────┴─────────┘
         """
-        return TdExpr(self._expr.ceil())
+        return Expr(self._expr.ceil())
 
+    @pydoc(categories="numeric")
     def clip(
         self,
-        lower_bound: NumericLiteral | TemporalLiteral | IntoTdExprColumn | None = None,
-        upper_bound: NumericLiteral | TemporalLiteral | IntoTdExprColumn | None = None,
-    ) -> TdExpr:
+        lower_bound: NumericLiteral | TemporalLiteral | IntoExprColumn | None = None,
+        upper_bound: NumericLiteral | TemporalLiteral | IntoExprColumn | None = None,
+    ) -> Expr:
         """
         For element values outside the lower and upper bounds, lower values are
         replaced with the lower bound
@@ -600,14 +614,15 @@ class TdExpr:
         └──────┴─────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(
+        return Expr(
             self._expr.clip(
                 td_translator._unwrap_into_tdexpr_column(lower_bound),
                 td_translator._unwrap_into_tdexpr_column(upper_bound),
             )
         )
 
-    def cos(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def cos(self) -> Expr:
         """
         Calculate the cosine of the element value.
 
@@ -633,9 +648,10 @@ class TdExpr:
         │ null ┆ null      │
         └──────┴───────────┘
         """
-        return TdExpr(self._expr.cos())
+        return Expr(self._expr.cos())
 
-    def cosh(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def cosh(self) -> Expr:
         """
         Calculate the hyperbolic cosine of the element value.
 
@@ -661,9 +677,10 @@ class TdExpr:
         │ null ┆ null       │
         └──────┴────────────┘
         """
-        return TdExpr(self._expr.cosh())
+        return Expr(self._expr.cosh())
 
-    def cot(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def cot(self) -> Expr:
         """
         Calculate the cotangent of the element value.
 
@@ -689,9 +706,10 @@ class TdExpr:
         │ null ┆ null      │
         └──────┴───────────┘
         """
-        return TdExpr(self._expr.cot())
+        return Expr(self._expr.cot())
 
-    def degrees(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def degrees(self) -> Expr:
         """
         Convert a radian value to degrees
 
@@ -717,9 +735,10 @@ class TdExpr:
         │ null ┆ null       │
         └──────┴────────────┘
         """
-        return TdExpr(self._expr.degrees())
+        return Expr(self._expr.degrees())
 
-    def eq(self, other: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def eq(self, other: Any) -> Expr:
         """
         Compare if 2 expressions are equal, equivalent to `expr == other`. If one
         of the expressions is `null` (None) it returns `null`.
@@ -749,9 +768,10 @@ class TdExpr:
         └─────┴──────┴───────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.eq(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.eq(td_translator._unwrap_into_tdexpr(other)))
 
-    def eq_missing(self, other: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def eq_missing(self, other: Any) -> Expr:
         """
         Compare if 2 expressions are equal an, equivalent to `expr == other`. If one
         of the expressions is `null` (None) it returns `false`.
@@ -781,9 +801,10 @@ class TdExpr:
         └─────┴──────┴───────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.eq_missing(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.eq_missing(td_translator._unwrap_into_tdexpr(other)))
 
-    def exp(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def exp(self) -> Expr:
         """
         Calculate the exponential of the element value.
 
@@ -807,9 +828,10 @@ class TdExpr:
         │ null ┆ null        │
         └──────┴─────────────┘
         """
-        return TdExpr(self._expr.exp())
+        return Expr(self._expr.exp())
 
-    def fill_nan(self, value: int | float | TdExpr | None) -> TdExpr:
+    @pydoc(categories="manipulation")
+    def fill_nan(self, value: int | float | Expr | None) -> Expr:
         """
         Replace `NaN` values with the given value.
 
@@ -838,14 +860,15 @@ class TdExpr:
         └──────┴──────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.fill_nan(td_translator._unwrap_tdexpr(value)))
+        return Expr(self._expr.fill_nan(td_translator._unwrap_tdexpr(value)))
 
+    @pydoc(categories="manipulation")
     def fill_null(
         self,
-        value: Any | TdExpr | None = None,
+        value: Any | Expr | None = None,
         strategy: FillNullStrategy | None = None,
         limit: int | None = None,
-    ) -> TdExpr:
+    ) -> Expr:
         """
         Replace `null` values with the given value.
 
@@ -878,16 +901,17 @@ class TdExpr:
         └──────┴───────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(
+        return Expr(
             self._expr.fill_null(
                 td_translator._unwrap_into_tdexpr(value), strategy, limit
             )
         )
 
+    @pydoc(categories="filters")
     def filter(
         self,
-        *predicates: IntoTdExprColumn | Iterable[IntoTdExprColumn],
-    ) -> TdExpr:
+        *predicates: IntoExprColumn | Iterable[IntoExprColumn],
+    ) -> Expr:
         """
         Apply a filter predicate to an expression.
 
@@ -933,11 +957,12 @@ class TdExpr:
         └───────┴─────────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(
+        return Expr(
             self._expr.filter(td_translator._unwrap_into_tdexpr_column(*predicates))
         )
 
-    def first(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def first(self) -> Expr:
         """
         Get the first element.
 
@@ -961,9 +986,10 @@ class TdExpr:
         │ 70   ┆ 10      │
         └──────┴─────────┘
         """
-        return TdExpr(self._expr.first())
+        return Expr(self._expr.first())
 
-    def floor(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def floor(self) -> Expr:
         """
         Round down the expression to the previous integer value.
 
@@ -984,9 +1010,9 @@ class TdExpr:
         │ 1.1  ┆  1      │
         └──────┴─────────┘
         """
-        return TdExpr(self._expr.floor())
+        return Expr(self._expr.floor())
 
-    def floordiv(self, other: Any) -> TdExpr:
+    def floordiv(self, other: Any) -> Expr:
         """
         Calculate the floor on the division.
 
@@ -1012,9 +1038,10 @@ class TdExpr:
         └──────┴──────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.floordiv(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.floordiv(td_translator._unwrap_into_tdexpr(other)))
 
-    def ge(self, other: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def ge(self, other: Any) -> Expr:
         """
         Greater or equal operator.
 
@@ -1039,9 +1066,10 @@ class TdExpr:
         └──────┴─────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.ge(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.ge(td_translator._unwrap_into_tdexpr(other)))
 
-    def gt(self, other: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def gt(self, other: Any) -> Expr:
         """
         Greater than operator.
 
@@ -1066,15 +1094,16 @@ class TdExpr:
         └──────┴─────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.gt(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.gt(td_translator._unwrap_into_tdexpr(other)))
 
+    @pydoc(categories="numeric")
     def hash(
         self,
         seed: int = 0,
         seed_1: int | None = None,
         seed_2: int | None = None,
         seed_3: int | None = None,
-    ) -> TdExpr:
+    ) -> Expr:
         """
         Compute the hash of an element value.
 
@@ -1101,14 +1130,15 @@ class TdExpr:
         │ 2.0  ┆ 4738789230185236462 │
         └──────┴─────────────────────┘
         """
-        return TdExpr(self._expr.hash(seed, seed_1, seed_2, seed_3))
+        return Expr(self._expr.hash(seed, seed_1, seed_2, seed_3))
 
+    @pydoc(categories="logic")
     def is_between(
         self,
-        lower_bound: IntoTdExpr,
-        upper_bound: IntoTdExpr,
+        lower_bound: IntoExpr,
+        upper_bound: IntoExpr,
         closed: ClosedInterval = "both",
-    ) -> TdExpr:
+    ) -> Expr:
         """
         If an expression is between the given bounds.
 
@@ -1139,7 +1169,7 @@ class TdExpr:
         └──────┴─────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(
+        return Expr(
             self._expr.is_between(
                 td_translator._unwrap_into_tdexpr(lower_bound),
                 td_translator._unwrap_into_tdexpr(upper_bound),
@@ -1147,7 +1177,8 @@ class TdExpr:
             )
         )
 
-    def is_finite(self) -> TdExpr:
+    @pydoc(categories="logic")
+    def is_finite(self) -> Expr:
         """
         If an element value is finite.
 
@@ -1170,9 +1201,10 @@ class TdExpr:
         │ inf  ┆ false  │
         └──────┴────────┘
         """
-        return TdExpr(self._expr.is_finite())
+        return Expr(self._expr.is_finite())
 
-    def is_in(self, other: TdExpr | Collection[Any] | Series) -> TdExpr:
+    @pydoc(categories="logic")
+    def is_in(self, other: Expr | Collection[Any] | Series) -> Expr:
         """
         If an element value is in the given collection.
 
@@ -1199,9 +1231,10 @@ class TdExpr:
         └──────┴────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.is_in(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.is_in(td_translator._unwrap_into_tdexpr(other)))
 
-    def is_infinite(self) -> TdExpr:
+    @pydoc(categories="logic")
+    def is_infinite(self) -> Expr:
         """
         If an element value is infinite.
 
@@ -1224,9 +1257,10 @@ class TdExpr:
         │ inf  ┆ true     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.is_infinite())
+        return Expr(self._expr.is_infinite())
 
-    def is_nan(self) -> TdExpr:
+    @pydoc(categories="logic")
+    def is_nan(self) -> Expr:
         """
         If an element value is `NaN`.
 
@@ -1249,9 +1283,10 @@ class TdExpr:
         │ inf  ┆ false    │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.is_nan())
+        return Expr(self._expr.is_nan())
 
-    def is_not_nan(self) -> TdExpr:
+    @pydoc(categories="logic")
+    def is_not_nan(self) -> Expr:
         """
         If an element value is not `NaN`.
 
@@ -1275,9 +1310,10 @@ class TdExpr:
         │ inf  ┆ true     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.is_not_nan())
+        return Expr(self._expr.is_not_nan())
 
-    def is_not_null(self) -> TdExpr:
+    @pydoc(categories="logic")
+    def is_not_null(self) -> Expr:
         """
         If an element value is not `null` (None).
 
@@ -1301,9 +1337,10 @@ class TdExpr:
         │ inf  ┆ true     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.is_not_null())
+        return Expr(self._expr.is_not_null())
 
-    def is_null(self) -> TdExpr:
+    @pydoc(categories="logic")
+    def is_null(self) -> Expr:
         """
         If an element value is `null` (None).
 
@@ -1327,9 +1364,10 @@ class TdExpr:
         │ inf  ┆ false    │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.is_null())
+        return Expr(self._expr.is_null())
 
-    def is_unique(self) -> TdExpr:
+    @pydoc(categories="logic")
+    def is_unique(self) -> Expr:
         """
         If an element value is unique for all values in the column.
 
@@ -1353,9 +1391,10 @@ class TdExpr:
         │ 2.0  ┆ true     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.is_unique())
+        return Expr(self._expr.is_unique())
 
-    def last(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def last(self) -> Expr:
         """
         Get the last element.
 
@@ -1379,9 +1418,10 @@ class TdExpr:
         │ 70   ┆ 70      │
         └──────┴─────────┘
         """
-        return TdExpr(self._expr.last())
+        return Expr(self._expr.last())
 
-    def le(self, other: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def le(self, other: Any) -> Expr:
         """
         Less or equal operator.
 
@@ -1406,9 +1446,10 @@ class TdExpr:
         └──────┴─────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.le(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.le(td_translator._unwrap_into_tdexpr(other)))
 
-    def log(self, base: float = math.e) -> TdExpr:
+    @pydoc(categories="numeric")
+    def log(self, base: float = math.e) -> Expr:
         """
         Calculate the logarithm to the given base.
 
@@ -1437,9 +1478,10 @@ class TdExpr:
         │ NaN  ┆ NaN      │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.log(base))
+        return Expr(self._expr.log(base))
 
-    def log1p(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def log1p(self) -> Expr:
         """
         Calculate the natural logarithm plus one.
 
@@ -1465,9 +1507,10 @@ class TdExpr:
         │ NaN  ┆ NaN      │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.log1p())
+        return Expr(self._expr.log1p())
 
-    def log10(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def log10(self) -> Expr:
         """
         Calculate the logarithm base 10.
 
@@ -1493,9 +1536,10 @@ class TdExpr:
         │ NaN  ┆ NaN      │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.log10())
+        return Expr(self._expr.log10())
 
-    def lt(self, other: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def lt(self, other: Any) -> Expr:
         """
         Less than operator.
 
@@ -1520,9 +1564,10 @@ class TdExpr:
         └──────┴─────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.lt(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.lt(td_translator._unwrap_into_tdexpr(other)))
 
-    def mod(self, other: Any) -> TdExpr:
+    @pydoc(categories="numeric")
+    def mod(self, other: Any) -> Expr:
         """
         Modulus operator.
 
@@ -1549,9 +1594,10 @@ class TdExpr:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.mod(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.mod(td_translator._unwrap_into_tdexpr(other)))
 
-    def mul(self, other: Any) -> TdExpr:
+    @pydoc(categories="numeric")
+    def mul(self, other: Any) -> Expr:
         """
         Multiplication operator.
 
@@ -1579,9 +1625,10 @@ class TdExpr:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.mul(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.mul(td_translator._unwrap_into_tdexpr(other)))
 
-    def ne(self, other: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def ne(self, other: Any) -> Expr:
         """
         Compare if 2 expressions are not equal, equivalent to `expr != other`. If one
         of the expressions is `null` (None) it returns `null`.
@@ -1611,9 +1658,10 @@ class TdExpr:
         └─────┴──────┴───────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.ne(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.ne(td_translator._unwrap_into_tdexpr(other)))
 
-    def ne_missing(self, other: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def ne_missing(self, other: Any) -> Expr:
         """
         Compare if 2 expressions are not equal an, equivalent to `expr != other`. If one
         of the expressions is `null` (None) it returns `false`.
@@ -1643,9 +1691,10 @@ class TdExpr:
         └─────┴──────┴───────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.ne_missing(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.ne_missing(td_translator._unwrap_into_tdexpr(other)))
 
-    def neg(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def neg(self) -> Expr:
         """
         Unary minus operator.
 
@@ -1671,9 +1720,10 @@ class TdExpr:
         │ NaN  ┆ NaN  │
         └──────┴──────┘
         """
-        return TdExpr(self._expr.neg())
+        return Expr(self._expr.neg())
 
-    def not_(self) -> TdExpr:
+    @pydoc(categories="logic")
+    def not_(self) -> Expr:
         """
         Negate a boolean expression.
 
@@ -1695,9 +1745,10 @@ class TdExpr:
         │ null  ┆ null  │
         └───────┴───────┘
         """
-        return TdExpr(self._expr.not_())
+        return Expr(self._expr.not_())
 
-    def or_(self, *others: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def or_(self, *others: Any) -> Expr:
         """
         Bitwise `or` operator with the given expressions.
         It can be used with integer and bool types.
@@ -1726,9 +1777,10 @@ class TdExpr:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.or_(td_translator._unwrap_into_tdexpr(*others)))
+        return Expr(self._expr.or_(td_translator._unwrap_into_tdexpr(*others)))
 
-    def pow(self, exponent: IntoTdExprColumn | int | float) -> TdExpr:
+    @pydoc(categories="numeric")
+    def pow(self, exponent: IntoExprColumn | int | float) -> Expr:
         """
         Exponentiation operator.
 
@@ -1756,11 +1808,10 @@ class TdExpr:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(
-            self._expr.pow(td_translator._unwrap_into_tdexpr_column(exponent))
-        )
+        return Expr(self._expr.pow(td_translator._unwrap_into_tdexpr_column(exponent)))
 
-    def radians(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def radians(self) -> Expr:
         """
         Convert a degree value to radians
 
@@ -1784,15 +1835,16 @@ class TdExpr:
         │ null    ┆ null     │
         └─────────┴──────────┘
         """
-        return TdExpr(self._expr.radians())
+        return Expr(self._expr.radians())
 
+    @pydoc(categories="aggregation")
     def rank(
         self,
         method: RankMethod = "average",
         *,
         descending: bool = False,
         seed: int | None = None,
-    ) -> TdExpr:
+    ) -> Expr:
         """
         Compute the rank of the element values. Multiple rank types are available.
 
@@ -1824,9 +1876,10 @@ class TdExpr:
         │ NaN  ┆ 6    │
         └──────┴──────┘
         """
-        return TdExpr(self._expr.rank(method=method, descending=descending, seed=seed))
+        return Expr(self._expr.rank(method=method, descending=descending, seed=seed))
 
-    def diff(self, n: int = 1) -> TdExpr:
+    @pydoc(categories="numeric")
+    def diff(self, n: int = 1) -> Expr:
         """
         Compute the difference between an element value and the element value
         of the specified relative row.
@@ -1865,9 +1918,10 @@ class TdExpr:
         """
         # Dropping 'null_behavior' as it is breaks when more than one column (we have
         # system columns)
-        return TdExpr(self._expr.diff(n))
+        return Expr(self._expr.diff(n))
 
-    def reinterpret(self, *, signed: bool = True) -> TdExpr:
+    @pydoc(categories="numeric")
+    def reinterpret(self, *, signed: bool = True) -> Expr:
         """
         Reinterpret the 64bit element values (i64 or u64) as a signed/unsigned integers.
         Only valid for 64bit integers, for other types use cast.
@@ -1899,9 +1953,10 @@ class TdExpr:
         │ null ┆ null        │
         └──────┴─────────────┘
         """
-        return TdExpr(self._expr.reinterpret(signed=signed))
+        return Expr(self._expr.reinterpret(signed=signed))
 
-    def round(self, decimals: int = 0) -> TdExpr:
+    @pydoc(categories="numeric")
+    def round(self, decimals: int = 0) -> Expr:
         """
         Round floating point element values.
 
@@ -1930,9 +1985,10 @@ class TdExpr:
         │ NaN  ┆ NaN   │
         └──────┴───────┘
         """
-        return TdExpr(self._expr.round(decimals))
+        return Expr(self._expr.round(decimals))
 
-    def round_sig_figs(self, digits: int) -> TdExpr:
+    @pydoc(categories="numeric")
+    def round_sig_figs(self, digits: int) -> Expr:
         """
         Round floating point element values to the specified significant figures.
 
@@ -1965,9 +2021,10 @@ class TdExpr:
         │ 2142.0 ┆ 2100.0         │
         └────────┴────────────────┘
         """
-        return TdExpr(self._expr.round_sig_figs(digits))
+        return Expr(self._expr.round_sig_figs(digits))
 
-    def shrink_dtype(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def shrink_dtype(self) -> Expr:
         """
         Cast down a column to the smallest type that can hold the element values.
 
@@ -1990,9 +2047,10 @@ class TdExpr:
         │ 65025 ┆ 65025        │
         └───────┴──────────────┘
         """
-        return TdExpr(self._expr.shrink_dtype())
+        return Expr(self._expr.shrink_dtype())
 
-    def sign(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def sign(self) -> Expr:
         """
         Calculate the sign of element values.
 
@@ -2021,9 +2079,10 @@ class TdExpr:
         │ 2142.0 ┆ 1.0  │
         └────────┴──────┘
         """
-        return TdExpr(self._expr.sign())
+        return Expr(self._expr.sign())
 
-    def sin(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def sin(self) -> Expr:
         """
         Calculate the sine of the element value.
 
@@ -2047,9 +2106,10 @@ class TdExpr:
         └─────┴───────────┘
 
         """
-        return TdExpr(self._expr.sin())
+        return Expr(self._expr.sin())
 
-    def sinh(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def sinh(self) -> Expr:
         """
         Calculate the hyperbolic sine of the element value.
 
@@ -2072,9 +2132,10 @@ class TdExpr:
         │ 90  ┆ 6.1020e38 │
         └─────┴───────────┘
         """
-        return TdExpr(self._expr.sinh())
+        return Expr(self._expr.sinh())
 
-    def count(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def count(self) -> Expr:
         """
         Aggregation operation that counts the non `null` values of the given column in
         the group.
@@ -2112,9 +2173,10 @@ class TdExpr:
         │ C    ┆ 1     │
         └──────┴───────┘
         """
-        return TdExpr(self._expr.count())
+        return Expr(self._expr.count())
 
-    def len(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def len(self) -> Expr:
         """
         Aggregation operation that counts the rows in the group.
 
@@ -2151,9 +2213,10 @@ class TdExpr:
         │ C    ┆ 2   │
         └──────┴─────┘
         """
-        return TdExpr(self._expr.len())
+        return Expr(self._expr.len())
 
-    def slice(self, offset: int | TdExpr, length: int | TdExpr | None = None) -> TdExpr:
+    @pydoc(categories="filters")
+    def slice(self, offset: int | Expr, length: int | Expr | None = None) -> Expr:
         """
         Compute a slice of the `TableFrame` for the specified columns.
 
@@ -2192,14 +2255,15 @@ class TdExpr:
         └─────┴─────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(
+        return Expr(
             self._expr.slice(
                 td_translator._unwrap_tdexpr(offset),
                 td_translator._unwrap_tdexpr(length),
             )
         )
 
-    def sqrt(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def sqrt(self) -> Expr:
         """
         Calculate the square root of the element value.
 
@@ -2224,9 +2288,10 @@ class TdExpr:
         │ null ┆ null     │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.sqrt())
+        return Expr(self._expr.sqrt())
 
-    def sub(self, other: Any) -> TdExpr:
+    @pydoc(categories="numeric")
+    def sub(self, other: Any) -> Expr:
         """
         Equivalent to the `-` operator.
 
@@ -2256,9 +2321,10 @@ class TdExpr:
         └──────┴──────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.sub(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.sub(td_translator._unwrap_into_tdexpr(other)))
 
-    def max(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def max(self) -> Expr:
         """
         Aggregation operation that finds the maximum value in the group.
 
@@ -2301,9 +2367,10 @@ class TdExpr:
         │ null ┆ null │
         └──────┴──────┘
         """
-        return TdExpr(self._expr.max())
+        return Expr(self._expr.max())
 
-    def min(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def min(self) -> Expr:
         """
         Aggregation operation that finds the minimum value in the group.
 
@@ -2346,9 +2413,10 @@ class TdExpr:
         │ D    ┆ -4   │
         └──────┴──────┘
         """
-        return TdExpr(self._expr.min())
+        return Expr(self._expr.min())
 
-    def sum(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def sum(self) -> Expr:
         """
         Aggregation operation that sums the values in the group.
 
@@ -2391,9 +2459,10 @@ class TdExpr:
         │ F    ┆ -5  │
         └──────┴─────┘
         """
-        return TdExpr(self._expr.sum())
+        return Expr(self._expr.sum())
 
-    def mean(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def mean(self) -> Expr:
         """
         Aggregation operation that finds the mean of the values in the group.
 
@@ -2436,9 +2505,10 @@ class TdExpr:
         │ B    ┆ 2.333333 │
         └──────┴──────────┘
         """
-        return TdExpr(self._expr.mean())
+        return Expr(self._expr.mean())
 
-    def median(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def median(self) -> Expr:
         """
         Aggregation operation that finds the median of the values in the group.
 
@@ -2481,9 +2551,10 @@ class TdExpr:
         │ null ┆ null │
         └──────┴──────┘
         """
-        return TdExpr(self._expr.median())
+        return Expr(self._expr.median())
 
-    def n_unique(self) -> TdExpr:
+    @pydoc(categories="aggregation")
+    def n_unique(self) -> Expr:
         """
         Aggregation operation that counts the unique values of the given column
         in the group.
@@ -2527,9 +2598,10 @@ class TdExpr:
         │ null ┆ 1   │
         └──────┴─────┘
         """
-        return TdExpr(self._expr.n_unique())
+        return Expr(self._expr.n_unique())
 
-    def tan(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def tan(self) -> Expr:
         """
         Calculate the tangent of the element value.
 
@@ -2552,9 +2624,10 @@ class TdExpr:
         │ 90  ┆ -1.9952   │
         └─────┴───────────┘
         """
-        return TdExpr(self._expr.tan())
+        return Expr(self._expr.tan())
 
-    def tanh(self) -> TdExpr:
+    @pydoc(categories="numeric")
+    def tanh(self) -> Expr:
         """
         Calculate the hyperbolic tangent of the element value.
 
@@ -2577,9 +2650,10 @@ class TdExpr:
         │ 9.0 ┆ 1.0      │
         └─────┴──────────┘
         """
-        return TdExpr(self._expr.tanh())
+        return Expr(self._expr.tanh())
 
-    def truediv(self, other: Any) -> TdExpr:
+    @pydoc(categories="numeric")
+    def truediv(self, other: Any) -> Expr:
         """
         Equivalent to the float `/` operator.
 
@@ -2612,9 +2686,10 @@ class TdExpr:
         └────────┴────────────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.truediv(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.truediv(td_translator._unwrap_into_tdexpr(other)))
 
-    def xor(self, other: Any) -> TdExpr:
+    @pydoc(categories="logic")
+    def xor(self, other: Any) -> Expr:
         """
         Bitwise `xor` operator with the given expression.
         It can be used with integer and bool types.
@@ -2642,25 +2717,27 @@ class TdExpr:
         └─────┴─────┘
         """
         # noinspection PyProtectedMember
-        return TdExpr(self._expr.xor(td_translator._unwrap_into_tdexpr(other)))
+        return Expr(self._expr.xor(td_translator._unwrap_into_tdexpr(other)))
 
     """ Object Properties"""
 
+    @pydoc(categories="type_casting")
     @property
-    def dt(self) -> td_datetime.TdExprDateTimeNameSpace:
+    def dt(self) -> td_datetime.ExprDateTimeNameSpace:
         """
         Return an object namespace with all date-time methods for a date-time value.
         """
-        return td_datetime.TdExprDateTimeNameSpace(self._expr.dt)
+        return td_datetime.ExprDateTimeNameSpace(self._expr.dt)
 
+    @pydoc(categories="type_casting")
     @property
-    def str(self) -> td_string.TdExprStringNameSpace:
+    def str(self) -> td_string.ExprStringNameSpace:
         """
         Return an object namespace with all string methods for a string value.
         """
-        return td_string.TdExprStringNameSpace(self._expr.str)
+        return td_string.ExprStringNameSpace(self._expr.str)
 
 
-IntoTdExprColumn: TypeAlias = Union[TdExpr, pl.Series, str]
+IntoExprColumn: TypeAlias = Union[Expr, pl.Series, str]
 
-IntoTdExpr: TypeAlias = Union[PythonLiteral, IntoTdExprColumn, None]
+IntoExpr: TypeAlias = Union[PythonLiteral, IntoExprColumn, None]

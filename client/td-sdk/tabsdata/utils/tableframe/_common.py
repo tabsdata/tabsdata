@@ -8,8 +8,9 @@ from typing import Any, Callable, Iterable
 
 import polars as pl
 from polars import DataFrame
-from polars._typing import PolarsDataType
 
+# noinspection PyProtectedMember
+import tabsdata.tableframe._typing as td_typing
 import tabsdata.utils.tableframe._constants as td_constants
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata.exceptions import ErrorCode, TableFrameError
@@ -86,7 +87,10 @@ def add_system_columns(ldf: pl.LazyFrame) -> pl.LazyFrame:
 
 
 def add_system_column(
-    column: str, dtype: PolarsDataType, generator: Callable[[], Any], batch: DataFrame
+    column: str,
+    dtype: td_typing.TdDataType,
+    generator: Callable[[], Any],
+    batch: DataFrame,
 ) -> DataFrame:
     return batch.with_columns(
         pl.first()
@@ -99,7 +103,7 @@ def add_system_column(
 
 
 def generate_system_column(
-    column: str, dtype: PolarsDataType, generator: Callable[[], Any], size: int
+    column: str, dtype: td_typing.TdDataType, generator: Callable[[], Any], size: int
 ):
     values = []
     for i in range(size):

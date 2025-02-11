@@ -126,11 +126,11 @@ class TestTableFrame(unittest.TestCase):
 
     def test_repr(self):
         string = self.table_frame.__repr__()
-        self.assertTrue(string.startswith("<TdLazyFrame at"))
+        self.assertTrue(string.startswith("<TableFrame at"))
 
     def test_repr_function(self):
         string = repr(self.table_frame)
-        self.assertTrue(string.startswith("<TdLazyFrame at"))
+        self.assertTrue(string.startswith("<TableFrame at"))
 
     # ToDo
     def test_limit(self):

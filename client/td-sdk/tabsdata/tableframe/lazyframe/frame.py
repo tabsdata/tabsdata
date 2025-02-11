@@ -14,12 +14,7 @@ from accessify import accessify, private
 from polars import DataType, Schema, Series
 
 # noinspection PyProtectedMember
-from polars._typing import (
-    ColumnNameOrSelector,
-    JoinStrategy,
-    PolarsDataType,
-    UniqueKeepStrategy,
-)
+from polars._typing import ColumnNameOrSelector, JoinStrategy, UniqueKeepStrategy
 from polars.dependencies import numpy as np
 
 import tabsdata as td
@@ -49,6 +44,7 @@ import tabsdata.utils.tableframe._reflection as td_reflection
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._translator as td_translator
 from tabsdata.exceptions import ErrorCode, TableFrameError
+from tabsdata.utils.annotations import pydoc
 
 # noinspection PyProtectedMember
 from td_interceptor.interceptor import Interceptor
@@ -58,12 +54,12 @@ logger = logging.getLogger(__name__)
 
 
 @accessify
-class TdLazyFrame:
+class LazyFrame:
     """Owned Functions."""
 
     @classmethod
-    def _from_lazy(cls, lf: pl.LazyFrame) -> TdLazyFrame:
-        return TdLazyFrame.__build__(lf)
+    def _from_lazy(cls, lf: pl.LazyFrame) -> LazyFrame:
+        return LazyFrame.__build__(lf)
 
     def _to_lazy(self) -> pl.LazyFrame:
         return self._lf
@@ -71,16 +67,17 @@ class TdLazyFrame:
     """ Initialization Functions """
 
     @classmethod
-    def empty(cls) -> TdLazyFrame:
-        return TdLazyFrame.__build__(None)
+    @pydoc(categories="tableframe")
+    def empty(cls) -> LazyFrame:
+        return LazyFrame.__build__(None)
 
     @classmethod
     def __build__(
         cls,
         df: (
-            td_typing.TdDictionary | pl.LazyFrame | pl.DataFrame | TdLazyFrame | None
+            td_typing.TableDictionary | pl.LazyFrame | pl.DataFrame | LazyFrame | None
         ) = None,
-    ) -> TdLazyFrame:
+    ) -> LazyFrame:
         # noinspection PyProtectedMember
         if df is None:
             df = pl.LazyFrame(None)
@@ -90,7 +87,7 @@ class TdLazyFrame:
             pass
         elif isinstance(df, pl.DataFrame):
             df = df.lazy()
-        elif isinstance(df, TdLazyFrame):
+        elif isinstance(df, LazyFrame):
             df = df._lf
         else:
             raise TableFrameError(ErrorCode.TF2, type(df))
@@ -105,9 +102,9 @@ class TdLazyFrame:
 
     def __init__(
         self,
-        df: td_typing.TdDictionary | TdLazyFrame | None = None,
+        df: td_typing.TableDictionary | LazyFrame | None = None,
     ) -> None:
-        if isinstance(df, TdLazyFrame):
+        if isinstance(df, LazyFrame):
             # noinspection PyProtectedMember
             df = df._lf
         else:
@@ -129,6 +126,7 @@ class TdLazyFrame:
     def columns(self) -> list[str]:
         return self._lf.collect_schema().names()
 
+    @pydoc(categories="attributes")
     @property
     def dtypes(self) -> list[DataType]:
         return self._lf.collect_schema().dtypes()
@@ -153,7 +151,7 @@ class TdLazyFrame:
                 def wrapper(*args, **kwargs):
                     result = attr(*args, **kwargs)
                     if isinstance(result, pl.LazyFrame):
-                        return TdLazyFrame.__build__(result)
+                        return LazyFrame.__build__(result)
                     return result
 
                 return wrapper
@@ -166,37 +164,37 @@ class TdLazyFrame:
         return self._lf.__bool__()
 
     def __eq__(self, other: object) -> NoReturn:
-        if isinstance(other, TdLazyFrame):
+        if isinstance(other, LazyFrame):
             return self._id == other._id
         else:
             return self._lf.__eq__(other=other)
 
     def __ne__(self, other: object) -> NoReturn:
-        if isinstance(other, TdLazyFrame):
+        if isinstance(other, LazyFrame):
             return self._id != other._id
         else:
             return self._lf.__ne__(other=other)
 
     def __gt__(self, other: Any) -> NoReturn:
-        if isinstance(other, TdLazyFrame):
+        if isinstance(other, LazyFrame):
             return self._lf.__gt__(other=other._lf)
         else:
             return self._lf.__gt__(other=other)
 
     def __lt__(self, other: Any) -> NoReturn:
-        if isinstance(other, TdLazyFrame):
+        if isinstance(other, LazyFrame):
             return self._lf.__lt__(other=other._lf)
         else:
             return self._lf.__lt__(other=other)
 
     def __ge__(self, other: Any) -> NoReturn:
-        if isinstance(other, TdLazyFrame):
+        if isinstance(other, LazyFrame):
             return self._lf.__ge__(other=other._lf)
         else:
             return self._lf.__ge__(other=other)
 
     def __le__(self, other: Any) -> NoReturn:
-        if isinstance(other, TdLazyFrame):
+        if isinstance(other, LazyFrame):
             return self._lf.__le__(other=other._lf)
         else:
             return self._lf.__le__(other=other)
@@ -205,14 +203,14 @@ class TdLazyFrame:
     def __contains__(self, key: str) -> bool:
         return self._lf.__contains__(key=key)
 
-    def __copy__(self) -> TdLazyFrame:
-        return TdLazyFrame.__build__(self._lf.__copy__())
+    def __copy__(self) -> LazyFrame:
+        return LazyFrame.__build__(self._lf.__copy__())
 
-    def __deepcopy__(self, memo: None = None) -> TdLazyFrame:
-        return TdLazyFrame.__build__(self._lf.__deepcopy__(memo=memo))
+    def __deepcopy__(self, memo: None = None) -> LazyFrame:
+        return LazyFrame.__build__(self._lf.__deepcopy__(memo=memo))
 
-    def __getitem__(self, item: int | range | slice) -> TdLazyFrame:
-        return TdLazyFrame.__build__(self._lf.__getitem__(item=item))
+    def __getitem__(self, item: int | range | slice) -> LazyFrame:
+        return LazyFrame.__build__(self._lf.__getitem__(item=item))
 
     def __str__(self) -> str:
         return self._lf.explain(optimized=False)
@@ -220,16 +218,17 @@ class TdLazyFrame:
     def __repr__(self) -> str:
         return (
             f"<{self.__class__.__name__} at 0x{id(self):X}> with {self._lf.__repr__()}"
-        )
+        ).replace("LazyFrame", "TableFrame")
 
     @private
     def _repr_html_(self) -> str:
         # noinspection PyProtectedMember
-        return self._lf._repr_html_().replace("LazyFrame", "TdDataFrame")
+        return self._lf._repr_html_().replace("LazyFrame", "TableFrame")
 
     """ Description Functions """
 
     @private
+    @pydoc(categories="description")
     def explain(self) -> None:
         logger.info(
             self._lf.explain(
@@ -250,6 +249,7 @@ class TdLazyFrame:
         )
 
     @private
+    @pydoc(categories="description")
     def show_graph(self) -> str | None:
         logger.info(
             self._lf.show_graph(
@@ -272,21 +272,22 @@ class TdLazyFrame:
         )
 
     @private
-    def inspect(self, fmt: str = "{}") -> TdLazyFrame:
-        return TdLazyFrame.__build__(self._lf.inspect(fmt=fmt))
+    def inspect(self, fmt: str = "{}") -> LazyFrame:
+        return LazyFrame.__build__(self._lf.inspect(fmt=fmt))
 
     """ Transformation Functions """
 
     # ToDo: proper expressions handling.
     # status(Status.TODO)
+    @pydoc(categories="tableframe")
     def sort(
         self,
-        by: td_expr.IntoTdExpr | Iterable[td_expr.IntoTdExpr],
-        *more_by: td_expr.IntoTdExpr,
+        by: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
+        *more_by: td_expr.IntoExpr,
         descending: bool | Sequence[bool] = False,
         nulls_last: bool | Sequence[bool] = False,
         maintain_order: bool = False,
-    ) -> TdLazyFrame:
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Sort the `TableFrame` by the given column(s) or expression(s).
@@ -339,7 +340,7 @@ class TdLazyFrame:
         └──────┴───────┘
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.sort(
                 by=td_translator._unwrap_into_tdexpr([by] + list(more_by)),
                 *more_by,
@@ -352,15 +353,16 @@ class TdLazyFrame:
 
     # ToDo: disallow transformations in system td columns.
     # status(Status.TODO)
+    @pydoc(categories="manipulation")
     def cast(
         self,
         dtypes: (
-            Mapping[ColumnNameOrSelector | PolarsDataType, PolarsDataType]
-            | PolarsDataType
+            Mapping[ColumnNameOrSelector | td_typing.TdDataType, td_typing.TdDataType]
+            | td_typing.TdDataType
         ),
         *,
         strict: bool = True,
-    ) -> TdLazyFrame:
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Cast columns to a new data type.
@@ -410,13 +412,14 @@ class TdLazyFrame:
         └──────┴───────┘
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.cast(dtypes=td_translator._unwrap_tdexpr(dtypes), strict=strict)
         )
 
     # ToDo: should we allow only clear to 0 rows?
     # status(Status.TODO)
-    def clear(self, n: int = 0) -> TdLazyFrame:
+    @pydoc(categories="tableframe")
+    def clear(self, n: int = 0) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Clears all rows of the `TableFrame` preserving the schema.
@@ -452,25 +455,26 @@ class TdLazyFrame:
         ╞══════╪═══════╡
         └──────┴───────┘
         """
-        return TdLazyFrame.__build__(self._lf.clear(n=n))
+        return LazyFrame.__build__(self._lf.clear(n=n))
 
     # ToDo: allways attach system td columns.
     # ToDo: dedicated algorithm for proper provenance handling.
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
+    @pydoc(categories="join")
     def join(
         self,
-        other: TdLazyFrame,
-        on: str | td_expr.TdExpr | Sequence[str | td_expr.TdExpr] | None = None,
+        other: LazyFrame,
+        on: str | td_expr.Expr | Sequence[str | td_expr.Expr] | None = None,
         how: JoinStrategy = "inner",
         *,
-        left_on: str | td_expr.TdExpr | Sequence[str | td_expr.TdExpr] | None = None,
-        right_on: str | td_expr.TdExpr | Sequence[str | td_expr.TdExpr] | None = None,
+        left_on: str | td_expr.Expr | Sequence[str | td_expr.Expr] | None = None,
+        right_on: str | td_expr.Expr | Sequence[str | td_expr.Expr] | None = None,
         suffix: str = "_right",
         join_nulls: bool = False,
         coalesce: bool | None = None,
-    ) -> TdLazyFrame:
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Join the `TableFrame` with another `TableFrame`.
@@ -610,18 +614,19 @@ class TdLazyFrame:
             allow_parallel=True,
             force_parallel=False,
         )
-        return TdLazyFrame.__build__(_assemble_columns(lf))
+        return LazyFrame.__build__(_assemble_columns(lf))
 
     # ToDo: allways attach system td columns.
     # ToDo: dedicated algorithm for proper provenance handling.
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
+    @pydoc(categories="projection")
     def with_columns(
         self,
-        *exprs: td_expr.IntoTdExpr | Iterable[td_expr.IntoTdExpr],
-        **named_exprs: td_expr.IntoTdExpr,
-    ) -> TdLazyFrame:
+        *exprs: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
+        **named_exprs: td_expr.IntoExpr,
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Add columns to the `TableFrame`.
@@ -665,7 +670,7 @@ class TdLazyFrame:
         └──────┴──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.with_columns(
                 *[td_translator._unwrap_into_tdexpr_column(column) for column in exprs],
                 **named_exprs,
@@ -677,11 +682,12 @@ class TdLazyFrame:
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
+    @pydoc(categories="projection")
     def drop(
         self,
         *columns: ColumnNameOrSelector | Iterable[ColumnNameOrSelector],
         strict: bool = True,
-    ) -> TdLazyFrame:
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Discard columns from the `TableFrame`.
@@ -725,16 +731,17 @@ class TdLazyFrame:
         └──────┘
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.drop(td_translator._unwrap_tdexpr(*columns), strict=strict)
         )
 
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
+    @pydoc(categories="manipulation")
     def fill_null(
         self,
-        value: Any | td_expr.TdExpr | None = None,
-    ) -> TdLazyFrame:
+        value: Any | td_expr.Expr | None = None,
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Replace all `null` values in the `TableFrame` with the given value.
@@ -777,7 +784,7 @@ class TdLazyFrame:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.fill_null(
                 value=td_translator._unwrap_tdexpr(value),
                 strategy=None,
@@ -788,7 +795,8 @@ class TdLazyFrame:
 
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
-    def fill_nan(self, value: int | float | td_expr.TdExpr | None) -> TdLazyFrame:
+    @pydoc(categories="manipulation")
+    def fill_nan(self, value: int | float | td_expr.Expr | None) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Replace all `NaN` values in the `TableFrame` with the given value.
@@ -831,7 +839,7 @@ class TdLazyFrame:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.fill_nan(value=td_translator._unwrap_tdexpr(value))
         )
 
@@ -839,13 +847,14 @@ class TdLazyFrame:
     # ToDo: proper expressions handling.
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
+    @pydoc(categories="filters")
     def unique(
         self,
         subset: ColumnNameOrSelector | Collection[ColumnNameOrSelector] | None = None,
         *,
         keep: UniqueKeepStrategy = "any",
         maintain_order: bool = False,
-    ) -> TdLazyFrame:
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Deduplicate rows from the `TableFrame`.
@@ -896,7 +905,7 @@ class TdLazyFrame:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.unique(
                 subset=td_translator._unwrap_tdexpr(subset),
                 keep=keep,
@@ -908,10 +917,11 @@ class TdLazyFrame:
     # ToDo: proper expressions handling.
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
+    @pydoc(categories="manipulation")
     def drop_nans(
         self,
         subset: ColumnNameOrSelector | Collection[ColumnNameOrSelector] | None = None,
-    ) -> TdLazyFrame:
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Drop rows with `NaN` values.
@@ -963,7 +973,7 @@ class TdLazyFrame:
         >>>
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.drop_nans(subset=td_translator._unwrap_tdexpr(subset))
         )
 
@@ -971,10 +981,11 @@ class TdLazyFrame:
     # ToDo: proper expressions handling.
     # ToDo: ensure system td columns are left unchanged.
     # status(Status.TODO)
+    @pydoc(categories="manipulation")
     def drop_nulls(
         self,
         subset: ColumnNameOrSelector | Collection[ColumnNameOrSelector] | None = None,
-    ) -> TdLazyFrame:
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Drop rows with null values.
@@ -1027,7 +1038,7 @@ class TdLazyFrame:
         └─────┴─────┴──────┘
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.drop_nulls(subset=td_translator._unwrap_tdexpr(subset))
         )
 
@@ -1036,16 +1047,17 @@ class TdLazyFrame:
     # ToDo: allways attach system td columns.
     # ToDo: dedicated algorithm for proper provenance handling.
     # ToDo: check for undesired operations of system td columns.
+    @pydoc(categories="filters")
     def filter(
         self,
         *predicates: (
-            td_expr.IntoTdExprColumn
-            | Iterable[td_expr.IntoTdExprColumn]
+            td_expr.IntoExprColumn
+            | Iterable[td_expr.IntoExprColumn]
             | bool
             | list[bool]
             | np.ndarray[Any, Any]
         ),
-    ) -> TdLazyFrame:
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Filter the `TableFrame` based on the given predicates.
@@ -1084,7 +1096,7 @@ class TdLazyFrame:
         └─────┴─────┘
         """
         # noinspection PyProtectedMember
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             self._lf.filter(
                 *[
                     td_translator._unwrap_into_tdexpr_column(column)
@@ -1099,11 +1111,12 @@ class TdLazyFrame:
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
+    @pydoc(categories="projection")
     def select(
         self,
-        *exprs: td_expr.IntoTdExpr | Iterable[td_expr.IntoTdExpr],
-        **named_exprs: td_expr.IntoTdExpr,
-    ) -> TdLazyFrame:
+        *exprs: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
+        **named_exprs: td_expr.IntoExpr,
+    ) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Select column(s) from the `TableFrame`.
@@ -1169,7 +1182,7 @@ class TdLazyFrame:
             *[td_translator._unwrap_into_tdexpr(column) for column in exprs],
             necessary_columns,
         )
-        return TdLazyFrame.__build__(
+        return LazyFrame.__build__(
             _assemble_columns(
                 self._lf.select(
                     columns,
@@ -1183,10 +1196,11 @@ class TdLazyFrame:
     # ToDo: check for undesired operations of system td columns.
     # ToDo: proper expressions handling.
     # status(Status.TODO)
+    @pydoc(categories="aggregation")
     def group_by(
         self,
-        *by: td_expr.IntoTdExpr | Iterable[td_expr.IntoTdExpr],
-    ) -> td_group_by.TdLazyGroupBy:
+        *by: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
+    ) -> td_group_by.LazyGroupBy:
         # noinspection PyShadowingNames
         """
         Perform a group by on the `TableFrame`.
@@ -1229,7 +1243,7 @@ class TdLazyFrame:
         └─────┴─────┘
         """
         # noinspection PyProtectedMember
-        return td_group_by.TdLazyGroupBy(
+        return td_group_by.LazyGroupBy(
             self._lf.group_by(
                 *[td_translator._unwrap_into_tdexpr(column) for column in by],
                 maintain_order=False,
@@ -1237,7 +1251,8 @@ class TdLazyFrame:
         )
 
     # status(Status.DONE)
-    def slice(self, offset: int, length: int | None = None) -> TdLazyFrame:
+    @pydoc(categories="filters")
+    def slice(self, offset: int, length: int | None = None) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Return a `TableFrame` with a slice of the original `TableFrame`
@@ -1275,10 +1290,11 @@ class TdLazyFrame:
         │ D   ┆ 5   │
         └─────┴─────┘
         """
-        return TdLazyFrame.__build__(self._lf.slice(offset=offset, length=length))
+        return LazyFrame.__build__(self._lf.slice(offset=offset, length=length))
 
     # status(Status.DONE)
-    def limit(self, n: int = 5) -> TdLazyFrame:
+    @pydoc(categories="filters")
+    def limit(self, n: int = 5) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Return a `TableFrame` with the first `n` rows.
@@ -1316,10 +1332,11 @@ class TdLazyFrame:
         │ X   ┆ 10  │
         └─────┴─────┘
         """
-        return TdLazyFrame.__build__(self._lf.limit(n=n))
+        return LazyFrame.__build__(self._lf.limit(n=n))
 
     # status(Status.DONE)
-    def head(self, n: int = 5) -> TdLazyFrame:
+    @pydoc(categories="filters")
+    def head(self, n: int = 5) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Return a `TableFrame` with the first `n` rows.
@@ -1356,10 +1373,11 @@ class TdLazyFrame:
         │ X   ┆ 10  │
         └─────┴─────┘
         """
-        return TdLazyFrame.__build__(self._lf.head(n=n))
+        return LazyFrame.__build__(self._lf.head(n=n))
 
     # status(Status.DONE)
-    def tail(self, n: int = 5) -> TdLazyFrame:
+    @pydoc(categories="filters")
+    def tail(self, n: int = 5) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Return a `TableFrame` with the last `n` rows.
@@ -1396,10 +1414,11 @@ class TdLazyFrame:
         │ M   ┆ 9   │
         └─────┴─────┘
         """
-        return TdLazyFrame.__build__(self._lf.tail(n=n))
+        return LazyFrame.__build__(self._lf.tail(n=n))
 
     # status(Status.DONE)
-    def last(self) -> TdLazyFrame:
+    @pydoc(categories="filters")
+    def last(self) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Return a `TableFrame` with the last row.
@@ -1432,10 +1451,11 @@ class TdLazyFrame:
         │ M   ┆ 9   │
         └─────┴─────┘
         """
-        return TdLazyFrame.__build__(self._lf.last())
+        return LazyFrame.__build__(self._lf.last())
 
     # status(Status.DONE)
-    def first(self) -> TdLazyFrame:
+    @pydoc(categories="filters")
+    def first(self) -> LazyFrame:
         # noinspection PyShadowingNames
         """
         Return a `TableFrame` with the first row.
@@ -1468,15 +1488,15 @@ class TdLazyFrame:
         │ A   ┆ 1   │
         └─────┴─────┘
         """
-        return TdLazyFrame.__build__(self._lf.first())
+        return LazyFrame.__build__(self._lf.first())
 
 
-TdPolarsType = TypeVar("TdPolarsType", TdLazyFrame, Series, td_expr.TdExpr)
+TdType = TypeVar("TdType", LazyFrame, Series, td_expr.Expr)
 
 """Internal private Functions."""
 
 
-def _assemble_columns(f: TdLazyFrame | pl.LazyFrame) -> td.TableFrame:
+def _assemble_columns(f: LazyFrame | pl.LazyFrame) -> td.TableFrame:
     if isinstance(f, pl.LazyFrame):
         return td.TableFrame.__build__(Interceptor.instance().assemble_columns(f))
     elif isinstance(f, td.TableFrame):
@@ -1497,7 +1517,7 @@ def get_class_methods(cls) -> List[str]:
 
 def get_missing_methods():
     polars_methods = get_class_methods(pl.LazyFrame)
-    tabsdata_methods = get_class_methods(TdLazyFrame)
+    tabsdata_methods = get_class_methods(LazyFrame)
     tabsdata_all_methods = set(
         tabsdata_methods
         + td_constants.DUPLICATE_METHODS
@@ -1512,12 +1532,13 @@ def get_missing_methods():
     )
     diff = list(set(polars_methods) - tabsdata_all_methods)
     # We determine if running inside a pytest test using the standard procedure:
-    # https://docs.pytest.org/en/stable/example/simple.html#detect-if-running-from-within-a-pytest-run
+    # https://docs.pytest.org/en/stable/example/simple.html#detect-if-running-from
+    # -within-a-pytest-run
     if diff:
         if os.environ.get(td_constants.PYTEST_CONTEXT_ACTIVE) is not None:
             logger.warning(
                 "🧨 There are some polars LazyDataFrame methods not available in"
-                " TdLazyFrame"
+                " TableFrame"
             )
             for polars_method in diff:
                 logger.warning(f"   👀 {polars_method}")
@@ -1527,8 +1548,8 @@ def check_polars_api():
     """
     Check polars API.
     """
-    logger.info("Available TdTableFrame (TableFrame) methods:")
-    for method in get_class_methods(TdLazyFrame):
+    logger.info("Available TableFrame methods:")
+    for method in get_class_methods(LazyFrame):
         logger.debug(f"   {method}")
     get_missing_methods()
 

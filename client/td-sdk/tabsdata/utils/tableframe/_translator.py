@@ -24,35 +24,33 @@ def _is_instance_of_union(obj, tp):
     return False
 
 
-def _wrap_polars_frame(f: pl.LazyFrame | pl.DataFrame) -> td_frame.TdLazyFrame:
+def _wrap_polars_frame(f: pl.LazyFrame | pl.DataFrame) -> td_frame.LazyFrame:
     if isinstance(f, pl.LazyFrame):
         # noinspection PyProtectedMember
-        return td_frame.TdLazyFrame._from_lazy(f)
+        return td_frame.LazyFrame._from_lazy(f)
     elif isinstance(f, pl.DataFrame):
         # noinspection PyProtectedMember
-        return td_frame.TdLazyFrame._from_lazy(f.lazy())
+        return td_frame.LazyFrame._from_lazy(f.lazy())
     else:
         raise TableFrameError(ErrorCode.TF7, type(f))
 
 
-def _unwrap_table_frame(tf: td_frame.TdLazyFrame):
+def _unwrap_table_frame(tf: td_frame.LazyFrame):
     # noinspection PyProtectedMember
-    return td_common.drop_system_columns(td_frame.TdLazyFrame._to_lazy(tf))
+    return td_common.drop_system_columns(td_frame.LazyFrame._to_lazy(tf))
 
 
 # noinspection PyProtectedMember
 def _unwrap_tdexpr(expr: Any) -> pl.Expr | List[pl.Expr] | Any:
-    if isinstance(expr, td_expr.TdExpr):
+    if isinstance(expr, td_expr.Expr):
         return expr._expr
     elif isinstance(expr, dict):
         return {
-            key: value._expr if isinstance(value, td_expr.TdExpr) else value
+            key: value._expr if isinstance(value, td_expr.Expr) else value
             for key, value in expr.items()
         }
     elif isinstance(expr, Collection) and not isinstance(expr, (str, bytes)):
-        return [
-            item._expr if isinstance(item, td_expr.TdExpr) else item for item in expr
-        ]
+        return [item._expr if isinstance(item, td_expr.Expr) else item for item in expr]
     else:
         return expr
 
@@ -60,16 +58,14 @@ def _unwrap_tdexpr(expr: Any) -> pl.Expr | List[pl.Expr] | Any:
 def _unwrap_into_tdexpr_column(
     expr: Any,
 ) -> pl.IntoExprColumn | List[pl.IntoExprColumn] | Any:
-    if isinstance(expr, td_expr.TdExpr):
+    if isinstance(expr, td_expr.Expr):
         # noinspection PyProtectedMember
         return expr._expr
     elif isinstance(expr, dict):
         return {key: _unwrap_into_tdexpr_column(value) for key, value in expr.items()}
     elif isinstance(expr, Collection) and not isinstance(expr, (str, bytes)):
         # noinspection PyProtectedMember
-        return [
-            item._expr if isinstance(item, td_expr.TdExpr) else item for item in expr
-        ]
+        return [item._expr if isinstance(item, td_expr.Expr) else item for item in expr]
     else:
         return expr
 
@@ -77,7 +73,7 @@ def _unwrap_into_tdexpr_column(
 def _unwrap_into_tdexpr(expr: Any) -> pl.IntoExpr | List[pl.IntoExpr] | Any:
     if expr is None:
         return None
-    if _is_instance_of_union(expr, td_expr.IntoTdExprColumn):
+    if _is_instance_of_union(expr, td_expr.IntoExprColumn):
         # noinspection PyProtectedMember
         return _unwrap_into_tdexpr_column(expr)
     elif isinstance(expr, dict):
@@ -89,9 +85,9 @@ def _unwrap_into_tdexpr(expr: Any) -> pl.IntoExpr | List[pl.IntoExpr] | Any:
 
 
 def _unwrap_tdexpr_date_time_name_space(
-    expr: td_datetime.TdExprDateTimeNameSpace,
+    expr: td_datetime.ExprDateTimeNameSpace,
 ) -> pl.ExprDateTimeNameSpace:
-    if isinstance(expr, td_datetime.TdExprDateTimeNameSpace):
+    if isinstance(expr, td_datetime.ExprDateTimeNameSpace):
         # noinspection PyProtectedMember
         return expr._expr
     else:

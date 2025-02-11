@@ -2,8 +2,8 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
-
-from typing import List
+import logging
+from typing import List, ParamSpec, TypeVar
 
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
 from tabsdata.plugin import DestinationPlugin, SourcePlugin
@@ -27,7 +27,12 @@ from tabsdata.tabsdatafunction import (
     TabsdataFunction,
 )
 
+P = ParamSpec("P")
+T = TypeVar("T")
+
 ALL_DEPS = "*"
+
+logger = logging.getLogger(__name__)
 
 
 def transformer(

@@ -753,7 +753,7 @@ class ErrorCode(Enum):
     TF2 = {
         "code": "TF-002",
         "message": (
-            "TdTableFrame must be instantiated empty, or with a dictionary, or another"
+            "TableFrame must be instantiated empty, or with a dictionary, or another"
             " TableFrame. '{}' was provided instead."
         ),
     }
@@ -772,15 +772,15 @@ class ErrorCode(Enum):
     TF5 = {
         "code": "TF-005",
         "message": (
-            "Expr must be instantiated with a polars Expr or a TdExpr object: '{}' "
-            "was provided instead."
+            "Expr must be instantiated with a polars Expr or a Tabsdata Expr object:"
+            " '{}' was provided instead."
         ),
     }
     TF6 = {
         "code": "TF-006",
         "message": (
-            "GroupBy must be instantiated with a polars LazyGroupBY or a TdGroupBy "
-            "object: '{}' was provided instead."
+            "GroupBy must be instantiated with a polars LazyGroupBY or a Tabsdata"
+            " LazyGroupBy object: '{}' was provided instead."
         ),
     }
     TF7 = {
@@ -981,7 +981,7 @@ class SecretConfigurationError(TabsDataException):
 
 class TableFrameError(TabsDataException):
     """
-    Exception raised when handling a (Td)TableFrame.
+    Exception raised when handling a TableFrame.
     """
 
     CODE_PREFIX = "TF"

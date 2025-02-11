@@ -10,8 +10,10 @@ from collections.abc import Iterable
 import polars as pl
 
 # noinspection PyProtectedMember
-from polars._typing import PolarsDataType, PythonDataType
+from polars._typing import PythonDataType
 
+# noinspection PyProtectedMember
+import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.expr as td_expr
 
 # noinspection PyProtectedMember
@@ -25,13 +27,13 @@ def _new_col(
     check: bool,
     name: (
         str
-        | PolarsDataType
+        | td_typing.DataType
         | PythonDataType
         | Iterable[str]
-        | Iterable[PolarsDataType | PythonDataType]
+        | Iterable[td_typing.DataType | PythonDataType]
     ),
-    *more_names: str | PolarsDataType | PythonDataType,
-) -> td_expr.TdExpr:
+    *more_names: str | td_typing.DataType | PythonDataType,
+) -> td_expr.Expr:
     if check:
         td_common.check_columns(name, *more_names)
     return _create_col(name, *more_names)
@@ -40,17 +42,17 @@ def _new_col(
 def _create_col(
     name: (
         str
-        | PolarsDataType
+        | td_typing.TdDataType
         | PythonDataType
         | Iterable[str]
-        | Iterable[PolarsDataType | PythonDataType]
+        | Iterable[td_typing.TdDataType | PythonDataType]
     ),
-    *more_names: str | PolarsDataType | PythonDataType,
-) -> td_expr.TdExpr:
-    return td_expr.TdExpr(pl.col(name, *more_names))
+    *more_names: str | td_typing.TdDataType | PythonDataType,
+) -> td_expr.Expr:
+    return td_expr.Expr(pl.col(name, *more_names))
 
 
-class TdCol:
+class Col:
     """
     This class is used to create TableFrame column expressions.
 
@@ -76,13 +78,13 @@ class TdCol:
         self,
         name: (
             str
-            | PolarsDataType
+            | td_typing.TdDataType
             | PythonDataType
             | Iterable[str]
-            | Iterable[PolarsDataType | PythonDataType]
+            | Iterable[td_typing.TdDataType | PythonDataType]
         ),
-        *more_names: str | PolarsDataType | PythonDataType,
-    ) -> td_expr.TdExpr:
+        *more_names: str | td_typing.TdDataType | PythonDataType,
+    ) -> td_expr.Expr:
         """
         Create a TableFrame column expression.
 
@@ -103,7 +105,7 @@ class TdCol:
         """
         return _new_col(True, name, *more_names)
 
-    def __getattr__(self, name: str) -> td_expr.TdExpr:
+    def __getattr__(self, name: str) -> td_expr.Expr:
         """
         Constructs a column expression using attribute syntax.
 
@@ -124,4 +126,4 @@ class TdCol:
         return _new_col(True, name)
 
 
-tdcol: TdCol = TdCol()
+col: Col = Col()

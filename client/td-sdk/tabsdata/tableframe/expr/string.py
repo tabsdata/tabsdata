@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+import polars.expr.string as pl_string
 from polars import Expr
 
 # noinspection PyProtectedMember
@@ -13,29 +14,31 @@ from polars._typing import Ambiguous, TimeUnit
 
 # noinspection PyProtectedMember
 from polars._utils.various import NoDefault, no_default
-from polars.expr.string import ExprStringNameSpace
 
 import tabsdata.tableframe.expr.expr as td_expr
 
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._translator as td_translator
+from tabsdata.utils.annotations import pydoc
 
 
-def to_tdexpr(expr: Expr) -> td_expr.TdExpr:
-    return td_expr.TdExpr(expr)
+# ToDo: This requires some refactoring to unify transformer methods
+def _to_tdexpr(expr: Expr) -> td_expr.Expr:
+    return td_expr.Expr(expr)
 
 
-class TdExprStringNameSpace:
-    def __init__(self, expr: ExprStringNameSpace) -> None:
+class ExprStringNameSpace:
+    def __init__(self, expr: pl_string.ExprStringNameSpace) -> None:
         # noinspection PyProtectedMember
         self._expr = expr
 
+    @pydoc(categories="type_casting")
     def to_date(
         self,
         fmt: str | None = None,
         *,
         strict: bool = True,
-    ) -> td_expr.TdExpr:
+    ) -> td_expr.Expr:
         """
         Convert the string to a date.
 
@@ -62,10 +65,11 @@ class TdExprStringNameSpace:
         │ null       ┆ null       │
         └────────────┴────────────┘
         """
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.to_date(format=fmt, strict=strict, exact=True, cache=True)
         )
 
+    @pydoc(categories="type_casting")
     def to_datetime(
         self,
         fmt: str | None = None,
@@ -73,8 +77,8 @@ class TdExprStringNameSpace:
         time_unit: TimeUnit | None = None,
         time_zone: str | None = None,
         strict: bool = True,
-        ambiguous: Ambiguous | td_expr.TdExpr = "raise",
-    ) -> td_expr.TdExpr:
+        ambiguous: Ambiguous | td_expr.Expr = "raise",
+    ) -> td_expr.Expr:
         """
         Convert the string to a datetime.
 
@@ -109,7 +113,7 @@ class TdExprStringNameSpace:
         └─────────────────────┴─────────────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.to_datetime(
                 format=fmt,
                 time_unit=time_unit,
@@ -121,9 +125,10 @@ class TdExprStringNameSpace:
             )
         )
 
+    @pydoc(categories="type_casting")
     def to_time(
         self, fmt: str | None = None, *, strict: bool = True, cache: bool = True
-    ) -> td_expr.TdExpr:
+    ) -> td_expr.Expr:
         """
         Convert the string to a time.
 
@@ -151,9 +156,10 @@ class TdExprStringNameSpace:
         │ null                ┆ null                │
         └─────────────────────┴─────────────────────┘
         """
-        return to_tdexpr(self._expr.to_time(format=fmt, strict=strict, cache=cache))
+        return _to_tdexpr(self._expr.to_time(format=fmt, strict=strict, cache=cache))
 
-    def len_bytes(self) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def len_bytes(self) -> td_expr.Expr:
         """
         Return number of bytes (not chars) of a string.
 
@@ -175,9 +181,10 @@ class TdExprStringNameSpace:
         │ null ┆ null       │
         └──────┴────────────┘
         """
-        return to_tdexpr(self._expr.len_bytes())
+        return _to_tdexpr(self._expr.len_bytes())
 
-    def len_chars(self) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def len_chars(self) -> td_expr.Expr:
         """
         Return number of chars (not bytes) of a string.
 
@@ -199,9 +206,10 @@ class TdExprStringNameSpace:
         │ null ┆ null       │
         └──────┴────────────┘
         """
-        return to_tdexpr(self._expr.len_chars())
+        return _to_tdexpr(self._expr.len_chars())
 
-    def to_uppercase(self) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def to_uppercase(self) -> td_expr.Expr:
         """
         Return the uppercase of a string.
 
@@ -222,9 +230,10 @@ class TdExprStringNameSpace:
         │ null ┆ null         │
         └──────┴──────────────┘
         """
-        return to_tdexpr(self._expr.to_uppercase())
+        return _to_tdexpr(self._expr.to_uppercase())
 
-    def to_lowercase(self) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def to_lowercase(self) -> td_expr.Expr:
         """
         Return the lowercase of a string.
 
@@ -245,9 +254,10 @@ class TdExprStringNameSpace:
         │ null ┆ null          │
         └──────┴───────────────┘
         """
-        return to_tdexpr(self._expr.to_lowercase())
+        return _to_tdexpr(self._expr.to_lowercase())
 
-    def to_titlecase(self) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def to_titlecase(self) -> td_expr.Expr:
         """
         Uppercase the first character and lowercase all the others ones of a string.
 
@@ -271,9 +281,10 @@ class TdExprStringNameSpace:
         │ null ┆ null      │
         └──────┴───────────┘
         """
-        return to_tdexpr(self._expr.to_titlecase())
+        return _to_tdexpr(self._expr.to_titlecase())
 
-    def strip_chars(self, characters: td_expr.IntoTdExpr = None) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def strip_chars(self, characters: td_expr.IntoExpr = None) -> td_expr.Expr:
         """
         Trim string values.
 
@@ -302,15 +313,14 @@ class TdExprStringNameSpace:
         └─────────────────────────────────┴─────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.strip_chars(
                 characters=td_translator._unwrap_into_tdexpr(characters)
             )
         )
 
-    def strip_chars_start(
-        self, characters: td_expr.IntoTdExpr = None
-    ) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def strip_chars_start(self, characters: td_expr.IntoExpr = None) -> td_expr.Expr:
         """
         Trim string values from the start of the string.
 
@@ -339,13 +349,14 @@ class TdExprStringNameSpace:
         └───────────────────────────────┴────────────────────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.strip_chars_start(
                 characters=td_translator._unwrap_into_tdexpr(characters)
             )
         )
 
-    def strip_chars_end(self, characters: td_expr.IntoTdExpr = None) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def strip_chars_end(self, characters: td_expr.IntoExpr = None) -> td_expr.Expr:
         """
         Trim string values from the end of the string.
 
@@ -374,13 +385,14 @@ class TdExprStringNameSpace:
         └───────────────────────────────┴─────────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.strip_chars_end(
                 characters=td_translator._unwrap_into_tdexpr(characters)
             )
         )
 
-    def strip_prefix(self, prefix: td_expr.IntoTdExpr) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def strip_prefix(self, prefix: td_expr.IntoExpr) -> td_expr.Expr:
         """
         Trim string values removing the given prefix
 
@@ -406,9 +418,10 @@ class TdExprStringNameSpace:
         │ null                          ┆ null            │
         └───────────────────────────────┴─────────────────┘
         """
-        return to_tdexpr(self._expr.strip_prefix(prefix=prefix))
+        return _to_tdexpr(self._expr.strip_prefix(prefix=prefix))
 
-    def strip_suffix(self, suffix: td_expr.IntoTdExpr) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def strip_suffix(self, suffix: td_expr.IntoExpr) -> td_expr.Expr:
         """
         Trim string values removing the given suffix
 
@@ -434,9 +447,10 @@ class TdExprStringNameSpace:
         │ null                          ┆ null            │
         └───────────────────────────────┴─────────────────┘
         """
-        return to_tdexpr(self._expr.strip_suffix(suffix=suffix))
+        return _to_tdexpr(self._expr.strip_suffix(suffix=suffix))
 
-    def pad_start(self, length: int, fill_char: str = " ") -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def pad_start(self, length: int, fill_char: str = " ") -> td_expr.Expr:
         """
         Pad string values at the front to the given length using the given
         fill character.
@@ -463,9 +477,10 @@ class TdExprStringNameSpace:
         │ null   ┆ null      │
         └────────┴───────────┘
         """
-        return to_tdexpr(self._expr.pad_start(length=length, fill_char=fill_char))
+        return _to_tdexpr(self._expr.pad_start(length=length, fill_char=fill_char))
 
-    def pad_end(self, length: int, fill_char: str = " ") -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def pad_end(self, length: int, fill_char: str = " ") -> td_expr.Expr:
         """
         Pad string values at the end to the given length using the given
         fill character.
@@ -492,9 +507,10 @@ class TdExprStringNameSpace:
         │ null   ┆ null    │
         └────────┴─────────┘
         """
-        return to_tdexpr(self._expr.pad_end(length=length, fill_char=fill_char))
+        return _to_tdexpr(self._expr.pad_end(length=length, fill_char=fill_char))
 
-    def zfill(self, length: int | td_expr.IntoTdExprColumn) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def zfill(self, length: int | td_expr.IntoExprColumn) -> td_expr.Expr:
         """
         Pad numeric string values at the start to the given length using zeros.
 
@@ -520,15 +536,16 @@ class TdExprStringNameSpace:
         │ null ┆ null  │
         └──────┴───────┘
         """
-        return to_tdexpr(self._expr.zfill(length=length))
+        return _to_tdexpr(self._expr.zfill(length=length))
 
+    @pydoc(categories="string")
     def contains(
         self,
-        pattern: str | td_expr.TdExpr,
+        pattern: str | td_expr.Expr,
         *,
         literal: bool = False,
         strict: bool = True,
-    ) -> td_expr.TdExpr:
+    ) -> td_expr.Expr:
         """
         Evaluate if the string contains a pattern.
 
@@ -557,7 +574,7 @@ class TdExprStringNameSpace:
         └──────┴──────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.contains(
                 pattern=td_expr.td_translator._unwrap_tdexpr(pattern),
                 literal=literal,
@@ -565,13 +582,14 @@ class TdExprStringNameSpace:
             )
         )
 
+    @pydoc(categories="string")
     def find(
         self,
-        pattern: str | td_expr.TdExpr,
+        pattern: str | td_expr.Expr,
         *,
         literal: bool = False,
         strict: bool = True,
-    ) -> td_expr.TdExpr:
+    ) -> td_expr.Expr:
         """
         Find the position of the first occurrence of the given pattern.
 
@@ -600,7 +618,7 @@ class TdExprStringNameSpace:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.find(
                 pattern=td_expr.td_translator._unwrap_tdexpr(pattern),
                 literal=literal,
@@ -608,7 +626,8 @@ class TdExprStringNameSpace:
             )
         )
 
-    def ends_with(self, suffix: str | td_expr.TdExpr) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def ends_with(self, suffix: str | td_expr.Expr) -> td_expr.Expr:
         """
         Evaluate if the string ends with.
 
@@ -635,11 +654,12 @@ class TdExprStringNameSpace:
         └──────┴───────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.ends_with(suffix=td_expr.td_translator._unwrap_tdexpr(suffix))
         )
 
-    def starts_with(self, prefix: str | td_expr.TdExpr) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def starts_with(self, prefix: str | td_expr.Expr) -> td_expr.Expr:
         """
         Evaluate if the string start with.
 
@@ -667,13 +687,14 @@ class TdExprStringNameSpace:
         └──────┴────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.starts_with(prefix=td_expr.td_translator._unwrap_tdexpr(prefix))
         )
 
+    @pydoc(categories="string")
     def extract(
-        self, pattern: td_expr.IntoTdExprColumn, group_index: int = 1
-    ) -> td_expr.TdExpr:
+        self, pattern: td_expr.IntoExprColumn, group_index: int = 1
+    ) -> td_expr.Expr:
         """
         Extract a pattern from the string.
 
@@ -701,16 +722,17 @@ class TdExprStringNameSpace:
         └───────────┴─────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.extract(
                 pattern=td_translator._unwrap_into_tdexpr_column(pattern),
                 group_index=group_index,
             )
         )
 
+    @pydoc(categories="string")
     def count_matches(
-        self, pattern: str | td_expr.TdExpr, *, literal: bool = False
-    ) -> td_expr.TdExpr:
+        self, pattern: str | td_expr.Expr, *, literal: bool = False
+    ) -> td_expr.Expr:
         """
         Counts the ocurrrences of the given pattern in the string.
 
@@ -741,20 +763,21 @@ class TdExprStringNameSpace:
         └───────────┴───────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.count_matches(
                 pattern=td_expr.td_translator._unwrap_tdexpr(pattern), literal=literal
             )
         )
 
+    @pydoc(categories="string")
     def replace(
         self,
-        pattern: str | td_expr.TdExpr,
-        value: str | td_expr.TdExpr,
+        pattern: str | td_expr.Expr,
+        value: str | td_expr.Expr,
         *,
         literal: bool = False,
         n: int = 1,
-    ) -> td_expr.TdExpr:
+    ) -> td_expr.Expr:
         """
         Replace the first occurence of a pattern with the given string.
 
@@ -785,7 +808,7 @@ class TdExprStringNameSpace:
         └───────────┴───────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.replace(
                 pattern=td_expr.td_translator._unwrap_tdexpr(pattern),
                 value=td_expr.td_translator._unwrap_tdexpr(value),
@@ -794,13 +817,14 @@ class TdExprStringNameSpace:
             )
         )
 
+    @pydoc(categories="string")
     def replace_all(
         self,
-        pattern: str | td_expr.TdExpr,
-        value: str | td_expr.TdExpr,
+        pattern: str | td_expr.Expr,
+        value: str | td_expr.Expr,
         *,
         literal: bool = False,
-    ) -> td_expr.TdExpr:
+    ) -> td_expr.Expr:
         """
         Replace the all occurences of a pattern with the given string.
 
@@ -831,7 +855,7 @@ class TdExprStringNameSpace:
         └───────────┴─────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.replace_all(
                 pattern=td_expr.td_translator._unwrap_tdexpr(pattern),
                 value=td_expr.td_translator._unwrap_tdexpr(value),
@@ -839,7 +863,8 @@ class TdExprStringNameSpace:
             )
         )
 
-    def reverse(self) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def reverse(self) -> td_expr.Expr:
         """
         Reverse the string.
 
@@ -861,13 +886,14 @@ class TdExprStringNameSpace:
         │ null ┆ null    │
         └──────┴─────────┘
         """
-        return to_tdexpr(self._expr.reverse())
+        return _to_tdexpr(self._expr.reverse())
 
+    @pydoc(categories="string")
     def slice(
         self,
-        offset: int | td_expr.IntoTdExprColumn,
-        length: int | td_expr.IntoTdExprColumn | None = None,
-    ) -> td_expr.TdExpr:
+        offset: int | td_expr.IntoExprColumn,
+        length: int | td_expr.IntoExprColumn | None = None,
+    ) -> td_expr.Expr:
         """
         Extract the substring at the given offset for the given length.
 
@@ -894,14 +920,15 @@ class TdExprStringNameSpace:
         └──────┴───────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.slice(
                 offset=td_translator._unwrap_into_tdexpr(offset),
                 length=td_translator._unwrap_into_tdexpr(length),
             )
         )
 
-    def head(self, n: int | td_expr.IntoTdExprColumn) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def head(self, n: int | td_expr.IntoExprColumn) -> td_expr.Expr:
         """
         Extract the start of the string up to the given length.
 
@@ -927,9 +954,12 @@ class TdExprStringNameSpace:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(self._expr.head(n=td_translator._unwrap_into_tdexpr_column(n)))
+        return _to_tdexpr(
+            self._expr.head(n=td_translator._unwrap_into_tdexpr_column(n))
+        )
 
-    def tail(self, n: int | td_expr.IntoTdExprColumn) -> td_expr.TdExpr:
+    @pydoc(categories="string")
+    def tail(self, n: int | td_expr.IntoExprColumn) -> td_expr.Expr:
         """
         Extract the end of the string up to the given length.
 
@@ -955,11 +985,14 @@ class TdExprStringNameSpace:
         └──────┴──────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(self._expr.tail(n=td_translator._unwrap_into_tdexpr_column(n)))
+        return _to_tdexpr(
+            self._expr.tail(n=td_translator._unwrap_into_tdexpr_column(n))
+        )
 
+    @pydoc(categories="type_casting")
     def to_integer(
-        self, *, base: int | td_expr.IntoTdExprColumn = 10, strict: bool = True
-    ) -> td_expr.TdExpr:
+        self, *, base: int | td_expr.IntoExprColumn = 10, strict: bool = True
+    ) -> td_expr.Expr:
         """
         Covert a string to integer.
 
@@ -988,15 +1021,16 @@ class TdExprStringNameSpace:
         └──────┴────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.to_integer(
                 base=td_translator._unwrap_into_tdexpr_column(base), strict=strict
             )
         )
 
+    @pydoc(categories="string")
     def contains_any(
-        self, patterns: td_expr.IntoTdExpr, *, ascii_case_insensitive: bool = False
-    ) -> td_expr.TdExpr:
+        self, patterns: td_expr.IntoExpr, *, ascii_case_insensitive: bool = False
+    ) -> td_expr.Expr:
         """
         Evaluate if the string contains any of the given patterns.
 
@@ -1025,20 +1059,21 @@ class TdExprStringNameSpace:
         └──────┴──────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.contains_any(
                 patterns=td_translator._unwrap_into_tdexpr(patterns),
                 ascii_case_insensitive=ascii_case_insensitive,
             )
         )
 
+    @pydoc(categories="string")
     def replace_many(
         self,
-        patterns: td_expr.IntoTdExpr | Mapping[str, str],
-        replace_with: td_expr.IntoTdExpr | NoDefault = no_default,
+        patterns: td_expr.IntoExpr | Mapping[str, str],
+        replace_with: td_expr.IntoExpr | NoDefault = no_default,
         *,
         ascii_case_insensitive: bool = False,
-    ) -> td_expr.TdExpr:
+    ) -> td_expr.Expr:
         """
         Replace the all occurences of any the given patterns with the given string.
 
@@ -1069,7 +1104,7 @@ class TdExprStringNameSpace:
         └──────┴──────────────┘
         """
         # noinspection PyProtectedMember
-        return to_tdexpr(
+        return _to_tdexpr(
             self._expr.replace_many(
                 patterns=td_translator._unwrap_into_tdexpr(patterns),
                 replace_with=td_translator._unwrap_into_tdexpr(replace_with),
