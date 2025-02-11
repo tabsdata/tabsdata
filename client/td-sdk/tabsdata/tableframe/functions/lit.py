@@ -9,14 +9,15 @@ from typing import Any
 import polars as pl
 
 # noinspection PyProtectedMember
-from polars._typing import PolarsDataType
-
+import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.expr as td_expr
+from tabsdata.utils.annotations import pydoc
 
 
+@pydoc(categories="generation")
 def lit(
-    value: Any, dtype: PolarsDataType | None = None, *, allow_object: bool = False
-) -> td_expr.TdExpr:
+    value: Any, dtype: td_typing.TdDataType | None = None, *, allow_object: bool = False
+) -> td_expr.Expr:
     """
     Expression for the given literal value.
 
@@ -44,4 +45,4 @@ def lit(
     │ Hi   ┆ null │
     └──────┴──────┘
     """
-    return td_expr.TdExpr(pl.lit(value, dtype, allow_object=allow_object))
+    return td_expr.Expr(pl.lit(value, dtype, allow_object=allow_object))

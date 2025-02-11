@@ -44,11 +44,11 @@ from tabsdata.decorators import ALL_DEPS, publisher, subscriber, transformer
 from tabsdata.format import CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
 from tabsdata.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.secret import DirectSecret, EnvironmentSecret, HashiCorpSecret
-from tabsdata.tableframe.expr.expr import TdExpr as Expr
-from tabsdata.tableframe.functions.col import tdcol as col
+from tabsdata.tableframe.expr.expr import Expr as Expr
+from tabsdata.tableframe.functions.col import col as col
 from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
-from tabsdata.tableframe.lazyframe.frame import TdLazyFrame as TableFrame
+from tabsdata.tableframe.lazyframe.frame import LazyFrame as TableFrame
 from tabsdata.tableuri import TableURI
 from tabsdata.tabsdatafunction import (
     AzureDestination,

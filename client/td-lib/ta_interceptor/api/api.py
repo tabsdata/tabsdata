@@ -29,42 +29,42 @@ class InterceptorPlugin(ABC):
     @abstractmethod
     def standard_system_columns(self) -> list[str]:
         """
-        Returns a list of standard system TdLazyFrame columns.
+        Returns a list of standard system TableFrame columns.
         """
         pass
 
     @abstractmethod
     def extended_system_columns(self) -> list[str]:
         """
-        Returns a list of extended system TdLazyFrame columns.
+        Returns a list of extended system TableFrame columns.
         """
         pass
 
     @abstractmethod
     def system_columns(self) -> list[str]:
         """
-        Returns a list of system TdLazyFrame columns.
+        Returns a list of system TableFrame columns.
         """
         pass
 
     @abstractmethod
     def system_columns_metadata(self) -> dict[str, Any]:
         """
-        Returns a list of required system TdLazyFrame columns with their metadata.
+        Returns a list of required system TableFrame columns with their metadata.
         """
         pass
 
     @abstractmethod
     def required_columns(self) -> list[str]:
         """
-        Returns a list of required system TdLazyFrame columns.
+        Returns a list of required system TableFrame columns.
         """
         pass
 
     @abstractmethod
     def required_columns_metadata(self) -> dict[str, Any]:
         """
-        Returns a list of required system TdLazyFrame columns with their metadata.
+        Returns a list of required system TableFrame columns with their metadata.
         """
         pass
 
