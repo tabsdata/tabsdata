@@ -5,6 +5,7 @@
 import inspect
 import logging
 import os
+import sys
 
 import polars as pl
 import pytest
@@ -201,7 +202,7 @@ def test_custom_requirements(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     correct_requirements = {
         PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
-        PYTHON_VERSION_KEY: "3.12",
+        PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3"],
     }
     correct_custom_requirements_path = os.path.join(
@@ -266,7 +267,7 @@ def test_custom_requirements_no_package_version(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     correct_requirements = {
         PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
-        PYTHON_VERSION_KEY: "3.12",
+        PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas"],
     }
     correct_custom_requirements_path = os.path.join(
@@ -331,7 +332,7 @@ def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     correct_requirements = {
         PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
-        PYTHON_VERSION_KEY: "3.12",
+        PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3"],
         PYTHON_INSTALL_DEPENDENCIES_KEY: False,
     }
