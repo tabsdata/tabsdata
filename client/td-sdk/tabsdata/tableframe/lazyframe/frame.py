@@ -21,6 +21,7 @@ import tabsdata as td
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe._typing as td_typing
+import tabsdata.tableframe.dataframe.frame as td_frame
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe.expr.expr as td_expr
@@ -44,7 +45,7 @@ import tabsdata.utils.tableframe._reflection as td_reflection
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._translator as td_translator
 from tabsdata.exceptions import ErrorCode, TableFrameError
-from tabsdata.utils.annotations import pydoc
+from tabsdata.utils.annotations import pydoc, unstable
 
 # noinspection PyProtectedMember
 from td_interceptor.interceptor import Interceptor
@@ -1489,6 +1490,14 @@ class LazyFrame:
         └─────┴─────┘
         """
         return LazyFrame.__build__(self._lf.first())
+
+    """ Functions derived from DataFrame"""
+
+    @unstable()
+    @pydoc(categories="projection")
+    def item(self) -> Any:
+        # noinspection PyProtectedMember
+        return td_frame.DataFrame.item(td_translator._unwrap_table_frame(self))
 
 
 TdType = TypeVar("TdType", LazyFrame, Series, td_expr.Expr)

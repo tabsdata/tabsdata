@@ -790,6 +790,20 @@ class ErrorCode(Enum):
             "instead."
         ),
     }
+    TF8 = {
+        "code": "TF-008",
+        "message": (
+            "Lazy frame not eligible for 'item' operation as it has more than one non "
+            "system columns."
+        ),
+    }
+    TF9 = {
+        "code": "TF-009",
+        "message": (
+            "Lazy frame not eligible for 'item' operation as it doesn't look to come "
+            "from an aggregation operation."
+        ),
+    }
     TUCE1 = {
         "code": "TUCE-001",
         "message": (

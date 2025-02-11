@@ -89,6 +89,13 @@ TD_COL_GENERATOR = "generator"
 
 class StandardSystemColumns(Enum):
     TD_IDENTIFIER = "$td.id"
+    TD_OFFSET = "$td.offset"
+
+
+class StandardVolatileSystemColumns(Enum):
+    TD_ITEM_COLUMN = "$td._item"
+    TD_MIN_COLUMN = "$td._min"
+    TD_MAX_COLUMN = "$td._max"
 
 
 class StandardSystemColumnsMetadata(Enum):
