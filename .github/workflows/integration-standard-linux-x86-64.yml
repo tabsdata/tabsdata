@@ -6,7 +6,7 @@
 name: Integration Standard Linux (x86-64)
 
 on:
-  pull_request:
+  # pull_request:
   workflow_dispatch:
 
 concurrency:
