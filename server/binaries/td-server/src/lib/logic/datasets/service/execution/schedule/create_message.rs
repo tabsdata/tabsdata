@@ -107,13 +107,13 @@ mod tests {
     use crate::logic::datasets::service::execution::schedule::poll_datasets::PollDatasetsService;
     use crate::logic::datasets::service::execution::schedule::tests::td_uri;
     use std::path::PathBuf;
-    use td_common::absolute_path::AbsolutePath;
     use td_common::id;
     use td_common::id::Id;
     use td_common::server::FileWorkerMessageQueue;
     use td_common::server::{SupervisorMessage, SupervisorMessagePayload};
     use td_execution::parameters::FunctionInput;
     use td_execution::parameters::InputTable;
+    use td_execution::parameters::Location;
     use td_execution::parameters::OutputTable;
     use td_objects::crudl::RequestContext;
     use td_objects::datasets::dto::ExecutionPlanWriteBuilder;
@@ -127,7 +127,6 @@ mod tests {
     use td_transaction::TransactionBy;
     use testdir::testdir;
     use tower::ServiceExt;
-    use url::Url;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -181,13 +180,22 @@ mod tests {
         ]);
     }
 
-    trait ToSPath {
-        fn to_spath(&self) -> SPath;
+    fn mount_uri(test_dir: impl Into<PathBuf>) -> String {
+        let test_dir = test_dir.into();
+        if cfg!(target_os = "windows") {
+            format!("file:///{}", test_dir.to_string_lossy())
+        } else {
+            format!("file://{}", test_dir.to_string_lossy())
+        }
     }
 
-    impl ToSPath for Url {
-        fn to_spath(&self) -> SPath {
-            SPath::parse(self.abs_path().as_str()).unwrap()
+    trait AsPath {
+        fn as_path(&self) -> String;
+    }
+
+    impl AsPath for Location {
+        fn as_path(&self) -> String {
+            self.uri().path().to_string()
         }
     }
 
@@ -195,47 +203,41 @@ mod tests {
         dir: impl Into<PathBuf>,
         collection_id: Id,
         dataset_id: Id,
-        functiond_id: Id,
+        function_id: Id,
         version: Option<&str>,
         table_id: Option<&str>,
-    ) -> SPath {
+    ) -> String {
         let dir = dir.into();
-        let dir = dir.to_string_lossy();
+        let path = SPath::try_from(dir).unwrap();
         let (path, _) = if let (Some(version), Some(table_id)) = (version, table_id) {
             StorageLocation::V1
-                .builder(SPath::parse(dir).unwrap())
+                .builder(path)
                 .collection(collection_id)
                 .dataset(dataset_id)
-                .function(functiond_id)
+                .function(function_id)
                 .version(version)
                 .table(table_id)
                 .build()
         } else {
             StorageLocation::V1
-                .builder(SPath::parse(dir).unwrap())
+                .builder(path)
                 .collection(collection_id)
                 .dataset(dataset_id)
-                .function(functiond_id)
+                .function(function_id)
                 .build()
         };
-        path
+        path.to_string()
     }
 
     #[tokio::test]
     async fn test_with_dependencies() {
         let db = td_database::test_utils::db().await.unwrap();
         let test_dir = testdir!();
-        let message_queue =
-            Arc::new(FileWorkerMessageQueue::with_location(test_dir.clone()).unwrap());
-
-        #[cfg(target_os = "windows")]
-        let mount_uri = format!("file:///{}", test_dir.to_string_lossy());
-        #[cfg(not(target_os = "windows"))]
-        let mount_uri = format!("file://{}", test_dir.to_string_lossy());
+        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
             .mount_path("/")
-            .uri(&mount_uri)
+            .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
         let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
@@ -315,7 +317,7 @@ mod tests {
         );
         assert_eq!(message.info().function_id(), &f0.to_string());
         assert_eq!(
-            message.info().function_bundle().uri().to_spath(),
+            message.info().function_bundle().as_path(),
             storage_path(&test_dir, collection_id, d0, f0, None, None)
         );
         assert!(message.info().function_bundle().env_prefix().is_none());
@@ -357,7 +359,7 @@ mod tests {
             OutputTable::Table { name, location, .. } => {
                 assert_eq!(name, "t0");
                 assert_eq!(
-                    location.uri().to_spath(),
+                    location.as_path(),
                     storage_path(
                         &test_dir,
                         collection_id,
@@ -377,17 +379,11 @@ mod tests {
     async fn test_no_dependencies() {
         let db = td_database::test_utils::db().await.unwrap();
         let test_dir = testdir!();
-        let message_queue =
-            Arc::new(FileWorkerMessageQueue::with_location(test_dir.clone()).unwrap());
-
-        #[cfg(target_os = "windows")]
-        let mount_uri = format!("file:///{}", test_dir.to_string_lossy());
-        #[cfg(not(target_os = "windows"))]
-        let mount_uri = format!("file://{}", test_dir.to_string_lossy());
+        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
             .mount_path("/")
-            .uri(&mount_uri)
+            .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
         let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
@@ -455,7 +451,7 @@ mod tests {
         );
         assert_eq!(message.info().function_id(), &f0.to_string());
         assert_eq!(
-            message.info().function_bundle().uri().to_spath(),
+            message.info().function_bundle().as_path(),
             storage_path(&test_dir, collection_id, d0, f0, None, None)
         );
         assert!(message.info().function_bundle().env_prefix().is_none());
@@ -480,7 +476,7 @@ mod tests {
             OutputTable::Table { name, location, .. } => {
                 assert_eq!(name, "t0");
                 assert_eq!(
-                    location.uri().to_spath(),
+                    location.as_path(),
                     storage_path(
                         &test_dir,
                         collection_id,
@@ -500,17 +496,11 @@ mod tests {
     async fn test_multiple_datasets_without_dependencies() {
         let db = td_database::test_utils::db().await.unwrap();
         let test_dir = testdir!();
-        let message_queue =
-            Arc::new(FileWorkerMessageQueue::with_location(test_dir.clone()).unwrap());
-
-        #[cfg(target_os = "windows")]
-        let mount_uri = format!("file:///{}", test_dir.to_string_lossy());
-        #[cfg(not(target_os = "windows"))]
-        let mount_uri = format!("file://{}", test_dir.to_string_lossy());
+        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
             .mount_path("/")
-            .uri(&mount_uri)
+            .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
         let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
@@ -641,7 +631,7 @@ mod tests {
             );
             assert_eq!(message.info().function_id(), &function_id.to_string());
             assert_eq!(
-                message.info().function_bundle().uri().to_spath(),
+                message.info().function_bundle().as_path(),
                 storage_path(
                     &test_dir,
                     collection_id,
@@ -671,17 +661,11 @@ mod tests {
     async fn test_multiple_output_tables() {
         let db = td_database::test_utils::db().await.unwrap();
         let test_dir = testdir!();
-        let message_queue =
-            Arc::new(FileWorkerMessageQueue::with_location(test_dir.clone()).unwrap());
-
-        #[cfg(target_os = "windows")]
-        let mount_uri = format!("file:///{}", test_dir.to_string_lossy());
-        #[cfg(not(target_os = "windows"))]
-        let mount_uri = format!("file://{}", test_dir.to_string_lossy());
+        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
             .mount_path("/")
-            .uri(&mount_uri)
+            .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
         let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
@@ -750,7 +734,7 @@ mod tests {
             OutputTable::Table { name, location, .. } => {
                 assert_eq!(name, "t0");
                 assert_eq!(
-                    location.uri().to_spath(),
+                    location.as_path(),
                     storage_path(
                         &test_dir,
                         collection_id,
@@ -769,7 +753,7 @@ mod tests {
             OutputTable::Table { name, location, .. } => {
                 assert_eq!(name, "t1");
                 assert_eq!(
-                    location.uri().to_spath(),
+                    location.as_path(),
                     storage_path(
                         &test_dir,
                         collection_id,
@@ -789,17 +773,11 @@ mod tests {
     async fn test_multiple_input_tables() {
         let db = td_database::test_utils::db().await.unwrap();
         let test_dir = testdir!();
-        let message_queue =
-            Arc::new(FileWorkerMessageQueue::with_location(test_dir.clone()).unwrap());
-
-        #[cfg(target_os = "windows")]
-        let mount_uri = format!("file:///{}", test_dir.to_string_lossy());
-        #[cfg(not(target_os = "windows"))]
-        let mount_uri = format!("file://{}", test_dir.to_string_lossy());
+        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
             .mount_path("/")
-            .uri(&mount_uri)
+            .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
         let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
@@ -912,17 +890,11 @@ mod tests {
     async fn test_no_input_tables() {
         let db = td_database::test_utils::db().await.unwrap();
         let test_dir = testdir!();
-        let message_queue =
-            Arc::new(FileWorkerMessageQueue::with_location(test_dir.clone()).unwrap());
-
-        #[cfg(target_os = "windows")]
-        let mount_uri = format!("file:///{}", test_dir.to_string_lossy());
-        #[cfg(not(target_os = "windows"))]
-        let mount_uri = format!("file://{}", test_dir.to_string_lossy());
+        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
             .mount_path("/")
-            .uri(&mount_uri)
+            .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
         let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
@@ -989,17 +961,11 @@ mod tests {
     async fn test_no_output_tables() {
         let db = td_database::test_utils::db().await.unwrap();
         let test_dir = testdir!();
-        let message_queue =
-            Arc::new(FileWorkerMessageQueue::with_location(test_dir.clone()).unwrap());
-
-        #[cfg(target_os = "windows")]
-        let mount_uri = format!("file:///{}", test_dir.to_string_lossy());
-        #[cfg(not(target_os = "windows"))]
-        let mount_uri = format!("file://{}", test_dir.to_string_lossy());
+        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
             .mount_path("/")
-            .uri(&mount_uri)
+            .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
         let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());

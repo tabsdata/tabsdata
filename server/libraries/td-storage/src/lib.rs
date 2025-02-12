@@ -11,6 +11,7 @@ use object_store::path::Path;
 use regex::Regex;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
+use std::path::PathBuf;
 use td_error::td_error;
 use tracing::{trace, warn};
 use url::Url;
@@ -152,6 +153,24 @@ impl Deref for SPath {
 impl Display for SPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "/{}", self.0)
+    }
+}
+
+impl TryFrom<PathBuf> for SPath {
+    type Error = StorageError;
+
+    fn try_from(path: PathBuf) -> Result<Self> {
+        let path = path.as_path();
+        if !path.is_absolute() {
+            return Err(StorageError::InvalidPath(
+                path.to_string_lossy().to_string(),
+                "path must be absolute".to_string(),
+            ));
+        }
+        let path = Path::from_filesystem_path(path).map_err(|e| {
+            StorageError::InvalidPath(path.to_string_lossy().to_string(), e.to_string())
+        })?;
+        Ok(SPath(path))
     }
 }
 
