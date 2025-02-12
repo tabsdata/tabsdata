@@ -3,10 +3,16 @@
 #
 
 import csv
+import io
+import json
+import os
 import re
-import sys
+import subprocess
 
 from tabulate import tabulate
+
+TARGET_DIR = os.path.join(".", "target", "audit")
+TARGET_FILE = os.path.join(TARGET_DIR, "licenses_rs.txt")
 
 
 def get_custom_license(dependency_name, dependency_license):
@@ -47,8 +53,42 @@ def ignore_dependency(dependency):
     return dependency.startswith("td-") or dependency == "tabsdata"
 
 
-reader = csv.reader(sys.stdin)
-data = list(reader)
+os.makedirs(TARGET_DIR, exist_ok=True)
+
+if os.path.exists(TARGET_FILE):
+    os.remove(TARGET_FILE)
+
+try:
+    result = subprocess.run(
+        ["cargo", "license", "--manifest-path", "Cargo.toml", "--json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    cargo_output = result.stdout
+except subprocess.CalledProcessError as e:
+    print(f"Error running cargo license: {e}")
+    exit(1)
+except Exception as e:
+    print(f"Error processing response from cargo license: {e}")
+    exit(1)
+
+try:
+    licenses_json_data = json.loads(cargo_output)
+    licenses_csv_data = [
+        f'"{pkg["name"]}","{pkg["version"]}","{pkg["license"]}"'
+        for pkg in licenses_json_data
+    ]
+    csv_output = "\n".join(licenses_csv_data)
+except json.JSONDecodeError as e:
+    print(f"Error parsing json output from cargo license: {e}")
+    exit(1)
+
+
+csv_file = io.StringIO(csv_output)
+reader = csv.reader(csv_file)
+data = list(reader)  #
+
 data = [row for row in data if not ignore_dependency(row[0])]
 for row in data:
     dependency_name_tag = row[0]
@@ -63,9 +103,13 @@ for row in data:
 data.sort(key=lambda x: (x[2], x[0]))
 
 headers = ["Name", "Version", "License"]
-
-print(
+content = (
     "This project includes code from the following Rust crates and versions (grouped by"
-    " license):\n"
+    " license):\n\n"
 )
-print(tabulate(data, headers=headers, tablefmt="fancy_grid"))
+content += tabulate(data, headers=headers, tablefmt="fancy_grid")
+
+with open(TARGET_FILE, "w", encoding="utf-8") as f:
+    f.write(content + "\n")
+
+print(content)

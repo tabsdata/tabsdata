@@ -1437,12 +1437,11 @@ script = [
 [tasks.license]
 cwd = "${PROJECT_ROOT_FOLDER}"
 dependencies = ["license_rs", "license_py"]
+script_runner = "@duckscript"
 script = [
     '''
-    (cat ./target/audit/licenses_rs.txt; cat ./target/audit/licenses_py.txt) > ./target/audit/licenses.txt
-    (cat ./target/audit/licenses_rs.txt; cat ./target/audit/licenses_py.txt) > ./variant/assets/manifest/THIRD-PARTY
+    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/report_licenses.py
     ''']
-ignore_errors = true
 
 [tasks.license_rs]
 run_task = [
@@ -1534,8 +1533,11 @@ script = [
 [tasks.license_report_rs]
 private = true
 cwd = "${PROJECT_ROOT_FOLDER}"
-script = { file = "${PROJECT_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_rs.sh", absolute_path = true }
-ignore_errors = true
+script_runner = "@duckscript"
+script = [
+    '''
+    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/report_licenses_rs.py
+    ''']
 
 [tasks.license_py]
 run_task = [
@@ -1548,8 +1550,11 @@ run_task = [
 [tasks.license_report_py]
 private = true
 cwd = "${PROJECT_ROOT_FOLDER}"
-script = { file = "${PROJECT_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_py.sh", absolute_path = true }
-ignore_errors = true
+script_runner = "@duckscript"
+script = [
+    '''
+    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/report_licenses_py.py
+    ''']
 
 [tasks.license_check_py]
 private = true

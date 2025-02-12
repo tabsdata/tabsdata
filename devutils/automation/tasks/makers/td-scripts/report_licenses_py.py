@@ -3,9 +3,13 @@
 #
 
 import json
-import sys
+import os
+import subprocess
 
 from tabulate import tabulate
+
+TARGET_DIR = os.path.join(".", "target", "audit")
+TARGET_FILE = os.path.join(TARGET_DIR, "licenses_py.txt")
 
 normalized_licenses = {
     "APACHE SOFTWARE LICENSE": "Apache Software License",
@@ -42,12 +46,30 @@ def get_custom_license(package_name, package_license):
         return "Unknown"
 
 
-def ignore_package(package):
-    return package.startswith("td-") or package == "tabsdata"
+def ignore_package(name):
+    return name.startswith("td-") or name == "tabsdata"
 
 
-reader = sys.stdin.read()
-data = json.loads(reader)
+os.makedirs(TARGET_DIR, exist_ok=True)
+
+if os.path.exists(TARGET_FILE):
+    os.remove(TARGET_FILE)
+
+try:
+    result = subprocess.run(
+        ["licensecheck", "-u", "requirements:requirements.txt", "--format", "json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    data = json.loads(result.stdout)
+except subprocess.CalledProcessError as e:
+    print(f"Error running licensecheck: {e}")
+    exit(1)
+except Exception as e:
+    print(f"Error parsing json output from licensecheck: {e}")
+    exit(1)
+
 packages = data.get("packages", [])
 table_data = []
 for package in packages:
@@ -72,8 +94,13 @@ for package in packages:
 table_data.sort(key=lambda x: (x[2], x[0]))
 
 headers = ["Name", "Version", "License"]
-print(
-    "\nThis project uses the following Python packages and versions (grouped by"
-    " license):\n"
+content = (
+    "This project uses the following Python packages and versions (grouped by"
+    " license):\n\n"
 )
-print(tabulate(table_data, headers=headers, tablefmt="fancy_grid"))
+content += tabulate(table_data, headers=headers, tablefmt="fancy_grid")
+
+with open(TARGET_FILE, "w", encoding="utf-8") as f:
+    f.write(content + "\n")
+
+print(content)

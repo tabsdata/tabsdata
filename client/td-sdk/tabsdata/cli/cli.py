@@ -110,7 +110,11 @@ def info(third_party: bool, license: bool, release_notes: bool):
         os.path.dirname(os.path.dirname(__file__)), "assets", "manifest"
     )
     if license:
-        with open(os.path.join(assets_folder, "LICENSE"), "r") as f:
+        with open(
+            os.path.join(assets_folder, "LICENSE"),
+            "r",
+            encoding="utf-8",
+        ) as f:
             click.echo("License:")
             click.echo()
             click.echo("-" * 20)
@@ -118,7 +122,11 @@ def info(third_party: bool, license: bool, release_notes: bool):
             click.echo("-" * 20)
             click.echo()
     if third_party:
-        with open(os.path.join(assets_folder, "THIRD-PARTY"), "r") as f:
+        with open(
+            os.path.join(assets_folder, "THIRD-PARTY"),
+            "r",
+            encoding="utf-8",
+        ) as f:
             click.echo("3rd party dependencies:")
             click.echo()
             click.echo("-" * 20)
@@ -126,7 +134,11 @@ def info(third_party: bool, license: bool, release_notes: bool):
             click.echo("-" * 20)
             click.echo()
     if release_notes:
-        with open(os.path.join(assets_folder, "RELEASE-NOTES"), "r") as f:
+        with open(
+            os.path.join(assets_folder, "RELEASE-NOTES"),
+            "r",
+            encoding="utf-8",
+        ) as f:
             click.echo("Release notes:")
             click.echo()
             click.echo("-" * 20)
