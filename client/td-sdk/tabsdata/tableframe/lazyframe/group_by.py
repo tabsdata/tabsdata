@@ -24,11 +24,11 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 from tabsdata.utils.annotations import pydoc
 
 
-class LazyGroupBy:
-    def __init__(self, lgb: pl_group_by.LazyGroupBy | LazyGroupBy) -> None:
+class TableFrameGroupBy:
+    def __init__(self, lgb: pl_group_by.LazyGroupBy | TableFrameGroupBy) -> None:
         if isinstance(lgb, pl_group_by.LazyGroupBy):
             self._lgb = lgb
-        elif isinstance(lgb, LazyGroupBy):
+        elif isinstance(lgb, TableFrameGroupBy):
             self._lgb = lgb._lgb
         else:
             raise TableFrameError(ErrorCode.TF6, type(lgb))
@@ -41,7 +41,7 @@ class LazyGroupBy:
         self,
         *aggs: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
         **named_aggs: td_expr.IntoExpr,
-    ) -> td_frame.LazyFrame:
+    ) -> td_frame.TableFrame:
         """
         Aggregation expressions for the group by column(s).
 
@@ -106,13 +106,13 @@ class LazyGroupBy:
 
         expressions = unwrapped_aggs + unwrapped_required_columns + unwrapped_named_aggs
 
-        return td_frame.LazyFrame.__build__(
+        return td_frame.TableFrame.__build__(
             self._lgb.agg(
                 expressions,
             )
         )
 
-    def len(self) -> td_frame.LazyFrame:
+    def len(self) -> td_frame.TableFrame:
         """
         Aggregation operation that counts the rows in the group.
 
@@ -155,14 +155,14 @@ class LazyGroupBy:
         │ D    ┆ 1   │
         └──────┴─────┘
         """
-        return td_frame.LazyFrame.__build__(self._lgb.len())
+        return td_frame.TableFrame.__build__(self._lgb.len())
 
     @pydoc(categories="aggregation")
-    def count(self) -> td_frame.LazyFrame:
-        return td_frame.LazyFrame.__build__(self._lgb.count())
+    def count(self) -> td_frame.TableFrame:
+        return td_frame.TableFrame.__build__(self._lgb.count())
 
     @pydoc(categories="aggregation")
-    def max(self) -> td_frame.LazyFrame:
+    def max(self) -> td_frame.TableFrame:
         """
         Aggregation operation that computes the maximum value in the group for
         of all the non `group by` columns.
@@ -206,10 +206,10 @@ class LazyGroupBy:
         │ F    ┆ 9    ┆ NaN  │
         └──────┴──────┴──────┘
         """
-        return td_frame.LazyFrame.__build__(self._lgb.max())
+        return td_frame.TableFrame.__build__(self._lgb.max())
 
     @pydoc(categories="aggregation")
-    def mean(self) -> td_frame.LazyFrame:
+    def mean(self) -> td_frame.TableFrame:
         """
         Aggregation operation that computes the mean value in the group for
         of all the non `group by` columns.
@@ -253,10 +253,10 @@ class LazyGroupBy:
         │ F    ┆ 9.0      ┆ NaN      │
         └──────┴──────────┴──────────┘
         """
-        return td_frame.LazyFrame.__build__(self._lgb.mean())
+        return td_frame.TableFrame.__build__(self._lgb.mean())
 
     @pydoc(categories="aggregation")
-    def median(self) -> td_frame.LazyFrame:
+    def median(self) -> td_frame.TableFrame:
         """
         Aggregation operation that computes the median value in the group for
         of all the non `group by` columns.
@@ -300,10 +300,10 @@ class LazyGroupBy:
         │ F    ┆ 9.0  ┆ NaN  │
         └──────┴──────┴──────┘
         """
-        return td_frame.LazyFrame.__build__(self._lgb.median())
+        return td_frame.TableFrame.__build__(self._lgb.median())
 
     @pydoc(categories="aggregation")
-    def min(self) -> td_frame.LazyFrame:
+    def min(self) -> td_frame.TableFrame:
         """
         Aggregation operation that computes the minimum value in the group for
         of all the non `group by` columns.
@@ -347,10 +347,10 @@ class LazyGroupBy:
         │ F    ┆ 9    ┆ NaN  │
         └──────┴──────┴──────┘
         """
-        return td_frame.LazyFrame.__build__(self._lgb.min())
+        return td_frame.TableFrame.__build__(self._lgb.min())
 
     @pydoc(categories="aggregation")
-    def n_unique(self) -> td_frame.LazyFrame:
+    def n_unique(self) -> td_frame.TableFrame:
         """
         Aggregation operation that counts the unique values of the given column
         in the group for of all the non `group by` columns.
@@ -394,10 +394,10 @@ class LazyGroupBy:
         │ F    ┆ 1   ┆ 1   │
         └──────┴─────┴─────┘
         """
-        return td_frame.LazyFrame.__build__(self._lgb.n_unique())
+        return td_frame.TableFrame.__build__(self._lgb.n_unique())
 
     @pydoc(categories="aggregation")
-    def sum(self) -> td_frame.LazyFrame:
+    def sum(self) -> td_frame.TableFrame:
         """
         Aggregation operation that computes the sum for all values in the group for
         of all the non `group by` columns.
@@ -441,4 +441,4 @@ class LazyGroupBy:
         │ F    ┆ 9   ┆ NaN  │
         └──────┴─────┴──────┘
         """
-        return td_frame.LazyFrame.__build__(self._lgb.sum())
+        return td_frame.TableFrame.__build__(self._lgb.sum())

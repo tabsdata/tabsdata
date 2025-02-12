@@ -3388,14 +3388,14 @@ def _convert_recursively_to_tableframe(arguments: Any):
         return [_convert_recursively_to_tableframe(v) for v in arguments]
     elif isinstance(arguments, tuple):
         return tuple(_convert_recursively_to_tableframe(v) for v in arguments)
-    elif isinstance(arguments, td_frame.LazyFrame):
+    elif isinstance(arguments, td_frame.TableFrame):
         return arguments
     elif isinstance(arguments, pl.DataFrame):
-        return td_frame.LazyFrame.__build__(_add_dummy_required_columns(arguments))
+        return td_frame.TableFrame.__build__(_add_dummy_required_columns(arguments))
     elif isinstance(arguments, pl.LazyFrame):
-        return td_frame.LazyFrame.__build__(_add_dummy_required_columns(arguments))
+        return td_frame.TableFrame.__build__(_add_dummy_required_columns(arguments))
     elif isinstance(arguments, pd.DataFrame):
-        return td_frame.LazyFrame.__build__(
+        return td_frame.TableFrame.__build__(
             _add_dummy_required_columns(pl.DataFrame(arguments))
         )
     return arguments
@@ -3406,7 +3406,7 @@ def _clean_recursively_and_convert_to_datatype(
     datatype: (
         Type[pl.DataFrame]
         | Type[pl.LazyFrame]
-        | Type[td_frame.LazyFrame]
+        | Type[td_frame.TableFrame]
         | Type[pd.DataFrame]
     ),
 ) -> Any:
@@ -3421,7 +3421,7 @@ def _clean_recursively_and_convert_to_datatype(
         return tuple(
             _clean_recursively_and_convert_to_datatype(v, datatype) for v in result
         )
-    elif isinstance(result, td_frame.LazyFrame):
+    elif isinstance(result, td_frame.TableFrame):
         try:
             if datatype == pl.DataFrame:
                 return result._lf.drop(td_helpers.SYSTEM_COLUMNS).collect()
@@ -3459,11 +3459,11 @@ def _recursively_obtain_datatype(
     Type[pl.DataFrame]
     | Type[pd.DataFrame]
     | Type[pl.LazyFrame]
-    | Type[td_frame.LazyFrame]
+    | Type[td_frame.TableFrame]
     | None
 ):
     if isinstance(
-        arguments, (pl.DataFrame, pl.LazyFrame, td_frame.LazyFrame, pd.DataFrame)
+        arguments, (pl.DataFrame, pl.LazyFrame, td_frame.TableFrame, pd.DataFrame)
     ):
         return type(arguments)
     elif not arguments:
@@ -3478,8 +3478,8 @@ def _recursively_obtain_datatype(
         return pl.DataFrame
     elif pl.LazyFrame in types:
         return pl.LazyFrame
-    elif td_frame.LazyFrame in types:
-        return td_frame.LazyFrame
+    elif td_frame.TableFrame in types:
+        return td_frame.TableFrame
     elif pd.DataFrame in types:
         return pd.DataFrame
     else:

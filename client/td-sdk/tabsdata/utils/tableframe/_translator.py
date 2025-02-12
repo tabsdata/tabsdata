@@ -24,20 +24,20 @@ def _is_instance_of_union(obj, tp):
     return False
 
 
-def _wrap_polars_frame(f: pl.LazyFrame | pl.DataFrame) -> td_frame.LazyFrame:
+def _wrap_polars_frame(f: pl.LazyFrame | pl.DataFrame) -> td_frame.TableFrame:
     if isinstance(f, pl.LazyFrame):
         # noinspection PyProtectedMember
-        return td_frame.LazyFrame._from_lazy(f)
+        return td_frame.TableFrame._from_lazy(f)
     elif isinstance(f, pl.DataFrame):
         # noinspection PyProtectedMember
-        return td_frame.LazyFrame._from_lazy(f.lazy())
+        return td_frame.TableFrame._from_lazy(f.lazy())
     else:
         raise TableFrameError(ErrorCode.TF7, type(f))
 
 
-def _unwrap_table_frame(tf: td_frame.LazyFrame):
+def _unwrap_table_frame(tf: td_frame.TableFrame):
     # noinspection PyProtectedMember
-    return td_common.drop_system_columns(td_frame.LazyFrame._to_lazy(tf))
+    return td_common.drop_system_columns(td_frame.TableFrame._to_lazy(tf))
 
 
 # noinspection PyProtectedMember

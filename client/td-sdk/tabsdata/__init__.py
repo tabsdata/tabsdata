@@ -48,7 +48,7 @@ from tabsdata.tableframe.expr.expr import Expr as Expr
 from tabsdata.tableframe.functions.col import col as col
 from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
-from tabsdata.tableframe.lazyframe.frame import LazyFrame as TableFrame
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import TableURI
 from tabsdata.tabsdatafunction import (
     AzureDestination,

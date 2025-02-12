@@ -6,7 +6,7 @@ import logging
 
 import polars as pl
 
-from tabsdata.tableframe.lazyframe.frame import LazyFrame
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._common import add_system_columns, drop_system_columns
@@ -73,19 +73,19 @@ def test_wrap_and_unwrap_lazy_frame():
 
 
 def test_table_frame_from_none():
-    _ = LazyFrame(None)
+    _ = TableFrame(None)
 
 
 def test_table_frame_from_void():
-    _ = LazyFrame()
+    _ = TableFrame()
 
 
 def test_table_frame_from_empty():
-    _ = LazyFrame.empty()
+    _ = TableFrame.empty()
 
 
 def test_table_frame_from_dictionary():
-    _ = LazyFrame(
+    _ = TableFrame(
         {
             "letters": ["a", "b", "c"],
             "numbers": [1, 2, 3],

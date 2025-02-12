@@ -9,7 +9,7 @@ import pytest
 
 import tabsdata as td
 from tabsdata.exceptions import ErrorCode, TabsDataException
-from tabsdata.tableframe.lazyframe.frame import LazyFrame
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._helpers import REQUIRED_COLUMNS
@@ -42,7 +42,7 @@ def test_init_with_dataframe_with_required_columns():
 def test_init_with_lazyframe_with_required_columns():
     data = {col: [1, 2, 3] for col in REQUIRED_COLUMNS}
     d = pl.DataFrame(data).to_dict(as_series=False)
-    tdf = LazyFrame.__build__(d)
+    tdf = TableFrame.__build__(d)
     assert isinstance(tdf, td.TableFrame)
 
 
