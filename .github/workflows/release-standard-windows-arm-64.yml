@@ -41,6 +41,7 @@ jobs:
       python-version: "3.12"
       MARKERS: "not mariadb and not mysql and not oracle and not postgres"
       PYTEST_MAXIMUM_RETRY_COUNT: 17
+      PYTHONIOENCODING: "utf-8"
 
     steps:
       - name: Configure git symlinks

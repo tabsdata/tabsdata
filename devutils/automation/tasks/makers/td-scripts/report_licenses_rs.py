@@ -8,8 +8,11 @@ import json
 import os
 import re
 import subprocess
+import sys
 
 from tabulate import tabulate
+
+sys.stdout.reconfigure(encoding="utf-8")
 
 TARGET_DIR = os.path.join(".", "target", "audit")
 TARGET_FILE = os.path.join(TARGET_DIR, "licenses_rs.txt")

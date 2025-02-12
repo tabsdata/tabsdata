@@ -3,6 +3,9 @@
 #
 
 import os
+import sys
+
+sys.stdout.reconfigure(encoding="utf-8")
 
 LICENSES_RS = "./target/audit/licenses_rs.txt"
 LICENSES_PY = "./target/audit/licenses_py.txt"

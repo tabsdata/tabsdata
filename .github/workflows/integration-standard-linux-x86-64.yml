@@ -46,6 +46,7 @@ jobs:
       python-version: "3.12"
       MARKERS: "not oracle"
       PYTEST_MAXIMUM_RETRY_COUNT: 36
+      PYTHONIOENCODING: "utf-8"
 
     steps:
       - name: Configure git symlinks
