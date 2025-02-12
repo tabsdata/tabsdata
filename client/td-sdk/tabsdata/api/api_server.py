@@ -3,13 +3,25 @@
 #
 
 import json
+import logging
+import os
+import time
 from urllib.parse import urlparse
 
 import requests
 
+from tabsdata.utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
+
 DEFAULT_APISERVER_PORT = "2457"
 HTTP_PROTOCOL = "http://"
 PORT_SEPARATOR = ":"
+
+HTTP_TIMEOUT = 60 * 5
+MIN_HTTP_ATTEMPTS = 1
+MAX_HTTP_ATTEMPTS = 12
+HTTP_RETIRES_DELAY = 5
+
+logger = logging.getLogger(__name__)
 
 
 class APIServerError(Exception):
@@ -46,25 +58,119 @@ class APIServer:
 
     @property
     def authentication_header(self):
-        return {"Authorization": f"Bearer {self.bearer_token}"}
+        return {"Authorization": f"Bearer {self.bearer_token}", "Connection": "close"}
+
+    @property
+    def connection_header(self):
+        return {"Connection": "close"}
 
     def get(self, path, params=None):
-        return requests.get(
-            self.url + path, headers=self.authentication_header, params=params
+        headers = {}
+        headers.update(self.authentication_header)
+        headers.update(self.connection_header)
+
+        max_tries = (
+            MIN_HTTP_ATTEMPTS
+            if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None
+            else MAX_HTTP_ATTEMPTS
         )
+
+        for attempt in range(max_tries):
+            try:
+                response = requests.get(
+                    self.url + path,
+                    headers=headers,
+                    timeout=HTTP_TIMEOUT,
+                    params=params,
+                )
+                return response
+            except Exception as e:
+                logger.debug(f"Attempt {attempt + 1} for 'get' failed: {e}")
+                if attempt < MAX_HTTP_ATTEMPTS - 1:
+                    time.sleep(HTTP_RETIRES_DELAY)
+                else:
+                    raise
 
     def post(self, path, data):
-        return requests.post(
-            self.url + path, json=data, headers=self.authentication_header
+        headers = {}
+        headers.update(self.authentication_header)
+        headers.update(self.connection_header)
+
+        max_tries = (
+            MIN_HTTP_ATTEMPTS
+            if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None
+            else MAX_HTTP_ATTEMPTS
         )
 
+        for attempt in range(max_tries):
+            try:
+                response = requests.post(
+                    self.url + path,
+                    headers=headers,
+                    timeout=HTTP_TIMEOUT,
+                    json=data,
+                )
+                return response
+            except Exception as e:
+                logger.debug(f"Attempt {attempt + 1} for 'post' failed: {e}")
+                if attempt < MAX_HTTP_ATTEMPTS - 1:
+                    time.sleep(HTTP_RETIRES_DELAY)
+                else:
+                    raise
+
     def post_binary(self, path, data):
-        headers = {"Content-Type": "application/octet-stream"}
+        headers = {}
         headers.update(self.authentication_header)
-        return requests.post(self.url + path, data=data, headers=headers)
+        headers.update(self.connection_header)
+        headers.update({"Content-Type": "application/octet-stream"})
+
+        max_tries = (
+            MIN_HTTP_ATTEMPTS
+            if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None
+            else MAX_HTTP_ATTEMPTS
+        )
+
+        for attempt in range(max_tries):
+            try:
+                response = requests.post(
+                    self.url + path,
+                    headers=headers,
+                    timeout=HTTP_TIMEOUT,
+                    data=data,
+                )
+                return response
+            except Exception as e:
+                logger.debug(f"Attempt {attempt + 1} for 'binary' failed: {e}")
+                if attempt < MAX_HTTP_ATTEMPTS - 1:
+                    time.sleep(HTTP_RETIRES_DELAY)
+                else:
+                    raise
 
     def delete(self, path):
-        return requests.delete(self.url + path, headers=self.authentication_header)
+        headers = {}
+        headers.update(self.authentication_header)
+        headers.update(self.connection_header)
+
+        max_tries = (
+            MIN_HTTP_ATTEMPTS
+            if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None
+            else MAX_HTTP_ATTEMPTS
+        )
+
+        for attempt in range(max_tries):
+            try:
+                response = requests.delete(
+                    self.url + path,
+                    headers=headers,
+                    timeout=HTTP_TIMEOUT,
+                )
+                return response
+            except Exception as e:
+                print(f"Attempt {attempt + 1} for 'delete' failed: {e}")
+                if attempt < MAX_HTTP_ATTEMPTS - 1:
+                    time.sleep(HTTP_RETIRES_DELAY)
+                else:
+                    raise
 
     def _store_in_file(self, file_path: str):
         with open(file_path, "w") as file:

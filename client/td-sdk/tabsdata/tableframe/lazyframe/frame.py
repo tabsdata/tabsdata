@@ -76,7 +76,7 @@ class TableFrame:
     def __build__(
         cls,
         df: (
-                td_typing.TableDictionary | pl.LazyFrame | pl.DataFrame | TableFrame | None
+            td_typing.TableDictionary | pl.LazyFrame | pl.DataFrame | TableFrame | None
         ) = None,
     ) -> TableFrame:
         # noinspection PyProtectedMember
