@@ -6,7 +6,7 @@
 name: Integration Standard Linux (x86-64)
 
 on:
-  # pull_request:
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -27,7 +27,7 @@ defaults:
 
 jobs:
   integration-standard-linux-x86-64:
-    runs-on: ubuntu-latest
+    runs-on: release-linux-x86-64
     permissions: write-all
     defaults:
       run:
