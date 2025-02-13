@@ -81,13 +81,11 @@ MYSQL_PORT = 3306
 ORACLE_PORT = 1521
 POSTGRES_PORT = 5432
 
-
 FAKE_TRIGGERED_TIME = 1234567890123
 FAKE_SCHEDULED_TIME = 1248067890123
 
 # Expected output of the foo1 function when called with f1="o1" and f2="o2"
 EXPECTED_FOO1_OUTPUT = ("o1", "o2")
-
 
 FORMAT_TYPE_TO_CONFIG = {
     "csv": {
