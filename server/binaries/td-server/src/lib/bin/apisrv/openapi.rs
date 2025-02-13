@@ -25,7 +25,7 @@ pub fn router() -> Router {
 
     #[api_server_docs(
         title = "Tabsdata API",
-        version = "0.9.1",
+        version = "0.9.2",
         modifier = &SecurityAddon,
         server = (url = "/", description = "API Server"),
     )]
