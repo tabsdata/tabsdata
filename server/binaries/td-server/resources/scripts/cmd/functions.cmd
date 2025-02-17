@@ -2,11 +2,11 @@ rem
 rem Copyright 2024 Tabs Data Inc.
 rem
 
-rem function to check for errors
+rem function to check execution error
 :check_error
 if %errorlevel% neq 0 (
-    echo Command failed with status %errorlevel%.
-    exit /b %errorlevel%
+    echo Command failed with status %errorlevel%
+    exit %errorlevel%
 )
 goto :eof
 

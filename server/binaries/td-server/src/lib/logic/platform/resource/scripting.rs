@@ -69,20 +69,20 @@ impl ScriptBuilder {
     #[cfg(not(windows))]
     const BACKGROUND_PREFIX: [&'static str; 0] = [];
     #[cfg(windows)]
-    const BACKGROUND_PREFIX: [&'static str; 1] = ["start /b"];
+    const BACKGROUND_PREFIX: [&'static str; 1] = ["call"];
 
     #[cfg(not(windows))]
-    const BACKGROUND_SUFFIX: [&'static str; 1] = ["&"];
+    const BACKGROUND_SUFFIX: [&'static str; 0] = [];
     #[cfg(windows)]
     const BACKGROUND_SUFFIX: [&'static str; 0] = [];
 
     #[cfg(not(windows))]
-    const BACKGROUND_WAIT: [&'static str; 1] = ["wait $!"];
+    const BACKGROUND_WAIT: [&'static str; 0] = [];
     #[cfg(windows)]
     const BACKGROUND_WAIT: [&'static str; 0] = [];
 
     #[cfg(not(windows))]
-    const CHECK: [&'static str; 0] = [];
+    const CHECK: [&'static str; 1] = ["check_error $?"];
     #[cfg(windows)]
     const CHECK: [&'static str; 1] = ["call :check_error"];
 
@@ -101,7 +101,7 @@ impl ScriptBuilder {
     #[cfg(not(windows))]
     const EXIT0: [&'static str; 1] = ["exit 0"];
     #[cfg(windows)]
-    const EXIT0: [&'static str; 1] = ["exit /b 0"];
+    const EXIT0: [&'static str; 1] = ["exit 0"];
 
     pub fn new() -> Self {
         ScriptBuilder { lines: Vec::new() }
