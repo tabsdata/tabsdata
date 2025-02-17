@@ -6,10 +6,8 @@
 import logging
 import os
 import pathlib
-import random
 import re
 import sys
-import time
 from time import sleep
 
 import boto3
@@ -23,12 +21,15 @@ import yaml
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
 
+from tabsdata.utils.tableframe._generators import _id
+
 # The following non-import code must execute early to set up the environment correctly.
 # Suppressing E402 to allow imports after this setup.
 # flake8: noqa: E402
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+logging.getLogger("filelock").setLevel(logging.INFO)
 
 TESTS_ROOT_FOLDER = os.path.dirname(__file__)
 
@@ -755,11 +756,8 @@ def add_mock_table_location(mock_table_location):
 
 @pytest.fixture(scope="session")
 def testing_collection_with_table(worker_id, tabsserver_connection):
-    # The table will be named 'output'
-    current_time = time.time()
-    random.seed(current_time)
-    random_number = random.randint(0, 1000)
-    collection_name = f"testing_collection_with_table_{worker_id}_{random_number}"
+    random_id = _id()
+    collection_name = f"testing_collection_with_table_{worker_id}_{random_id}"
     file_path = os.path.join(
         ABSOLUTE_TEST_FOLDER_LOCATION,
         "testing_resources",
@@ -780,8 +778,8 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
             tabsserver_connection.table_sample(collection_name, "output")
             break
         except APIServerError as e:
-            logger.debug(f"Error sampling table: {e}")
-            logger.debug(f"Retrying in {retry} seconds")
+            logger.debug(f"Error sampling table '{random_id}' - '{file_path}': {e}")
+            logger.debug(f"Retrying '{random_id}' - '{file_path}' in {retry} seconds")
             retry += 1
             # Waiting for up to 10' & 30'', as young Gauss already knew.
             if retry == MAXIMUM_RETRY_COUNT:
@@ -791,8 +789,13 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
     try:
         yield collection_name
     finally:
-        try:
-            logger.debug(f"Deleting collection {collection_name}")
-            tabsserver_connection.collection_delete(collection_name)
-        except APIServerError as e:
-            logger.error(f"Failed to delete collection: {e}")
+        # ToDo: Deleting collections is not yet supported
+        #       In any case, as log as identifiers are unique, there seems to be no
+        #       strong
+        #       need to delete the collections after a test.
+        pass
+    #     try:
+    #         logger.debug(f"Deleting collection {collection_name}")
+    #         tabsserver_connection.collection_delete(collection_name)
+    #     except APIServerError as e:
+    #         logger.error(f"Failed to delete collection: {e}")

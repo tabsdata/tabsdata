@@ -91,7 +91,6 @@ class TableFrameGroupBy:
         for named_agg in named_aggs:
             # noinspection PyProtectedMember
             result = td_translator._unwrap_into_tdexpr(named_agg)
-            print(f"Processing named_agg: {named_agg} -> {result}")  # Debugging output
             unwrapped_named_aggs.append(result)
 
         unwrapped_required_columns = []

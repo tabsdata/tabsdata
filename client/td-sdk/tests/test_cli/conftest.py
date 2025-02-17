@@ -4,18 +4,18 @@
 
 import logging
 import os
-import random
-import time
 
 import pytest
 from click.testing import CliRunner
 from filelock import FileLock
 
 from tabsdata.cli.cli import cli
+from tabsdata.utils.tableframe._generators import _id
 from tests.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, API_SERVER_URL
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+logging.getLogger("filelock").setLevel(logging.INFO)
 
 
 @pytest.fixture(scope="module")
@@ -46,10 +46,11 @@ def atomic_login():
 @pytest.fixture(scope="function")
 def testing_collection(login, worker_id):
     runner = CliRunner()
-    current_time = time.time()
-    random.seed(current_time)
-    random_number = random.randint(0, 1000)
-    collection_name = f"testing_collection_{worker_id}_{random_number}"
+    # current_time = time.time()
+    # random.seed(current_time)
+    # random_id = random.randint(0, 1000)
+    random_id = _id()
+    collection_name = f"testing_collection_{worker_id}_{random_id}"
     runner.invoke(
         cli,
         [

@@ -67,9 +67,8 @@ def test_wrap_and_unwrap_lazy_frame():
     )
 
     tf = _wrap_polars_frame(lf)
-    print(tf._lf.collect())
     lf = _unwrap_table_frame(tf)
-    print(lf.collect())
+    lf.collect()
 
 
 def test_table_frame_from_none():

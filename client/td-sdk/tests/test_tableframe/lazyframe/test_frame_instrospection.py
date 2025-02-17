@@ -22,4 +22,3 @@ class TestTableFrame(unittest.TestCase):
         lf = self.table_frame.select("*")
         columns = lf.columns
         check.equal(Counter(columns), Counter(expected_columns))
-        print(columns)

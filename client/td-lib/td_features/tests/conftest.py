@@ -9,7 +9,7 @@ import sys
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
+logging.getLogger("filelock").setLevel(logging.INFO)
 
 sys.path.insert(
     0,

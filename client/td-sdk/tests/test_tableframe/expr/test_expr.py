@@ -271,7 +271,7 @@ class TestTableFrame(unittest.TestCase):
         tf = tf.filter(
             (td.col("numbers") > 1).and_(td.col("letters").str.starts_with("b"))
         )
-        print(tf._lf.collect())
+        tf._lf.collect()
 
     def test_agg(self):
         data = [
@@ -289,4 +289,4 @@ class TestTableFrame(unittest.TestCase):
         tf = tf.group_by(td.col("dates").cast(pl.Date).dt.year().alias("year")).agg(
             td.col("letters").count()
         )
-        print(tf._lf.collect())
+        tf._lf.collect()

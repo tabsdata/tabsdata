@@ -45,7 +45,7 @@ jobs:
       rust-profile: integration
       python-version: "3.12"
       MARKERS: "not oracle"
-      PYTEST_MAXIMUM_RETRY_COUNT: 36
+      PYTEST_MAXIMUM_RETRY_COUNT: 17
       PYTHONIOENCODING: "utf-8"
 
     steps:
@@ -221,6 +221,23 @@ jobs:
         id: test-examples
         if: 'false'
         run: cargo make --time-summary --env profile=${{ env.rust-profile }} --env td-toolchain=${{ env.td-toolchain }} --env td-target=${{ env.td-target }} --env td-cross=${{ env.td-cross }} examples
+
+      - name: Create instance folder artifact
+        id: crate-instance-folder-artifact
+        if: 'false && failure() && !cancelled()'
+        run: |
+          SOURCE_FOLDER="$HOME/.tabsdata/instances/pytest"
+          TARGET_ARCHIVE="./target/instance.tar.gz"
+          tar -czvf "$TARGET_ARCHIVE" "$SOURCE_FOLDER"
+          echo "Instance folder artifact created: $TARGET_ARCHIVE"
+
+      - name: Publish instance folder artifact
+        id: publish-instance-folder-artifact
+        if: 'false && failure() && !cancelled()'
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: instance
+          path: ./target/instance.tar.gz
 
       - name: Create environment logs artifact
         id: crate-environment-logs-artifact
