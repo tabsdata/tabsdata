@@ -377,6 +377,9 @@ version = "0.5.0"
 version = "0.44.2"
 features = ["lazy", "parquet", "csv", "json", "polars-lazy", "streaming", "cloud", "aws", "azure", "gcp", "cloud_write"]
 
+[workspace.dependencies.rand]
+version = "0.9.0"
+
 [workspace.dependencies.ratatui]
 version = "0.28.1"
 

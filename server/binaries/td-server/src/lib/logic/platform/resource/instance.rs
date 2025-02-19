@@ -55,12 +55,6 @@ pub const WORKER_PID_FILE: &str = "pid";
 pub const WORKER_OUT_FILE: &str = "out.log";
 pub const WORKER_ERR_FILE: &str = "err.log";
 
-pub const INSTANCE_ENV: &str = "TD_INSTANCE";
-pub const REPOSITORY_ENV: &str = "TD_REPOSITORY";
-pub const WORKSPACE_ENV: &str = "TD_WORKSPACE";
-pub const CONFIG_ENV: &str = "TD_CONFIG";
-pub const WORK_ENV: &str = "TD_WORK";
-
 /// Get the instance path of a given instance.
 pub fn get_instance_path_for_instance(instance: &Option<PathBuf>) -> PathBuf {
     let root = dirs::home_dir().unwrap_or_else(|| PathBuf::from(ROOT));

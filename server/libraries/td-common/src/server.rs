@@ -39,6 +39,12 @@ use td_error::td_error;
 use tracing::error;
 use url::Url;
 
+pub const INSTANCE_ENV: &str = "TD_INSTANCE";
+pub const REPOSITORY_ENV: &str = "TD_REPOSITORY";
+pub const WORKSPACE_ENV: &str = "TD_WORKSPACE";
+pub const CONFIG_ENV: &str = "TD_CONFIG";
+pub const WORK_ENV: &str = "TD_WORK";
+
 pub const QUEUE_PARAMETER: &str = "--work";
 
 pub const EXCLUSION_PREFIX: char = '.';

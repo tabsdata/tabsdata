@@ -18,6 +18,7 @@ pub mod monitor;
 pub mod name;
 pub mod os;
 pub mod server;
+pub mod settings;
 pub mod status;
 pub mod str;
 pub mod system_tables;

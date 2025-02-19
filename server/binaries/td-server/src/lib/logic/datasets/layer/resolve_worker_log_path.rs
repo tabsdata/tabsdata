@@ -2,11 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::logic::platform::resource::instance::WORKSPACE_ENV;
 use glob::glob;
 use std::env;
 use std::path::PathBuf;
 use td_common::error::TdError;
+use td_common::server::WORKSPACE_ENV;
 use td_error::td_error;
 use td_objects::datasets::dao::DsWorkerMessageWithNames;
 use td_objects::datasets::dlo::WorkerLogPaths;

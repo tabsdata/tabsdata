@@ -1,0 +1,12 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+# Values marked with * indicate default value if unspecified
+
+# Configure how to log environment variables in ephemeral workers runs:
+# - (*) none: do not log them
+# -     name: log only name
+# -     value: log name and value
+
+env_log_mode: name
