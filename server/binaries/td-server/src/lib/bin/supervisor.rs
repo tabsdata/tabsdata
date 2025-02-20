@@ -24,7 +24,7 @@ use crate::logic::platform::resource::instance::{
 };
 use crate::logic::platform::resource::messaging::SupervisorMessageQueue;
 use crate::logic::platform::resource::scripting::{ArgumentPrefix, CommandBuilder, ScriptBuilder};
-use crate::logic::platform::resource::settings::extract_domain_config;
+use crate::logic::platform::resource::settings::extract_profile_config;
 use crate::logic::platform::runtime::error::RuntimeError;
 use atomic_enum::atomic_enum;
 use chrono::Utc;
@@ -1792,19 +1792,19 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
         .or_else(|| check_and_join(arguments.profile.clone(), true));
 
     if config.is_none() {
-        let domain_folder = tempdir().unwrap_or_else(|e| {
-            error!("Failed to create temporary domain config folder: {}", e);
+        let profile_folder = tempdir().unwrap_or_else(|e| {
+            error!("Failed to create temporary profile config folder: {}", e);
             exit(GeneralError.code());
         });
-        let persistent_domain_folder = domain_folder.into_path();
-        let domain_config = match extract_domain_config(persistent_domain_folder) {
+        let persistent_profile_folder = profile_folder.into_path();
+        let profile_config = match extract_profile_config(persistent_profile_folder) {
             Ok(config) => config?,
             Err(e) => {
-                error!("Failed to extract domain config yaml file: {}", e);
+                error!("Failed to extract profile config yaml file: {}", e);
                 exit(GeneralError.code());
             }
         };
-        config = Some(domain_config);
+        config = Some(profile_config);
     }
 
     let repository_dir = get_repository_path_for_instance(

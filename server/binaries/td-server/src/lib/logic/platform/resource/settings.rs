@@ -3,26 +3,33 @@
 //
 
 use crate::bin::tdserver::TD_KEEP;
-use crate::logic::platform::resource::instance::{CONFIG_FILE, CONFIG_FOLDER, WORKSPACE_FOLDER};
+use crate::logic::platform::resource::instance::{
+    CONFIG_FILE, CONFIG_FOLDER, INSTANCES_FOLDER, WORKSPACE_FOLDER,
+};
 use include_dir::{include_dir, Dir, DirEntry};
-use std::fs::{create_dir_all, write};
+use std::fs::{create_dir_all, write, File};
+use std::io;
 use std::io::Result;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use td_common::env::TABSDATA_HOME_DIR;
+use td_common::files::ROOT;
 use td_common::server::EXCLUSION_PREFIX;
+use td_common::settings::{DEFAULT_SETTINGS, SETTINGS_FILE};
 use tracing::trace;
 
-pub static DEFAULT_DOMAIN: Dir<'_> =
+pub static DEFAULT_PROFILE: Dir<'_> =
     include_dir!("server/binaries/td-server/resources/profiles/internal/default");
 
-pub fn extract_domain<P: AsRef<Path>>(destination: P, rewrite: bool) -> Result<()> {
-    extract_folder(destination, &DEFAULT_DOMAIN, rewrite)
+pub fn extract_profile<P: AsRef<Path>>(destination: P, rewrite: bool) -> Result<()> {
+    extract_folder(destination, &DEFAULT_PROFILE, rewrite)
 }
 
-pub fn extract_domain_config<P: AsRef<Path>>(destination: P) -> Result<Option<PathBuf>> {
+pub fn extract_profile_config<P: AsRef<Path>>(destination: P) -> Result<Option<PathBuf>> {
     let config_yaml = Path::new(WORKSPACE_FOLDER)
         .join(CONFIG_FOLDER)
         .join(CONFIG_FILE);
-    let result = extract_file(&destination, &DEFAULT_DOMAIN, config_yaml.as_path());
+    let result = extract_file(&destination, &DEFAULT_PROFILE, config_yaml.as_path());
     match result {
         Ok(_) => Ok(Some(destination.as_ref().join(config_yaml))),
         Err(err) => Err(err),
@@ -89,4 +96,30 @@ fn extract_file<P: AsRef<Path>>(destination: P, resource: &Dir, target: &Path) -
         }
     }
     Ok(())
+}
+
+pub fn extract_default_settings<P: AsRef<Path>>(
+    instance: Option<String>,
+    destination: Option<P>,
+) -> io::Result<PathBuf> {
+    let root = dirs::home_dir().unwrap_or_else(|| PathBuf::from(ROOT));
+    let folder = match destination.as_ref().map(|p| p.as_ref()) {
+        None => root.join(TABSDATA_HOME_DIR),
+        Some(path) if path.is_relative() => root
+            .join(TABSDATA_HOME_DIR)
+            .join(INSTANCES_FOLDER)
+            .join(path),
+        Some(path) => path.to_path_buf(),
+    };
+    create_dir_all(&folder)?;
+    let file_name = match instance {
+        None => SETTINGS_FILE.to_string(),
+        Some(name) => format!("settings_{}.yaml", name),
+    };
+    let settings_path = folder.join(file_name);
+    let mut settings_file = File::create(&settings_path)?;
+    settings_file.write_all(DEFAULT_SETTINGS.as_bytes())?;
+    settings_file.flush()?;
+
+    Ok(settings_path)
 }

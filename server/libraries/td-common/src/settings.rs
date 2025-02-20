@@ -19,12 +19,12 @@ pub const SETTINGS_FILE: &str = "settings.yaml";
 
 pub const ENV_LOG_MODE: &str = "env_log_mode";
 
+pub const DEFAULT_SETTINGS: &str =
+    include_str!("../../../binaries/td-server/resources/settings/settings.yaml");
+
 static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
     Config::builder()
-        .add_source(File::from_str(
-            include_str!("../../../binaries/td-server/resources/settings/settings.yaml"),
-            config::FileFormat::Yaml,
-        ))
+        .add_source(File::from_str(DEFAULT_SETTINGS, config::FileFormat::Yaml))
         .build()
         .ok()
         .and_then(|config| config.try_deserialize().ok())

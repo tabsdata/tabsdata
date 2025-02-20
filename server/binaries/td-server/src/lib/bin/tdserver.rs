@@ -12,7 +12,7 @@ use crate::logic::platform::resource::instance::{
     get_instance_path_for_instance, get_repository_path_for_instance,
     get_workspace_path_for_instance, CONFIG_FOLDER, MSG_FOLDER, WORK_FOLDER,
 };
-use crate::logic::platform::resource::settings::extract_domain;
+use crate::logic::platform::resource::settings::{extract_default_settings, extract_profile};
 use clap::{command, Parser};
 use clap_derive::{Args, Subcommand};
 use getset::Getters;
@@ -83,6 +83,9 @@ enum Commands {
     #[command(about = "Create a Tabsdata profile based on the product defaults)")]
     Profile(ProfileArguments),
 
+    #[command(about = "Create a Tabsdata settings based on the product defaults)")]
+    Settings(SettingsArguments),
+
     #[command(about = "Start a Tabsdata instance (with optional additional arguments)")]
     Start(StartArguments),
 
@@ -120,10 +123,37 @@ struct ProfileArguments {
         name = "folder",
         required = true,
         value_parser = clap::value_parser!(PathBuf),
-        long_help = "Folder containing to contain the created profile. \
+        long_help = "Folder to contain the created profile. \
                      It can be absolute or relative. All required parent folders will be created if necessary."
     )]
     folder: PathBuf,
+}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct SettingsArguments {
+    /// Name of the instance of the settings file.
+    #[arg(
+        long,
+        name = "instance",
+        required = false,
+        long_help = "Name of the instance of the settings file. \
+                     If specified, the generated file will be settings_<instance>.yaml. \
+                     Otherwise, the generated file will be settings.yaml"
+    )]
+    instance: Option<String>,
+
+    /// Destination folder of the created settings.
+    #[arg(
+        long,
+        name = "folder",
+        required = false,
+        value_parser = clap::value_parser!(PathBuf),
+        long_help = "Folder to contain the created settings. \
+                     If unspecified, folder ~/.tabsdata will be used. \
+                     It can be absolute or relative. All required parent folders will be created if necessary."
+    )]
+    folder: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Getters, Args)]
@@ -248,6 +278,9 @@ impl TabsDataCli {
             Commands::Profile(arguments) => {
                 command_profile(arguments);
             }
+            Commands::Settings(arguments) => {
+                command_settings(arguments);
+            }
             Commands::Start(arguments) => {
                 command_start(arguments);
             }
@@ -271,7 +304,7 @@ impl TabsDataCli {
 }
 
 fn command_profile(arguments: ProfileArguments) {
-    match extract_domain(arguments.folder().join(arguments.name()), true) {
+    match extract_profile(arguments.folder().join(arguments.name()), true) {
         Ok(_) => {
             info!(
                 "Tabsdata profile '{}' at '{:?}' created successfully",
@@ -284,6 +317,32 @@ fn command_profile(arguments: ProfileArguments) {
                 "Failed to create Tabsdata profile '{}' at '{:?}': {}",
                 arguments.folder().display(),
                 arguments.name(),
+                e
+            );
+            exit(GeneralError.code())
+        }
+    };
+}
+
+fn command_settings(arguments: SettingsArguments) {
+    match extract_default_settings(arguments.instance().clone(), arguments.folder().clone()) {
+        Ok(settings) => {
+            info!(
+                "Tabsdata default settings replicated successfully at '{:?}'",
+                settings
+            );
+        }
+        Err(e) => {
+            error!(
+                "Failed to replicate Tabsdata default settings at '{}' - '{:?}': {}",
+                arguments
+                    .folder()
+                    .as_ref()
+                    .map_or("<default>".to_string(), |p| format!("{:?}", p)),
+                arguments
+                    .instance()
+                    .as_ref()
+                    .map_or("<default>".to_string(), |s| s.to_string()),
                 e
             );
             exit(GeneralError.code())

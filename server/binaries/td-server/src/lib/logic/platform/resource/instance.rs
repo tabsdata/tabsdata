@@ -3,7 +3,7 @@
 //
 
 use crate::logic::platform::resource::instance::InstanceError::*;
-use crate::logic::platform::resource::settings::extract_domain;
+use crate::logic::platform::resource::settings::extract_profile;
 use std::fs::{canonicalize, copy, create_dir_all};
 use std::io;
 use std::path::{PathBuf, StripPrefixError};
@@ -187,7 +187,7 @@ pub fn create_instance_tree(
     if let Some(custom_profile) = profile {
         copy_profile_tree(&custom_profile, &instance)?;
     }
-    extract_domain(&instance, false)?;
+    extract_profile(&instance, false)?;
     Ok(())
 }
 
