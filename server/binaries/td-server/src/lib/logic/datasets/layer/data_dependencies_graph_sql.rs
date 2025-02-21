@@ -61,9 +61,8 @@ mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::datasets::dto::DatasetWrite;
     use td_objects::dlo::{CollectionName, DatasetId};
+    use td_tower::ctx_service::RawOneshot;
     use td_tower::extractors::*;
-
-    use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_data_dependencies_graph_sql() {
@@ -88,7 +87,7 @@ mod tests {
             );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
-        let d0 = service.oneshot(request).await.unwrap();
+        let d0 = service.raw_oneshot(request).await.unwrap();
         println!("{:#?}", d0);
 
         let request = RequestContext::with(users[0].id(), "r", false)
@@ -108,7 +107,7 @@ mod tests {
             );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
-        let d1 = service.oneshot(request).await.unwrap();
+        let d1 = service.raw_oneshot(request).await.unwrap();
         println!("{:#?}", d1);
 
         let request = RequestContext::with(users[0].id(), "r", false)
@@ -128,7 +127,7 @@ mod tests {
             );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
-        let d2 = service.oneshot(request).await.unwrap();
+        let d2 = service.raw_oneshot(request).await.unwrap();
         println!("{:#?}", d2);
 
         let request = RequestContext::with(users[0].id(), "r", false)
@@ -151,7 +150,7 @@ mod tests {
             );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
-        let d3 = service.oneshot(request).await.unwrap();
+        let d3 = service.raw_oneshot(request).await.unwrap();
         println!("{:#?}", d3);
 
         let connection = db.acquire().await.unwrap();

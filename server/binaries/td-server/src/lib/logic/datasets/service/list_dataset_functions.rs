@@ -22,8 +22,8 @@ use td_objects::tower_service::extractor::{
 use td_objects::tower_service::finder::{find_by_name, find_scoped_by_name};
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
+use td_tower::service_provider::TdBoxService;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
 use tower::ServiceBuilder;
 
 pub struct ListDatasetFunctionsService {
@@ -66,7 +66,7 @@ impl ListDatasetFunctionsService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<ListRequest<FunctionParam>, ListResponse<FunctionList>, TdError> {
+    ) -> TdBoxService<ListRequest<FunctionParam>, ListResponse<FunctionList>, TdError> {
         self.provider.make().await
     }
 }
@@ -81,7 +81,7 @@ mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -92,7 +92,7 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ListDatasetFunctionsService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ListRequest<FunctionParam>, ListResponse<FunctionList>>(&[
             type_of_val(&read_dataset_authorize),
@@ -160,7 +160,7 @@ mod tests {
         let request = RequestContext::with(&creator_id.to_string(), "r", false)
             .await
             .list(FunctionParam::new("ds0", "d11"), ListParams::default());
-        let response: ListResponse<FunctionList> = service.oneshot(request).await.unwrap();
+        let response: ListResponse<FunctionList> = service.raw_oneshot(request).await.unwrap();
         assert_eq!(*response.len(), 2);
         let functions: HashMap<_, _> = response
             .data()

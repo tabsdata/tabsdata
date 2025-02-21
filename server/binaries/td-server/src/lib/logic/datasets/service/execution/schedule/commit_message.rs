@@ -20,11 +20,10 @@ use td_execution::parameters::FunctionInput;
 use td_objects::datasets::dao::DsDataVersion;
 use td_objects::tower_service::extractor::{extract_message_id, to_vec};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
-use td_tower::default_services::{conditional, ContextProvider, Do, Else, If, TransactionProvider};
+use td_tower::default_services::{conditional, Do, Else, If, SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service, service_provider};
-use tower::util::BoxService;
 
 pub struct CommitMessagesService<Q> {
     provider: ServiceProvider<SupervisorMessage<FunctionInput>, (), TdError>,
@@ -46,7 +45,7 @@ where
     p! {
         provider(db: DbPool, message_queue: Arc<Q>) -> TdError {
             service_provider!(layers!(
-                ContextProvider::new(message_queue),
+                SrvCtxProvider::new(message_queue),
                 TransactionProvider::new(db.clone()),
                 from_fn(extract_message_id::<SupervisorMessage<FunctionInput>>),
                 from_fn(worker_message_to_data_version_id),
@@ -79,7 +78,7 @@ where
         }
     }
 
-    pub async fn service(&self) -> BoxService<SupervisorMessage<FunctionInput>, (), TdError> {
+    pub async fn service(&self) -> TdBoxService<SupervisorMessage<FunctionInput>, (), TdError> {
         self.provider.make().await
     }
 }
@@ -102,7 +101,7 @@ mod tests {
     use td_objects::test_utils::seed_execution_requirement::seed_execution_requirement;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -113,7 +112,7 @@ mod tests {
         let message_queue = Arc::new(MockWorkerMessageQueue::new(vec![]));
         let provider = CommitMessagesService::provider(db, message_queue);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<SupervisorMessage<FunctionInput>, ()>(&[
             type_of_val(&extract_message_id::<SupervisorMessage<FunctionInput>>),
@@ -205,7 +204,10 @@ mod tests {
         // Run service, which should move to commited state
         let provider = CommitMessagesService::new(db.clone(), message_queue.clone());
         let service = provider.service().await;
-        service.oneshot(supervisor_message.clone()).await.unwrap();
+        service
+            .raw_oneshot(supervisor_message.clone())
+            .await
+            .unwrap();
 
         // Assert no locked messages
         let locked_messages: Vec<SupervisorMessage<FunctionInput>> =
@@ -326,7 +328,10 @@ mod tests {
         // Run service, which should move to rollback state
         let provider = CommitMessagesService::new(db.clone(), message_queue.clone());
         let service = provider.service().await;
-        service.oneshot(supervisor_message.clone()).await.unwrap();
+        service
+            .raw_oneshot(supervisor_message.clone())
+            .await
+            .unwrap();
 
         // Assert no locked messages
         let locked_messages: Vec<SupervisorMessage<FunctionInput>> =

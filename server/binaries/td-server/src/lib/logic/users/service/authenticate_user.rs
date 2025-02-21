@@ -16,11 +16,10 @@ use td_objects::tower_service::finder::find_by_name;
 use td_objects::users::dao::User;
 use td_objects::users::dto::AuthenticateRequest;
 use td_tower::default_services::{
-    ConnectionProvider, ContextProvider, ServiceEntry, ServiceReturn, Share,
+    ConnectionProvider, ServiceEntry, ServiceReturn, Share, SrvCtxProvider,
 };
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct AuthenticateUserService {
@@ -41,7 +40,7 @@ impl AuthenticateUserService {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(ConnectionProvider::new(db))
-            .layer(ContextProvider::new(jwt_logic))
+            .layer(SrvCtxProvider::new(jwt_logic))
             .layer(from_fn(extract_user_name::<AuthenticateRequest>))
             .layer(from_fn(find_by_name::<UserName, User>))
             .layer(from_fn(auth_user_validate_enabled))
@@ -55,7 +54,7 @@ impl AuthenticateUserService {
             .into_service_provider()
     }
 
-    pub async fn service(&self) -> BoxService<AuthenticateRequest, TokenResponse, TdError> {
+    pub async fn service(&self) -> TdBoxService<AuthenticateRequest, TokenResponse, TdError> {
         self.provider.make().await
     }
 }
@@ -81,8 +80,8 @@ pub mod tests {
         use td_objects::tower_service::finder::find_by_name;
         use td_objects::users::dao::User;
         use td_objects::users::dto::AuthenticateRequest;
+        use td_tower::ctx_service::RawOneshot;
         use td_tower::metadata::*;
-        use tower::ServiceExt;
 
         let db = td_database::test_utils::db().await.unwrap();
         let jwt_logic = Arc::new(JwtLogic::new(
@@ -93,7 +92,7 @@ pub mod tests {
 
         let provider = AuthenticateUserService::provider(db, jwt_logic);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<AuthenticateRequest, TokenResponse>(&[
             type_of_val(&extract_user_name::<AuthenticateRequest>),

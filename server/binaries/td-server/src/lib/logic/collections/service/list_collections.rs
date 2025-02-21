@@ -11,8 +11,7 @@ use td_objects::crudl::{ListRequest, ListResponse};
 use td_objects::tower_service::mapper::map_list;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct ListCollectionsService {
@@ -39,7 +38,7 @@ impl ListCollectionsService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<ListRequest<()>, ListResponse<CollectionList>, TdError> {
+    ) -> TdBoxService<ListRequest<()>, ListResponse<CollectionList>, TdError> {
         self.provider.make().await
     }
 }
@@ -50,7 +49,7 @@ pub mod tests {
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_user::admin_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -65,12 +64,10 @@ pub mod tests {
         use td_objects::crudl::{ListRequest, ListResponse};
         use td_objects::tower_service::mapper::map_list;
         use td_tower::metadata::*;
-        use tower::ServiceExt;
-
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ListCollectionsService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ListRequest<()>, ListResponse<CollectionList>>(&[
             type_of_val(&list_collections_authorize),
@@ -90,7 +87,7 @@ pub mod tests {
             .await
             .list((), ListParams::default());
 
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();
         assert_eq!(list.len(), &1);

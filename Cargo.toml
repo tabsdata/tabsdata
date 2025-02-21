@@ -61,11 +61,11 @@ members = [
 exclude = [
     "macros",
     "macros/helpers/td-shared",
+    "macros/facets/td-apiforge",
     "macros/facets/td-attach",
     "macros/facets/td-concrete",
     "macros/facets/td-error",
     "macros/facets/td-typing",
-    "macros/facets/td-utoipa"
 ]
 
 [[bin]]
@@ -126,6 +126,10 @@ ignored = ["openssl", "toml"]
 
 ## Macros
 
+[workspace.dependencies.td-apiforge]
+path = "macros/facets/td-apiforge"
+version = "0.9.2"
+
 [workspace.dependencies.td-attach]
 path = "macros/facets/td-attach"
 version = "0.9.2"
@@ -149,9 +153,6 @@ version = "0.9.2"
 path = "macros/facets/td-typing"
 version = "0.9.2"
 
-[workspace.dependencies.td-utoipa]
-path = "macros/facets/td-utoipa"
-version = "0.9.2"
 
 ## Libraries
 

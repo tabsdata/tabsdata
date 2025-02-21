@@ -12,8 +12,7 @@ use td_objects::users::dao::UserWithNames;
 use td_objects::users::dto::{UserList, UserRead};
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct ListUsersService {
@@ -39,7 +38,7 @@ impl ListUsersService {
             .into_service_provider()
     }
 
-    pub async fn service(&self) -> BoxService<ListRequest<()>, ListResponse<UserList>, TdError> {
+    pub async fn service(&self) -> TdBoxService<ListRequest<()>, ListResponse<UserList>, TdError> {
         self.provider.make().await
     }
 }
@@ -51,7 +50,7 @@ pub mod tests {
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::users::dto::UserList;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -66,12 +65,11 @@ pub mod tests {
         use td_objects::users::dto::UserList;
         use td_objects::users::dto::UserRead;
         use td_tower::metadata::*;
-        use tower::ServiceExt;
 
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ListUsersService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ListRequest<()>, ListResponse<UserList>>(&[
             type_of_val(&extract_req_is_admin::<ListRequest<()>>),
@@ -92,7 +90,7 @@ pub mod tests {
         let request = RequestContext::with(&user_id1.to_string(), "r", true)
             .await
             .list((), ListParams::default());
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();
         assert_eq!(*list.len(), 3);

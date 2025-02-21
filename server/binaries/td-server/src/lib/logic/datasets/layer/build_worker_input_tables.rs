@@ -10,11 +10,11 @@ use td_objects::crudl::handle_select_error;
 use td_objects::datasets::dao::DsExecutionRequirementDependency;
 use td_objects::dlo::DataVersionId;
 use td_storage::{SPath, Storage};
-use td_tower::extractors::{Connection, Context, Input, IntoMutSqlConnection};
+use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 pub async fn build_worker_input_tables(
     Connection(connection): Connection,
-    Context(storage): Context<Storage>,
+    SrvCtx(storage): SrvCtx<Storage>,
     Input(data_version_id): Input<DataVersionId>,
 ) -> Result<Vec<InputTable>, TdError> {
     let mut conn = connection.lock().await;

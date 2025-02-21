@@ -3,23 +3,21 @@
 //
 
 use crate::bin::apisrv::api_server::DatasetsState;
+use crate::bin::apisrv::data::DATA_TAG;
 use crate::logic::apisrv::status::error_status::GetErrorStatus;
-use crate::{get_status, router};
+use crate::router;
 use axum::extract::{Path, Query, State};
 use axum::routing::get;
 use axum::Extension;
 #[allow(unused_imports)]
 use serde_json::json;
-use td_common::error::TdError;
+use std::vec::Vec;
+use td_apiforge::{api_server_path, get_status};
 use td_objects::crudl::RequestContext;
 use td_objects::datasets::dto::SchemaField;
-
-use td_utoipa::api_server_path;
-use tower::ServiceExt;
-
-use crate::bin::apisrv::data::DATA_TAG;
-use std::vec::Vec;
 use td_objects::rest_urls::{AtParam, TableCommitParam, TableParam, TABLE_SCHEMA};
+use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
+use tower::ServiceExt;
 
 router! {
     state => { DatasetsState },
@@ -42,11 +40,6 @@ pub async fn get_schema(
 ) -> Result<GetStatus, GetErrorStatus> {
     let table_commit = TableCommitParam::new(&table_param, &at_param)?;
     let request = context.read(table_commit);
-    let schema = state
-        .schema()
-        .await
-        .oneshot(request)
-        .await
-        .map_err(TdError::from)?;
-    Ok(GetStatus::OK(schema))
+    let schema = state.schema().await.oneshot(request).await?;
+    Ok(GetStatus::OK(schema.into()))
 }

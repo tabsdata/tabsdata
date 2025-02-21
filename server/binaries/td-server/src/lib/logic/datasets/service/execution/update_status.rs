@@ -23,9 +23,9 @@ use td_objects::tower_service::extractor::{
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
+use td_tower::service_provider::TdBoxService;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
 use td_tower::{layers, p, service_provider};
-use tower::util::BoxService;
 
 pub struct UpdateExecutionStatusService {
     provider: ServiceProvider<UpdateRequest<DataVersionId, DataVersionUpdateRequest>, (), TdError>,
@@ -62,7 +62,7 @@ impl UpdateExecutionStatusService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<UpdateRequest<DataVersionId, DataVersionUpdateRequest>, (), TdError> {
+    ) -> TdBoxService<UpdateRequest<DataVersionId, DataVersionUpdateRequest>, (), TdError> {
         self.provider.make().await
     }
 }

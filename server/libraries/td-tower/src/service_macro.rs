@@ -108,7 +108,7 @@ mod tests {
                 service_provider!(layers!(Identity::new()))
             }
         }
-        let _: () = test_provider().make().await.call(()).await.unwrap();
+        let _: () = *test_provider().make().await.call(()).await.unwrap();
     }
 
     #[tokio::test]
@@ -118,7 +118,7 @@ mod tests {
                 service_provider!(layers!(Identity::new()))
             }
         }
-        let _: () = test_provider(1).make().await.call(()).await.unwrap();
+        let _: () = *test_provider(1).make().await.call(()).await.unwrap();
     }
 
     #[tokio::test]
@@ -128,7 +128,7 @@ mod tests {
                 service_provider!(layers!(Identity::new()))
             }
         }
-        let _: () = test_provider(42, "test")
+        let _: () = *test_provider(42, "test")
             .make()
             .await
             .call(())
@@ -166,7 +166,7 @@ mod tests {
             }
         }
 
-        let _: () = test_provider(42, "test")
+        let _: () = *test_provider(42, "test")
             .make()
             .await
             .call(())

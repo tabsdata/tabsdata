@@ -19,12 +19,11 @@ use td_objects::tower_service::extractor::{extract_list_params, extract_name};
 use td_storage::Storage;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{
-    ConnectionProvider, ContextProvider, ServiceEntry, ServiceReturn, Share,
+    ConnectionProvider, ServiceEntry, ServiceReturn, Share, SrvCtxProvider,
 };
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{l, layers};
-use tower::util::BoxService;
 use tower::ServiceBuilder;
 
 pub struct SampleService {
@@ -46,7 +45,7 @@ impl SampleService {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(ConnectionProvider::new(db))
-            .layer(ContextProvider::new(storage))
+            .layer(SrvCtxProvider::new(storage))
             .layer(Self::table_sample())
             .map_err(TdError::from) // TODO make this disappear, type conversion should be implicit
             .service(ServiceReturn)
@@ -72,7 +71,7 @@ impl SampleService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<ListRequest<TableCommitParam>, BoxedSyncStream, TdError> {
+    ) -> TdBoxService<ListRequest<TableCommitParam>, BoxedSyncStream, TdError> {
         self.provider.make().await
     }
 }
@@ -99,8 +98,8 @@ mod tests {
     use td_objects::test_utils::seed_user::seed_user;
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, SPath, Storage};
+    use td_tower::ctx_service::RawOneshot;
     use testdir::testdir;
-    use tower::ServiceExt;
     use url::Url;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -120,7 +119,6 @@ mod tests {
         use td_objects::tower_service::extractor::extract_name;
         use td_tower::metadata::type_of_val;
         use td_tower::metadata::Metadata;
-        use tower::ServiceExt;
 
         fn dummy_file() -> String {
             if cfg!(target_os = "windows") {
@@ -139,7 +137,7 @@ mod tests {
         let storage = Storage::from(vec![mound_def]).await.unwrap();
         let provider = SampleService::provider(db, Arc::new(storage));
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ListRequest<TableCommitParam>, BoxedSyncStream>(&[
             type_of_val(&read_dataset_authorize),
@@ -260,7 +258,7 @@ mod tests {
                     .build()
                     .unwrap(),
             );
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let mut data = response.unwrap().into_inner();
         let bytes = data.next().await.unwrap().unwrap();

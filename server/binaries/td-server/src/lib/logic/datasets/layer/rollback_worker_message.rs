@@ -5,11 +5,11 @@
 use td_common::error::TdError;
 use td_common::server::{SupervisorMessage, WorkerMessageQueue};
 use td_execution::parameters::FunctionInput;
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 use tracing::error;
 
 pub async fn rollback_worker_message<T: WorkerMessageQueue>(
-    Context(message_queue): Context<T>,
+    SrvCtx(message_queue): SrvCtx<T>,
     Input(message): Input<SupervisorMessage<FunctionInput>>,
 ) -> Result<(), TdError> {
     // Rollback is never an error.

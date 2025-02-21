@@ -16,8 +16,7 @@ use td_objects::users::dao::UserWithNames;
 use td_objects::users::dto::UserRead;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct ReadUserService {
@@ -48,7 +47,7 @@ impl ReadUserService {
             .into_service_provider()
     }
 
-    pub async fn service(&self) -> BoxService<ReadRequest<String>, UserRead, TdError> {
+    pub async fn service(&self) -> TdBoxService<ReadRequest<String>, UserRead, TdError> {
         self.provider.make().await
     }
 }
@@ -58,7 +57,7 @@ pub mod tests {
     use crate::logic::users::service::read_user::ReadUserService;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -75,12 +74,10 @@ pub mod tests {
         use td_objects::users::dao::UserWithNames;
         use td_objects::users::dto::UserRead;
         use td_tower::metadata::*;
-        use tower::ServiceExt;
-
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ReadUserService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ReadRequest<String>, UserRead>(&[
             type_of_val(&extract_name::<ReadRequest<String>, String, UserName>),
@@ -103,7 +100,7 @@ pub mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .read("u0");
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let created = response.unwrap();
 

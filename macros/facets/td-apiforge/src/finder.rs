@@ -5,20 +5,24 @@
 extern crate proc_macro;
 
 use proc_macro::{Span, TokenStream};
-use std::path::Path;
-
-use darling::FromMeta;
-use quote::quote;
-use syn::{parse_macro_input, Expr, File, Ident, Item};
-use walkdir::WalkDir;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 use crate::attributes::UtoipaTagArguments;
+use crate::status::{CTX_MACRO_NAME, CTX_PREFIX};
+use darling::FromMeta;
+use heck::ToUpperCamelCase;
+use quote::{format_ident, quote};
+use syn::{parse_macro_input, Expr, File, Ident, Item, ItemMacro};
 use td_shared::parse_meta;
 use td_shared::project::get_project_root;
+use walkdir::WalkDir;
 
 const DEFAULT_TAGS_MACRO: &str = "api_server_tag";
 const DEFAULT_PATHS_ATTRIBUTE: &str = "api_server_path";
 const DEFAULT_SCHEMA_ATTRIBUTE: &str = "api_server_schema";
+
+const CTX_STATUS_FILE: &str = "status.rs";
 
 #[derive(FromMeta)]
 struct UtoipaDocsArguments {
@@ -63,6 +67,12 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
         .schemas_attribute
         .unwrap_or_else(|| Ident::new(DEFAULT_SCHEMA_ATTRIBUTE, Span::call_site().into()));
 
+    let mut ctx_file = PathBuf::new();
+    ctx_file.push(file!());
+    ctx_file.pop();
+    ctx_file.push(CTX_STATUS_FILE);
+    let ctx_macro_gen_idents = extract_ctx_macro_idents(ctx_file);
+
     let (tags_found, found_paths, found_schemas) = WalkDir::new(&root_dir)
         .follow_links(true)
         .follow_root_links(true)
@@ -79,6 +89,7 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
                 &tags_attribute,
                 &paths_attribute,
                 &schemas_attribute,
+                &ctx_macro_gen_idents,
             )
         })
         .fold(
@@ -138,6 +149,38 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// Extract all macro idents from the given file.
+fn extract_ctx_macro_idents(path: impl Into<PathBuf>) -> Vec<Ident> {
+    let mut file = std::fs::File::open(path.into()).unwrap();
+    let mut buffer = String::new();
+    file.read_to_string(&mut buffer).unwrap();
+
+    let parsed_macros: Vec<ItemMacro> = syn::parse::<File>(buffer.parse().unwrap())
+        .expect("Failed to parse file")
+        .items
+        .into_iter()
+        .filter_map(|item| {
+            if let Item::Macro(m) = item {
+                Some(m)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let mut idents = Vec::new();
+    for item_macro in parsed_macros {
+        if item_macro.mac.path.is_ident(CTX_MACRO_NAME) {
+            let tokens = item_macro.mac.tokens.clone();
+            let mut iter = tokens.into_iter();
+            if let Some(proc_macro2::TokenTree::Ident(ident)) = iter.next() {
+                idents.push(ident);
+            }
+        }
+    }
+    idents
+}
+
 /// Find all tags, paths, and schemas in the given file.
 /// The tags are found in macros definitions, while paths and schemas are found in other proc
 /// macros attributes and associated types.
@@ -147,6 +190,7 @@ fn find_in_file(
     tags_attribute: &Ident,
     paths_attribute: &Ident,
     schemas_attribute: &Ident,
+    ctx_macro_gen_idents: &[Ident],
 ) -> (
     Vec<proc_macro2::TokenStream>,
     Vec<syn::Path>,
@@ -167,6 +211,17 @@ fn find_in_file(
                     (name = #name, description = #description)
                 };
                 found_tags.push(syn_tag);
+            } else if let Some(ident) = item.mac.path.get_ident() {
+                // And also look for macro generated schemas.
+                if ctx_macro_gen_idents.contains(ident) {
+                    let macro_name = ident.to_string().to_upper_camel_case();
+                    let input = item.mac.tokens.clone();
+                    let schema_struct = syn::parse::<syn::Ident>(input.into()).unwrap();
+                    let schema_ident =
+                        format_ident!("{}{}{}", CTX_PREFIX, macro_name, schema_struct);
+                    let path = syn::parse_str(&format!("{}::{}", module, schema_ident)).unwrap();
+                    found_schemas.push(path);
+                }
             }
         }
 

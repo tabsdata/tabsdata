@@ -6,7 +6,7 @@ use crate::users::dao::UserWithNames;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use td_utoipa::api_server_schema;
+use td_apiforge::api_server_schema;
 
 /// API: Payload for user create.
 #[api_server_schema]

@@ -5,14 +5,15 @@
 use crate::bin::apisrv::api_server::DatasetsState;
 use crate::bin::apisrv::functions::FUNCTIONS_TAG;
 use crate::logic::apisrv::status::error_status::GetErrorStatus;
-use crate::{get_status, router};
+use crate::router;
 use axum::extract::{Path, State};
 use axum::routing::get;
 use axum::Extension;
+use td_apiforge::{api_server_path, get_status};
 use td_objects::crudl::{ListParams, ListRequest, RequestContext};
 use td_objects::datasets::dto::FunctionRead;
 use td_objects::rest_urls::{FunctionParam, FUNCTION_GET};
-use td_utoipa::api_server_path;
+use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
 // TODO(TD-281) add Datasets logic, clean unused code serving as example
@@ -34,12 +35,11 @@ pub async fn read_dataset_function(
     Path(collection_dataset): Path<FunctionParam>,
 ) -> Result<GetStatus, GetErrorStatus> {
     let request: ListRequest<FunctionParam> = context.list(collection_dataset, ListParams::first());
-    let first_function = state
+    let response = state
         .list_dataset_functions()
         .await
         .oneshot(request)
-        .await?
-        .data()[0]
-        .clone();
-    Ok(GetStatus::OK(first_function))
+        .await?;
+    let response = response.transform(|v| v.data()[0].clone());
+    Ok(GetStatus::OK(response.into()))
 }

@@ -267,7 +267,7 @@ def test_function_trigger_execution_plan_name(tabsserver_connection):
             execution_plan_name="test_execution_plan_name",
         )
         assert response.status_code == 201
-        assert response.json()["name"] == "test_execution_plan_name"
+        assert response.json()["data"]["name"] == "test_execution_plan_name"
     finally:
         tabsserver_connection.function_delete(
             "test_function_trigger_execution_plan_name_collection", "test_input_plugin"

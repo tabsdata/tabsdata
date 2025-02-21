@@ -14,7 +14,7 @@ use crate::bin::apisrv::api_server::{DatasetsState, StorageState};
 use crate::routers;
 #[allow(unused_imports)]
 use serde_json::json;
-use td_utoipa::{api_server_schema, api_server_tag};
+use td_apiforge::{api_server_schema, api_server_tag};
 use utoipa::IntoResponses;
 
 /// This struct is just used to document ParquetFile in the OpenAPI schema.

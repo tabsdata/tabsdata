@@ -8,11 +8,11 @@ use td_common::execution_status::TransactionStatus;
 use td_common::id::Id;
 use td_objects::datasets::dao::DsTransaction;
 use td_objects::dlo::{ExecutionPlanId, RequestUserId};
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 use td_transaction::{TransactionBy, TransactionMap};
 
 pub async fn build_transactions(
-    Context(transaction_by): Context<TransactionBy>,
+    SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Input(execution_plan_id): Input<ExecutionPlanId>,
     Input(transaction_ids): Input<TransactionMap<Id>>,
     Input(user_id): Input<RequestUserId>,

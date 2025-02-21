@@ -11,14 +11,14 @@ use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Extension;
-use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{WorkerMessageParam, WORKER_LOGS};
-use td_utoipa::{api_server_path, api_server_schema};
-use tower::ServiceExt;
-use utoipa::IntoResponses;
-
 #[allow(unused_imports)]
 use serde_json::json;
+use td_apiforge::{api_server_path, api_server_schema};
+use td_objects::crudl::RequestContext;
+use td_objects::rest_urls::{WorkerMessageParam, WORKER_LOGS};
+use td_tower::ctx_service::IntoData;
+use tower::ServiceExt;
+use utoipa::IntoResponses;
 
 router! {
     state => { DatasetsState },
@@ -49,5 +49,6 @@ pub async fn read_worker_logs(
 ) -> Result<impl IntoResponse, CreateErrorStatus> {
     let request = context.read(param);
     let response = dataset_state.read_worker().await.oneshot(request).await?;
-    Ok(Body::from_stream(response.into_inner()))
+    let stream = response.into_data();
+    Ok(Body::from_stream(stream.into_inner()))
 }

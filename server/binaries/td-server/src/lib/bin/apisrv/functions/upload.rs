@@ -5,15 +5,15 @@
 use crate::bin::apisrv::api_server::DatasetsState;
 use crate::bin::apisrv::functions::FUNCTIONS_TAG;
 use crate::logic::apisrv::status::error_status::UpdateErrorStatus;
-use crate::logic::apisrv::status::status_macros::EmptyUpdateStatus;
+use crate::logic::apisrv::status::EmptyUpdateStatus;
 use crate::router;
 use axum::extract::{Path, Request, State};
 use axum::routing::post;
 use axum::Extension;
+use td_apiforge::{api_server_path, api_server_schema};
 use td_objects::crudl::RequestContext;
 use td_objects::datasets::dto::UploadFunction;
 use td_objects::rest_urls::{FunctionIdParam, FUNCTION_UPLOAD};
-use td_utoipa::{api_server_path, api_server_schema};
 use tower::ServiceExt;
 
 // TODO(TD-281) add Datasets logic, clean unused code serving as example
@@ -39,10 +39,10 @@ pub async fn upload_function(
     request: Request,
 ) -> Result<EmptyUpdateStatus, UpdateErrorStatus> {
     let request = UploadFunction::new(function_id_param, request);
-    dataset_state
+    let response = dataset_state
         .upload_function()
         .await
         .oneshot(request)
         .await?;
-    Ok(EmptyUpdateStatus::NO_CONTENT)
+    Ok(EmptyUpdateStatus::OK(response.into()))
 }

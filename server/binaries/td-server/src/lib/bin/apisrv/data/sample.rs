@@ -14,9 +14,10 @@ use axum::Extension;
 #[allow(unused_imports)]
 use serde_json::json;
 use std::vec::Vec;
+use td_apiforge::api_server_path;
 use td_objects::crudl::{ListParams, RequestContext};
 use td_objects::rest_urls::{AtParam, TableCommitParam, TableParam, TABLE_SAMPLE};
-use td_utoipa::api_server_path;
+use td_tower::ctx_service::IntoData;
 use tower::ServiceExt;
 
 router! {
@@ -39,5 +40,6 @@ pub async fn get_sample(
     let table_commit = TableCommitParam::new(&table_param, &at_param)?;
     let request = context.list(table_commit, list_params);
     let response = state.sample().await.oneshot(request).await?;
-    Ok(Body::from_stream(response.into_inner()))
+    let stream = response.into_data();
+    Ok(Body::from_stream(stream.into_inner()))
 }

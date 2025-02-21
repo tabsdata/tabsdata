@@ -11,8 +11,7 @@ use td_objects::datasets::dto::CommitList;
 use td_objects::tower_service::mapper::map_list;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct ListCommitsService {
@@ -37,7 +36,9 @@ impl ListCommitsService {
             .into_service_provider()
     }
 
-    pub async fn service(&self) -> BoxService<ListRequest<()>, ListResponse<CommitList>, TdError> {
+    pub async fn service(
+        &self,
+    ) -> TdBoxService<ListRequest<()>, ListResponse<CommitList>, TdError> {
         self.provider.make().await
     }
 }
@@ -52,7 +53,7 @@ mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_execution_plan::seed_execution_plan;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -65,12 +66,11 @@ mod tests {
         use td_objects::datasets::dto::CommitList;
         use td_objects::tower_service::mapper::map_list;
         use td_tower::metadata::{type_of_val, Metadata};
-        use tower::ServiceExt;
 
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ListCommitsService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ListRequest<()>, ListResponse<CommitList>>(&[
             type_of_val(&list_commits_sql),
@@ -106,7 +106,7 @@ mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .list((), ListParams::default());
-        let response: ListResponse<CommitList> = service.oneshot(request).await.unwrap();
+        let response: ListResponse<CommitList> = service.raw_oneshot(request).await.unwrap();
         assert_eq!(
             response
                 .data()

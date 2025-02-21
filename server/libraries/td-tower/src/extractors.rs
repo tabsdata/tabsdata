@@ -2,6 +2,7 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
+use crate::ctx_service::{CtxMap, InnerContext};
 use crate::error::{ConnectionError, FromHandlerError};
 use crate::handler::Handler;
 use async_trait::async_trait;
@@ -50,27 +51,27 @@ where
 }
 
 /// Wrapper for a context value.
-pub struct Context<T>(pub Arc<T>);
+pub struct SrvCtx<T>(pub Arc<T>);
 
-impl<T> Context<T> {
+impl<T> SrvCtx<T> {
     pub fn new(value: T) -> Self {
         Self(Arc::new(value))
     }
 }
 
-impl<T> Clone for Context<T> {
+impl<T> Clone for SrvCtx<T> {
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0))
     }
 }
 
 #[async_trait]
-impl<T> FromHandler for Context<T>
+impl<T> FromHandler for SrvCtx<T>
 where
     T: Send + Sync + 'static,
 {
     async fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
-        let value = match handler.get::<Context<T>>() {
+        let value = match handler.get::<SrvCtx<T>>() {
             // Note that this just clones the Arc, not T itself
             Some(value) => Ok(value.clone()),
             None => Err(FromHandlerError::NotFound(String::from(type_name::<T>()))),
@@ -162,6 +163,29 @@ impl FromHandler for Connection {
     }
 }
 
+// We have an inner struct just so it looks like the other extractors in the layers.
+#[derive(Debug, Default, Clone)]
+pub struct ReqCtx(pub InnerContext);
+
+impl ReqCtx {
+    pub fn arc(&self) -> Arc<Mutex<Option<CtxMap>>> {
+        self.0.deref().clone()
+    }
+}
+
+#[async_trait]
+impl FromHandler for ReqCtx {
+    async fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
+        let value = match handler.get::<ReqCtx>() {
+            Some(value) => Ok(value.clone()),
+            None => Err(FromHandlerError::NotFound(String::from(
+                type_name::<ReqCtx>(),
+            ))),
+        }?;
+        Ok(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,11 +204,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_extractor() {
-        let context = Context::new(String::from("test"));
+        let context = SrvCtx::new(String::from("test"));
         let mut handler = Handler::new();
         handler.insert(context.clone());
 
-        let retrieved_context: Context<String> = Context::from_handler(&handler).await.unwrap();
+        let retrieved_context: SrvCtx<String> = SrvCtx::from_handler(&handler).await.unwrap();
         assert_eq!(*retrieved_context.0, "test");
     }
 
@@ -226,5 +250,17 @@ mod tests {
         let mut conn = retrieved_connection.0.lock().await;
         let conn = conn.get_mut_connection().unwrap();
         assert!(conn.ping().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_ctx_extractor() {
+        let context = ReqCtx::default();
+        let mut handler = Handler::new();
+        handler.insert(context.clone());
+
+        let retrieved_context: ReqCtx = ReqCtx::from_handler(&handler).await.unwrap();
+        assert_eq!(retrieved_context.0.error_count().await, 0);
+        assert_eq!(retrieved_context.0.warning_count().await, 0);
+        assert_eq!(retrieved_context.0.notification_count().await, 0);
     }
 }

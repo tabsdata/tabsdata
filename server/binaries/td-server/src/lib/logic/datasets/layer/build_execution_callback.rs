@@ -9,11 +9,11 @@ use td_common::error::TdError;
 use td_common::server::{Callback, HttpCallbackBuilder};
 use td_error::td_error;
 use td_objects::datasets::dao::DsReadyToExecute;
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 use url::Url;
 
 pub async fn build_execution_callback(
-    Context(server_url): Context<SocketAddr>,
+    SrvCtx(server_url): SrvCtx<SocketAddr>,
     Input(ds): Input<DsReadyToExecute>,
 ) -> Result<Callback, TdError> {
     // This is loopback address, because this endpoint is only available to the server.

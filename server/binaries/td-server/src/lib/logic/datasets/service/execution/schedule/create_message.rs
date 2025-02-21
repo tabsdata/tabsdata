@@ -30,12 +30,11 @@ use td_objects::tower_service::extractor::{
 };
 use td_storage::Storage;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
-use td_tower::default_services::ContextProvider;
+use td_tower::default_services::SrvCtxProvider;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
-use tower::util::BoxService;
 
 pub struct CreateMessageService<Q> {
     provider: ServiceProvider<DsReadyToExecute, (), TdError>,
@@ -72,9 +71,9 @@ where
                 from_fn(extract_data_version_id::<DsReadyToExecute>),
                 from_fn(extract_function_id::<DsReadyToExecute>),
                 from_fn(set_data_version_state::run_requested),
-                ContextProvider::new(message_queue),
-                ContextProvider::new(storage),
-                ContextProvider::new(server_url),
+                SrvCtxProvider::new(message_queue),
+                SrvCtxProvider::new(storage),
+                SrvCtxProvider::new(server_url),
                 TransactionProvider::new(db),
                 from_fn(select_data_version),
                 from_fn(extract_transaction_id::<DsDataVersion>),
@@ -95,7 +94,7 @@ where
         }
     }
 
-    pub async fn service(&self) -> BoxService<DsReadyToExecute, (), TdError> {
+    pub async fn service(&self) -> TdBoxService<DsReadyToExecute, (), TdError> {
         self.provider.make().await
     }
 }
@@ -124,9 +123,9 @@ mod tests {
     use td_objects::test_utils::seed_user::seed_user;
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, SPath};
+    use td_tower::ctx_service::RawOneshot;
     use td_transaction::TransactionBy;
     use testdir::testdir;
-    use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -154,7 +153,7 @@ mod tests {
         let server_url = Arc::new(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2457));
         let provider = CreateMessageService::provider(db, message_queue, storage, server_url);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<DsReadyToExecute, ()>(&[
             type_of_val(&event_time),
@@ -280,12 +279,12 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let poll_service = PollDatasetsService::new(db.clone()).service().await;
-        let response: Vec<DsReadyToExecute> = poll_service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = poll_service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 1);
         let ds_ready_to_execute = response.first().unwrap().clone();
 
@@ -293,7 +292,10 @@ mod tests {
             CreateMessageService::provider(db.clone(), message_queue.clone(), storage, server_url);
         let service = provider.make().await;
 
-        let _: () = service.oneshot(ds_ready_to_execute.clone()).await.unwrap();
+        let _: () = service
+            .raw_oneshot(ds_ready_to_execute.clone())
+            .await
+            .unwrap();
 
         let created_message = message_queue.locked_messages().await;
         assert_eq!(created_message.len(), 1);
@@ -414,12 +416,12 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let poll_service = PollDatasetsService::new(db.clone()).service().await;
-        let response: Vec<DsReadyToExecute> = poll_service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = poll_service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 1);
         let ds_ready_to_execute = response.first().unwrap().clone();
 
@@ -427,7 +429,10 @@ mod tests {
             CreateMessageService::provider(db.clone(), message_queue.clone(), storage, server_url);
         let service = provider.make().await;
 
-        let _: () = service.oneshot(ds_ready_to_execute.clone()).await.unwrap();
+        let _: () = service
+            .raw_oneshot(ds_ready_to_execute.clone())
+            .await
+            .unwrap();
 
         let created_message: Vec<SupervisorMessage<FunctionInput>> =
             message_queue.locked_messages().await;
@@ -555,7 +560,7 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
         let request = RequestContext::with(user_id, "r", false).await.create(
@@ -568,7 +573,7 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
         let request = RequestContext::with(user_id, "r", false).await.create(
@@ -581,12 +586,12 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let poll_service = PollDatasetsService::new(db.clone()).service().await;
-        let response: Vec<DsReadyToExecute> = poll_service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = poll_service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 3);
 
         let provider =
@@ -594,7 +599,10 @@ mod tests {
 
         for ds_ready_to_execute in response {
             let service = provider.make().await;
-            let _: () = service.oneshot(ds_ready_to_execute.clone()).await.unwrap();
+            let _: () = service
+                .raw_oneshot(ds_ready_to_execute.clone())
+                .await
+                .unwrap();
         }
 
         let created_messages: Vec<SupervisorMessage<FunctionInput>> =
@@ -696,12 +704,12 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let poll_service = PollDatasetsService::new(db.clone()).service().await;
-        let response: Vec<DsReadyToExecute> = poll_service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = poll_service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 1);
         let ds_ready_to_execute = response.first().unwrap().clone();
 
@@ -709,7 +717,10 @@ mod tests {
             CreateMessageService::provider(db.clone(), message_queue.clone(), storage, server_url);
         let service = provider.make().await;
 
-        let _: () = service.oneshot(ds_ready_to_execute.clone()).await.unwrap();
+        let _: () = service
+            .raw_oneshot(ds_ready_to_execute.clone())
+            .await
+            .unwrap();
 
         let created_message: Vec<SupervisorMessage<FunctionInput>> =
             message_queue.locked_messages().await;
@@ -835,12 +846,12 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let poll_service = PollDatasetsService::new(db.clone()).service().await;
-        let response: Vec<DsReadyToExecute> = poll_service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = poll_service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 1);
         let ds_ready_to_execute = response.first().unwrap().clone();
 
@@ -848,7 +859,10 @@ mod tests {
             CreateMessageService::provider(db.clone(), message_queue.clone(), storage, server_url);
         let service = provider.make().await;
 
-        let _: () = service.oneshot(ds_ready_to_execute.clone()).await.unwrap();
+        let _: () = service
+            .raw_oneshot(ds_ready_to_execute.clone())
+            .await
+            .unwrap();
 
         let created_message: Vec<SupervisorMessage<FunctionInput>> =
             message_queue.locked_messages().await;
@@ -925,12 +939,12 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let poll_service = PollDatasetsService::new(db.clone()).service().await;
-        let response: Vec<DsReadyToExecute> = poll_service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = poll_service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 1);
         let ds_ready_to_execute = response.first().unwrap().clone();
 
@@ -938,7 +952,10 @@ mod tests {
             CreateMessageService::provider(db.clone(), message_queue.clone(), storage, server_url);
         let service = provider.make().await;
 
-        let _: () = service.oneshot(ds_ready_to_execute.clone()).await.unwrap();
+        let _: () = service
+            .raw_oneshot(ds_ready_to_execute.clone())
+            .await
+            .unwrap();
 
         let created_message: Vec<SupervisorMessage<FunctionInput>> =
             message_queue.locked_messages().await;
@@ -996,12 +1013,12 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let poll_service = PollDatasetsService::new(db.clone()).service().await;
-        let response: Vec<DsReadyToExecute> = poll_service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = poll_service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 1);
         let ds_ready_to_execute = response.first().unwrap().clone();
 
@@ -1009,7 +1026,10 @@ mod tests {
             CreateMessageService::provider(db.clone(), message_queue.clone(), storage, server_url);
         let service = provider.make().await;
 
-        let _: () = service.oneshot(ds_ready_to_execute.clone()).await.unwrap();
+        let _: () = service
+            .raw_oneshot(ds_ready_to_execute.clone())
+            .await
+            .unwrap();
 
         let created_message: Vec<SupervisorMessage<FunctionInput>> =
             message_queue.locked_messages().await;

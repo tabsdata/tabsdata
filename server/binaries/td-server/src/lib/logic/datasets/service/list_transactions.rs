@@ -11,8 +11,7 @@ use td_objects::datasets::dto::TransactionList;
 use td_objects::tower_service::mapper::map_list;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct ListTransactionsService {
@@ -39,7 +38,7 @@ impl ListTransactionsService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<ListRequest<()>, ListResponse<TransactionList>, TdError> {
+    ) -> TdBoxService<ListRequest<()>, ListResponse<TransactionList>, TdError> {
         self.provider.make().await
     }
 }
@@ -55,7 +54,7 @@ mod tests {
     use td_objects::test_utils::seed_execution_plan::seed_execution_plan;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -68,12 +67,10 @@ mod tests {
         use td_objects::datasets::dto::TransactionList;
         use td_objects::tower_service::mapper::map_list;
         use td_tower::metadata::{type_of_val, Metadata};
-        use tower::ServiceExt;
-
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ListTransactionsService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ListRequest<()>, ListResponse<TransactionList>>(&[
             type_of_val(&list_transactions_sql),
@@ -109,7 +106,7 @@ mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .list((), ListParams::default());
-        let response: ListResponse<TransactionList> = service.oneshot(request).await.unwrap();
+        let response: ListResponse<TransactionList> = service.raw_oneshot(request).await.unwrap();
         assert_eq!(
             response
                 .data()

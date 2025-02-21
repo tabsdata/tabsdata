@@ -17,12 +17,11 @@ use td_objects::dlo::ExecutionPlanId;
 use td_objects::rest_urls::ExecutionPlanIdParam;
 use td_objects::tower_service::extractor::extract_name;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
-use td_tower::default_services::{ConnectionProvider, ContextProvider};
+use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
 use td_transaction::TransactionBy;
-use tower::util::BoxService;
 
 pub struct ReadPlanService {
     provider: ServiceProvider<ReadRequest<ExecutionPlanIdParam>, ExecutionPlanRead, TdError>,
@@ -39,7 +38,7 @@ impl ReadPlanService {
     p! {
         provider(db: DbPool, transaction_by: Arc<TransactionBy>) -> TdError {
             service_provider!(layers!(
-                ContextProvider::new(transaction_by),
+                SrvCtxProvider::new(transaction_by),
                 ConnectionProvider::new(db),
                 from_fn(read_dataset_authorize),
                 from_fn(extract_name::<ReadRequest<ExecutionPlanIdParam>, ExecutionPlanIdParam, ExecutionPlanId>),
@@ -55,7 +54,7 @@ impl ReadPlanService {
     /// Returns a service that read the execution plan.
     pub async fn service(
         &self,
-    ) -> BoxService<ReadRequest<ExecutionPlanIdParam>, ExecutionPlanRead, TdError> {
+    ) -> TdBoxService<ReadRequest<ExecutionPlanIdParam>, ExecutionPlanRead, TdError> {
         self.provider.make().await
     }
 }
@@ -74,7 +73,7 @@ mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_execution_plan::seed_execution_plan_serialized;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -84,7 +83,7 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ReadPlanService::provider(db, Arc::new(TransactionBy::default()));
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ReadRequest<ExecutionPlanIdParam>, ExecutionPlanRead>(&[
             type_of_val(&read_dataset_authorize),
@@ -215,7 +214,7 @@ mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .read(ExecutionPlanIdParam::new(execution_plan_id.to_string()));
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert_eq!(response.name(), "test");

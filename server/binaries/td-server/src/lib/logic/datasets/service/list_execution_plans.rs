@@ -12,8 +12,7 @@ use td_objects::datasets::dto::*;
 use td_objects::tower_service::mapper::map_list;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct ListExecutionPlansService {
@@ -43,7 +42,7 @@ impl ListExecutionPlansService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<ListRequest<()>, ListResponse<ExecutionPlanList>, TdError> {
+    ) -> TdBoxService<ListRequest<()>, ListResponse<ExecutionPlanList>, TdError> {
         self.provider.make().await
     }
 }
@@ -54,7 +53,7 @@ mod tests {
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -68,12 +67,11 @@ mod tests {
         use td_objects::datasets::dto::ExecutionPlanList;
         use td_objects::tower_service::mapper::map_list;
         use td_tower::metadata::{type_of_val, Metadata};
-        use tower::ServiceExt;
 
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ListExecutionPlansService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ListRequest<()>, ListResponse<ExecutionPlanList>>(&[
             type_of_val(&read_dataset_authorize),
@@ -93,7 +91,7 @@ mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .list((), ListParams::default());
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
     }
 }

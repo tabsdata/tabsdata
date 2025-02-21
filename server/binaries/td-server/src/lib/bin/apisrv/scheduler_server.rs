@@ -15,6 +15,7 @@ use td_common::server::WorkerMessageQueue;
 use td_database::sql::DbPool;
 use td_error::td_error;
 use td_storage::Storage;
+use td_tower::ctx_service::{CtxMap, CtxResponse, IntoData};
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
 use tokio::select;
 use tower::{BoxError, ServiceBuilder, ServiceExt};
@@ -29,12 +30,14 @@ pub struct Scheduler {
 impl Scheduler {
     async fn schedule(&self) -> Result<(), SchedulerError> {
         let service = self.scheduler_service.make().await;
-        service.oneshot(()).await
+        let _ = service.oneshot(()).await?;
+        Ok(())
     }
 
     async fn commit(&self) -> Result<(), SchedulerError> {
         let service = self.commit_service.make().await;
-        service.oneshot(()).await
+        let _ = service.oneshot(()).await?;
+        Ok(())
     }
 
     pub async fn run(self) {
@@ -164,7 +167,7 @@ macro_rules! scheduler_service {
         where
             Q: WorkerMessageQueue,
         {
-            type Response = ();
+            type Response = CtxResponse<()>;
             type Error = TdError;
             type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
@@ -177,7 +180,7 @@ macro_rules! scheduler_service {
 
                 Box::pin(async move {
                     $func(services).await?;
-                    Ok(())
+                    Ok(CtxResponse::new((), CtxMap::default()))
                 })
             }
         }
@@ -191,7 +194,7 @@ async fn scheduler<Q>(services: Arc<ScheduleServices<Q>>) -> Result<(), TdError>
 where
     Q: WorkerMessageQueue,
 {
-    let datasets = services.poll().await.oneshot(()).await?;
+    let datasets = services.poll().await.oneshot(()).await?.into_data();
     trace!(
         "Found {} functions ready to execute: {:#?}",
         datasets.len(),
@@ -211,7 +214,7 @@ async fn commit<Q>(services: Arc<ScheduleServices<Q>>) -> Result<(), TdError>
 where
     Q: WorkerMessageQueue,
 {
-    let locked = services.list().await.oneshot(()).await?;
+    let locked = services.list().await.oneshot(()).await?.into_data();
     trace!(
         "Found {} locked messages in the queue: {:#?}",
         locked.len(),

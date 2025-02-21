@@ -7,11 +7,11 @@ use td_common::id;
 use td_common::id::Id;
 use td_execution::dataset::Dataset;
 use td_execution::execution_planner::ExecutionTemplate;
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 use td_transaction::{TransactionBy, TransactionMap};
 
 pub async fn dataset(
-    Context(transaction_by): Context<TransactionBy>,
+    SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Input(execution_template): Input<ExecutionTemplate>,
 ) -> Result<TransactionMap<Dataset>, TdError> {
     let mut dataset_transactions = TransactionMap::new(&transaction_by);

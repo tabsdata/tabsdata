@@ -8,10 +8,10 @@ use td_execution::parameters::{Info, Location};
 use td_objects::datasets::dao::{DsExecutionPlanWithNames, DsReadyToExecute};
 use td_objects::dlo::{RequestTime, Value};
 use td_storage::{SPath, Storage};
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 
 pub async fn build_worker_info(
-    Context(storage): Context<Storage>,
+    SrvCtx(storage): SrvCtx<Storage>,
     Input(ds): Input<DsReadyToExecute>,
     Input(execution_plan): Input<DsExecutionPlanWithNames>,
     Input(request_time): Input<RequestTime>,

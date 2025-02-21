@@ -4,6 +4,7 @@
 
 pub mod box_sync_clone_layer;
 pub mod box_sync_clone_service;
+pub mod ctx_service;
 pub mod default_services;
 pub mod error;
 pub mod extractors;

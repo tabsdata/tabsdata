@@ -7,7 +7,7 @@
 
 use crate::logic::apisrv::api_router::OpenApiRouterBuilder;
 use axum::Router;
-use td_utoipa::api_server_docs;
+use td_apiforge::api_server_docs;
 use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 

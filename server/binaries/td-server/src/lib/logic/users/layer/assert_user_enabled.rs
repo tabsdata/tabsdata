@@ -6,12 +6,12 @@ use crate::logic::users::error::UserError;
 use sqlx::sqlite::SqliteRow;
 use td_common::error::TdError;
 use td_objects::crudl::{handle_select_error, RequestContext};
-use td_tower::extractors::{Connection, Context, IntoMutSqlConnection};
+use td_tower::extractors::{Connection, IntoMutSqlConnection, SrvCtx};
 
 /// function to use in other services to assert the user making the request is active
 pub async fn assert_user_enabled(
     Connection(connection): Connection,
-    Context(context): Context<RequestContext>,
+    SrvCtx(context): SrvCtx<RequestContext>,
 ) -> Result<(), TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;

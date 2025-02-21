@@ -14,7 +14,7 @@ use td_database::sql::DbPool;
 use td_execution::parameters::FunctionInput;
 use td_objects::datasets::dao::DsReadyToExecute;
 use td_storage::Storage;
-use tower::util::BoxService;
+use td_tower::service_provider::TdBoxService;
 
 pub mod commit_message;
 pub mod create_message;
@@ -51,19 +51,19 @@ where
         }
     }
 
-    pub async fn poll(&self) -> BoxService<(), Vec<DsReadyToExecute>, TdError> {
+    pub async fn poll(&self) -> TdBoxService<(), Vec<DsReadyToExecute>, TdError> {
         self.poll_datasets_provider.service().await
     }
 
-    pub async fn create(&self) -> BoxService<DsReadyToExecute, (), TdError> {
+    pub async fn create(&self) -> TdBoxService<DsReadyToExecute, (), TdError> {
         self.create_message_provider.service().await
     }
 
-    pub async fn list(&self) -> BoxService<(), Vec<SupervisorMessage<FunctionInput>>, TdError> {
+    pub async fn list(&self) -> TdBoxService<(), Vec<SupervisorMessage<FunctionInput>>, TdError> {
         self.list_created_messages_provider.service().await
     }
 
-    pub async fn commit(&self) -> BoxService<SupervisorMessage<FunctionInput>, (), TdError> {
+    pub async fn commit(&self) -> TdBoxService<SupervisorMessage<FunctionInput>, (), TdError> {
         self.commit_message_provider.service().await
     }
 }

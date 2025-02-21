@@ -6,7 +6,7 @@ use crate::collections::dao::CollectionWithNames;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use td_utoipa::api_server_schema;
+use td_apiforge::api_server_schema;
 
 /// API: Payload for collection create.
 #[api_server_schema]

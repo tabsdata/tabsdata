@@ -6,23 +6,24 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
-use crate::logic::apisrv::status::extractors::Json;
-use axum::extract::{Path, Query, State};
-use axum::routing::{delete, get, post};
-use axum::Extension;
-use derive_builder::Builder;
-use getset::Getters;
-use serde::{Deserialize, Serialize};
-
 use crate::bin::apisrv::api_server::CollectionsState;
 use crate::logic::apisrv::jwt::admin_only::AdminOnly;
 use crate::logic::apisrv::status::error_status::{
     CreateErrorStatus, DeleteErrorStatus, GetErrorStatus, ListErrorStatus, UpdateErrorStatus,
 };
-use crate::logic::apisrv::status::status_macros::DeleteStatus;
-use crate::{create_status, get_status, list_status, router, update_status};
+use crate::logic::apisrv::status::extractors::Json;
+use crate::logic::apisrv::status::DeleteStatus;
+use crate::router;
+use axum::extract::{Path, Query, State};
 use axum::middleware::from_fn;
-use td_concrete::concrete;
+use axum::routing::{delete, get, post};
+use axum::Extension;
+use derive_builder::Builder;
+use getset::Getters;
+use serde::{Deserialize, Serialize};
+use td_apiforge::{
+    api_server_path, api_server_tag, create_status, get_status, list_status, update_status,
+};
 use td_objects::collections::dto::{
     CollectionCreate, CollectionList, CollectionRead, CollectionUpdate,
 };
@@ -33,7 +34,7 @@ use td_objects::rest_urls::{
     CollectionParam, CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
     UPDATE_COLLECTION,
 };
-use td_utoipa::{api_server_path, api_server_schema, api_server_tag};
+use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
 api_server_tag!(name = "Collection", description = "Collections API");
@@ -52,11 +53,7 @@ router! {
     }
 }
 
-#[concrete]
-#[api_server_schema]
-type ListResponseCollection = ListResponse<CollectionList>;
-
-list_status!(ListResponseCollection);
+list_status!(CollectionList);
 
 #[api_server_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTION_TAG)]
 #[doc = "Lists collections"]
@@ -89,7 +86,7 @@ pub async fn get_collection(
         .await
         .oneshot(request)
         .await?;
-    Ok(GetStatus::OK(response))
+    Ok(GetStatus::OK(response.into()))
 }
 
 create_status!(CollectionRead);
@@ -107,7 +104,7 @@ pub async fn create_collection(
         .await
         .oneshot(request)
         .await?;
-    Ok(CreateStatus::CREATED(response))
+    Ok(CreateStatus::CREATED(response.into()))
 }
 
 update_status!(CollectionRead);
@@ -126,7 +123,7 @@ pub async fn update_collection(
         .await
         .oneshot(request)
         .await?;
-    Ok(UpdateStatus::OK(response))
+    Ok(UpdateStatus::OK(response.into()))
 }
 
 #[api_server_path(method = delete, path = DELETE_COLLECTION, tag = COLLECTION_TAG)]
@@ -137,12 +134,12 @@ pub async fn delete_collection(
     Path(collection_param): Path<CollectionParam>,
 ) -> Result<DeleteStatus, DeleteErrorStatus> {
     let request = context.delete(collection_param);
-    collections_state
+    let response = collections_state
         .delete_collection()
         .await
         .oneshot(request)
         .await?;
-    Ok(DeleteStatus::NO_CONTENT)
+    Ok(DeleteStatus::OK(response.into()))
 }
 
 #[cfg(test)]
@@ -190,7 +187,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["len"], 0);
+        assert_eq!(body["data"]["len"], 0);
 
         // Create a new collection
         let collection_create = json!(
@@ -217,8 +214,8 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["name"], "joaquin's collection");
-        assert_eq!(body["description"], "mock collection");
+        assert_eq!(body["data"]["name"], "joaquin's collection");
+        assert_eq!(body["data"]["description"], "mock collection");
 
         // List again and assert we have 2 collections
         let response = to_route(&router)
@@ -236,7 +233,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["len"], 1);
+        assert_eq!(body["data"]["len"], 1);
 
         // Get the new collection
         let response = to_route(&router)
@@ -254,8 +251,8 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["name"], "joaquin's collection");
-        assert_eq!(body["description"], "mock collection");
+        assert_eq!(body["data"]["name"], "joaquin's collection");
+        assert_eq!(body["data"]["description"], "mock collection");
 
         // Update the new collection
         let collection_update = json!(
@@ -281,8 +278,8 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["name"], "joaquin's collection");
-        assert_eq!(body["description"], "not a mock anymore");
+        assert_eq!(body["data"]["name"], "joaquin's collection");
+        assert_eq!(body["data"]["description"], "not a mock anymore");
 
         // Delete the new collection
         let response = to_route(&router)
@@ -296,7 +293,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(response.status(), StatusCode::OK);
 
         // List again and assert we are back to 1 collection
         let response = to_route(&router)
@@ -314,6 +311,6 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["len"], 0);
+        assert_eq!(body["data"]["len"], 0);
     }
 }

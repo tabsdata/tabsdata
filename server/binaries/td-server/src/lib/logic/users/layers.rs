@@ -19,7 +19,7 @@ use td_objects::users::dto::{AuthenticateRequest, PasswordUpdate, UserCreate, Us
 use td_security::config::PasswordHashingConfig;
 use td_security::password;
 use td_security::password::{assert_password_policy, create_password_hash};
-use td_tower::extractors::{Connection, Context, Input, IntoMutSqlConnection};
+use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 pub async fn create_user_authorize(
     Input(req_is_admin): Input<RequestIsAdmin>,
@@ -45,7 +45,7 @@ pub async fn user_validate_password(Input(password): Input<Password>) -> Result<
 }
 
 pub async fn create_user_build_dao(
-    Context(password_hashing_config): Context<PasswordHashingConfig>,
+    SrvCtx(password_hashing_config): SrvCtx<PasswordHashingConfig>,
     Input(request_time): Input<RequestTime>,
     Input(request_user_id): Input<RequestUserId>,
     Input(user_id): Input<UserId>,
@@ -315,7 +315,7 @@ pub async fn update_user_validate_enabled(
 }
 
 pub async fn update_user_build_dao(
-    Context(password_hashing_config): Context<PasswordHashingConfig>,
+    SrvCtx(password_hashing_config): SrvCtx<PasswordHashingConfig>,
     Input(request_user_id): Input<RequestUserId>,
     Input(request_time): Input<RequestTime>,
     Input(dto): Input<UserUpdate>,
@@ -421,7 +421,7 @@ pub async fn auth_user_extract_req_password(
 }
 
 pub async fn auth_user_create_jwt(
-    Context(jwt_logic): Context<JwtLogic>,
+    SrvCtx(jwt_logic): SrvCtx<JwtLogic>,
     Input(user_id): Input<UserId>,
 ) -> Result<TokenResponse, TdError> {
     let token = jwt_logic.authorize_access(&user_id, "user")?;

@@ -11,12 +11,12 @@ use td_common::error::TdError;
 use td_objects::datasets::dao::DsFunction;
 use td_objects::datasets::dto::UploadFunction;
 use td_storage::{SPath, Storage};
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 use tokio::io::BufWriter;
 use tokio_util::io::StreamReader;
 
 pub async fn upload_function_validate_hash_write_to_storage(
-    Context(storage): Context<Storage>,
+    SrvCtx(storage): SrvCtx<Storage>,
     Input(request): Input<UploadFunction>,
     Input(function): Input<DsFunction>,
 ) -> Result<(), TdError> {

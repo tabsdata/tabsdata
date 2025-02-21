@@ -16,7 +16,7 @@ use td_objects::crudl::{
     CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest,
 };
 use td_objects::rest_urls::CollectionParam;
-use tower::util::BoxService;
+use td_tower::service_provider::TdBoxService;
 
 mod create_collection;
 mod delete_collection;
@@ -48,31 +48,32 @@ impl CollectionServices {
 
     pub async fn create_collection(
         &self,
-    ) -> BoxService<CreateRequest<(), CollectionCreate>, CollectionRead, TdError> {
+    ) -> TdBoxService<CreateRequest<(), CollectionCreate>, CollectionRead, TdError> {
         self.create_service_provider.service().await
     }
 
     pub async fn read_collection(
         &self,
-    ) -> BoxService<ReadRequest<CollectionParam>, CollectionRead, TdError> {
+    ) -> TdBoxService<ReadRequest<CollectionParam>, CollectionRead, TdError> {
         self.read_service_provider.service().await
     }
 
     pub async fn delete_collection(
         &self,
-    ) -> BoxService<DeleteRequest<CollectionParam>, (), TdError> {
+    ) -> TdBoxService<DeleteRequest<CollectionParam>, (), TdError> {
         self.delete_service_provider.service().await
     }
 
     pub async fn update_collection(
         &self,
-    ) -> BoxService<UpdateRequest<CollectionParam, CollectionUpdate>, CollectionRead, TdError> {
+    ) -> TdBoxService<UpdateRequest<CollectionParam, CollectionUpdate>, CollectionRead, TdError>
+    {
         self.update_service_provider.service().await
     }
 
     pub async fn list_collections(
         &self,
-    ) -> BoxService<ListRequest<()>, ListResponse<CollectionList>, TdError> {
+    ) -> TdBoxService<ListRequest<()>, ListResponse<CollectionList>, TdError> {
         self.list_service_provider.service().await
     }
 }
@@ -83,7 +84,7 @@ pub mod tests {
     use td_database::sql::DbPool;
     use td_objects::collections::dto::{CollectionCreate, CollectionRead};
     use td_objects::crudl::RequestContext;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     /// Creates collections for tests.
     ///
@@ -118,7 +119,7 @@ pub mod tests {
                         .unwrap(),
                 );
             let service = logic.create_collection().await;
-            let collection = service.oneshot(request).await.unwrap();
+            let collection = service.raw_oneshot(request).await.unwrap();
             collections.push(collection);
         }
         collections

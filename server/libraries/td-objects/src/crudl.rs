@@ -12,12 +12,12 @@ use sqlx::error::ErrorKind::{ForeignKeyViolation, UniqueViolation};
 use sqlx::sqlite::{SqliteQueryResult, SqliteRow};
 use sqlx::{Error, SqliteConnection};
 use std::fmt::Debug;
+use td_apiforge::api_server_schema;
 use td_common::error::{TdDomainError, TdError};
 use td_common::time::UniqueUtc;
 use td_database::sql::DbError;
 use td_error::td_error;
 use td_tower::error::{ConnectionError, FromHandlerError};
-use td_utoipa::api_server_schema;
 use utoipa::IntoParams;
 
 /// Request context for the logic layer.

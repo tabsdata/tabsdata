@@ -5,20 +5,20 @@
 use crate::bin::apisrv::api_server::DatasetsState;
 use crate::bin::apisrv::execution::EXECUTION_TAG;
 use crate::logic::apisrv::status::error_status::ListErrorStatus;
-use crate::{list_status, router};
+use crate::router;
 use axum::extract::{Query, State};
 use axum::routing::get;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use td_concrete::concrete;
+use td_apiforge::{api_server_path, list_status};
 use td_objects::crudl::{
     ListParams, ListRequest, ListResponse, ListResponseBuilder, RequestContext,
 };
 use td_objects::datasets::dto::CommitList;
 use td_objects::rest_urls::COMMITS_LIST;
-use td_utoipa::{api_server_path, api_server_schema};
+use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
 router! {
@@ -28,10 +28,7 @@ router! {
     }}
 }
 
-#[concrete]
-#[api_server_schema]
-pub type ListCommitList = ListResponse<CommitList>;
-list_status!(ListCommitList);
+list_status!(CommitList);
 
 #[api_server_path(method = get, path = COMMITS_LIST, tag = EXECUTION_TAG)]
 #[doc = "List commits"]

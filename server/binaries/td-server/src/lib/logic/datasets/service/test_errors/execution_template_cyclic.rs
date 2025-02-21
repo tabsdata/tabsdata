@@ -14,8 +14,8 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::test_utils::seed_dataset::seed_dataset;
 use td_objects::test_utils::seed_user::seed_user;
+use td_tower::ctx_service::RawOneshot;
 use td_transaction::TransactionBy;
-use tower::ServiceExt;
 
 #[tokio::test]
 async fn test_execution_template_cyclic() {
@@ -62,7 +62,7 @@ async fn test_execution_template_cyclic() {
     let request = RequestContext::with(&user_id.to_string(), "r", false)
         .await
         .update(FunctionParam::new("ds0", "d0"), update);
-    let _ = service.oneshot(request).await.unwrap();
+    let _ = service.raw_oneshot(request).await.unwrap();
 
     let service = TemplateService::new(db.clone(), Arc::new(TransactionBy::default()))
         .service()
@@ -138,7 +138,7 @@ async fn test_execution_template_cyclic_more_nodes() {
     let request = RequestContext::with(&user_id.to_string(), "r", false)
         .await
         .update(FunctionParam::new("ds0", "d0"), update);
-    let _ = service.oneshot(request).await.unwrap();
+    let _ = service.raw_oneshot(request).await.unwrap();
 
     let service = TemplateService::new(db.clone(), Arc::new(TransactionBy::default()))
         .service()

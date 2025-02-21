@@ -15,11 +15,10 @@ use td_database::sql::DbPool;
 use td_objects::datasets::dto::*;
 use td_storage::Storage;
 use td_tower::default_services::{
-    ContextProvider, ServiceEntry, ServiceReturn, Share, TransactionProvider,
+    ServiceEntry, ServiceReturn, Share, SrvCtxProvider, TransactionProvider,
 };
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 /// Service for uploading a function bundle.
@@ -45,7 +44,7 @@ impl UploadFunctionService {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
-            .layer(ContextProvider::new(storage))
+            .layer(SrvCtxProvider::new(storage))
             .layer(from_fn(upload_function_to_collection_name))
             .layer(from_fn(find_collection_id))
             .layer(from_fn(select_function_by_id))
@@ -57,7 +56,7 @@ impl UploadFunctionService {
             .into_service_provider()
     }
 
-    pub async fn service(&self) -> BoxService<UploadFunction, (), TdError> {
+    pub async fn service(&self) -> TdBoxService<UploadFunction, (), TdError> {
         self.provider.make().await
     }
 }
@@ -78,8 +77,8 @@ pub mod tests {
     use td_objects::test_utils::seed_user::seed_user;
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, SPath, Storage};
+    use td_tower::ctx_service::RawOneshot;
     use testdir::testdir;
-    use tower::ServiceExt;
     use url::Url;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -97,7 +96,6 @@ pub mod tests {
         use td_objects::datasets::dto::UploadFunction;
         use td_storage::{MountDef, Storage};
         use td_tower::metadata::{type_of_val, Metadata};
-        use tower::ServiceExt;
 
         fn dummy_file() -> String {
             if cfg!(target_os = "windows") {
@@ -116,7 +114,7 @@ pub mod tests {
         let storage = Storage::from(vec![mound_def]).await.unwrap();
         let provider = UploadFunctionService::provider(db, Arc::new(storage));
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<UploadFunction, ()>(&[
             type_of_val(&upload_function_to_collection_name),
@@ -172,7 +170,7 @@ pub mod tests {
         let res = upload_function_service
             .service()
             .await
-            .oneshot(upload_function)
+            .raw_oneshot(upload_function)
             .await;
         assert!(res.is_ok());
 

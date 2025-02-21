@@ -10,10 +10,10 @@ use td_common::server::{
 };
 use td_execution::parameters::FunctionInput;
 use td_objects::dlo::{Value, WorkerMessageId};
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 
 pub async fn create_worker_message<T: WorkerMessageQueue>(
-    Context(message_queue): Context<T>,
+    SrvCtx(message_queue): SrvCtx<T>,
     Input(message_id): Input<WorkerMessageId>,
     Input(callback): Input<Callback>,
     Input(function_input): Input<FunctionInput>,

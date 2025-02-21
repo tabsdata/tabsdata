@@ -16,7 +16,7 @@ use getset::Getters;
 use polars::datatypes::Field;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use td_utoipa::api_server_schema;
+use td_apiforge::api_server_schema;
 use tokio::sync::Mutex;
 use utoipa::IntoParams;
 
@@ -237,7 +237,7 @@ impl ExecutionTemplateRead {
 }
 
 #[api_server_schema]
-#[derive(Debug, Getters, Builder, Serialize)]
+#[derive(Debug, Clone, Getters, Builder, Serialize)]
 #[builder(setter(into))]
 #[getset(get = "pub")]
 pub struct ExecutionPlanRead {

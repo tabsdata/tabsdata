@@ -39,8 +39,8 @@ use td_objects::datasets::dto::*;
 use td_objects::rest_urls::FunctionParam;
 use td_tower::default_services::{ServiceEntry, ServiceReturn, Share, TransactionProvider};
 use td_tower::from_fn::from_fn;
+use td_tower::service_provider::TdBoxService;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
 use tower::ServiceBuilder;
 
 pub struct UpdateDatasetService {
@@ -99,7 +99,7 @@ impl UpdateDatasetService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<UpdateRequest<FunctionParam, DatasetWrite>, DatasetRead, TdError> {
+    ) -> TdBoxService<UpdateRequest<FunctionParam, DatasetWrite>, DatasetRead, TdError> {
         self.provider.make().await
     }
 }
@@ -118,7 +118,7 @@ pub mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
     use td_storage::location::StorageLocation;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -161,7 +161,7 @@ pub mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = UpdateDatasetService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<UpdateRequest<FunctionParam, DatasetWrite>, DatasetRead>(&[
             type_of_val(&extract_request_context_from_update_request),
@@ -248,7 +248,7 @@ pub mod tests {
         let request = RequestContext::with(&updator_id.to_string(), "r", false)
             .await
             .update(FunctionParam::new("ds0", "d1"), update);
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let updated = response.unwrap();
 

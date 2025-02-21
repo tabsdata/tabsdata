@@ -6,30 +6,30 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
-use crate::logic::apisrv::status::extractors::Json;
-use axum::extract::{Path, Query, State};
-use axum::routing::{delete, get, post};
-use axum::Extension;
-
-use derive_builder::Builder;
-use getset::Getters;
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
-use utoipa::IntoParams;
-
 use crate::bin::apisrv::api_server::UsersState;
 use crate::logic::apisrv::jwt::admin_only::AdminOnly;
 use crate::logic::apisrv::status::error_status::{
     CreateErrorStatus, DeleteErrorStatus, GetErrorStatus, ListErrorStatus, UpdateErrorStatus,
 };
-use crate::logic::apisrv::status::status_macros::DeleteStatus;
-use crate::{create_status, get_status, list_status, router, update_status};
+use crate::logic::apisrv::status::extractors::Json;
+use crate::logic::apisrv::status::DeleteStatus;
+use crate::router;
+use axum::extract::{Path, Query, State};
 use axum::middleware::from_fn;
-use td_concrete::concrete;
+use axum::routing::{delete, get, post};
+use axum::Extension;
+use derive_builder::Builder;
+use getset::Getters;
+use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
+use td_apiforge::{
+    api_server_path, api_server_tag, create_status, get_status, list_status, update_status,
+};
 use td_objects::crudl::{ListParams, ListResponse, ListResponseBuilder, RequestContext};
 use td_objects::users::dto::{UserCreate, UserRead, UserUpdate};
-use td_utoipa::{api_server_path, api_server_schema, api_server_tag};
+use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
+use utoipa::IntoParams;
 
 pub const USERS: &str = "/users";
 pub const USER: &str = "/users/{user}";
@@ -57,10 +57,7 @@ pub struct UserUriParams {
     user: String,
 }
 
-#[concrete]
-#[api_server_schema]
-pub type ListResponseUser = ListResponse<UserRead>;
-list_status!(ListResponseUser);
+list_status!(UserRead);
 
 const LIST_USERS: &str = USERS;
 #[api_server_path(method = get, path = LIST_USERS, tag = USER_TAG)]
@@ -87,7 +84,7 @@ pub async fn get_user(
 ) -> Result<GetStatus, GetErrorStatus> {
     let request = context.read(path_params.user());
     let response = users_state.read_user().await.oneshot(request).await?;
-    Ok(GetStatus::OK(response))
+    Ok(GetStatus::OK(response.into()))
 }
 
 create_status!(UserRead);
@@ -102,7 +99,7 @@ pub async fn create_user(
 ) -> Result<CreateStatus, CreateErrorStatus> {
     let request = context.create((), request);
     let response = users_state.create_user().await.oneshot(request).await?;
-    Ok(CreateStatus::CREATED(response))
+    Ok(CreateStatus::CREATED(response.into()))
 }
 
 update_status!(UserRead);
@@ -118,7 +115,7 @@ pub async fn update_user(
 ) -> Result<UpdateStatus, UpdateErrorStatus> {
     let request = context.update::<String, _>(path_params.user(), request);
     let response = users_state.update_user().await.oneshot(request).await?;
-    Ok(UpdateStatus::OK(response))
+    Ok(UpdateStatus::OK(response.into()))
 }
 
 const DELETE_USER: &str = USER;
@@ -130,8 +127,8 @@ pub async fn delete_user(
     Path(path_params): Path<UserUriParams>,
 ) -> Result<DeleteStatus, DeleteErrorStatus> {
     let request = context.delete(path_params.user());
-    users_state.delete_user().await.oneshot(request).await?;
-    Ok(DeleteStatus::NO_CONTENT)
+    let response = users_state.delete_user().await.oneshot(request).await?;
+    Ok(DeleteStatus::OK(response.into()))
 }
 
 #[cfg(test)]
@@ -192,7 +189,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["len"], 1);
+        assert_eq!(body["data"]["len"], 1);
 
         // Create a new user
         let user_create = json!(
@@ -220,9 +217,9 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["name"], "joaquin");
-        assert_eq!(body["full_name"], "Joaquin");
-        assert_eq!(body["email"], "joaquin@tabsdata.com");
+        assert_eq!(body["data"]["name"], "joaquin");
+        assert_eq!(body["data"]["full_name"], "Joaquin");
+        assert_eq!(body["data"]["email"], "joaquin@tabsdata.com");
 
         // List again and assert we have 2 users
         let response = to_route(&router)
@@ -240,7 +237,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["len"], 2);
+        assert_eq!(body["data"]["len"], 2);
 
         // Get the new user
         let response = to_route(&router)
@@ -258,9 +255,9 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["name"], "joaquin");
-        assert_eq!(body["full_name"], "Joaquin");
-        assert_eq!(body["email"], "joaquin@tabsdata.com");
+        assert_eq!(body["data"]["name"], "joaquin");
+        assert_eq!(body["data"]["full_name"], "Joaquin");
+        assert_eq!(body["data"]["email"], "joaquin@tabsdata.com");
 
         // Update the new user
         let user_update = json!(
@@ -286,9 +283,9 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["name"], "joaquin");
-        assert_eq!(body["full_name"], "Mister Duck");
-        assert_eq!(body["email"], "quack@tabsdata.com");
+        assert_eq!(body["data"]["name"], "joaquin");
+        assert_eq!(body["data"]["full_name"], "Mister Duck");
+        assert_eq!(body["data"]["email"], "quack@tabsdata.com");
 
         // Delete the new user
         let response = to_route(&router)
@@ -302,7 +299,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(response.status(), StatusCode::OK);
 
         // List again and assert we are back to 1 user
         let response = to_route(&router)
@@ -320,6 +317,6 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["len"], 1);
+        assert_eq!(body["data"]["len"], 1);
     }
 }

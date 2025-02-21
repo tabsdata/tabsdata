@@ -271,10 +271,9 @@ impl<Err> Future for ResponseFuture<Err> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ctx_service::RawOneshot;
     use crate::default_services::{ServiceEntry, ServiceReturn};
     use crate::extractors::Input;
-    use tower::ServiceExt;
-
     #[cfg(feature = "test_tower_metadata")]
     use crate::metadata::{type_of_val, Metadata};
 
@@ -296,7 +295,7 @@ mod tests {
             .layer(from_fn(add_one))
             .service(ServiceReturn);
 
-        let response: i32 = service.oneshot(3).await.unwrap();
+        let response: i32 = service.raw_oneshot(3).await.unwrap();
         assert_eq!(response, 5);
     }
 
@@ -309,7 +308,7 @@ mod tests {
             .layer(layer.clone())
             .service(ServiceReturn);
 
-        let response: i32 = service.oneshot(3).await.unwrap();
+        let response: i32 = service.raw_oneshot(3).await.unwrap();
         assert_eq!(response, 5);
     }
 
@@ -324,10 +323,10 @@ mod tests {
 
         let service_clone = service.clone();
 
-        let response: i32 = service.oneshot(3).await.unwrap();
+        let response: i32 = service.raw_oneshot(3).await.unwrap();
         assert_eq!(response, 5);
 
-        let response_clone: i32 = service_clone.oneshot(3).await.unwrap();
+        let response_clone: i32 = service_clone.raw_oneshot(3).await.unwrap();
         assert_eq!(response_clone, 5);
     }
 
@@ -345,7 +344,7 @@ mod tests {
             .layer(from_fn(test_layer_fn))
             .service(ServiceReturn);
 
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
         metadata.assert_service::<i32, i32>(&[type_of_val(&add_one), type_of_val(&test_layer_fn)]);

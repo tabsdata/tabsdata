@@ -9,10 +9,10 @@ use std::collections::HashMap;
 use td_common::error::TdError;
 use td_objects::datasets::dto::SchemaField;
 use td_storage::{SPath, Storage};
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 
 pub async fn get_table_schema(
-    Context(storage): Context<Storage>,
+    SrvCtx(storage): SrvCtx<Storage>,
     Input(table_path): Input<SPath>,
 ) -> Result<Vec<SchemaField>, TdError> {
     let url = storage.to_external_uri(&table_path)?;

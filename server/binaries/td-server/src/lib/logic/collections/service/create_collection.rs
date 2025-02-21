@@ -19,8 +19,7 @@ use td_objects::tower_service::finder::find_by_id;
 use td_objects::tower_service::mapper::map;
 use td_tower::default_services::{ServiceEntry, ServiceReturn, Share, TransactionProvider};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct CreateCollectionService {
@@ -62,7 +61,7 @@ impl CreateCollectionService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<CreateRequest<(), CollectionCreate>, CollectionRead, TdError> {
+    ) -> TdBoxService<CreateRequest<(), CollectionCreate>, CollectionRead, TdError> {
         self.provider.make().await
     }
 }
@@ -75,7 +74,7 @@ mod tests {
     use td_objects::collections::dto::CollectionCreateBuilder;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_user::admin_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -95,13 +94,11 @@ mod tests {
         use td_objects::tower_service::finder::find_by_id;
         use td_objects::tower_service::mapper::map;
         use td_tower::metadata::{type_of_val, Metadata};
-        use tower::ServiceExt;
-
         let db = td_database::test_utils::db().await.unwrap();
         let provider = CreateCollectionService::provider(db);
         let service = provider.make().await;
 
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
         metadata.assert_service::<CreateRequest<(), CollectionCreate>, CollectionRead>(&[
@@ -143,7 +140,7 @@ mod tests {
             .await
             .create((), create);
 
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let created = response.unwrap();
 

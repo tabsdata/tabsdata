@@ -15,9 +15,8 @@ use td_objects::tower_service::extractor::extract_name;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
-use tower::util::BoxService;
 
 pub struct ReadWorkerLogsService {
     provider: ServiceProvider<ReadRequest<WorkerMessageParam>, BoxedSyncStream, TdError>,
@@ -45,7 +44,7 @@ impl ReadWorkerLogsService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<ReadRequest<WorkerMessageParam>, BoxedSyncStream, TdError> {
+    ) -> TdBoxService<ReadRequest<WorkerMessageParam>, BoxedSyncStream, TdError> {
         self.provider.make().await
     }
 }
@@ -63,7 +62,7 @@ mod tests {
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_worker_message::seed_worker_message;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -73,7 +72,7 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ReadWorkerLogsService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ReadRequest<WorkerMessageParam>, BoxedSyncStream>(&[
             type_of_val(
@@ -150,7 +149,7 @@ mod tests {
                 .await
                 .read(WorkerMessageParam::new(message_id));
 
-        let response: BoxedSyncStream = service.oneshot(request).await.unwrap();
+        let response: BoxedSyncStream = service.raw_oneshot(request).await.unwrap();
         let bytes = response.into_inner().next().await.unwrap().unwrap();
         let response = String::from_utf8_lossy(&bytes).to_string();
         assert_eq!(response, "");

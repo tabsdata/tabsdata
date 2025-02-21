@@ -31,12 +31,11 @@ async fn init_server() -> ApiServer {
 }
 
 mod endpoint {
+    use crate::counter::CounterState;
     use axum::extract::State;
     use axum::routing::get;
-
-    use tabsdatalib::{router, status};
-
-    use crate::counter::CounterState;
+    use tabsdatalib::router;
+    use td_apiforge::status;
 
     router! {
         state => { CounterState },
@@ -46,8 +45,8 @@ mod endpoint {
     }
 
     status! {
-        Counter,
-        (OK => usize),
+        CounterStatus,
+        OK => usize
     }
 
     pub async fn counter(State(state): State<CounterState>) -> CounterStatus {

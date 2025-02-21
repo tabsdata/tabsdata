@@ -104,7 +104,7 @@ def test_collection_list_with_params(api_server_connection):
         offset=10, len=42, filter="hi", order_by="hello"
     )
     assert response.status_code == 200
-    list_params = response.json().get("list_params")
+    list_params = response.json().get("data").get("list_params")
     assert list_params is not None
     assert list_params.get("offset") == 10
     assert list_params.get("len") == 42
@@ -123,7 +123,7 @@ def test_collection_create_api(api_server_connection):
             "test_collection_create_api", "test_collection_create_api_description"
         )
         assert response.status_code == 201
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == "test_collection_create_api"
         assert (
             response_json.get("description") == "test_collection_create_api_description"
@@ -143,7 +143,7 @@ def test_collection_delete_api(api_server_connection):
         raise_for_status=False,
     )
     response = api_server_connection.collection_delete("test_collection_delete_api")
-    assert response.status_code == 204
+    assert response.status_code == 200
 
 
 @pytest.mark.integration
@@ -162,7 +162,7 @@ def test_collection_get(api_server_connection):
     try:
         response = api_server_connection.collection_get_by_name("test_collection_get")
         assert response.status_code == 200
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == "test_collection_get"
         assert response_json.get("description") == "test_collection_get_description"
     finally:
@@ -194,7 +194,7 @@ def test_collection_update_new_description(api_server_connection):
             description="test_collection_update_new_description_new_description",
         )
         assert response.status_code == 200
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert (
             response_json.get("description")
             == "test_collection_update_new_description_new_description"
@@ -225,7 +225,7 @@ def test_collection_update_new_name(api_server_connection):
             new_collection_name="test_collection_update_new_name_new_name",
         )
         assert response.status_code == 200
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == "test_collection_update_new_name_new_name"
     finally:
         api_server_connection.collection_delete(
@@ -260,7 +260,7 @@ def test_function_create(api_server_connection):
             function_snippet,
         )
         assert response.status_code == 201
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == function_name
         assert response_json.get("description") == function_description
         assert response_json.get("tables") is None
@@ -287,7 +287,7 @@ def test_users_list_with_params(api_server_connection):
         offset=10, len=42, filter="hi", order_by="hello"
     )
     assert response.status_code == 200
-    list_params = response.json().get("list_params")
+    list_params = response.json().get("data").get("list_params")
     assert list_params is not None
     assert list_params.get("offset") == 10
     assert list_params.get("len") == 42
@@ -309,7 +309,7 @@ def test_users_create(api_server_connection):
             name, full_name, email, password, enabled
         )
         assert response.status_code == 201
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == name
         assert response_json.get("full_name") == full_name
         assert response_json.get("email") == email
@@ -335,7 +335,7 @@ def test_users_delete(api_server_connection):
         raise_for_status=False,
     )
     response = api_server_connection.users_delete(name)
-    assert response.status_code == 204
+    assert response.status_code == 200
 
 
 @pytest.mark.integration
@@ -364,7 +364,7 @@ def test_users_get_by_name(api_server_connection):
     try:
         response = api_server_connection.users_get_by_name(name)
         assert response.status_code == 200
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == name
         assert response_json.get("full_name") == full_name
         assert response_json.get("email") == email
@@ -408,7 +408,7 @@ def test_users_update_new_password(api_server_connection):
             enabled=False,
         )
         assert response.status_code == 200
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == name
         assert (
             response_json.get("full_name")
@@ -446,7 +446,7 @@ def test_users_update_no_new_password(api_server_connection):
             enabled=False,
         )
         assert response.status_code == 200
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == name
         assert (
             response_json.get("full_name")
@@ -482,7 +482,7 @@ def test_users_update_change_fullname(api_server_connection):
             full_name="test_users_update_change_fullname_new_full_name",
         )
         assert response.status_code == 200
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == name
         assert (
             response_json.get("full_name")
@@ -524,7 +524,7 @@ def test_function_in_collection_list_with_params(api_server_connection):
         order_by="hello",
     )
     assert response.status_code == 200
-    list_params = response.json().get("list_params")
+    list_params = response.json().get("data").get("list_params")
     assert list_params is not None
     assert list_params.get("offset") == 10
     assert list_params.get("len") == 42
@@ -626,7 +626,7 @@ def test_function_update(api_server_connection):
             function_snippet=new_function_snippet,
         )
         assert response.status_code == 200
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json.get("name") == function_name
         assert response_json.get("description") == new_description
         assert response_json.get("function_snippet") == new_function_snippet
@@ -665,13 +665,13 @@ def test_function_upload_function_bundle(api_server_connection):
             function_snippet,
         )
         assert response.status_code == 201
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json
         function_id = response_json.get("current_function_id")
         response = api_server_connection.function_upload_bundle(
             FUNCTION_TESTING_Collection_NAME, function_name, function_id, binary_data
         )
-        assert response.status_code == 204
+        assert response.status_code == 200
     finally:
         api_server_connection.function_delete(
             FUNCTION_TESTING_Collection_NAME, function_name, raise_for_status=False
@@ -706,13 +706,13 @@ def test_function_list_functions(api_server_connection):
             function_snippet,
         )
         assert response.status_code == 201
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json
         function_id = response_json.get("current_function_id")
         response = api_server_connection.function_upload_bundle(
             FUNCTION_TESTING_Collection_NAME, function_name, function_id, binary_data
         )
-        assert response.status_code == 204
+        assert response.status_code == 200
         response = api_server_connection.function_list_history(
             FUNCTION_TESTING_Collection_NAME, function_name
         )
@@ -751,13 +751,13 @@ def test_function_execute(api_server_connection):
             function_snippet,
         )
         assert response.status_code == 201
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json
         function_id = response_json.get("current_function_id")
         response = api_server_connection.function_upload_bundle(
             FUNCTION_TESTING_Collection_NAME, function_name, function_id, binary_data
         )
-        assert response.status_code == 204
+        assert response.status_code == 200
         response = api_server_connection.function_execute(
             FUNCTION_TESTING_Collection_NAME, function_name
         )
@@ -796,13 +796,13 @@ def test_function_execute_execution_plan_name(api_server_connection):
             function_snippet,
         )
         assert response.status_code == 201
-        response_json = response.json()
+        response_json = response.json().get("data")
         assert response_json
         function_id = response_json.get("current_function_id")
         response = api_server_connection.function_upload_bundle(
             FUNCTION_TESTING_Collection_NAME, function_name, function_id, binary_data
         )
-        assert response.status_code == 204
+        assert response.status_code == 200
         response = api_server_connection.function_execute(
             FUNCTION_TESTING_Collection_NAME,
             function_name,
@@ -810,7 +810,7 @@ def test_function_execute_execution_plan_name(api_server_connection):
         )
         assert response.status_code == 201
         assert (
-            response.json().get("name")
+            response.json().get("data").get("name")
             == "test_function_execute_execution_plan_name_api"
         )
     finally:

@@ -6,11 +6,11 @@
 
 use axum::extract::{Path, Query};
 use axum::Json;
+use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
+use td_apiforge::{api_server_path, api_server_schema, api_server_tag, get_status};
 use utoipa::{IntoParams, IntoResponses};
-
-use td_utoipa::{api_server_path, api_server_schema, api_server_tag};
 
 api_server_tag!(name = "Test", description = "Test Service");
 
@@ -53,6 +53,26 @@ pub struct TestErrorResponse {
     /// Response ID
     error_id: usize,
 }
+
+// We mimic the CtxResponse and CtxMap struct from the td-tower crate,
+// so we don't need to customize the td_concrete macros in ctx_macro_gen.
+#[derive(Serialize, Builder, Getters)]
+#[getset(get = "pub")]
+pub struct CtxResponse<U> {
+    version: String,
+    context: CtxMap,
+    data: U,
+}
+
+pub type CtxMap = String;
+
+#[api_server_schema]
+#[derive(Debug, Clone, Serialize)]
+pub struct ConcreteResponse {
+    response: String,
+}
+
+get_status!(ConcreteResponse);
 
 pub const TEST_GET: &str = "/get";
 #[api_server_path(method = get, path = TEST_GET, tag = TEST_TAG)]

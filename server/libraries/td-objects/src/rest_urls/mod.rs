@@ -10,10 +10,10 @@ use constcat::concat;
 use getset::Getters;
 use serde::Deserialize;
 use serde_valid::Validate;
+use td_apiforge::api_server_schema;
 use td_common::error::TdError;
 use td_common::id::Id;
 use td_common::uri::Version;
-use td_utoipa::api_server_schema;
 use utoipa::IntoParams;
 
 pub const COLLECTIONS: &str = "/collections";

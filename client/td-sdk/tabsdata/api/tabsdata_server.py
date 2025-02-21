@@ -698,7 +698,7 @@ class TabsdataServer:
         Returns:
             List[Transaction]: The list of commits in the server.
         """
-        raw_commits = self.connection.commit_list().json().get("data")
+        raw_commits = self.connection.commit_list().json().get("data").get("data")
         return [Commit(**commit) for commit in raw_commits]
 
     @property
@@ -711,7 +711,8 @@ class TabsdataServer:
         Returns:
             List[Collection]: The list of collections in the server.
         """
-        raw_collections = self.connection.collection_list().json().get("data")
+        raw_collections = (self.connection.collection_list().json().get("data")
+                           .get("data"))
         return [Collection(**collection) for collection in raw_collections]
 
     @property
@@ -724,7 +725,8 @@ class TabsdataServer:
         Returns:
             List[ExecutionPlan]: The list of execution plans in the server.
         """
-        raw_execution_plans = self.connection.execution_plan_list().json().get("data")
+        raw_execution_plans = (self.connection.execution_plan_list().json().get("data")
+                               .get("data"))
         return [
             ExecutionPlan(**execution_plan) for execution_plan in raw_execution_plans
         ]
@@ -739,9 +741,7 @@ class TabsdataServer:
         Returns:
             ServerStatus: The status of the server.
         """
-        return ServerStatus(
-            **self.connection.status_get().json().get("database_status")
-        )
+        return ServerStatus(**self.connection.status_get().json().get("data"))
 
     @property
     def transactions(self) -> List[Transaction]:
@@ -753,7 +753,8 @@ class TabsdataServer:
         Returns:
             List[Transaction]: The list of transactions in the server.
         """
-        raw_transactions = self.connection.transaction_list().json().get("data")
+        raw_transactions = (self.connection.transaction_list().json().get("data")
+                            .get("data"))
         return [Transaction(**transaction) for transaction in raw_transactions]
 
     @property
@@ -766,7 +767,7 @@ class TabsdataServer:
         Returns:
             List[User]: The list of users in the server.
         """
-        raw_users = self.connection.users_list().json().get("data")
+        raw_users = self.connection.users_list().json().get("data").get("data")
         return [User(**user) for user in raw_users]
 
     def collection_create(
@@ -816,7 +817,8 @@ class TabsdataServer:
         Raises:
             APIServerError: If the collection could not be obtained.
         """
-        return Collection(**self.connection.collection_get_by_name(name).json())
+        return Collection(**self.connection.collection_get_by_name(name).json()
+                          .get("data"))
 
     def collection_list_functions(self, collection_name) -> List[Function]:
         """
@@ -834,6 +836,7 @@ class TabsdataServer:
         raw_list_of_functions = (
             self.connection.function_in_collection_list(collection_name)
             .json()
+            .get("data")
             .get("data")
         )
         return [Function(**function) for function in raw_list_of_functions]
@@ -893,6 +896,7 @@ class TabsdataServer:
             )
             .json()
             .get("data")
+            .get("data")
         )
         return [
             DataVersion(**data_version) for data_version in raw_list_of_data_versions
@@ -908,7 +912,8 @@ class TabsdataServer:
         Returns:
             str: The execution plan.
         """
-        return self.connection.execution_plan_read(execution_plan_id).json().get("dot")
+        return (self.connection.execution_plan_read(execution_plan_id).json()
+                .get("data").get("dot"))
 
     def function_create(
         self,
@@ -977,7 +982,7 @@ class TabsdataServer:
             function_snippet=function_snippet,
             raise_for_status=raise_for_status,
         )
-        current_function_id = response.json().get("current_function_id")
+        current_function_id = response.json().get("data").get("current_function_id")
         with open(context_location, "rb") as file:
             bundle = file.read()
 
@@ -1027,7 +1032,7 @@ class TabsdataServer:
         #  for the TabsdataServer. Currently leaving it static due to time constraints.
         function_definition = self.connection.function_get(
             collection_name, function_name
-        ).json()
+        ).json().get("data")
         return Function(**function_definition)
 
     def function_list_history(self, collection_name, function_name) -> List[Function]:
@@ -1047,6 +1052,7 @@ class TabsdataServer:
         raw_list_of_functions = (
             self.connection.function_list_history(collection_name, function_name)
             .json()
+            .get("data")
             .get("data")
         )
         return [Function(**function) for function in raw_list_of_functions]
@@ -1149,7 +1155,7 @@ class TabsdataServer:
             raise_for_status=raise_for_status,
         )
 
-        current_function_id = response.json().get("current_function_id")
+        current_function_id = response.json().get("data").get("current_function_id")
         with open(context_location, "rb") as file:
             bundle = file.read()
 
@@ -1233,7 +1239,7 @@ class TabsdataServer:
         """
         return self.connection.table_get_schema(
             collection_name, table_name, commit=commit, time=time, version=version
-        ).json()
+        ).json().get("data")
 
     def table_list(
         self, collection_name: str, offset: int = None, len: int = None
@@ -1252,6 +1258,7 @@ class TabsdataServer:
         raw_tables = (
             self.connection.table_list(collection_name, offset=offset, len=len)
             .json()
+            .get("data")
             .get("data")
         )
         return [Table(**table) for table in raw_tables]
@@ -1385,7 +1392,7 @@ class TabsdataServer:
         Raises:
             APIServerError: If the user could not be obtained.
         """
-        return User(**self.connection.users_get_by_name(name).json())
+        return User(**self.connection.users_get_by_name(name).json().get("data"))
 
     def user_update(
         self,
@@ -1446,6 +1453,7 @@ class TabsdataServer:
                 by_data_version_id,
             )
             .json()
+            .get("data")
             .get("data")
         )
         return [Worker(**worker_message) for worker_message in raw_worker_messages]

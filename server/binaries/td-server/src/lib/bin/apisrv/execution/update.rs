@@ -6,7 +6,7 @@ use crate::bin::apisrv::api_server::DatasetsState;
 use crate::bin::apisrv::execution::DataVersionUriParams;
 use crate::logic::apisrv::status::error_status::UpdateErrorStatus;
 use crate::logic::apisrv::status::extractors::Json;
-use crate::logic::apisrv::status::status_macros::EmptyUpdateStatus;
+use crate::logic::apisrv::status::EmptyUpdateStatus;
 use crate::router;
 use axum::extract::{Path, State};
 use axum::routing::post;
@@ -33,10 +33,10 @@ pub async fn update_execution_status(
     Json(request): Json<DataVersionUpdateRequest>,
 ) -> Result<EmptyUpdateStatus, UpdateErrorStatus> {
     let request = context.update(data_version_uri_params, request);
-    dataset_state
+    let response = dataset_state
         .update_execution_status()
         .await
         .oneshot(request)
         .await?;
-    Ok(EmptyUpdateStatus::NO_CONTENT)
+    Ok(EmptyUpdateStatus::OK(response.into()))
 }

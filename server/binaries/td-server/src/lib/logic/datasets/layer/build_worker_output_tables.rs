@@ -9,11 +9,11 @@ use td_objects::crudl::{handle_select_error, handle_sql_err};
 use td_objects::datasets::dao::{DsFunction, DsTable, DsTableData};
 use td_objects::dlo::{DataVersionId, FunctionId};
 use td_storage::{SPath, Storage};
-use td_tower::extractors::{Connection, Context, Input, IntoMutSqlConnection};
+use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 pub async fn build_worker_output_tables(
     Connection(connection): Connection,
-    Context(storage): Context<Storage>,
+    SrvCtx(storage): SrvCtx<Storage>,
     Input(data_version_id): Input<DataVersionId>,
     Input(function_id): Input<FunctionId>,
 ) -> Result<Vec<OutputTable>, TdError> {

@@ -13,10 +13,10 @@ use axum::routing::get;
 use axum::Extension;
 #[allow(unused_imports)]
 use serde_json::json;
+use td_apiforge::api_server_path;
 use td_common::error::TdError;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{AtParam, TableCommitParam, TableParam, TABLE_DATA};
-use td_utoipa::api_server_path;
 use tower::ServiceExt;
 
 router! {
@@ -37,12 +37,7 @@ pub async fn get_data(
 ) -> Result<impl IntoResponse, GetErrorStatus> {
     let table_commit = TableCommitParam::new(&table_param, &at_param)?;
     let request = context.read(table_commit);
-    let path = state
-        .data()
-        .await
-        .oneshot(request)
-        .await
-        .map_err(TdError::from)?;
+    let path = state.data().await.oneshot(request).await?;
     let stream = storage.read_stream(&path).await.map_err(TdError::from)?;
     Ok(Body::from_stream(stream))
 }

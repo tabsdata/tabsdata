@@ -14,12 +14,12 @@
 
 #![allow(non_camel_case_types)]
 
-use crate::status;
 use derive_builder::Builder;
 use getset::Getters;
 use http::StatusCode;
 use serde::Serialize;
-use td_utoipa::api_server_schema;
+use td_apiforge::api_server_schema;
+use td_apiforge::status;
 
 pub type AuthorizeErrorStatus = DefaultErrorStatus;
 pub type ServerErrorStatus = DefaultErrorStatus;
@@ -44,10 +44,10 @@ pub struct ErrorResponse {
 }
 
 status!(
-    DefaultError,
-    (BAD_REQUEST => ErrorResponse),
-    (UNAUTHORIZED => ErrorResponse),
-    (INTERNAL_SERVER_ERROR => ErrorResponse),
+    DefaultErrorStatus,
+    BAD_REQUEST => ErrorResponse,
+    UNAUTHORIZED => ErrorResponse,
+    INTERNAL_SERVER_ERROR => ErrorResponse,
 );
 
 impl From<ErrorResponse> for DefaultErrorStatus {
@@ -62,11 +62,11 @@ impl From<ErrorResponse> for DefaultErrorStatus {
 }
 
 status!(
-    DefaultAndNotFoundError,
-    (NOT_FOUND => ErrorResponse),
-    (BAD_REQUEST => ErrorResponse),
-    (UNAUTHORIZED => ErrorResponse),
-    (INTERNAL_SERVER_ERROR => ErrorResponse),
+    DefaultAndNotFoundErrorStatus,
+    NOT_FOUND => ErrorResponse,
+    BAD_REQUEST => ErrorResponse,
+    UNAUTHORIZED => ErrorResponse,
+    INTERNAL_SERVER_ERROR => ErrorResponse,
 );
 
 impl From<ErrorResponse> for DefaultAndNotFoundErrorStatus {
@@ -86,7 +86,6 @@ mod tests {
     #![allow(clippy::upper_case_acronyms, non_camel_case_types)]
 
     use super::*;
-    use crate::json_response;
     use axum::response::IntoResponse;
     use http::StatusCode;
     use utoipa::ToSchema;
@@ -98,10 +97,10 @@ mod tests {
 
     status!(
         TestErrorStatus,
-        (BAD_REQUEST => TestErrorResponse),
-        (UNAUTHORIZED => TestErrorResponse),
-        (INTERNAL_SERVER_ERROR => TestErrorResponse),
-        (NOT_FOUND => TestErrorResponse),
+        BAD_REQUEST => TestErrorResponse,
+        UNAUTHORIZED => TestErrorResponse,
+        INTERNAL_SERVER_ERROR => TestErrorResponse,
+        NOT_FOUND => TestErrorResponse,
     );
 
     #[test]
@@ -116,16 +115,17 @@ mod tests {
                 .unwrap(),
         )
         .into_response();
-        let expected_bad_request = json_response!(
+        let expected_bad_request = (
             StatusCode::BAD_REQUEST,
-            ErrorResponseBuilder::default()
+            axum::Json(serde_json::json!(ErrorResponseBuilder::default()
                 .status(StatusCode::BAD_REQUEST)
                 .code("TD-X: Bad Request".to_string())
                 .error(Some("Bad request".to_string()))
                 .error_description(Some("Invalid input".to_string()))
                 .build()
-                .unwrap()
-        );
+                .unwrap())),
+        )
+            .into_response();
         assert_eq!(bad_request_response.status(), expected_bad_request.status());
 
         let unauthorized_response = DefaultErrorStatus::UNAUTHORIZED(
@@ -138,16 +138,17 @@ mod tests {
                 .unwrap(),
         )
         .into_response();
-        let expected_unauthorized = json_response!(
+        let expected_unauthorized = (
             StatusCode::UNAUTHORIZED,
-            ErrorResponseBuilder::default()
+            axum::Json(serde_json::json!(ErrorResponseBuilder::default()
                 .status(StatusCode::UNAUTHORIZED)
                 .code("TD-X: Unauthorized".to_string())
                 .error(Some("Unauthorized".to_string()))
                 .error_description(Some("Authentication required".to_string()))
                 .build()
-                .unwrap()
-        );
+                .unwrap())),
+        )
+            .into_response();
         assert_eq!(
             unauthorized_response.status(),
             expected_unauthorized.status()
@@ -163,16 +164,17 @@ mod tests {
                 .unwrap(),
         )
         .into_response();
-        let expected_internal_server_error = json_response!(
+        let expected_internal_server_error = (
             StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorResponseBuilder::default()
+            axum::Json(serde_json::json!(ErrorResponseBuilder::default()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .code("TD-X: Internal Error".to_string())
                 .error(Some("Internal server error".to_string()))
                 .error_description(Some("Unexpected error".to_string()))
                 .build()
-                .unwrap()
-        );
+                .unwrap())),
+        )
+            .into_response();
         assert_eq!(
             internal_server_error_response.status(),
             expected_internal_server_error.status()
@@ -191,16 +193,17 @@ mod tests {
                 .unwrap(),
         )
         .into_response();
-        let expected_not_found = json_response!(
+        let expected_not_found = (
             StatusCode::NOT_FOUND,
-            ErrorResponseBuilder::default()
+            axum::Json(serde_json::json!(ErrorResponseBuilder::default()
                 .status(StatusCode::NOT_FOUND)
                 .code("TD-X: Not found".to_string())
                 .error(Some("Not found".to_string()))
                 .error_description(Some("Resource not found".to_string()))
                 .build()
-                .unwrap()
-        );
+                .unwrap())),
+        )
+            .into_response();
         assert_eq!(not_found_response.status(), expected_not_found.status());
 
         let bad_request_response = DefaultAndNotFoundErrorStatus::BAD_REQUEST(
@@ -213,16 +216,17 @@ mod tests {
                 .unwrap(),
         )
         .into_response();
-        let expected_bad_request = json_response!(
+        let expected_bad_request = (
             StatusCode::BAD_REQUEST,
-            ErrorResponseBuilder::default()
+            axum::Json(serde_json::json!(ErrorResponseBuilder::default()
                 .status(StatusCode::BAD_REQUEST)
                 .code("TD-X: Bad Request".to_string())
                 .error(Some("Bad request".to_string()))
                 .error_description(Some("Invalid input".to_string()))
                 .build()
-                .unwrap()
-        );
+                .unwrap())),
+        )
+            .into_response();
         assert_eq!(bad_request_response.status(), expected_bad_request.status());
 
         let unauthorized_response = DefaultAndNotFoundErrorStatus::UNAUTHORIZED(
@@ -235,16 +239,17 @@ mod tests {
                 .unwrap(),
         )
         .into_response();
-        let expected_unauthorized = json_response!(
+        let expected_unauthorized = (
             StatusCode::UNAUTHORIZED,
-            ErrorResponseBuilder::default()
+            axum::Json(serde_json::json!(ErrorResponseBuilder::default()
                 .status(StatusCode::UNAUTHORIZED)
                 .code("TD-X: Unauthorized".to_string())
                 .error(Some("Unauthorized".to_string()))
                 .error_description(Some("Authentication required".to_string()))
                 .build()
-                .unwrap()
-        );
+                .unwrap())),
+        )
+            .into_response();
         assert_eq!(
             unauthorized_response.status(),
             expected_unauthorized.status()
@@ -260,16 +265,17 @@ mod tests {
                 .unwrap(),
         )
         .into_response();
-        let expected_internal_server_error = json_response!(
+        let expected_internal_server_error = (
             StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorResponseBuilder::default()
+            axum::Json(serde_json::json!(ErrorResponseBuilder::default()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .code("TD-X: Internal Error".to_string())
                 .error(Some("Internal server error".to_string()))
                 .error_description(Some("Unexpected error".to_string()))
                 .build()
-                .unwrap()
-        );
+                .unwrap())),
+        )
+            .into_response();
         assert_eq!(
             internal_server_error_response.status(),
             expected_internal_server_error.status()

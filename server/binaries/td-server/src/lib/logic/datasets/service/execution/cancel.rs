@@ -20,9 +20,8 @@ use td_objects::tower_service::extractor::extract_req_name;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
-use tower::util::BoxService;
 
 pub struct CancelExecutionService {
     provider: ServiceProvider<UpdateRequest<TransactionId, ()>, (), TdError>,
@@ -54,7 +53,7 @@ impl CancelExecutionService {
         }
     }
 
-    pub async fn service(&self) -> BoxService<UpdateRequest<TransactionId, ()>, (), TdError> {
+    pub async fn service(&self) -> TdBoxService<UpdateRequest<TransactionId, ()>, (), TdError> {
         self.provider.make().await
     }
 }
@@ -73,7 +72,7 @@ mod tests {
     use td_objects::test_utils::seed_execution_requirement::seed_execution_requirement;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -83,7 +82,7 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = CancelExecutionService::provider(db.clone());
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<UpdateRequest<TransactionId, ()>, ()>(&[
             type_of_val(&event_time),
@@ -156,7 +155,7 @@ mod tests {
         let request: UpdateRequest<TransactionId, ()> = RequestContext::with(user_id, "r", false)
             .await
             .update(TransactionId::new(transaction_id.to_string()), ());
-        let _: () = service.oneshot(request).await.unwrap();
+        let _: () = service.raw_oneshot(request).await.unwrap();
 
         // Assert db state
         const SELECT_EXECUTION_PLAN: &str = r#"
@@ -338,7 +337,7 @@ mod tests {
         let request: UpdateRequest<TransactionId, ()> = RequestContext::with(user_id, "r", false)
             .await
             .update(TransactionId::new(transaction_id_1.to_string()), ());
-        let _: () = service.oneshot(request).await.unwrap();
+        let _: () = service.raw_oneshot(request).await.unwrap();
 
         // Assert db state
         const SELECT_EXECUTION_PLAN: &str = r#"

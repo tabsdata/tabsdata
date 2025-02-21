@@ -41,8 +41,8 @@ use td_objects::rest_urls::{
     WorkerMessageParam,
 };
 use td_storage::{SPath, Storage};
+use td_tower::service_provider::TdBoxService;
 use td_transaction::TransactionBy;
-use tower::util::BoxService;
 
 pub mod create_dataset;
 pub mod data;
@@ -121,60 +121,60 @@ impl DatasetServices {
 
     pub async fn create_dataset(
         &self,
-    ) -> BoxService<CreateRequest<CollectionName, DatasetWrite>, DatasetRead, TdError> {
+    ) -> TdBoxService<CreateRequest<CollectionName, DatasetWrite>, DatasetRead, TdError> {
         self.create_service_provider.service().await
     }
 
     pub async fn update_dataset(
         &self,
-    ) -> BoxService<UpdateRequest<FunctionParam, DatasetWrite>, DatasetRead, TdError> {
+    ) -> TdBoxService<UpdateRequest<FunctionParam, DatasetWrite>, DatasetRead, TdError> {
         self.update_service_provider.service().await
     }
 
     pub async fn read_dataset(
         &self,
-    ) -> BoxService<ReadRequest<FunctionParam>, DatasetRead, TdError> {
+    ) -> TdBoxService<ReadRequest<FunctionParam>, DatasetRead, TdError> {
         self.read_service_provider.service().await
     }
 
-    pub async fn upload_function(&self) -> BoxService<UploadFunction, (), TdError> {
+    pub async fn upload_function(&self) -> TdBoxService<UploadFunction, (), TdError> {
         self.upload_function_provider.service().await
     }
 
     pub async fn list_datasets(
         &self,
-    ) -> BoxService<ListRequest<CollectionName>, ListResponse<DatasetList>, TdError> {
+    ) -> TdBoxService<ListRequest<CollectionName>, ListResponse<DatasetList>, TdError> {
         self.list_service_provider.service().await
     }
 
     pub async fn list_dataset_functions(
         &self,
-    ) -> BoxService<ListRequest<FunctionParam>, ListResponse<FunctionList>, TdError> {
+    ) -> TdBoxService<ListRequest<FunctionParam>, ListResponse<FunctionList>, TdError> {
         self.list_dataset_functions_provider.service().await
     }
 
     pub async fn create_execution_template(
         &self,
-    ) -> BoxService<ReadRequest<FunctionParam>, ExecutionTemplateRead, TdError> {
+    ) -> TdBoxService<ReadRequest<FunctionParam>, ExecutionTemplateRead, TdError> {
         self.template_service_provider.service().await
     }
 
     pub async fn create_execution_plan(
         &self,
-    ) -> BoxService<CreateRequest<FunctionParam, ExecutionPlanWrite>, ExecutionPlanRead, TdError>
+    ) -> TdBoxService<CreateRequest<FunctionParam, ExecutionPlanWrite>, ExecutionPlanRead, TdError>
     {
         self.create_plan_service_provider.service().await
     }
 
     pub async fn read_execution_plan(
         &self,
-    ) -> BoxService<ReadRequest<ExecutionPlanIdParam>, ExecutionPlanRead, TdError> {
+    ) -> TdBoxService<ReadRequest<ExecutionPlanIdParam>, ExecutionPlanRead, TdError> {
         self.read_plan_service_provider.service().await
     }
 
     pub async fn update_execution_status(
         &self,
-    ) -> BoxService<UpdateRequest<DataVersionId, DataVersionUpdateRequest>, (), TdError> {
+    ) -> TdBoxService<UpdateRequest<DataVersionId, DataVersionUpdateRequest>, (), TdError> {
         self.update_execution_status_service_provider
             .service()
             .await
@@ -182,72 +182,72 @@ impl DatasetServices {
 
     pub async fn recover_execution(
         &self,
-    ) -> BoxService<UpdateRequest<TransactionId, ()>, (), TdError> {
+    ) -> TdBoxService<UpdateRequest<TransactionId, ()>, (), TdError> {
         self.recover_execution_service_provider.service().await
     }
 
     pub async fn cancel_execution(
         &self,
-    ) -> BoxService<UpdateRequest<TransactionId, ()>, (), TdError> {
+    ) -> TdBoxService<UpdateRequest<TransactionId, ()>, (), TdError> {
         self.cancel_execution_service_provider.service().await
     }
 
     pub async fn list_dataset_versions(
         &self,
-    ) -> BoxService<ListRequest<FunctionParam>, ListResponse<DataVersionList>, TdError> {
+    ) -> TdBoxService<ListRequest<FunctionParam>, ListResponse<DataVersionList>, TdError> {
         self.list_dataset_versions_service.service().await
     }
 
     pub async fn list_execution_plans(
         &self,
-    ) -> BoxService<ListRequest<()>, ListResponse<ExecutionPlanList>, TdError> {
+    ) -> TdBoxService<ListRequest<()>, ListResponse<ExecutionPlanList>, TdError> {
         self.list_execution_plans_service.service().await
     }
 
-    pub async fn data(&self) -> BoxService<ReadRequest<TableCommitParam>, SPath, TdError> {
+    pub async fn data(&self) -> TdBoxService<ReadRequest<TableCommitParam>, SPath, TdError> {
         self.data_service.service().await
     }
 
     pub async fn schema(
         &self,
-    ) -> BoxService<ReadRequest<TableCommitParam>, Vec<SchemaField>, TdError> {
+    ) -> TdBoxService<ReadRequest<TableCommitParam>, Vec<SchemaField>, TdError> {
         self.schema_service.service().await
     }
 
     pub async fn sample(
         &self,
-    ) -> BoxService<ListRequest<TableCommitParam>, BoxedSyncStream, TdError> {
+    ) -> TdBoxService<ListRequest<TableCommitParam>, BoxedSyncStream, TdError> {
         self.sample_service.service().await
     }
 
     pub async fn list_tables(
         &self,
-    ) -> BoxService<ListRequest<CollectionParam>, ListResponse<TableList>, TdError> {
+    ) -> TdBoxService<ListRequest<CollectionParam>, ListResponse<TableList>, TdError> {
         self.list_tables_service.service().await
     }
 
     pub async fn list_transactions(
         &self,
-    ) -> BoxService<ListRequest<()>, ListResponse<TransactionList>, TdError> {
+    ) -> TdBoxService<ListRequest<()>, ListResponse<TransactionList>, TdError> {
         self.list_transactions_service.service().await
     }
 
     pub async fn list_commits(
         &self,
-    ) -> BoxService<ListRequest<()>, ListResponse<CommitList>, TdError> {
+    ) -> TdBoxService<ListRequest<()>, ListResponse<CommitList>, TdError> {
         self.list_commits_service.service().await
     }
 
     pub async fn list_worker_messages(
         &self,
-    ) -> BoxService<ListRequest<WorkerMessageListParam>, ListResponse<WorkerMessageList>, TdError>
+    ) -> TdBoxService<ListRequest<WorkerMessageListParam>, ListResponse<WorkerMessageList>, TdError>
     {
         self.list_worker_messages_service.service().await
     }
 
     pub async fn read_worker(
         &self,
-    ) -> BoxService<ReadRequest<WorkerMessageParam>, BoxedSyncStream, TdError> {
+    ) -> TdBoxService<ReadRequest<WorkerMessageParam>, BoxedSyncStream, TdError> {
         self.read_worker_service.service().await
     }
 }

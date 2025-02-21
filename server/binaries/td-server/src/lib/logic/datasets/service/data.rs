@@ -17,9 +17,8 @@ use td_storage::SPath;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{l, layers};
-use tower::util::BoxService;
 use tower::ServiceBuilder;
 
 pub struct DataService {
@@ -59,7 +58,7 @@ impl DataService {
         }
     }
 
-    pub async fn service(&self) -> BoxService<ReadRequest<TableCommitParam>, SPath, TdError> {
+    pub async fn service(&self) -> TdBoxService<ReadRequest<TableCommitParam>, SPath, TdError> {
         self.provider.make().await
     }
 }
@@ -82,7 +81,7 @@ mod tests {
     use td_objects::test_utils::seed_user::seed_user;
     use td_storage::location::StorageLocation;
     use td_storage::SPath;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -100,12 +99,10 @@ mod tests {
         use td_storage::SPath;
         use td_tower::metadata::type_of_val;
         use td_tower::metadata::Metadata;
-        use tower::ServiceExt;
-
         let db = td_database::test_utils::db().await.unwrap();
         let provider = DataService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ReadRequest<TableCommitParam>, SPath>(&[
             type_of_val(&read_dataset_authorize),
@@ -198,7 +195,7 @@ mod tests {
                 )
                 .unwrap(),
             );
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), path);
     }
@@ -396,7 +393,7 @@ mod tests {
                 )
                 .unwrap(),
             );
-        service.oneshot(request).await
+        service.raw_oneshot(request).await
     }
 
     #[tokio::test]
@@ -585,6 +582,6 @@ mod tests {
                 )
                 .unwrap(),
             );
-        service.oneshot(request).await
+        service.raw_oneshot(request).await
     }
 }

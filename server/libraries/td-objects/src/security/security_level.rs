@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use td_utoipa::api_server_schema;
+use td_apiforge::api_server_schema;
 
 /// Data Security Level. 0 is the highest security level.
 #[api_server_schema]

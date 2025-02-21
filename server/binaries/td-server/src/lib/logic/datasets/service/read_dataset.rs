@@ -15,8 +15,7 @@ use td_objects::datasets::dto::*;
 use td_objects::rest_urls::FunctionParam;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct ReadDatasetService {
@@ -45,7 +44,7 @@ impl ReadDatasetService {
             .into_service_provider()
     }
 
-    pub async fn service(&self) -> BoxService<ReadRequest<FunctionParam>, DatasetRead, TdError> {
+    pub async fn service(&self) -> TdBoxService<ReadRequest<FunctionParam>, DatasetRead, TdError> {
         self.provider.make().await
     }
 }
@@ -59,7 +58,7 @@ mod tests {
     use crate::logic::users::service::create_user::tests::create_test_users;
     use td_objects::crudl::RequestContext;
     use td_objects::dlo::CollectionName;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -69,7 +68,7 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ReadDatasetService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ReadRequest<FunctionParam>, DatasetRead>(&[
             type_of_val(&read_dataset_authorize),
@@ -104,7 +103,7 @@ mod tests {
             );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         println!("{:#?}", response);
 
         let request = RequestContext::with(users[0].id(), "r", false)
@@ -112,7 +111,7 @@ mod tests {
             .read(FunctionParam::new("ds0", "d0"));
 
         let service = ReadDatasetService::new(db.clone()).service().await;
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         println!("{:#?}", response);
     }
 }

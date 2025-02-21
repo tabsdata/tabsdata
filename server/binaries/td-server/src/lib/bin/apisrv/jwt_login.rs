@@ -4,17 +4,16 @@
 
 //! Login API Service for API Server. Implements JWT authentication and authorization.
 
-use crate::logic::apisrv::status::extractors::Json;
-use axum::extract::State;
-use axum::routing::post;
-use td_utoipa::{api_server_path, api_server_tag};
-use tower::ServiceExt;
-
 use crate::bin::apisrv::api_server::UsersState;
 use crate::logic::apisrv::jwt::jwt_logic::{AccessRequest, RefreshRequest, TokenResponse};
 use crate::logic::apisrv::status::error_status::AuthorizeErrorStatus;
-use crate::{auth_status, router};
+use crate::logic::apisrv::status::extractors::Json;
+use crate::router;
+use axum::extract::State;
+use axum::routing::post;
+use td_apiforge::{api_server_path, api_server_tag, auth_status_raw};
 use td_objects::users::dto::AuthenticateRequest;
+use td_tower::ctx_service::RawOneshot;
 
 pub const ACCESS: &str = "/auth/access";
 pub const REFRESH: &str = "/auth/refresh";
@@ -30,22 +29,22 @@ router! {
     }}
 }
 
-auth_status!(TokenResponse);
+auth_status_raw!(TokenResponse);
 
 #[api_server_path(method = post, path = ACCESS, tag = AUTHENTICATION_TAG)]
 pub async fn access(
     State(users_state): State<UsersState>,
     Json(request): Json<AccessRequest>,
-) -> Result<AuthStatus, AuthorizeErrorStatus> {
+) -> Result<AuthStatusRaw, AuthorizeErrorStatus> {
     let request =
         AuthenticateRequest::new(request.name().to_string(), request.password().to_string());
     // Authenticate user
     let token = users_state
         .authenticate_user()
         .await
-        .oneshot(request)
+        .raw_oneshot(request)
         .await?;
-    Ok(AuthStatus::OK(token))
+    Ok(AuthStatusRaw::OK(token))
 }
 
 #[api_server_path(method = post, path = REFRESH, tag = AUTHENTICATION_TAG)]
@@ -53,7 +52,7 @@ pub async fn refresh(
     State(_users_state): State<UsersState>,
     // State((jwt_state, _users_state)): State<(JwtState, UsersState)>,
     Json(_request): Json<RefreshRequest>,
-) -> Result<AuthStatus, AuthorizeErrorStatus> {
+) -> Result<AuthStatusRaw, AuthorizeErrorStatus> {
     todo!()
     // let refresh_token = EncodedToken::new(request.refresh_token());
     // let _refresh_claim = jwt_state.authenticate_refresh(refresh_token);
@@ -63,7 +62,7 @@ pub async fn refresh(
     // //     .await?;
     // // TODO(TD-273) Roles and permissions in token
     // let token = jwt_state.authorize_access("user.name()", "request.role()")?;
-    // Ok(AuthStatus::OK(token))
+    // Ok(AuthStatusRaw::OK(token))
 }
 
 #[cfg(test)]

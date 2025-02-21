@@ -13,10 +13,10 @@ use td_common::error::TdError;
 use td_objects::crudl::ListParams;
 use td_objects::datasets::dlo::BoxedSyncStream;
 use td_storage::{SPath, Storage};
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 
 pub async fn get_table_sample(
-    Context(storage): Context<Storage>,
+    SrvCtx(storage): SrvCtx<Storage>,
     Input(list_params): Input<ListParams>,
     Input(table_path): Input<SPath>,
 ) -> Result<BoxedSyncStream, TdError> {

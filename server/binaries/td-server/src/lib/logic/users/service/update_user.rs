@@ -26,12 +26,12 @@ use td_objects::users::dao::UserWithNames;
 use td_objects::users::dto::{UserRead, UserUpdate};
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::{
-    conditional, ContextProvider, Do, Else, If, ServiceEntry, ServiceReturn, Share,
+    conditional, Do, Else, If, ServiceEntry, ServiceReturn, Share, SrvCtxProvider,
     TransactionProvider,
 };
 use td_tower::from_fn::from_fn;
+use td_tower::service_provider::TdBoxService;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
 use tower::ServiceBuilder;
 
 pub struct UpdateUserService {
@@ -52,7 +52,7 @@ impl UpdateUserService {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
-            .layer(ContextProvider::new(password_hashing_config))
+            .layer(SrvCtxProvider::new(password_hashing_config))
             .layer(from_fn(
                 extract_req_time::<UpdateRequest<String, UserUpdate>>,
             ))
@@ -101,7 +101,7 @@ impl UpdateUserService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<UpdateRequest<String, UserUpdate>, UserRead, TdError> {
+    ) -> TdBoxService<UpdateRequest<String, UserUpdate>, UserRead, TdError> {
         self.provider.make().await
     }
 }
@@ -117,7 +117,7 @@ pub mod tests {
     use td_objects::users::dao::User;
     use td_objects::users::dto::{PasswordUpdate, UserUpdate};
     use td_security::config::PasswordHashingConfig;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -149,14 +149,13 @@ pub mod tests {
         use td_objects::users::dto::{UserRead, UserUpdate};
         use td_security::config::PasswordHashingConfig;
         use td_tower::metadata::*;
-        use tower::ServiceExt;
 
         let db = td_database::test_utils::db().await.unwrap();
         let password_config = Arc::new(PasswordHashingConfig::default());
         let provider = UpdateUserService::provider(db, password_config);
         let service = provider.make().await;
         use crate::logic::users::layers::{user_extract_password, user_validate_password};
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<UpdateRequest<String, UserUpdate>, UserRead>(&[
             type_of_val(&extract_req_time::<UpdateRequest<String, UserUpdate>>),
@@ -215,7 +214,7 @@ pub mod tests {
             .await
             .update("u0", user_update);
         let request_time = *request.context().time();
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let updated = response.unwrap();
 
@@ -271,7 +270,7 @@ pub mod tests {
             .await
             .update("u0", user_update);
         let request_time = *request.context().time();
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let updated = response.unwrap();
 

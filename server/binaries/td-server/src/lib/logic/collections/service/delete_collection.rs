@@ -17,8 +17,7 @@ use td_objects::tower_service::extractor::{
 use td_objects::tower_service::finder::find_by_name;
 use td_tower::default_services::{ServiceEntry, ServiceReturn, Share, TransactionProvider};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct DeleteCollectionService {
@@ -51,7 +50,7 @@ impl DeleteCollectionService {
             .into_service_provider()
     }
 
-    pub async fn service(&self) -> BoxService<DeleteRequest<CollectionParam>, (), TdError> {
+    pub async fn service(&self) -> TdBoxService<DeleteRequest<CollectionParam>, (), TdError> {
         self.provider.make().await
     }
 }
@@ -63,7 +62,7 @@ mod tests {
     use td_objects::rest_urls::CollectionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_user::admin_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -81,13 +80,11 @@ mod tests {
         };
         use td_objects::tower_service::finder::find_by_name;
         use td_tower::metadata::{type_of_val, Metadata};
-        use tower::ServiceExt;
-
         let db = td_database::test_utils::db().await.unwrap();
         let provider = DeleteCollectionService::provider(db);
         let service = provider.make().await;
 
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
         metadata.assert_service::<DeleteRequest<CollectionParam>, ()>(&[
@@ -115,7 +112,7 @@ mod tests {
             .await
             .delete(CollectionParam::new("ds0"));
 
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
 
         const SELECT: &str = "SELECT count(*) FROM collections WHERE name = ?1";

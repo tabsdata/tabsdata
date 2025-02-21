@@ -14,9 +14,8 @@ use td_objects::tower_service::mapper::map_list;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
-use tower::util::BoxService;
 
 pub struct ListWorkerMessagesService {
     provider: ServiceProvider<
@@ -47,7 +46,7 @@ impl ListWorkerMessagesService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<ListRequest<WorkerMessageListParam>, ListResponse<WorkerMessageList>, TdError>
+    ) -> TdBoxService<ListRequest<WorkerMessageListParam>, ListResponse<WorkerMessageList>, TdError>
     {
         self.provider.make().await
     }
@@ -67,7 +66,7 @@ mod tests {
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_worker_message::seed_worker_message;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -77,7 +76,7 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = ListWorkerMessagesService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata
             .assert_service::<ListRequest<WorkerMessageListParam>, ListResponse<WorkerMessageList>>(
@@ -184,7 +183,7 @@ mod tests {
                     ListParams::default(),
                 );
 
-        let response: ListResponse<WorkerMessageList> = service.oneshot(request).await.unwrap();
+        let response: ListResponse<WorkerMessageList> = service.raw_oneshot(request).await.unwrap();
 
         assert_eq!(*response.len(), 1);
         assert_eq!(response.data()[0].id(), &message_id.to_string());

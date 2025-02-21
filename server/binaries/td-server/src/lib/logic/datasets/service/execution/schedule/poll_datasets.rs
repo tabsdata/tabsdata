@@ -9,11 +9,10 @@ use td_database::sql::DbPool;
 use td_objects::datasets::dao::DsReadyToExecute;
 use td_objects::dlo::Limit;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
-use td_tower::default_services::{ConnectionProvider, ContextProvider};
+use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
-use tower::util::BoxService;
 
 pub struct PollDatasetsService {
     provider: ServiceProvider<(), Vec<DsReadyToExecute>, TdError>,
@@ -30,14 +29,14 @@ impl PollDatasetsService {
     p! {
         provider(db: DbPool) -> TdError {
             service_provider!(layers!(
-                ContextProvider::new(Arc::new(Limit::new(10))),
+                SrvCtxProvider::new(Arc::new(Limit::new(10))),
                 ConnectionProvider::new(db),
                 from_fn(poll_execution_requirements),
             ))
         }
     }
 
-    pub async fn service(&self) -> BoxService<(), Vec<DsReadyToExecute>, TdError> {
+    pub async fn service(&self) -> TdBoxService<(), Vec<DsReadyToExecute>, TdError> {
         self.provider.make().await
     }
 }
@@ -54,8 +53,8 @@ mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
     use td_storage::location::StorageLocation;
+    use td_tower::ctx_service::RawOneshot;
     use td_transaction::TransactionBy;
-    use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -65,7 +64,7 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = PollDatasetsService::provider(db.clone());
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<(), Vec<DsReadyToExecute>>(&[type_of_val(
             &poll_execution_requirements,
@@ -100,14 +99,14 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let provider = PollDatasetsService::provider(db.clone());
         let service = provider.make().await;
 
-        let response: Vec<DsReadyToExecute> = service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 1);
 
         let ds = response.first().unwrap();
@@ -165,7 +164,7 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
@@ -191,14 +190,14 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let provider = PollDatasetsService::provider(db.clone());
         let service = provider.make().await;
 
-        let response: Vec<DsReadyToExecute> = service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 2);
 
         response.iter().for_each(|ds| {
@@ -231,7 +230,7 @@ mod tests {
         let provider = PollDatasetsService::provider(db.clone());
         let service = provider.make().await;
 
-        let response: Vec<DsReadyToExecute> = service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = service.raw_oneshot(()).await.unwrap();
         assert!(response.is_empty());
     }
 
@@ -276,7 +275,7 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
         let request = RequestContext::with(user_id2, "r", false).await.create(
@@ -289,14 +288,14 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let provider = PollDatasetsService::provider(db.clone());
         let service = provider.make().await;
 
-        let response: Vec<DsReadyToExecute> = service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 2);
 
         response.iter().for_each(|ds| {
@@ -362,7 +361,7 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
         let request = RequestContext::with(user_id, "r", false).await.create(
@@ -375,14 +374,14 @@ mod tests {
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
-            .oneshot(request)
+            .raw_oneshot(request)
             .await
             .unwrap();
 
         let provider = PollDatasetsService::provider(db.clone());
         let service = provider.make().await;
 
-        let response: Vec<DsReadyToExecute> = service.oneshot(()).await.unwrap();
+        let response: Vec<DsReadyToExecute> = service.raw_oneshot(()).await.unwrap();
         assert_eq!(response.len(), 2);
 
         response.iter().for_each(|ds| {

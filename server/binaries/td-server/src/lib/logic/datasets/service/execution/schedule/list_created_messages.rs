@@ -9,11 +9,10 @@ use td_common::error::TdError;
 use td_common::server::{SupervisorMessage, WorkerMessageQueue};
 use td_execution::parameters::FunctionInput;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
-use td_tower::default_services::ContextProvider;
+use td_tower::default_services::SrvCtxProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
-use tower::util::BoxService;
 
 pub struct ListCreatedMessagesService<Q> {
     provider: ServiceProvider<(), Vec<SupervisorMessage<FunctionInput>>, TdError>,
@@ -35,13 +34,15 @@ where
     p! {
         provider(message_queue: Arc<Q>) -> TdError {
             service_provider!(layers!(
-                ContextProvider::new(message_queue),
+                SrvCtxProvider::new(message_queue),
                 from_fn(list_locked_worker_messages::<Q>),
             ))
         }
     }
 
-    pub async fn service(&self) -> BoxService<(), Vec<SupervisorMessage<FunctionInput>>, TdError> {
+    pub async fn service(
+        &self,
+    ) -> TdBoxService<(), Vec<SupervisorMessage<FunctionInput>>, TdError> {
         self.provider.make().await
     }
 }
@@ -54,7 +55,7 @@ mod tests {
         mock_supervisor_message, mock_supervisor_message_payload, State, StatefulMessage,
     };
     use td_common::server::SupervisorMessagePayload;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -64,7 +65,7 @@ mod tests {
         let message_queue = Arc::new(MockWorkerMessageQueue::new(vec![]));
         let provider = ListCreatedMessagesService::provider(message_queue);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<(), Vec<SupervisorMessage<FunctionInput>>>(&[type_of_val(
             &list_locked_worker_messages::<MockWorkerMessageQueue>,
@@ -91,7 +92,7 @@ mod tests {
         let provider = ListCreatedMessagesService::new(message_queue);
 
         let service = provider.service().await;
-        let result: Vec<SupervisorMessage<FunctionInput>> = service.oneshot(()).await.unwrap();
+        let result: Vec<SupervisorMessage<FunctionInput>> = service.raw_oneshot(()).await.unwrap();
 
         assert_eq!(result.len(), messages.len());
         for res in result.iter() {
@@ -122,7 +123,7 @@ mod tests {
         let provider = ListCreatedMessagesService::new(message_queue);
 
         let service = provider.service().await;
-        let result: Vec<SupervisorMessage<FunctionInput>> = service.oneshot(()).await.unwrap();
+        let result: Vec<SupervisorMessage<FunctionInput>> = service.raw_oneshot(()).await.unwrap();
 
         assert!(result.is_empty());
     }

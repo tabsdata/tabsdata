@@ -26,12 +26,11 @@ use td_objects::tower_service::extractor::{
 };
 use td_objects::tower_service::finder::{find_by_name, find_scoped_by_name};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
-use td_tower::default_services::{conditional, ContextProvider, Do, Else, If, TransactionProvider};
+use td_tower::default_services::{conditional, Do, Else, If, SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{l, layers, p, service, service_provider};
 use td_transaction::TransactionBy;
-use tower::util::BoxService;
 
 pub struct TemplateService {
     provider: ServiceProvider<ReadRequest<FunctionParam>, ExecutionTemplateRead, TdError>,
@@ -65,7 +64,7 @@ impl TemplateService {
     l! {
         create_template(transaction_by: Arc<TransactionBy>) -> TdError {
             layers!(
-                ContextProvider::new(transaction_by),
+                SrvCtxProvider::new(transaction_by),
                 conditional(
                     If(service!(layers!(
                         from_fn(select_dataset_function),
@@ -88,7 +87,7 @@ impl TemplateService {
     /// for the given [`FunctionParam`].
     pub async fn service(
         &self,
-    ) -> BoxService<ReadRequest<FunctionParam>, ExecutionTemplateRead, TdError> {
+    ) -> TdBoxService<ReadRequest<FunctionParam>, ExecutionTemplateRead, TdError> {
         self.provider.make().await
     }
 }
@@ -107,7 +106,7 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -117,7 +116,7 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = TemplateService::provider(db, Arc::new(TransactionBy::default()));
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ReadRequest<FunctionParam>, ExecutionTemplateRead>(&[
             type_of_val(&read_dataset_authorize),
@@ -155,7 +154,7 @@ mod tests {
             .read(FunctionParam::new(collection_name, dataset_name));
 
         let service = service_provider.service().await;
-        let response = service.oneshot(request).await.unwrap();
+        let response = service.raw_oneshot(request).await.unwrap();
 
         assert_eq!(response.collection_name(), collection_name);
         assert_eq!(response.dataset_name(), dataset_name);
@@ -440,7 +439,7 @@ mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .update(FunctionParam::new("ds0", "d0"), update);
-        let _ = service.oneshot(request).await.unwrap();
+        let _ = service.raw_oneshot(request).await.unwrap();
 
         run_and_assert(
             &db,

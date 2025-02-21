@@ -66,7 +66,7 @@ impl Hash for MetadataType {
 ///         .layer(from_fn(test_layer_fn))
 ///         .service(ServiceReturn);
 ///
-///     let response: Metadata = service.oneshot(()).await.unwrap();
+///     let response: Metadata = service.raw_oneshot(()).await.unwrap();
 ///     let metadata = response.get();
 ///
 ///     assert_eq!(metadata.fn_names(), &vec![type_of_val(&test_layer_fn)]);

@@ -7,12 +7,11 @@
 
 use std::ops::Deref;
 use std::sync::Arc;
-use td_tower::default_services::{ContextProvider, ServiceEntry, ServiceReturn, Share};
+use td_tower::default_services::{ServiceEntry, ServiceReturn, Share, SrvCtxProvider};
 use td_tower::error::FromHandlerError;
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::{ServiceBuilder, ServiceExt};
 
 /// In this example, we have a NameChecker, composed of 3 services:
@@ -34,7 +33,7 @@ async fn main() {
 
     let service = name_creator.format_checker().await;
     let response = service.oneshot(String::from("JoaquinBo")).await.unwrap();
-    assert_eq!(response, "JoaquinBo");
+    assert_eq!(*response, "JoaquinBo");
 
     let service = name_creator.format_checker().await;
     let response = service.oneshot(String::from("NotJoaquin")).await;
@@ -45,11 +44,11 @@ async fn main() {
         .oneshot(String::from("JoaquinButLong"))
         .await
         .unwrap();
-    assert_eq!(response, "JoaquinB");
+    assert_eq!(*response, "JoaquinB");
 
     let service = name_creator.format_checker_and_shortener().await;
     let response = service.oneshot(String::from("JoaquinBo")).await.unwrap();
-    assert_eq!(response, "JoaquinB");
+    assert_eq!(*response, "JoaquinB");
 
     let name_creator = NameChecker::new("joaquin");
 
@@ -90,27 +89,27 @@ impl NameChecker {
     ) -> ServiceProvider<Req, Res, NameCreatorError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
-            .layer(ContextProvider::new(Arc::new(expected_name)))
+            .layer(SrvCtxProvider::new(Arc::new(expected_name)))
             .layer(from_fn(expected_name_checker))
             .layer(from_fn(capital_letter_checker))
             .service(ServiceReturn)
             .into_service_provider()
     }
 
-    async fn format_checker(&self) -> BoxService<String, String, NameCreatorError> {
+    async fn format_checker(&self) -> TdBoxService<String, String, NameCreatorError> {
         self.format_checker_provider.make().await
     }
 
     fn shortener_provider<Req: Share, Res: Share>() -> ServiceProvider<Req, Res, NameCreatorError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
-            .layer(ContextProvider::new(Arc::new(8)))
+            .layer(SrvCtxProvider::new(Arc::new(8)))
             .layer(from_fn(name_shortener))
             .service(ServiceReturn)
             .into_service_provider()
     }
 
-    async fn shortener(&self) -> BoxService<String, String, NameCreatorError> {
+    async fn shortener(&self) -> TdBoxService<String, String, NameCreatorError> {
         self.shortener_provider.make().await
     }
 
@@ -119,8 +118,8 @@ impl NameChecker {
     ) -> ServiceProvider<Req, Res, NameCreatorError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
-            .layer(ContextProvider::new(Arc::new(expected_name)))
-            .layer(ContextProvider::new(Arc::new(8)))
+            .layer(SrvCtxProvider::new(Arc::new(expected_name)))
+            .layer(SrvCtxProvider::new(Arc::new(8)))
             .layer(from_fn(expected_name_checker))
             .layer(from_fn(capital_letter_checker))
             .layer(from_fn(name_shortener))
@@ -128,14 +127,14 @@ impl NameChecker {
             .into_service_provider()
     }
 
-    async fn format_checker_and_shortener(&self) -> BoxService<String, String, NameCreatorError> {
+    async fn format_checker_and_shortener(&self) -> TdBoxService<String, String, NameCreatorError> {
         self.format_checker_and_shortener_provider.make().await
     }
 }
 
 async fn expected_name_checker(
     Input(name): Input<String>,
-    Context(expected_name): Context<String>,
+    SrvCtx(expected_name): SrvCtx<String>,
 ) -> Result<(), NameCreatorError> {
     if name == expected_name {
         Ok(())
@@ -153,7 +152,7 @@ async fn capital_letter_checker(Input(name): Input<String>) -> Result<(), NameCr
 
 async fn name_shortener(
     Input(name): Input<String>,
-    Context(max_length): Context<i32>,
+    SrvCtx(max_length): SrvCtx<i32>,
 ) -> Result<String, NameCreatorError> {
     let new_name = name.chars().take(*max_length as usize).collect::<String>();
     Ok(new_name)

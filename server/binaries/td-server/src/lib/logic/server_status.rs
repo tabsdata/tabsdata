@@ -8,29 +8,28 @@ use getset::Getters;
 use serde::{Deserialize, Serialize};
 use sqlx::Connection;
 use std::time::Instant;
+use td_apiforge::api_server_schema;
 use td_common::error::TdError;
 use td_database::sql::DbPool;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::extractors;
 use td_tower::extractors::IntoMutSqlConnection;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use td_utoipa::api_server_schema;
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 /// API: Status schema.
 #[api_server_schema]
-#[derive(Debug, Serialize, Deserialize, Getters)]
+#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
-pub struct DatabaseStatus {
+pub struct ApiStatus {
     status: HealthStatus,
     latency_as_nanos: u128,
 }
 
-impl DatabaseStatus {
+impl ApiStatus {
     pub fn new(status: HealthStatus, latency_as_nanos: u128) -> Self {
-        DatabaseStatus {
+        ApiStatus {
             status,
             latency_as_nanos,
         }
@@ -38,7 +37,7 @@ impl DatabaseStatus {
 }
 
 #[api_server_schema]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HealthStatus {
     OK,
     DatabaseError(String),
@@ -46,7 +45,7 @@ pub enum HealthStatus {
 
 /// API: Status logic.
 pub struct StatusLogic {
-    status_service_provider: ServiceProvider<(), DatabaseStatus, TdError>,
+    status_service_provider: ServiceProvider<(), ApiStatus, TdError>,
 }
 
 impl StatusLogic {
@@ -68,14 +67,14 @@ impl StatusLogic {
             .into_service_provider()
     }
 
-    pub async fn status_service(&self) -> BoxService<(), DatabaseStatus, TdError> {
+    pub async fn status_service(&self) -> TdBoxService<(), ApiStatus, TdError> {
         self.status_service_provider.make().await
     }
 }
 
 async fn database_status(
     extractors::Connection(connection): extractors::Connection,
-) -> Result<DatabaseStatus, TdError> {
+) -> Result<ApiStatus, TdError> {
     let start = Instant::now();
 
     let mut conn = connection.lock().await;
@@ -85,7 +84,7 @@ async fn database_status(
         Ok(_) => HealthStatus::OK,
         Err(e) => HealthStatus::DatabaseError(e.to_string()),
     };
-    let status = DatabaseStatus::new(database_status, start.elapsed().as_nanos());
+    let status = ApiStatus::new(database_status, start.elapsed().as_nanos());
 
     Ok(status)
 }
@@ -94,7 +93,6 @@ async fn database_status(
 pub mod tests {
     use super::*;
     use td_tower::extractors::ConnectionType;
-
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -125,15 +123,16 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_status_service() {
+        use td_tower::ctx_service::RawOneshot;
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
         let provider = StatusLogic::status_service_provider(db);
 
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<(), DatabaseStatus>(&[type_of_val(&database_status)]);
+        metadata.assert_service::<(), ApiStatus>(&[type_of_val(&database_status)]);
     }
 }

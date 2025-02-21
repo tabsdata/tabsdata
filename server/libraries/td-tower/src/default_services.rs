@@ -5,8 +5,9 @@
 //! This module contains default Services reusable in different contexts. Usually, services will
 //! be created by composing these services with other layer.
 
+use crate::ctx_service::CtxResponse;
 use crate::error::{ConnectionError, FromHandlerError};
-use crate::extractors::{Connection, ConnectionType, Context, Input};
+use crate::extractors::{Connection, ConnectionType, Input, ReqCtx, SrvCtx};
 use crate::handler::{Handler, IntoHandler};
 use std::any::type_name;
 use std::fmt::Display;
@@ -84,7 +85,7 @@ where
     Res: Send + Sync + 'static,
     Err: From<FromHandlerError> + Display,
 {
-    type Response = Res;
+    type Response = CtxResponse<Res>;
     type Error = Err;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
@@ -106,6 +107,9 @@ where
             // For convenience, we insert the () into the handler (unit type always present).
             handler.insert(Input(Arc::new(())));
             handler.insert(Input(Arc::new(req)));
+
+            // Also insert context
+            handler.insert(ReqCtx::default());
 
             #[cfg(feature = "test_tower_metadata")]
             {
@@ -131,18 +135,32 @@ where
                 .ok_or(FromHandlerError::NotFound(String::from(type_name::<Res>())))?;
             let res = Arc::try_unwrap(res.0)
                 .map_err(|_| FromHandlerError::InternalError(String::from(type_name::<Res>())))?;
-            Ok(res)
+            // Also get ctx
+            let ctx = handler
+                .remove::<ReqCtx>()
+                .ok_or(FromHandlerError::NotFound(String::from(
+                    type_name::<ReqCtx>(),
+                )))?;
+            let ctx = ctx
+                .arc()
+                .lock()
+                .await
+                .take()
+                .ok_or(FromHandlerError::NotFound(String::from(
+                    type_name::<ReqCtx>(),
+                )))?;
+            Ok(CtxResponse::new(res, ctx))
         })
     }
 }
 
 /// ContextProvider is a layer wrapping ContextProviderService. It is required that the type is
 /// inserted within an Arc.
-pub struct ContextProvider<T> {
+pub struct SrvCtxProvider<T> {
     context: Arc<T>,
 }
 
-impl<T> Clone for ContextProvider<T> {
+impl<T> Clone for SrvCtxProvider<T> {
     fn clone(&self) -> Self {
         Self {
             context: self.context.clone(),
@@ -150,17 +168,17 @@ impl<T> Clone for ContextProvider<T> {
     }
 }
 
-impl<T> ContextProvider<T> {
-    pub fn new(context: Arc<T>) -> ContextProvider<T> {
-        ContextProvider { context }
+impl<T> SrvCtxProvider<T> {
+    pub fn new(context: Arc<T>) -> SrvCtxProvider<T> {
+        SrvCtxProvider { context }
     }
 }
 
-impl<S, T> Layer<S> for ContextProvider<T> {
-    type Service = ContextProviderService<S, T>;
+impl<S, T> Layer<S> for SrvCtxProvider<T> {
+    type Service = SrvCtxProviderService<S, T>;
 
     fn layer(&self, service: S) -> Self::Service {
-        ContextProviderService {
+        SrvCtxProviderService {
             inner: service,
             context: self.context.clone(),
         }
@@ -169,12 +187,12 @@ impl<S, T> Layer<S> for ContextProvider<T> {
 
 /// ContextProviderService is a service that will insert the context into the handler. The inserted
 /// context can be extracted by any service in the chain using the appropriate extractor.
-pub struct ContextProviderService<S, T> {
+pub struct SrvCtxProviderService<S, T> {
     inner: S,
     context: Arc<T>,
 }
 
-impl<S: Clone, T> Clone for ContextProviderService<S, T> {
+impl<S: Clone, T> Clone for SrvCtxProviderService<S, T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -183,7 +201,7 @@ impl<S: Clone, T> Clone for ContextProviderService<S, T> {
     }
 }
 
-impl<S, T> Service<Handler> for ContextProviderService<S, T>
+impl<S, T> Service<Handler> for SrvCtxProviderService<S, T>
 where
     S: Service<Handler> + Send + Clone + 'static,
     S::Future: Send,
@@ -214,14 +232,14 @@ where
 
                 // Add types to metadata
                 let Input(metadata) = Metadata::from_handler(&handler).await.unwrap();
-                let res_type_name = type_of::<Context<T>>();
+                let res_type_name = type_of::<SrvCtx<T>>();
                 metadata
                     .created_type("ContextProviderService", res_type_name)
                     .await;
             }
 
             // Insert the context into the handler
-            handler.insert(Context(context));
+            handler.insert(SrvCtx(context));
 
             // And send it to the next service
             inner.call(handler).await
@@ -408,7 +426,12 @@ where
             }
 
             // Regain the transaction
-            let transaction = connection.arc().lock().await.take().unwrap();
+            let transaction = connection
+                .arc()
+                .lock()
+                .await
+                .take()
+                .ok_or(ConnectionError::ConnectionLost)?;
             let transaction = if let ConnectionType::Transaction(transaction) = transaction {
                 transaction
             } else {
@@ -685,6 +708,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ctx_service::RawOneshot;
     use crate::extractors;
     use crate::extractors::{Input, IntoMutSqlConnection};
     use crate::from_fn::from_fn;
@@ -700,7 +724,7 @@ mod tests {
             inner: ServiceReturn,
             phantom: PhantomData::<i32>,
         };
-        let res = init_service.oneshot(1).await;
+        let res = init_service.raw_oneshot(1).await;
         assert!(matches!(res, Ok(1)));
     }
 
@@ -714,7 +738,7 @@ mod tests {
             phantom: PhantomData::<Metadata>,
         };
 
-        let res = init_service.oneshot(()).await;
+        let res = init_service.raw_oneshot(()).await;
         assert!(res.is_ok());
         let metadata = res.unwrap().get();
         metadata.assert_service::<(), ()>(&[]);
@@ -724,15 +748,15 @@ mod tests {
     async fn test_context_provider_layer() {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
-            .layer(ContextProvider::new(Arc::new(String::from("data"))))
-            .layer(from_fn(|Context(c): Context<String>| async move {
+            .layer(SrvCtxProvider::new(Arc::new(String::from("data"))))
+            .layer(from_fn(|SrvCtx(c): SrvCtx<String>| async move {
                 // Clones context to output
                 let s = c.deref().clone();
                 Ok::<_, FromHandlerError>(s)
             }))
             .service(ServiceReturn);
 
-        let res: String = service.oneshot(()).await.unwrap();
+        let res: String = service.raw_oneshot(()).await.unwrap();
         assert_eq!(res, "data");
     }
 
@@ -755,7 +779,7 @@ mod tests {
             ))
             .service(ServiceReturn);
 
-        let res: bool = service.oneshot(()).await.unwrap();
+        let res: bool = service.raw_oneshot(()).await.unwrap();
         assert!(res);
     }
 
@@ -778,7 +802,7 @@ mod tests {
             ))
             .service(ServiceReturn);
 
-        let res: bool = service.oneshot(()).await.unwrap();
+        let res: bool = service.raw_oneshot(()).await.unwrap();
         assert!(res);
     }
 
@@ -810,7 +834,7 @@ mod tests {
             Ok(())
         }
 
-        let mut service = ServiceBuilder::new()
+        let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(conditional(
                 If(ServiceBuilder::new()
@@ -827,7 +851,7 @@ mod tests {
             ))
             .service(ServiceReturn);
 
-        let res: Result<Metadata, FromHandlerError> = service.call(()).await;
+        let res: Result<Metadata, FromHandlerError> = service.raw_oneshot(()).await;
         let res = res.unwrap();
         let metadata = res.get();
         metadata.assert_service::<(), ()>(&[
@@ -839,12 +863,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_service_conditional() {
-        let mut service = ServiceBuilder::new()
+        let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(conditional(
                 If(ServiceBuilder::new()
                     .layer(from_fn(|condition: Input<bool>| async move {
-                        Ok(Condition(*condition.0))
+                        Ok::<_, FromHandlerError>(Condition(*condition.0))
                     }))
                     .service(ServiceReturn)),
                 Do(ServiceBuilder::new()
@@ -858,11 +882,11 @@ mod tests {
             ))
             .service(ServiceReturn);
 
-        let res: Result<String, FromHandlerError> = service.call(true).await;
+        let res: Result<String, FromHandlerError> = service.clone().raw_oneshot(true).await;
         let res = res.unwrap();
         assert_eq!(res, "true");
 
-        let res: Result<String, FromHandlerError> = service.call(false).await;
+        let res: Result<String, FromHandlerError> = service.clone().raw_oneshot(false).await;
         let res = res.unwrap();
         assert_eq!(res, "false");
     }

@@ -6,11 +6,11 @@ use td_common::error::TdError;
 use td_objects::crudl::handle_select_error;
 use td_objects::datasets::dao::DsReadyToExecute;
 use td_objects::dlo::Limit;
-use td_tower::extractors::{Connection, Context, IntoMutSqlConnection};
+use td_tower::extractors::{Connection, IntoMutSqlConnection, SrvCtx};
 
 pub async fn poll_execution_requirements(
     Connection(connection): Connection,
-    Context(limit): Context<Limit>,
+    SrvCtx(limit): SrvCtx<Limit>,
 ) -> Result<Vec<DsReadyToExecute>, TdError> {
     const SELECT_REQUIREMENTS: &str = r#"
         SELECT

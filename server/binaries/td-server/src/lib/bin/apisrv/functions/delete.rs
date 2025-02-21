@@ -9,12 +9,12 @@
 use axum::extract::Path;
 use axum::routing::delete;
 
-use td_utoipa::api_server_path;
+use td_apiforge::api_server_path;
 
 use crate::bin::apisrv::api_server::DatasetsState;
 use crate::bin::apisrv::functions::FUNCTIONS_TAG;
 use crate::logic::apisrv::status::error_status::DeleteErrorStatus;
-use crate::logic::apisrv::status::status_macros::DeleteStatus;
+use crate::logic::apisrv::status::DeleteStatus;
 use crate::router;
 use td_objects::rest_urls::{FunctionParam, FUNCTION_DELETE};
 

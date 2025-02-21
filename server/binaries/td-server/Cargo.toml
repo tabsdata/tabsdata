@@ -100,7 +100,7 @@ toml = { workspace = true }
 td-attach = { workspace = true }
 td-concrete = { workspace = true }
 td-error = { workspace = true }
-td-utoipa = { workspace = true }
+td-apiforge = { workspace = true }
 
 ## Libraries
 

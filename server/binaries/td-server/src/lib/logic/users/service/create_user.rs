@@ -21,11 +21,11 @@ use td_objects::users::dao::UserWithNames;
 use td_objects::users::dto::{UserCreate, UserRead};
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::{
-    ContextProvider, ServiceEntry, ServiceReturn, Share, TransactionProvider,
+    ServiceEntry, ServiceReturn, Share, SrvCtxProvider, TransactionProvider,
 };
 use td_tower::from_fn::from_fn;
+use td_tower::service_provider::TdBoxService;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
 use tower::ServiceBuilder;
 
 pub struct CreateUserService {
@@ -46,7 +46,7 @@ impl CreateUserService {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
-            .layer(ContextProvider::new(password_hashing_config))
+            .layer(SrvCtxProvider::new(password_hashing_config))
             .layer(from_fn(
                 extract_req_is_admin::<CreateRequest<(), UserCreate>>,
             ))
@@ -69,7 +69,7 @@ impl CreateUserService {
             .into_service_provider()
     }
 
-    pub async fn service(&self) -> BoxService<CreateRequest<(), UserCreate>, UserRead, TdError> {
+    pub async fn service(&self) -> TdBoxService<CreateRequest<(), UserCreate>, UserRead, TdError> {
         self.provider.make().await
     }
 }
@@ -88,7 +88,7 @@ pub mod tests {
     use td_objects::test_utils::seed_user::admin_user;
     use td_objects::users::dto::{UserCreate, UserRead};
     use td_security::config::PasswordHashingConfig;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -113,7 +113,7 @@ pub mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = CreateUserService::provider(db, password_config);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<CreateRequest<(), UserCreate>, UserRead>(&[
             type_of_val(&extract_req_is_admin::<CreateRequest<(), UserCreate>>),
@@ -160,7 +160,7 @@ pub mod tests {
         let request = RequestContext::with(&admin_id, "r", true)
             .await
             .create((), create);
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let created = response.unwrap();
 
@@ -240,7 +240,7 @@ pub mod tests {
                 .await
                 .create((), user);
             let service = logic.create_user().await;
-            let user = service.oneshot(request).await.unwrap();
+            let user = service.raw_oneshot(request).await.unwrap();
             users.push(user);
         }
         users

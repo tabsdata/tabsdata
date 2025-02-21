@@ -6,18 +6,17 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
-use axum::extract::State;
-use axum::routing::get;
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
-
 use crate::bin::apisrv::api_server::StatusState;
 use crate::logic::apisrv::jwt::admin_only::AdminOnly;
 use crate::logic::apisrv::status::error_status::ServerErrorStatus;
-use crate::logic::server_status::DatabaseStatus;
-use crate::{router, status};
+use crate::logic::server_status::ApiStatus;
+use crate::router;
+use axum::extract::State;
 use axum::middleware::from_fn;
-use td_utoipa::{api_server_path, api_server_schema, api_server_tag};
+use axum::routing::get;
+use std::fmt::Debug;
+use td_apiforge::{api_server_path, api_server_tag, get_status};
+use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
 pub const STATUS: &str = "/status";
@@ -34,32 +33,20 @@ router! {
     }
 }
 
-/// Global status report.
-#[api_server_schema]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Status {
-    database_status: DatabaseStatus,
-}
-
-status!(Server, (OK => Status));
+get_status!(ApiStatus);
 
 #[api_server_path(method = get, path = STATUS, tag = STATUS_TAG)]
 #[doc = "API Server Status"]
-async fn status(
-    State(status_state): State<StatusState>,
-) -> Result<ServerStatus, ServerErrorStatus> {
+async fn status(State(status_state): State<StatusState>) -> Result<GetStatus, ServerErrorStatus> {
     let response = status_state.status_service().await.oneshot(()).await?;
-    let server_status = Status {
-        database_status: response,
-    };
-    Ok(ServerStatus::OK(server_status))
+    Ok(GetStatus::OK(response.into()))
 }
 
 #[cfg(test)]
 mod tests {
     use crate::bin::apisrv::api_server::StatusState;
     use crate::bin::apisrv::server_status::STATUS;
-    use crate::logic::server_status::{DatabaseStatus, HealthStatus, StatusLogic};
+    use crate::logic::server_status::{ApiStatus, HealthStatus, StatusLogic};
     use axum::body::{to_bytes, Body};
     use axum::extract::Request;
     use axum::{Extension, Router};
@@ -100,9 +87,8 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        let database_status: DatabaseStatus =
-            serde_json::from_value(body["database_status"].clone())
-                .expect("Failed to parse database status");
+        let database_status: ApiStatus =
+            serde_json::from_value(body["data"].clone()).expect("Failed to parse database status");
         assert!(matches!(database_status.status(), HealthStatus::OK));
         assert!(*database_status.latency_as_nanos() > 0);
     }

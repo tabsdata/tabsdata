@@ -10,11 +10,11 @@ use td_execution::link::{DataGraph, TriggerGraph};
 use td_interceptor::execution::from_graph::ExecutionTemplateBuilder;
 use td_interceptor_api::execution::from_graph::FromDatasetGraph;
 use td_objects::dlo::{CollectionId, DatasetId};
-use td_tower::extractors::{Context, Input};
+use td_tower::extractors::{Input, SrvCtx};
 use td_transaction::TransactionBy;
 
 pub async fn generate_execution_template(
-    Context(transaction_by): Context<TransactionBy>,
+    SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Input(collection_id): Input<CollectionId>,
     Input(dataset_id): Input<DatasetId>,
     Input(data_graph): Input<DataGraph>,

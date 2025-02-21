@@ -39,8 +39,8 @@ use td_objects::datasets::dto::*;
 use td_objects::dlo::CollectionName;
 use td_tower::default_services::{ServiceEntry, ServiceReturn, Share, TransactionProvider};
 use td_tower::from_fn::from_fn;
+use td_tower::service_provider::TdBoxService;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
 use tower::ServiceBuilder;
 
 pub struct CreateDatasetService {
@@ -99,7 +99,7 @@ impl CreateDatasetService {
 
     pub async fn service(
         &self,
-    ) -> BoxService<CreateRequest<CollectionName, DatasetWrite>, DatasetRead, TdError> {
+    ) -> TdBoxService<CreateRequest<CollectionName, DatasetWrite>, DatasetRead, TdError> {
         self.provider.make().await
     }
 }
@@ -122,7 +122,7 @@ pub mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
     use td_storage::location::StorageLocation;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -163,7 +163,7 @@ pub mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let provider = CreateDatasetService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<CreateRequest<CollectionName, DatasetWrite>, DatasetRead>(&[
             type_of_val(&create_authorize),
@@ -241,7 +241,7 @@ pub mod tests {
         let request = RequestContext::with(&creator_id, "r", false)
             .await
             .create(collection_name, dataset);
-        service.oneshot(request).await
+        service.raw_oneshot(request).await
     }
 
     #[tokio::test]
@@ -294,7 +294,7 @@ pub mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .create(CollectionName::new("ds0"), create);
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let created = response.unwrap();
 
@@ -347,7 +347,7 @@ pub mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .create(CollectionName::new("ds0"), create);
-        let created = service.oneshot(request).await.unwrap();
+        let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_TABLES_SELECT_SQL: &str = r#"
             SELECT * FROM ds_tables WHERE function_id = ?1 ORDER BY pos
@@ -404,7 +404,7 @@ pub mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .create(CollectionName::new("ds0"), create);
-        let created = service.oneshot(request).await.unwrap();
+        let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_FUNCTION_SELECT_SQL: &str = r#"
             SELECT * FROM ds_functions WHERE id = ?1
@@ -471,7 +471,7 @@ pub mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .create(CollectionName::new("ds0"), create);
-        let created = service.oneshot(request).await.unwrap();
+        let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_FUNCTION_SELECT_SQL: &str = r#"
             SELECT * FROM ds_functions WHERE id = ?1
@@ -538,7 +538,7 @@ pub mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .create(CollectionName::new("ds0"), create);
-        let created = service.oneshot(request).await.unwrap();
+        let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_DEPS_SELECT_SQL: &str = r#"
             SELECT * FROM ds_dependencies WHERE function_id = ?1
@@ -588,7 +588,7 @@ pub mod tests {
         let request = RequestContext::with(&user_id.to_string(), "r", false)
             .await
             .create(CollectionName::new("ds0"), create);
-        let created = service.oneshot(request).await.unwrap();
+        let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_DEPS_SELECT_SQL: &str = r#"
             SELECT * FROM ds_dependencies WHERE function_id = ?1 ORDER BY pos

@@ -16,8 +16,7 @@ use td_objects::tower_service::finder::find_by_name;
 use td_objects::users::dao::User;
 use td_tower::default_services::{ServiceEntry, ServiceReturn, Share, TransactionProvider};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use tower::util::BoxService;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
 
 pub struct DeleteUserService {
@@ -49,7 +48,7 @@ impl DeleteUserService {
             .into_service_provider()
     }
 
-    pub async fn service(&self) -> BoxService<DeleteRequest<String>, (), TdError> {
+    pub async fn service(&self) -> TdBoxService<DeleteRequest<String>, (), TdError> {
         self.provider.make().await
     }
 }
@@ -61,7 +60,7 @@ pub mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::entity_finder::users::UserWithNamesFinder;
     use td_objects::test_utils::seed_user::seed_user;
-    use tower::ServiceExt;
+    use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -77,12 +76,11 @@ pub mod tests {
         use td_objects::tower_service::finder::find_by_name;
         use td_objects::users::dao::User;
         use td_tower::metadata::*;
-        use tower::ServiceExt;
 
         let db = td_database::test_utils::db().await.unwrap();
         let provider = DeleteUserService::provider(db);
         let service = provider.make().await;
-        let response: Metadata = service.oneshot(()).await.unwrap();
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<DeleteRequest<String>, ()>(&[
             type_of_val(&extract_req_user_id::<DeleteRequest<String>>),
@@ -107,7 +105,7 @@ pub mod tests {
         let request = RequestContext::with(&admin_id, "r", true)
             .await
             .delete("u0");
-        let response = service.oneshot(request).await;
+        let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
 
         let res = UserWithNamesFinder::default()

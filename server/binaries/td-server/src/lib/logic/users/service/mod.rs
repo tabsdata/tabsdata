@@ -17,7 +17,7 @@ use td_objects::crudl::{
 };
 use td_objects::users::dto::{AuthenticateRequest, UserCreate, UserList, UserRead, UserUpdate};
 use td_security::config::PasswordHashingConfig;
-use tower::util::BoxService;
+use td_tower::service_provider::TdBoxService;
 
 pub mod authenticate_user;
 pub mod create_user;
@@ -62,31 +62,33 @@ impl UserServices {
 
     pub async fn create_user(
         &self,
-    ) -> BoxService<CreateRequest<(), UserCreate>, UserRead, TdError> {
+    ) -> TdBoxService<CreateRequest<(), UserCreate>, UserRead, TdError> {
         self.create_service_provider.service().await
     }
 
-    pub async fn read_user(&self) -> BoxService<ReadRequest<String>, UserRead, TdError> {
+    pub async fn read_user(&self) -> TdBoxService<ReadRequest<String>, UserRead, TdError> {
         self.read_service_provider.service().await
     }
 
-    pub async fn delete_user(&self) -> BoxService<DeleteRequest<String>, (), TdError> {
+    pub async fn delete_user(&self) -> TdBoxService<DeleteRequest<String>, (), TdError> {
         self.delete_service_provider.service().await
     }
 
     pub async fn update_user(
         &self,
-    ) -> BoxService<UpdateRequest<String, UserUpdate>, UserRead, TdError> {
+    ) -> TdBoxService<UpdateRequest<String, UserUpdate>, UserRead, TdError> {
         self.update_service_provider.service().await
     }
 
-    pub async fn list_users(&self) -> BoxService<ListRequest<()>, ListResponse<UserList>, TdError> {
+    pub async fn list_users(
+        &self,
+    ) -> TdBoxService<ListRequest<()>, ListResponse<UserList>, TdError> {
         self.list_service_provider.service().await
     }
 
     pub async fn authenticate_user(
         &self,
-    ) -> BoxService<AuthenticateRequest, TokenResponse, TdError> {
+    ) -> TdBoxService<AuthenticateRequest, TokenResponse, TdError> {
         self.authenticate_service_provider.service().await
     }
 }

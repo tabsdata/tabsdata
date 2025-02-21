@@ -10,7 +10,7 @@ mod tests {
     use utoipa::{Modify, OpenApi};
 
     use crate::test_server::{TEST_GET, TEST_POST};
-    use td_utoipa::api_server_docs;
+    use td_apiforge::api_server_docs;
 
     struct SecurityAddon;
     impl Modify for SecurityAddon {
@@ -24,7 +24,7 @@ mod tests {
         tags_attribute = api_server_tag,
         paths_attribute = api_server_path,
         schemas_attribute = api_server_schema,
-        root_dir = "facets/td-utoipa/tests"
+        root_dir = "facets/td-apiforge/tests"
     )]
     pub struct Docs;
 
@@ -86,5 +86,6 @@ mod tests {
         assert!(schemas.contains_key("TestRequest"));
         assert!(schemas.contains_key("TestResponse"));
         assert!(schemas.contains_key("TestErrorResponse"));
+        assert!(schemas.contains_key("CtxGetStatusConcreteResponse"));
     }
 }
