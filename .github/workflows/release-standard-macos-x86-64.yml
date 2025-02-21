@@ -30,7 +30,7 @@ jobs:
         working-directory: .
 
     env:
-      rust-channel: stable
+      rust-channel: 1.84.1
       rust-target: x86_64-apple-darwin
       rust-toolchain: stable-x86_64-apple-darwin
       td-channel: stable
