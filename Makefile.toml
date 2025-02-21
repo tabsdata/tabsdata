@@ -1787,6 +1787,66 @@ script = [
     end
     ''']
 
+[tasks.fix]
+run_task = [
+    { name = [
+        "fix_rs",
+        "fix_py"
+    ] }
+]
+
+[tasks.fix_rs]
+run_task = [
+    { name = [
+        "fix_rs_macros",
+        "fix_rs_modules"
+    ] }
+]
+
+[tasks.fix_py]
+
+[tasks.fix_rs_macros]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    if is_empty ${td-target}
+        if is_empty ${td-toolchain}
+            exec --fail-on-error ${td-cargo} clippy --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_MACROS_CARGO_TOML} -- -D warnings
+        else
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_MACROS_CARGO_TOML} -- -D warnings
+       end
+    else
+        if is_empty ${td-toolchain}
+            exec --fail-on-error ${td-cargo} clippy --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_MACROS_CARGO_TOML} -- -D warnings
+        else
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_MACROS_CARGO_TOML} -- -D warnings
+        end
+    end
+    ''']
+
+[tasks.fix_rs_modules]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    if is_empty ${td-target}
+        if is_empty ${td-toolchain}
+            exec --fail-on-error ${td-cargo} clippy --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_ROOT_CARGO_TOML} -- -D warnings
+        else
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_ROOT_CARGO_TOML} -- -D warnings
+       end
+    else
+        if is_empty ${td-toolchain}
+            exec --fail-on-error ${td-cargo} clippy --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_ROOT_CARGO_TOML} -- -D warnings
+        else
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_ROOT_CARGO_TOML} -- -D warnings
+        end
+    end
+    ''']
+
 [tasks.doc]
 run_task = [
     { name = [

@@ -68,7 +68,7 @@ pub struct TabsDataWorkerDescriber {
 
 impl TabsDataWorkerDescriberBuilder {
     fn validate(&self) -> Result<(), DescriberError> {
-        if self.name.as_ref().map_or(true, |n| n.trim().is_empty()) {
+        if self.name.as_ref().is_none_or(|n| n.trim().is_empty()) {
             return Err(MissingWorkerName);
         }
         if let Some(program) = &self.program {
