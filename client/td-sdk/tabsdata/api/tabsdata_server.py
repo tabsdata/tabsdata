@@ -711,8 +711,9 @@ class TabsdataServer:
         Returns:
             List[Collection]: The list of collections in the server.
         """
-        raw_collections = (self.connection.collection_list().json().get("data")
-                           .get("data"))
+        raw_collections = (
+            self.connection.collection_list().json().get("data").get("data")
+        )
         return [Collection(**collection) for collection in raw_collections]
 
     @property
@@ -725,8 +726,9 @@ class TabsdataServer:
         Returns:
             List[ExecutionPlan]: The list of execution plans in the server.
         """
-        raw_execution_plans = (self.connection.execution_plan_list().json().get("data")
-                               .get("data"))
+        raw_execution_plans = (
+            self.connection.execution_plan_list().json().get("data").get("data")
+        )
         return [
             ExecutionPlan(**execution_plan) for execution_plan in raw_execution_plans
         ]
@@ -753,8 +755,9 @@ class TabsdataServer:
         Returns:
             List[Transaction]: The list of transactions in the server.
         """
-        raw_transactions = (self.connection.transaction_list().json().get("data")
-                            .get("data"))
+        raw_transactions = (
+            self.connection.transaction_list().json().get("data").get("data")
+        )
         return [Transaction(**transaction) for transaction in raw_transactions]
 
     @property
@@ -817,8 +820,9 @@ class TabsdataServer:
         Raises:
             APIServerError: If the collection could not be obtained.
         """
-        return Collection(**self.connection.collection_get_by_name(name).json()
-                          .get("data"))
+        return Collection(
+            **self.connection.collection_get_by_name(name).json().get("data")
+        )
 
     def collection_list_functions(self, collection_name) -> List[Function]:
         """
@@ -912,8 +916,12 @@ class TabsdataServer:
         Returns:
             str: The execution plan.
         """
-        return (self.connection.execution_plan_read(execution_plan_id).json()
-                .get("data").get("dot"))
+        return (
+            self.connection.execution_plan_read(execution_plan_id)
+            .json()
+            .get("data")
+            .get("dot")
+        )
 
     def function_create(
         self,
@@ -1030,9 +1038,11 @@ class TabsdataServer:
         # TODO: For this and other function representations, decide if data and
         #  versions will be dynamically calculated like users, collections, etc. are
         #  for the TabsdataServer. Currently leaving it static due to time constraints.
-        function_definition = self.connection.function_get(
-            collection_name, function_name
-        ).json().get("data")
+        function_definition = (
+            self.connection.function_get(collection_name, function_name)
+            .json()
+            .get("data")
+        )
         return Function(**function_definition)
 
     def function_list_history(self, collection_name, function_name) -> List[Function]:
@@ -1237,9 +1247,13 @@ class TabsdataServer:
         Raises:
             APIServerError: If the schema could not be obtained.
         """
-        return self.connection.table_get_schema(
-            collection_name, table_name, commit=commit, time=time, version=version
-        ).json().get("data")
+        return (
+            self.connection.table_get_schema(
+                collection_name, table_name, commit=commit, time=time, version=version
+            )
+            .json()
+            .get("data")
+        )
 
     def table_list(
         self, collection_name: str, offset: int = None, len: int = None

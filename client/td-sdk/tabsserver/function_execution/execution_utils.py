@@ -20,7 +20,6 @@ import polars as pl
 from uuid_v7.base import uuid7
 
 import tabsdata as td
-import tabsdata.tableframe.lazyframe.frame as td_frame
 from tabsdata import SourcePlugin
 from tabsdata.format import (
     CSVFormat,
@@ -49,6 +48,7 @@ from tabsdata.utils.bundle_utils import (
     CONFIG_INPUTS_KEY,
     PLUGINS_FOLDER,
 )
+from tabsdata.utils.tableframe._reflection import check_required_columns
 
 from . import environment_import_utils, sql_utils
 from .cloud_connectivity_utils import (
@@ -153,9 +153,7 @@ def execute_function_with_config(
             )
         INITIAL_VALUES.update_new_values(new_initial_values)
     result = convert_tuple_to_list(result)
-    # TODO: Remove this once we are confident that the system columns are always
-    #   added by the TableFrame
-    result = assemble_result_columns(result)
+    check_frame_integrity(result)
     return result
 
 
@@ -168,12 +166,16 @@ def convert_tuple_to_list(
         return result
 
 
-def assemble_result_columns(result: td.TableFrame | None | List[td.TableFrame | None]):
-    if isinstance(result, td.TableFrame):
-        result = td_frame._assemble_columns(result)
-    elif isinstance(result, list):
-        result = [assemble_result_columns(table) for table in result]
-    return result
+def check_frame_integrity(frame: td.TableFrame | None | List[td.TableFrame | None]):
+    if isinstance(frame, td.TableFrame):
+        if frame is not None:
+            # noinspection PyProtectedMember
+            check_required_columns(frame._to_lazy())
+    elif isinstance(frame, list):
+        for table in frame:
+            if table is not None:
+                # noinspection PyProtectedMember
+                check_required_columns(table._to_lazy())
 
 
 def trigger_source(

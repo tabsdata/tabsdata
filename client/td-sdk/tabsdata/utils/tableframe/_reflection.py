@@ -15,10 +15,9 @@ def check_required_columns(df: pl.DataFrame | pl.LazyFrame):
     Check if any required column is missing.
     This can depend on the interceptor implementation.
     """
+    columns = df.collect_schema().names()
     missing_columns = [
-        column
-        for column in td_helpers.REQUIRED_COLUMNS
-        if column not in df.collect_schema().names()
+        column for column in td_helpers.REQUIRED_COLUMNS if column not in columns
     ]
     if missing_columns:
         raise TableFrameError(ErrorCode.TF1, missing_columns)

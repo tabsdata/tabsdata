@@ -89,6 +89,7 @@ class Interceptor(InterceptorPlugin, ABC):
     def required_columns_metadata(self) -> dict[str, Any]:
         return REQUIRED_COLUMNS_METADATA
 
+    # ToDo: This function might be incorrect. Review when revisiting provenance.
     def assemble_columns(self, lf: pl.LazyFrame) -> pl.LazyFrame:
         target_cols = [
             td_constants.StandardSystemColumns.TD_IDENTIFIER.value,
