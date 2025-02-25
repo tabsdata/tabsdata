@@ -5,13 +5,20 @@
 import argparse
 import collections
 import hashlib
+import importlib.metadata
+import importlib.util
 import json
 import logging
 import os
+import os.path
+import pathlib
 import pkgutil
 import shutil
 import subprocess
+import sysconfig
+import tempfile
 from pathlib import Path
+from typing import List, Literal, TypeAlias
 
 import importlib_metadata
 import yaml
@@ -22,6 +29,7 @@ from yaml.constructor import ConstructorError
 from tabsdata.utils.bundle_utils import (
     LOCAL_PACKAGES_FOLDER,
     PYTHON_CHECK_MODULE_AVAILABILITY_KEY,
+    PYTHON_DEVELOPMENT_PACKAGES_KEY,
     PYTHON_INSTALL_DEPENDENCIES_KEY,
     PYTHON_PUBLIC_PACKAGES_KEY,
     PYTHON_VERSION_KEY,
@@ -33,13 +41,36 @@ from tabsserver.utils import TimeBlock
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()
 
+HostPackageSource: TypeAlias = Literal[
+    "Development",
+    "Local",
+]
+
+# Base environments are added the hash of this string to ensure that to function
+# environment accidentally resolves to a base environment.
+# !!! Do not change this string... never !!!
+BASE_ENV_SALT = "RekvSLlYqSt0VXJghaYhbQ5UyaofKk4h"
+
 # The environment name is the second last element in the yaml file name when split by .,
 # the last being "yaml" (e.g. "python_environment_123456.yaml")
 DEFAULT_TABSDATA_FOLDER = os.path.join(os.path.expanduser("~"), ".tabsdata")
 DEFAULT_ENVIRONMENT_FOLDER = os.path.join(DEFAULT_TABSDATA_FOLDER, "environments")
+DEFAULT_INSTANCES_FOLDER = os.path.join(DEFAULT_TABSDATA_FOLDER, "instances")
+DEFAULT_INSTANCE = os.path.join(DEFAULT_INSTANCES_FOLDER, "tabsdata")
+WORKSPACE_FOLDER = "workspace"
+WORK_FOLDER = "work"
+LOCK_FOLDER = "lock"
+BASE_ENVIRONMENT_PREFIX = "."
 DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER = os.path.join(
     DEFAULT_TABSDATA_FOLDER, "available_environments"
 )
+
+WHEEL_EXTENSION = ".whl"
+TARGET_FOLDER = "target"
+
+PYTHON_BASE_VERSION = "3.12"
+
+TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
 
 UV_EXECUTABLE = "uv"
 
@@ -314,12 +345,14 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:
     return required_modules
 
 
+# flake8: noqa: C901
 def create_virtual_environment(
     requirements_description_file: str,
     locks_folder: str,
     current_instance: str | None = None,
     environment_prefix: str | None = None,
     inject_current_tabsdata: bool = False,
+    salt: str | None = None,
 ) -> str | None:
     """Create a Python virtual environment with pyenv"""
 
@@ -370,6 +403,20 @@ def create_virtual_environment(
             environment_hash, get_dir_hash(local_packages)
         )
 
+    development_packages = requirements_data.get(PYTHON_DEVELOPMENT_PACKAGES_KEY)
+    if development_packages:
+        logger.info(
+            f"Development packages provided: {development_packages}, hashing its"
+            " contents"
+        )
+        for development_package in development_packages:
+            environment_hash = add_hex_numbers(
+                environment_hash, get_dir_hash(development_package)
+            )
+
+    if salt:
+        environment_hash = add_hex_numbers(environment_hash, hash_string(salt))
+
     if not os.path.isdir(locks_folder):
         logger.warning(
             f"Locks folder {locks_folder} does not exist. If in production, this could"
@@ -384,7 +431,8 @@ def create_virtual_environment(
     else:
         logical_environment_name = f"td_{environment_hash}"
 
-    # Add the environment prefix if provided, currently used for testing
+    # Add the environment prefix if provided, currently used for testing and to create
+    # base environments.
     if environment_prefix:
         logical_environment_name = f"{environment_prefix}_{logical_environment_name}"
 
@@ -406,6 +454,7 @@ def create_virtual_environment(
                 real_environment_created = atomic_environment_creation(
                     logical_environment_name,
                     real_environment_name,
+                    development_packages,
                     local_packages,
                     python_version,
                     required_modules,
@@ -488,6 +537,7 @@ def testimony_exists(environment_name) -> bool:
 def atomic_environment_creation(
     logical_environment_name: str,
     real_environment_name: str,
+    development_packages: list[str],
     local_packages: str,
     python_version: str,
     required_modules: list[str],
@@ -616,12 +666,21 @@ def atomic_environment_creation(
     )
     if not result:
         return None
+
     if local_packages:
         result = install_local_packages(
             local_packages, logical_environment_name, real_environment_name
         )
         if not result:
             return None
+
+    if development_packages:
+        result = install_development_packages(
+            development_packages, logical_environment_name, real_environment_name
+        )
+        if not result:
+            return None
+
     return real_environment_name
 
 
@@ -655,6 +714,10 @@ def install_requirements(
 ) -> bool:
     """Install the required Python packages to the current environment.
     Returns true if the requirements are installed successfully, false otherwise."""
+
+    if not requirements:
+        logger.warning("No requirements to install")
+        return True
 
     pip_install_requirements_command = add_python_target_and_join_commands(
         [
@@ -699,46 +762,99 @@ def install_requirements(
         return True
 
 
+def install_development_packages(
+    development_packages: List[str],
+    logical_environment_name: str,
+    real_environment_name: str,
+) -> bool | None:
+    logger.info(f"Installing development packages for folder: {development_packages}")
+    with time_block:
+        for development_package in development_packages:
+            install_result = install_host_package(
+                "Development",
+                development_package,
+                logical_environment_name,
+                real_environment_name,
+            )
+            if not install_result:
+                return install_result
+    logger.info(
+        "Development packages installed successfully. Time taken:"
+        f" {time_block.time_taken():.2f}s"
+    )
+    return True
+
+
 def install_local_packages(
     local_packages: str, logical_environment_name: str, real_environment_name: str
 ) -> bool | None:
-    logger.info("Installing local packages")
+    logger.info(f"Installing local packages for folder: {local_packages}")
     with time_block:
-        for package_number in os.listdir(local_packages):
-            package_folder = os.path.join(local_packages, package_number)
-            if os.path.isdir(package_folder):
-                pip_install_requirements_command = add_python_target_and_join_commands(
-                    [UV_EXECUTABLE, "pip", "install", package_folder],
-                    real_environment_name,
-                )
-                logger.info(
-                    f"Installing the local package in {package_folder} for the virtual "
-                    f"environment {logical_environment_name}"
-                )
-                logger.debug(f"Running command: '{pip_install_requirements_command}'")
-                result = subprocess.run(
-                    pip_install_requirements_command,
-                    shell=True,
-                )
-                if result.returncode != 0:
-                    logger.error(
-                        f"Failed to install the local package {package_folder} for the "
-                        f"virtual environment {logical_environment_name}"
-                    )
-                    delete_virtual_environment(
-                        logical_environment_name=logical_environment_name,
-                        real_environment_name=real_environment_name,
-                    )
-                    return None
-                else:
-                    logger.info(
-                        f"Local package {package_number} installed successfully for the"
-                        f" virtual environment {logical_environment_name}"
-                    )
+        for local_package in os.listdir(local_packages):
+            package_folder = os.path.join(local_packages, local_package)
+            install_result = install_host_package(
+                "Local",
+                package_folder,
+                logical_environment_name,
+                real_environment_name,
+            )
+            if not install_result:
+                return install_result
     logger.info(
         "Local packages installed successfully. Time taken:"
         f" {time_block.time_taken():.2f}s"
     )
+    return True
+
+
+def install_host_package(
+    source: HostPackageSource,
+    package_archive: str,
+    logical_environment_name: str,
+    real_environment_name: str,
+) -> bool | None:
+    logger.info(f"Installing host package archive: {package_archive}")
+    if os.path.isdir(package_archive) or (
+        os.path.isfile(package_archive)
+        and pathlib.Path(package_archive).suffix == WHEEL_EXTENSION
+    ):
+        pip_install_requirements_command = add_python_target_and_join_commands(
+            [UV_EXECUTABLE, "pip", "install", package_archive],
+            real_environment_name,
+        )
+        logger.info(
+            f"Installing the host package in {package_archive} for the virtual "
+            f"environment {logical_environment_name}"
+        )
+        logger.debug(f"Running command: '{pip_install_requirements_command}'")
+        result = subprocess.run(
+            pip_install_requirements_command,
+            shell=True,
+        )
+        if result.returncode != 0:
+            logger.error(
+                f"Failed to install the host package {package_archive} for the "
+                f"virtual environment {logical_environment_name}"
+            )
+            delete_virtual_environment(
+                logical_environment_name=logical_environment_name,
+                real_environment_name=real_environment_name,
+            )
+            return None
+        else:
+            logger.info(
+                f"Host package {package_archive} installed successfully for the"
+                f" virtual environment {logical_environment_name}"
+            )
+    else:
+        message = (
+            f"Host package '${package_archive}' is not a directory or a wheel file."
+        )
+        if source == "Development":
+            logger.error(message)
+            return None
+        else:
+            logger.warning(f"{message} Discarding it.")
     return True
 
 
@@ -760,20 +876,211 @@ def install_python_version(python_version: str) -> None:
         )
 
 
-if __name__ == "__main__":
+PackageProvider: TypeAlias = Literal[
+    "Archive (Project)",
+    "Archive (Folder)",
+    "Archive (Wheel)",
+    "Folder (Editable)",
+    "Folder (Frozen)",
+    "Package",
+]
+
+
+def get_tabsdata_package_metadata() -> tuple[str | None, PackageProvider | None]:
+    td_tabsdata_dev_pkg = os.getenv(TD_TABSDATA_DEV_PKG)
+    if td_tabsdata_dev_pkg:
+        provider = "Archive (Project)"
+        location = pathlib.Path(td_tabsdata_dev_pkg)
+    else:
+        try:
+            packages = {
+                dist.metadata["Name"]: dist.version
+                for dist in importlib.metadata.distributions()
+            }
+            if TABSDATA_MODULE_NAME in packages:
+                distribution = importlib.metadata.distribution(TABSDATA_MODULE_NAME)
+                site_packages = pathlib.Path(sysconfig.get_paths()["purelib"])
+                direct_url_file = pathlib.Path(
+                    os.path.join(
+                        site_packages,
+                        f"{TABSDATA_MODULE_NAME}-{distribution.version}.dist-info",
+                        "direct_url.json",
+                    )
+                )
+                if direct_url_file.exists():
+                    with direct_url_file.open() as f:
+                        direct_url_data = json.load(f)
+                        if "url" in direct_url_data and direct_url_data[
+                            "url"
+                        ].startswith("file://"):
+                            url = pathlib.Path(direct_url_data["url"][7:])
+                            if url.suffix == WHEEL_EXTENSION:
+                                if url.exists():
+                                    provider = "Archive (Wheel)"
+                                    location = url
+                                else:
+                                    provider = "Archive (Folder)"
+                                    while (
+                                        url.name != TARGET_FOLDER and url.parent != url
+                                    ):
+                                        url = url.parent
+                                    if url.name == TARGET_FOLDER:
+                                        url = url.parent
+                                    location = url
+                            else:
+                                if "dir_info" in direct_url_data and direct_url_data[
+                                    "dir_info"
+                                ].get("editable", False):
+                                    provider = "Folder (Editable)"
+                                    location = url
+                                else:
+                                    provider = "Folder (Frozen)"
+                                    location = url
+                        else:
+                            provider = None
+                            location = None
+                else:
+                    provider = "Package"
+                    location = None
+            else:
+                provider = None
+                location = None
+        except importlib.metadata.PackageNotFoundError:
+            provider = None
+            location = None
+    return provider, location
+
+
+def main():
     parser = argparse.ArgumentParser(
-        description="Create a Python environment with pyenv"
+        description=(
+            "Create the server base Python virtual environment for a given tabsdata "
+            "instance."
+        )
     )
     parser.add_argument(
-        "--python-requirements-file", type=str, help="Path to Python requirements file"
+        "--instance",
+        type=str,
+        help="Path of the Tabsdata instance.",
+        required=False,
     )
-    parser.add_argument("--python-version", type=str, help="Python version to use")
+
     args = parser.parse_args()
 
-    if not os.path.isfile(args.python_requirements_file):
-        logger.error(
-            f"Python requirements file {args.python_requirements_file} not found."
-            " Please check the path and try again by providing it to the"
-            " --python-requirements-file argument"
+    with tempfile.NamedTemporaryFile(suffix=".yaml", delete=True) as requirements_file:
+        tabsdata_provider, tabsdata_location = get_tabsdata_package_metadata()
+        logger.info(
+            "Module tabsdata classified as: "
+            f"provider: {tabsdata_provider} - "
+            f"location: {tabsdata_location}"
         )
-        exit(1)
+
+        if tabsdata_provider in (
+            "Archive (Project)",
+            "Archive (Folder)",
+            "Archive (Wheel)",
+            "Folder (Editable)",
+            "Folder (Frozen)",
+        ):
+            development_packages = [
+                str(tabsdata_location),
+            ]
+        else:
+            development_packages = []
+
+        logger.debug(f"Temporary base requirements file: {requirements_file.name}")
+        requirements_path = requirements_file.name
+        requirements = {
+            PYTHON_VERSION_KEY: PYTHON_BASE_VERSION,
+            PYTHON_CHECK_MODULE_AVAILABILITY_KEY: tabsdata_provider
+            in (
+                "Archive (Project)",
+                "Archive (Folder)",
+                "Archive (Wheel)",
+                "Folder (Editable)",
+                "Folder (Frozen)",
+            ),
+            PYTHON_PUBLIC_PACKAGES_KEY: [],
+            PYTHON_DEVELOPMENT_PACKAGES_KEY: development_packages,
+        }
+
+        with open(requirements_path, "w") as file:
+            yaml.dump(requirements, file, default_flow_style=False)
+        logger.debug(f"Temporary base requirements contents: {requirements}")
+
+        instance = args.instance or DEFAULT_INSTANCE
+
+        instance_path = Path(instance)
+        if instance_path.is_absolute():
+            if instance_path.exists() and not instance_path.is_dir():
+                message = (
+                    f"Invalid instance: '{instance_path}'. An instance absolute path"
+                    " must be a directory or not exist."
+                )
+                logger.error(message)
+                raise ValueError(message)
+            instance = instance_path.name
+        elif os.sep not in args.instance and (
+            os.altsep is None or os.altsep not in args.instance
+        ):
+            instance_path = Path(os.path.join(DEFAULT_INSTANCES_FOLDER, instance))
+            if instance_path.exists() and not instance_path.is_dir():
+                message = (
+                    f"Invalid instance: '{instance_path}'. An instance relative path"
+                    " must be a directory or not exist."
+                )
+                logger.error(message)
+                raise ValueError(message)
+            instance = instance_path.name
+        else:
+            message = (
+                f"Invalid instance: '{instance_path}'. It is neither an absolute path"
+                " nor a single name."
+            )
+            logger.error(message)
+            raise ValueError(message)
+
+        requirements_description_file = requirements_file.name
+        locks_folder = os.path.join(
+            instance_path.absolute(), WORKSPACE_FOLDER, WORK_FOLDER, LOCK_FOLDER
+        )
+        current_instance = (
+            f"{BASE_ENVIRONMENT_PREFIX}{instance}_{get_current_tabsdata_version()}"
+        )
+        environment_prefix = None
+        inject_current_tabsdata = True
+        os.makedirs(locks_folder, exist_ok=True)
+
+        logger.debug(
+            "Creating base virtual environment:"
+            f"\n - Requirements File: '{requirements_description_file}'"
+            f"\n - Lock Folder: '{locks_folder}'"
+            f"\n - Current Instance: '{current_instance}'"
+            f"\n - Environment Prefix: '{environment_prefix}'"
+            f"\n - Inject Current Tabsdata Version: '{inject_current_tabsdata}'"
+        )
+
+        environment = create_virtual_environment(
+            requirements_description_file,
+            locks_folder,
+            current_instance,
+            environment_prefix,
+            inject_current_tabsdata,
+            BASE_ENV_SALT,
+        )
+
+        if not environment:
+            message = "Failed to create the base virtual environment."
+            logger.error(message)
+            raise ValueError(message)
+
+        logger.info(f"Base virtual environment is now: '{environment}'")
+        print(
+            "<environment>"
+            f"{os.path.join(DEFAULT_ENVIRONMENT_FOLDER, environment)}"
+            "</environment>"
+        )
+
+
+if __name__ == "__main__":
+    main()

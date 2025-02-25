@@ -303,6 +303,7 @@ setup(
         "console_scripts": [
             "td = tabsdata.cli.cli:cli",
             "tdmain = tabsserver.main:main",
+            "tdvenv = tabsserver.pyenv_creation:main",
         ]
     },
     include_package_data=True,

@@ -13,6 +13,7 @@ while eq ${ko} true
     if is_dir ${git_folder}
         echo "Root project folder is: ${current_folder}"
         set_env ROOT_PROJECT_FOLDER ${current_folder}
+        set_env TD_TABSDATA_DEV_PKG ${current_folder}
         ko = set false
     else
         parent_folder = dirname ${current_folder}

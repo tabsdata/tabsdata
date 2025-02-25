@@ -1,0 +1,56 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Python Enablement Components"
+edition = { workspace = true }
+name = "td-python"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+
+[lib]
+
+[features]
+
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+test_logging = []
+test_tower_metadata = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "strum_macros", "td-build", "thiserror", "toml"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+[dependencies]
+
+# Internal dependencies
+
+## Libraries
+
+td-common = { workspace = true }
+
+## Macros
+
+td-error = { workspace = true }
+
+# External dependencies
+
+rand = { workspace = true }
+strum_macros = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

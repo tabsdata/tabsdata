@@ -851,6 +851,10 @@ script = [
     set_env PYTHONPATH ${new_pythonpath}
     set_pythonpath = get_env PYTHONPATH
     echo "Python system path persisted: ${set_pythonpath}"
+
+    set_env TD_TABSDATA_DEV_PKG ${PROJECT_ROOT_FOLDER}
+    set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
+    echo "Tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
     ''']
 
 [tasks.remove_pytest_tabsdata]

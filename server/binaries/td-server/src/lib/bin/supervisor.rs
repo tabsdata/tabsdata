@@ -65,6 +65,7 @@ use td_common::server::{
     REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, WORKSPACE_ENV, WORK_ENV,
 };
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataStatus};
+use td_python::venv::prepare;
 use tempfile::tempdir;
 use thiserror::Error;
 use tokio::runtime::Handle;
@@ -1834,11 +1835,13 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
 
     // These environment variable are meant to be used as URI locations. Therefore, in Windows they will have a
     // leading slash (/), resulting if, for example, '/c:\folder\file' instead of 'c:\folder\file
-    set_var(INSTANCE_ENV, prepend_slash(instance_dir_absolute));
+    set_var(INSTANCE_ENV, prepend_slash(instance_dir_absolute.clone()));
     set_var(REPOSITORY_ENV, prepend_slash(repository_dir_absolute));
     set_var(WORKSPACE_ENV, prepend_slash(workspace_dir_absolute));
     set_var(CONFIG_ENV, prepend_slash(config_dir_absolute));
     set_var(WORK_ENV, prepend_slash(work_dir_absolute));
+
+    prepare(&instance_dir_absolute);
 
     config.and_then(|file| file.parent().map(|folder| folder.to_path_buf()))
 }

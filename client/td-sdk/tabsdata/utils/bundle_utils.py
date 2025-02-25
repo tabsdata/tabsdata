@@ -40,6 +40,7 @@ LOCAL_PACKAGES_FOLDER = "local_packages"
 PLUGINS_FOLDER = "plugins"
 
 PYTHON_CHECK_MODULE_AVAILABILITY_KEY = "checkPackagesAvailability"
+PYTHON_DEVELOPMENT_PACKAGES_KEY = "developmentPackages"
 PYTHON_LOCAL_PACKAGES_KEY = "localPackages"
 PYTHON_PUBLIC_PACKAGES_KEY = "publicPackages"
 PYTHON_INSTALL_DEPENDENCIES_KEY = "installPackagesDependencies"

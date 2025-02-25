@@ -43,6 +43,7 @@ use td_common::os::{get_process_tree, terminate_process};
 use td_common::status::ExitStatus::GeneralError;
 use td_interceptor::engine::Interceptor;
 use td_interceptor_api::api::InterceptorPlugin;
+use td_python::venv::prepare;
 use thiserror::Error;
 use tokio::time::{Duration, Instant};
 use tracing::{error, info, warn};
@@ -474,6 +475,9 @@ fn command_start(arguments: StartArguments) {
                 exit(GeneralError.code());
             };
             let describer = describer.unwrap();
+
+            prepare(&supervisor_instance);
+
             match TabsDataWorker::new(describer.clone()).work() {
                 Ok(worker) => {
                     info!(

@@ -47,16 +47,17 @@ members = [
     "server/libraries/td-common",
     "server/libraries/td-database",
     "server/libraries/td-execution",
-    "plugins/rust/td-interceptor",
     "server/libraries/td-interceptor-api",
     "server/libraries/td-objects",
+    "server/libraries/td-python",
     "server/libraries/td-schema",
-    "server/libraries/td-storage",
     "server/libraries/td-security",
-    "server/binaries/td-server",
+    "server/libraries/td-storage",
     "server/libraries/td-tower",
+    "server/libraries/td-transaction",
     "plugins/rust/td-transaction-interceptor",
-    "server/libraries/td-transaction"
+    "plugins/rust/td-interceptor",
+    "server/binaries/td-server",
 ]
 exclude = [
     "macros",
@@ -180,32 +181,36 @@ version = "0.9.2"
 path = "server/libraries/td-objects"
 version = "0.9.2"
 
-[workspace.dependencies.td-security]
-path = "server/libraries/td-security"
+[workspace.dependencies.td-python]
+path = "server/libraries/td-python"
 version = "0.9.2"
 
 [workspace.dependencies.td-schema]
 path = "server/libraries/td-schema"
 version = "0.9.2"
 
-[workspace.dependencies.td-storage]
-path = "server/libraries/td-storage"
+[workspace.dependencies.td-security]
+path = "server/libraries/td-security"
 version = "0.9.2"
 
 [workspace.dependencies.td-server]
 path = "server/binaries/td-server"
 version = "0.9.2"
 
+[workspace.dependencies.td-storage]
+path = "server/libraries/td-storage"
+version = "0.9.2"
+
 [workspace.dependencies.td-tower]
 path = "server/libraries/td-tower"
 version = "0.9.2"
 
-[workspace.dependencies.td-transaction-interceptor]
-path = "plugins/rust/td-transaction-interceptor"
-version = "0.9.2"
-
 [workspace.dependencies.td-transaction]
 path = "server/libraries/td-transaction"
+version = "0.9.2"
+
+[workspace.dependencies.td-transaction-interceptor]
+path = "plugins/rust/td-transaction-interceptor"
 version = "0.9.2"
 
 # External dependencies
