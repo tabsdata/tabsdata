@@ -3,6 +3,8 @@
 //
 
 use async_trait::async_trait;
+use derive_builder::Builder;
+use getset::Getters;
 use serde::Serialize;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -14,11 +16,8 @@ use tower_service::Service;
 
 const API_VERSION: &str = "1";
 
-/// Response for read operations.
-///
-/// Besides the data, it includes the [`ListParams`] used for the list operation,
-/// the offset and length of the result and a flag indicating if there are more results or not.
-#[derive(Debug, Clone, serde::Serialize, getset::Getters, derive_builder::Builder)]
+/// Response in given Context.
+#[derive(Debug, Clone, Serialize, Getters, Builder)]
 #[builder(pattern = "owned")]
 #[getset(get = "pub")]
 pub struct CtxResponse<U> {
@@ -55,12 +54,9 @@ impl<U> Deref for CtxResponse<U> {
     }
 }
 
-/// Response for read operations.
-///
-/// Besides the data, it includes the [`ListParams`] used for the list operation,
-/// the offset and length of the result and a flag indicating if there are more results or not.
+/// Empty Response in given Context.
 #[api_server_schema]
-#[derive(Debug, Clone, serde::Serialize, getset::Getters, derive_builder::Builder)]
+#[derive(Debug, Clone, Serialize, Getters, Builder)]
 #[builder(pattern = "owned")]
 #[getset(get = "pub")]
 pub struct CtxEmptyResponse {
@@ -81,7 +77,7 @@ impl From<CtxResponse<()>> for CtxEmptyResponse {
 }
 
 #[api_server_schema]
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, derive_builder::Builder)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Builder)]
 #[builder(setter(into))]
 pub struct Message {
     code: String,

@@ -3,9 +3,8 @@
 //
 
 extern crate proc_macro;
-use proc_macro::TokenStream;
-
 use crate::concrete::generic_remover;
+use proc_macro::TokenStream;
 
 mod concrete;
 

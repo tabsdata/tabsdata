@@ -2,6 +2,8 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
+use derive_builder::Builder;
+use getset::Getters;
 use serde::{Deserialize, Serialize};
 use td_apiforge::{api_server_schema, status};
 use td_concrete::concrete;

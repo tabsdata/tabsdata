@@ -245,9 +245,9 @@ fn concrete_struct(
     // name and fields of the existing struct
     let name = &type_input.ident;
     let fields = &type_input.fields;
-
+    let attributes = type_input.attrs;
     let new_fields = replace_all_generics(fields, &generics, &concrete_types);
-    let attributes: Vec<_> = type_input.attrs.iter().map(|attr| quote!(#attr)).collect();
+
     let struct_definition = quote! {
         #(#alias_attributes)*
         #(#attributes)*
