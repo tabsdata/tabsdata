@@ -8,10 +8,12 @@ import hashlib
 import json
 import logging
 import os
+import pkgutil
 import shutil
 import subprocess
 from pathlib import Path
 
+import importlib_metadata
 import yaml
 from filelock import FileLock, Timeout
 from yaml import MappingNode
@@ -23,6 +25,7 @@ from tabsdata.utils.bundle_utils import (
     PYTHON_INSTALL_DEPENDENCIES_KEY,
     PYTHON_PUBLIC_PACKAGES_KEY,
     PYTHON_VERSION_KEY,
+    TABSDATA_MODULE_NAME,
 )
 from tabsserver.function_execution.global_utils import CURRENT_PLATFORM
 from tabsserver.utils import TimeBlock
@@ -252,11 +255,71 @@ def add_hex_numbers(hex1, hex2):
     return result_hex
 
 
+def get_current_tabsdata_version():
+    available_modules = [module.name for module in pkgutil.iter_modules()]
+    mapping = importlib_metadata.packages_distributions()
+    real_modules = [
+        mapping[module][0] for module in available_modules if module in mapping
+    ]
+    for module in real_modules:
+        if module == TABSDATA_MODULE_NAME:
+            try:
+                version = importlib_metadata.version(module)
+                return version
+            except Exception as e:
+                logger.error(f"Error getting version of {module}: {e}")
+                logger.error(
+                    "This should never happen as the tabsdata code is "
+                    "currently being run, please reach out to the "
+                    "development team for assistance."
+                )
+                raise e
+    logger.error("Could not find the tabsdata module in the available modules.")
+    logger.error(
+        "This should never happen as the tabsdata code is "
+        "currently being run, please reach out to the "
+        "development team for assistance."
+    )
+    raise ValueError("Could not find the tabsdata module in the available modules.")
+
+
+def inject_tabsdata_version(required_modules: list[str]) -> list[str]:
+    """Inject the tabsdata version into the list of required modules"""
+    tabsdata_version = get_current_tabsdata_version()
+    previous_tabsdata_version = [
+        module for module in required_modules if TABSDATA_MODULE_NAME in module
+    ]
+    required_modules = [
+        module for module in required_modules if TABSDATA_MODULE_NAME not in module
+    ]
+    logger.debug(f"Injecting tabsdata version {tabsdata_version} into the requirements")
+    new_tabsdata_version = f"{TABSDATA_MODULE_NAME}=={tabsdata_version}"
+    required_modules.append(new_tabsdata_version)
+    if previous_tabsdata_version:
+        previous_tabsdata_version = previous_tabsdata_version[0]
+        if previous_tabsdata_version != new_tabsdata_version:
+            logger.warning(
+                f"Found previous tabsdata version '{previous_tabsdata_version}' in the"
+                " requirements. Replacing it with the current version."
+            )
+        else:
+            logger.info(
+                "Injected tabsdata version is the same as the one already "
+                "present in the requirements."
+            )
+    else:
+        logger.warning(
+            "Could not find the tabsdata module in the requirements. Injecting it now."
+        )
+    return required_modules
+
+
 def create_virtual_environment(
     requirements_description_file: str,
     locks_folder: str,
     current_instance: str | None = None,
     environment_prefix: str | None = None,
+    inject_current_tabsdata: bool = False,
 ) -> str | None:
     """Create a Python virtual environment with pyenv"""
 
@@ -265,6 +328,8 @@ def create_virtual_environment(
     python_version = requirements_data[PYTHON_VERSION_KEY]
     # We sort the requirements and remove duplicates to ensure consistent hashing
     required_modules = sorted(list(set(requirements_data[PYTHON_PUBLIC_PACKAGES_KEY])))
+    if inject_current_tabsdata:
+        required_modules = inject_tabsdata_version(required_modules)
     # By default, we install dependencies of the packages provided in the list.
     # This can be overridden by setting the key to False in the requirements file.
     # When inferring the requirements from the local system, we do not install

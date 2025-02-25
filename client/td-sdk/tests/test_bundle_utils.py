@@ -68,12 +68,7 @@ class DummyFunction:
         self.interpreter = interpreter
         self.original_folder = original_folder
         self.original_file = original_file
-        if isinstance(output, str):
-            self.output = {"tables": (output,)}
-        elif isinstance(output, dict):
-            self.output = output
-        else:
-            self.output = None
+        self.output = output
         self.original_function = BaseDummyFunction(name, module)
 
 
@@ -81,63 +76,57 @@ def test_create_configuration_json(tmp_path):
     dummy_function = DummyFunction(
         name="dummy_function",
         module="dummy_module",
-        input=[],
+        input=CORRECT_SOURCE,
         original_file="dummy_file.py",
-        output="output.txt",
+        output=CORRECT_DESTINATION,
     )
     save_location = tmp_path / "save_location"
     save_location.mkdir()
     result = create_configuration(dummy_function, str(save_location))
     expected = {
-        CONFIG_INPUTS_KEY: {},
+        CONFIG_INPUTS_KEY: CORRECT_SOURCE.to_dict(),
         CONFIG_ENTRY_POINT_KEY: {
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
-        CONFIG_OUTPUT_KEY: {
-            "tables": ("output.txt",),
-        },
+        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION.to_dict(),
     }
     expected_load = {
-        CONFIG_INPUTS_KEY: {},
+        CONFIG_INPUTS_KEY: CORRECT_SOURCE.to_dict(),
         CONFIG_ENTRY_POINT_KEY: {
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
-        CONFIG_OUTPUT_KEY: {
-            "tables": [
-                "output.txt",
-            ],
-        },
+        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION.to_dict(),
     }
+    print(f"result: {result}")
     assert result == expected
     with open(save_location / CONFIG_FILE_NAME) as f:
         assert json.load(f) == expected_load
 
 
 def test_create_configuration_json_output_dict(tmp_path):
-    output = {"tables": ("output.txt", "output2.txt")}
     dummy_function = DummyFunction(
         name="dummy_function",
         module="dummy_module",
-        input=[],
+        input=CORRECT_SOURCE,
         original_file="dummy_file.py",
-        output=output,
+        output=CORRECT_DESTINATION,
     )
     save_location = tmp_path / "save_location"
     save_location.mkdir()
     result = create_configuration(dummy_function, str(save_location))
     expected = {
-        CONFIG_INPUTS_KEY: {},
+        CONFIG_INPUTS_KEY: CORRECT_SOURCE.to_dict(),
         CONFIG_ENTRY_POINT_KEY: {
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
-        CONFIG_OUTPUT_KEY: output,
+        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION.to_dict(),
     }
     expected_load = {
-        CONFIG_INPUTS_KEY: {},
+        CONFIG_INPUTS_KEY: CORRECT_SOURCE.to_dict(),
         CONFIG_ENTRY_POINT_KEY: {
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
-        CONFIG_OUTPUT_KEY: {"tables": ["output.txt", "output2.txt"]},
+        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION.to_dict(),
     }
     assert result == expected
     with open(save_location / CONFIG_FILE_NAME) as f:

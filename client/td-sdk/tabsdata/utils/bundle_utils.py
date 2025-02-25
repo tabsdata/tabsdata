@@ -45,6 +45,7 @@ PYTHON_PUBLIC_PACKAGES_KEY = "publicPackages"
 PYTHON_INSTALL_DEPENDENCIES_KEY = "installPackagesDependencies"
 PYTHON_VERSION_KEY = "pythonVersion"
 REQUIREMENTS_FILE_NAME = "requirements.yaml"
+TABSDATA_MODULE_NAME = "tabsdata"
 
 
 def create_configuration(function: TabsdataFunction, save_location: str):
@@ -64,11 +65,6 @@ def create_configuration(function: TabsdataFunction, save_location: str):
 
 
 def create_output_configuration(function: TabsdataFunction, save_location: str) -> dict:
-    # TODO: This will be removed when interaction with the backend is implemented
-    #   https://tabsdata.atlassian.net/browse/TAB-36
-    if isinstance(function.output, dict):
-        return function.output
-
     return convert_to_dict_and_store_if_plugin(function.output, save_location)
 
 
@@ -199,6 +195,8 @@ def obtain_ordered_dists() -> List[str]:
         mapping[module][0] for module in available_modules if module in mapping
     ]
     for module in real_modules:
+        if module == TABSDATA_MODULE_NAME:
+            dists.append(f"{TABSDATA_MODULE_NAME}==$current")
         try:
             version = importlib_metadata.version(module)
             if version:

@@ -1362,8 +1362,8 @@ cwd = "${PROJECT_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .venv,dist,build,.tabsdata"
-    exec --fail-on-error ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .venv,dist,build,.tabsdata
+    echo "Running command: ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .venv,dist,build,.tabsdata,venv"
+    exec --fail-on-error ${ENV_PREFIX}flake8 --select=E9,F63,F7,F82 --ignore=E203,W503 --show-source --statistics . --extend-exclude .venv,dist,build,.tabsdata,venv
     ''']
 
 [tasks.fmt_py_flake8_complexity]
@@ -1372,8 +1372,8 @@ cwd = "${PROJECT_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .venv,dist,build,.tabsdata"
-    exec --fail-on-error ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .venv,dist,build,.tabsdata
+    echo "Running command: ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .venv,dist,build,.tabsdata,venv"
+    exec --fail-on-error ${ENV_PREFIX}flake8 --max-complexity=10 --ignore=E203,W503 --max-line-length=88 --statistics  . --extend-exclude .venv,dist,build,.tabsdata,venv
     ''']
 
 [tasks.fmt_py_black]

@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from tabsdata.utils.bundle_utils import (
+    PYTHON_CHECK_MODULE_AVAILABILITY_KEY,
     PYTHON_INSTALL_DEPENDENCIES_KEY,
     PYTHON_LOCAL_PACKAGES_KEY,
     PYTHON_PUBLIC_PACKAGES_KEY,
@@ -204,6 +205,7 @@ def test_custom_requirements(tmp_path):
         PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
         PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3"],
+        PYTHON_CHECK_MODULE_AVAILABILITY_KEY: True,
     }
     correct_custom_requirements_path = os.path.join(
         tmp_path, "correct_custom_requirements.yaml"
@@ -269,6 +271,7 @@ def test_custom_requirements_no_package_version(tmp_path):
         PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
         PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas"],
+        PYTHON_CHECK_MODULE_AVAILABILITY_KEY: True,
     }
     correct_custom_requirements_path = os.path.join(
         tmp_path, "correct_custom_requirements.yaml"
@@ -335,6 +338,7 @@ def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
         PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3"],
         PYTHON_INSTALL_DEPENDENCIES_KEY: False,
+        PYTHON_CHECK_MODULE_AVAILABILITY_KEY: True,
     }
     correct_custom_requirements_path = os.path.join(
         tmp_path, "correct_custom_requirements.yaml"

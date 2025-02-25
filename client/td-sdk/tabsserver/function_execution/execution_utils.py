@@ -90,7 +90,44 @@ def execute_function_from_config(
 def execute_function_with_config(
     config: dict, met: Callable, working_dir: str, execution_context: InputYaml
 ):
+    logger.info("Obtaining function parameters")
+    importer_plugin, input_config, parameters = obtain_met_parameters(
+        config, execution_context, working_dir
+    )
+    logger.info("Function parameters obtained")
+    logger.info("Executing function provided by the user")
+    result = met(*parameters)
+    logger.info("Finished executing function provided by the user")
+    if INITIAL_VALUES.returns_values:
+        logger.info("New initial values generated")
+        if SourcePlugin.IDENTIFIER in input_config:
+            # If working with a plugin, the new initial values are stored in the plugin
+            new_initial_values = importer_plugin.initial_values
+        else:
+            # If working with a source, the new initial values are part of the result
+            if isinstance(result, tuple):
+                *result, new_initial_values = result
+            else:
+                new_initial_values = result
+                result = None
+        if not isinstance(new_initial_values, dict):
+            logger.error(
+                f"Invalid type for new initial values: {type(new_initial_values)}."
+                " No initial values stored."
+            )
+            raise TypeError(
+                f"Invalid type for new initial values: {type(new_initial_values)}."
+                " No initial values stored."
+            )
+        INITIAL_VALUES.update_new_values(new_initial_values)
+    result = convert_tuple_to_list(result)
+    check_frame_integrity(result)
+    return result
+
+
+def obtain_met_parameters(config, execution_context, working_dir):
     input_config = config.get(CONFIG_INPUTS_KEY)
+    importer_plugin = None
     if SourcePlugin.IDENTIFIER in input_config:
         importer_plugin_file = input_config.get(SourcePlugin.IDENTIFIER)
         plugins_folder = os.path.join(working_dir, PLUGINS_FOLDER)
@@ -127,34 +164,7 @@ def execute_function_with_config(
     else:
         source_config = build_input(config.get(CONFIG_INPUTS_KEY))
         parameters = trigger_source(source_config, working_dir, execution_context)
-    logger.info("Executing function provided by the user.")
-    result = met(*parameters)
-    logger.info("Finished executing function provided by the user")
-    if INITIAL_VALUES.returns_values:
-        logger.info("New initial values generated")
-        if SourcePlugin.IDENTIFIER in input_config:
-            # If working with a plugin, the new initial values are stored in the plugin
-            new_initial_values = importer_plugin.initial_values
-        else:
-            # If working with a source, the new initial values are part of the result
-            if isinstance(result, tuple):
-                *result, new_initial_values = result
-            else:
-                new_initial_values = result
-                result = None
-        if not isinstance(new_initial_values, dict):
-            logger.error(
-                f"Invalid type for new initial values: {type(new_initial_values)}."
-                " No initial values stored."
-            )
-            raise TypeError(
-                f"Invalid type for new initial values: {type(new_initial_values)}."
-                " No initial values stored."
-            )
-        INITIAL_VALUES.update_new_values(new_initial_values)
-    result = convert_tuple_to_list(result)
-    check_frame_integrity(result)
-    return result
+    return importer_plugin, input_config, parameters
 
 
 def convert_tuple_to_list(

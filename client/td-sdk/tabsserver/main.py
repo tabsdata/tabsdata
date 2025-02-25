@@ -99,6 +99,7 @@ def do(
             current_instance=current_instance,
             locks_folder=locks_folder,
             environment_prefix=environment_prefix,
+            inject_current_tabsdata=True,
         )
     if not python_environment:
         logger.error(

@@ -16,6 +16,7 @@ from tabsdata.utils.bundle_utils import (
     PYTHON_LOCAL_PACKAGES_KEY,
     PYTHON_PUBLIC_PACKAGES_KEY,
     PYTHON_VERSION_KEY,
+    TABSDATA_MODULE_NAME,
 )
 from tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_FOLDER,
@@ -23,6 +24,7 @@ from tabsserver.pyenv_creation import (
     create_virtual_environment,
     found_requirements,
     get_dir_hash,
+    inject_tabsdata_version,
     remove_path,
 )
 from tabsserver.utils import DEFAULT_DEVELOPMENT_LOCKS_LOCATION
@@ -316,3 +318,21 @@ def test_get_dir_hash_different_directory_same_multiple_files(tmp_path):
     create_file_with_name_and_content(dir2, "context.py", "print('Hello, thir time!')")
     create_file_with_name_and_content(dir2, "requirements.txt", "pandas")
     assert get_dir_hash(dir1) == get_dir_hash(dir2)
+
+
+def test_inject_tabsdata_version_no_tabsdata():
+    requirements = ["pandas", "numpy"]
+    assert [
+        module
+        for module in inject_tabsdata_version(requirements)
+        if f"{TABSDATA_MODULE_NAME}==" in module
+    ]
+
+
+def test_inject_tabsdata_version_current_tabsdata():
+    requirements = ["pandas", "numpy", f"{TABSDATA_MODULE_NAME}==$current"]
+    assert [
+        module
+        for module in inject_tabsdata_version(requirements)
+        if f"{TABSDATA_MODULE_NAME}==" in module
+    ]
