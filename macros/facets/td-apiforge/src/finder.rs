@@ -20,7 +20,7 @@ use walkdir::WalkDir;
 
 const DEFAULT_TAGS_MACRO: &str = "api_server_tag";
 const DEFAULT_PATHS_ATTRIBUTE: &str = "api_server_path";
-const DEFAULT_SCHEMA_ATTRIBUTE: &str = "api_server_schema";
+const DEFAULT_SCHEMA_ATTRIBUTES: &[&str] = &["api_server_schema", "Dao", "typed"];
 
 const CTX_STATUS_FILE: &str = "status.rs";
 
@@ -35,7 +35,8 @@ struct UtoipaDocsArguments {
     root_dir: Option<String>,
     tags_attribute: Option<Ident>,
     paths_attribute: Option<Ident>,
-    schemas_attribute: Option<Ident>,
+    #[darling(default, multiple, rename = "schemas_attribute")]
+    schemas_attributes: Vec<Option<Ident>>,
 }
 
 /// The main procedural macro that generates the OpenAPI documentation for the given crate.
@@ -63,9 +64,18 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
     let paths_attribute = parsed_args
         .paths_attribute
         .unwrap_or_else(|| Ident::new(DEFAULT_PATHS_ATTRIBUTE, Span::call_site().into()));
-    let schemas_attribute = parsed_args
-        .schemas_attribute
-        .unwrap_or_else(|| Ident::new(DEFAULT_SCHEMA_ATTRIBUTE, Span::call_site().into()));
+    let mut schemas_attributes: Vec<_> = parsed_args
+        .schemas_attributes
+        .iter()
+        .filter_map(|f| f.as_ref())
+        .cloned()
+        .collect();
+    if schemas_attributes.is_empty() {
+        DEFAULT_SCHEMA_ATTRIBUTES
+            .iter()
+            .map(|s| Ident::new(s, Span::call_site().into()))
+            .for_each(|s| schemas_attributes.push(s));
+    }
 
     let mut ctx_file = PathBuf::new();
     ctx_file.push(file!());
@@ -88,7 +98,7 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
                 &syntax,
                 &tags_attribute,
                 &paths_attribute,
-                &schemas_attribute,
+                &schemas_attributes,
                 &ctx_macro_gen_idents,
             )
         })
@@ -189,7 +199,7 @@ fn find_in_file(
     syntax: &File,
     tags_attribute: &Ident,
     paths_attribute: &Ident,
-    schemas_attribute: &Ident,
+    schemas_attributes: &[Ident],
     ctx_macro_gen_idents: &[Ident],
 ) -> (
     Vec<proc_macro2::TokenStream>,
@@ -239,7 +249,12 @@ fn find_in_file(
                 let path = syn::parse_str(&format!("{}::{}", module, ident)).unwrap();
                 found_paths.push(path);
             }
-            if attr.path().is_ident(schemas_attribute) {
+            if attr
+                .path()
+                .get_ident()
+                .map(|i| schemas_attributes.contains(i))
+                .unwrap_or(false)
+            {
                 let path = syn::parse_str(&format!("{}::{}", module, ident)).unwrap();
                 found_schemas.push(path);
             }

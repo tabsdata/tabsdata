@@ -9,7 +9,7 @@ use crate::tower_service::extractor::{RequestNameProvider, UserIdProvider, UserN
 use crate::users::dao::{User, UserWithNames};
 use crate::users::dto::PasswordUpdate::{Change, ForceChange};
 use crate::users::dto::{AuthenticateRequest, UserCreate, UserUpdate};
-use td_typing::service_type;
+use td_type::service_type;
 
 #[service_type]
 #[derive(Debug, Clone)]

@@ -66,7 +66,7 @@ exclude = [
     "macros/facets/td-attach",
     "macros/facets/td-concrete",
     "macros/facets/td-error",
-    "macros/facets/td-typing",
+    "macros/facets/td-type",
 ]
 
 [[bin]]
@@ -150,8 +150,8 @@ version = "0.13"
 path = "macros/facets/td-error"
 version = "0.9.2"
 
-[workspace.dependencies.td-typing]
-path = "macros/facets/td-typing"
+[workspace.dependencies.td-type]
+path = "macros/facets/td-type"
 version = "0.9.2"
 
 

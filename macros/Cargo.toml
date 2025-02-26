@@ -42,11 +42,11 @@ authors = [
 [workspace]
 members = [
     "helpers/td-shared",
+    "facets/td-apiforge",
     "facets/td-attach",
     "facets/td-concrete",
     "facets/td-error",
-    "facets/td-typing",
-    "facets/td-apiforge",
+    "facets/td-type",
 ]
 
 [[bin]]
@@ -86,6 +86,10 @@ dummy = []
 path = "../devutils/automation/tasks/cargo/td-build"
 version = "0.9.2"
 
+[workspace.dependencies.td-apiforge]
+path = "facets/td-apiforge"
+version = "0.9.2"
+
 [workspace.dependencies.td-concrete]
 path = "facets/td-concrete"
 version = "0.9.2"
@@ -98,6 +102,9 @@ version = "0.9.2"
 
 [workspace.dependencies.axum]
 version = "0.8.1"
+
+[workspace.dependencies.chrono]
+version = "0.4.39"
 
 [workspace.dependencies.darling]
 version = "0.20.10"
@@ -139,6 +146,10 @@ features = ["derive"]
 
 [workspace.dependencies.serde_json]
 version = "1.0.138"
+
+[workspace.dependencies.sqlx]
+version = "0.8.3"
+features = ["sqlite", "runtime-tokio", "macros", "chrono"]
 
 [workspace.dependencies.syn]
 version = "2.0.98"

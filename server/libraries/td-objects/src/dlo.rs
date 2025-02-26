@@ -5,7 +5,7 @@
 use crate as td_objects;
 use chrono::{DateTime, Utc};
 use td_common::uri::Version;
-use td_typing::service_type;
+use td_type::service_type;
 
 pub trait Creator<T> {
     fn create(value: impl Into<T>) -> Self;

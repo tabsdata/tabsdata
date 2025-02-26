@@ -1,0 +1,456 @@
+//
+// Copyright 2025 Tabs Data Inc.
+//
+
+mod test;
+
+#[cfg(test)]
+mod tests {
+    use super::test::*;
+    use td_type::{Dao, Dlo, Dto};
+
+    #[Dao]
+    struct Dao {
+        id: i64,
+        name: String,
+        description: Option<String>,
+        modified: chrono::DateTime<chrono::Utc>,
+        active: bool,
+    }
+
+    #[Dlo]
+    struct Dlo {
+        id: i64,
+    }
+
+    #[Dto]
+    struct Dto {
+        name: String,
+        description: Option<String>,
+    }
+
+    #[test]
+    fn test_dao() -> Result<(), td_common::error::TdError> {
+        #[Dao]
+        #[td_type(builder(try_from = Dao))]
+        struct TestDao {
+            name: String,
+        }
+
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(chrono::DateTime::<chrono::Utc>::default())
+            .active(true)
+            .build()?;
+
+        let dao = TestDaoBuilder::try_from(&dao)?.build()?;
+        assert_eq!(dao.name, "dao");
+        Ok(())
+    }
+
+    #[test]
+    fn test_dto() -> Result<(), td_common::error::TdError> {
+        #[Dto]
+        #[td_type(builder(try_from = Dto))]
+        struct TestDto {
+            name: String,
+        }
+
+        let dto = Dto::builder()
+            .name("dao")
+            .description("dao desc".to_string())
+            .build()?;
+
+        let dto = TestDtoBuilder::try_from(&dto)?.build()?;
+        assert_eq!(dto.name, "dao");
+        Ok(())
+    }
+
+    #[test]
+    fn test_dlo() -> Result<(), td_common::error::TdError> {
+        #[Dlo]
+        #[td_type(builder(try_from = Dlo))]
+        struct TestDlo {
+            id: i128,
+        }
+
+        let dlo = Dlo::builder().id(1234).build()?;
+
+        let dlo = TestDloBuilder::try_from(&dlo)?.build()?;
+        assert_eq!(dlo.id, 1234);
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_builder() {
+        let modified = chrono::DateTime::<chrono::Utc>::default();
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(modified)
+            .active(true)
+            .build()
+            .unwrap();
+
+        assert_eq!(dao.id, 123);
+        assert_eq!(dao.name, "dao");
+        assert_eq!(dao.description, Some("dao desc".to_string()));
+        assert_eq!(dao.modified, modified);
+        assert!(dao.active);
+
+        let new_dao = dao.to_builder().name("renamed dao").build().unwrap();
+
+        assert_eq!(new_dao.id, 123);
+        assert_eq!(new_dao.name, "renamed dao");
+        assert_eq!(new_dao.description, Some("dao desc".to_string()));
+        assert_eq!(new_dao.modified, modified);
+        assert!(new_dao.active);
+    }
+
+    #[test]
+    fn test_fields() {
+        #[Dao]
+        struct Dao {
+            id: i64,
+            name: String,
+            description: Option<String>,
+            modified: chrono::DateTime<chrono::Utc>,
+            active: bool,
+        }
+
+        let fields = Dao::fields();
+        assert_eq!(fields.len(), 5);
+        assert_eq!(fields[0], "id");
+        assert_eq!(fields[1], "name");
+        assert_eq!(fields[2], "description");
+        assert_eq!(fields[3], "modified");
+        assert_eq!(fields[4], "active");
+    }
+
+    #[test]
+    fn test_fields_skip() {
+        #[Dao]
+        struct Dao {
+            id: i64,
+            #[sqlx(skip)]
+            name: String,
+            #[sqlx(flatten)]
+            description: Option<String>,
+            #[sqlx(skip)]
+            modified: chrono::DateTime<chrono::Utc>,
+            active: bool,
+        }
+
+        let fields = Dao::fields();
+        assert_eq!(fields.len(), 3);
+        assert_eq!(fields[0], "id");
+        assert_eq!(fields[1], "description");
+        assert_eq!(fields[2], "active");
+    }
+
+    #[test]
+    fn test_builder_try_from() {
+        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[builder(setter(into))]
+        #[getset(get = "pub")]
+        #[td_type(builder(try_from = Dao))]
+        struct TestDto {
+            name: String,
+            description: Option<String>,
+        }
+
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(chrono::DateTime::<chrono::Utc>::default())
+            .active(true)
+            .build()
+            .unwrap();
+
+        let dto = TestDtoBuilder::try_from(&dao).unwrap().build().unwrap();
+        assert_eq!(dto.name, "dao");
+        assert_eq!(dto.description, Some("dao desc".to_string()));
+    }
+
+    #[test]
+    fn test_builder_from_skip() {
+        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[builder(setter(into))]
+        #[getset(get = "pub")]
+        #[td_type(builder(try_from = Dao))]
+        struct TestDto {
+            name: String,
+            #[td_type(builder(skip))]
+            description: Option<String>,
+        }
+
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(chrono::DateTime::<chrono::Utc>::default())
+            .active(true)
+            .build()
+            .unwrap();
+
+        let mut dto_builder = TestDtoBuilder::try_from(&dao).unwrap();
+        assert_eq!(dto_builder.name, Some("dao".to_string()));
+        assert_eq!(dto_builder.description, None);
+
+        let dto = dto_builder
+            .description(Some("my new dao desc".to_string()))
+            .build()
+            .unwrap();
+        assert_eq!(dto.name, "dao");
+        assert_eq!(dto.description, Some("my new dao desc".to_string()));
+    }
+
+    #[test]
+    fn test_builder_from_skip_all_and_include() {
+        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[builder(setter(into))]
+        #[getset(get = "pub")]
+        #[td_type(builder(try_from = Dao, skip_all))]
+        struct TestDto {
+            #[td_type(builder(include))]
+            name: String,
+            description: Option<String>,
+        }
+
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(chrono::DateTime::<chrono::Utc>::default())
+            .active(true)
+            .build()
+            .unwrap();
+
+        let mut dto_builder = TestDtoBuilder::try_from(&dao).unwrap();
+        assert_eq!(dto_builder.name, Some("dao".to_string()));
+        assert_eq!(dto_builder.description, None);
+
+        let dto = dto_builder
+            .description(Some("my new dao desc".to_string()))
+            .build()
+            .unwrap();
+        assert_eq!(dto.name, "dao");
+        assert_eq!(dto.description, Some("my new dao desc".to_string()));
+    }
+
+    #[test]
+    fn test_builder_from_combined() {
+        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[builder(setter(into))]
+        #[getset(get = "pub")]
+        #[td_type(builder(try_from = Dao, skip_all))]
+        #[td_type(builder(try_from = Dto))]
+        struct TestDxo {
+            #[td_type(builder(try_from = Dao, include))]
+            name: String,
+            #[td_type(builder(try_from = Dao, include))]
+            #[td_type(builder(try_from = Dto, skip))]
+            description: Option<String>,
+        }
+
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(chrono::DateTime::<chrono::Utc>::default())
+            .active(true)
+            .build()
+            .unwrap();
+
+        let dxo = TestDxoBuilder::try_from(&dao).unwrap().build().unwrap();
+        assert_eq!(dxo.name, "dao".to_string());
+        assert_eq!(dxo.description, Some("dao desc".to_string()));
+
+        let dto = Dto::builder()
+            .name("dao")
+            .description("dao desc".to_string())
+            .build()
+            .unwrap();
+
+        let mut dxo_builder = TestDxoBuilder::try_from(&dto).unwrap();
+        assert_eq!(dxo_builder.name, Some("dao".to_string()));
+        assert_eq!(dxo_builder.description, None);
+
+        let dxo = dxo_builder
+            .description(Some("my new dxo desc".to_string()))
+            .build()
+            .unwrap();
+        assert_eq!(dxo.name, "dao");
+        assert_eq!(dxo.description, Some("my new dxo desc".to_string()));
+    }
+
+    #[test]
+    fn test_builder_from_default() {
+        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[builder(setter(into))]
+        #[getset(get = "pub")]
+        #[td_type(builder(try_from = Dao))]
+        struct TestDto {
+            #[td_type(builder(default))]
+            name: String,
+            description: Option<String>,
+        }
+
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(chrono::DateTime::<chrono::Utc>::default())
+            .active(true)
+            .build()
+            .unwrap();
+
+        let dto = TestDtoBuilder::try_from(&dao).unwrap().build().unwrap();
+        assert_eq!(dto.name, String::default());
+        assert_eq!(dto.description, Some("dao desc".to_string()));
+    }
+
+    #[test]
+    fn test_builder_from_rename() {
+        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[builder(setter(into))]
+        #[getset(get = "pub")]
+        #[td_type(builder(try_from = Dao))]
+        struct TestDto {
+            name: String,
+            #[td_type(builder(field = "description"))]
+            renamed_description: Option<String>,
+            #[td_type(builder(field = "active"))]
+            actually_active: bool,
+        }
+
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(chrono::DateTime::<chrono::Utc>::default())
+            .active(true)
+            .build()
+            .unwrap();
+
+        let dto = TestDtoBuilder::try_from(&dao).unwrap().build().unwrap();
+        assert_eq!(dto.name, "dao");
+        assert_eq!(dto.renamed_description, Some("dao desc".to_string()));
+        assert!(dto.actually_active);
+    }
+
+    #[test]
+    fn test_builder_from_combined_all() {
+        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[builder(setter(into))]
+        #[getset(get = "pub")]
+        #[td_type(builder(try_from = Dao, skip_all))]
+        #[td_type(builder(try_from = Dto))]
+        #[td_type(builder(try_from = Dlo))]
+        struct TestDxo {
+            #[td_type(builder(try_from = Dao, include))]
+            #[td_type(builder(try_from = Dto, skip))]
+            id: i64,
+            #[td_type(builder(try_from = Dao, include))]
+            #[td_type(builder(try_from = Dlo, default))]
+            name: String,
+            #[td_type(builder(try_from = Dao, include))]
+            #[td_type(builder(try_from = Dto, skip))]
+            #[td_type(builder(try_from = Dlo, default))]
+            description: Option<String>,
+            #[td_type(builder(try_from = Dao, include, field = "name"))]
+            #[td_type(builder(try_from = Dto, field = "name"))]
+            #[td_type(builder(try_from = Dlo, skip))]
+            new_name: String,
+        }
+
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(chrono::DateTime::<chrono::Utc>::default())
+            .active(true)
+            .build()
+            .unwrap();
+
+        let dxo = TestDxoBuilder::try_from(&dao).unwrap().build().unwrap();
+        assert_eq!(dxo.id, 123);
+        assert_eq!(dxo.name, "dao".to_string());
+        assert_eq!(dxo.description, Some("dao desc".to_string()));
+        assert_eq!(dxo.new_name, "dao".to_string());
+
+        let dto = Dto::builder()
+            .name("dto")
+            .description("dto desc".to_string())
+            .build()
+            .unwrap();
+
+        let mut dxo_builder = TestDxoBuilder::try_from(&dto).unwrap();
+        assert_eq!(dxo_builder.id, None);
+        assert_eq!(dxo_builder.name, Some("dto".to_string()));
+        assert_eq!(dxo_builder.description, None);
+        assert_eq!(dxo_builder.new_name, Some("dto".to_string()));
+
+        let dxo = dxo_builder
+            .id(456)
+            .name("new name".to_string())
+            .description(Some("new description".to_string()))
+            .build()
+            .unwrap();
+        assert_eq!(dxo.id, 456);
+        assert_eq!(dxo.name, "new name".to_string());
+        assert_eq!(dxo.description, Some("new description".to_string()));
+        assert_eq!(dxo.new_name, "dto".to_string());
+
+        let dlo = Dlo::builder().id(789).build().unwrap();
+
+        let mut dxo_builder = TestDxoBuilder::try_from(&dlo).unwrap();
+        assert_eq!(dxo_builder.id, Some(789));
+        assert_eq!(dxo_builder.name, Some("".to_string()));
+        assert_eq!(dxo_builder.description, Some(None));
+        assert_eq!(dxo_builder.new_name, None);
+
+        let dxo = dxo_builder
+            .description(Some("new description".to_string()))
+            .new_name("new name".to_string())
+            .build()
+            .unwrap();
+        assert_eq!(dxo.id, 789);
+        assert_eq!(dxo.name, "".to_string());
+        assert_eq!(dxo.description, Some("new description".to_string()));
+        assert_eq!(dxo.new_name, "new name".to_string());
+    }
+
+    #[test]
+    fn test_from_error() -> Result<(), td_common::error::TdError> {
+        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[builder(setter(into))]
+        #[getset(get = "pub")]
+        #[td_type(builder(try_from = Dao))]
+        struct TestDto {
+            name: String,
+            #[td_type(builder(field = "description"))]
+            renamed_description: Option<String>,
+            #[td_type(builder(field = "active"))]
+            actually_active: bool,
+        }
+
+        let dao = Dao::builder()
+            .id(123)
+            .name("dao")
+            .description("dao desc".to_string())
+            .modified(chrono::DateTime::<chrono::Utc>::default())
+            .active(true)
+            .build()?;
+
+        let dto = TestDtoBuilder::try_from(&dao)?.build()?;
+        assert_eq!(dto.name, "dao");
+        assert_eq!(dto.renamed_description, Some("dao desc".to_string()));
+        assert!(dto.actually_active);
+        Ok(())
+    }
+}

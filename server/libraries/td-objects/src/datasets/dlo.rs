@@ -25,7 +25,7 @@ use td_common::error::TdError;
 use td_common::execution_status::DataVersionStatus;
 use td_common::uri::TdUriNameId;
 use td_error::td_error;
-use td_typing::service_type;
+use td_type::service_type;
 
 #[service_type]
 pub struct FunctionTablesMap(pub HashMap<String, Vec<String>>);
