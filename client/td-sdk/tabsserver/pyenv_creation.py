@@ -992,13 +992,15 @@ def main():
         requirements_path = requirements_file.name
         requirements = {
             PYTHON_VERSION_KEY: PYTHON_BASE_VERSION,
-            PYTHON_CHECK_MODULE_AVAILABILITY_KEY: tabsdata_provider
-            in (
-                "Archive (Project)",
-                "Archive (Folder)",
-                "Archive (Wheel)",
-                "Folder (Editable)",
-                "Folder (Frozen)",
+            PYTHON_CHECK_MODULE_AVAILABILITY_KEY: (
+                tabsdata_provider
+                in (
+                    "Archive (Project)",
+                    "Archive (Folder)",
+                    "Archive (Wheel)",
+                    "Folder (Editable)",
+                    "Folder (Frozen)",
+                )
             ),
             PYTHON_PUBLIC_PACKAGES_KEY: [],
             PYTHON_DEVELOPMENT_PACKAGES_KEY: development_packages,

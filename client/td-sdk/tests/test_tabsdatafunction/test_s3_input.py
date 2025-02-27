@@ -26,12 +26,12 @@ S3_CREDENTIALS = S3AccessKeyCredentials(
 )
 CREDENTIALS_DICT = {
     S3AccessKeyCredentials.IDENTIFIER: {
-        S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: DirectSecret(
-            TEST_ACCESS_KEY_ID
-        ).to_dict(),
-        S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: DirectSecret(
-            TEST_SECRET_ACCESS_KEY
-        ).to_dict(),
+        S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: (
+            DirectSecret(TEST_ACCESS_KEY_ID).to_dict()
+        ),
+        S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: (
+            DirectSecret(TEST_SECRET_ACCESS_KEY).to_dict()
+        ),
     }
 }
 
@@ -387,8 +387,8 @@ def test_initial_last_modified_valid_string():
             S3Source.URI_KEY: [uri],
             S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
             S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": datetime.datetime.fromisoformat(time).isoformat(
-                timespec="microseconds"
+            "initial_last_modified": (
+                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
             ),
             S3Source.REGION_KEY: None,
         }

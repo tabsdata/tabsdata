@@ -270,8 +270,8 @@ def test_initial_last_modified_valid_string():
         LocalFileSource.IDENTIFIER: {
             LocalFileSource.PATH_KEY: [path],
             "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            "initial_last_modified": datetime.datetime.fromisoformat(time).isoformat(
-                timespec="microseconds"
+            "initial_last_modified": (
+                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
             ),
         }
     }

@@ -25,12 +25,12 @@ S3_CREDENTIALS = S3AccessKeyCredentials(
 )
 CREDENTIALS_DICT = {
     S3AccessKeyCredentials.IDENTIFIER: {
-        S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: DirectSecret(
-            TEST_ACCESS_KEY_ID
-        ).to_dict(),
-        S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: DirectSecret(
-            TEST_SECRET_ACCESS_KEY
-        ).to_dict(),
+        S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: (
+            DirectSecret(TEST_ACCESS_KEY_ID).to_dict()
+        ),
+        S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: (
+            DirectSecret(TEST_SECRET_ACCESS_KEY).to_dict()
+        ),
     }
 }
 

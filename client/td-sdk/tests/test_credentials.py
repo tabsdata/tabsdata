@@ -24,12 +24,12 @@ def test_account_key_credentials_initialization():
     assert credentials.account_key == DirectSecret("test_password")
     assert credentials.to_dict() == {
         AzureAccountKeyCredentials.IDENTIFIER: {
-            AzureAccountKeyCredentials.ACCOUNT_NAME_KEY: DirectSecret(
-                "test_user"
-            ).to_dict(),
-            AzureAccountKeyCredentials.ACCOUNT_KEY_KEY: DirectSecret(
-                "test_password"
-            ).to_dict(),
+            AzureAccountKeyCredentials.ACCOUNT_NAME_KEY: (
+                DirectSecret("test_user").to_dict()
+            ),
+            AzureAccountKeyCredentials.ACCOUNT_KEY_KEY: (
+                DirectSecret("test_password").to_dict()
+            ),
         }
     }
     assert build_credentials(credentials) == credentials
@@ -90,12 +90,12 @@ def test_s3_access_key_credentials_initialization():
     assert credentials.aws_secret_access_key == DirectSecret("test_secret_access_key")
     assert credentials.to_dict() == {
         S3AccessKeyCredentials.IDENTIFIER: {
-            S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: DirectSecret(
-                "test_access_key_id"
-            ).to_dict(),
-            S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: DirectSecret(
-                "test_secret_access_key"
-            ).to_dict(),
+            S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: (
+                DirectSecret("test_access_key_id").to_dict()
+            ),
+            S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: (
+                DirectSecret("test_secret_access_key").to_dict()
+            ),
         }
     }
     assert build_credentials(credentials) == credentials
@@ -149,9 +149,9 @@ def test_user_password_credentials_initialization():
     assert credentials.to_dict() == {
         UserPasswordCredentials.IDENTIFIER: {
             UserPasswordCredentials.USER_KEY: DirectSecret("test_user").to_dict(),
-            UserPasswordCredentials.PASSWORD_KEY: DirectSecret(
-                "test_password"
-            ).to_dict(),
+            UserPasswordCredentials.PASSWORD_KEY: (
+                DirectSecret("test_password").to_dict()
+            ),
         }
     }
     assert build_credentials(credentials) == credentials

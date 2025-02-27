@@ -25,12 +25,12 @@ AZURE_CREDENTIALS = AzureAccountKeyCredentials(
 )
 CREDENTIALS_DICT = {
     AzureAccountKeyCredentials.IDENTIFIER: {
-        AzureAccountKeyCredentials.ACCOUNT_NAME_KEY: DirectSecret(
-            TEST_ACCOUNT_NAME
-        ).to_dict(),
-        AzureAccountKeyCredentials.ACCOUNT_KEY_KEY: DirectSecret(
-            TEST_ACCOUNT_KEY
-        ).to_dict(),
+        AzureAccountKeyCredentials.ACCOUNT_NAME_KEY: (
+            DirectSecret(TEST_ACCOUNT_NAME).to_dict()
+        ),
+        AzureAccountKeyCredentials.ACCOUNT_KEY_KEY: (
+            DirectSecret(TEST_ACCOUNT_KEY).to_dict()
+        ),
     }
 }
 

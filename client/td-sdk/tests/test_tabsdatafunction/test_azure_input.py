@@ -26,12 +26,12 @@ AZURE_CREDENTIALS = AzureAccountKeyCredentials(
 )
 CREDENTIALS_DICT = {
     AzureAccountKeyCredentials.IDENTIFIER: {
-        AzureAccountKeyCredentials.ACCOUNT_NAME_KEY: DirectSecret(
-            TEST_ACCOUNT_NAME
-        ).to_dict(),
-        AzureAccountKeyCredentials.ACCOUNT_KEY_KEY: DirectSecret(
-            TEST_ACCOUNT_KEY
-        ).to_dict(),
+        AzureAccountKeyCredentials.ACCOUNT_NAME_KEY: (
+            DirectSecret(TEST_ACCOUNT_NAME).to_dict()
+        ),
+        AzureAccountKeyCredentials.ACCOUNT_KEY_KEY: (
+            DirectSecret(TEST_ACCOUNT_KEY).to_dict()
+        ),
     }
 }
 
@@ -396,8 +396,8 @@ def test_initial_last_modified_valid_string():
                 CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
             },
             AzureSource.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": datetime.datetime.fromisoformat(time).isoformat(
-                timespec="microseconds"
+            "initial_last_modified": (
+                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
             ),
         }
     }
