@@ -967,7 +967,11 @@ def main():
 
     args = parser.parse_args()
 
-    with tempfile.NamedTemporaryFile(suffix=".yaml", delete=True) as requirements_file:
+    with tempfile.NamedTemporaryFile(
+        suffix=".yaml",
+        mode="w",
+        delete=False,
+    ) as requirements_file:
         tabsdata_provider, tabsdata_location = get_tabsdata_package_metadata()
         logger.info(
             "Module tabsdata classified as: "

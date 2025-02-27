@@ -1,0 +1,146 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+name: Release Workflow (Standard)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: .
+
+on:
+  workflow_dispatch:
+    inputs:
+      dump_server:
+        description: "Dump full server instance contents for hard investigations"
+        required: false
+        type: string
+        default: "false"
+      run_on_linux_x86_64:
+        description: "Run on Ubuntu (x86_64)"
+        required: false
+        type: string
+        default: "true"
+      run_on_linux_arm_64:
+        description: "Run on Ubuntu (arm_64)"
+        required: false
+        type: string
+        default: "false"
+      run_on_macos_x86_64:
+        description: "Run on macOS (x86_64)"
+        required: false
+        type: string
+        default: "true"
+      run_on_macos_arm_64:
+        description: "Run on macOS (arm_64)"
+        required: false
+        type: string
+        default: "true"
+      run_on_windows_x86_64:
+        description: "Run on Windows (x86_64)"
+        required: false
+        type: string
+        default: "true"
+      run_on_windows_arm_64:
+        description: "Run on Windows (arm_64)"
+        required: false
+        type: string
+        default: "false"
+
+jobs:
+  describe-job:
+    name: Describe Job
+    permissions: write-all
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: .
+    outputs:
+      run_on_linux_x86_64: ${{ steps.set-outputs.outputs.run_on_linux_x86_64 }}
+      run_on_linux_arm_64: ${{ steps.set-outputs.outputs.run_on_linux_arm_64 }}
+      run_on_macos_x86_64: ${{ steps.set-outputs.outputs.run_on_macos_x86_64 }}
+      run_on_macos_arm_64: ${{ steps.set-outputs.outputs.run_on_macos_arm_64 }}
+      run_on_windows_x86_64: ${{ steps.set-outputs.outputs.run_on_windows_x86_64 }}
+      run_on_windows_arm_64: ${{ steps.set-outputs.outputs.run_on_windows_arm_64 }}
+
+    steps:
+      - name: Show Inputs
+        id: show-inputs
+        run: |
+          echo "Workflow Inputs:"
+          echo "${{ toJSON(github.event.inputs) }}"    
+
+      - name: Set Inputs
+        id: set-outputs
+        run: |
+          normalize_boolean() {
+            local input_value=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+            case "$input_value" in
+              "true" | "yes" | "1") echo "true" ;;
+              "false" | "not" | "0") echo "false" ;;
+              *) echo "$2" ;; # Default value if invalid
+            esac
+          }
+      
+          expr_run_on_linux_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_linux_x86_64 }}" "true")"
+          echo "run_on_linux_x86_64=$expr_run_on_linux_x86_64" >> $GITHUB_ENV
+          echo "run_on_linux_x86_64=$expr_run_on_linux_x86_64" >> $GITHUB_OUTPUT
+      
+          expr_run_on_linux_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_linux_arm_64 }}" "false")"
+          echo "run_on_linux_arm_64=$expr_run_on_linux_arm_64" >> $GITHUB_ENV
+          echo "run_on_linux_arm_64=$expr_run_on_linux_arm_64" >> $GITHUB_OUTPUT
+      
+          expr_run_on_macos_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_macos_x86_64 }}" "true")"
+          echo "run_on_macos_x86_64=$expr_run_on_macos_x86_64" >> $GITHUB_ENV
+          echo "run_on_macos_x86_64=$expr_run_on_macos_x86_64" >> $GITHUB_OUTPUT
+      
+          expr_run_on_macos_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_macos_arm_64 }}" "true")"
+          echo "run_on_macos_arm_64=$expr_run_on_macos_arm_64" >> $GITHUB_ENV
+          echo "run_on_macos_arm_64=$expr_run_on_macos_arm_64" >> $GITHUB_OUTPUT
+      
+          expr_run_on_windows_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_windows_x86_64 }}" "true")"
+          echo "run_on_windows_x86_64=$expr_run_on_windows_x86_64" >> $GITHUB_ENV
+          echo "run_on_windows_x86_64=$expr_run_on_windows_x86_64" >> $GITHUB_OUTPUT
+      
+          expr_run_on_windows_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_windows_arm_64 }}" "false")"
+          echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_ENV
+          echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_OUTPUT   
+
+      - name: Show Outputs
+        id: show-outputs
+        run: |
+          echo "Workflow Outputs:"
+          echo "- run_on_linux_x86_64: ${{ steps.set-outputs.outputs.run_on_linux_x86_64 }}"
+          echo "- run_on_linux_arm_64: ${{ steps.set-outputs.outputs.run_on_linux_arm_64 }}"
+          echo "- run_on_macos_x86_64: ${{ steps.set-outputs.outputs.run_on_macos_x86_64 }}"
+          echo "- run_on_macos_arm_64: ${{ steps.set-outputs.outputs.run_on_macos_arm_64 }}"
+          echo "- run_on_windows_x86_64: ${{ steps.set-outputs.outputs.run_on_windows_x86_64 }}"
+          echo "- run_on_windows_arm_64: ${{ steps.set-outputs.outputs.run_on_windows_arm_64 }}"
+
+  dispatch-job:
+    name: Dispatch Job
+    permissions: write-all
+    needs: describe-job
+    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@main
+    secrets:
+      PAT_AOINOKIMI: ${{ secrets.PAT_AOINOKIMI }}
+      TRANSPORTER_AWS_ACCESS_KEY_ID: ${{ secrets.TRANSPORTER_AWS_ACCESS_KEY_ID }}
+      TRANSPORTER_AWS_SECRET_ACCESS_KEY: ${{ secrets.TRANSPORTER_AWS_SECRET_ACCESS_KEY }}
+      TRANSPORTER_AZURE_ACCOUNT_KEY: ${{ secrets.TRANSPORTER_AZURE_ACCOUNT_KEY }}
+      TRANSPORTER_AZURE_ACCOUNT_NAME: ${{ secrets.TRANSPORTER_AZURE_ACCOUNT_NAME }}
+    with:
+      td_edition: "standard"
+      runner_mode: "release"
+      dump_server: ${{ inputs.dump_server }}
+      run_on_linux_x86_64: ${{ needs.describe-job.outputs.run_on_linux_x86_64 }}
+      run_on_linux_arm_64: ${{ needs.describe-job.outputs.run_on_linux_arm_64 }}
+      run_on_macos_x86_64: ${{ needs.describe-job.outputs.run_on_macos_x86_64 }}
+      run_on_macos_arm_64: ${{ needs.describe-job.outputs.run_on_macos_arm_64 }}
+      run_on_windows_x86_64: ${{ needs.describe-job.outputs.run_on_windows_x86_64 }}
+      run_on_windows_arm_64: ${{ needs.describe-job.outputs.run_on_windows_arm_64 }}

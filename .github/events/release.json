@@ -1,0 +1,13 @@
+{
+  "inputs": {
+    "td_edition": "standard",
+    "runner_mode": "release",
+    "dump_server": "false",
+    "run_on_linux_x86_64": "true",
+    "run_on_linux_arm_64": "false",
+    "run_on_macos_x86_64": "true",
+    "run_on_macos_arm_64": "true",
+    "run_on_windows_x86_64": "true",
+    "run_on_windows_arm_64": "false"
+  }
+}

@@ -12,8 +12,8 @@ use std::env::var_os;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, RwLock};
 use std::time::SystemTime;
-use std::{env, fs};
-use tracing::{debug, warn};
+use std::{env, fs, io};
+use tracing::{debug, info, warn};
 
 pub const SETTINGS_FILE: &str = "settings.yaml";
 
@@ -182,11 +182,35 @@ fn dump() {
                 .join(TABSDATA_HOME_DIR)
                 .join(format!("settings_{}.yaml", instance.to_string_lossy()));
             if source.exists() {
-                let target = path.join("settings.yaml");
-                fs::rename(&source, &target).expect("Unable to relocate instance settings seed");
+                let target = path.join(SETTINGS_FILE);
+                if target.exists() {
+                    fs::remove_file(&target).unwrap_or_else(|e| {
+                        panic!("Unable to remove default instance settings seed: {}", e)
+                    });
+                }
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent).unwrap_or_else(|e| {
+                        panic!("Unable to prepare instance settings seed: {}", e)
+                    });
+                }
+                move_file(&source, &target)
+                    .unwrap_or_else(|e| panic!("Unable to relocate instance settings seed: {}", e));
             }
         }
     }
+}
+
+fn move_file(source: &Path, target: &Path) -> io::Result<()> {
+    if let Err(e) = fs::rename(source, target) {
+        if e.kind() == io::ErrorKind::CrossesDevices {
+            info!("Detected a cross-device link! Falling back to copy + remove.");
+            fs::copy(source, target)?;
+            fs::remove_file(source)?;
+        } else {
+            return Err(e);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -204,6 +228,8 @@ mod tests {
     use std::{env, panic};
     use tempfile::TempDir;
 
+    pub const SLEEP_TIME: u64 = 50;
+
     fn yaml(key: Option<&str>, value: Option<&str>) -> PathBuf {
         let instance_folder = TempDir::new().expect("Folder creation error");
         let settings_path = instance_folder.path().join(SETTINGS_FILE);
@@ -212,13 +238,13 @@ mod tests {
             settings_data.insert(k.to_string(), v.to_string());
         }
         let settings_content = to_string(&settings_data).expect("Serialization error");
-        sleep(Duration::from_millis(100));
+        sleep(Duration::from_millis(SLEEP_TIME));
         let mut settings_file = File::create(&settings_path).expect("File creation error");
         settings_file
             .write_all(settings_content.as_bytes())
             .expect("File write error");
         settings_file.flush().expect("Failed to flush data to disk");
-        sleep(Duration::from_millis(100));
+        sleep(Duration::from_millis(SLEEP_TIME));
 
         instance_folder.into_path()
     }
@@ -238,7 +264,7 @@ mod tests {
         let result = panic::catch_unwind(|| {
             env::set_var(INSTANCE_ENV, instance.to_string_lossy().to_string());
 
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
 
             let value_seed_ins = value();
 
@@ -253,16 +279,22 @@ mod tests {
             let mut seed_data = HashMap::new();
             seed_data.insert(ENV_LOG_MODE, &value_seed_ins);
             let seed_content = to_string(&seed_data).expect("Serialization error");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
             let mut seed_file = File::create(&seed_path).expect("File creation error");
             seed_file
                 .write_all(seed_content.as_bytes())
                 .expect("File write error");
             seed_file.flush().expect("Failed to flush data to disk");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
 
             let setting = MANAGER.get(ENV_LOG_MODE);
-            assert_eq!(setting, Some(value_seed_ins.to_string()));
+            assert_eq!(
+                setting,
+                Some(value_seed_ins.to_string()),
+                "(1) Expected {:?}, but got {:?}",
+                Some(value_seed_ins.to_string()),
+                setting
+            );
 
             let value_env = value();
             let value_env_ins = value();
@@ -271,13 +303,13 @@ mod tests {
             let mut settings_data = HashMap::new();
             settings_data.insert(ENV_LOG_MODE, &value_file_ins);
             let settings_content = to_string(&settings_data).expect("Serialization error");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
             let mut settings_file = File::create(&settings_path).expect("File creation error");
             settings_file
                 .write_all(settings_content.as_bytes())
                 .expect("File write error");
             settings_file.flush().expect("Failed to flush data to disk");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
 
             env::set_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()), &value_env);
             env::set_var(
@@ -294,13 +326,24 @@ mod tests {
             );
 
             let setting = MANAGER.get(ENV_LOG_MODE);
-            assert_eq!(setting, Some(value_env.to_string()));
+            assert_eq!(
+                setting,
+                Some(value_env.to_string()),
+                "(2) Expected {:?}, but got {:?}",
+                Some(value_env.to_string()),
+                setting
+            );
 
             env::remove_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()));
 
             let setting = MANAGER.get(ENV_LOG_MODE);
-            assert_eq!(setting, Some(value_env_ins.to_string()));
-
+            assert_eq!(
+                setting,
+                Some(value_env_ins.to_string()),
+                "(3) Expected {:?}, but got {:?}",
+                Some(value_env_ins.to_string()),
+                setting
+            );
             env::remove_var(format!(
                 "TD__{}_{}",
                 &instance
@@ -312,29 +355,41 @@ mod tests {
             ));
 
             let setting = MANAGER.get(ENV_LOG_MODE);
-            assert_eq!(setting, Some(value_file_ins.to_string()));
+            assert_eq!(
+                setting,
+                Some(value_file_ins.to_string()),
+                "(4) Expected {:?}, but got {:?}",
+                Some(value_file_ins.to_string()),
+                setting
+            );
 
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
             fs::rename(
                 instance.join(SETTINGS_FILE),
                 instance.join(format!("{}_", SETTINGS_FILE)),
             )
             .expect("Rename error");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
 
             let setting = MANAGER.get(ENV_LOG_MODE);
-            assert_eq!(setting, Some("name".to_string()));
+            assert_eq!(
+                setting,
+                Some("name".to_string()),
+                "(5) Expected {:?}, but got {:?}",
+                Some("name".to_string()),
+                setting
+            );
 
             let value_env = value();
             let value_env_ins = value();
             let value_file_ins = value();
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
             fs::rename(
                 instance.join(format!("{}_", SETTINGS_FILE)),
                 instance.join(SETTINGS_FILE),
             )
             .expect("Rename error");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
 
             env::set_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()), &value_env);
             env::set_var(
@@ -353,21 +408,33 @@ mod tests {
             let mut settings_data = HashMap::new();
             settings_data.insert(ENV_LOG_MODE, &value_file_ins);
             let settings_content = to_string(&settings_data).expect("Serialization error");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
             let mut settings_file = File::create(&settings_path).expect("File creation error");
             settings_file
                 .write_all(settings_content.as_bytes())
                 .expect("File write error");
             settings_file.flush().expect("Failed to flush data to disk");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
 
             let setting = MANAGER.get(ENV_LOG_MODE);
-            assert_eq!(setting, Some(value_env.to_string()));
+            assert_eq!(
+                setting,
+                Some(value_env.to_string()),
+                "(6) Expected {:?}, but got {:?}",
+                Some(value_env.to_string()),
+                setting
+            );
 
             env::remove_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()));
 
             let setting = MANAGER.get(ENV_LOG_MODE);
-            assert_eq!(setting, Some(value_env_ins.to_string()));
+            assert_eq!(
+                setting,
+                Some(value_env_ins.to_string()),
+                "(7) Expected {:?}, but got {:?}",
+                Some(value_env_ins.to_string()),
+                setting
+            );
 
             env::remove_var(format!(
                 "TD__{}_{}",
@@ -380,48 +447,67 @@ mod tests {
             ));
 
             let setting = MANAGER.get(ENV_LOG_MODE);
-            assert_eq!(setting, Some(value_file_ins.to_string()));
+            assert_eq!(
+                setting,
+                Some(value_file_ins.to_string()),
+                "(8) Expected {:?}, but got {:?}",
+                Some(value_file_ins.to_string()),
+                setting
+            );
 
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
             fs::rename(
                 instance.join(SETTINGS_FILE),
                 instance.join(format!("{}_", SETTINGS_FILE)),
             )
             .expect("Rename error");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
 
             let setting = MANAGER.get(ENV_LOG_MODE);
-            assert_eq!(setting, Some("name".to_string()));
+            assert_eq!(
+                setting,
+                Some("name".to_string()),
+                "(9) Expected {:?}, but got {:?}",
+                Some("name".to_string()),
+                setting
+            );
 
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
             fs::rename(
                 instance.join(format!("{}_", SETTINGS_FILE)),
                 instance.join(SETTINGS_FILE),
             )
             .expect("Rename error");
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(SLEEP_TIME));
 
-            for _ in 0..8 {
+            for i in 0..8 {
                 let value_file_ins = value();
 
                 let settings_path = instance.join(SETTINGS_FILE);
                 let mut settings_data = HashMap::new();
                 settings_data.insert(ENV_LOG_MODE, &value_file_ins);
                 let settings_content = to_string(&settings_data).expect("Serialization error");
-                sleep(Duration::from_millis(100));
+                sleep(Duration::from_millis(SLEEP_TIME));
                 let mut settings_file = File::create(&settings_path).expect("File creation error");
                 settings_file
                     .write_all(settings_content.as_bytes())
                     .expect("File write error");
                 settings_file.flush().expect("Failed to flush data to disk");
-                sleep(Duration::from_millis(100));
+                sleep(Duration::from_millis(SLEEP_TIME));
 
                 let mut rng = rng();
-                let time = rng.random_range(0..=4);
-                sleep(Duration::from_secs(time));
+                let time = rng.random_range(50..=100);
+                sleep(Duration::from_millis(time));
 
                 let setting = MANAGER.get(ENV_LOG_MODE);
-                assert_eq!(setting, Some(value_file_ins.to_string()));
+                assert_eq!(
+                    setting,
+                    Some(value_file_ins.to_string()),
+                    "(10 - {}) Expected {:?}, but got {:?}",
+                    i,
+                    Some(value_file_ins.to_string()),
+                    setting
+                );
             }
 
             env::remove_var(INSTANCE_ENV);
