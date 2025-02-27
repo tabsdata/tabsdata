@@ -14,7 +14,7 @@ use std::process::{exit, Command, Output};
 use td_common::error::TdError;
 use td_common::os::name_program;
 use td_common::status::ExitStatus::GeneralError;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 pub const PYTHON_PROGRAM: &str = "python";
 pub const PYTHON_ARGUMENT_C: &str = "-c";
@@ -151,10 +151,10 @@ pub fn prepare(instance: &PathBuf) {
 fn dump(output: &Output) {
     match String::from_utf8(output.clone().stdout) {
         Ok(output) => {
-            error!("Standard Output: {}", output)
+            info!("Standard Output:\n{}", output)
         }
         Err(e) => {
-            error!(
+            info!(
                 "Standard Output: Error processing system standard output: {}",
                 e
             )
@@ -162,10 +162,10 @@ fn dump(output: &Output) {
     };
     match String::from_utf8(output.clone().stderr) {
         Ok(output) => {
-            error!("Standard Error: {}", output)
+            info!("Standard Error: {}", output)
         }
         Err(e) => {
-            error!(
+            info!(
                 "Standard Error: Error processing system standard error: {}",
                 e
             )
