@@ -453,4 +453,137 @@ mod tests {
         assert!(dto.actually_active);
         Ok(())
     }
+
+    #[test]
+    fn test_updated_from() -> Result<(), td_common::error::TdError> {
+        #[Dto]
+        struct TestDto {
+            id: i64,
+        }
+
+        #[Dao]
+        #[td_type(updater(try_from = TestDto, skip_all))]
+        struct TestDao {
+            #[td_type(updater(include))]
+            id: i64,
+            name: String,
+            description: Option<String>,
+            modified: chrono::DateTime<chrono::Utc>,
+            active: bool,
+        }
+
+        let dto = TestDto::builder().id(123).build()?;
+
+        let now = chrono::Utc::now();
+        let mut dao_builder = TestDao::builder();
+        let dao_builder = dao_builder
+            .name("dlo")
+            .description(Some("desc".to_string()))
+            .modified(now)
+            .active(false);
+        let dao = dao_builder.update_from(&dto)?.build()?;
+
+        assert_eq!(dao.id, 123);
+        assert_eq!(dao.name, "dlo");
+        assert_eq!(dao.description, Some("desc".to_string()));
+        assert_eq!(dao.modified, now);
+        assert!(!dao.active);
+        Ok(())
+    }
+
+    #[test]
+    fn test_try_from_updated_from() -> Result<(), td_common::error::TdError> {
+        #[Dlo]
+        struct TestDlo {
+            name: String,
+            description: Option<String>,
+            modified: chrono::DateTime<chrono::Utc>,
+        }
+
+        #[Dto]
+        struct TestDto {
+            id: i64,
+        }
+
+        #[Dao]
+        #[td_type(builder(try_from = TestDlo))]
+        #[td_type(updater(try_from = TestDto, skip_all))]
+        struct TestDao {
+            #[td_type(builder(skip))]
+            #[td_type(updater(include))]
+            id: i64,
+            name: String,
+            description: Option<String>,
+            modified: chrono::DateTime<chrono::Utc>,
+            #[td_type(builder(skip))]
+            active: bool,
+        }
+
+        let now = chrono::Utc::now();
+        let dlo = TestDlo::builder()
+            .name("dlo")
+            .description(Some("desc".to_string()))
+            .modified(now)
+            .build()?;
+
+        let dto = TestDto::builder().id(123).build()?;
+
+        let dao = TestDaoBuilder::try_from(&dlo)?
+            .update_from(&dto)?
+            .active(true)
+            .build()?;
+
+        assert_eq!(dao.id, 123);
+        assert_eq!(dao.name, "dlo");
+        assert_eq!(dao.description, Some("desc".to_string()));
+        assert_eq!(dao.modified, now);
+        assert!(dao.active);
+        Ok(())
+    }
+
+    #[test]
+    fn test_try_from_updated_from_default() -> Result<(), td_common::error::TdError> {
+        #[Dlo]
+        struct TestDlo {
+            name: String,
+            description: Option<String>,
+            modified: chrono::DateTime<chrono::Utc>,
+        }
+
+        #[Dto]
+        struct TestDto {
+            id: i64,
+        }
+
+        #[Dao]
+        #[td_type(builder(try_from = TestDlo))]
+        #[td_type(updater(try_from = TestDto, skip_all))]
+        struct TestDao {
+            #[td_type(builder(skip))]
+            #[td_type(updater(include))]
+            id: i64,
+            name: String,
+            description: Option<String>,
+            modified: chrono::DateTime<chrono::Utc>,
+            #[td_type(builder(default))]
+            active: bool,
+        }
+
+        let now = chrono::Utc::now();
+        let dlo = TestDlo::builder()
+            .name("dlo")
+            .description(Some("desc".to_string()))
+            .modified(now)
+            .build()?;
+
+        let dto = TestDto::builder().id(123).build()?;
+        let dao = TestDaoBuilder::try_from(&dlo)?.update_from(&dto)?.build()?;
+
+        assert_eq!(dao.id, 123);
+        assert_eq!(dao.name, "dlo");
+        assert_eq!(dao.description, Some("desc".to_string()));
+        assert_eq!(dao.modified, now);
+        assert!(!dao.active);
+        Ok(())
+    }
 }

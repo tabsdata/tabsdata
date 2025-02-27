@@ -55,6 +55,8 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
 struct TdTypeArgs {
     #[darling(multiple)]
     builder: Vec<TdTypeArg>,
+    #[darling(multiple)]
+    updater: Vec<TdTypeArg>,
 }
 
 #[derive(FromMeta)]
@@ -68,11 +70,13 @@ struct TdTypeArg {
 #[darling(attributes(td_type))]
 struct TdTypeFields {
     #[darling(multiple)]
-    builder: Vec<TdTypeField>,
+    builder: Vec<TdTryFromField>,
+    #[darling(multiple)]
+    updater: Vec<TdTryFromField>,
 }
 
 #[derive(FromMeta)]
-struct TdTypeField {
+struct TdTryFromField {
     try_from: Option<Ident>,
     #[darling(default)]
     skip: bool,
@@ -114,7 +118,7 @@ pub fn td_type(input: TokenStream) -> TokenStream {
         setters.push(setting);
     }
 
-    let froms = gen_froms(&args, &item);
+    let td_types_froms = gen_td_types_froms(&args, &item);
     let fields_list = gen_fields_as_list(fields);
     let error_impl = gen_error(type_);
 
@@ -138,7 +142,7 @@ pub fn td_type(input: TokenStream) -> TokenStream {
             }
         }
 
-        #froms
+        #td_types_froms
         #error_impl
     };
 
@@ -178,25 +182,97 @@ fn gen_error(type_: &Ident) -> proc_macro2::TokenStream {
     }
 }
 
-fn gen_froms(args: &TdTypeArgs, target: &ItemStruct) -> proc_macro2::TokenStream {
+fn gen_td_types_froms(args: &TdTypeArgs, target: &ItemStruct) -> proc_macro2::TokenStream {
     let mut expanded = quote! {};
     for arg in &args.builder {
-        if let Some(from) = &arg.try_from {
-            expanded.extend(gen_from(from, target, arg.skip_all));
+        if let Some(try_from) = &arg.try_from {
+            expanded.extend(gen_try_from(try_from, target, arg.skip_all));
+        }
+    }
+    for arg in &args.updater {
+        if let Some(update_from) = &arg.try_from {
+            expanded.extend(gen_updated_from(update_from, target, arg.skip_all));
         }
     }
     expanded
 }
 
-fn gen_from(from: &Ident, target: &ItemStruct, skip_all: bool) -> proc_macro2::TokenStream {
+fn gen_try_from(from: &Ident, target: &ItemStruct, skip_all: bool) -> proc_macro2::TokenStream {
     let to = &target.ident;
-    let fields = &target.fields;
-
+    let builder = format_ident!("{}Builder", to);
     let builder_error_type = format_ident!("{}BuilderError", to);
+
+    let initializers = gen_from_fields_initializers(
+        FieldsType::Builder,
+        from,
+        target,
+        &builder_error_type,
+        skip_all,
+    );
+    let (impl_generics, ty_generics, where_clause) = target.generics.split_for_impl();
+
+    let expanded = quote! {
+        impl #impl_generics TryFrom<& #from #ty_generics> for #builder #ty_generics #where_clause {
+            type Error = #builder_error_type;
+            fn try_from(from: & #from #ty_generics) -> Result<Self, Self::Error> {
+                let mut builder = #builder::default();
+                builder #(#initializers)*;
+                Ok(builder)
+            }
+        }
+    };
+
+    expanded
+}
+
+fn gen_updated_from(from: &Ident, target: &ItemStruct, skip_all: bool) -> proc_macro2::TokenStream {
+    let to = &target.ident;
+    let builder = format_ident!("{}Builder", to);
+    let builder_error_type = format_ident!("{}BuilderError", to);
+
+    let initializers = gen_from_fields_initializers(
+        FieldsType::Updater,
+        from,
+        target,
+        &builder_error_type,
+        skip_all,
+    );
+    let (_, ty_generics, where_clause) = target.generics.split_for_impl();
+
+    let expanded = quote! {
+        impl #builder #ty_generics #where_clause {
+            fn update_from(&mut self, from: & #from #ty_generics) -> Result<&mut Self, #builder_error_type> {
+                self #(#initializers)*;
+                Ok(self)
+            }
+        }
+    };
+
+    expanded
+}
+
+enum FieldsType {
+    Builder,
+    Updater,
+}
+
+fn gen_from_fields_initializers(
+    fields_type: FieldsType,
+    from: &Ident,
+    target: &ItemStruct,
+    builder_error_type: &Ident,
+    skip_all: bool,
+) -> Vec<proc_macro2::TokenStream> {
+    let fields = &target.fields;
 
     let mut initializers = vec![];
     for field in fields.iter() {
-        match should_include_field(field, from, skip_all) {
+        let td_type_fields = TdTypeFields::from_field(field).unwrap();
+        let from_fields = match fields_type {
+            FieldsType::Builder => &td_type_fields.builder,
+            FieldsType::Updater => &td_type_fields.updater,
+        };
+        match should_include_from_field(from_fields, from, skip_all) {
             IncludeField::Include => {
                 let field_type = field.ty.clone();
                 let field_name = field.ident.as_ref().unwrap();
@@ -241,22 +317,7 @@ fn gen_from(from: &Ident, target: &ItemStruct, skip_all: bool) -> proc_macro2::T
         }
     }
 
-    let builder = format_ident!("{}Builder", to);
-
-    let (impl_generics, ty_generics, where_clause) = target.generics.split_for_impl();
-
-    let expanded = quote! {
-        impl #impl_generics TryFrom<& #from #ty_generics> for #builder #ty_generics #where_clause {
-            type Error = #builder_error_type;
-            fn try_from(from: & #from #ty_generics) -> Result<Self, Self::Error> {
-                let mut builder = #builder::default();
-                builder #(#initializers)*;
-                Ok(builder)
-            }
-        }
-    };
-
-    expanded
+    initializers
 }
 
 enum IncludeField {
@@ -266,9 +327,11 @@ enum IncludeField {
     Rename(String),
 }
 
-fn should_include_field(field: &syn::Field, from: &Ident, skip_all: bool) -> IncludeField {
-    let td_type_fields = TdTypeFields::from_field(field).unwrap();
-
+fn should_include_from_field(
+    from_args: &[TdTryFromField],
+    from: &Ident,
+    skip_all: bool,
+) -> IncludeField {
     fn none_or_eq<T: PartialEq>(a: &Option<T>, b: &T) -> bool {
         // If Ident is not present or equal to the from field.
         a.as_ref().is_none_or(|a| a == b)
@@ -276,8 +339,7 @@ fn should_include_field(field: &syn::Field, from: &Ident, skip_all: bool) -> Inc
 
     if skip_all {
         // If skipping all, we only include the fields explicitly marked with `include`
-        if let Some(f) = td_type_fields
-            .builder
+        if let Some(f) = from_args
             .iter()
             .find(|f| f.include && none_or_eq(&f.try_from, from))
         {
@@ -289,25 +351,22 @@ fn should_include_field(field: &syn::Field, from: &Ident, skip_all: bool) -> Inc
         } else {
             IncludeField::Skip
         }
-    } else if td_type_fields.builder.is_empty() {
+    } else if from_args.is_empty() {
         // If no specific builder fields are defined, include the field
         IncludeField::Include
     } else {
         // Otherwise, include the field unless it is explicitly marked with `skip`
-        if let Some(_f) = td_type_fields
-            .builder
+        if let Some(_f) = from_args
             .iter()
             .find(|f| f.skip && none_or_eq(&f.try_from, from))
         {
             IncludeField::Skip
-        } else if let Some(_f) = td_type_fields
-            .builder
+        } else if let Some(_f) = from_args
             .iter()
             .find(|f| f.default && none_or_eq(&f.try_from, from))
         {
             IncludeField::Default
-        } else if let Some(f) = td_type_fields
-            .builder
+        } else if let Some(f) = from_args
             .iter()
             .find(|f| f.field.is_some() && none_or_eq(&f.try_from, from))
         {
