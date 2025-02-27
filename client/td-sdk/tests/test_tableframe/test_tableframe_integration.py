@@ -102,7 +102,7 @@ POLARS_TABLE_FRAME = pl.DataFrame(
 
 for i in range(POLARS_TABLE_FRAME_DUPLICATION_TIMES):
     POLARS_TABLE_FRAME = pl.concat([POLARS_TABLE_FRAME, POLARS_TABLE_FRAME])
-
+POLARS_TABLE_FRAME = POLARS_TABLE_FRAME.collect().lazy()
 
 POLARS_TABLE_FRAME_DATETIME = POLARS_TABLE_FRAME.with_columns(
     pl.col("d").str.to_date(), pl.col("dt").str.to_datetime()

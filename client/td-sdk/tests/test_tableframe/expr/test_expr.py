@@ -21,7 +21,7 @@ from tabsdata.utils.tableframe._translator import _wrap_polars_frame
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
-from ..common import enrich_dataframe, load_complex_dataframe, pretty_polars
+from ..common import load_complex_dataframe, pretty_polars
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -259,13 +259,11 @@ class TestTableFrame(unittest.TestCase):
         )
 
     def test_filter(self):
-        lf = enrich_dataframe(
-            pl.LazyFrame(
-                {
-                    "letters": ["a", "b", "c"],
-                    "numbers": [1, 2, 3],
-                }
-            )
+        lf = pl.LazyFrame(
+            {
+                "letters": ["a", "b", "c"],
+                "numbers": [1, 2, 3],
+            }
         )
         tf = _wrap_polars_frame(lf)
         tf = tf.filter(
@@ -284,7 +282,7 @@ class TestTableFrame(unittest.TestCase):
             {"letters": "g", "numbers": 7, "dates": "2023-08-26"},
             {"letters": "h", "numbers": 8, "dates": "2023-07-27"},
         ]
-        lf = enrich_dataframe(pl.from_dicts(data).lazy())
+        lf = pl.from_dicts(data).lazy()
         tf = _wrap_polars_frame(lf)
         tf = tf.group_by(td.col("dates").cast(pl.Date).dt.year().alias("year")).agg(
             td.col("letters").count()

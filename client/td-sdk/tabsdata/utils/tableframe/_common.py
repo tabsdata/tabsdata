@@ -4,13 +4,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, Literal, TypeAlias
+from typing import Any, Iterable, Literal, TypeAlias
 
 import polars as pl
-from polars import DataFrame
 
 # noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
 import tabsdata.utils.tableframe._constants as td_constants
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata.exceptions import ErrorCode, TableFrameError
@@ -18,6 +16,11 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 DropColumnsStrategy: TypeAlias = Literal[
     "drop",
     "select",
+]
+
+AddSystemColumnsStrategy: TypeAlias = Literal[
+    "map_element",
+    "map_batches",
 ]
 
 
@@ -49,96 +52,128 @@ def check_columns(columns: Any, *more_columns: Any):
     return
 
 
-def _generator(fn):
-    while True:
-        yield fn()
+def add_system_columns(
+    lf: pl.LazyFrame, strategy: AddSystemColumnsStrategy = "map_element"
+) -> pl.LazyFrame:
+    match strategy:
+        case "map_element":
+            return add_system_columns_map_element(lf)
+        case "map_batches":
+            return add_system_columns_map_batches(lf)
+        case _:
+            raise ValueError(f"Unknown add system column strategy: {strategy}")
 
 
-def add_system_columns(ldf: pl.LazyFrame) -> pl.LazyFrame:
-    columns = ldf.collect_schema().names()
-    dtypes = ldf.collect_schema().dtypes()
-    schema_dictionary = {col: dtype for col, dtype in zip(columns, dtypes)}
-    existing_columns = set(ldf.collect_schema().names())
+def add_system_columns_map_element(lf: pl.LazyFrame) -> pl.LazyFrame:
+    current_columns = set(lf.collect_schema().names())
     for column, metadata in td_helpers.SYSTEM_COLUMNS_METADATA.items():
-        if column in existing_columns:
+        if column in current_columns:
             continue
         dtype, default, generator = (
             metadata[td_constants.TD_COL_DTYPE],
             metadata[td_constants.TD_COL_DEFAULT],
             metadata[td_constants.TD_COL_GENERATOR],
         )
-        ldf = ldf.with_columns(default().alias(column))
-        schema_dictionary[column] = dtype
-        schema = pl.Schema(schema_dictionary)
-        # fmt: off
-        ldf = ldf.map_batches(
-            lambda
-            batch,
-            lambda_column=column,
-            lambda_dtype=dtype,
-            lambda_generator=generator:
-            add_system_column(lambda_column,
-                              lambda_dtype,
-                              lambda_generator,
-                              batch),
-            predicate_pushdown=True,
+        lf = lf.with_columns(default().alias(column))
+        lf = lf.with_columns(
+            pl.col(column).map_elements(generator, return_dtype=dtype).alias(column)
+        )
+    return lf
+
+
+def add_system_columns_map_batches(lf: pl.LazyFrame) -> pl.LazyFrame:
+    def generate_system_column(
+        series: pl.Series, series_generator, series_dtype
+    ) -> pl.Series:
+        series = series.map_elements(series_generator, return_dtype=series_dtype)
+        return series.cast(series_dtype)
+
+    dtypes = lf.collect_schema().dtypes()
+
+    current_columns = set(lf.collect_schema().names())
+    missing_columns = []
+
+    generators = {}
+    dtypes = {}
+
+    for column, metadata in td_helpers.SYSTEM_COLUMNS_METADATA.items():
+        if column in current_columns:
+            continue
+        dtype, default, generator = (
+            metadata[td_constants.TD_COL_DTYPE],
+            metadata[td_constants.TD_COL_DEFAULT],
+            metadata[td_constants.TD_COL_GENERATOR],
+        )
+        missing_columns.append(default().cast(dtype).alias(column))
+        generators[column] = generator
+        dtypes[column] = dtype
+
+    if missing_columns:
+        lf = lf.with_columns(missing_columns)
+
+    if missing_columns:
+
+        def generate_system_columns(batch: pl.DataFrame) -> pl.DataFrame:
+            return batch.with_columns(
+                [
+                    generate_system_column(
+                        batch[missing_column],
+                        generators[missing_column],
+                        dtypes[missing_column],
+                    ).alias(missing_column)
+                    for missing_column in generators
+                ]
+            )
+
+        lf = lf.map_batches(
+            generate_system_columns,
             streamable=True,
-            schema=schema,
-            # ToDo: ⚠️ Dimas: There should be a better way...
-            validate_output_schema=False
+            validate_output_schema=False,
         )
-        # fmt: on
-    return ldf
-
-
-def add_system_column(
-    column: str,
-    dtype: td_typing.TdDataType,
-    generator: Callable[[], Any],
-    batch: DataFrame,
-) -> DataFrame:
-    return batch.with_columns(
-        pl.first()
-        .map_batches(
-            lambda chunk: generate_system_column(column, dtype, generator, len(chunk)),
-            is_elementwise=True,
-        )
-        .alias(column)
-    )
-
-
-def generate_system_column(
-    column: str, dtype: td_typing.TdDataType, generator: Callable[[], Any], size: int
-):
-    values = []
-    for i in range(size):
-        values.append(generator())
-    return pl.Series(column, values, dtype=dtype)
+    return lf
 
 
 def drop_system_columns(
-    ldf: pl.LazyFrame,
-    strategy: DropColumnsStrategy = "select",
+    lf: pl.LazyFrame,
+    strategy: DropColumnsStrategy | None = "drop",
     ignore_missing: bool = True,
 ) -> pl.LazyFrame:
     match strategy:
+        case None:
+            return lf
         case "drop":
-            return drop_system_columns_drop(ldf, ignore_missing)
+            return drop_system_columns_drop(lf, ignore_missing)
+        case "drop":
+            return drop_system_columns_drop_in_batch(lf, ignore_missing)
         case "select":
-            return drop_system_columns_select(ldf, ignore_missing)
+            return drop_system_columns_select_in_batch(lf, ignore_missing)
         case _:
             raise ValueError(f"Unknown drop column strategy: {strategy}")
 
 
 def drop_system_columns_drop(
-    ldf: pl.LazyFrame, ignore_missing: bool = True
+    lf: pl.LazyFrame, ignore_missing: bool = True
 ) -> pl.LazyFrame:
     columns_to_remove = list(td_helpers.SYSTEM_COLUMNS)
-    columns = ldf.collect_schema().names()
-    dtypes = ldf.collect_schema().dtypes()
+    if ignore_missing:
+        existing_columns = set(lf.collect_schema().names())
+        columns_to_remove = [
+            col for col in columns_to_remove if col in existing_columns
+        ]
+    for column in columns_to_remove:
+        lf = lf.drop(column)
+    return lf
+
+
+def drop_system_columns_drop_in_batch(
+    lf: pl.LazyFrame, ignore_missing: bool = True
+) -> pl.LazyFrame:
+    columns_to_remove = list(td_helpers.SYSTEM_COLUMNS)
+    columns = lf.collect_schema().names()
+    dtypes = lf.collect_schema().dtypes()
     schema = {col: dtype for col, dtype in zip(columns, dtypes)}
     if ignore_missing:
-        existing_columns = set(ldf.collect_schema().names())
+        existing_columns = set(lf.collect_schema().names())
         columns_to_remove = [
             col for col in columns_to_remove if col in existing_columns
         ]
@@ -146,7 +181,7 @@ def drop_system_columns_drop(
         schema.pop(column)
     schema = pl.Schema(schema)
 
-    ldf = ldf.map_batches(
+    lf = lf.map_batches(
         lambda batch: batch.drop(columns_to_remove),
         predicate_pushdown=True,
         streamable=True,
@@ -154,22 +189,22 @@ def drop_system_columns_drop(
         # ToDo: ⚠️ Dimas: There should be a better way...
         validate_output_schema=False,
     )
-    return ldf
+    return lf
 
 
-def drop_system_columns_select(
-    ldf: pl.LazyFrame, ignore_missing: bool = True
+def drop_system_columns_select_in_batch(
+    lf: pl.LazyFrame, ignore_missing: bool = True
 ) -> pl.LazyFrame:
     system_columns = set(td_helpers.SYSTEM_COLUMNS)
-    source_columns = ldf.collect_schema().names()
+    source_columns = lf.collect_schema().names()
     target_columns = [col for col in source_columns if col not in system_columns]
     if not ignore_missing:
         missing_columns = system_columns - set(source_columns)
         if missing_columns:
             raise ValueError(f"Missing expected system columns: {missing_columns}")
-    schema = {col: ldf.collect_schema().get(col) for col in target_columns}
+    schema = {col: lf.collect_schema().get(col) for col in target_columns}
     schema = pl.Schema(schema)
-    ldf = ldf.map_batches(
+    lf = lf.map_batches(
         lambda batch: batch.select(target_columns),
         predicate_pushdown=True,
         streamable=True,
@@ -178,4 +213,4 @@ def drop_system_columns_select(
         validate_output_schema=False,
     )
 
-    return ldf
+    return lf

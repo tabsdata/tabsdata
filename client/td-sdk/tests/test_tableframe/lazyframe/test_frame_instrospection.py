@@ -7,6 +7,9 @@ from collections import Counter
 
 import pytest_check as check
 
+# noinspection PyProtectedMemberº
+from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
+
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
 from ..common import load_complex_dataframe
@@ -21,4 +24,4 @@ class TestTableFrame(unittest.TestCase):
         expected_columns = self.data_frame.collect_schema().names()
         lf = self.table_frame.select("*")
         columns = lf.columns
-        check.equal(Counter(columns), Counter(expected_columns))
+        check.equal(Counter(columns), Counter(expected_columns + SYSTEM_COLUMNS))

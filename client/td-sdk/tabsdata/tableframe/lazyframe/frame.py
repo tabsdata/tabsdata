@@ -205,10 +205,17 @@ class TableFrame:
         return self._lf.__contains__(key=key)
 
     def __copy__(self) -> TableFrame:
-        return TableFrame.__build__(self._lf.__copy__())
+        msg = (
+            "__copy__ not supported for TableFrame objects as it is not deterministic."
+        )
+        raise TypeError(msg)
 
     def __deepcopy__(self, memo: None = None) -> TableFrame:
-        return TableFrame.__build__(self._lf.__deepcopy__(memo=memo))
+        msg = (
+            "__deepcopy__ not supported for TableFrame objects as it is not"
+            " deterministic."
+        )
+        raise TypeError(msg)
 
     def __getitem__(self, item: int | range | slice) -> TableFrame:
         return TableFrame.__build__(self._lf.__getitem__(item=item))

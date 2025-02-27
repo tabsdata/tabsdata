@@ -10,7 +10,6 @@ import polars as pl
 import tabsdata as td
 
 # noinspection PyProtectedMember
-import tabsdata.utils.tableframe._helpers as td_helpers
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -31,7 +30,7 @@ def load_simple_dataframe(
         "intColumn": [1, 2, 3],
         "stringColumn": ["a", "b", "c"],
     }
-    lazy_frame = enrich_dataframe(pl.LazyFrame(data), token=token)
+    lazy_frame = pl.LazyFrame(data)
 
     data_frame = pl.DataFrame(lazy_frame.collect())
     table_frame = td.TableFrame.__build__(lazy_frame)
@@ -46,21 +45,7 @@ def load_complex_dataframe(
         "python-polars-the-definitive-guide/main/data/penguins.csv"
     )
 
-    lazy_frame = enrich_dataframe(pl.scan_csv(data), token=token)
+    lazy_frame = pl.scan_csv(data)
     data_frame = pl.DataFrame(lazy_frame.collect())
     table_frame = td.TableFrame.__build__(lazy_frame)
     return lazy_frame, data_frame, table_frame
-
-
-def enrich_dataframe(ldf: pl.LazyFrame, token: Optional[str] = None) -> pl.LazyFrame:
-    ldf = ldf.with_columns(
-        [
-            (
-                pl.format(
-                    f"{token}_{{}}" if token else "{}", pl.int_range(0, pl.len())
-                ).cast(pl.String)
-            ).alias(column)
-            for column in td_helpers.REQUIRED_COLUMNS
-        ]
-    )
-    return ldf

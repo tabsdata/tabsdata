@@ -5,9 +5,9 @@
 import unittest
 
 import polars as pl
-from polars.testing import assert_frame_equal
 
 import tabsdata as td
+from tabsdata.utils.tableframe import _constants, _helpers
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
@@ -28,7 +28,9 @@ class TestTableFrame(unittest.TestCase):
         self.assertTrue("stringColumn" in columns)
 
     def test_dtypes(self):
-        expected_dtypes = [pl.Int64, pl.Utf8] + [pl.Utf8] * len(SYSTEM_COLUMNS)
+        expected_dtypes = [pl.Int64, pl.Utf8]
+        for column, metadata in _helpers.SYSTEM_COLUMNS_METADATA.items():
+            expected_dtypes.append(metadata[_constants.TD_COL_DTYPE])
         dtypes = self.table_frame.dtypes
         self.assertEqual(dtypes, expected_dtypes)
 
@@ -71,18 +73,6 @@ class TestTableFrame(unittest.TestCase):
     def test_contains(self):
         assert self.table_frame.__contains__("intColumn")
         assert self.table_frame.__contains__("stringColumn")
-
-    def test_copy(self):
-        ttf = self.table_frame.__copy__()
-        self.assertIsInstance(ttf, td.TableFrame)
-        self.assertListEqual(ttf.columns, self.table_frame.columns)
-        assert_frame_equal(self.table_frame._lf.collect(), ttf._lf.collect())
-
-    def test_deepcopy(self):
-        ttf = self.table_frame.__deepcopy__()
-        self.assertIsInstance(ttf, td.TableFrame)
-        self.assertListEqual(ttf.columns, self.table_frame.columns)
-        assert_frame_equal(self.table_frame._lf.collect(), ttf._lf.collect())
 
     def test_getitem_index(self):
         with self.assertRaises(TypeError):

@@ -19,11 +19,14 @@ from tabsdata.tableframe.lazyframe.frame import _assemble_columns
 from tabsdata.utils.tableframe._helpers import required_columns
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._translator import _wrap_polars_frame
+from tabsdata.utils.tableframe._translator import (
+    _unwrap_table_frame,
+    _wrap_polars_frame,
+)
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
-from ..common import enrich_dataframe, load_complex_dataframe, pretty_polars
+from ..common import load_complex_dataframe, pretty_polars
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -42,14 +45,12 @@ class TestTableFrame(unittest.TestCase):
         )
 
     def test_drop_nulls(self):
-        lf = enrich_dataframe(
-            pl.LazyFrame(
-                {
-                    "c1": [11, 12, 13],
-                    "c2": ["2a", None, "2c"],
-                    "c3": ["3a", "3b", None],
-                }
-            )
+        lf = pl.LazyFrame(
+            {
+                "c1": [11, 12, 13],
+                "c2": ["2a", None, "2c"],
+                "c3": ["3a", "3b", None],
+            }
         )
         tf = _wrap_polars_frame(lf)
         tf = tf.drop_nulls()
@@ -169,13 +170,11 @@ class TestTableFrame(unittest.TestCase):
             assert column in columns
 
     def test_str(self):
-        lf = enrich_dataframe(
-            pl.LazyFrame(
-                {
-                    "letters": ["a", "b", "c"],
-                    "numbers": [1, 2, 3],
-                }
-            )
+        lf = pl.LazyFrame(
+            {
+                "letters": ["a", "b", "c"],
+                "numbers": [1, 2, 3],
+            }
         )
         tf = td.TableFrame.__build__(lf)
         tf = tf.with_columns(
@@ -197,7 +196,10 @@ class TestTableFrame(unittest.TestCase):
             }
         )
         tf = td.TableFrame.__build__(lf)
-        tf._lf.sink_ndjson(os.path.join(tempfile.gettempdir(), "delete.sink.json"))
+        tf._lf.sink_ndjson(os.path.join(tempfile.gettempdir(), "delete.sink_1.json"))
+        _unwrap_table_frame(tf).sink_ndjson(
+            os.path.join(tempfile.gettempdir(), "delete.sink_2.json")
+        )
 
     def test_item(self):
         lf = pl.LazyFrame(

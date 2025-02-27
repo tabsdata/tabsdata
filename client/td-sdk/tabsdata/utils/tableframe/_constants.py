@@ -17,6 +17,7 @@ FUNCTION_METHODS = ["pipe"]
 INTERNAL_METHODS = [
     "_comparison_error",
     "_fetch",
+    "_filter",
     "_from_pyldf",
     "_scan_python_function",
     "_set_sink_optimizations",
@@ -57,6 +58,8 @@ UNSUPPORTED_METHODS = [
     "shift",
     "merge_sorted",
     "rename",
+    "remote",
+    "remove",
     "rolling",
     "select_seq",
     "set_sorted",

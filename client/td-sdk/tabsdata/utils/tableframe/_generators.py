@@ -14,5 +14,5 @@ def _id_default() -> pl.Expr:
     return pl.lit("", pl.String)
 
 
-def _id() -> pl.String:
+def _id(_old_value: pl.String | None = None) -> pl.String:
     return base32hex.b32encode(uuid7().bytes)[:26]

@@ -14,12 +14,7 @@ from tabsdata.utils.tableframe._translator import _wrap_polars_frame
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
-from ..common import (
-    enrich_dataframe,
-    load_complex_dataframe,
-    load_simple_dataframe,
-    pretty_polars,
-)
+from ..common import load_complex_dataframe, load_simple_dataframe, pretty_polars
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -45,13 +40,11 @@ class TestTableFrame(unittest.TestCase):
         assert len(tf._lf.collect().rows()) == 6
 
     def test_lit(self):
-        lf = enrich_dataframe(
-            pl.LazyFrame(
-                {
-                    "letters": ["a", "b", "c"],
-                    "numbers": [1, 2, 3],
-                }
-            )
+        lf = pl.LazyFrame(
+            {
+                "letters": ["a", "b", "c"],
+                "numbers": [1, 2, 3],
+            }
         )
         tf = _wrap_polars_frame(lf)
         tf = tf.with_columns([pl.lit("こんにちは世界").alias("token")])
