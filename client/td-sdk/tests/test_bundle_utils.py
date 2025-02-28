@@ -20,7 +20,7 @@ from tabsdata.utils.bundle_utils import (
     CONFIG_INPUTS_KEY,
     CONFIG_OUTPUT_KEY,
     LOCAL_PACKAGES_FOLDER,
-    PYTHON_CHECK_MODULE_AVAILABILITY_KEY,
+    PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
     PYTHON_INSTALL_DEPENDENCIES_KEY,
     PYTHON_LOCAL_PACKAGES_KEY,
     PYTHON_PUBLIC_PACKAGES_KEY,
@@ -163,7 +163,7 @@ def test_create_requirements_yaml(mock_obtain_ordered_dists, tmp_path):
                 f".{sys.version_info.micro}"
             ),
             PYTHON_PUBLIC_PACKAGES_KEY: expected,
-            PYTHON_CHECK_MODULE_AVAILABILITY_KEY: True,
+            PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
         }
 
 
@@ -247,7 +247,7 @@ def test_create_requirements_yaml_no_local_packages(
                 f"{sys.version_info.micro}"
             ),
             PYTHON_PUBLIC_PACKAGES_KEY: expected,
-            PYTHON_CHECK_MODULE_AVAILABILITY_KEY: True,
+            PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
         }
 
 
@@ -276,7 +276,7 @@ def test_create_requirements_yaml_with_local_packages(
             ),
             PYTHON_PUBLIC_PACKAGES_KEY: expected,
             PYTHON_LOCAL_PACKAGES_KEY: [str(local_package_path)],
-            PYTHON_CHECK_MODULE_AVAILABILITY_KEY: True,
+            PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
         }
     mock_store_folder_contents.assert_called_once_with(
         str(local_package_path),
@@ -316,7 +316,7 @@ def test_create_requirements_yaml_with_multiple_local_packages(
                 str(local_package_path1),
                 str(local_package_path2),
             ],
-            PYTHON_CHECK_MODULE_AVAILABILITY_KEY: True,
+            PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
         }
     mock_store_folder_contents.assert_any_call(
         str(local_package_path1),

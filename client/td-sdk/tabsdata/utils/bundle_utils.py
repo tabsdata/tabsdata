@@ -39,7 +39,7 @@ IGNORED_FOLDERS = (".venv", ".git", "__pycache__", "target")
 LOCAL_PACKAGES_FOLDER = "local_packages"
 PLUGINS_FOLDER = "plugins"
 
-PYTHON_CHECK_MODULE_AVAILABILITY_KEY = "checkPackagesAvailability"
+PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY = "ignoreUnavailablePackages"
 PYTHON_DEVELOPMENT_PACKAGES_KEY = "developmentPackages"
 PYTHON_LOCAL_PACKAGES_KEY = "localPackages"
 PYTHON_PUBLIC_PACKAGES_KEY = "publicPackages"
@@ -122,7 +122,7 @@ def create_requirements(
         PYTHON_VERSION_KEY: python_version,
         PYTHON_PUBLIC_PACKAGES_KEY: requirements,
         PYTHON_INSTALL_DEPENDENCIES_KEY: False,
-        PYTHON_CHECK_MODULE_AVAILABILITY_KEY: True,
+        PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
 
     if local_packages:

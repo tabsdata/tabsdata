@@ -28,8 +28,8 @@ from yaml.constructor import ConstructorError
 
 from tabsdata.utils.bundle_utils import (
     LOCAL_PACKAGES_FOLDER,
-    PYTHON_CHECK_MODULE_AVAILABILITY_KEY,
     PYTHON_DEVELOPMENT_PACKAGES_KEY,
+    PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
     PYTHON_INSTALL_DEPENDENCIES_KEY,
     PYTHON_PUBLIC_PACKAGES_KEY,
     PYTHON_VERSION_KEY,
@@ -369,7 +369,7 @@ def create_virtual_environment(
     # dependencies.
     install_dependencies = requirements_data.get(PYTHON_INSTALL_DEPENDENCIES_KEY, True)
     check_module_availability = requirements_data.get(
-        PYTHON_CHECK_MODULE_AVAILABILITY_KEY, False
+        PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY, False
     )
 
     # Check if the local packages folder exists
@@ -392,7 +392,7 @@ def create_virtual_environment(
             PYTHON_VERSION_KEY: python_version,
             PYTHON_PUBLIC_PACKAGES_KEY: required_modules,
             PYTHON_INSTALL_DEPENDENCIES_KEY: install_dependencies,
-            PYTHON_CHECK_MODULE_AVAILABILITY_KEY: check_module_availability,
+            PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: check_module_availability,
         }
     )
     if local_packages:
@@ -996,7 +996,7 @@ def main():
         requirements_path = requirements_file.name
         requirements = {
             PYTHON_VERSION_KEY: PYTHON_BASE_VERSION,
-            PYTHON_CHECK_MODULE_AVAILABILITY_KEY: (
+            PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: (
                 tabsdata_provider
                 in (
                     "Archive (Project)",

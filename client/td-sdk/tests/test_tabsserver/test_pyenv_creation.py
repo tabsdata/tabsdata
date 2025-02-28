@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 from tabsdata.utils.bundle_utils import (
-    PYTHON_CHECK_MODULE_AVAILABILITY_KEY,
+    PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
     PYTHON_LOCAL_PACKAGES_KEY,
     PYTHON_PUBLIC_PACKAGES_KEY,
     PYTHON_VERSION_KEY,
@@ -38,7 +38,7 @@ def test_create_virtual_environment_check_availability_false_fails(tmp_path):
         PYTHON_LOCAL_PACKAGES_KEY: [os.getcwd()],
         PYTHON_VERSION_KEY: "3.12",
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3", "doesntexist"],
-        PYTHON_CHECK_MODULE_AVAILABILITY_KEY: False,
+        PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: False,
     }
     incorrect_custom_requirements_path = os.path.join(
         tmp_path, "correct_custom_requirements.yaml"
@@ -63,7 +63,7 @@ def test_create_virtual_environment_check_availability_true_works(tmp_path):
         PYTHON_LOCAL_PACKAGES_KEY: [os.getcwd()],
         PYTHON_VERSION_KEY: "3.12",
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3", "doesntexist"],
-        PYTHON_CHECK_MODULE_AVAILABILITY_KEY: True,
+        PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
     incorrect_custom_requirements_path = os.path.join(
         tmp_path, "correct_custom_requirements.yaml"
