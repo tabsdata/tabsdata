@@ -48,7 +48,7 @@ REQUIRED_COLUMNS_METADATA = {
 
 class Interceptor(InterceptorPlugin, ABC):
     name = "Interceptor Plugin (Standard)"
-    version = "0.9.2"
+    version = "0.9.3"
 
     def __init__(self) -> None:
         FeaturesManager.instance().disable(Feature.ENTERPRISE)
