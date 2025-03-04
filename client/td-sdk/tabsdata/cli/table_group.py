@@ -123,7 +123,7 @@ def list(ctx: click.Context, collection: str):
         for table in list_of_tables:
             cli_table.add_row(
                 table.name,
-                table.function,
+                table.function.name,
             )
 
         click.echo()

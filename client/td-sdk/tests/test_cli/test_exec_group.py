@@ -43,6 +43,7 @@ def test_transaction_list(login, testing_collection_with_table):
 def test_commit_list(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(cli, ["exec", "list-commits"])
+    logger.debug(result.output)
     assert result.exit_code == 0
 
 

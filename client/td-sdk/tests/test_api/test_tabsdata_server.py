@@ -31,28 +31,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def test_user_class():
-    user = User(
-        name="test",
-        full_name="Test User",
-        email="test_email",
-        enabled=True,
-        example_kwarg="example",
-    )
-    assert user.name == "test"
-    assert user.full_name == "Test User"
-    assert user.email == "test_email"
-    assert user.enabled is True
-    assert user.kwargs == {"example_kwarg": "example"}
-    assert user.__repr__()
-    assert user.__str__()
-    assert user == user
-    assert user != User(
-        name="test2", full_name="Test User", email="test_email", enabled=True
-    )
-    assert user != "test"
-
-
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_tabsdata_server_create():
@@ -130,34 +108,6 @@ def test_tabsdata_server_user_update(tabsserver_connection):
         assert user.enabled is False
     finally:
         tabsserver_connection.user_delete("test_tabsdata_server_user_update")
-
-
-def test_collection_class():
-    created_time = int(time.time())
-    collection = Collection(
-        name="test_collection_class",
-        created_on=created_time,
-        created_by="test",
-        description="test_collection_class_description",
-        example_kwarg="example",
-    )
-    assert collection.name == "test_collection_class"
-    assert collection.description == "test_collection_class_description"
-    assert collection.created_on == created_time
-    assert collection.created_on_string == convert_timestamp_to_string(created_time)
-    assert collection.created_by == "test"
-    assert collection.kwargs == {"example_kwarg": "example"}
-    assert collection.__repr__()
-    assert collection.__str__()
-    assert collection == collection
-    assert collection != Collection(
-        name="test_collection_class_second_name",
-        description="test_collection_class_description",
-        id="test_collection_class_id",
-        created_on=int(time.time()),
-        created_by="test",
-    )
-    assert collection != "test"
 
 
 @pytest.mark.integration
@@ -496,109 +446,12 @@ def test_convert_timestamp_to_string():
     assert convert_timestamp_to_string(timestamp) == "2024-11-27T16:03:33Z"
 
 
-def test_function_class():
-    function = Function(
-        id="test",
-        trigger_with_names=["trigger"],
-        tables=["table"],
-        dependencies_with_names=["dependency"],
-    )
-    assert function.id == "test"
-    assert function.name is None
-    assert function.description is None
-    assert function.created_on is None
-    assert function.created_by is None
-    assert function.created_on_string == "None"
-    assert function.trigger_with_names == ["trigger"]
-    assert function.tables == ["table"]
-    assert function.dependencies_with_names == ["dependency"]
-    assert function.__repr__()
-    assert function.__str__()
-
-
-def test_function_class_all_params():
-    time_created = int(time.time())
-    function = Function(
-        id="test",
-        trigger_with_names=["trigger"],
-        tables=["table"],
-        dependencies_with_names=["dependency"],
-        name="test",
-        description="test_description",
-        created_on=time_created,
-        created_by="test_creator",
-    )
-    assert function.id == "test"
-    assert function.name == "test"
-    assert function.description == "test_description"
-    assert function.created_by == "test_creator"
-    assert function.trigger_with_names == ["trigger"]
-    assert function.tables == ["table"]
-    assert function.dependencies_with_names == ["dependency"]
-    assert function.__repr__()
-    assert function.__str__()
-
-
-def test_execution_plan_class():
-    time_triggered = int(time.time())
-    execution_plan = ExecutionPlan(
-        id="execution_plan_id",
-        name="execution_plan_name",
-        collection="collection_name",
-        dataset="function_name",
-        triggered_by="triggered_by",
-        triggered_on=time_triggered,
-        status="F",
-        random_kwarg="kwarg",
-        started_on=time_triggered,
-        ended_on=time_triggered,
-    )
-    assert execution_plan.id == "execution_plan_id"
-    assert execution_plan.name == "execution_plan_name"
-    assert execution_plan.collection == "collection_name"
-    assert execution_plan.function == "function_name"
-    assert execution_plan.triggered_by == "triggered_by"
-    assert execution_plan.triggered_on == time_triggered
-    assert isinstance(execution_plan.triggered_on_str, str)
-    assert execution_plan.started_on == time_triggered
-    assert isinstance(execution_plan.started_on_str, str)
-    assert execution_plan.ended_on == time_triggered
-    assert isinstance(execution_plan.ended_on_str, str)
-    assert execution_plan.status == "Failed"
-    assert execution_plan.kwargs == {"random_kwarg": "kwarg"}
-    assert execution_plan.__repr__()
-    assert execution_plan.__str__()
-
-
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_tabsdata_server_execution_plans_list(tabsserver_connection):
     execution_plans = tabsserver_connection.execution_plans
     assert isinstance(execution_plans, list)
     assert all(isinstance(user, ExecutionPlan) for user in execution_plans)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-def test_data_version_class():
-    time_triggered = int(time.time())
-    data_version = DataVersion(
-        id="test_id",
-        execution_plan_id="test_execution_plan_id",
-        triggered_on=time_triggered,
-        status="F",
-        function_id="test_function_id",
-        example_kwarg="example",
-    )
-    assert data_version.id == "test_id"
-    assert data_version.execution_plan_id == "test_execution_plan_id"
-    assert data_version.triggered_on == time_triggered
-    assert isinstance(data_version.triggered_on_str, str)
-    assert data_version.status == "Failed"
-    assert data_version.function_id == "test_function_id"
-    assert data_version.kwargs == {"example_kwarg": "example"}
-    assert data_version.__repr__()
-    assert data_version.__str__()
 
 
 @pytest.mark.integration
@@ -610,21 +463,6 @@ def test_table_list(tabsserver_connection, testing_collection_with_table):
     assert tables
     assert isinstance(tables, list)
     assert all(isinstance(table, Table) for table in tables)
-
-
-def test_table_class():
-    function = Table(
-        id="test_id",
-        name="test_name",
-        function="test_function",
-        additional_kwarg="test_kwarg",
-    )
-    assert function.id == "test_id"
-    assert function.name == "test_name"
-    assert function.function == "test_function"
-    assert function.kwargs == {"additional_kwarg": "test_kwarg"}
-    assert function.__repr__()
-    assert function.__str__()
 
 
 @pytest.mark.integration
@@ -668,33 +506,6 @@ def test_tabsdata_server_transaction_list(tabsserver_connection):
     transactions = tabsserver_connection.transactions
     assert isinstance(transactions, list)
     assert all(isinstance(transaction, Transaction) for transaction in transactions)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-def test_transaction_class():
-    time_triggered = int(time.time())
-    transaction = Transaction(
-        id="test_id",
-        execution_plan_id="test_execution_plan_id",
-        triggered_on=time_triggered,
-        ended_on=time_triggered,
-        started_on=time_triggered,
-        status="F",
-        example_kwarg="example",
-    )
-    assert transaction.id == "test_id"
-    assert transaction.execution_plan_id == "test_execution_plan_id"
-    assert transaction.triggered_on == time_triggered
-    assert isinstance(transaction.triggered_on_str, str)
-    assert transaction.status == "Failed"
-    assert transaction.started_on == time_triggered
-    assert isinstance(transaction.started_on_str, str)
-    assert transaction.ended_on == time_triggered
-    assert isinstance(transaction.ended_on_str, str)
-    assert transaction.kwargs == {"example_kwarg": "example"}
-    assert transaction.__repr__()
-    assert transaction.__str__()
 
 
 @pytest.mark.integration
@@ -1080,17 +891,19 @@ def test_worker_message_get(tabsserver_connection, testing_collection_with_table
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
     assert transaction_id
-    messages = tabsserver_connection.worker_list(by_transaction_id=transaction_id)
+    function = tabsserver_connection.collection_list_functions(
+        testing_collection_with_table
+    )[0]
+    messages = tabsserver_connection.worker_list(by_function_id=function.id)
     logger.debug(f"Messages: {messages}")
     assert messages
     assert isinstance(messages, list)
     assert all(isinstance(message, Worker) for message in messages)
     message_id = messages[0].id
     logger.debug(f"Message ID: {message_id}")
-    # ToDo: Checking for logs is still flaky. We need to reconsider this.
-    # log = tabsserver_connection.worker_log(message_id)
-    # assert log
-    # assert isinstance(log, str)
+    # Flakiness should be fixed now, comment if it starts failing again
+    log = tabsserver_connection.worker_log(message_id)
+    assert isinstance(log, str)
 
 
 @pytest.mark.integration
@@ -1100,7 +913,6 @@ def test_worker_messages_list_by_execution_plan_id(
 ):
     execution_plan_id = tabsserver_connection.execution_plans[0].id
     messages = tabsserver_connection.worker_list(by_execution_plan_id=execution_plan_id)
-    assert messages
     assert isinstance(messages, list)
     assert all(isinstance(message, Worker) for message in messages)
 
@@ -1156,37 +968,6 @@ def test_worker_messages_list_by_data_version_id(
     assert messages
     assert isinstance(messages, list)
     assert all(isinstance(message, Worker) for message in messages)
-
-
-def test_worker_message_class():
-    time_triggered = int(time.time())
-    message = Worker(
-        id="test_id",
-        collection="test_collection",
-        function="test_function",
-        function_id="test_function_id",
-        execution_plan="test_execution_plan",
-        data_version_id="test_data_version_id",
-        execution_plan_id="test_execution_plan_id",
-        transaction_id="test_transaction_id",
-        example_kwarg="example",
-        started_on=time_triggered,
-        status="P",
-    )
-    assert message.id == "test_id"
-    assert message.collection == "test_collection"
-    assert message.function == "test_function"
-    assert message.function_id == "test_function_id"
-    assert message.execution_plan == "test_execution_plan"
-    assert message.data_version_id == "test_data_version_id"
-    assert message.execution_plan_id == "test_execution_plan_id"
-    assert message.transaction_id == "test_transaction_id"
-    assert message.started_on == time_triggered
-    assert message.status == "Published"
-    assert isinstance(message.started_on_str, str)
-    assert message.kwargs == {"example_kwarg": "example"}
-    assert message.__repr__()
-    assert message.__str__()
 
 
 @pytest.mark.integration

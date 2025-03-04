@@ -114,7 +114,7 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
                     function.created_by,
                     beautify_list(function.dependencies_with_names),
                     beautify_list(function.trigger_with_names),
-                    beautify_list(function.tables),
+                    beautify_list([table.name for table in function.tables]),
                 )
 
             click.echo()
@@ -142,7 +142,7 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
                 function.created_by,
                 beautify_list(function.dependencies_with_names),
                 beautify_list(function.trigger_with_names),
-                beautify_list(function.tables),
+                beautify_list([table.name for table in function.tables]),
             )
 
             click.echo()

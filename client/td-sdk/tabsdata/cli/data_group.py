@@ -53,8 +53,8 @@ def versions(ctx: click.Context, collection: str, function: str):
         for data_version in data_version_list:
             table.add_row(
                 data_version.id,
-                data_version.function_id,
-                data_version.execution_plan_id,
+                data_version.function.id,
+                data_version.execution_plan.id,
                 data_version.triggered_on_str,
                 data_version.status,
             )

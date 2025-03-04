@@ -96,8 +96,8 @@ def list_plans(ctx: click.Context):
             table.add_row(
                 plan.id,
                 plan.name,
-                plan.collection,
-                plan.function,
+                plan.collection.name,
+                plan.function.name,
                 plan.triggered_on_str,
                 plan.status,
             )
@@ -127,7 +127,7 @@ def list_trxs(ctx: click.Context):
         for plan in list_of_transactions:
             table.add_row(
                 plan.id,
-                plan.execution_plan_id,
+                plan.execution_plan.id,
                 plan.triggered_on_str,
                 plan.status,
             )
@@ -210,12 +210,12 @@ def list_workers(
         for worker in list_of_workers:
             table.add_row(
                 worker.id,
-                worker.collection,
-                worker.function,
-                worker.function_id,
-                worker.execution_plan,
-                worker.execution_plan_id,
-                worker.transaction_id,
+                worker.collection.name,
+                worker.function.name,
+                worker.function.id,
+                worker.execution_plan.name,
+                worker.execution_plan.id,
+                worker.transaction.id,
                 worker.started_on_str,
                 worker.status,
             )
