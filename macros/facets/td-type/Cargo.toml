@@ -16,7 +16,7 @@ authors = { workspace = true }
 proc-macro = true
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "utoipa"]
+ignored = ["openssl", "strum", "strum_macros", "thiserror"]
 
 [features]
 
@@ -28,6 +28,8 @@ dummy = []
 # Internal dependencies
 
 td-apiforge = { workspace = true }
+td-error = { workspace = true }
+td-shared = { workspace = true }
 
 # External dependencies
 
@@ -35,12 +37,19 @@ chrono = { workspace = true, features = ["serde"] }
 darling = { workspace = true }
 derive_builder = { workspace = true }
 getset = { workspace = true }
+lazy_static = { workspace = true }
 quote = { workspace = true }
+paste = { workspace = true }
 proc-macro2 = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "runtime-tokio", "macros", "chrono"] }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 syn = { workspace = true, features = ["full"] }
-utoipa = { workspace = true }
+thiserror = { workspace = true }
+utoipa = { workspace = true, features = ["uuid"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

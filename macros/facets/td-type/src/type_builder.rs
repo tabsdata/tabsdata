@@ -14,7 +14,7 @@ pub fn dlo(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
-        #[builder(setter(into))]
+        #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
     };
@@ -27,7 +27,7 @@ pub fn dao(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
-        #[builder(setter(into))]
+        #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
     };
@@ -41,7 +41,7 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #[td_apiforge::api_server_schema]
         #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
-        #[builder(setter(into))]
+        #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
     };

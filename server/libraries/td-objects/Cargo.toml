@@ -72,7 +72,7 @@ sqlx = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-utoipa = { workspace = true, features = ["axum_extras", "preserve_order"] }
+utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
 
 [dev-dependencies]
 td-database = { workspace = true, features = ["td-test"] }

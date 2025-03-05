@@ -8,6 +8,7 @@ use proc_macro::TokenStream;
 
 mod service_type;
 mod type_builder;
+mod typed_types;
 
 #[proc_macro_attribute]
 pub fn service_type(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -35,4 +36,9 @@ pub fn Dlo(args: TokenStream, item: TokenStream) -> TokenStream {
 #[allow(non_snake_case)]
 pub fn Dto(args: TokenStream, item: TokenStream) -> TokenStream {
     type_builder::dto(args, item)
+}
+
+#[proc_macro_attribute]
+pub fn typed(args: TokenStream, item: TokenStream) -> TokenStream {
+    typed_types::typed_basic(args, item)
 }
