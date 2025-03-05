@@ -4,6 +4,11 @@
 use crate as td_common;
 use data_encoding::BASE32HEX_NOPAD;
 use serde::{Deserialize, Serialize};
+use sqlx::encode::IsNull;
+use sqlx::error::BoxDynError;
+use sqlx::sqlite::{SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef};
+use sqlx::{Decode, Encode, Sqlite, Type};
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::ops::Add;
 use std::time::{Duration, SystemTime};
@@ -79,9 +84,35 @@ impl From<Id> for String {
     }
 }
 
+impl Type<Sqlite> for Id {
+    fn type_info() -> SqliteTypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+
+impl Encode<'_, Sqlite> for Id {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<SqliteArgumentValue<'_>>,
+    ) -> Result<IsNull, BoxDynError> {
+        let id = self.to_string();
+        args.push(SqliteArgumentValue::Text(Cow::Owned(id)));
+
+        Ok(IsNull::No)
+    }
+}
+
+impl<'r> Decode<'r, Sqlite> for Id {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, BoxDynError> {
+        let id = <String as Decode<Sqlite>>::decode(value)?;
+        Id::try_from(&id).map_err(|e| Box::new(e) as BoxDynError)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::SqliteConnection;
     use std::thread::sleep;
     use std::time::{Duration, SystemTime};
     use uuid::{Bytes, Uuid};
@@ -127,5 +158,43 @@ mod tests {
         sleep(Duration::from_millis(1));
         let id2 = id();
         assert!(id1.to_string() < id2.to_string());
+    }
+
+    #[tokio::test]
+    async fn test_sqlx_encode_decode() {
+        let id = id();
+        let db = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        let mut conn = db.acquire().await.unwrap();
+        let conn = &mut conn as &mut SqliteConnection;
+        sqlx::query(
+            r#"
+            CREATE TABLE test (
+                id TEXT PRIMARY KEY
+            )
+            "#,
+        )
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO test (id) VALUES (?)")
+            .bind(id)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            id: Id,
+        }
+
+        let got: Row = sqlx::query_as("SELECT id FROM test")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+
+        assert_eq!(id, got.id);
     }
 }

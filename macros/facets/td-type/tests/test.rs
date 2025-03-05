@@ -79,4 +79,16 @@ pub mod td_common {
             }
         }
     }
+
+    pub mod time {
+        use chrono::{DateTime, Utc};
+
+        pub struct UniqueUtc {}
+
+        impl UniqueUtc {
+            pub async fn now_millis() -> DateTime<Utc> {
+                Utc::now()
+            }
+        }
+    }
 }

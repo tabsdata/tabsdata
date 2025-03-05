@@ -206,7 +206,7 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
     let expanded = quote! {
         #(#attrs)*
         #[td_apiforge::api_server_schema]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         pub struct #name(String);
 
         #[td_error::td_error]
@@ -315,6 +315,17 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
                 self.0.serialize(serializer)
             }
         }
+
+        impl sqlx::Type<sqlx::Sqlite> for #name {
+
+            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+                <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+            }
+
+            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
+                <String as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+            }
+        }
     };
 
     expanded
@@ -337,7 +348,7 @@ pub fn typed_int<T: FromStr + ToTokens + PartialOrd>(
 
     let expanded = quote! {
         #[td_apiforge::api_server_schema]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         #expanded
     };
 
@@ -352,7 +363,7 @@ pub fn typed_float<T: FromStr + ToTokens + PartialOrd>(
 
     let expanded = quote! {
         #[td_apiforge::api_server_schema]
-        #[derive(Debug, Clone, PartialEq, PartialOrd)]
+        #[derive(Debug, Clone, PartialEq, PartialOrd, sqlx::Decode, sqlx::Encode)]
         #expanded
     };
 
@@ -483,6 +494,18 @@ pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
                 self.0.serialize(serializer)
             }
         }
+
+        impl sqlx::Type<sqlx::Sqlite> for #name {
+
+            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+                <#int_type as sqlx::Type<sqlx::Sqlite>>::type_info()
+            }
+
+            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
+                <#int_type as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+            }
+        }
+
     };
 
     expanded
@@ -512,7 +535,7 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
     let expanded = quote! {
         #(#attrs)*
         #[td_apiforge::api_server_schema]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         pub struct #name(bool);
 
         impl Default for #name {
@@ -566,6 +589,18 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
                 self.0.serialize(serializer)
             }
         }
+
+        impl sqlx::Type<sqlx::Sqlite> for #name {
+
+            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+                <bool as sqlx::Type<sqlx::Sqlite>>::type_info()
+            }
+
+            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
+                <bool as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+            }
+        }
+
     };
 
     expanded
@@ -595,7 +630,7 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
 
     let expanded = quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         pub struct #name(td_common::id::Id);
 
         impl Default for #name {
@@ -605,6 +640,11 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
         }
 
         impl #name {
+
+            fn new() -> Self {
+                Self(td_common::id::id())
+            }
+
             fn parse(val: impl Into<td_common::id::Id>) -> Result<Self, td_common::error::TdError> {
                 let val = val.into();
                 Ok(Self(val))
@@ -677,6 +717,18 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
                 self.0.serialize(serializer)
             }
         }
+
+        impl sqlx::Type<sqlx::Sqlite> for #name {
+
+            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+                <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+            }
+
+            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
+                <String as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+            }
+        }
+
     };
 
     expanded
@@ -709,7 +761,7 @@ pub fn typed_timestamp(
 
     let expanded = quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         pub struct #name(chrono::DateTime<chrono::Utc>);
 
         impl Default for #name {
@@ -719,6 +771,10 @@ pub fn typed_timestamp(
         }
 
         impl #name {
+            async fn now() -> Self {
+                Self(td_common::time::UniqueUtc::now_millis().await)
+            }
+
             fn parse(val: impl Into<chrono::DateTime<chrono::Utc>>) -> Result<Self, td_common::error::TdError> {
                 let val = val.into();
                 Ok(Self(val))
@@ -791,6 +847,18 @@ pub fn typed_timestamp(
                 self.0.serialize(serializer)
             }
         }
+
+        impl sqlx::Type<sqlx::Sqlite> for #name {
+
+            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+                <chrono::DateTime<chrono::Utc> as sqlx::Type<sqlx::Sqlite>>::type_info()
+            }
+
+            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
+                <chrono::DateTime<chrono::Utc> as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+            }
+        }
+
     };
 
     expanded
