@@ -67,6 +67,7 @@ exclude = [
     "macros/facets/td-concrete",
     "macros/facets/td-error",
     "macros/facets/td-type",
+    "macros/facets/tm-workspace",
 ]
 
 [[bin]]
@@ -154,6 +155,9 @@ version = "0.9.3"
 path = "macros/facets/td-type"
 version = "0.9.3"
 
+[workspace.dependencies.tm-workspace]
+path = "macros/facets/tm-workspace"
+version = "0.9.3"
 
 ## Libraries
 

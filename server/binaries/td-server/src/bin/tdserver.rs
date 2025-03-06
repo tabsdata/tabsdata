@@ -12,11 +12,15 @@ use td_common::logging;
 use td_common::logging::LogOutput;
 use terminal_size::{terminal_size, Width};
 use textwrap::fill;
+use tm_workspace::workspace_root;
 use tracing::Level;
 
 const ACK: &str = ".ack";
 
-const BANNER: &str = include_str!("../../../../../variant/assets/manifest/BANNER");
+const BANNER: &str = include_str!(concat!(
+    workspace_root!(),
+    "/variant/assets/manifest/BANNER"
+));
 const VERSION: &str = include_str!("../../../../../assets/manifest/VERSION");
 
 fn check_banner() -> std::io::Result<()> {

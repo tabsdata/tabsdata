@@ -6,6 +6,7 @@ env_scripts = [
     # Display build information
     '''
     #!@duckscript
+    echo "CARGO_MANIFEST_DIR.............................: '${CARGO_MANIFEST_DIR}'"
     echo "CARGO_MAKE_PROFILE.............................: '${CARGO_MAKE_PROFILE}'"
     echo "CARGO_MAKE_CARGO_PROFILE.......................: '${CARGO_MAKE_CARGO_PROFILE}'"
     echo "CARGO_MAKE_RUST_CHANNEL........................: '${CARGO_MAKE_RUST_CHANNEL}'"

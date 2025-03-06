@@ -47,6 +47,7 @@ members = [
     "facets/td-concrete",
     "facets/td-error",
     "facets/td-type",
+    "facets/tm-workspace"
 ]
 
 [[bin]]
