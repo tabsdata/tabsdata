@@ -13,6 +13,7 @@ from time import sleep
 import boto3
 import cx_Oracle
 import docker
+import hvac
 import mysql.connector
 import polars as pl
 import psycopg2
@@ -21,6 +22,7 @@ import yaml
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
 
+from tabsdata import HashiCorpSecret
 from tabsdata.utils.tableframe._generators import _id
 
 # The following non-import code must execute early to set up the environment correctly.
@@ -67,6 +69,14 @@ DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME = "pytest_exclusive_mysql_container"
 DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME = "pytest_exclusive_oracle_container"
 DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME = "pytest_exclusive_postgres_container"
 DEFAULT_LOGS_FILE = "fn.log"
+
+DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME = "pytest_exclusive_hashicorp_container"
+HASHICORP_PORT = 8200
+HASHICORP_TESTING_SECRET_PATH = "tabsdata/testing/path"
+HASHICORP_TESTING_SECRET_NAME = "testing_secret_name"
+HASHICORP_TESTING_SECRET_VALUE = "testing_secret_value"
+HASHICORP_TESTING_TOKEN = "testing_token"
+HASHICORP_TESTING_URL = "http://127.0.0.1:8200"
 
 TESTING_AWS_ACCESS_KEY_ID = "TRANSPORTER_AWS_ACCESS_KEY_ID"
 TESTING_AWS_SECRET_ACCESS_KEY = "TRANSPORTER_AWS_SECRET_ACCESS_KEY"
@@ -157,6 +167,31 @@ def testing_mariadb(tmp_path_factory, worker_id):
         with FileLock(str(fn) + ".lock"):
             # only one worker will be able to create the database
             yield create_docker_mariadb_database()
+
+
+@pytest.fixture(scope="session")
+def testing_hashicorp_vault(tmp_path_factory, worker_id):
+    os.environ[HashiCorpSecret.VAULT_URL_ENV_VAR] = HASHICORP_TESTING_URL
+    os.environ[HashiCorpSecret.VAULT_TOKEN_ENV_VAR] = HASHICORP_TESTING_TOKEN
+    # Needed for test_input_s3_hashicorp_secret_vault_name to work
+    os.environ[HashiCorpSecret.VAULT_URL_ENV_VAR.replace("HASHICORP", "H1")] = (
+        HASHICORP_TESTING_URL
+    )
+    os.environ[HashiCorpSecret.VAULT_TOKEN_ENV_VAR.replace("HASHICORP", "H1")] = (
+        HASHICORP_TESTING_TOKEN
+    )
+    if worker_id == "master":
+        # not executing in with multiple workers, just produce the data and let
+        # pytest's fixture caching do its job
+        yield create_docker_hashicorp_vault()
+    else:
+        # get the temp directory shared by all workers
+        root_tmp_dir = tmp_path_factory.getbasetemp().parent
+
+        fn = root_tmp_dir / "docker_hashicorp_vault_creation"
+        with FileLock(str(fn) + ".lock"):
+            # only one worker will be able to create the database
+            yield create_docker_hashicorp_vault()
 
 
 @pytest.fixture(scope="session")
@@ -390,6 +425,63 @@ def create_docker_mysql_database():
         return
 
 
+def create_docker_hashicorp_vault():
+    logger.info("Starting HashiCorp vault container")
+    client = docker.from_env()
+    if client.containers.list(
+        filters={"name": DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}
+    ):
+        logger.info("HashiCorp vault container already exists")
+        return
+    else:
+        client.containers.run(
+            "hashicorp/vault",
+            name=DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
+            environment=[
+                f"VAULT_DEV_ROOT_TOKEN_ID={HASHICORP_TESTING_TOKEN}",
+            ],
+            ports={"8200/tcp": HASHICORP_PORT},
+            detach=True,
+        )
+        # Wait for the database to be ready
+        retry = 0
+        while True:
+            try:
+                hashicorp_client = hvac.Client(
+                    url=HASHICORP_TESTING_URL,
+                    token=HASHICORP_TESTING_TOKEN,
+                    verify=True,
+                )
+                hashicorp_client.secrets.kv.v2.create_or_update_secret(
+                    path=HASHICORP_TESTING_SECRET_PATH,
+                    secret={
+                        HASHICORP_TESTING_SECRET_NAME: HASHICORP_TESTING_SECRET_VALUE
+                    },
+                )
+                # Needed for test_input_s3_hashicorp_secret to work
+                hashicorp_client.secrets.kv.v2.create_or_update_secret(
+                    path="aws/s3creds",
+                    secret={
+                        "access_key_id": os.environ.get(
+                            TESTING_AWS_ACCESS_KEY_ID, "FAKE_ID"
+                        )
+                    },
+                )
+                return
+            except Exception as err:
+                retry += 1
+                # Waiting for up to 10' & 30'', as young Gauss already knew.
+                if retry == MAXIMUM_RETRY_COUNT:
+                    logger.error(f"Error connecting to HashiCorp vault: {err}")
+                    raise err
+                else:
+                    logger.warning(
+                        f"Error connecting to HashiCorp vault, retrying in {retry} "
+                        "second(s)"
+                    )
+                    sleep(retry)
+
+
 def create_docker_mariadb_database():
     logger.info("Starting MariaDB container")
     client = docker.from_env()
@@ -576,6 +668,7 @@ def remove_docker_containers():
         f"({DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME}"
         f"|{DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME}"
         f"|{DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME}"
+        f"|{DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}"
         f"|{DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME})"
     )
     for container in client.containers.list(filters={"name": name_pattern}):

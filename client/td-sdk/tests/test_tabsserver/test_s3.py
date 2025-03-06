@@ -39,6 +39,12 @@ from tests.testing_resources.test_input_s3_explicit_format.example import (
 from tests.testing_resources.test_input_s3_explicit_format_object.example import (
     input_s3_explicit_format_object,
 )
+from tests.testing_resources.test_input_s3_hashicorp_secret.example import (
+    input_s3_hashicorp_secret,
+)
+from tests.testing_resources.test_input_s3_hashicorp_secret_vault_name.example import (
+    input_s3_hashicorp_secret_vault_name,
+)
 from tests.testing_resources.test_input_s3_modified_uri.example import (
     input_s3_modified_uri,
 )
@@ -1071,3 +1077,85 @@ def test_output_s3_ndjson(tmp_path, s3_client):
     finally:
         # Clean up the S3 bucket
         s3_client.delete_object(Bucket=bucket_name, Key=file_name)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.hashicorp
+def test_input_s3_hashicorp_secret(tmp_path, testing_hashicorp_vault):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_s3_hashicorp_secret,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_s3_hashicorp_secret",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.hashicorp
+def test_input_s3_hashicorp_secret_vault_name(tmp_path, testing_hashicorp_vault):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_s3_hashicorp_secret_vault_name,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_s3_hashicorp_secret_vault_name",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)

@@ -5,10 +5,16 @@
 import os
 
 import pytest
+from pytest import MonkeyPatch
 
 from tabsdata import DirectSecret, EnvironmentSecret, HashiCorpSecret
 from tabsdata.exceptions import ErrorCode, SecretConfigurationError
 from tabsdata.secret import build_secret
+from tests.conftest import (
+    HASHICORP_TESTING_SECRET_NAME,
+    HASHICORP_TESTING_SECRET_PATH,
+    HASHICORP_TESTING_SECRET_VALUE,
+)
 
 
 def test_direct_secret_initialization():
@@ -81,7 +87,8 @@ def test_build_secret_from_multiple_dictionary_id_raises_exception():
             DirectSecret.SECRET_DIRECT_VALUE_KEY: "secret_thing",
         },
         HashiCorpSecret.IDENTIFIER: {
-            DirectSecret.SECRET_DIRECT_VALUE_KEY: "secret_thing",
+            HashiCorpSecret.NAME_KEY: "another_secret_thing",
+            HashiCorpSecret.PATH_KEY: "secret_thing",
         },
     }
     with pytest.raises(SecretConfigurationError) as e:
@@ -103,11 +110,15 @@ def test_secret_object_and_dict_not_equal():
 
 
 def test_build_hashicorp_secret():
-    hashicorp_secret = HashiCorpSecret("secret_thing_name")
-    assert hashicorp_secret.secret_name == "secret_thing_name"
+    hashicorp_secret = HashiCorpSecret("secret_thing_path", "secret_thing_name")
+    assert hashicorp_secret.name == "secret_thing_name"
+    assert hashicorp_secret.path == "secret_thing_path"
+    assert hashicorp_secret.vault == "HASHICORP"
     assert hashicorp_secret.to_dict() == {
         HashiCorpSecret.IDENTIFIER: {
-            HashiCorpSecret.SECRET_NAME_KEY: "secret_thing_name",
+            HashiCorpSecret.PATH_KEY: "secret_thing_path",
+            HashiCorpSecret.NAME_KEY: "secret_thing_name",
+            HashiCorpSecret.VAULT_KEY: "HASHICORP",
         }
     }
     assert build_secret(hashicorp_secret) == hashicorp_secret
@@ -115,16 +126,119 @@ def test_build_hashicorp_secret():
     assert hashicorp_secret.__repr__()
 
 
-def test_hashicorp_secret_value():
-    hashicorp_secret = HashiCorpSecret("secret_thing_name")
-    with pytest.raises(NotImplementedError):
+def test_build_hashicorp_secret_with_vault_name():
+    hashicorp_secret = HashiCorpSecret(
+        "secret_thing_path", "secret_thing_name", vault="TESTING_VAULT_NAME"
+    )
+    assert hashicorp_secret.name == "secret_thing_name"
+    assert hashicorp_secret.path == "secret_thing_path"
+    assert hashicorp_secret.vault == "TESTING_VAULT_NAME"
+    assert hashicorp_secret.to_dict() == {
+        HashiCorpSecret.IDENTIFIER: {
+            HashiCorpSecret.PATH_KEY: "secret_thing_path",
+            HashiCorpSecret.NAME_KEY: "secret_thing_name",
+            HashiCorpSecret.VAULT_KEY: "TESTING_VAULT_NAME",
+        }
+    }
+    assert build_secret(hashicorp_secret) == hashicorp_secret
+    assert build_secret(hashicorp_secret.to_dict()) == hashicorp_secret
+    assert hashicorp_secret.__repr__()
+
+
+@pytest.mark.hashicorp
+def test_hashicorp_secret_value(testing_hashicorp_vault):
+    hashicorp_secret = HashiCorpSecret(
+        HASHICORP_TESTING_SECRET_PATH, HASHICORP_TESTING_SECRET_NAME
+    )
+    assert hashicorp_secret.secret_value == HASHICORP_TESTING_SECRET_VALUE
+
+
+@pytest.mark.hashicorp
+def test_hashicorp_secret_value_vault_name(testing_hashicorp_vault):
+    hashicorp_secret = HashiCorpSecret(
+        HASHICORP_TESTING_SECRET_PATH, HASHICORP_TESTING_SECRET_NAME, vault="H1"
+    )
+    assert hashicorp_secret.secret_value == HASHICORP_TESTING_SECRET_VALUE
+
+
+@pytest.mark.hashicorp
+def test_hashicorp_secret_value_vault_name_no_exists(testing_hashicorp_vault):
+    hashicorp_secret = HashiCorpSecret(
+        HASHICORP_TESTING_SECRET_PATH,
+        HASHICORP_TESTING_SECRET_NAME,
+        vault="NO_EXISTS",
+    )
+    with pytest.raises(ValueError):
         _ = hashicorp_secret.secret_value
+
+
+@pytest.mark.hashicorp
+def test_hashicorp_secret_name_not_exist(testing_hashicorp_vault):
+    hashicorp_secret = HashiCorpSecret(HASHICORP_TESTING_SECRET_PATH, "does_not_exist")
+    with pytest.raises(ValueError):
+        _ = hashicorp_secret.secret_value
+
+
+@pytest.mark.hashicorp
+def test_hashicorp_secret_path_not_exist(testing_hashicorp_vault):
+    hashicorp_secret = HashiCorpSecret("does_not_exist", HASHICORP_TESTING_SECRET_NAME)
+    with pytest.raises(ValueError):
+        _ = hashicorp_secret.secret_value
+
+
+@pytest.mark.hashicorp
+def test_hashicorp_secret_url_env_var_not_exist(testing_hashicorp_vault):
+    with MonkeyPatch.context() as mp:
+        mp.setenv(HashiCorpSecret.VAULT_URL_ENV_VAR, "WRONG_URL")
+        hashicorp_secret = HashiCorpSecret(
+            HASHICORP_TESTING_SECRET_PATH, HASHICORP_TESTING_SECRET_NAME
+        )
+        with pytest.raises(ValueError):
+            _ = hashicorp_secret.secret_value
+
+
+@pytest.mark.hashicorp
+def test_hashicorp_secret_token_env_var_not_exist(testing_hashicorp_vault):
+    with MonkeyPatch.context() as mp:
+        mp.setenv(HashiCorpSecret.VAULT_TOKEN_ENV_VAR, "WRONG_TOKEN")
+        hashicorp_secret = HashiCorpSecret(
+            HASHICORP_TESTING_SECRET_PATH, HASHICORP_TESTING_SECRET_NAME
+        )
+        with pytest.raises(ValueError):
+            _ = hashicorp_secret.secret_value
+
+
+def test_hashicorp_secret_vault_wrong_type():
+    with pytest.raises(SecretConfigurationError) as e:
+        HashiCorpSecret("secret_thing_path", "secret_thing_name", vault=42)
+    assert e.value.error_code == ErrorCode.SCE4
+
+
+def test_hashicorp_secret_vault_wrong_value():
+    with pytest.raises(SecretConfigurationError) as e:
+        HashiCorpSecret("secret_thing_path", "secret_thing_name", vault="a")
+    assert e.value.error_code == ErrorCode.SCE5
+    with pytest.raises(SecretConfigurationError) as e:
+        HashiCorpSecret("secret_thing_path", "secret_thing_name", vault="3")
+    assert e.value.error_code == ErrorCode.SCE5
+    with pytest.raises(SecretConfigurationError) as e:
+        HashiCorpSecret("secret_thing_path", "secret_thing_name", vault="3A_")
+    assert e.value.error_code == ErrorCode.SCE5
+    with pytest.raises(SecretConfigurationError) as e:
+        HashiCorpSecret("secret_thing_path", "secret_thing_name", vault="A3v")
+    assert e.value.error_code == ErrorCode.SCE5
+    with pytest.raises(SecretConfigurationError) as e:
+        HashiCorpSecret("secret_thing_path", "secret_thing_name", vault="")
+    assert e.value.error_code == ErrorCode.SCE5
+    with pytest.raises(SecretConfigurationError) as e:
+        HashiCorpSecret("secret_thing_path", "secret_thing_name", vault="A3+")
+    assert e.value.error_code == ErrorCode.SCE5
 
 
 def test_secret_repr():
     secret = DirectSecret("secret_thing")
     assert secret.__repr__()
-    hashicorp_secret = HashiCorpSecret("secret_thing_name")
+    hashicorp_secret = HashiCorpSecret("secret_thing_path", "secret_thing_name")
     assert hashicorp_secret.__repr__()
     environment_secret = EnvironmentSecret("secret_variable_name")
     assert environment_secret.__repr__()

@@ -3,8 +3,11 @@
 #
 
 import os
+import re
 from abc import ABC, abstractmethod
 from enum import Enum
+
+import hvac
 
 from tabsdata.exceptions import ErrorCode, SecretConfigurationError
 
@@ -44,13 +47,17 @@ class Secret(ABC):
         return f"{self.__class__.__name__}({self.to_dict()[self.IDENTIFIER]})"
 
 
-# TODO: Implement the actual functionality of the HashiCorpSecret class once the backend
-#  implementation is ready. https://tabsdata.atlassian.net/browse/TAB-95
 class HashiCorpSecret(Secret):
     """Secrets class representing a secret stored in Hashicorp Vault.
 
     Attributes:
-        secret_name (str): The name of the secret in Hashicorp Vault.
+        path (str): The path to the secret in Hashicorp Vault.
+        name (str): The name of the secret in Hashicorp Vault.
+        vault (str): If multiple vaults exist in the system, the name of the vault to
+            use. When executing in the server, the URL and token associated to that
+            specific vault will be used. The name can only contain uppercase letters,
+            numbers and underscores, and can't begin with a number. Defaults to
+            "HASHICORP".
 
     Methods:
         to_dict() -> dict: Convert the HashiCorpSecret object to a dictionary.
@@ -59,16 +66,43 @@ class HashiCorpSecret(Secret):
 
     IDENTIFIER = SecretIdentifier.HASHICORP_SECRET.value
 
-    SECRET_NAME_KEY = "secret_name"
+    PATH_KEY = "path"
+    NAME_KEY = "name"
+    VAULT_KEY = "vault"
 
-    def __init__(self, secret_name: str):
+    VAULT_TOKEN_ENV_VAR = "TDS_HASHICORP_TOKEN"
+    VAULT_URL_ENV_VAR = "TDS_HASHICORP_URL"
+
+    def __init__(self, path: str, name: str, vault: str = "HASHICORP"):
         """
         Initialize the HashiCorpSecret object.
 
         Args:
-            secret_name (str): The name of the secret in Hashicorp Vault.
+            path (str): The path to the secret in Hashicorp Vault.
+            name (str): The name of the secret in Hashicorp Vault.
+            vault (str, optional): If multiple vaults exist in the system, the name
+                of the vault to use. When executing in the server, the URL and token
+                associated to that specific vault will be used. The name can only
+                contain uppercase letters, numbers and underscores, and can't begin
+                with a number. Defaults to "HASHICORP".
         """
-        self.secret_name = secret_name
+        self.path = path
+        self.name = name
+        self.vault = vault
+
+    @property
+    def vault(self) -> str:
+        return self._vault
+
+    @vault.setter
+    def vault(self, vault: str):
+        if not isinstance(vault, str):
+            raise SecretConfigurationError(ErrorCode.SCE4, type(vault))
+        pattern = r"^[A-Z_][A-Z0-9_]*$"
+        is_valid = bool(re.match(pattern, vault))
+        if not is_valid:
+            raise SecretConfigurationError(ErrorCode.SCE5, vault)
+        self._vault = vault
 
     def to_dict(self) -> dict:
         """
@@ -79,7 +113,9 @@ class HashiCorpSecret(Secret):
         """
         return {
             self.IDENTIFIER: {
-                self.SECRET_NAME_KEY: self.secret_name,
+                self.PATH_KEY: self.path,
+                self.NAME_KEY: self.name,
+                self.VAULT_KEY: self.vault,
             }
         }
 
@@ -92,10 +128,36 @@ class HashiCorpSecret(Secret):
         Returns:
             str: The secret value.
         """
-        raise NotImplementedError(
-            "This method is not implemented yet."
-            " https://tabsdata.atlassian.net/browse/TAB-95"
-        )
+        try:
+            vault_url_env_var = (
+                self.VAULT_URL_ENV_VAR.replace("HASHICORP", self.vault)
+                if self.vault
+                else self.VAULT_URL_ENV_VAR
+            )
+            vault_url = os.environ[vault_url_env_var]
+        except KeyError:
+            raise ValueError(f"Environment variable {vault_url_env_var} not found.")
+        try:
+            vault_token_env_var = (
+                self.VAULT_TOKEN_ENV_VAR.replace("HASHICORP", self.vault)
+                if self.vault
+                else self.VAULT_TOKEN_ENV_VAR
+            )
+            vault_token = os.environ[vault_token_env_var]
+        except KeyError:
+            raise ValueError(f"Environment variable {vault_token_env_var} not found.")
+        try:
+            client = hvac.Client(url=vault_url, token=vault_token)
+            secret = client.secrets.kv.read_secret_version(
+                self.path, raise_on_deleted_version=False
+            )
+            return secret["data"]["data"][self.name]
+        except Exception:
+            raise ValueError(
+                "Error while retrieving secret from Hashicorp Vault. "
+                "Please verify the secret path and name, as well as the "
+                "environment variables for the URL and the token."
+            )
 
 
 class DirectSecret(Secret):

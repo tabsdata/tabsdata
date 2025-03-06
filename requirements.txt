@@ -8,6 +8,7 @@ click==8.1.8
 cloudpickle==3.1.1
 connectorx==0.4.2
 filelock==3.17.0
+hvac==2.3.0
 importlib_metadata==8.6.1
 numpy==2.2.3
 pandas==2.2.3

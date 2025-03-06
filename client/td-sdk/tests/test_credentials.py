@@ -48,10 +48,12 @@ def test_account_key_credentials_update():
     credentials.account_key = "new_test_password"
     assert credentials.account_name == DirectSecret("new_test_user")
     assert credentials.account_key == DirectSecret("new_test_password")
-    credentials.account_name = HashiCorpSecret("new_test_user")
-    credentials.account_key = HashiCorpSecret("new_test_password")
-    assert credentials.account_name == HashiCorpSecret("new_test_user")
-    assert credentials.account_key == HashiCorpSecret("new_test_password")
+    credentials.account_name = HashiCorpSecret("secret_path", "new_test_user")
+    credentials.account_key = HashiCorpSecret("secret_path", "new_test_password")
+    assert credentials.account_name == HashiCorpSecret("secret_path", "new_test_user")
+    assert credentials.account_key == HashiCorpSecret(
+        "secret_path", "new_test_password"
+    )
 
 
 def test_account_key_credentials_from_dictionary():
@@ -116,11 +118,17 @@ def test_s3_access_key_credentials_update():
     assert credentials.aws_secret_access_key == DirectSecret(
         "new_test_secret_access_key"
     )
-    credentials.aws_access_key_id = HashiCorpSecret("new_test_access_key_id")
-    credentials.aws_secret_access_key = HashiCorpSecret("new_test_secret_access_key")
-    assert credentials.aws_access_key_id == HashiCorpSecret("new_test_access_key_id")
+    credentials.aws_access_key_id = HashiCorpSecret(
+        "secret_path", "new_test_access_key_id"
+    )
+    credentials.aws_secret_access_key = HashiCorpSecret(
+        "secret_path", "new_test_secret_access_key"
+    )
+    assert credentials.aws_access_key_id == HashiCorpSecret(
+        "secret_path", "new_test_access_key_id"
+    )
     assert credentials.aws_secret_access_key == HashiCorpSecret(
-        "new_test_secret_access_key"
+        "secret_path", "new_test_secret_access_key"
     )
 
 
@@ -170,10 +178,10 @@ def test_user_password_credentials_update():
     credentials.password = "new_test_password"
     assert credentials.user == DirectSecret("new_test_user")
     assert credentials.password == DirectSecret("new_test_password")
-    credentials.user = HashiCorpSecret("new_test_user")
-    credentials.password = HashiCorpSecret("new_test_password")
-    assert credentials.user == HashiCorpSecret("new_test_user")
-    assert credentials.password == HashiCorpSecret("new_test_password")
+    credentials.user = HashiCorpSecret("secret_path", "new_test_user")
+    credentials.password = HashiCorpSecret("secret_path", "new_test_password")
+    assert credentials.user == HashiCorpSecret("secret_path", "new_test_user")
+    assert credentials.password == HashiCorpSecret("secret_path", "new_test_password")
 
 
 def test_user_password_credentials_from_dictionary():

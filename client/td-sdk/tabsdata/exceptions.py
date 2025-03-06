@@ -746,6 +746,21 @@ class ErrorCode(Enum):
             "got '{}' instead."
         ),
     }
+    SCE4 = {
+        "code": "SCE-004",
+        "message": (
+            "The vault parameter to build a HashiCorpSecret object must be of type "
+            "'str'; got '{}' instead."
+        ),
+    }
+    SCE5 = {
+        "code": "SCE-005",
+        "message": (
+            "The vault parameter to build a HashiCorpSecret object must be a string "
+            "containing only uppercase letters, numbers and underscores and cannot "
+            "start with a number; got {} instead."
+        ),
+    }
     TF1 = {
         "code": "TF-001",
         "message": "The input DataFrame is missing the required column(s) '{}'.",
