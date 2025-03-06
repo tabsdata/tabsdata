@@ -7,6 +7,7 @@ use std::fs;
 use std::io::Write;
 use tabsdatalib::bin::tdserver;
 use td_attach::attach;
+use td_build::version::TABSDATA_VERSION;
 use td_common::env::{get_home_dir, TABSDATA_HOME_DIR};
 use td_common::logging;
 use td_common::logging::LogOutput;
@@ -21,12 +22,11 @@ const BANNER: &str = include_str!(concat!(
     workspace_root!(),
     "/variant/assets/manifest/BANNER"
 ));
-const VERSION: &str = include_str!("../../../../../assets/manifest/VERSION");
 
 fn check_banner() -> std::io::Result<()> {
     let ack = get_home_dir().join(TABSDATA_HOME_DIR).join(ACK);
     let ack_version = fs::read_to_string(&ack).unwrap_or_else(|_| "".to_string());
-    if ack_version.trim() == VERSION.trim() {
+    if ack_version.trim() == TABSDATA_VERSION.trim() {
         return Ok(());
     }
     let _ = show_banner();
@@ -34,7 +34,7 @@ fn check_banner() -> std::io::Result<()> {
         fs::create_dir_all(parent)?;
     }
     let mut file = fs::File::create(&ack)?;
-    file.write_all(VERSION.trim().as_bytes())?;
+    file.write_all(TABSDATA_VERSION.trim().as_bytes())?;
     Ok(())
 }
 

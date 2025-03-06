@@ -13,6 +13,7 @@ from ta_interceptor.api.api import InterceptorPlugin
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._constants as td_constants
 from td_features.features import Feature, FeaturesManager
+from td_interceptor.version import version
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ REQUIRED_COLUMNS_METADATA = {
 
 class Interceptor(InterceptorPlugin, ABC):
     name = "Interceptor Plugin (Standard)"
-    version = "0.9.3"
+    version = version()
 
     def __init__(self) -> None:
         FeaturesManager.instance().disable(Feature.ENTERPRISE)

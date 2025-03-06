@@ -14,6 +14,7 @@ use darling::FromMeta;
 use heck::ToUpperCamelCase;
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, Expr, File, Ident, Item, ItemMacro};
+use td_shared::meta_parser::SynMetaOrLit;
 use td_shared::parse_meta;
 use td_shared::project::get_project_root;
 use walkdir::WalkDir;
@@ -27,7 +28,7 @@ const CTX_STATUS_FILE: &str = "status.rs";
 #[derive(FromMeta)]
 struct UtoipaDocsArguments {
     title: String,
-    version: String,
+    version: SynMetaOrLit,
     #[darling(default, multiple, rename = "modifier")]
     modifiers: Vec<Option<Expr>>,
     #[darling(default, multiple, rename = "server")]

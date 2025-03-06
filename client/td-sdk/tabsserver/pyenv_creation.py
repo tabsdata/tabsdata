@@ -33,8 +33,8 @@ from tabsdata.utils.bundle_utils import (
     PYTHON_INSTALL_DEPENDENCIES_KEY,
     PYTHON_PUBLIC_PACKAGES_KEY,
     PYTHON_VERSION_KEY,
-    TABSDATA_MODULE_NAME,
 )
+from tabsdata.utils.constants import TABSDATA_MODULE_NAME
 from tabsserver.function_execution.global_utils import CURRENT_PLATFORM
 from tabsserver.utils import TimeBlock
 

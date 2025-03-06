@@ -19,6 +19,7 @@ import yaml
 from tabsdata.exceptions import ErrorCode, RegistrationError
 from tabsdata.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.tabsdatafunction import Input, Output, TabsdataFunction
+from tabsdata.utils.constants import TABSDATA_MODULE_NAME
 
 # Importing like this to ensure backwards compatibility with Python 3.7 and prior
 if sys.version_info >= (3, 8):
@@ -46,7 +47,6 @@ PYTHON_PUBLIC_PACKAGES_KEY = "publicPackages"
 PYTHON_INSTALL_DEPENDENCIES_KEY = "installPackagesDependencies"
 PYTHON_VERSION_KEY = "pythonVersion"
 REQUIREMENTS_FILE_NAME = "requirements.yaml"
-TABSDATA_MODULE_NAME = "tabsdata"
 
 
 def create_configuration(function: TabsdataFunction, save_location: str):

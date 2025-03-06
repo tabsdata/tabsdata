@@ -12,6 +12,7 @@ use std::os::unix::fs::symlink;
 use std::os::windows::fs::symlink_file as symlink;
 use std::path::{Path, PathBuf};
 use std::process::exit;
+use td_build::version::TABSDATA_VERSION;
 
 #[cfg(not(target_os = "windows"))]
 const TARGET: &str = "./target/";
@@ -29,7 +30,7 @@ const PROFILE_DEV: &str = "dev";
 const PROFILE_DEBUG: &str = "debug";
 
 #[derive(clap_derive::Parser)]
-#[command(name = "Tabsdata X-task", version = "0.9.3")]
+#[command(name = "Tabsdata X-task", version = TABSDATA_VERSION)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

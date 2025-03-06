@@ -7,3 +7,4 @@ pub mod descriptor;
 pub mod feature;
 pub mod structure;
 pub mod verifier;
+pub mod version;

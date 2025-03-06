@@ -4,13 +4,17 @@
 
 [package]
 description = "Tabsdata Xtask Library"
-edition = { workspace = true }
 name = "td-xtask"
-publish = false
+
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+readme = { workspace = true }
+repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
-license = { workspace = true }
-authors = { workspace = true }
 
 [features]
 
@@ -22,6 +26,8 @@ test-utils = []
 [dependencies]
 
 # Internal dependencies
+
+td-build = { workspace = true }
 
 # External dependencies
 

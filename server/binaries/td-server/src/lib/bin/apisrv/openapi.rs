@@ -8,6 +8,7 @@
 use crate::logic::apisrv::api_router::OpenApiRouterBuilder;
 use axum::Router;
 use td_apiforge::api_server_docs;
+use td_build::version::TABSDATA_VERSION;
 use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
@@ -25,7 +26,7 @@ pub fn router() -> Router {
 
     #[api_server_docs(
         title = "Tabsdata API",
-        version = "0.9.3",
+        version = TABSDATA_VERSION,
         modifier = &SecurityAddon,
         server = (url = "/", description = "API Server"),
     )]

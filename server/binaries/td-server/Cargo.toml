@@ -4,14 +4,18 @@
 
 [package]
 description = "Tabsdata Server"
-edition = { workspace = true }
 name = "td-server"
-publish = false
+build = "build.rs"
+
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+readme = { workspace = true }
+repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
-license = { workspace = true }
-authors = { workspace = true }
-build = "build.rs"
 
 [[bin]]
 name = "tdserver"
@@ -99,6 +103,7 @@ toml = { workspace = true }
 
 td-attach = { workspace = true }
 td-apiforge = { workspace = true }
+td-build = { workspace = true }
 td-concrete = { workspace = true }
 td-error = { workspace = true }
 tm-workspace = { workspace = true }

@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 const OUT_DIR: &str = "OUT_DIR";
 const ROOT_PROJECT_FOLDER: &str = "ROOT_PROJECT_FOLDER";
+const CARGO_MANIFEST_DIR: &str = "CARGO_MANIFEST_DIR";
 
 const GIT_FOLDER: &str = ".git";
 const CARGO_FILE: &str = "Cargo.toml";
@@ -31,9 +32,17 @@ fn get_workspace_root() -> Option<PathBuf> {
     let mut build_root = PathBuf::from(
         env::var(OUT_DIR)
             .or_else(|_| env::var(ROOT_PROJECT_FOLDER))
+            .or_else(|_| env::var(CARGO_MANIFEST_DIR))
             .unwrap_or_else(|_| {
+                let env_vars = std::env::vars()
+                    .map(|(k, v)| format!("- {}={}", k, v))
+                    .collect::<Vec<String>>()
+                    .join("\n");
                 panic!(
-                    "Neither OUT_DIR nor ROOT_PROJECT_FOLDER is set. Compilation cannot proceed..."
+                    "Neither OUT_DIR \
+                    nor ROOT_PROJECT_FOLDER \
+                    nor CARGO_MANIFEST_DIR is set. \
+                    Compilation cannot proceed...\n{env_vars}"
                 );
             }),
     );

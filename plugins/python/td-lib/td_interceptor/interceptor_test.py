@@ -7,10 +7,12 @@ from abc import ABC
 
 from ta_interceptor.api.api_test import InterceptorTestPlugin
 
+from td_interceptor.version import version
+
 
 class InterceptorTest(InterceptorTestPlugin, ABC):
     name = "Interceptor Test Plugin (Standard)"
-    version = "0.9.3"
+    version = version()
 
     @classmethod
     def instance(cls) -> "InterceptorTest":

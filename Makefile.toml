@@ -228,6 +228,7 @@ PROJECT_TD_FEATURES_ROOT = { value = "${ROOT_PROJECT_FOLDER}/client/td-lib/td_fe
 PROJECT_TA_INTERCEPTOR_ROOT = { value = "${ROOT_PROJECT_FOLDER}/client/td-lib/ta_interceptor/", normalize = true }
 PROJECT_TD_INTERCEPTOR_ROOT = { value = "${ROOT_PROJECT_FOLDER}/plugins/python/td-lib/td_interceptor/", normalize = true }
 PROJECT_TD_SDK_ROOT = { value = "${ROOT_PROJECT_FOLDER}/client/td-sdk/", normalize = true }
+BUMP_VERSION_PYTHON_PY = { value = "${ROOT_PROJECT_FOLDER}/devutils/automation/tasks/makers/td-scripts/bump_version.py", normalize = true }
 CLEAN_PYTHON_PY = { value = "${ROOT_PROJECT_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean_python.py", normalize = true }
 COPY_ASSETS_PY = { value = "${ROOT_PROJECT_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }
 TESTS_FOLDER = { value = "tests/", normalize = true }
@@ -2039,6 +2040,47 @@ script = [
 
 [tasks.deploy]
 dependencies = ["build", "assembly", "install"]
+
+[tasks.bump]
+run_task = [
+    { name = [
+        "bump_cargo",
+        "bump_other",
+    ] }
+]
+
+[tasks.bump_cargo]
+private = true
+run_task = [
+    { name = [
+        "bump_cargo_modules",
+        "bump_cargo_macros",
+    ] }
+]
+
+[tasks.bump_cargo_modules]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes
+    ''']
+
+[tasks.bump_cargo_macros]
+private = true
+cwd = "${PROJECT_MACROS_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes
+    ''']
+
+[tasks.bump_other]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+command = "python3"
+args = ["${BUMP_VERSION_PYTHON_PY}", "${PROJECT_ROOT_FOLDER}", "${CARGO_MAKE_TASK_ARGS}"]
 
 [tasks.virtualenv]
 cwd = "${ROOT_PROJECT_FOLDER}"
