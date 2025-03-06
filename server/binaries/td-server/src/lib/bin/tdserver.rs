@@ -354,6 +354,7 @@ fn command_settings(arguments: SettingsArguments) {
 fn command_start(arguments: StartArguments) {
     show_mode();
     show_uv_repository_mode();
+    show_setup_and_launch();
     let supervisor_instance = get_instance_path_for_instance(arguments.instance());
     let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
 
@@ -679,6 +680,8 @@ fn command_stop(arguments: StopArguments) {
 
 fn command_status(arguments: ControlArguments) {
     show_mode();
+    show_uv_repository_mode();
+    show_setup_and_launch();
     let supervisor_workspace =
         get_workspace_path_for_instance(arguments.workspace(), &arguments.instance().clone());
     let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
@@ -916,7 +919,7 @@ struct InstanceRow {
 #[cfg(not(any(test, feature = "mock-env")))]
 pub fn show_mode() {
     warn!(
-        "✅ ✅ ✅ Activated tabsdata {} in production mode",
+        "Activated tabsdata {} in production mode",
         Interceptor.edition()
     );
 }
@@ -932,8 +935,12 @@ pub fn show_mode() {
 pub fn show_uv_repository_mode() {
     let uv_extra_index_url = "UV_EXTRA_INDEX_URL";
     if env::var(uv_extra_index_url).is_ok() {
-        warn!("🔴 🔴 🔴 You are using additional uv repositories!!!")
+        warn!("You are using additional uv repositories!!!")
     }
+}
+
+pub fn show_setup_and_launch() {
+    info!("Setting up and launching instance...")
 }
 
 pub async fn start() {
