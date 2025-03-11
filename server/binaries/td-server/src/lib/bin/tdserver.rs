@@ -40,9 +40,10 @@ use td_common::cli::{parse_extra_arguments, ARGUMENT_PREFIX, TRAILING_ARGUMENTS_
 use td_common::env::to_absolute;
 use td_common::files::ROOT;
 use td_common::os::{get_process_tree, terminate_process};
-use td_common::status::ExitStatus::GeneralError;
+use td_common::status::ExitStatus::{GeneralError, Success};
 use td_interceptor::engine::Interceptor;
 use td_interceptor_api::api::InterceptorPlugin;
+use td_python::upgrade::{get_source_version, get_target_version, upgrade};
 use td_python::venv::prepare;
 use thiserror::Error;
 use tokio::time::{Duration, Instant};
@@ -86,6 +87,9 @@ enum Commands {
 
     #[command(about = "Create a Tabsdata settings based on the product defaults)")]
     Settings(SettingsArguments),
+
+    #[command(about = "Upgrade a Tabsdata instance (with optional additional arguments)")]
+    Upgrade(UpgradeArguments),
 
     #[command(about = "Start a Tabsdata instance (with optional additional arguments)")]
     Start(StartArguments),
@@ -155,6 +159,42 @@ struct SettingsArguments {
                      It can be absolute or relative. All required parent folders will be created if necessary."
     )]
     folder: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct InstanceArguments {
+    /// Name/Location of the Tabsdata instance.
+    #[arg(
+        long,
+        name = "instance",
+        required = false,
+        value_parser = clap::value_parser!(PathBuf),
+        long_help = "Name/Location of the Tabsdata instance."
+    )]
+    instance: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct UpgradeOptionsArguments {
+    /// Option to perform actual upgrade instead of performing a dry run.
+    #[arg(
+        long,
+        name = "execute",
+        long_help = "Option to perform actual upgrade."
+    )]
+    execute: bool,
+}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct UpgradeArguments {
+    #[command(flatten)]
+    instance: InstanceArguments,
+
+    #[command(flatten)]
+    options: UpgradeOptionsArguments,
 }
 
 #[derive(Debug, Clone, Getters, Args)]
@@ -282,6 +322,9 @@ impl TabsDataCli {
             Commands::Settings(arguments) => {
                 command_settings(arguments);
             }
+            Commands::Upgrade(arguments) => {
+                command_upgrade(arguments);
+            }
             Commands::Start(arguments) => {
                 command_start(arguments);
             }
@@ -351,12 +394,60 @@ fn command_settings(arguments: SettingsArguments) {
     };
 }
 
+fn command_upgrade(arguments: UpgradeArguments) {
+    let supervisor_instance = get_instance_path_for_instance(&arguments.instance.instance);
+    let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
+
+    if !needs_upgrade(supervisor_instance_absolute.clone()) {
+        info!("The instance is already up to date. No need to upgrade.");
+        exit(Success.code())
+    }
+
+    let supervisor_workspace =
+        get_workspace_path_for_instance(&None, arguments.instance.instance());
+    let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
+    let supervisor_tracker = WorkerTracker::new(supervisor_work.clone());
+    match supervisor_tracker.check_worker_status() {
+        WorkerStatus::Running { pid } => {
+            error!(
+                "Tabsdata instance '{}' is running with pid {}. You need to stop it before upgrading",
+                supervisor_workspace.clone().display(),
+                pid,
+            );
+            exit(GeneralError.code());
+        }
+        _ => match upgrade(&supervisor_instance_absolute, arguments.options.execute) {
+            Ok(_) => (),
+            Err(e) => {
+                error!(
+                    "Failed to upgrade instance '{}: {}",
+                    supervisor_instance_absolute.display(),
+                    e
+                );
+                exit(GeneralError.code());
+            }
+        },
+    };
+}
+
 fn command_start(arguments: StartArguments) {
     show_mode();
     show_uv_repository_mode();
     show_setup_and_launch();
+
     let supervisor_instance = get_instance_path_for_instance(arguments.instance());
     let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
+
+    if needs_upgrade(supervisor_instance_absolute.clone()) {
+        warn!("The instance is not up to date. An upgrade is required before starting.");
+        warn!("To upgrade, run: 'tdserver upgrade --instance <instance> --execute'.");
+        warn!("(or just 'tdserver upgrade --execute' to upgrade the default instance.)");
+        warn!("For a dry run before upgrading, use: 'tdserver upgrade --instance <instance>'.");
+        warn!("(or just 'tdserver upgrade' for the default instance.)");
+        warn!("It is strongly recommended to back up your instance before proceeding with the upgrade.");
+
+        exit(GeneralError.code())
+    }
 
     let supervisor_repository = get_repository_path_for_instance(
         arguments.repository(),
@@ -860,6 +951,27 @@ fn command_instances() {
     info!("Search completed in {:.2?} seconds", start_time.elapsed());
 }
 
+fn needs_upgrade(instance: PathBuf) -> bool {
+    if !instance.exists() {
+        return false;
+    }
+    let source = match get_source_version(&instance) {
+        Ok(version) => version,
+        Err(err) => {
+            error!("Failed to get source version: {}", err);
+            exit(GeneralError.code());
+        }
+    };
+    let target = match get_target_version() {
+        Ok(version) => version,
+        Err(err) => {
+            error!("Failed to get target version: {}", err);
+            exit(GeneralError.code());
+        }
+    };
+    source < target
+}
+
 #[derive(Tabled)]
 struct WorkerRow {
     #[tabled(rename = "Process")]
@@ -927,7 +1039,7 @@ pub fn show_mode() {
 #[cfg(any(test, feature = "mock-env"))]
 pub fn show_mode() {
     info!(
-        "⚠️  ⚠️  ⚠️  Activated tabsdata {} in development mode",
+        "Activated tabsdata {} in development mode",
         Interceptor.edition()
     );
 }

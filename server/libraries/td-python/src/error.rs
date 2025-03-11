@@ -33,4 +33,10 @@ pub enum PythonError {
     InstanceUpgradePanic(#[source] Error) = 5010,
     #[error("Upgrade of instance finished with errors.")]
     InstanceUpgradeError(ExitStatus) = 5011,
+    #[error("The file .version for this instance is empty.")]
+    EmptyVersionFile = 5012,
+    #[error("Invalid version format in .version file: {0}.")]
+    InvalidVersionFormat(String) = 5013,
+    #[error("Failed to read .version file.")]
+    InvalidVersionFile(#[source] Error) = 5014,
 }

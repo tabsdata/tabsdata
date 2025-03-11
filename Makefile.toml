@@ -1571,6 +1571,19 @@ script = [
     licensecheck -u requirements:requirements.txt
     ''']
 
+[tasks.sourcetrack]
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    exists = is_path_exists ./variant/devutils/automation/tasks/makers/td-scripts/repositories_sourcetrack.py
+    if eq ${exists} true
+        exec --fail-on-error python ./variant/devutils/automation/tasks/makers/td-scripts/repositories_sourcetrack.py
+    else
+        echo "Generating source track metadata file does not apply for this project"
+    end
+    ''']
+
 [tasks.upgrade]
 run_task = [
     { name = [

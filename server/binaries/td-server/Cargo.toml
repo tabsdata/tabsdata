@@ -90,6 +90,7 @@ ignored = ["openssl", "strum", "td-build", "td-schema", "toml"]
 # Internal dependencies
 
 td-build = { workspace = true }
+td-python = { workspace = true }
 
 # External dependencies
 

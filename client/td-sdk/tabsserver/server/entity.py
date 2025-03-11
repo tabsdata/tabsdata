@@ -13,5 +13,9 @@ class Upgrade(ABC):
     target_version: Version
 
     @abstractmethod
-    def upgrade(self, instance: Path) -> list[str]:
+    def upgrade(
+        self,
+        instance: Path,
+        dry_run: bool,
+    ) -> list[str]:
         pass

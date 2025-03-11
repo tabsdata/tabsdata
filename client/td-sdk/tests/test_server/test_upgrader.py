@@ -12,7 +12,11 @@ class Upgrade_0_9_0_to_0_9_1(Upgrade):
     source_version = Version("0.9.0")
     target_version = Version("0.9.1")
 
-    def upgrade(self, instance: Path) -> list[str]:
+    def upgrade(
+        self,
+        instance: Path,
+        dry_run: bool,
+    ) -> list[str]:
         return ["action1"]
 
 
@@ -21,7 +25,11 @@ class Upgrade_0_9_1_to_0_9_2(Upgrade):
     source_version = Version("0.9.1")
     target_version = Version("0.9.2")
 
-    def upgrade(self, instance: Path) -> list[str]:
+    def upgrade(
+        self,
+        instance: Path,
+        dry_run: bool,
+    ) -> list[str]:
         return ["action2"]
 
 
@@ -30,7 +38,11 @@ class Upgrade_0_9_2_to_0_9_3(Upgrade):
     source_version = Version("0.9.2")
     target_version = Version("0.9.3")
 
-    def upgrade(self, instance: Path) -> list[str]:
+    def upgrade(
+        self,
+        instance: Path,
+        dry_run: bool,
+    ) -> list[str]:
         return ["action3"]
 
 
@@ -48,7 +60,11 @@ class TestUpgradeFunction(unittest.TestCase):
         source_version = Version("0.9.3")
         target_version = Version("0.9.3")
         actions = upgrade(
-            self.instance, source_version, target_version, self.upgrade_plan
+            self.instance,
+            source_version,
+            target_version,
+            self.upgrade_plan,
+            True,
         )
         self.assertEqual(actions, {})
 
@@ -56,7 +72,11 @@ class TestUpgradeFunction(unittest.TestCase):
         source_version = Version("0.9.0")
         target_version = Version("0.9.3")
         actions = upgrade(
-            self.instance, source_version, target_version, self.upgrade_plan
+            self.instance,
+            source_version,
+            target_version,
+            self.upgrade_plan,
+            True,
         )
         expected_actions = {
             Version("0.9.1"): ["action1"],
@@ -73,7 +93,11 @@ class TestUpgradeFunction(unittest.TestCase):
         }
         with self.assertRaises(RuntimeError) as context:
             upgrade(
-                self.instance, source_version, target_version, incomplete_upgrade_plan
+                self.instance,
+                source_version,
+                target_version,
+                incomplete_upgrade_plan,
+                True,
             )
         self.assertIn("No upgrade class found for", str(context.exception))
 
@@ -83,7 +107,11 @@ class TestUpgradeFunction(unittest.TestCase):
             source_version = Version("0.9.2")
             target_version = Version("0.9.1")
 
-            def upgrade(self, instance: Path) -> list[str]:
+            def upgrade(
+                self,
+                instance: Path,
+                dry_run: bool,
+            ) -> list[str]:
                 return ["action_loop"]
 
         source_version = Version("0.9.0")
@@ -94,7 +122,13 @@ class TestUpgradeFunction(unittest.TestCase):
             Version("0.9.2"): Upgrade_0_9_2_to_0_9_1,
         }
         with self.assertRaises(RuntimeError) as context:
-            upgrade(self.instance, source_version, target_version, loop_upgrade_plan)
+            upgrade(
+                self.instance,
+                source_version,
+                target_version,
+                loop_upgrade_plan,
+                True,
+            )
         self.assertIn("Loop detected in upgrade plan", str(context.exception))
 
     def test_upgrade_missed_versions(self):
@@ -105,5 +139,11 @@ class TestUpgradeFunction(unittest.TestCase):
             Version("0.9.2"): Upgrade_0_9_2_to_0_9_3,
         }
         with self.assertRaises(RuntimeError) as context:
-            upgrade(self.instance, source_version, target_version, missed_upgrade_plan)
+            upgrade(
+                self.instance,
+                source_version,
+                target_version,
+                missed_upgrade_plan,
+                True,
+            )
         self.assertIn("Some versions cannot be reached", str(context.exception))

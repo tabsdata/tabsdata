@@ -18,5 +18,9 @@ class Upgrade_0_9_2_to_0_9_3(Upgrade):
     source_version = Version("0.9.2")
     target_version = Version("0.9.3")
 
-    def upgrade(self, instance: Path) -> list[str]:
+    def upgrade(
+        self,
+        instance: Path,
+        dry_run: bool,
+    ) -> list[str]:
         return []

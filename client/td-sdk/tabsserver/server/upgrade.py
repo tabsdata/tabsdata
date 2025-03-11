@@ -13,9 +13,9 @@ from packaging.version import Version
 
 from tabsserver.server.entity import Upgrade
 from tabsserver.server.instance import VERSION_FILE, get_instance_path, get_version
-from tabsserver.server.v0.v0_9.v0_9_1.upgrade import Upgrade_0_9_0_to_0_9_1
-from tabsserver.server.v0.v0_9.v0_9_2.upgrade import Upgrade_0_9_1_to_0_9_2
-from tabsserver.server.v0.v0_9.v0_9_3.upgrade import Upgrade_0_9_2_to_0_9_3
+from tabsserver.server.upgraders.v0.v0_9.v0_9_1.upgrade import Upgrade_0_9_0_to_0_9_1
+from tabsserver.server.upgraders.v0.v0_9.v0_9_2.upgrade import Upgrade_0_9_1_to_0_9_2
+from tabsserver.server.upgraders.v0.v0_9.v0_9_3.upgrade import Upgrade_0_9_2_to_0_9_3
 from tabsserver.utils import TimeBlock
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,15 @@ def get_target_version() -> Version:
     return get_version()
 
 
+def update_version(instance: Path, version: Version):
+    version_file = instance / VERSION_FILE
+    try:
+        with open(version_file, "w", encoding="utf-8") as file:
+            file.write(str(version))
+    except OSError as e:
+        raise RuntimeError(f"Error writing to .version file: {e}")
+
+
 def check(upgrade_plan: Dict[Version, Type[Upgrade]]):
     visited_versions = set()
     current_version = SEED_VERSION
@@ -73,16 +82,24 @@ def upgrade(
     source_version: Version,
     target_version: Version,
     upgrade_plan: Dict[Version, Type[Upgrade]],
+    dry_run: bool,
 ) -> Dict[Version, list[str]]:
     check(upgrade_plan)
     actions: Dict[Version, list[str]] = {}
     if source_version >= target_version:
         return actions
-    logger.info(
-        f"Upgrading instance '{instance}' "
-        f"from version {source_version} "
-        f"to version {target_version}"
-    )
+    if dry_run:
+        logger.info(
+            f"Simulating upgrade of instance '{instance}' "
+            f"from version {source_version} "
+            f"to version {target_version}"
+        )
+    else:
+        logger.info(
+            f"Upgrading instance '{instance}' "
+            f"from version {source_version} "
+            f"to version {target_version}"
+        )
     current_version = source_version
     while current_version < target_version:
         if current_version not in upgrade_plan:
@@ -91,18 +108,31 @@ def upgrade(
         upgrade_object = upgrade_class()
         timer = TimeBlock()
         with timer:
-            logger.info(
-                f"Upgrading instance {instance} from {upgrade_object.source_version} to"
-                f" {upgrade_object.target_version}..."
+            if dry_run:
+                logger.info(
+                    f"Simulating upgrade (step) of instance {instance} "
+                    f"from {upgrade_object.source_version} "
+                    f"to {upgrade_object.target_version}..."
+                )
+            else:
+                logger.info(
+                    f"Upgrading (step) instance {instance} "
+                    f"from {upgrade_object.source_version} "
+                    f"to {upgrade_object.target_version}..."
+                )
+            actions[upgrade_object.target_version] = upgrade_object.upgrade(
+                instance, dry_run
             )
-            actions[upgrade_object.target_version] = upgrade_object.upgrade(instance)
         time_taken = timer.time_taken()
         logger.info(
             "Time taken:"
-            f" {humanize.precisedelta(time_taken, minimum_unit='milliseconds')}"
+            f"{humanize.precisedelta(time_taken, minimum_unit='milliseconds')}"
         )
-
         current_version = upgrade_object.target_version
+
+    if not dry_run:
+        update_version(instance, target_version)
+
     return actions
 
 
@@ -116,7 +146,12 @@ def main():
         help="Path of the Tabsdata instance to upgrade",
         required=False,
     )
-
+    parser.add_argument(
+        "--execute",
+        action="store_false",
+        dest="dry_run",
+        help="Disable dry-run mode and execute actions",
+    )
     arguments = parser.parse_args()
     instance = get_instance_path(arguments.instance)
     source_version = get_source_version(instance)
@@ -124,7 +159,13 @@ def main():
 
     timer = TimeBlock()
     with timer:
-        upgrades = upgrade(instance, source_version, target_version, get_upgrade_plan())
+        upgrades = upgrade(
+            instance,
+            source_version,
+            target_version,
+            get_upgrade_plan(),
+            arguments.dry_run,
+        )
     time_taken = timer.time_taken()
 
     for version, actions in sorted(upgrades.items()):
@@ -138,7 +179,7 @@ def main():
     if upgrades:
         logger.info(
             "Time taken to upgrade:"
-            f" {humanize.precisedelta(time_taken, minimum_unit='milliseconds')}"
+            f"{humanize.precisedelta(time_taken, minimum_unit='milliseconds')}"
         )
 
 

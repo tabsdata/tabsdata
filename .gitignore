@@ -98,6 +98,7 @@ share/python-wheels/
 site
 tests/bundle*
 target/
+variant/assets/manifest/SOURCETRACK.yaml
 variant/assets/manifest/THIRD-PARTY
 var/
 venv.bak/

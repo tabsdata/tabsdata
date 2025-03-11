@@ -43,6 +43,7 @@ ignored = ["openssl", "strum_macros", "td-build", "thiserror", "toml"]
 
 ## Libraries
 
+td-build = { workspace = true }
 td-common = { workspace = true }
 
 ## Macros
@@ -52,6 +53,7 @@ td-error = { workspace = true }
 # External dependencies
 
 rand = { workspace = true }
+semver = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
