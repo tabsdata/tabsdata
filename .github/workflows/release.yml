@@ -135,7 +135,7 @@ jobs:
       TRANSPORTER_AZURE_ACCOUNT_KEY: ${{ secrets.TRANSPORTER_AZURE_ACCOUNT_KEY }}
       TRANSPORTER_AZURE_ACCOUNT_NAME: ${{ secrets.TRANSPORTER_AZURE_ACCOUNT_NAME }}
     with:
-      td_edition: "standard"
+      td_product: "standard"
       runner_mode: "release"
       dump_server: ${{ inputs.dump_server }}
       run_on_linux_x86_64: ${{ needs.describe-job.outputs.run_on_linux_x86_64 }}

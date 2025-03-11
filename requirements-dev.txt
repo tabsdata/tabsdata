@@ -23,6 +23,7 @@ mimesis==18.0.0
 mysql-connector-python==9.2.0
 oracledb==2.5.1
 pdoc==15.0.1
+pipdeptree==2.25.0
 psycopg2-binary==2.9.10
 pytest==8.3.4
 pytest-check==2.5.0

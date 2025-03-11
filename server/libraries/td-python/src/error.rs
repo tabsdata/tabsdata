@@ -29,4 +29,8 @@ pub enum PythonError {
     InterpreterResolutionParseError(String) = 5008,
     #[error("Error instance name from path '{0}'.")]
     InstanceExtractionError(PathBuf) = 5009,
+    #[error("Upgrade of instance panicked.")]
+    InstanceUpgradePanic(#[source] Error) = 5010,
+    #[error("Upgrade of instance finished with errors.")]
+    InstanceUpgradeError(ExitStatus) = 5011,
 }

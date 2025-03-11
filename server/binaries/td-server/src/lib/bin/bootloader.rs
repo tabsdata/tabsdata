@@ -13,8 +13,10 @@ use clap::Parser;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
-use std::io;
+use std::io::Write;
 use std::path::PathBuf;
+use std::{fs, io};
+use td_build::version::TABSDATA_VERSION;
 use td_common::cli::Cli;
 use td_common::config::Config;
 use td_common::status::ExitStatus;
@@ -23,6 +25,8 @@ use thiserror::Error;
 use tracing::{error, info};
 
 pub const BOOTLOADER: &str = "bootloader";
+
+const VERSION: &str = ".version";
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
@@ -240,7 +244,20 @@ impl Bootloader {
         match create_instance_tree(params.profile(config), Some(params.instance(config))) {
             Ok(_) => Ok(()),
             Err(e) => Err(RuntimeError::new(e.to_string())),
+        }?;
+        match self.stamp_instance(config, params) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(RuntimeError::new(e.to_string())),
         }
+    }
+
+    fn stamp_instance(&self, config: &Configuration, params: &Arguments) -> io::Result<()> {
+        let version = params.instance(config).join(VERSION);
+        if !version.exists() {
+            let mut file = fs::File::create(&version)?;
+            file.write_all(TABSDATA_VERSION.trim().as_bytes())?;
+        };
+        Ok(())
     }
 }
 

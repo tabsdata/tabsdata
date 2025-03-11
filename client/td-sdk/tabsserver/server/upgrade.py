@@ -1,0 +1,146 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+import argparse
+import logging
+import os.path
+from pathlib import Path
+from typing import Dict, Type
+
+import humanize
+from packaging.version import Version
+
+from tabsserver.server.entity import Upgrade
+from tabsserver.server.instance import VERSION_FILE, get_instance_path, get_version
+from tabsserver.server.v0.v0_9.v0_9_1.upgrade import Upgrade_0_9_0_to_0_9_1
+from tabsserver.server.v0.v0_9.v0_9_2.upgrade import Upgrade_0_9_1_to_0_9_2
+from tabsserver.server.v0.v0_9.v0_9_3.upgrade import Upgrade_0_9_2_to_0_9_3
+from tabsserver.utils import TimeBlock
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+SEED_VERSION = Version("0.9.0")
+
+UPGRADE_PLAN: Dict[Version, Type[Upgrade]] = {
+    Upgrade_0_9_0_to_0_9_1.source_version: Upgrade_0_9_0_to_0_9_1,
+    Upgrade_0_9_1_to_0_9_2.source_version: Upgrade_0_9_1_to_0_9_2,
+    Upgrade_0_9_2_to_0_9_3.source_version: Upgrade_0_9_2_to_0_9_3,
+}
+
+
+def get_upgrade_plan() -> Dict[Version, Type[Upgrade]]:
+    return UPGRADE_PLAN
+
+
+def get_source_version(instance: Path) -> Version:
+    version_file = os.path.join(instance, VERSION_FILE)
+    if os.path.exists(version_file):
+        with open(version_file, "r", encoding="utf-8") as file:
+            version = file.read().strip()
+        if not version:
+            print("The file .version for this instance is empty")
+            exit(1)
+    else:
+        return SEED_VERSION
+    return Version(version)
+
+
+def get_target_version() -> Version:
+    return get_version()
+
+
+def check(upgrade_plan: Dict[Version, Type[Upgrade]]):
+    visited_versions = set()
+    current_version = SEED_VERSION
+    while current_version in upgrade_plan:
+        if current_version in visited_versions:
+            raise RuntimeError(f"Loop detected in upgrade plan: {current_version}")
+        visited_versions.add(current_version)
+        upgrade_class = upgrade_plan[current_version]
+        upgrade_object = upgrade_class()
+        current_version = upgrade_object.target_version
+    all_versions = set(upgrade_plan.keys())
+    missed_versions = all_versions - visited_versions
+    if missed_versions:
+        raise RuntimeError(f"Some versions cannot be reached: {missed_versions}")
+
+
+def upgrade(
+    instance: Path,
+    source_version: Version,
+    target_version: Version,
+    upgrade_plan: Dict[Version, Type[Upgrade]],
+) -> Dict[Version, list[str]]:
+    check(upgrade_plan)
+    actions: Dict[Version, list[str]] = {}
+    if source_version >= target_version:
+        return actions
+    logger.info(
+        f"Upgrading instance '{instance}' "
+        f"from version {source_version} "
+        f"to version {target_version}"
+    )
+    current_version = source_version
+    while current_version < target_version:
+        if current_version not in upgrade_plan:
+            raise RuntimeError(f"No upgrade class found for {source_version}")
+        upgrade_class = upgrade_plan[current_version]
+        upgrade_object = upgrade_class()
+        timer = TimeBlock()
+        with timer:
+            logger.info(
+                f"Upgrading instance {instance} from {upgrade_object.source_version} to"
+                f" {upgrade_object.target_version}..."
+            )
+            actions[upgrade_object.target_version] = upgrade_object.upgrade(instance)
+        time_taken = timer.time_taken()
+        logger.info(
+            "Time taken:"
+            f" {humanize.precisedelta(time_taken, minimum_unit='milliseconds')}"
+        )
+
+        current_version = upgrade_object.target_version
+    return actions
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Upgrade a Tabsdata instance to the current version"
+    )
+    parser.add_argument(
+        "--instance",
+        type=str,
+        help="Path of the Tabsdata instance to upgrade",
+        required=False,
+    )
+
+    arguments = parser.parse_args()
+    instance = get_instance_path(arguments.instance)
+    source_version = get_source_version(instance)
+    target_version = get_target_version()
+
+    timer = TimeBlock()
+    with timer:
+        upgrades = upgrade(instance, source_version, target_version, get_upgrade_plan())
+    time_taken = timer.time_taken()
+
+    for version, actions in sorted(upgrades.items()):
+        logger.info(f"- Actions to version {version}:")
+        if actions:
+            for action in actions:
+                logger.info(f"  - {action}")
+        else:
+            logger.info("  - No actions")
+
+    if upgrades:
+        logger.info(
+            "Time taken to upgrade:"
+            f" {humanize.precisedelta(time_taken, minimum_unit='milliseconds')}"
+        )
+
+
+if __name__ == "__main__":
+    main()

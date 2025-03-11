@@ -1,6 +1,6 @@
 {
   "inputs": {
-    "td_edition": "standard",
+    "td_product": "standard",
     "runner_mode": "release",
     "dump_server": "false",
     "run_on_linux_x86_64": "true",

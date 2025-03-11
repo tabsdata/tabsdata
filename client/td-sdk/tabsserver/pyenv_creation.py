@@ -36,6 +36,15 @@ from tabsdata.utils.bundle_utils import (
 )
 from tabsdata.utils.constants import TABSDATA_MODULE_NAME
 from tabsserver.function_execution.global_utils import CURRENT_PLATFORM
+from tabsserver.server.instance import (
+    DEFAULT_ENVIRONMENT_FOLDER,
+    DEFAULT_INSTANCE,
+    DEFAULT_INSTANCES_FOLDER,
+    DEFAULT_TABSDATA_FOLDER,
+    LOCK_FOLDER,
+    WORK_FOLDER,
+    WORKSPACE_FOLDER,
+)
 from tabsserver.utils import TimeBlock
 
 logger = logging.getLogger(__name__)
@@ -51,15 +60,6 @@ HostPackageSource: TypeAlias = Literal[
 # !!! Do not change this string... never !!!
 BASE_ENV_SALT = "RekvSLlYqSt0VXJghaYhbQ5UyaofKk4h"
 
-# The environment name is the second last element in the yaml file name when split by .,
-# the last being "yaml" (e.g. "python_environment_123456.yaml")
-DEFAULT_TABSDATA_FOLDER = os.path.join(os.path.expanduser("~"), ".tabsdata")
-DEFAULT_ENVIRONMENT_FOLDER = os.path.join(DEFAULT_TABSDATA_FOLDER, "environments")
-DEFAULT_INSTANCES_FOLDER = os.path.join(DEFAULT_TABSDATA_FOLDER, "instances")
-DEFAULT_INSTANCE = os.path.join(DEFAULT_INSTANCES_FOLDER, "tabsdata")
-WORKSPACE_FOLDER = "workspace"
-WORK_FOLDER = "work"
-LOCK_FOLDER = "lock"
 BASE_ENVIRONMENT_PREFIX = "."
 DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER = os.path.join(
     DEFAULT_TABSDATA_FOLDER, "available_environments"
