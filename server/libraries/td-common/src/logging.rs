@@ -93,7 +93,7 @@ where
 fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     max_level: Level,
     writer: W,
-    supervisor: bool,
+    with_tokio_console: bool,
 ) -> LoggerGuard {
     let tabsdata_layer = tracing_subscriber::fmt::layer()
         .with_writer(writer)
@@ -104,7 +104,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
         .with(SensitiveFilterLayer)
         .with(tabsdata_layer);
     #[cfg(feature = "tokio_console")]
-    let registry = registry.with(if supervisor {
+    let registry = registry.with(if with_tokio_console {
         Some(console_subscriber::spawn())
     } else {
         None

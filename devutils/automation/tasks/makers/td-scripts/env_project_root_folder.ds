@@ -3,17 +3,16 @@
 #
 
 #!@duckscript
-# (env_project_root_folder.ds)
+!include_files ./make/libraries/log.ds
 
 current_folder = pwd
-echo "Current project folder is: ${current_folder}"
+debug "✅ Current project folder is: ${current_folder}"
 ko = set true
 while eq ${ko} true
     git_folder = concat ${current_folder} "/.git"
     if is_dir ${git_folder}
-        echo "Root project folder is: ${current_folder}"
+        debug "✅ Root project folder is: ${current_folder}"
         set_env ROOT_PROJECT_FOLDER ${current_folder}
-        set_env TD_TABSDATA_DEV_PKG ${current_folder}
         ko = set false
     else
         parent_folder = dirname ${current_folder}

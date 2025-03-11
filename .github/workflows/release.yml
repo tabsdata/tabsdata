@@ -52,6 +52,10 @@ on:
         type: string
         default: "false"
 
+  schedule:
+     # Run at 02:00 UTC (03:00 AM Spain time) Monday to Friday
+    - cron: "0 2 * * 1-5"
+
 jobs:
   describe-job:
     name: Describe Job
@@ -87,30 +91,50 @@ jobs:
               *) echo "$2" ;; # Default value if invalid
             esac
           }
-      
-          expr_run_on_linux_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_linux_x86_64 }}" "true")"
-          echo "run_on_linux_x86_64=$expr_run_on_linux_x86_64" >> $GITHUB_ENV
-          echo "run_on_linux_x86_64=$expr_run_on_linux_x86_64" >> $GITHUB_OUTPUT
-      
-          expr_run_on_linux_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_linux_arm_64 }}" "false")"
-          echo "run_on_linux_arm_64=$expr_run_on_linux_arm_64" >> $GITHUB_ENV
-          echo "run_on_linux_arm_64=$expr_run_on_linux_arm_64" >> $GITHUB_OUTPUT
-      
-          expr_run_on_macos_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_macos_x86_64 }}" "true")"
-          echo "run_on_macos_x86_64=$expr_run_on_macos_x86_64" >> $GITHUB_ENV
-          echo "run_on_macos_x86_64=$expr_run_on_macos_x86_64" >> $GITHUB_OUTPUT
-      
-          expr_run_on_macos_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_macos_arm_64 }}" "true")"
-          echo "run_on_macos_arm_64=$expr_run_on_macos_arm_64" >> $GITHUB_ENV
-          echo "run_on_macos_arm_64=$expr_run_on_macos_arm_64" >> $GITHUB_OUTPUT
-      
-          expr_run_on_windows_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_windows_x86_64 }}" "true")"
-          echo "run_on_windows_x86_64=$expr_run_on_windows_x86_64" >> $GITHUB_ENV
-          echo "run_on_windows_x86_64=$expr_run_on_windows_x86_64" >> $GITHUB_OUTPUT
-      
-          expr_run_on_windows_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_windows_arm_64 }}" "false")"
-          echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_ENV
-          echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_OUTPUT   
+          
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            echo "run_on_linux_x86_64=false" >> $GITHUB_ENV
+            echo "run_on_linux_x86_64=false" >> $GITHUB_OUTPUT
+          
+            echo "run_on_linux_arm_64=false" >> $GITHUB_ENV
+            echo "run_on_linux_arm_64=false" >> $GITHUB_OUTPUT
+          
+            echo "run_on_macos_x86_64=false" >> $GITHUB_ENV
+            echo "run_on_macos_x86_64=false" >> $GITHUB_OUTPUT
+          
+            echo "run_on_macos_arm_64=false" >> $GITHUB_ENV
+            echo "run_on_macos_arm_64=false" >> $GITHUB_OUTPUT
+
+            echo "run_on_windows_x86_64=true" >> $GITHUB_ENV
+            echo "run_on_windows_x86_64=true" >> $GITHUB_OUTPUT          
+          
+            echo "run_on_windows_arm_64=false" >> $GITHUB_ENV
+            echo "run_on_windows_arm_64=false" >> $GITHUB_OUTPUT
+          else
+            expr_run_on_linux_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_linux_x86_64 }}" "true")"
+            echo "run_on_linux_x86_64=$expr_run_on_linux_x86_64" >> $GITHUB_ENV
+            echo "run_on_linux_x86_64=$expr_run_on_linux_x86_64" >> $GITHUB_OUTPUT
+            
+            expr_run_on_linux_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_linux_arm_64 }}" "false")"
+            echo "run_on_linux_arm_64=$expr_run_on_linux_arm_64" >> $GITHUB_ENV
+            echo "run_on_linux_arm_64=$expr_run_on_linux_arm_64" >> $GITHUB_OUTPUT
+            
+            expr_run_on_macos_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_macos_x86_64 }}" "true")"
+            echo "run_on_macos_x86_64=$expr_run_on_macos_x86_64" >> $GITHUB_ENV
+            echo "run_on_macos_x86_64=$expr_run_on_macos_x86_64" >> $GITHUB_OUTPUT
+            
+            expr_run_on_macos_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_macos_arm_64 }}" "true")"
+            echo "run_on_macos_arm_64=$expr_run_on_macos_arm_64" >> $GITHUB_ENV
+            echo "run_on_macos_arm_64=$expr_run_on_macos_arm_64" >> $GITHUB_OUTPUT
+            
+            expr_run_on_windows_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_windows_x86_64 }}" "true")"
+            echo "run_on_windows_x86_64=$expr_run_on_windows_x86_64" >> $GITHUB_ENV
+            echo "run_on_windows_x86_64=$expr_run_on_windows_x86_64" >> $GITHUB_OUTPUT
+            
+            expr_run_on_windows_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_windows_arm_64 }}" "false")"
+            echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_ENV
+            echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_OUTPUT   
+          fi
 
       - name: Show Outputs
         id: show-outputs

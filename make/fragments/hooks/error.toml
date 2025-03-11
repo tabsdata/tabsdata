@@ -1,0 +1,49 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.failure]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    os_family = os_family
+    if eq ${os_family} "windows"
+        cm_run_task failure_windows
+    else
+        if eq ${os_family} "mac"
+            cm_run_task failure_mac
+        else
+            if eq ${os_family} "linux"
+                cm_run_task failure_linux
+            end
+        end
+    end
+    ''']
+
+[tasks.failure_windows]
+ignore_errors = true
+env = { MAKE_SUCCESS = "false" }
+
+[tasks.failure_linux]
+ignore_errors = true
+env = { MAKE_SUCCESS = "false" }
+
+[tasks.failure_mac]
+ignore_errors = true
+env = { MAKE_SUCCESS = "false" }
+script = [
+    '''
+    if command -v viu &> /dev/null; then
+        echo
+        viu --width 32 ${ROOT_PROJECT_FOLDER}/make/resources/images/ferri-sad.png
+    fi
+    if command -v lolcat &> /dev/null && command -v figlet &> /dev/null; then
+        echo
+        figlet -f ${ROOT_PROJECT_FOLDER}/make/resources/fonts/3d.flf Failed! | lolcat
+        echo
+    else
+        echo "⭕️ Ko!. You can install figlet and lolcat for cooler messages..."
+    fi
+    ''']

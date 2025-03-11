@@ -1,0 +1,40 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.clean_py]
+description = "Task 'clean' for Python projects"
+run_task = [
+    { name = [
+        "clean_py_tabsdata",
+        "clean_py_td_features",
+        "clean_py_ta_interceptor",
+        "clean_py_td_interceptor",
+        "clean_py_td-sdk"
+    ] }
+]
+
+[tasks.clean_py_tabsdata]
+private = true
+command = "python3"
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_ROOT_FOLDER}", "py"]
+
+[tasks.clean_py_td_features]
+private = true
+command = "python3"
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_FEATURES_ROOT}", "py"]
+
+[tasks.clean_py_ta_interceptor]
+private = true
+command = "python3"
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TA_INTERCEPTOR_ROOT}", "py"]
+
+[tasks.clean_py_td_interceptor]
+private = true
+command = "python3"
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_INTERCEPTOR_ROOT}", "py"]
+
+[tasks.clean_py_td-sdk]
+private = true
+command = "python3"
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_SDK_ROOT}", "py"]

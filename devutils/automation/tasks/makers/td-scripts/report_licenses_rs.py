@@ -3,15 +3,34 @@
 #
 
 import csv
+import importlib
+import importlib.util
 import io
 import json
 import os
 import re
 import subprocess
 import sys
+from types import ModuleType
 
 from tabulate import tabulate
 
+
+# noinspection DuplicatedCode
+def load(module_name) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        os.path.join(
+            os.getenv("MAKE_LIBRARIES_PATH"),
+            f"{module_name}.py",
+        ),
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+logger = load("log").get_logger()
 sys.stdout.reconfigure(encoding="utf-8")
 
 TARGET_DIR = os.path.join(".", "target", "audit")
@@ -70,10 +89,10 @@ try:
     )
     cargo_output = result.stdout
 except subprocess.CalledProcessError as e:
-    print(f"Error running cargo license: {e}")
+    logger.error(f"❌ Error running cargo license: {e}")
     exit(1)
 except Exception as e:
-    print(f"Error processing response from cargo license: {e}")
+    logger.error(f"❌ Error processing response from cargo license: {e}")
     exit(1)
 
 try:
@@ -84,7 +103,7 @@ try:
     ]
     csv_output = "\n".join(licenses_csv_data)
 except json.JSONDecodeError as e:
-    print(f"Error parsing json output from cargo license: {e}")
+    logger.error(f"❌ Error parsing json output from cargo license: {e}")
     exit(1)
 
 
@@ -115,4 +134,4 @@ content += tabulate(data, headers=headers, tablefmt="fancy_grid")
 with open(TARGET_FILE, "w", encoding="utf-8") as f:
     f.write(content + "\n")
 
-print(content)
+logger.debug(content)

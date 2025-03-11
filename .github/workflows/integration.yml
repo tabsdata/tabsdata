@@ -54,9 +54,50 @@ on:
         default: "false"
 
 jobs:
+  permit-job:
+    name: Permit Job
+    permissions: write-all
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: .
+    outputs:
+      permit_workflow: ${{ steps.check-label.outputs.permit_workflow }}
+
+    steps:
+      - name: Check label
+        id: check-label
+        run: |
+          PR_LABEL_LIST='${{ toJson(github.event.pull_request.labels.*.name) }}'
+          echo "Pull rquest labels: ${PR_LABEL_LIST}"      
+          
+          if echo "${PR_LABEL_LIST}" | jq -e '.[] | select(. == "skip-ci")' > /dev/null; then
+            echo "⚠️ Not ready. ☹️ PR contains label 'skip-ci'. Skipping workflow."
+            echo "permit_workflow=false" >> $GITHUB_ENV          
+            echo "permit_workflow=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Ready. 🙂 PR does not contain label 'skip-ci'. Running workflow."
+            echo "permit_workflow=true" >> $GITHUB_ENV
+            echo "permit_workflow=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Mark pull request
+        id: mark-pull-request
+        if: ${{ github.event_name == 'pull_request' && steps.check-label.outputs.permit_workflow == 'false' }}
+        uses: LouisBrunner/checks-action@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: "😶 Skipped"
+          conclusion: "skipped"
+          output: |
+            {"title": "⚠️ Run Skipped", "summary": "Run skipped as it is labelled as 'skip-ci'."}
+
   describe-job:
     name: Describe Job
     permissions: write-all
+    needs: permit-job
+    if: ${{ needs.permit-job.outputs.permit_workflow == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -128,6 +169,7 @@ jobs:
     name: Dispatch Job
     permissions: write-all
     needs: describe-job
+    if: ${{ needs.permit-job.outputs.permit_workflow == 'true' }}
     uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@main
     secrets:
       PAT_AOINOKIMI: ${{ secrets.PAT_AOINOKIMI }}

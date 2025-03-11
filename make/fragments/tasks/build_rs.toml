@@ -1,0 +1,80 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.build_rs]
+description = "Task 'build' for Rust projects"
+run_task = [
+    { name = [
+        "build_all_rs",
+        "build_none_rs"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+    { name = [
+        "build_none_rs"
+    ] }
+]
+
+[tasks.build_all_rs]
+private = true
+run_task = [
+    { name = [
+        "build_all_rs_macros",
+        "build_all_rs_modules"
+    ] }
+]
+
+[tasks.build_all_rs_macros]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_MACROS_CARGO_TOML} --all-features --lib --bins --examples"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_MACROS_CARGO_TOML} --all-features --lib --bins --examples
+    ''']
+
+[tasks.build_all_rs_modules]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --all-features --lib --bins --examples"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --all-features --lib --bins --examples
+    ''']
+
+[tasks.build_none_rs]
+private = true
+run_task = [
+    { name = [
+        "build_none_rs_macros",
+        "build_none_rs_modules"
+    ] }
+]
+
+[tasks.build_none_rs_macros]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_MACROS_CARGO_TOML} --lib --bins"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_MACROS_CARGO_TOML} --lib --bins
+    ''']
+
+[tasks.build_none_rs_modules]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --lib --bins"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --lib --bins
+    ''']

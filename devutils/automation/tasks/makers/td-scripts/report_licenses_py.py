@@ -2,12 +2,33 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+import importlib
+import importlib.util
 import json
 import os
 import subprocess
 import sys
+from types import ModuleType
 
 from tabulate import tabulate
+
+
+# noinspection DuplicatedCode
+def load(module_name) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        os.path.join(
+            os.getenv("MAKE_LIBRARIES_PATH"),
+            f"{module_name}.py",
+        ),
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+logger = load("log").get_logger()
+
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -67,10 +88,10 @@ try:
     )
     data = json.loads(result.stdout)
 except subprocess.CalledProcessError as e:
-    print(f"Error running licensecheck: {e}")
+    logger.error(f"❌ Error running licensecheck: {e}")
     exit(1)
 except Exception as e:
-    print(f"Error parsing json output from licensecheck: {e}")
+    logger.error(f"❌ Error parsing json output from licensecheck: {e}")
     exit(1)
 
 packages = data.get("packages", [])
@@ -106,4 +127,4 @@ content += tabulate(table_data, headers=headers, tablefmt="fancy_grid")
 with open(TARGET_FILE, "w", encoding="utf-8") as f:
     f.write(content + "\n")
 
-print(content)
+logger.debug(content)

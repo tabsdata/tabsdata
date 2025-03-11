@@ -136,6 +136,7 @@ datafiles = [
 
 print(f"Including tabsdata binaries: {datafiles}")
 
+# noinspection DuplicatedCode
 print(f"Current path in bootest is {Path.cwd()}")
 variant_assets_folder = os.path.join("variant", "assets")
 client_assets_folder = os.path.join("client", "td-sdk", "tabsdata", "assets")

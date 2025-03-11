@@ -1,0 +1,30 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.build_py]
+description = "Task 'build' for Python projects"
+run_task = [
+    { name = [
+        "build_py_tabsdata",
+        "build_py_td_features",
+        "build_py_ta_interceptor",
+        "build_py_td_interceptor",
+        "build_py_td-sdk"
+    ] }
+]
+
+[tasks.build_py_tabsdata]
+private = true
+
+[tasks.build_py_td_features]
+private = true
+
+[tasks.build_py_ta_interceptor]
+private = true
+
+[tasks.build_py_td_interceptor]
+private = true
+
+[tasks.build_py_td-sdk]
+private = true

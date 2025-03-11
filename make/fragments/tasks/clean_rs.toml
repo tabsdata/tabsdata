@@ -1,0 +1,40 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.clean_rs]
+description = "Task 'clean' for Rust projects"
+run_task = [
+    { name = [
+        "clean_rs_macros",
+        "clean_rs_modules",
+        "clean_rs_all"
+    ] }
+]
+
+[tasks.clean_rs_macros]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_MACROS_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_MACROS_CARGO_TOML}
+    ''']
+
+[tasks.clean_rs_modules]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_ROOT_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_ROOT_CARGO_TOML}
+    ''']
+
+[tasks.clean_rs_all]
+private = true
+command = "python3"
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_ROOT_FOLDER}", "rs"]

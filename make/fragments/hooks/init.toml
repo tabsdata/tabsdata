@@ -1,0 +1,14 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.setup]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    PATH = get_env PATH
+    debug "✅ Real PATH: ${PATH}"
+    ''']
+

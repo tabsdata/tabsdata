@@ -1,0 +1,355 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.test_py]
+description = "Task 'test' for Python projects"
+dependencies = ["set_mode_test_py"]
+run_task = [
+    { name = [
+        "pre-test_py",
+        "test_py_tabsdata",
+        "test_py_td_features",
+        "test_py_ta_interceptor",
+        "test_py_td_interceptor",
+        "test_py_td-sdk",
+        "post-test_py"
+    ] }
+]
+
+[tasks.test_py_tabsdata]
+dependencies = ["set_mode_test_py"]
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+    compile = get_env TD_COMPILE
+    ''']
+
+[tasks.test_py_td_features]
+private = true
+dependencies = ["set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+    compile = get_env TD_COMPILE
+
+    cd "${PROJECT_TD_FEATURES_ROOT}"
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    else
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    end
+    if not eq ${exit_code} "5"
+        code = exit ${exit_code}
+    end
+    ''']
+
+[tasks.test_py_ta_interceptor]
+private = true
+dependencies = ["set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+    compile = get_env TD_COMPILE
+
+    cd "${PROJECT_TA_INTERCEPTOR_ROOT}"
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    else
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    end
+    if not eq ${exit_code} "5"
+        code = exit ${exit_code}
+    end
+    ''']
+
+[tasks.test_py_td_interceptor]
+private = true
+dependencies = ["set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+    compile = get_env TD_COMPILE
+
+    cd ${PROJECT_TD_INTERCEPTOR_ROOT}
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    else
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    end
+    if not eq ${exit_code} "5"
+        code = exit ${exit_code}
+    end
+    ''']
+
+[tasks.test_py_td-sdk]
+private = true
+dependencies = ["set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+    compile = get_env TD_COMPILE
+
+    cd ${PROJECT_TD_SDK_ROOT}
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    else
+        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    end
+    if not eq ${exit_code} "5"
+        code = exit ${exit_code}
+    end
+    ''']
+
+[tasks.set_mode_test_py]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    if is_empty ${verbose}
+        set_env TD_VERBOSE "false"
+    end
+    debug "🔅 Using td verbose: '${TD_VERBOSE}'"
+    _compile_empty = is_empty ${compile}
+    _compile_true = eq ${compile} "true"
+    _compile = set ${_compile_empty} or ${_compile_true}
+    if ${_compile}
+        set_env TD_COMPILE "true"
+    else
+        set_env TD_COMPILE "false"
+    end
+        debug "🔅 Using td compile: '${TD_COMPILE}'"
+    ''']
+
+[tasks.pre-test_py]
+private = true
+dependencies = ["set_mode_test_py", "license"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🔷 _____ Copying assets..."
+    cm_run_task copy_assets
+
+    debug "🔷 _____ Compiling..."
+    cm_run_task build
+
+    debug "🔷 _____ Generating python binaries..."
+    cm_run_task setup_pytest_tabsdata
+
+    debug "🔷 _____ Starting tabsdata server (pytest) first..."
+    cm_run_task stop_pytest_tabsdata
+    sleep 10000
+    cm_run_task remove_pytest_tabsdata
+    sleep 2000
+    cm_run_task start_pytest_tabsdata
+    sleep 15000
+    cm_run_task status_pytest_tabsdata
+    ''']
+
+[tasks.copy_assets]
+private = true
+command = "python3"
+args = ["${COPY_ASSETS_PY}"]
+
+[tasks.setup_pytest_tabsdata]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🔷 _____ Setting up tabsdata pytest context..."
+    debug "🚀 python3 setup.py --quiet develop --script-dir target/pytest/build"
+    set_env PYTHONWARNINGS ignore
+    exec --fail-on-error python3 setup.py --quiet develop --script-dir target/pytest/build
+
+    debug "🔷 _____ Setting up tabsdata pytest python path..."
+    debug "🚀 python3 ${PROJECT_TD_SDK_ROOT}/tests/bootest.py"
+    output = exec python3 ${PROJECT_TD_SDK_ROOT}/tests/bootest.py
+    pythonpath = set ${output.stdout}
+    debug "✅ Python system path will be added: ${pythonpath}"
+    old_pythonpath = get_env PYTHONPATH
+    debug "✅ Python system path before adjusting: ${old_pythonpath}"
+    os_name = get_env OS
+    is_windows = contains ${os_name} "Windows"
+    if ${is_windows}
+        separator = set ";"
+    else
+        separator = set ":"
+    end
+    new_pythonpath = concat ${pythonpath} ${separator} ${old_path}
+    debug "✅ Python system path after adjusting: ${new_pythonpath}"
+    set_env PYTHONPATH ${new_pythonpath}
+    set_pythonpath = get_env PYTHONPATH
+    debug "🔅 Python system path persisted: ${set_pythonpath}"
+
+    debug "🔷 _____ Setting up tabsdata development package mode..."
+    set_env TD_TABSDATA_DEV_PKG ${PROJECT_ROOT_FOLDER}
+    set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
+    debug "🔅 Tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
+    ''']
+
+[tasks.start_pytest_tabsdata]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🔷 _____ Starting tabsdata server (pytest)..."
+    if is_empty ${profile}
+        build-folder = set "debug"
+    else
+        is_dev = eq ${profile} "dev"
+        if ${is_dev}
+            build-folder = set "debug"
+        else
+            build-folder = set ${profile}
+        end
+    end
+    if not is_empty ${td-target}
+        build-folder = set ${td-target}/${build-folder}
+    end
+    debug "🔅 Using build folder ${build-folder}"
+    os_family = os_family
+    if eq ${os_family} "windows"
+        tdserver = set "tdserver.exe"
+    else
+        tdserver = set "tdserver"
+    end
+    debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
+    TDX = get_env TDX
+    debug "🔅 The tdserver process will use TDX location: '${TDX}'"
+    debug "🚀 ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apisrv --address 127.0.0.1:2467"
+    exec --fail-on-error ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apisrv --address 127.0.0.1:2467
+    ''']
+
+[tasks.status_pytest_tabsdata]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🔷 _____ Starting tabsdata server (pytest)..."
+    if is_empty ${profile}
+        build-folder = set "debug"
+    else
+        is_dev = eq ${profile} "dev"
+        if ${is_dev}
+            build-folder = set "debug"
+        else
+            build-folder = set ${profile}
+        end
+    end
+    if not is_empty ${td-target}
+        build-folder = set ${td-target}/${build-folder}
+    end
+    debug "🔅 Using build folder ${build-folder}"
+    os_family = os_family
+    if eq ${os_family} "windows"
+        tdserver = set "tdserver.exe"
+    else
+        tdserver = set "tdserver"
+    end
+    debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
+    debug "🚀 ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest"
+    exec --fail-on-error ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+    ''']
+
+[tasks.stop_pytest_tabsdata]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🔷 _____ Stopping tabsdata server (pytest)..."
+    if is_empty ${profile}
+        build-folder = set "debug"
+    else
+        is_dev = eq ${profile} "dev"
+        if ${is_dev}
+            build-folder = set "debug"
+        else
+            build-folder = set ${profile}
+        end
+    end
+    if not is_empty ${td-target}
+        build-folder = set ${td-target}/${build-folder}
+    end
+    debug "🔅 Using build folder ${build-folder}"
+    os_family = os_family
+    if eq ${os_family} "windows"
+        tdserver = set "tdserver.exe"
+    else
+        tdserver = set "tdserver"
+    end
+    debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
+    debug "🚀 ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest"
+    exec --fail-on-error ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+    ''']
+
+[tasks.remove_pytest_tabsdata]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🔷 _____ Deleteing tabsdata server (pytest)..."
+    home_folder = set ${HOME}
+    instance_folder = set ${home_folder}/.tabsdata/instances/pytest
+    debug "✅ The tabsdata instance pytest folder is: ${instance_folder}"
+    exists_instance_folder = is_path_exists ${instance_folder}
+    if eq ${exists_instance_folder} true
+        debug "✅ The tabsdata instance pytest folder exists. Deleting it: ${target_dir}..."
+        rm -r ${instance_folder}
+        debug "✅ The tabsdata instance pytest has been deleted: ${target_dir}!"
+    else
+        debug "✅ The tabsdata instance pytest folder does not exist. Skipping deleting it: ${target_dir}..."
+    end
+    ''']
+
+[tasks.post-test_py]
+private = true
+dependencies = ["set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cm_run_task stop_pytest_tabsdata
+    ''']

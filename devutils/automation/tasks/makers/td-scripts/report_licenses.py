@@ -2,8 +2,29 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+import importlib
+import importlib.util
 import os
 import sys
+from types import ModuleType
+
+
+# noinspection DuplicatedCode
+def load(module_name) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        os.path.join(
+            os.getenv("MAKE_LIBRARIES_PATH"),
+            f"{module_name}.py",
+        ),
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+logger = load("log").get_logger()
+
 
 sys.stdout.reconfigure(encoding="utf-8")
 

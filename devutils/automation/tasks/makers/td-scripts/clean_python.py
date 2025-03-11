@@ -3,30 +3,50 @@
 #
 
 import glob
+import importlib
+import importlib.util
 import os
 import shutil
 import sys
+from types import ModuleType
+
+
+# noinspection DuplicatedCode
+def load(module_name) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        os.path.join(
+            os.getenv("MAKE_LIBRARIES_PATH"),
+            f"{module_name}.py",
+        ),
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+logger = load("log").get_logger()
 
 
 def clean(project_folder, inclusion_patterns, exclusion_patterns):
-    print(f"Cleaning project: {project_folder}")
+    logger.debug(f"✏️ Cleaning project: {project_folder}")
 
     for pattern in inclusion_patterns:
-        print(f"Processing pattern: '{pattern}'")
+        logger.debug(f"✏️ Processing pattern: '{pattern}'")
         for path in glob.glob(
             os.path.join(project_folder, "**", pattern), recursive=True
         ):
             full_path = os.path.join(project_folder, path)
-            print(f"Found path: '{path}'")
+            logger.debug(f"✏️ Found path: '{path}'")
             if os.path.isdir(full_path):
-                print(f"   - Removing directory: {full_path}")
+                logger.debug(f"✏️    - Removing directory: {full_path}")
                 shutil.rmtree(full_path)
             elif os.path.isfile(full_path):
                 basename = os.path.basename(path)
                 if basename in exclusion_patterns:
-                    print(f"   - Skipping removal of file: {full_path}")
+                    logger.debug(f"✏️    - Skipping removal of file: {full_path}")
                 else:
-                    print(f"   - Removing file: {full_path}")
+                    logger.debug(f"✏️    - Removing file: {full_path}")
                     os.remove(full_path)
 
 
@@ -93,8 +113,8 @@ if __name__ == "__main__":
         elif target == "rs":
             clean_rs(project)
         else:
-            print(f"Error: Unknown target '{target}'", file=sys.stderr)
+            logger.error(f"⭕️ Error: Unknown target '{target}'", file=sys.stderr)
             sys.exit(1)
     else:
-        print("Error: No project or target provided", file=sys.stderr)
+        logger.error("⭕️ Error: No project or target provided", file=sys.stderr)
         sys.exit(1)

@@ -1,0 +1,90 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.test_rs]
+description = "Task 'test' for Rust projects"
+run_task = [
+    { name = [
+        "test_rs_macros",
+        "test_rs_modules"
+    ] }
+]
+
+[tasks.test_rs_macros]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    if eq ${td-cargo} "cross"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_MACROS_CARGO_TOML} --features ${macros-test-features}"
+        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_MACROS_CARGO_TOML} --features ${macros-test-features}
+    else
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_MACROS_CARGO_TOML} --features ${macros-test-features}"
+        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_MACROS_CARGO_TOML} --features ${macros-test-features}
+    end
+    ''']
+
+[tasks.test_rs_modules]
+private = true
+run_task = [
+    { name = [
+        "test_rs_modules_standard",
+        "test_rs_modules_logging",
+        "test_rs_modules_tower"
+    ] }
+]
+
+[tasks.test_rs_modules_standard]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    if eq ${td-cargo} "cross"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features}"
+        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features}
+    else
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features}"
+        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features}
+    end
+    ''']
+
+[tasks.test_rs_modules_logging]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    if eq ${td-cargo} "cross"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging"
+        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging
+    else
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging"
+        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging
+    end
+    ''']
+
+[tasks.test_rs_modules_tower]
+private = true
+cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    if eq ${td-cargo} "cross"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata"
+        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata
+    else
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata"
+        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata
+    end
+    ''']

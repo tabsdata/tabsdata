@@ -772,7 +772,6 @@ fn command_stop(arguments: StopArguments) {
 fn command_status(arguments: ControlArguments) {
     show_mode();
     show_uv_repository_mode();
-    show_setup_and_launch();
     let supervisor_workspace =
         get_workspace_path_for_instance(arguments.workspace(), &arguments.instance().clone());
     let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
