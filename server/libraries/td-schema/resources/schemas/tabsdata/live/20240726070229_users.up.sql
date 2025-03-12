@@ -20,26 +20,20 @@ CREATE TABLE users
     -- because if not we could ever delete a user.
 );
 
--- Create the admin user generating a random id (that is not a UUID)
--- The password is 'tabsdata'
--- created and modified by IDs are set to '0000000000000000000000' to indicate that the system did it.
-WITH admin AS (SELECT substr(abs(random()) || abs(random()) || abs(random()) || abs(random()) || abs(random()), 1,
-                             26) AS id)
-INSERT
-INTO users
-SELECT id,
+INSERT INTO users
+SELECT '00000000000000000000000004',
        'admin',
        'Administrator',
        '-',
        datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
        datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
        '$argon2id$v=19$m=19456,t=2,p=1$ULTV//eju00aMbzZXAORyg$4+7GgsoT3e7lHElgWA2v0OYQHr5SBQzYY3pcUy0/YDM',
        datetime('now'),
        0,
        1
-FROM admin;
+;
 
 CREATE VIEW users_with_names AS
 SELECT u.id,

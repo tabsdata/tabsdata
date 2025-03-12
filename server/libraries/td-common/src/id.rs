@@ -13,6 +13,7 @@ use std::fmt::Display;
 use std::ops::Add;
 use std::time::{Duration, SystemTime};
 use td_error::td_error;
+use td_security::DEFAULT_IDS;
 use uuid::{Bytes, Uuid};
 
 #[td_error]
@@ -45,13 +46,17 @@ pub fn id() -> Id {
 /// Returns the time of the identifier.
 pub fn id_time(id: &Id) -> SystemTime {
     let uuid = Uuid::from_bytes(Bytes::from(id.0));
-    if uuid.get_version_num() != 7 {
+    if uuid.get_version_num() == 7 {
+        let seconds_nanos = uuid.get_timestamp().unwrap().to_unix();
+        SystemTime::UNIX_EPOCH
+            + Duration::from_millis(seconds_nanos.0 * 1000)
+                .add(Duration::from_nanos(seconds_nanos.1 as u64))
+    } else if DEFAULT_IDS.contains(&id.0) {
+        // System epoch for default ids
+        SystemTime::UNIX_EPOCH
+    } else {
         panic!("Invalid Id {}, not a UUID v7", id);
     }
-    let seconds_nanos = uuid.get_timestamp().unwrap().to_unix();
-    SystemTime::UNIX_EPOCH
-        + Duration::from_millis(seconds_nanos.0 * 1000)
-            .add(Duration::from_nanos(seconds_nanos.1 as u64))
 }
 
 impl TryFrom<&String> for Id {
@@ -119,6 +124,7 @@ mod tests {
     use sqlx::SqliteConnection;
     use std::thread::sleep;
     use std::time::{Duration, SystemTime};
+    use td_security::DEFAULT_ENCODED_IDS;
     use uuid::{Bytes, Uuid};
 
     #[test]
@@ -200,5 +206,27 @@ mod tests {
             .unwrap();
 
         assert_eq!(id, got.id);
+    }
+
+    #[test]
+    fn test_default_ids() {
+        for (b, s) in DEFAULT_IDS.iter().zip(DEFAULT_ENCODED_IDS.iter()) {
+            let encoded = BASE32HEX_NOPAD.encode(b);
+            assert_eq!(&encoded, s);
+
+            let mut decoded = vec![0; 16];
+            BASE32HEX_NOPAD
+                .decode_mut(s.as_bytes(), &mut decoded)
+                .map_err(|_| IdError::InvalidStringRepresentation(s.to_string()))
+                .unwrap();
+            assert_eq!(&decoded, b);
+
+            let id = Id::try_from(&s.to_string()).unwrap();
+            assert_eq!(id, Id(*b));
+
+            let id = Id(*b);
+            let time = id_time(&id);
+            assert_eq!(time, SystemTime::UNIX_EPOCH);
+        }
     }
 }

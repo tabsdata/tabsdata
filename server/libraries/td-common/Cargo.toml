@@ -50,6 +50,7 @@ toml = { workspace = true }
 # Internal dependencies
 
 td-error = { workspace = true }
+td-security = { workspace = true }
 
 ## Macros
 

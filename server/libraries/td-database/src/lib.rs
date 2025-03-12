@@ -25,6 +25,11 @@ pub async fn db_with_schema(
 #[cfg(test)]
 mod tests {
     use crate::sql::SqliteConfigBuilder;
+    use td_security::{
+        ENCODED_ID_ROLE_SEC_ADMIN, ENCODED_ID_ROLE_SYS_ADMIN, ENCODED_ID_ROLE_USER,
+        ENCODED_ID_USER_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN,
+        ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_USER,
+    };
     use testdir::testdir;
 
     #[tokio::test]
@@ -32,5 +37,67 @@ mod tests {
         let db_file = testdir!().join("test.db").to_str().map(str::to_string);
         let config = SqliteConfigBuilder::default().url(db_file).build().unwrap();
         assert!(!crate::db(&config).await.unwrap().is_closed());
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_db_defaults() {
+        let db = crate::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
+        #[derive(sqlx::FromRow)]
+        struct Value {
+            id: String,
+        }
+
+        let row: Value = sqlx::query_as("SELECT id FROM users WHERE name = 'admin'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_USER_ADMIN);
+
+        let row: Value = sqlx::query_as("SELECT id FROM roles WHERE name = 'sys_admin'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_ROLE_SYS_ADMIN);
+
+        let row: Value = sqlx::query_as("SELECT id FROM roles WHERE name = 'sec_admin'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_ROLE_SEC_ADMIN);
+
+        let row: Value = sqlx::query_as("SELECT id FROM roles WHERE name = 'user'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_ROLE_USER);
+
+        let row: Value =
+            sqlx::query_as("SELECT id FROM users_roles WHERE user_id = ?1 AND role_id = ?2")
+                .bind(ENCODED_ID_USER_ADMIN)
+                .bind(ENCODED_ID_ROLE_SYS_ADMIN)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        assert_eq!(row.id, ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN);
+
+        let row: Value =
+            sqlx::query_as("SELECT id FROM users_roles WHERE user_id = ?1 AND role_id = ?2")
+                .bind(ENCODED_ID_USER_ADMIN)
+                .bind(ENCODED_ID_ROLE_SEC_ADMIN)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        assert_eq!(row.id, ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN);
+
+        let row: Value =
+            sqlx::query_as("SELECT id FROM users_roles WHERE user_id = ?1 AND role_id = ?2")
+                .bind(ENCODED_ID_USER_ADMIN)
+                .bind(ENCODED_ID_ROLE_USER)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        assert_eq!(row.id, ENCODED_ID_USER_ROLE_ADMIN_USER);
     }
 }

@@ -15,38 +15,36 @@ CREATE TABLE roles
 );
 CREATE UNIQUE INDEX roles___name___idx ON roles (name);
 
--- Create the default roles generating a random id (that is not a UUID): sys_admin, sec_admin, user.
--- Created and modified by IDs are set to '0000000000000000000000' to indicate that the system did it.
 INSERT INTO roles
-SELECT substr(abs(random()) || abs(random()) || abs(random()) || abs(random()) || abs(random()), 1, 26),
+SELECT '00000000000000000000000008',
        'sys_admin',
        'System Administrator Role',
        datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
        datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
        1
 ;
 
 INSERT INTO roles
-SELECT substr(abs(random()) || abs(random()) || abs(random()) || abs(random()) || abs(random()), 1, 26),
+SELECT '0000000000000000000000000C',
        'sec_admin',
        'Security Administrator Role',
        datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
        datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
        1
 ;
 
 INSERT INTO roles
-SELECT substr(abs(random()) || abs(random()) || abs(random()) || abs(random()) || abs(random()), 1, 26),
+SELECT '0000000000000000000000000G',
        'user',
        'User Role',
        datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
        datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
        1
 ;
 
@@ -81,24 +79,11 @@ CREATE UNIQUE INDEX roles___user_id__role_id___idx ON users_roles (user_id, role
 
 -- Assign the sys_admin, sec_admin and user roles to the admin user.
 INSERT INTO users_roles
-SELECT substr(abs(random()) || abs(random()) || abs(random()) || abs(random()) || abs(random()), 1, 26),
+SELECT '0000000000000000000000000K',
        u.id,
        r.id,
        datetime('now'),
-       '0000000000000000000000',
-       1
-FROM users u,
-     roles r
-WHERE u.name = 'admin'
-  AND r.name = 'sec_admin'
-;
-
-INSERT INTO users_roles
-SELECT substr(abs(random()) || abs(random()) || abs(random()) || abs(random()) || abs(random()), 1, 26),
-       u.id,
-       r.id,
-       datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
        1
 FROM users u,
      roles r
@@ -107,11 +92,24 @@ WHERE u.name = 'admin'
 ;
 
 INSERT INTO users_roles
-SELECT substr(abs(random()) || abs(random()) || abs(random()) || abs(random()) || abs(random()), 1, 26),
+SELECT '0000000000000000000000000O',
        u.id,
        r.id,
        datetime('now'),
-       '0000000000000000000000',
+       '00000000000000000000000000',
+       1
+FROM users u,
+     roles r
+WHERE u.name = 'admin'
+  AND r.name = 'sec_admin'
+;
+
+INSERT INTO users_roles
+SELECT '0000000000000000000000000S',
+       u.id,
+       r.id,
+       datetime('now'),
+       '00000000000000000000000000',
        1
 FROM users u,
      roles r
