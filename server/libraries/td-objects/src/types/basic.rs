@@ -69,6 +69,10 @@ fn parse_user(s: String) -> Result<String, TdError> {
     parse_name(s, "User name")
 }
 
+fn parse_role(s: String) -> Result<String, TdError> {
+    parse_name(s, "Role name")
+}
+
 fn parse_function(s: String) -> Result<String, TdError> {
     parse_name(s, "Function name")
 }
@@ -128,10 +132,10 @@ pub struct BundleId;
 #[td_type::typed(id)]
 pub struct CollectionId;
 
-#[td_type::typed(string(parser = parse_collection ))]
+#[td_type::typed(string(parser = parse_collection))]
 pub struct CollectionName;
 
-#[td_type::typed(string( regex = DATA_LOCATION_REGEX ))]
+#[td_type::typed(string(regex = DATA_LOCATION_REGEX))]
 pub struct DataLocation;
 
 #[td_type::typed(string(min_len = 0, max_len = 200))]
@@ -143,7 +147,7 @@ pub struct DependencyId;
 #[td_type::typed(i16(min = 0, max = 200))]
 pub struct DependencyPos;
 
-#[td_type::typed(string(regex = DependencyStatus::REGEX ))]
+#[td_type::typed(string(regex = DependencyStatus::REGEX))]
 pub struct DependencyStatus;
 
 impl DependencyStatus {
@@ -164,13 +168,16 @@ pub struct DependencyVersionId;
 #[td_type::typed(id)]
 pub struct ExecutionPlanId;
 
+#[td_type::typed(bool(default = false))]
+pub struct Fixed;
+
 #[td_type::typed(bool)]
 pub struct Frozen;
 
 #[td_type::typed(id)]
 pub struct FunctionId;
 
-#[td_type::typed(string(parser = parse_function ))]
+#[td_type::typed(string(parser = parse_function))]
 pub struct FunctionName;
 
 // JSON blob with `version`, `envs` & `secrets` top entries.
@@ -178,7 +185,7 @@ pub struct FunctionName;
 #[td_type::typed(string(max_len = 4096))]
 pub struct FunctionRuntimeValues;
 
-#[td_type::typed(string(regex = FunctionStatus::REGEX ))]
+#[td_type::typed(string(regex = FunctionStatus::REGEX))]
 pub struct FunctionStatus;
 
 impl FunctionStatus {
@@ -206,19 +213,25 @@ pub struct Partition;
 #[td_type::typed(timestamp)]
 pub struct PublishedOn;
 
+#[td_type::typed(id)]
+pub struct RoleId;
+
+#[td_type::typed(string(parser = parse_role))]
+pub struct RoleName;
+
 #[td_type::typed(string(min_len = 0, max_len = 4096))]
 pub struct Snippet;
 
 #[td_type::typed(string(min_len = 1, max_len = 10))]
 pub struct StorageVersion;
 
-#[td_type::typed(string(parser = parse_dependency ))]
+#[td_type::typed(string(parser = parse_dependency))]
 pub struct TableDependency;
 
 #[td_type::typed(id)]
 pub struct TableDataId;
 
-#[td_type::typed(string(regex = TableDataVersionStatus::REGEX ))]
+#[td_type::typed(string(regex = TableDataVersionStatus::REGEX))]
 pub struct TableDataVersionStatus;
 
 impl TableDataVersionStatus {
@@ -263,13 +276,13 @@ pub struct TableDataVersionId;
 #[td_type::typed(id)]
 pub struct TableId;
 
-#[td_type::typed(string(parser = parse_table ))]
+#[td_type::typed(string(parser = parse_table))]
 pub struct TableName;
 
 #[td_type::typed(i16)]
 pub struct TableFunctionParamPos;
 
-#[td_type::typed(string(regex = TableStatus::REGEX ))]
+#[td_type::typed(string(regex = TableStatus::REGEX))]
 pub struct TableStatus;
 
 impl TableStatus {
@@ -294,7 +307,7 @@ pub struct TableTrigger;
 #[td_type::typed(id)]
 pub struct TableVersionId;
 
-#[td_type::typed(string(parser = parse_dependency ))]
+#[td_type::typed(string(parser = parse_dependency))]
 pub struct TableVersions;
 
 #[td_type::typed(id)]
@@ -306,7 +319,7 @@ pub struct TriggeredOn;
 #[td_type::typed(id)]
 pub struct TriggerId;
 
-#[td_type::typed(string(regex = TriggerStatus::REGEX ))]
+#[td_type::typed(string(regex = TriggerStatus::REGEX))]
 pub struct TriggerStatus;
 
 impl TriggerStatus {
@@ -327,8 +340,11 @@ pub struct TriggerVersionId;
 #[td_type::typed(id)]
 pub struct UserId;
 
-#[td_type::typed(string(parser = parse_user ))]
+#[td_type::typed(string(parser = parse_user))]
 pub struct UserName;
+
+#[td_type::typed(id)]
+pub struct UsersRolesId;
 
 #[cfg(test)]
 mod tests {

@@ -12,8 +12,10 @@
 //    'current' and 'at_time' methods.
 pub mod dependency;
 pub mod function;
+pub mod roles;
 pub mod table;
 pub mod trigger;
+pub mod users_roles;
 
 use getset::Getters;
 use std::marker::PhantomData;
@@ -27,6 +29,20 @@ pub struct Statement {
     sql: String,
     /// The parameter names ordered by their position in the parameterized SQL.
     params: Vec<String>,
+}
+
+impl Statement {
+    pub fn new<S, V>(sql: S, params: V) -> Self
+    where
+        S: AsRef<str>,
+        V: IntoIterator,
+        V::Item: AsRef<str>,
+    {
+        Self {
+            sql: sql.as_ref().to_string(),
+            params: params.into_iter().map(|s| s.as_ref().to_string()).collect(),
+        }
+    }
 }
 
 /// A typed column to use in query function conditions
@@ -161,9 +177,15 @@ fn select_cols(columns: &Columns) -> String {
     }
 }
 
+fn placeholders(len: usize) -> String {
+    (1..=len)
+        .map(|i| format!("?{}", i))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 #[cfg(test)]
 mod tests {
-
     #[test]
     fn test_which() {
         use super::Which;

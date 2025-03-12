@@ -6,5 +6,6 @@ pub mod basic;
 
 pub mod dependency;
 pub mod function;
+pub mod role;
 pub mod table;
 pub mod trigger;
