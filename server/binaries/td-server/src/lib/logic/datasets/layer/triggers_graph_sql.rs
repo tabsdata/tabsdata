@@ -3,7 +3,7 @@
 //
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_execution::link::{Graph, TriggerGraph, TriggerLink};
 use td_objects::crudl::handle_sql_err;
 use td_objects::dlo::DatasetId;

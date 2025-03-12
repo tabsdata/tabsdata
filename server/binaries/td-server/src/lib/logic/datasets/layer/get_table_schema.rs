@@ -6,7 +6,7 @@ use crate::logic::datasets::error::DatasetError;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{Field, LazyFrame, ScanArgsParquet, SchemaExt};
 use std::collections::HashMap;
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::datasets::dto::SchemaField;
 use td_storage::{SPath, Storage};
 use td_tower::extractors::{Input, SrvCtx};

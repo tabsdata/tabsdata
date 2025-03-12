@@ -3,8 +3,8 @@
 //
 
 use crate::logic::collections::layers::read_collection_authorize;
-use td_common::error::TdError;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use td_objects::collections::dao::CollectionWithNames;
 use td_objects::collections::dto::CollectionRead;
 use td_objects::crudl::ReadRequest;

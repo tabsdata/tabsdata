@@ -32,8 +32,8 @@ use crate::logic::datasets::layer::validate_external_dependency_tables::validate
 use crate::logic::datasets::layer::validate_fixed_dependency_versions::validate_fixed_dependency_versions;
 use crate::logic::datasets::layer::validate_self_dependency_tables::validate_self_dependency_tables;
 use crate::logic::datasets::layer::validate_table_names::validate_table_names;
-use td_common::error::TdError;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use td_objects::crudl::CreateRequest;
 use td_objects::datasets::dto::*;
 use td_objects::dlo::CollectionName;
@@ -109,11 +109,11 @@ pub mod tests {
     use crate::logic::collections::service::tests::create_test_collections;
     use crate::logic::datasets::service::create_dataset::CreateDatasetService;
     use crate::logic::users::service::create_user::tests::create_test_users;
-    use td_common::error::TdError;
     use td_common::id::Id;
     use td_common::system_tables::INITIAL_VALUES;
     use td_common::time::UniqueUtc;
     use td_database::sql::DbPool;
+    use td_error::TdError;
     use td_objects::crudl::{select_all_by, RequestContext};
     use td_objects::datasets::dao::{DsDependency, DsFunction, DsTable};
     use td_objects::datasets::dto::{DatasetRead, DatasetWrite};

@@ -2,8 +2,8 @@
 //   Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
 use td_common::server::{SupervisorMessage, WorkerMessageQueue};
+use td_error::TdError;
 use td_execution::parameters::FunctionInput;
 use td_tower::default_services::Condition;
 use td_tower::extractors::{Input, SrvCtx};

@@ -3,7 +3,7 @@
 //
 
 use crate::crudl::{list_response, ListRequest, ListResponse, ListResult};
-use td_common::error::TdError;
+use td_error::TdError;
 use td_tower::extractors::Input;
 
 pub async fn map<Dao, Dto>(Input(dao): Input<Dao>) -> Result<Dto, TdError>

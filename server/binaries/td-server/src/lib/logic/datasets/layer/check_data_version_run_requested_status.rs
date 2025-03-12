@@ -2,8 +2,8 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
 use td_common::execution_status::DataVersionStatus;
+use td_error::TdError;
 use td_objects::datasets::dao::DsDataVersion;
 use td_objects::dlo::DataVersionId;
 use td_tower::default_services::Condition;

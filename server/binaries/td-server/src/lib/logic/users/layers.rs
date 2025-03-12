@@ -6,8 +6,8 @@ use crate::logic::apisrv::jwt::jwt_logic::{JwtLogic, TokenResponse};
 use crate::logic::users::error::UserError;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use std::ops::Deref;
-use td_common::error::TdError;
 use td_database::sql::DbError;
+use td_error::TdError;
 use td_objects::crudl::{
     assert_one, handle_create_unique_err, handle_sql_err, list_result, list_select, ListRequest,
     ListResult,

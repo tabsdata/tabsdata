@@ -30,7 +30,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dao() -> Result<(), td_common::error::TdError> {
+    fn test_dao() -> Result<(), td_error::TdError> {
         #[Dao]
         #[td_type(builder(try_from = Dao))]
         struct TestDao {
@@ -51,7 +51,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dto() -> Result<(), td_common::error::TdError> {
+    fn test_dto() -> Result<(), td_error::TdError> {
         #[Dto]
         #[td_type(builder(try_from = Dto))]
         struct TestDto {
@@ -69,7 +69,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dlo() -> Result<(), td_common::error::TdError> {
+    fn test_dlo() -> Result<(), td_error::TdError> {
         #[Dlo]
         #[td_type(builder(try_from = Dlo))]
         struct TestDlo {
@@ -426,7 +426,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_error() -> Result<(), td_common::error::TdError> {
+    fn test_from_error() -> Result<(), td_error::TdError> {
         #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
@@ -455,7 +455,7 @@ mod tests {
     }
 
     #[test]
-    fn test_updated_from() -> Result<(), td_common::error::TdError> {
+    fn test_updated_from() -> Result<(), td_error::TdError> {
         #[Dto]
         struct TestDto {
             id: i64,
@@ -492,7 +492,7 @@ mod tests {
     }
 
     #[test]
-    fn test_try_from_updated_from() -> Result<(), td_common::error::TdError> {
+    fn test_try_from_updated_from() -> Result<(), td_error::TdError> {
         #[Dlo]
         struct TestDlo {
             name: String,
@@ -542,7 +542,7 @@ mod tests {
     }
 
     #[test]
-    fn test_try_from_updated_from_default() -> Result<(), td_common::error::TdError> {
+    fn test_try_from_updated_from_default() -> Result<(), td_error::TdError> {
         #[Dlo]
         struct TestDlo {
             name: String,

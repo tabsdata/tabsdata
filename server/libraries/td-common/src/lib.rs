@@ -7,7 +7,6 @@ pub mod cli;
 pub mod config;
 pub mod dataset;
 pub mod env;
-pub mod error;
 pub mod execution_status;
 pub mod files;
 pub mod id;

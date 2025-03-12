@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::crudl::{handle_sql_err, list_result, ListRequest, ListResult};
 use td_objects::datasets::dao::DsTableList;
 use td_objects::dlo::CollectionId;

@@ -5,8 +5,8 @@
 use crate::logic::datasets::error::DatasetError;
 use itertools::Itertools;
 use std::collections::HashSet;
-use td_common::error::TdError;
 use td_common::name::is_valid_name;
+use td_error::TdError;
 use td_objects::datasets::dto::*;
 use td_tower::extractors::Input;
 

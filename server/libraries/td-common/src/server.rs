@@ -5,8 +5,6 @@
 //! This module provides utilities that dedicated servers or workers can use to interact in several ways with their main
 //! supervisor.
 
-use crate as td_common;
-
 use crate::env::get_current_dir;
 use crate::execution_status::ExecutionUpdateStatus;
 use crate::files::{get_files_in_folder_sorted_by_name, LOCK_EXTENSION, YAML_EXTENSION};

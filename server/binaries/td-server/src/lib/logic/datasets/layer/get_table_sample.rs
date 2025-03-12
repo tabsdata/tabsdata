@@ -9,7 +9,7 @@ use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{col, LazyFrame, Literal, ParquetWriter, ScanArgsParquet};
 use std::collections::HashMap;
 use std::io::Cursor;
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::crudl::ListParams;
 use td_objects::datasets::dlo::BoxedSyncStream;
 use td_storage::{SPath, Storage};

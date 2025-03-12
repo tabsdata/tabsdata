@@ -45,12 +45,11 @@ ignored = ["openssl", "strum_macros", "serde_json", "td-build", "thiserror", "ut
 ## Macros
 
 td-apiforge = { workspace = true }
-td-error = { workspace = true }
 
 ## Libraries
 
-td-common = { workspace = true }
 td-database = { workspace = true }
+td-error = { workspace = true }
 
 # External dependencies
 

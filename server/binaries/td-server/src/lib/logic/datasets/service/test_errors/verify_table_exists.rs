@@ -4,8 +4,8 @@
 
 use crate::logic::datasets::error::DatasetError;
 use crate::logic::datasets::service::data::DataService;
-use td_common::error::assert_service_error;
 use td_common::id;
+use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{AtParam, TableCommitParam, TableParam};
 use td_objects::test_utils::seed_collection::seed_collection;

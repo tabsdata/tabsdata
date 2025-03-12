@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::crudl::RequestContext;
 use td_objects::datasets::dao::*;
 use td_objects::datasets::dto::*;

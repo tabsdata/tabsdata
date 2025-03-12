@@ -31,7 +31,7 @@ pub fn td_error_impl(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl td_common::error::TdDomainError for #name {
+        impl td_error::TdDomainError for #name {
             fn domain(&self) -> &'static str {
                 stringify!(#name)
             }
@@ -40,12 +40,12 @@ pub fn td_error_impl(input: TokenStream) -> TokenStream {
                 format!("{}::{:04}", self.domain(), self.variant_index())
             }
 
-            fn api_error(&self) -> td_common::error::ApiError {
-                td_common::error::ApiError::from(self.variant_index())
+            fn api_error(&self) -> td_error::ApiError {
+                td_error::ApiError::from(self.variant_index())
             }
         }
 
-        impl From<#name> for td_common::error::TdError {
+        impl From<#name> for td_error::TdError {
             fn from(error: #name) -> Self {
                 Self::new(error)
             }

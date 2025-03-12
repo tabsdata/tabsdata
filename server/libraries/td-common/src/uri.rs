@@ -2,8 +2,6 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate as td_common;
-
 use crate::id::Id;
 use crate::name::{name_regex_pattern, name_with_dot_regex_pattern};
 use crate::uri::TdUri::{Dataset, Table};

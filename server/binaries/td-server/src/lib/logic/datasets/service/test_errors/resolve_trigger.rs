@@ -5,7 +5,7 @@
 use crate::logic::datasets::error::DatasetError;
 use crate::logic::datasets::layer::check_syntax_dependencies_and_triggers::DependencyError;
 use crate::logic::datasets::service::create_dataset::CreateDatasetService;
-use td_common::error::assert_service_error;
+use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::datasets::dto::DatasetWrite;
 use td_objects::dlo::CollectionName;

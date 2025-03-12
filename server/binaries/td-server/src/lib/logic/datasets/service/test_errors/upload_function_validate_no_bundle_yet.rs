@@ -8,7 +8,7 @@ use axum::body::Body;
 use axum::extract::Request;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use td_common::error::assert_service_error;
+use td_error::assert_service_error;
 use td_objects::datasets::dto::UploadFunction;
 use td_objects::rest_urls::FunctionIdParam;
 use td_objects::test_utils::seed_collection::seed_collection;

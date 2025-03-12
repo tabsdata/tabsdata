@@ -2,8 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
 use td_common::time::UniqueUtc;
+use td_error::TdError;
 use td_execution::execution_planner::ExecutionTemplate;
 use td_objects::crudl::handle_update_error;
 use td_objects::dlo::DatasetId;

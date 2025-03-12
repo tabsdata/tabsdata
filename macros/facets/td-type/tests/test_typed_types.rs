@@ -7,13 +7,13 @@ mod test;
 #[cfg(test)]
 mod tests {
     use super::test::*;
-    use td_error::td_error;
+    use tm_error::td_error;
 
     macro_rules! typed_test {
         ($type_:ty, $value:expr) => {
             paste::paste! {
                 #[test]
-                fn [< test_ $type_:lower >]() -> Result<(), td_common::error::TdError> {
+                fn [< test_ $type_:lower >]() -> Result<(), td_error::TdError> {
                     #[td_type::typed([< $type_:lower >])]
                     struct TypedType;
 
@@ -48,7 +48,7 @@ mod tests {
 
     // Complex types tests
     #[test]
-    fn test_id() -> Result<(), td_common::error::TdError> {
+    fn test_id() -> Result<(), td_error::TdError> {
         #[td_type::typed(id)]
         struct TypedType;
 
@@ -70,7 +70,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_timestamp() -> Result<(), td_common::error::TdError> {
+    async fn test_timestamp() -> Result<(), td_error::TdError> {
         #[td_type::typed(timestamp)]
         struct TypedType;
 
@@ -101,7 +101,7 @@ mod tests {
         ($type_:ty, $default:tt) => {
             paste::paste! {
                 #[test]
-                fn [< test_ $type_:lower _default_const >]() -> Result<(), td_common::error::TdError> {
+                fn [< test_ $type_:lower _default_const >]() -> Result<(), td_error::TdError> {
                     const DEFAULT: $type_ = $default;
 
                     #[td_type::typed([< $type_:lower >](default = DEFAULT))]
@@ -117,7 +117,7 @@ mod tests {
         ($type_:ty, $const_type:ty, $default:tt) => {
             paste::paste! {
                 #[test]
-                fn [< test_ $type_:lower _default_const >]() -> Result<(), td_common::error::TdError> {
+                fn [< test_ $type_:lower _default_const >]() -> Result<(), td_error::TdError> {
                     const DEFAULT: $const_type = $default;
 
                     #[td_type::typed([< $type_:lower >](default = DEFAULT))]
@@ -135,7 +135,7 @@ mod tests {
         ($type_:ty, $default:tt) => {
             paste::paste! {
                 #[test]
-                fn [< test_ $type_:lower _default >]() -> Result<(), td_common::error::TdError> {
+                fn [< test_ $type_:lower _default >]() -> Result<(), td_error::TdError> {
                     #[td_type::typed([< $type_:lower >](default = $default))]
                     struct TypedType;
 
@@ -145,7 +145,7 @@ mod tests {
                 }
 
                 #[test]
-                fn [< test_ $type_:lower _default_closure >]() -> Result<(), td_common::error::TdError> {
+                fn [< test_ $type_:lower _default_closure >]() -> Result<(), td_error::TdError> {
                     fn default() -> $type_ {
                         $default.into()
                     }
@@ -215,7 +215,7 @@ mod tests {
         ($type_:ty) => {
             paste::paste! {
                 #[test]
-                fn [< test_ $type_:lower _try_from >]() -> Result<(), td_common::error::TdError> {
+                fn [< test_ $type_:lower _try_from >]() -> Result<(), td_error::TdError> {
                     #[td_type::typed([< $type_:lower >])]
                     struct TypedType;
 
@@ -244,7 +244,7 @@ mod tests {
     // must be implemented so this works).
 
     #[test]
-    fn test_i16_i32_try_from() -> Result<(), td_common::error::TdError> {
+    fn test_i16_i32_try_from() -> Result<(), td_error::TdError> {
         #[td_type::typed(i16)]
         struct TypedType;
 
@@ -258,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn test_id_string_try_from() -> Result<(), td_common::error::TdError> {
+    fn test_id_string_try_from() -> Result<(), td_error::TdError> {
         #[td_type::typed(id)]
         struct TypedType;
 
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn test_string_id_try_from() -> Result<(), td_common::error::TdError> {
+    fn test_string_id_try_from() -> Result<(), td_error::TdError> {
         #[td_type::typed(string)]
         struct TypedType;
 
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_string_parser() {
-        fn parser(s: String) -> Result<String, td_common::error::TdError> {
+        fn parser(s: String) -> Result<String, td_error::TdError> {
             if s.starts_with("123") {
                 Ok(s)
             } else {
@@ -418,7 +418,7 @@ mod tests {
         ($type_:ty, $default:expr) => {
             paste::paste! {
                 #[test]
-                fn [< test_ $type_:lower _default_numeric >]() -> Result<(), td_common::error::TdError> {
+                fn [< test_ $type_:lower _default_numeric >]() -> Result<(), td_error::TdError> {
                     #[td_type::typed([< $type_:lower >](min = [< 2 $type_:lower >], max = [< 4 $type_:lower >]))]
                     struct TypedType;
 

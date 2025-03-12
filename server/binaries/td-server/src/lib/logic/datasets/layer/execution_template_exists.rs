@@ -2,7 +2,7 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_execution::execution_planner::ExecutionTemplate;
 use td_tower::default_services::Condition;
 use td_tower::extractors::Input;

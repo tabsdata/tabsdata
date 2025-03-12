@@ -2,8 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
 use td_common::execution_status::{DataVersionStatus, RecoverStatus};
+use td_error::TdError;
 use td_objects::datasets::dlo::{DataVersionState, DataVersionStateBuilder};
 use td_objects::dlo::{RequestTime, Value};
 use td_tower::extractors::Input;

@@ -4,7 +4,7 @@
 
 use crate::logic::collections::error::CollectionError;
 use crate::logic::collections::service::update_collection::UpdateCollectionService;
-use td_common::error::assert_service_error;
+use td_error::assert_service_error;
 use td_objects::collections::dto::CollectionUpdate;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;

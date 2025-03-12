@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::crudl::{handle_sql_err, list_result, ListRequest, ListResult};
 use td_objects::datasets::dao::DsWorkerMessageWithNames;
 use td_objects::rest_urls::{By, WorkerMessageListParam};

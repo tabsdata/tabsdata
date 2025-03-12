@@ -9,8 +9,8 @@ use crate::logic::datasets::layer::read_dataset_authorize::read_dataset_authoriz
 use crate::logic::datasets::layer::resolve_table_location::resolve_table_location;
 use crate::logic::datasets::layer::verify_table_exists::verify_table_exists;
 use std::sync::Arc;
-use td_common::error::TdError;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use td_objects::crudl::ReadRequest;
 use td_objects::datasets::dto::*;
 use td_objects::dlo::{CollectionName, TableName};

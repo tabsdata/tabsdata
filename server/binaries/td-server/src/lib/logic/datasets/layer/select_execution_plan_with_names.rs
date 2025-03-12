@@ -2,7 +2,7 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::crudl::handle_select_error;
 use td_objects::datasets::dao::DsExecutionPlanWithNames;
 use td_objects::dlo::ExecutionPlanId;

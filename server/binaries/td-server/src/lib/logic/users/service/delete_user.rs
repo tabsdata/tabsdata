@@ -5,8 +5,8 @@
 use crate::logic::users::layers::{
     delete_user_authorize, delete_user_sql_delete, delete_user_validate,
 };
-use td_common::error::TdError;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
 use td_objects::dlo::UserName;
 use td_objects::tower_service::extractor::{

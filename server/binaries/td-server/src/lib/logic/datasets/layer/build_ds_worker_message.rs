@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::datasets::dao::{DsDataVersion, DsWorkerMessage, DsWorkerMessageBuilder};
 use td_objects::dlo::{Value, WorkerMessageId};
 use td_tower::extractors::Input;

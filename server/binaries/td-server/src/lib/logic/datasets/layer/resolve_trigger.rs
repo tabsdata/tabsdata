@@ -5,8 +5,8 @@
 use crate::logic::datasets::error::DatasetError;
 use crate::logic::datasets::layer::common_functions::uri_names_to_uri_ids;
 use std::ops::Deref;
-use td_common::error::TdError;
 use td_common::uri::TdUri;
+use td_error::TdError;
 use td_objects::datasets::dlo::*;
 use td_objects::datasets::dto::*;
 use td_objects::dlo::{CollectionName, DatasetName};

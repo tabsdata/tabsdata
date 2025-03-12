@@ -5,8 +5,8 @@
 use crate::logic::collections::layers::{
     create_collection_authorize, create_collection_build_dao, create_collection_sql_insert,
 };
-use td_common::error::TdError;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use td_objects::collections::dao::CollectionWithNames;
 use td_objects::collections::dto::{CollectionCreate, CollectionRead};
 use td_objects::crudl::CreateRequest;

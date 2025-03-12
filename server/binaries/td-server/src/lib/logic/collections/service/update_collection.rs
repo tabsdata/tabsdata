@@ -6,8 +6,8 @@ use crate::logic::collections::layers::{
     update_collection_authorize, update_collection_build_dao, update_collection_sql_update,
     update_collection_validate,
 };
-use td_common::error::TdError;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use td_objects::collections::dao::{Collection, CollectionWithNames};
 use td_objects::collections::dto::{CollectionRead, CollectionUpdate};
 use td_objects::crudl::UpdateRequest;

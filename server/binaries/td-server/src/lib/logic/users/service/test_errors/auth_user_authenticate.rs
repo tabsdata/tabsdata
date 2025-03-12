@@ -7,7 +7,7 @@ use crate::logic::users::error::UserError;
 use crate::logic::users::service::authenticate_user::AuthenticateUserService;
 use chrono::Duration;
 use std::sync::Arc;
-use td_common::error::assert_service_error;
+use td_error::assert_service_error;
 use td_objects::test_utils::seed_user::seed_user;
 use td_objects::users::dto::AuthenticateRequest;
 

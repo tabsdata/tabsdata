@@ -3,8 +3,8 @@
 //
 
 use td_common::dataset::DatasetRef;
-use td_common::error::TdError;
 use td_common::uri::TdUri;
+use td_error::TdError;
 use td_execution::dataset::DatasetWithUris;
 use td_execution::execution_planner::{ExecutionPlan, ExecutionPlanWithNames};
 use td_objects::crudl::handle_select_error;

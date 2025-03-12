@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_execution::execution_planner::ExecutionPlanWithNames;
 use td_execution::graphs::{DatasetGraph, ExecutionGraphWithNames};
 use td_tower::extractors::{Input, SrvCtx};

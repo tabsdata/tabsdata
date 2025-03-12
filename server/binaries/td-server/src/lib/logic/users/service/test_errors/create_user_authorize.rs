@@ -5,7 +5,7 @@
 use crate::logic::users::error::UserError;
 use crate::logic::users::service::create_user::CreateUserService;
 use std::sync::Arc;
-use td_common::error::assert_service_error;
+use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::test_utils::seed_user::seed_user;
 use td_objects::users::dto::UserCreate;

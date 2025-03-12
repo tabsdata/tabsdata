@@ -6,7 +6,7 @@ use crate::dlo::Value;
 use crate::entity_finder::{EntityFinder, IdName, ScopedEntityFinder};
 use sqlx::sqlite::SqliteRow;
 use sqlx::FromRow;
-use td_common::error::TdError;
+use td_error::TdError;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection};
 
 pub async fn find_by_id<Id, Dao>(

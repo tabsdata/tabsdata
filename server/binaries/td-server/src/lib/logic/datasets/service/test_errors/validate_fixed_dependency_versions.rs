@@ -4,11 +4,11 @@
 
 use crate::logic::datasets::error::DatasetError;
 use crate::logic::datasets::service::create_dataset::CreateDatasetService;
-use td_common::error::assert_service_error;
 use td_common::id;
 use td_common::id::Id;
 use td_common::time::UniqueUtc;
 use td_database::sql::DbPool;
+use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::datasets::dto::DatasetWrite;
 use td_objects::dlo::CollectionName;

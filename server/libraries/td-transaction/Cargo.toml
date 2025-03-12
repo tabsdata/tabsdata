@@ -40,13 +40,13 @@ ignored = ["openssl", "strum_macros", "thiserror"]
 
 # Internal dependencies
 
-## Macros
 
-td-error = { workspace = true }
+## Macros
 
 ## Libraries
 
 td-common = { workspace = true }
+td-error = { workspace = true }
 td-transaction-interceptor = { workspace = true }
 
 # External dependencies

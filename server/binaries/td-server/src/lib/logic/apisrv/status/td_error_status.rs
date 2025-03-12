@@ -8,7 +8,7 @@ use crate::logic::apisrv::status::error_status::{
     DefaultAndNotFoundErrorStatus, DefaultErrorStatus, ErrorResponse, ErrorResponseBuilder,
 };
 use http::StatusCode;
-use td_common::error::{ApiError, TdError};
+use td_error::{ApiError, TdError};
 
 impl From<TdError> for DefaultAndNotFoundErrorStatus {
     fn from(error: TdError) -> Self {

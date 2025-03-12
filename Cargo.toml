@@ -32,6 +32,7 @@ members = [
     "devutils/automation/tasks/makers/td-xtask",
     "server/libraries/td-common",
     "server/libraries/td-database",
+    "server/libraries/td-error",
     "server/libraries/td-execution",
     "server/libraries/td-interceptor-api",
     "server/libraries/td-objects",
@@ -51,8 +52,8 @@ exclude = [
     "macros/facets/td-apiforge",
     "macros/facets/td-attach",
     "macros/facets/td-concrete",
-    "macros/facets/td-error",
     "macros/facets/td-type",
+    "macros/facets/tm-error",
     "macros/facets/tm-workspace",
 ]
 
@@ -136,14 +137,11 @@ path = "devutils/automation/tasks/cargo/td-build"
 [workspace.dependencies.td-concrete]
 path = "macros/facets/td-concrete"
 
-[workspace.dependencies.duct]
-version = "0.13"
-
-[workspace.dependencies.td-error]
-path = "macros/facets/td-error"
-
 [workspace.dependencies.td-type]
 path = "macros/facets/td-type"
+
+[workspace.dependencies.tm-error]
+path = "macros/facets/tm-error"
 
 [workspace.dependencies.tm-workspace]
 path = "macros/facets/tm-workspace"
@@ -155,6 +153,10 @@ path = "server/libraries/td-common"
 
 [workspace.dependencies.td-database]
 path = "server/libraries/td-database"
+
+[workspace.dependencies.td-error]
+path = "server/libraries/td-error"
+version = "0.9.2"
 
 [workspace.dependencies.td-execution]
 path = "server/libraries/td-execution"
@@ -268,6 +270,9 @@ version = "5.0.1"
 
 [workspace.dependencies.derive_builder]
 version = "0.20.2"
+
+[workspace.dependencies.duct]
+version = "0.13"
 
 [workspace.dependencies.futures]
 version = "0.3.31"

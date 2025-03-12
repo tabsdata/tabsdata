@@ -3,8 +3,8 @@
 //
 
 use crate::logic::collections::error::CollectionError;
-use td_common::error::TdError;
 use td_database::sql::DbError;
+use td_error::TdError;
 use td_objects::collections::dao::{Collection, CollectionBuilder, CollectionWithNames};
 use td_objects::collections::dto::{CollectionCreate, CollectionUpdate};
 use td_objects::crudl::{

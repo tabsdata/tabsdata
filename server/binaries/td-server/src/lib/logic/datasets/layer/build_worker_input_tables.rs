@@ -3,8 +3,8 @@
 //
 
 use indexmap::IndexMap;
-use td_common::error::TdError;
 use td_common::uri::TdUri;
+use td_error::TdError;
 use td_execution::parameters::{InputTable, InputTableVersion, Location};
 use td_objects::crudl::handle_select_error;
 use td_objects::datasets::dao::DsExecutionRequirementDependency;

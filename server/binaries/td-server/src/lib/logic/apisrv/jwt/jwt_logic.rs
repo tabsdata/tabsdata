@@ -9,8 +9,8 @@ use getset::Getters;
 use jsonwebtoken::{decode, encode, get_current_timestamp, DecodingKey, EncodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use td_apiforge::api_server_schema;
-use td_common::error::TdError;
 use td_error::td_error;
+use td_error::TdError;
 
 const BEARER_TOKEN_TYPE: &str = "Bearer";
 

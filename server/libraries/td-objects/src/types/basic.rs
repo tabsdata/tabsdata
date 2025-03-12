@@ -5,8 +5,8 @@
 use constcat::concat;
 use lazy_static::lazy_static;
 use regex::Regex;
-use td_common::error::TdError;
 use td_error::td_error;
+use td_error::TdError;
 
 const IDENTIFIER_LEN: &str = "99";
 

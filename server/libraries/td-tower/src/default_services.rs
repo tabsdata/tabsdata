@@ -15,8 +15,8 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
-use td_common::error::TdError;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use tower::{Layer, Service};
 use tracing::error;
 
@@ -715,7 +715,7 @@ mod tests {
     use sqlx::Connection;
     use std::ops::Deref;
     use std::sync::Arc;
-    use td_common::error::TdError;
+    use td_error::TdError;
     use tower::{ServiceBuilder, ServiceExt};
 
     #[tokio::test]

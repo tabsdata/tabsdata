@@ -1,6 +1,8 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
+
+pub use tm_error::td_error;
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -155,7 +157,7 @@ pub async fn assert_service_error<Req, Res, Err: TdDomainError + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use crate as td_common;
+    use crate as td_error;
 
     use super::*;
     use std::error::Error;

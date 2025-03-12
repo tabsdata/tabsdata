@@ -25,9 +25,9 @@ use crate::logic::datasets::service::schema::SchemaService;
 use crate::logic::datasets::service::update_dataset::UpdateDatasetService;
 use crate::logic::datasets::service::upload_function::UploadFunctionService;
 use std::sync::Arc;
-use td_common::error::TdError;
 use td_common::execution_status::DataVersionUpdateRequest;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use td_objects::crudl::{CreateRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest};
 use td_objects::datasets::dlo::BoxedSyncStream;
 use td_objects::datasets::dto::{

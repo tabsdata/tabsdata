@@ -5,8 +5,8 @@
 use crate::logic::datasets::service::execution::create_plan::CreatePlanService;
 use crate::logic::datasets::service::update_dataset::UpdateDatasetService;
 use std::sync::Arc;
-use td_common::error::assert_service_error;
 use td_common::uri::TdUri;
+use td_error::assert_service_error;
 use td_execution::graphs::GraphError;
 use td_objects::crudl::RequestContext;
 use td_objects::datasets::dto::{DatasetWrite, ExecutionPlanWriteBuilder};

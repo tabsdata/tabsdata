@@ -6,8 +6,7 @@ use crate::config::PasswordHashingConfig;
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use td_common::error::TdError;
-use td_error::td_error;
+use td_error::{td_error, TdError};
 
 #[td_error]
 pub enum Error {

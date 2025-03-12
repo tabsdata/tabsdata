@@ -45,10 +45,9 @@ ignored = ["openssl", "strum_macros", "td-build", "td-database", "thiserror", "t
 
 ## Macros
 
-td-error = { workspace = true }
-
 ## Libraries
 
+td-error = { workspace = true }
 td-common = { workspace = true }
 td-schema = { workspace = true }
 

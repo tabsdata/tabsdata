@@ -9,7 +9,7 @@ use std::env;
 use std::ffi::OsString;
 use std::path::MAIN_SEPARATOR;
 use std::string::ToString;
-use td_common::error::TdError;
+use td_error::TdError;
 
 #[cfg(windows)]
 pub const PATH_SEPARATOR: char = ';';

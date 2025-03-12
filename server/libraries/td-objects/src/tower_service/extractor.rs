@@ -13,9 +13,9 @@ use crate::dlo::{
 };
 use crate::rest_urls::WorkerMessageParam;
 use chrono::{DateTime, Utc};
-use td_common::error::TdError;
 use td_common::server::SupervisorMessage;
 use td_common::uri::Version;
+use td_error::TdError;
 use td_tower::extractors::Input;
 
 pub trait UserNameProvider {

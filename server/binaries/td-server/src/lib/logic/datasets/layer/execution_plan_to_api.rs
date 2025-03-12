@@ -2,7 +2,7 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_execution::execution_planner::ExecutionPlanWithNames;
 use td_execution::graphs::{groups_into_subgraph, ExecutionDot, ExecutionGraphWithNames};
 use td_objects::datasets::dao::DsExecutionPlan;

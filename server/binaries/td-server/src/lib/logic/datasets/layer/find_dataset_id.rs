@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::dlo::{CollectionId, DatasetId, DatasetName};
 use td_objects::entity_finder::EntityFinderError;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection};

@@ -5,9 +5,9 @@
 use crate::logic::datasets::error::DatasetError;
 use sqlx::SqliteConnection;
 use std::collections::HashMap;
-use td_common::error::TdError;
 use td_common::str::comma_separated;
 use td_common::uri::{TdUri, TdUriNameId};
+use td_error::TdError;
 use td_objects::entity_finder::collections::CollectionWithNamesFinder;
 use td_objects::entity_finder::datasets::DatasetFinder;
 

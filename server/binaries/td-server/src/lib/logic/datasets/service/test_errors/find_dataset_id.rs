@@ -4,7 +4,7 @@
 
 use crate::logic::datasets::error::DatasetError;
 use crate::logic::datasets::service::update_dataset::UpdateDatasetService;
-use td_common::error::assert_service_error;
+use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::datasets::dto::DatasetWrite;
 use td_objects::rest_urls::FunctionParam;

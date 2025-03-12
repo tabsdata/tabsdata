@@ -3,7 +3,7 @@
 //
 
 use chrono::{DateTime, Utc};
-use td_common::error::TdError;
+use td_error::TdError;
 use td_execution::dataset::{RelativeVersions, ResolvedVersion};
 use td_execution::execution_planner::{ExecutionPlan, ExecutionTemplate};
 use td_execution::version_finder::SqlVersionFinder;

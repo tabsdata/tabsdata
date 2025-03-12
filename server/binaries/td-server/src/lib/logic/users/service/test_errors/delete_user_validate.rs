@@ -4,7 +4,7 @@
 
 use crate::logic::users::error::UserError;
 use crate::logic::users::service::delete_user::DeleteUserService;
-use td_common::error::assert_service_error;
+use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::test_utils::seed_user::admin_user;
 

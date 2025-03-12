@@ -12,8 +12,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use td_build::version::TABSDATA_VERSION;
-use td_common::error::TdError;
 use td_common::os::name_program;
+use td_error::TdError;
 use tracing::error;
 
 const VERSION_FILE: &str = ".version";

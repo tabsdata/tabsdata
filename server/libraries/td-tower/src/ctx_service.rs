@@ -9,7 +9,7 @@ use serde::Serialize;
 use std::ops::Deref;
 use std::sync::Arc;
 use td_apiforge::api_server_schema;
-use td_common::error::TdError;
+use td_error::TdError;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
 use tower_service::Service;

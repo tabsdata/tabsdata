@@ -7,8 +7,8 @@ use crate::logic::collections::service::delete_collection::DeleteCollectionServi
 use crate::logic::collections::service::list_collections::ListCollectionsService;
 use crate::logic::collections::service::read_collection::ReadCollectionService;
 use crate::logic::collections::service::update_collection::UpdateCollectionService;
-use td_common::error::TdError;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use td_objects::collections::dto::{
     CollectionCreate, CollectionList, CollectionRead, CollectionUpdate,
 };

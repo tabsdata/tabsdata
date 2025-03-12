@@ -5,7 +5,7 @@
 use crate::logic::datasets::error::DatasetError;
 use itertools::Itertools;
 use sqlx::FromRow;
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::crudl::{
     list_response, list_result, list_select, ListRequest, ListResponse, ListResult,
 };

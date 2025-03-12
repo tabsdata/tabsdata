@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use td_common::error::TdError;
+use td_error::TdError;
 use td_objects::crudl::{handle_list_error, list_result, list_select, ListRequest, ListResult};
 use td_objects::datasets::dao::DsTransaction;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection};

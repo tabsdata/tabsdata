@@ -12,9 +12,9 @@ use crate::io::log_std_out_and_err;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Output};
-use td_common::error::TdError;
 use td_common::os::name_program;
 use td_common::status::ExitStatus::GeneralError;
+use td_error::TdError;
 use tracing::{debug, error};
 
 pub const PYTHON_PROGRAM: &str = "python";

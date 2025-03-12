@@ -10,8 +10,8 @@ use crate::logic::users::service::list_users::ListUsersService;
 use crate::logic::users::service::read_user::ReadUserService;
 use crate::logic::users::service::update_user::UpdateUserService;
 use std::sync::Arc;
-use td_common::error::TdError;
 use td_database::sql::DbPool;
+use td_error::TdError;
 use td_objects::crudl::{
     CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest,
 };

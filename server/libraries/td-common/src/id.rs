@@ -1,7 +1,7 @@
 //
 // Copyright 2024 Tabs Data Inc.
 //
-use crate as td_common;
+
 use data_encoding::BASE32HEX_NOPAD;
 use serde::{Deserialize, Serialize};
 use sqlx::encode::IsNull;

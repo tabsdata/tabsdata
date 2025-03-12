@@ -32,7 +32,7 @@ members = [
     "facets/td-apiforge",
     "facets/td-attach",
     "facets/td-concrete",
-    "facets/td-error",
+    "facets/tm-error",
     "facets/td-type",
     "facets/tm-workspace"
 ]
@@ -79,11 +79,11 @@ path = "facets/td-apiforge"
 [workspace.dependencies.td-concrete]
 path = "facets/td-concrete"
 
-[workspace.dependencies.td-error]
-path = "facets/td-error"
-
 [workspace.dependencies.td-shared]
 path = "helpers/td-shared"
+
+[workspace.dependencies.tm-error]
+path = "facets/tm-error"
 
 # External dependencies
 

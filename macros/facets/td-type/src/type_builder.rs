@@ -160,7 +160,7 @@ fn gen_error(type_: &Ident) -> proc_macro2::TokenStream {
             }
         }
 
-        impl td_common::error::TdDomainError for #builder_error_type {
+        impl td_error::TdDomainError for #builder_error_type {
             fn domain(&self) -> &'static str {
                 stringify!(#builder_error_type)
             }
@@ -169,12 +169,12 @@ fn gen_error(type_: &Ident) -> proc_macro2::TokenStream {
                 format!("{}::{:04}", self.domain(), self.variant_index())
             }
 
-            fn api_error(&self) -> td_common::error::ApiError {
-                td_common::error::ApiError::from(self.variant_index())
+            fn api_error(&self) -> td_error::ApiError {
+                td_error::ApiError::from(self.variant_index())
             }
         }
 
-        impl From<#builder_error_type> for td_common::error::TdError {
+        impl From<#builder_error_type> for td_error::TdError {
             fn from(error: #builder_error_type) -> Self {
                 Self::new(error)
             }

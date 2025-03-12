@@ -79,7 +79,7 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
             quote! {
                 #[allow(clippy::needless_question_mark)]
                 impl TryFrom<#from> for #name {
-                    type Error = td_common::error::TdError;
+                    type Error = td_error::TdError;
                     fn try_from(val: #from) -> Result<Self, Self::Error> {
                         Ok(Self::parse((&*val).clone())?)
                     }
@@ -220,7 +220,7 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
             #[error("String value '{0}' does not match regex '{1}'")]
             Regex(String, String),
             #[error("Error parsing string value")]
-            Parse(#[from] td_common::error::TdError),
+            Parse(#[from] td_error::TdError),
         }
 
         impl Default for #name {
@@ -246,7 +246,7 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
                 #regex
             }
 
-            fn custom_parser() -> Option<Box<dyn Fn(String) -> Result<String, td_common::error::TdError>>> {
+            fn custom_parser() -> Option<Box<dyn Fn(String) -> Result<String, td_error::TdError>>> {
                 #parser
             }
 
@@ -545,7 +545,7 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
         }
 
         impl #name {
-            fn parse(val: impl Into<bool>) -> Result<Self, td_common::error::TdError> {
+            fn parse(val: impl Into<bool>) -> Result<Self, td_error::TdError> {
                 let val = val.into();
                 Ok(Self(val))
             }
@@ -559,8 +559,8 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
         }
 
         impl TryFrom<bool> for #name {
-            type Error = td_common::error::TdError;
-            fn try_from(val: bool) -> Result<#name, td_common::error::TdError> {
+            type Error = td_error::TdError;
+            fn try_from(val: bool) -> Result<#name, td_error::TdError> {
                 #name::parse(val)
             }
         }
@@ -645,7 +645,7 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
                 Self(td_common::id::id())
             }
 
-            fn parse(val: impl Into<td_common::id::Id>) -> Result<Self, td_common::error::TdError> {
+            fn parse(val: impl Into<td_common::id::Id>) -> Result<Self, td_error::TdError> {
                 let val = val.into();
                 Ok(Self(val))
             }
@@ -687,8 +687,8 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
         }
 
         impl TryFrom<td_common::id::Id> for #name {
-            type Error = td_common::error::TdError;
-            fn try_from(val: td_common::id::Id) -> Result<#name, td_common::error::TdError> {
+            type Error = td_error::TdError;
+            fn try_from(val: td_common::id::Id) -> Result<#name, td_error::TdError> {
                 #name::parse(val)
             }
         }
@@ -780,7 +780,7 @@ pub fn typed_timestamp(
                 Self(td_common::time::UniqueUtc::now_millis().await)
             }
 
-            fn parse(val: impl Into<chrono::DateTime<chrono::Utc>>) -> Result<Self, td_common::error::TdError> {
+            fn parse(val: impl Into<chrono::DateTime<chrono::Utc>>) -> Result<Self, td_error::TdError> {
                 let val = val.into();
                 Ok(Self(val))
             }
@@ -822,8 +822,8 @@ pub fn typed_timestamp(
         }
 
         impl TryFrom<chrono::DateTime<chrono::Utc>> for #name {
-            type Error = td_common::error::TdError;
-            fn try_from(val: chrono::DateTime<chrono::Utc>) -> Result<#name, td_common::error::TdError> {
+            type Error = td_error::TdError;
+            fn try_from(val: chrono::DateTime<chrono::Utc>) -> Result<#name, td_error::TdError> {
                 #name::parse(val)
             }
         }
