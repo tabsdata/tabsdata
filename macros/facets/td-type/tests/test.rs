@@ -5,6 +5,7 @@
 /// Mock td_common to test macro generation.
 #[allow(dead_code)]
 pub mod td_common {
+
     pub mod id {
         use serde::{Deserialize, Serialize};
         use std::fmt::Display;
@@ -48,6 +49,7 @@ pub mod td_common {
     }
 
     pub mod error {
+        use std::error::Error;
         use std::fmt::Display;
 
         pub trait TdDomainError {
@@ -76,6 +78,12 @@ pub mod td_common {
         impl TdError {
             pub fn new(_: impl Into<TdError>) -> Self {
                 Self {}
+            }
+        }
+
+        impl Error for TdError {
+            fn source(&self) -> Option<&(dyn Error + 'static)> {
+                None
             }
         }
     }

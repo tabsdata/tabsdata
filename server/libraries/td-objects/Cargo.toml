@@ -68,7 +68,9 @@ derive_builder = { workspace = true }
 futures-util = { workspace = true }
 getset = { workspace = true }
 itertools = { workspace = true }
+lazy_static = { workspace = true }
 polars = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_valid = { workspace = true }
@@ -77,6 +79,7 @@ strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
+tracing = { workspace = true }
 
 [dev-dependencies]
 td-database = { workspace = true, features = ["td-test"] }

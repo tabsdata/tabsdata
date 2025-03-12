@@ -7,6 +7,8 @@ mod test;
 #[cfg(test)]
 mod tests {
     use super::test::*;
+    use crate::test::td_common::error::TdError;
+    use td_error::td_error;
 
     macro_rules! typed_test {
         ($type_:ty, $value:expr) => {
@@ -369,16 +371,19 @@ mod tests {
         assert!(TypedString::parse("12345").is_ok());
     }
 
+    #[td_error]
+    enum ParsingError {
+        #[error("parse error: {0}, {1}")]
+        Parse(String, String) = 0,
+    }
+
     #[test]
     fn test_string_parser() {
-        fn parser(s: String) -> Result<String, TypedStringError> {
+        fn parser(s: String) -> Result<String, TdError> {
             if s.starts_with("123") {
                 Ok(s)
             } else {
-                Err(TypedStringError::Parse(
-                    s,
-                    "must start with 123".to_string(),
-                ))
+                Err(ParsingError::Parse(s, "must start with 123".to_string()))?
             }
         }
 
@@ -396,7 +401,7 @@ mod tests {
             if s.starts_with("123") {
                 Ok(s)
             } else {
-                Err(TypedStringError::Parse(s, "must start with 123".to_string()))
+                Err(ParsingError::Parse(s, "must start with 123".to_string()))?
             }
         }))]
         struct TypedString;
