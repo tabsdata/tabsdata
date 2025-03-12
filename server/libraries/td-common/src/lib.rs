@@ -23,6 +23,3 @@ pub mod str;
 pub mod system_tables;
 pub mod time;
 pub mod uri;
-
-#[cfg(test)]
-mod test_td_types;

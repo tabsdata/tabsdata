@@ -55,7 +55,6 @@ td-security = { workspace = true }
 ## Macros
 
 td-apiforge = { workspace = true }
-td-type = { workspace = true }
 
 # External dependencies
 

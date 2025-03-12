@@ -5,6 +5,7 @@
 use crate::sql::{condition_builder, placeholders, select_cols, Columns, Statement, Which, With};
 use crate::types::basic::RoleName;
 use crate::types::role::UsersRolesDB;
+use crate::types::DataAccessObject;
 use tracing::trace;
 
 /// Roles Queries.

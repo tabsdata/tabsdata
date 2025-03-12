@@ -81,15 +81,25 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
                 impl TryFrom<#from> for #name {
                     type Error = td_error::TdError;
                     fn try_from(val: #from) -> Result<Self, Self::Error> {
-                        Ok(Self::parse((&*val).clone())?)
+                        Ok(Self::parse(val.0)?)
                     }
                 }
             }
         })
         .collect();
 
+    let sql_entity = quote! {
+        impl crate::types::SqlEntity for #name {
+            type Type = #name;
+            fn value(&self) -> &Self::Type {
+                &self
+            }
+        }
+    };
+
     let expanded = quote! {
         #typed
+        #sql_entity
         #(#froms)*
     };
 
@@ -640,11 +650,6 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
         }
 
         impl #name {
-
-            fn new() -> Self {
-                Self(td_common::id::id())
-            }
-
             fn parse(val: impl Into<td_common::id::Id>) -> Result<Self, td_error::TdError> {
                 let val = val.into();
                 Ok(Self(val))
@@ -659,9 +664,6 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
                     .schema_type(utoipa::openapi::schema::SchemaType::new(
                         utoipa::openapi::schema::Type::String,
                     ))
-                    .format(Some(utoipa::openapi::schema::SchemaFormat::KnownFormat(
-                        utoipa::openapi::schema::KnownFormat::Uuid,
-                    )))
                     .into()
             }
         }
@@ -688,7 +690,15 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
 
         impl TryFrom<td_common::id::Id> for #name {
             type Error = td_error::TdError;
-            fn try_from(val: td_common::id::Id) -> Result<#name, td_error::TdError> {
+            fn try_from(val: td_common::id::Id) -> Result<Self, Self::Error> {
+                #name::parse(val)
+            }
+        }
+
+        impl TryFrom<String> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: String) -> Result<Self, Self::Error> {
+                let val = td_common::id::Id::try_from(&val)?;
                 #name::parse(val)
             }
         }
@@ -704,7 +714,8 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
             where
                 D: serde::Deserializer<'de>,
             {
-                let s = td_common::id::Id::deserialize(deserializer)?;
+                let s = String::deserialize(deserializer)?;
+                let s = td_common::id::Id::try_from(&s).map_err(serde::de::Error::custom)?;
                 #name::parse(s).map_err(serde::de::Error::custom)
             }
         }
@@ -714,7 +725,7 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
             where
                 S: serde::Serializer,
             {
-                self.0.serialize(serializer)
+                self.0.to_string().serialize(serializer)
             }
         }
 

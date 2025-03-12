@@ -2,15 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-mod test;
-
 #[cfg(test)]
 mod tests {
-    use super::test::*;
-    use td_type::{Dao, Dlo, Dto};
+    use crate::types::DataAccessObject;
+    use td_type::{Dao, Dlo, Dto, TdType};
 
     #[Dao]
-    struct Dao {
+    struct FooDao {
         id: i64,
         name: String,
         description: Option<String>,
@@ -19,12 +17,12 @@ mod tests {
     }
 
     #[Dlo]
-    struct Dlo {
+    struct FooDlo {
         id: i64,
     }
 
     #[Dto]
-    struct Dto {
+    struct FooDto {
         name: String,
         description: Option<String>,
     }
@@ -32,12 +30,12 @@ mod tests {
     #[test]
     fn test_dao() -> Result<(), td_error::TdError> {
         #[Dao]
-        #[td_type(builder(try_from = Dao))]
+        #[td_type(builder(try_from = FooDao))]
         struct TestDao {
             name: String,
         }
 
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -53,12 +51,12 @@ mod tests {
     #[test]
     fn test_dto() -> Result<(), td_error::TdError> {
         #[Dto]
-        #[td_type(builder(try_from = Dto))]
+        #[td_type(builder(try_from = FooDto))]
         struct TestDto {
             name: String,
         }
 
-        let dto = Dto::builder()
+        let dto = FooDto::builder()
             .name("dao")
             .description("dao desc".to_string())
             .build()?;
@@ -71,12 +69,12 @@ mod tests {
     #[test]
     fn test_dlo() -> Result<(), td_error::TdError> {
         #[Dlo]
-        #[td_type(builder(try_from = Dlo))]
+        #[td_type(builder(try_from = FooDlo))]
         struct TestDlo {
             id: i128,
         }
 
-        let dlo = Dlo::builder().id(1234).build()?;
+        let dlo = FooDlo::builder().id(1234).build()?;
 
         let dlo = TestDloBuilder::try_from(&dlo)?.build()?;
         assert_eq!(dlo.id, 1234);
@@ -86,7 +84,7 @@ mod tests {
     #[test]
     fn test_to_builder() {
         let modified = chrono::DateTime::<chrono::Utc>::default();
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -153,16 +151,16 @@ mod tests {
 
     #[test]
     fn test_builder_try_from() {
-        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
-        #[td_type(builder(try_from = Dao))]
+        #[td_type(builder(try_from = FooDao))]
         struct TestDto {
             name: String,
             description: Option<String>,
         }
 
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -178,17 +176,17 @@ mod tests {
 
     #[test]
     fn test_builder_from_skip() {
-        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
-        #[td_type(builder(try_from = Dao))]
+        #[td_type(builder(try_from = FooDao))]
         struct TestDto {
             name: String,
             #[td_type(builder(skip))]
             description: Option<String>,
         }
 
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -211,17 +209,17 @@ mod tests {
 
     #[test]
     fn test_builder_from_skip_all_and_include() {
-        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
-        #[td_type(builder(try_from = Dao, skip_all))]
+        #[td_type(builder(try_from = FooDao, skip_all))]
         struct TestDto {
             #[td_type(builder(include))]
             name: String,
             description: Option<String>,
         }
 
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -244,20 +242,20 @@ mod tests {
 
     #[test]
     fn test_builder_from_combined() {
-        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
-        #[td_type(builder(try_from = Dao, skip_all))]
-        #[td_type(builder(try_from = Dto))]
+        #[td_type(builder(try_from = FooDao, skip_all))]
+        #[td_type(builder(try_from = FooDto))]
         struct TestDxo {
-            #[td_type(builder(try_from = Dao, include))]
+            #[td_type(builder(try_from = FooDao, include))]
             name: String,
-            #[td_type(builder(try_from = Dao, include))]
-            #[td_type(builder(try_from = Dto, skip))]
+            #[td_type(builder(try_from = FooDao, include))]
+            #[td_type(builder(try_from = FooDto, skip))]
             description: Option<String>,
         }
 
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -270,7 +268,7 @@ mod tests {
         assert_eq!(dxo.name, "dao".to_string());
         assert_eq!(dxo.description, Some("dao desc".to_string()));
 
-        let dto = Dto::builder()
+        let dto = FooDto::builder()
             .name("dao")
             .description("dao desc".to_string())
             .build()
@@ -290,17 +288,17 @@ mod tests {
 
     #[test]
     fn test_builder_from_default() {
-        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
-        #[td_type(builder(try_from = Dao))]
+        #[td_type(builder(try_from = FooDao))]
         struct TestDto {
             #[td_type(builder(default))]
             name: String,
             description: Option<String>,
         }
 
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -316,10 +314,10 @@ mod tests {
 
     #[test]
     fn test_builder_from_rename() {
-        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
-        #[td_type(builder(try_from = Dao))]
+        #[td_type(builder(try_from = FooDao))]
         struct TestDto {
             name: String,
             #[td_type(builder(field = "description"))]
@@ -328,7 +326,7 @@ mod tests {
             actually_active: bool,
         }
 
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -345,30 +343,30 @@ mod tests {
 
     #[test]
     fn test_builder_from_combined_all() {
-        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
-        #[td_type(builder(try_from = Dao, skip_all))]
-        #[td_type(builder(try_from = Dto))]
-        #[td_type(builder(try_from = Dlo))]
+        #[td_type(builder(try_from = FooDao, skip_all))]
+        #[td_type(builder(try_from = FooDto))]
+        #[td_type(builder(try_from = FooDlo))]
         struct TestDxo {
-            #[td_type(builder(try_from = Dao, include))]
-            #[td_type(builder(try_from = Dto, skip))]
+            #[td_type(builder(try_from = FooDao, include))]
+            #[td_type(builder(try_from = FooDto, skip))]
             id: i64,
-            #[td_type(builder(try_from = Dao, include))]
-            #[td_type(builder(try_from = Dlo, default))]
+            #[td_type(builder(try_from = FooDao, include))]
+            #[td_type(builder(try_from = FooDlo, default))]
             name: String,
-            #[td_type(builder(try_from = Dao, include))]
-            #[td_type(builder(try_from = Dto, skip))]
-            #[td_type(builder(try_from = Dlo, default))]
+            #[td_type(builder(try_from = FooDao, include))]
+            #[td_type(builder(try_from = FooDto, skip))]
+            #[td_type(builder(try_from = FooDlo, default))]
             description: Option<String>,
-            #[td_type(builder(try_from = Dao, include, field = "name"))]
-            #[td_type(builder(try_from = Dto, field = "name"))]
-            #[td_type(builder(try_from = Dlo, skip))]
+            #[td_type(builder(try_from = FooDao, include, field = "name"))]
+            #[td_type(builder(try_from = FooDto, field = "name"))]
+            #[td_type(builder(try_from = FooDlo, skip))]
             new_name: String,
         }
 
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -383,7 +381,7 @@ mod tests {
         assert_eq!(dxo.description, Some("dao desc".to_string()));
         assert_eq!(dxo.new_name, "dao".to_string());
 
-        let dto = Dto::builder()
+        let dto = FooDto::builder()
             .name("dto")
             .description("dto desc".to_string())
             .build()
@@ -406,7 +404,7 @@ mod tests {
         assert_eq!(dxo.description, Some("new description".to_string()));
         assert_eq!(dxo.new_name, "dto".to_string());
 
-        let dlo = Dlo::builder().id(789).build().unwrap();
+        let dlo = FooDlo::builder().id(789).build().unwrap();
 
         let mut dxo_builder = TestDxoBuilder::try_from(&dlo).unwrap();
         assert_eq!(dxo_builder.id, Some(789));
@@ -427,10 +425,10 @@ mod tests {
 
     #[test]
     fn test_from_error() -> Result<(), td_error::TdError> {
-        #[derive(Debug, Default, td_type::TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
-        #[td_type(builder(try_from = Dao))]
+        #[td_type(builder(try_from = FooDao))]
         struct TestDto {
             name: String,
             #[td_type(builder(field = "description"))]
@@ -439,7 +437,7 @@ mod tests {
             actually_active: bool,
         }
 
-        let dao = Dao::builder()
+        let dao = FooDao::builder()
             .id(123)
             .name("dao")
             .description("dao desc".to_string())
@@ -584,6 +582,24 @@ mod tests {
         assert_eq!(dao.description, Some("desc".to_string()));
         assert_eq!(dao.modified, now);
         assert!(!dao.active);
+        Ok(())
+    }
+
+    #[test]
+    fn test_td_type_extractor() -> Result<(), td_error::TdError> {
+        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[builder(setter(into))]
+        #[getset(get = "pub")]
+        struct TestDxo {
+            #[td_type(extractor)]
+            name: String,
+            _size: i64,
+        }
+
+        let dxo = TestDxo::builder().name("name")._size(123).build()?;
+
+        let name = String::from(&dxo);
+        assert_eq!(name, "name");
         Ok(())
     }
 }

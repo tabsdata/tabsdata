@@ -70,6 +70,7 @@ mod tests {
         DependencyDB, DependencyDBWithNames, DependencyVersionDB, DependencyVersionDBWithNamesList,
         DependencyVersionDBWithNamesRead,
     };
+    use crate::types::DataAccessObject;
     use td_database::test_utils::db;
 
     #[tokio::test]

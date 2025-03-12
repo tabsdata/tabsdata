@@ -2,12 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-mod test;
-
 #[cfg(test)]
 mod tests {
-    use super::test::*;
-    use tm_error::td_error;
+    use crate::types::SqlEntity;
+    use sqlx::Type;
+    use td_common::id::{id, Id};
+    use td_common::time::UniqueUtc;
+    use td_error::td_error;
 
     macro_rules! typed_test {
         ($type_:ty, $value:expr) => {
@@ -52,20 +53,18 @@ mod tests {
         #[td_type::typed(id)]
         struct TypedType;
 
-        let typed = TypedType::default();
-        assert_eq!(*typed, td_common::id::Id::default());
+        let _ = TypedType::default();
 
-        let typed = TypedType::parse(td_common::id::id())?;
-        assert_eq!(*typed, td_common::id::id());
+        let id = id();
+        let typed = TypedType::parse(id)?;
+        assert_eq!(*typed, id);
 
-        let typed: TypedType = td_common::id::Id::from("".to_string()).try_into()?;
-        assert_eq!(*typed, td_common::id::id());
         let serialized = serde_json::to_string(&typed).unwrap();
         let deserialized: TypedType = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(*deserialized, td_common::id::id());
+        assert_eq!(*deserialized, id);
 
         let display = format!("{}", typed);
-        assert_eq!(display, format!("{}", td_common::id::id()));
+        assert_eq!(display, format!("{}", id));
         Ok(())
     }
 
@@ -74,11 +73,11 @@ mod tests {
         #[td_type::typed(timestamp)]
         struct TypedType;
 
-        let before = chrono::Utc::now();
+        let before = UniqueUtc::now_millis().await;
         let typed = TypedType::default();
-        let after = chrono::Utc::now();
-        assert!(*typed >= before);
-        assert!(after >= *typed);
+        let after = UniqueUtc::now_millis().await;
+        assert!(*typed > before);
+        assert!(after > *typed);
 
         let typed = TypedType::parse(chrono::DateTime::<chrono::Utc>::default())?;
         assert_eq!(*typed, chrono::DateTime::<chrono::Utc>::default());
@@ -186,15 +185,17 @@ mod tests {
 
     #[test]
     fn test_id_default() {
-        fn default_id() -> td_common::id::Id {
-            td_common::id::id()
+        fn default_id() -> Id {
+            Id::try_from("00000000000000000000000000").unwrap()
         }
 
         #[td_type::typed(id(default = default_id()))]
         struct TypedId;
 
-        let default = TypedId::default();
-        assert_eq!(*default, default_id());
+        assert_eq!(
+            Id::try_from("00000000000000000000000000").unwrap(),
+            default_id()
+        );
     }
 
     #[test]
@@ -240,7 +241,7 @@ mod tests {
     try_from_typed_test!(f64);
     try_from_typed_test!(bool);
 
-    // Testing try_from implementations between different types (impl From inner types
+    // Testing try_from implementations between different types (impl TryFrom inner types
     // must be implemented so this works).
 
     #[test]
@@ -263,20 +264,6 @@ mod tests {
         struct TypedType;
 
         #[td_type::typed(string, try_from = TypedType)]
-        struct NewTypedType;
-
-        let typed = TypedType::default();
-        let _new_typed: NewTypedType = typed.clone().try_into()?;
-        // We just care that the into is possible as Id is a mock type.
-        Ok(())
-    }
-
-    #[test]
-    fn test_string_id_try_from() -> Result<(), td_error::TdError> {
-        #[td_type::typed(string)]
-        struct TypedType;
-
-        #[td_type::typed(id, try_from = TypedType)]
         struct NewTypedType;
 
         let typed = TypedType::default();
@@ -439,4 +426,19 @@ mod tests {
     min_max_typed_numeric_test!(i64, 15i64);
     min_max_typed_numeric_test!(f32, 15f32);
     min_max_typed_numeric_test!(f64, 15f64);
+
+    #[test]
+    fn test_sqlx() {
+        #[td_type::typed(string)]
+        struct TypedType;
+
+        fn assert_sql_entity<T: SqlEntity>() {}
+        assert_sql_entity::<TypedType>();
+
+        assert_eq!(
+            TypedType::type_info(),
+            <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+        );
+        assert!(TypedType::compatible(&TypedType::type_info()));
+    }
 }

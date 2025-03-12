@@ -91,6 +91,7 @@ mod tests {
     use super::*;
     use crate::sql::table;
     use crate::sql::{Columns, Which, With};
+    use crate::types::DataAccessObject;
     use td_database::test_utils::db;
 
     #[tokio::test]

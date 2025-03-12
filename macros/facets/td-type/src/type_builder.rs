@@ -2,34 +2,117 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+//! Proc macros to generate default derives for the dao/dlo/dto types.
+
 use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{format_ident, quote, ToTokens};
-use syn::{parse_macro_input, DeriveInput, Fields, ItemStruct};
+use syn::{parse_macro_input, DeriveInput, Fields, ItemStruct, Type};
+use td_shared::parse_meta;
 
-/// Proc macros to generate default derives for the dao/dlo/dto types.
-pub fn dlo(_args: TokenStream, item: TokenStream) -> TokenStream {
+#[derive(FromMeta)]
+struct DaoArguments {
+    sql_table: Option<String>,
+}
+
+pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
+    let parsed_args = parse_meta!(DaoArguments, args).unwrap();
+
+    let sql_table = match parsed_args.sql_table {
+        Some(table) => {
+            let table = table.as_str();
+            quote! { #table }
+        }
+        None => {
+            let table = input.ident.to_string().to_lowercase();
+            quote! { #table }
+        }
+    };
+    let ident = &input.ident;
+    let fields = &input.fields;
+    let ty_generics = &input.generics;
+    let where_clause = &input.generics.where_clause;
+
+    let field_names = gen_fields_as_list(fields);
+    let field_types = gen_field_types_as_list(fields);
 
     let expanded = quote! {
         #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
+
+        impl<#ty_generics> crate::types::DataAccessObject for #ident #ty_generics #where_clause {
+            fn sql_table() -> &'static str {
+                #sql_table
+            }
+
+            fn fields() -> &'static [&'static str] {
+                &[#(stringify!(#field_names)),*]
+            }
+
+            fn sql_field_for_type<E: crate::types::SqlEntity>() -> Option<&'static str> {
+                match std::any::type_name::<E>() {
+                    #(
+                        id if id == std::any::type_name::<#field_types>() => Some(stringify!(#field_names)),
+                    )*
+                    _ => None,
+                }
+            }
+
+            fn values_query_builder(
+                &self,
+                sql: String,
+                bindings: &[&str],
+            ) -> sqlx::QueryBuilder<'_, sqlx::Sqlite> {
+                let mut query_builder = sqlx::QueryBuilder::new(sql);
+                query_builder.push_values(std::iter::once(self), |mut b, dao| {
+                    #(
+                        if bindings.contains(&stringify!(#field_names)) {
+                            b.push_bind(&dao.#field_names);
+                        }
+                    )*
+                });
+                query_builder
+            }
+
+            fn tuples_query_builder(
+                &self,
+                sql: String,
+                bindings: &[&str],
+            ) -> sqlx::QueryBuilder<'_, sqlx::Sqlite> {
+                let mut query_builder = sqlx::QueryBuilder::new(sql);
+                let mut separated = query_builder.separated(", ");
+                #(
+                    if bindings.contains(&stringify!(#field_names)) {
+                        separated.push(format!("{} = ", stringify!(#field_names)));
+                        separated.push_bind_unseparated(&self.#field_names);
+                    }
+                )*
+                query_builder
+            }
+        }
     };
 
     expanded.into()
 }
 
-pub fn dao(_args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn dlo(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
+
+    let ident = &input.ident;
+    let ty_generics = &input.generics;
+    let where_clause = &input.generics.where_clause;
 
     let expanded = quote! {
         #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
+
+        impl<#ty_generics> crate::types::DataLogicObject for #ident #ty_generics #where_clause {}
     };
 
     expanded.into()
@@ -38,12 +121,18 @@ pub fn dao(_args: TokenStream, item: TokenStream) -> TokenStream {
 pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
 
+    let ident = &input.ident;
+    let ty_generics = &input.generics;
+    let where_clause = &input.generics.where_clause;
+
     let expanded = quote! {
         #[td_apiforge::api_server_schema]
         #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
+
+        impl<#ty_generics> crate::types::DataTransferObject for #ident #ty_generics #where_clause {}
     };
 
     expanded.into()
@@ -73,6 +162,8 @@ struct TdTypeFields {
     builder: Vec<TdTryFromField>,
     #[darling(multiple)]
     updater: Vec<TdTryFromField>,
+    #[darling(default)]
+    extractor: bool,
 }
 
 #[derive(FromMeta)]
@@ -108,6 +199,7 @@ pub fn td_type(input: TokenStream) -> TokenStream {
     let fields = &item.fields;
 
     let builder_type = format_ident!("{}Builder", type_);
+    let builder_error_type = format_ident!("{}BuilderError", type_);
 
     let mut setters = vec![];
     for field in fields.iter() {
@@ -119,7 +211,6 @@ pub fn td_type(input: TokenStream) -> TokenStream {
     }
 
     let td_types_froms = gen_td_types_froms(&args, &item);
-    let fields_list = gen_fields_as_list(fields);
     let error_impl = gen_error(type_);
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -136,9 +227,12 @@ pub fn td_type(input: TokenStream) -> TokenStream {
                 builder #(#setters)*;
                 builder
             }
+        }
 
-            pub fn fields() -> &'static [&'static str] {
-                #fields_list
+        impl TryFrom<&#builder_type #ty_generics> for #type_ #ty_generics {
+            type Error = #builder_error_type;
+            fn try_from(from: &#builder_type #ty_generics) -> Result<Self, Self::Error> {
+                from.build()
             }
         }
 
@@ -194,6 +288,7 @@ fn gen_td_types_froms(args: &TdTypeArgs, target: &ItemStruct) -> proc_macro2::To
             expanded.extend(gen_updated_from(update_from, target, arg.skip_all));
         }
     }
+    expanded.extend(gen_extractor(target));
     expanded
 }
 
@@ -246,7 +341,41 @@ fn gen_updated_from(from: &Ident, target: &ItemStruct, skip_all: bool) -> proc_m
                 Ok(self)
             }
         }
+
+        impl TryFrom<(& #from #ty_generics, #builder #ty_generics)> for #builder #ty_generics {
+            type Error = #builder_error_type;
+            fn try_from(value: (& #from #ty_generics, #builder #ty_generics)) -> Result<Self, Self::Error> {
+                let (update, mut this) = value;
+                this.update_from(update)?;
+                Ok(this)
+            }
+        }
     };
+
+    expanded
+}
+
+fn gen_extractor(target: &ItemStruct) -> proc_macro2::TokenStream {
+    let to = &target.ident;
+    let (impl_generics, ty_generics, where_clause) = target.generics.split_for_impl();
+
+    let mut expanded = quote! {};
+
+    for field in target.fields.iter() {
+        let td_type_fields = TdTypeFields::from_field(field).unwrap();
+        let extractor = &td_type_fields.extractor;
+        if *extractor {
+            let field_name = field.ident.as_ref().unwrap();
+            let field_type = &field.ty;
+            expanded.extend(quote! {
+                impl #impl_generics From<& #to #ty_generics> for #field_type #where_clause {
+                    fn from(from: & #to #ty_generics) -> Self {
+                        from.#field_name.clone()
+                    }
+                }
+            });
+        }
+    }
 
     expanded
 }
@@ -332,53 +461,47 @@ fn should_include_from_field(
     from: &Ident,
     skip_all: bool,
 ) -> IncludeField {
-    fn none_or_eq<T: PartialEq>(a: &Option<T>, b: &T) -> bool {
-        // If Ident is not present or equal to the from field.
-        a.as_ref().is_none_or(|a| a == b)
-    }
+    let find_field = |pred: fn(&TdTryFromField) -> bool| {
+        from_args
+            .iter()
+            .find(|f| pred(f) && f.try_from.as_ref().is_none_or(|a| a == from))
+    };
 
     if skip_all {
-        // If skipping all, we only include the fields explicitly marked with `include`
-        if let Some(f) = from_args
-            .iter()
-            .find(|f| f.include && none_or_eq(&f.try_from, from))
-        {
-            if let Some(rename) = &f.field {
-                IncludeField::Rename(rename.clone())
-            } else {
-                IncludeField::Include
-            }
-        } else {
-            IncludeField::Skip
+        if let Some(f) = find_field(|f| f.include) {
+            return f
+                .field
+                .clone()
+                .map_or(IncludeField::Include, IncludeField::Rename);
         }
+        if let Some(_f) = find_field(|f| f.default) {
+            return IncludeField::Default;
+        }
+        if let Some(f) = find_field(|f| f.field.is_some()) {
+            return IncludeField::Rename(f.field.clone().unwrap());
+        }
+        if find_field(|f| f.default).is_some() {
+            return IncludeField::Default;
+        }
+        IncludeField::Skip
     } else if from_args.is_empty() {
-        // If no specific builder fields are defined, include the field
         IncludeField::Include
     } else {
-        // Otherwise, include the field unless it is explicitly marked with `skip`
-        if let Some(_f) = from_args
-            .iter()
-            .find(|f| f.skip && none_or_eq(&f.try_from, from))
-        {
-            IncludeField::Skip
-        } else if let Some(_f) = from_args
-            .iter()
-            .find(|f| f.default && none_or_eq(&f.try_from, from))
-        {
-            IncludeField::Default
-        } else if let Some(f) = from_args
-            .iter()
-            .find(|f| f.field.is_some() && none_or_eq(&f.try_from, from))
-        {
-            IncludeField::Rename(f.field.clone().unwrap())
-        } else {
-            IncludeField::Include
+        if find_field(|f| f.skip).is_some() {
+            return IncludeField::Skip;
         }
+        if find_field(|f| f.default).is_some() {
+            return IncludeField::Default;
+        }
+        if let Some(f) = find_field(|f| f.field.is_some()) {
+            return IncludeField::Rename(f.field.clone().unwrap());
+        }
+        IncludeField::Include
     }
 }
 
-fn gen_fields_as_list(fields: &Fields) -> proc_macro2::TokenStream {
-    let field_names = fields
+fn gen_fields_as_list(fields: &Fields) -> Vec<&Ident> {
+    fields
         .iter()
         .filter(|f| {
             // Check if the field does NOT have the `#[sqlx(skip)]` attribute
@@ -387,10 +510,18 @@ fn gen_fields_as_list(fields: &Fields) -> proc_macro2::TokenStream {
             })
         })
         .filter_map(|f| f.ident.as_ref())
-        .map(|ident| ident.to_string())
-        .collect::<Vec<_>>();
+        .collect()
+}
 
-    quote! {
-        &[#(#field_names),*]
-    }
+fn gen_field_types_as_list(fields: &Fields) -> Vec<&Type> {
+    fields
+        .iter()
+        .filter(|f| {
+            // Check if the field does NOT have the `#[sqlx(skip)]` attribute
+            !f.attrs.iter().any(|attr| {
+                attr.path().is_ident("sqlx") && attr.to_token_stream().to_string().contains("skip")
+            })
+        })
+        .map(|f| &f.ty)
+        .collect()
 }
