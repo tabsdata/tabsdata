@@ -20,9 +20,9 @@ impl Queries {
     pub fn select_tables_current(
         self,
         select: &Columns,
-        collections: Which<CollectionId>,
-        tables: Which<TableName>,
-        with: With,
+        collections: &Which<CollectionId>,
+        tables: &Which<TableName>,
+        with: &With,
     ) -> Statement {
         let select_columns = select_cols(select);
         let table = with.table_name("tables");
@@ -56,9 +56,9 @@ impl Queries {
     pub fn select_tables_at_time(
         self,
         select: &Columns,
-        collections: Which<CollectionId>,
-        tables: Which<TableName>,
-        with: With,
+        collections: &Which<CollectionId>,
+        tables: &Which<TableName>,
+        with: &With,
     ) -> Statement {
         let select_columns = select_cols(select);
         let table = with.table_name("table_versions");
@@ -113,18 +113,18 @@ mod tests {
     fn test_select_current_tables_table_view() {
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT * FROM tables");
         assert_eq!(statement.params(), &Vec::<String>::new());
 
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         assert_eq!(statement.sql(), "SELECT * FROM tables__with_names");
         assert_eq!(statement.params(), &Vec::<String>::new());
@@ -134,36 +134,36 @@ mod tests {
     fn test_select_current_tables_columns() {
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT * FROM tables");
         assert_eq!(statement.params(), &Vec::<String>::new());
 
         let statement = Queries::new().select_tables_current(
             &Columns::One("id"),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT id FROM tables");
         assert_eq!(statement.params(), &Vec::<String>::new());
 
         let statement = Queries::new().select_tables_current(
             &Columns::Some(&["id", "name"]),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT id, name FROM tables");
         assert_eq!(statement.params(), &Vec::<String>::new());
 
         let statement = Queries::new().select_tables_current(
             &Columns::Dyn(&vec!["id".to_string(), "name".to_string()]),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT id, name FROM tables");
         assert_eq!(statement.params(), &Vec::<String>::new());
@@ -173,9 +173,9 @@ mod tests {
     fn test_select_current_tables() {
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT * FROM tables");
         assert_eq!(statement.params(), &Vec::<String>::new());
@@ -185,9 +185,9 @@ mod tests {
     fn test_select_current_tables_collections() {
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::one(),
-            Which::all(),
-            With::Ids,
+            &Which::one(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -197,9 +197,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::set(3),
-            Which::all(),
-            With::Ids,
+            &Which::set(3),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -219,18 +219,18 @@ mod tests {
     fn test_select_current_tables_functions() {
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::all(),
-            Which::one(),
-            With::Ids,
+            &Which::all(),
+            &Which::one(),
+            &With::Ids,
         );
         assert_eq!(statement.sql, "SELECT * FROM tables WHERE name = ?1");
         assert_eq!(statement.params, vec!["name".to_string()]);
 
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::all(),
-            Which::set(2),
-            With::Ids,
+            &Which::all(),
+            &Which::set(2),
+            &With::Ids,
         );
         assert_eq!(statement.sql, "SELECT * FROM tables WHERE name IN (?1,?2)");
         assert_eq!(
@@ -240,9 +240,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::all(),
-            Which::like(),
-            With::Ids,
+            &Which::all(),
+            &Which::like(),
+            &With::Ids,
         );
         assert_eq!(statement.sql, "SELECT * FROM tables WHERE name LIKE ?1");
         assert_eq!(statement.params, vec!["name".to_string()]);
@@ -252,9 +252,9 @@ mod tests {
     fn test_select_current_tables_collections_functions() {
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::one(),
-            Which::one(),
-            With::Ids,
+            &Which::one(),
+            &Which::one(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -267,9 +267,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_current(
             &Columns::All,
-            Which::set(3),
-            Which::set(2),
-            With::Ids,
+            &Which::set(3),
+            &Which::set(2),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -293,9 +293,9 @@ mod tests {
     fn test_select_tables_at_time_from_table() {
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -316,9 +316,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -342,9 +342,9 @@ mod tests {
     fn test_select_tables_at_time_columns() {
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -365,9 +365,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_at_time(
             &Columns::One("id"),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -388,9 +388,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_at_time(
             &Columns::Some(&["id", "name"]),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -411,9 +411,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_at_time(
             &Columns::Dyn(&vec!["id".to_string(), "name".to_string()]),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -437,9 +437,9 @@ mod tests {
     fn test_select_tables_at_time() {
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -463,9 +463,9 @@ mod tests {
     fn test_select_tables_at_time_collections() {
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::one(),
-            Which::all(),
-            With::Ids,
+            &Which::one(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -489,9 +489,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::set(2),
-            Which::all(),
-            With::Ids,
+            &Which::set(2),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -522,9 +522,9 @@ mod tests {
     fn test_select_tables_at_time_tables() {
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::all(),
-            Which::one(),
-            With::Ids,
+            &Which::all(),
+            &Which::one(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -548,9 +548,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::all(),
-            Which::set(2),
-            With::Ids,
+            &Which::all(),
+            &Which::set(2),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -578,9 +578,9 @@ mod tests {
 
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::all(),
-            Which::like(),
-            With::Ids,
+            &Which::all(),
+            &Which::like(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -607,9 +607,9 @@ mod tests {
     fn test_select_tables_at_time_collections_tables() {
         let statement = Queries::new().select_tables_at_time(
             &Columns::All,
-            Which::one(),
-            Which::one(),
-            With::Ids,
+            &Which::one(),
+            &Which::one(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -648,198 +648,198 @@ mod tests {
                 false,
                 Queries::new().select_tables_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Names,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Names,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::One("id"),
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::Some(&["id"]),
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::All,
-                    Which::one(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::one(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::All,
-                    Which::set(1),
-                    Which::all(),
-                    With::Ids,
+                    &Which::set(1),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::All,
-                    Which::set(2),
-                    Which::all(),
-                    With::Ids,
+                    &Which::set(2),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::one(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::one(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::set(1),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::set(1),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::set(2),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::set(2),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_tables_current(
                     &Columns::All,
-                    Which::one(),
-                    Which::one(),
-                    With::Ids,
+                    &Which::one(),
+                    &Which::one(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Names,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Names,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::One("id"),
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::Some(&["id"]),
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::All,
-                    Which::one(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::one(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::All,
-                    Which::set(1),
-                    Which::all(),
-                    With::Ids,
+                    &Which::set(1),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::All,
-                    Which::set(2),
-                    Which::all(),
-                    With::Ids,
+                    &Which::set(2),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::set(1),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::set(1),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::set(2),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::set(2),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_tables_at_time(
                     &Columns::All,
-                    Which::one(),
-                    Which::one(),
-                    With::Ids,
+                    &Which::one(),
+                    &Which::one(),
+                    &With::Ids,
                 ),
             ),
         ];

@@ -101,9 +101,9 @@ mod tests {
 
         let statement = table::Queries::new().select_tables_current(
             &Columns::Some(TableDB::fields()),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         let _res: Vec<TableDB> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -113,9 +113,9 @@ mod tests {
 
         let statement = table::Queries::new().select_tables_current(
             &Columns::Some(TableDBWithNames::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<TableDBWithNames> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -125,9 +125,9 @@ mod tests {
 
         let statement = table::Queries::new().select_tables_at_time(
             &Columns::Some(TableVersionDB::fields()),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         let _res: Vec<TableVersionDB> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -137,9 +137,9 @@ mod tests {
 
         let statement = table::Queries::new().select_tables_at_time(
             &Columns::Some(TableVersionDBWithNamesRead::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<TableVersionDBWithNamesRead> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -149,9 +149,9 @@ mod tests {
 
         let statement = table::Queries::new().select_tables_at_time(
             &Columns::Some(TableVersionDBWithNamesList::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<TableVersionDBWithNamesList> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())

@@ -106,7 +106,7 @@ fn condition_builder<T>(
     table_alias: Option<&str>,
     column: &str,
     param_offset: usize,
-    values: Which<T>,
+    values: &Which<T>,
 ) -> Condition {
     let table_alias = table_alias
         .map(|alias| format!("{}.", alias))
@@ -132,10 +132,10 @@ fn condition_builder<T>(
         Which::Set(n, _) => {
             let in_condition = format!(
                 "{table_alias}{column} IN ({})",
-                create_bindings_literal(param_offset, n)
+                create_bindings_literal(param_offset, *n)
             );
             let mut params = vec![];
-            for i in 0..n {
+            for i in 0..*n {
                 params.push(format!("{column}#{i}"));
             }
             Condition::new(Some(in_condition), params, param_offset + n)
@@ -178,13 +178,6 @@ fn select_cols(columns: &Columns) -> String {
     }
 }
 
-fn placeholders(len: usize) -> String {
-    (1..=len)
-        .map(|i| format!("?{}", i))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -204,19 +197,19 @@ mod tests {
     #[test]
     fn test_condition_builder() {
         use super::{condition_builder, Which};
-        let condition = condition_builder::<String>(Some("t"), "name", 0, Which::all());
+        let condition = condition_builder::<String>(Some("t"), "name", 0, &Which::all());
         assert_eq!(condition.expr, None);
         assert_eq!(condition.params, Vec::<String>::new());
         assert_eq!(condition.param_offset, 0);
-        let condition = condition_builder::<String>(Some("t"), "name", 0, Which::one());
+        let condition = condition_builder::<String>(Some("t"), "name", 0, &Which::one());
         assert_eq!(condition.expr, Some("t.name = ?1".to_string()));
         assert_eq!(condition.params, vec!["name".to_string()]);
         assert_eq!(condition.param_offset, 1);
-        let condition = condition_builder::<String>(None, "name", 0, Which::like());
+        let condition = condition_builder::<String>(None, "name", 0, &Which::like());
         assert_eq!(condition.expr, Some("name LIKE ?1".to_string()));
         assert_eq!(condition.params, vec!["name".to_string()]);
         assert_eq!(condition.param_offset, 1);
-        let condition = condition_builder::<String>(Some("t"), "name", 0, Which::set(3));
+        let condition = condition_builder::<String>(Some("t"), "name", 0, &Which::set(3));
         assert_eq!(condition.expr, Some("t.name IN (?1,?2,?3)".to_string()));
         assert_eq!(
             condition.params,

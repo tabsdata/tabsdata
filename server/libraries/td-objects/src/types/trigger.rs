@@ -110,9 +110,9 @@ mod tests {
 
         let statement = trigger::Queries::new().select_triggers_current(
             &Columns::Some(TriggerDB::fields()),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         let _res: Vec<TriggerDB> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -122,9 +122,9 @@ mod tests {
 
         let statement = trigger::Queries::new().select_triggers_current(
             &Columns::Some(TriggerDBWithNames::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<TriggerDBWithNames> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -134,9 +134,9 @@ mod tests {
 
         let statement = trigger::Queries::new().select_triggers_at_time(
             &Columns::Some(TriggerVersionDB::fields()),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         let _res: Vec<TriggerVersionDB> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -146,9 +146,9 @@ mod tests {
 
         let statement = trigger::Queries::new().select_triggers_at_time(
             &Columns::Some(TriggerVersionDBWithNamesRead::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<TriggerVersionDBWithNamesRead> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -158,9 +158,9 @@ mod tests {
 
         let statement = trigger::Queries::new().select_triggers_at_time(
             &Columns::Some(TriggerVersionDBWithNamesList::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<TriggerVersionDBWithNamesList> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())

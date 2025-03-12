@@ -158,9 +158,9 @@ mod tests {
 
         let statement = function::Queries::new().select_functions_current(
             &Columns::Some(FunctionDB::fields()),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         let _res: Vec<FunctionDB> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -170,9 +170,9 @@ mod tests {
 
         let statement = function::Queries::new().select_functions_current(
             &Columns::Some(FunctionDBWithNames::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<FunctionDBWithNames> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -182,9 +182,9 @@ mod tests {
 
         let statement = function::Queries::new().select_functions_at_time(
             &Columns::Some(FunctionVersionDB::fields()),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         let _res: Vec<FunctionVersionDB> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -194,9 +194,9 @@ mod tests {
 
         let statement = function::Queries::new().select_functions_at_time(
             &Columns::Some(FunctionVersionDBWithNamesRead::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<FunctionVersionDBWithNamesRead> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -206,9 +206,9 @@ mod tests {
 
         let statement = function::Queries::new().select_functions_at_time(
             &Columns::Some(FunctionVersionDBWithNamesList::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<FunctionVersionDBWithNamesList> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())

@@ -20,9 +20,9 @@ impl Queries {
     pub fn select_dependencies_current(
         self,
         select: &Columns,
-        collections: Which<CollectionId>,
-        functions: Which<FunctionId>,
-        with: With,
+        collections: &Which<CollectionId>,
+        functions: &Which<FunctionId>,
+        with: &With,
     ) -> Statement {
         let select_columns = select_cols(select);
         let table = with.table_name("dependencies");
@@ -59,9 +59,9 @@ impl Queries {
     pub fn select_dependencies_at_time(
         self,
         select: &Columns,
-        collections: Which<CollectionId>,
-        functions: Which<FunctionId>,
-        with: With,
+        collections: &Which<CollectionId>,
+        functions: &Which<FunctionId>,
+        with: &With,
     ) -> Statement {
         let select_columns = select_cols(select);
         let table = with.table_name("dependency_versions");
@@ -117,18 +117,18 @@ mod tests {
     fn test_select_current_dependencies_table_view() {
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT * FROM dependencies");
         assert_eq!(statement.params(), &Vec::<String>::new());
 
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         assert_eq!(statement.sql(), "SELECT * FROM dependencies__with_names");
         assert_eq!(statement.params(), &Vec::<String>::new());
@@ -138,36 +138,36 @@ mod tests {
     fn test_select_current_dependencies_columns() {
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT * FROM dependencies");
         assert_eq!(statement.params(), &Vec::<String>::new());
 
         let statement = Queries::new().select_dependencies_current(
             &Columns::One("id"),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT id FROM dependencies");
         assert_eq!(statement.params(), &Vec::<String>::new());
 
         let statement = Queries::new().select_dependencies_current(
             &Columns::Some(&["id", "table_id"]),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT id, table_id FROM dependencies");
         assert_eq!(statement.params(), &Vec::<String>::new());
 
         let statement = Queries::new().select_dependencies_current(
             &Columns::Dyn(&vec!["id".to_string(), "table_id".to_string()]),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT id, table_id FROM dependencies");
         assert_eq!(statement.params(), &Vec::<String>::new());
@@ -177,9 +177,9 @@ mod tests {
     fn test_select_current_dependencies() {
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(statement.sql(), "SELECT * FROM dependencies");
         assert_eq!(statement.params(), &Vec::<String>::new());
@@ -189,9 +189,9 @@ mod tests {
     fn test_select_current_dependencies_collections() {
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::one(),
-            Which::all(),
-            With::Ids,
+            &Which::one(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -201,9 +201,9 @@ mod tests {
 
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::set(3),
-            Which::all(),
-            With::Ids,
+            &Which::set(3),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -223,9 +223,9 @@ mod tests {
     fn test_select_current_dependencies_functions() {
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::all(),
-            Which::one(),
-            With::Ids,
+            &Which::all(),
+            &Which::one(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -235,9 +235,9 @@ mod tests {
 
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::all(),
-            Which::set(2),
-            With::Ids,
+            &Which::all(),
+            &Which::set(2),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -253,9 +253,9 @@ mod tests {
     fn test_select_current_dependencies_collections_functions() {
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::one(),
-            Which::one(),
-            With::Ids,
+            &Which::one(),
+            &Which::one(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -268,9 +268,9 @@ mod tests {
 
         let statement = Queries::new().select_dependencies_current(
             &Columns::All,
-            Which::set(3),
-            Which::set(2),
-            With::Ids,
+            &Which::set(3),
+            &Which::set(2),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql,
@@ -294,9 +294,9 @@ mod tests {
     fn test_select_functions_at_time_from_table_view() {
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -317,9 +317,9 @@ mod tests {
 
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -343,9 +343,9 @@ mod tests {
     fn test_select_functions_at_time_columns() {
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -366,9 +366,9 @@ mod tests {
 
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::One("id"),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -389,9 +389,9 @@ mod tests {
 
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::Some(&["id", "table_id"]),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -412,9 +412,9 @@ mod tests {
 
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::Dyn(&vec!["id".to_string(), "table_id".to_string()]),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -438,9 +438,9 @@ mod tests {
     fn test_select_functions_at_time() {
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::All,
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -464,9 +464,9 @@ mod tests {
     fn test_select_functions_at_time_collections() {
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::All,
-            Which::one(),
-            Which::all(),
-            With::Ids,
+            &Which::one(),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -490,9 +490,9 @@ mod tests {
 
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::All,
-            Which::set(2),
-            Which::all(),
-            With::Ids,
+            &Which::set(2),
+            &Which::all(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -523,9 +523,9 @@ mod tests {
     fn test_select_functions_at_time_functions() {
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::All,
-            Which::all(),
-            Which::one(),
-            With::Ids,
+            &Which::all(),
+            &Which::one(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -549,9 +549,9 @@ mod tests {
 
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::All,
-            Which::all(),
-            Which::set(2),
-            With::Ids,
+            &Which::all(),
+            &Which::set(2),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -582,9 +582,9 @@ mod tests {
     fn test_select_functions_at_time_collections_functions() {
         let statement = Queries::new().select_dependencies_at_time(
             &Columns::All,
-            Which::one(),
-            Which::one(),
-            With::Ids,
+            &Which::one(),
+            &Which::one(),
+            &With::Ids,
         );
         assert_eq!(
             statement.sql().trim(),
@@ -623,198 +623,198 @@ mod tests {
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Names,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Names,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::One("id"),
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::Some(&["id"]),
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::All,
-                    Which::one(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::one(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::All,
-                    Which::set(1),
-                    Which::all(),
-                    With::Ids,
+                    &Which::set(1),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::All,
-                    Which::set(2),
-                    Which::all(),
-                    With::Ids,
+                    &Which::set(2),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::one(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::one(),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::set(1),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::set(1),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::All,
-                    Which::all(),
-                    Which::set(2),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::set(2),
+                    &With::Ids,
                 ),
             ),
             (
                 false,
                 Queries::new().select_dependencies_current(
                     &Columns::All,
-                    Which::one(),
-                    Which::one(),
-                    With::Ids,
+                    &Which::one(),
+                    &Which::one(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Names,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Names,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::One("id"),
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::Some(&["id"]),
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::All,
-                    Which::one(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::one(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::All,
-                    Which::set(1),
-                    Which::all(),
-                    With::Ids,
+                    &Which::set(1),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::All,
-                    Which::set(2),
-                    Which::all(),
-                    With::Ids,
+                    &Which::set(2),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::all(),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::all(),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::set(1),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::set(1),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::All,
-                    Which::all(),
-                    Which::set(2),
-                    With::Ids,
+                    &Which::all(),
+                    &Which::set(2),
+                    &With::Ids,
                 ),
             ),
             (
                 true,
                 Queries::new().select_dependencies_at_time(
                     &Columns::All,
-                    Which::one(),
-                    Which::one(),
-                    With::Ids,
+                    &Which::one(),
+                    &Which::one(),
+                    &With::Ids,
                 ),
             ),
         ];

@@ -18,10 +18,10 @@ impl Queries {
 
     /// SQL statement: ?1 = role_id
     pub fn select_permissions(
-        self,
+        &self,
         select: &Columns,
-        roles: Which<RoleId>,
-        with: With,
+        roles: &Which<RoleId>,
+        with: &With,
     ) -> Statement {
         let select_columns = select_cols(select);
         let table = with.table_name("permissions");
@@ -42,7 +42,7 @@ impl Queries {
 
     /// SQL statement: ?1 = id, ?2 = role_id, ?3 = permission_type, ?4 = entity_type,
     ///                ?5 = entity_id_on, ?6 = granted_by_id, ?7 = granted_on, ?8 = fixed
-    pub fn insert_permission(self) -> Statement {
+    pub fn insert_permission(&self) -> Statement {
         let sql = r#"
         INSERT INTO permissions
             (id, role_id, permission_type, entity_type, entity_id, granted_by_id, granted_on, fixed)
@@ -64,7 +64,7 @@ impl Queries {
     }
 
     /// SQL statement: ?1 = id, ?2 = role_id
-    pub fn delete_permission(self) -> Statement {
+    pub fn delete_permission(&self) -> Statement {
         let sql = r#"
         DELETE FROM permissions
             WHERE id = ?1 AND role_id = ?2
@@ -90,19 +90,19 @@ mod tests {
 
         let statements: Vec<(Statement, Vec<&str>)> = vec![
             (
-                Queries::new().select_permissions(&Columns::All, Which::all(), With::Ids),
+                Queries::new().select_permissions(&Columns::All, &Which::all(), &With::Ids),
                 vec![],
             ),
             (
-                Queries::new().select_permissions(&Columns::All, Which::all(), With::Names),
+                Queries::new().select_permissions(&Columns::All, &Which::all(), &With::Names),
                 vec![],
             ),
             (
-                Queries::new().select_permissions(&Columns::All, Which::one(), With::Ids),
+                Queries::new().select_permissions(&Columns::All, &Which::one(), &With::Ids),
                 vec!["r"],
             ),
             (
-                Queries::new().select_permissions(&Columns::All, Which::set(2), With::Ids),
+                Queries::new().select_permissions(&Columns::All, &Which::set(2), &With::Ids),
                 vec!["r0", "r2"],
             ),
         ];

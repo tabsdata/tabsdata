@@ -111,9 +111,9 @@ mod tests {
 
         let statement = dependency::Queries::new().select_dependencies_current(
             &Columns::Some(DependencyDB::fields()),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         let _res: Vec<DependencyDB> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -123,9 +123,9 @@ mod tests {
 
         let statement = dependency::Queries::new().select_dependencies_current(
             &Columns::Some(DependencyDBWithNames::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<DependencyDBWithNames> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -135,9 +135,9 @@ mod tests {
 
         let statement = dependency::Queries::new().select_dependencies_at_time(
             &Columns::Some(DependencyVersionDB::fields()),
-            Which::all(),
-            Which::all(),
-            With::Ids,
+            &Which::all(),
+            &Which::all(),
+            &With::Ids,
         );
         let _res: Vec<DependencyVersionDB> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -147,9 +147,9 @@ mod tests {
 
         let statement = dependency::Queries::new().select_dependencies_at_time(
             &Columns::Some(DependencyVersionDBWithNamesRead::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<DependencyVersionDBWithNamesRead> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
@@ -159,9 +159,9 @@ mod tests {
 
         let statement = dependency::Queries::new().select_dependencies_at_time(
             &Columns::Some(DependencyVersionDBWithNamesList::fields()),
-            Which::all(),
-            Which::all(),
-            With::Names,
+            &Which::all(),
+            &Which::all(),
+            &With::Names,
         );
         let _res: Vec<DependencyVersionDBWithNamesList> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())

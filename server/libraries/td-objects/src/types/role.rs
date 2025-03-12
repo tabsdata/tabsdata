@@ -2,27 +2,29 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, Description, Fixed, RoleId, RoleName, UserId, UserName, UsersRolesId,
 };
 
-#[td_type::Dao]
+#[td_type::Dao(sql_table = "roles")]
 #[td_type(builder(try_from = RoleCreate, skip_all))]
-#[td_type(updater(try_from = RoleContext, skip_all))]
+#[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct RoleDB {
+    #[td_type(extractor)]
     #[td_type(builder(default))]
     id: RoleId,
     #[td_type(builder(include))]
     name: RoleName,
     #[td_type(builder(include))]
     description: Description,
-    #[td_type(updater(include))]
+    #[td_type(updater(include, field = "time"))]
     created_on: AtTime,
-    #[td_type(updater(include))]
+    #[td_type(updater(include, field = "user_id"))]
     created_by_id: UserId,
-    #[td_type(updater(include))]
+    #[td_type(updater(include, field = "time"))]
     modified_on: AtTime,
-    #[td_type(updater(include))]
+    #[td_type(updater(include, field = "user_id"))]
     modified_by_id: UserId,
     #[td_type(builder(default))]
     fixed: Fixed,
@@ -34,15 +36,29 @@ pub struct RoleCreate {
     description: Description,
 }
 
-#[td_type::Dto]
-pub struct RoleContext {
-    created_on: AtTime,
-    created_by_id: UserId,
+#[td_type::Dao]
+#[td_type(builder(try_from = RoleUpdate, skip_all))]
+#[td_type(updater(try_from = RequestContext, skip_all))]
+pub struct RoleDBUpdate {
+    #[td_type(builder(include))]
+    name: RoleName,
+    #[td_type(builder(include))]
+    description: Description,
+    #[td_type(updater(include, field = "time"))]
     modified_on: AtTime,
+    #[td_type(updater(include, field = "user_id"))]
     modified_by_id: UserId,
 }
 
-#[td_type::Dao]
+pub type RoleUpdate = RoleCreate;
+
+#[td_type::Dto]
+pub struct RoleReadById {
+    #[td_type(extractor)]
+    id: RoleId,
+}
+
+#[td_type::Dao(sql_table = "roles__with_names")]
 pub struct RoleDBWithNames {
     id: RoleId,
     name: RoleName,
@@ -59,7 +75,7 @@ pub struct RoleDBWithNames {
 
 #[td_type::Dto]
 #[td_type(builder(try_from = RoleDBWithNames))]
-pub struct RoleRead {
+pub struct Role {
     id: RoleId,
     name: RoleName,
     description: Description,
@@ -146,23 +162,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_role_context_to_role_db() {
-        let role_context = RoleContext {
-            created_on: AtTime::default(),
-            created_by_id: UserId::default(),
-            modified_on: AtTime::default(),
-            modified_by_id: UserId::default(),
-        };
-        let mut role_db = RoleDBBuilder::default();
-        let role_db = role_db.update_from(&role_context).unwrap();
-        assert_eq!(role_db.created_on, Some(role_context.created_on));
-        assert_eq!(role_db.created_by_id, Some(role_context.created_by_id));
-        assert_eq!(role_db.modified_on, Some(role_context.modified_on));
-        assert_eq!(role_db.modified_by_id, Some(role_context.modified_by_id));
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_role_db_with_names_to_role_read() {
+    async fn test_role_db_with_names_to_role() {
         let role_db_with_names = RoleDBWithNames {
             id: RoleId::default(),
             name: RoleName::try_from("Admin".to_string()).unwrap(),
@@ -175,7 +175,7 @@ mod tests {
             created_by: UserName::try_from("creator".to_string()).unwrap(),
             modified_by: UserName::try_from("modifier".to_string()).unwrap(),
         };
-        let role_read = RoleReadBuilder::try_from(&role_db_with_names).unwrap();
+        let role_read = RoleBuilder::try_from(&role_db_with_names).unwrap();
         assert_eq!(role_read.id, Some(role_db_with_names.id));
         assert_eq!(role_read.name, Some(role_db_with_names.name));
         assert_eq!(role_read.description, Some(role_db_with_names.description));
