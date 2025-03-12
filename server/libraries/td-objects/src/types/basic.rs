@@ -54,49 +54,6 @@ fn parser(regex: Regex, s: String, message: impl Into<String>) -> Result<String,
     }
 }
 
-fn parse_name(s: String, name_type: &str) -> Result<String, TdError> {
-    lazy_static! {
-        static ref REGEX: Regex = Regex::new(NAME_PATTERN).unwrap();
-    }
-    parser(
-        REGEX.clone(),
-        s,
-        format!("{name_type}, a [_A-Za-z0-9] word of up to 100 characters"),
-    )
-}
-
-fn parse_user(s: String) -> Result<String, TdError> {
-    parse_name(s, "User name")
-}
-
-fn parse_role(s: String) -> Result<String, TdError> {
-    parse_name(s, "Role name")
-}
-
-fn parse_function(s: String) -> Result<String, TdError> {
-    parse_name(s, "Function name")
-}
-
-fn parse_collection(s: String) -> Result<String, TdError> {
-    parse_name(s, "Collection name")
-}
-
-fn parse_table(s: String) -> Result<String, TdError> {
-    parse_name(s, "Table name")
-}
-
-fn parse_trigger(s: String) -> Result<String, TdError> {
-    lazy_static! {
-        static ref REGEX: Regex = Regex::new(TRIGGER_PATTERN).unwrap();
-    }
-    parser(
-        REGEX.clone(),
-        s,
-        "trigger name, a [<COLLECTION>/]<TABLE> with <COLLECTION> and <NAME> \
-being a [_A-Za-z0-9] word of up to 100 characters each",
-    )
-}
-
 fn parse_dependency(s: String) -> Result<String, TdError> {
     lazy_static! {
         static ref DEPENDENCY_REGEX: Regex = Regex::new(DEPENDENCY_PATTERN).unwrap();
@@ -121,6 +78,53 @@ Each version being a 'HEAD' relative version (Git notation) or a version ID",
         )?;
     }
     Ok(s)
+}
+
+fn parse_name(s: String, name_type: &str) -> Result<String, TdError> {
+    lazy_static! {
+        static ref REGEX: Regex = Regex::new(NAME_PATTERN).unwrap();
+    }
+    parser(
+        REGEX.clone(),
+        s,
+        format!("{name_type}, a [_A-Za-z0-9] word of up to 100 characters"),
+    )
+}
+
+fn parse_collection(s: String) -> Result<String, TdError> {
+    parse_name(s, "Collection name")
+}
+
+fn parse_entity(s: String) -> Result<String, TdError> {
+    parse_name(s, "Entity name")
+}
+
+fn parse_function(s: String) -> Result<String, TdError> {
+    parse_name(s, "Function name")
+}
+
+fn parse_table(s: String) -> Result<String, TdError> {
+    parse_name(s, "Table name")
+}
+
+fn parse_role(s: String) -> Result<String, TdError> {
+    parse_name(s, "Role name")
+}
+
+fn parse_trigger(s: String) -> Result<String, TdError> {
+    lazy_static! {
+        static ref REGEX: Regex = Regex::new(TRIGGER_PATTERN).unwrap();
+    }
+    parser(
+        REGEX.clone(),
+        s,
+        "trigger name, a [<COLLECTION>/]<TABLE> with <COLLECTION> and <NAME> \
+being a [_A-Za-z0-9] word of up to 100 characters each",
+    )
+}
+
+fn parse_user(s: String) -> Result<String, TdError> {
+    parse_name(s, "User name")
 }
 
 #[td_type::typed(timestamp)]
@@ -166,10 +170,19 @@ impl DependencyStatus {
 pub struct DependencyVersionId;
 
 #[td_type::typed(id)]
+pub struct EntityId;
+
+#[td_type::typed(string(parser = parse_entity))]
+pub struct EntityName;
+
+#[td_type::typed(id)]
 pub struct ExecutionPlanId;
 
 #[td_type::typed(bool(default = false))]
 pub struct Fixed;
+
+#[td_type::typed(bool)]
+pub struct FixedRole;
 
 #[td_type::typed(bool)]
 pub struct Frozen;
@@ -209,6 +222,67 @@ pub struct FunctionVersionId;
 
 #[td_type::typed(string(min_len = 1, max_len = 1024))]
 pub struct Partition;
+
+#[td_type::typed(id)]
+pub struct PermissionId;
+
+#[td_type::typed(string(regex = PermissionType::REGEX ))]
+pub struct PermissionType;
+
+impl PermissionType {
+    const REGEX: &'static str = "^(sa|ss|ca|cd|cx|cr|cR)$";
+
+    pub fn sys_admin() -> Self {
+        Self("sa".to_string())
+    }
+
+    pub fn sec_admin() -> Self {
+        Self("ss".to_string())
+    }
+
+    pub fn collection_admin() -> Self {
+        Self("ca".to_string())
+    }
+
+    pub fn collection_dev() -> Self {
+        Self("cd".to_string())
+    }
+
+    pub fn collection_exec() -> Self {
+        Self("cx".to_string())
+    }
+
+    pub fn collection_read() -> Self {
+        Self("cr".to_string())
+    }
+
+    pub fn collection_read_all() -> Self {
+        Self("cR".to_string())
+    }
+
+    pub fn on_entity_type(&self) -> PermissionEntityType {
+        if self.0.starts_with("s") {
+            PermissionEntityType::system()
+        } else {
+            PermissionEntityType::collection()
+        }
+    }
+}
+
+#[td_type::typed(string(regex = PermissionEntityType::REGEX ))]
+pub struct PermissionEntityType;
+
+impl PermissionEntityType {
+    const REGEX: &'static str = "^(s|c)$";
+
+    pub fn system() -> Self {
+        Self("s".to_string())
+    }
+
+    pub fn collection() -> Self {
+        Self("c".to_string())
+    }
+}
 
 #[td_type::typed(timestamp)]
 pub struct PublishedOn;

@@ -12,6 +12,7 @@
 //    'current' and 'at_time' methods.
 pub mod dependency;
 pub mod function;
+pub mod permission;
 pub mod roles;
 pub mod table;
 pub mod trigger;
