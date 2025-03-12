@@ -18,9 +18,146 @@ pub mod table;
 pub mod trigger;
 pub mod users_roles;
 
+use crate::types::{DataAccessObject, SqlEntity};
 use getset::Getters;
 use std::marker::PhantomData;
 use td_database::sql::create_bindings_literal;
+use td_error::td_error;
+use tracing::trace;
+
+#[td_error]
+pub enum QueryError {
+    #[error("Type not found: {0:?}")]
+    TypeNotFound(String) = 5000,
+}
+
+// pub trait Queries<DB: sqlx::Database> we can do this to generalize the queries
+pub trait Queries {}
+
+#[rustfmt::skip]
+macro_rules! all_the_tuples {
+    ($name:ident) => {
+        $name!([E1]);
+        $name!([E1, E2]);
+        $name!([E1, E2, E3]);
+        $name!([E1, E2, E3, E4]);
+        $name!([E1, E2, E3, E4, E5]);
+        $name!([E1, E2, E3, E4, E5, E6]);
+        $name!([E1, E2, E3, E4, E5, E6, E7]);
+        $name!([E1, E2, E3, E4, E5, E6, E7, E8]);
+        $name!([E1, E2, E3, E4, E5, E6, E7, E8, E9]);
+        $name!([E1, E2, E3, E4, E5, E6, E7, E8, E9, E10]);
+    };
+}
+
+pub trait Insert<'a> {
+    fn insert<D: DataAccessObject>(
+        &self,
+        dao: &'a D,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+}
+
+impl<'a, Q> Insert<'a> for Q
+where
+    Q: Queries,
+{
+    fn insert<D: DataAccessObject>(
+        &self,
+        dao: &'a D,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
+        let table = D::sql_table();
+        let fields = D::fields();
+        let sql = format!("INSERT INTO {} ({}) ", table, fields.join(", "));
+
+        let query_builder = dao.values_query_builder(sql, fields);
+
+        trace!("insert_{}: sql: {}", table, query_builder.sql());
+        Ok(query_builder)
+    }
+}
+
+pub trait SelectBy<'a, E> {
+    fn select_by<D: DataAccessObject>(
+        &self,
+        e: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+}
+
+macro_rules! generate_select_by {
+    (
+        [$($E:ident),*]
+    ) => {
+        #[allow(non_snake_case, unused_parens)]
+        impl<'a, Q, $($E),*> SelectBy<'a, ($($E),*) > for Q
+        where
+            Q: Queries,
+            $($E: SqlEntity),*
+        {
+            fn select_by<D: DataAccessObject>(&self, ($($E),*): &'a ($($E),*)) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
+                let table = D::sql_table();
+                let fields = D::fields();
+                let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
+                let mut query_builder = sqlx::QueryBuilder::new(sql);
+
+                query_builder.push(" WHERE ");
+                let mut separated = query_builder.separated(" AND ");
+                $(
+                    let column = D::sql_field_for_type::<$E>()
+                        .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
+                    separated
+                        .push(format!("{} = ", column))
+                        .push_bind_unseparated($E.value());
+                )*
+
+                trace!("select_{}: sql: {}", table, query_builder.sql());
+                Ok(query_builder)
+            }
+        }
+    };
+}
+
+all_the_tuples!(generate_select_by);
+
+pub trait DeleteBy<'a, E> {
+    fn delete_by<D: DataAccessObject>(
+        &self,
+        e: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+}
+
+macro_rules! generate_delete_by {
+    (
+        [$($E:ident),*]
+    ) => {
+        #[allow(non_snake_case, unused_parens)]
+        impl<'a, Q, $($E),*> DeleteBy<'a, ($($E),*) > for Q
+        where
+            Q: Queries,
+            $($E: SqlEntity),*
+        {
+            fn delete_by<D: DataAccessObject>(&self, ($($E),*): &'a ($($E),*)) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
+                let table = D::sql_table();
+                let sql = format!("DELETE FROM {} ", table);
+                let mut query_builder = sqlx::QueryBuilder::new(sql);
+
+                query_builder.push(" WHERE ");
+                let mut separated = query_builder.separated(" AND ");
+                $(
+                    let column = D::sql_field_for_type::<$E>()
+                        .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
+                    separated
+                        .push(format!("{} = ", column))
+                        .push_bind_unseparated($E.value());
+                )*
+
+                trace!("delete_{}: sql: {}", table, query_builder.sql());
+                Ok(query_builder)
+            }
+        }
+    };
+}
+
+all_the_tuples!(generate_delete_by);
 
 /// A SQL statement with parameters created by query functions.
 #[derive(Debug, Clone, Getters)]

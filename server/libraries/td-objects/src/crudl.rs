@@ -369,6 +369,21 @@ impl<T> ListResult<T> {
             more: self.more,
         }
     }
+
+    pub fn try_map<B, F, E>(&self, mapper: F) -> Result<ListResult<B>, E>
+    where
+        F: FnMut(&T) -> Result<B, E>,
+    {
+        let list: Vec<B> = self
+            .list
+            .iter()
+            .map(mapper)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ListResult {
+            list,
+            more: self.more,
+        })
+    }
 }
 
 /// Helper function to determine if there is more data in the database. It should be used
