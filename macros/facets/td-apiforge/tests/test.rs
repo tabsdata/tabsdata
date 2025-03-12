@@ -6,11 +6,10 @@ mod test_server;
 
 #[cfg(test)]
 mod tests {
-    use utoipa::openapi::path::Operation;
-    use utoipa::{Modify, OpenApi};
-
     use crate::test_server::{TEST_GET, TEST_POST};
     use td_apiforge::api_server_docs;
+    use utoipa::openapi::path::Operation;
+    use utoipa::{Modify, OpenApi};
 
     struct SecurityAddon;
     impl Modify for SecurityAddon {
@@ -24,7 +23,7 @@ mod tests {
         tags_attribute = api_server_tag,
         paths_attribute = api_server_path,
         schemas_attribute = api_server_schema,
-        root_dir = "facets/td-apiforge/tests"
+        crate_dir(name = "crate", dir = "facets/td-apiforge/tests")
     )]
     pub struct Docs;
 

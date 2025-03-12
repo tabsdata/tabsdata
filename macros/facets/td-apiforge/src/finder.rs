@@ -4,26 +4,24 @@
 
 extern crate proc_macro;
 
-use proc_macro::{Span, TokenStream};
-use std::io::Read;
-use std::path::{Path, PathBuf};
-
 use crate::attributes::UtoipaTagArguments;
 use crate::status::{CTX_MACRO_NAME, CTX_PREFIX};
 use darling::FromMeta;
 use heck::ToUpperCamelCase;
+use proc_macro::{Span, TokenStream};
 use quote::{format_ident, quote};
+use std::path::Path;
 use syn::{parse_macro_input, Expr, File, Ident, Item, ItemMacro};
 use td_shared::meta_parser::SynMetaOrLit;
 use td_shared::parse_meta;
 use td_shared::project::get_project_root;
 use walkdir::WalkDir;
 
-const DEFAULT_TAGS_MACRO: &str = "api_server_tag";
-const DEFAULT_PATHS_ATTRIBUTE: &str = "api_server_path";
-const DEFAULT_SCHEMA_ATTRIBUTES: &[&str] = &["api_server_schema", "Dao", "typed"];
+const DEFAULT_TAGS_MACROS: &[&str] = &["api_server_tag"];
+const DEFAULT_PATHS_ATTRIBUTES: &[&str] = &["api_server_path"];
+const DEFAULT_SCHEMA_ATTRIBUTES: &[&str] = &["api_server_schema", "Dto", "typed"];
 
-const CTX_STATUS_FILE: &str = "status.rs";
+const CTX_STATUS_FILE: &str = include_str!("status.rs");
 
 #[derive(FromMeta)]
 struct UtoipaDocsArguments {
@@ -33,11 +31,99 @@ struct UtoipaDocsArguments {
     modifiers: Vec<Option<Expr>>,
     #[darling(default, multiple, rename = "server")]
     servers: Vec<Option<Expr>>,
-    root_dir: Option<String>,
-    tags_attribute: Option<Ident>,
-    paths_attribute: Option<Ident>,
+
+    #[darling(default, multiple, rename = "tags_attribute")]
+    tags_attributes: Vec<Option<Ident>>,
+    #[darling(default, multiple, rename = "paths_attribute")]
+    paths_attributes: Vec<Option<Ident>>,
     #[darling(default, multiple, rename = "schemas_attribute")]
     schemas_attributes: Vec<Option<Ident>>,
+
+    #[darling(default, multiple, rename = "crate_dir")]
+    crate_dirs: Vec<Option<CrateDir>>,
+}
+
+#[derive(Debug, Clone, FromMeta)]
+struct CrateDir {
+    name: String,
+    dir: String,
+}
+
+trait IntoIdent {
+    fn to_ident(&self) -> Ident;
+}
+
+impl IntoIdent for &str {
+    fn to_ident(&self) -> Ident {
+        Ident::new(self, Span::call_site().into())
+    }
+}
+
+impl UtoipaDocsArguments {
+    fn title(&self) -> &str {
+        &self.title
+    }
+
+    fn version(&self) -> &SynMetaOrLit {
+        &self.version
+    }
+
+    fn modifiers(&self) -> Vec<&Expr> {
+        self.modifiers.iter().filter_map(|f| f.as_ref()).collect()
+    }
+
+    fn servers(&self) -> Vec<&Expr> {
+        self.servers.iter().filter_map(|f| f.as_ref()).collect()
+    }
+
+    fn some_or_default<T: Clone>(option: &[Option<T>], default: &[T]) -> Vec<T> {
+        let list: Vec<_> = option.iter().filter_map(|f| f.as_ref()).cloned().collect();
+        if list.is_empty() {
+            default.to_vec()
+        } else {
+            list
+        }
+    }
+
+    fn tags_attributes(&self) -> Vec<Ident> {
+        let default: Vec<_> = DEFAULT_TAGS_MACROS.iter().map(|s| s.to_ident()).collect();
+        Self::some_or_default(&self.tags_attributes, &default)
+    }
+
+    fn paths_attributes(&self) -> Vec<Ident> {
+        let default: Vec<_> = DEFAULT_PATHS_ATTRIBUTES
+            .iter()
+            .map(|s| s.to_ident())
+            .collect();
+        Self::some_or_default(&self.paths_attributes, &default)
+    }
+
+    fn schemas_attributes(&self) -> Vec<Ident> {
+        let default: Vec<_> = DEFAULT_SCHEMA_ATTRIBUTES
+            .iter()
+            .map(|s| s.to_ident())
+            .collect();
+        Self::some_or_default(&self.schemas_attributes, &default)
+    }
+
+    fn default_crate_dirs() -> Vec<CrateDir> {
+        let base_root_dir: String = get_project_root();
+        vec![
+            CrateDir {
+                name: "crate".to_string(),
+                dir: format!("{}/server/binaries/td-server/src/lib", base_root_dir),
+            },
+            CrateDir {
+                name: "td_objects".to_string(),
+                dir: format!("{}/server/libraries/td-objects/src", base_root_dir),
+            },
+        ]
+    }
+
+    fn crate_dirs(&self) -> Vec<CrateDir> {
+        let default = Self::default_crate_dirs();
+        Self::some_or_default(&self.crate_dirs, &default)
+    }
 }
 
 /// The main procedural macro that generates the OpenAPI documentation for the given crate.
@@ -45,92 +131,60 @@ struct UtoipaDocsArguments {
 /// Custom attributes might be used to gain control over the generated OpenAPI documentation.
 /// Defaults are used in API Server.
 pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
-    let base_root_dir: String = get_project_root();
-    let base_root_dir = base_root_dir.as_str();
-    let default_root_dir = format!("{}/server/binaries/td-server/src/lib", base_root_dir);
-
     let parsed_args = parse_meta!(UtoipaDocsArguments, args).unwrap();
+    let item = parse_macro_input!(item as Item);
 
-    let title = parsed_args.title;
-    let version = parsed_args.version;
-    let modifiers = parsed_args.modifiers;
-    let servers = parsed_args.servers;
-    let root_dir = parsed_args
-        .root_dir
-        .unwrap_or_else(|| default_root_dir.to_string());
+    let ctx_macro_gen_idents = extract_ctx_macro_idents();
 
-    let tags_attribute = parsed_args
-        .tags_attribute
-        .unwrap_or_else(|| Ident::new(DEFAULT_TAGS_MACRO, Span::call_site().into()));
-    let paths_attribute = parsed_args
-        .paths_attribute
-        .unwrap_or_else(|| Ident::new(DEFAULT_PATHS_ATTRIBUTE, Span::call_site().into()));
-    let mut schemas_attributes: Vec<_> = parsed_args
-        .schemas_attributes
-        .iter()
-        .filter_map(|f| f.as_ref())
-        .cloned()
-        .collect();
-    if schemas_attributes.is_empty() {
-        DEFAULT_SCHEMA_ATTRIBUTES
-            .iter()
-            .map(|s| Ident::new(s, Span::call_site().into()))
-            .for_each(|s| schemas_attributes.push(s));
-    }
-
-    let mut ctx_file = PathBuf::new();
-    ctx_file.push(file!());
-    ctx_file.pop();
-    ctx_file.push(CTX_STATUS_FILE);
-    let ctx_macro_gen_idents = extract_ctx_macro_idents(ctx_file);
-
-    let (tags_found, found_paths, found_schemas) = WalkDir::new(&root_dir)
-        .follow_links(true)
-        .follow_root_links(true)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("rs"))
-        .map(|entry| {
-            let content = std::fs::read_to_string(entry.path()).expect("Failed to read file");
-            let syntax = syn::parse_file(&content).expect("Failed to parse file");
-            let crate_path = get_module_path(entry.path(), &root_dir);
-            find_in_file(
-                &crate_path,
-                &syntax,
-                &tags_attribute,
-                &paths_attribute,
-                &schemas_attributes,
-                &ctx_macro_gen_idents,
-            )
-        })
-        .fold(
-            (Vec::new(), Vec::new(), Vec::new()),
-            |(mut tags, mut paths, mut schemas), (tag, path, schema)| {
-                tags.extend(tag);
-
-                if let Some(duplicate) = has_duplicates_idents(&paths, &path) {
+    let (mut tags_found, mut found_paths, mut found_schemas) = (Vec::new(), Vec::new(), Vec::new());
+    for crate_dir in parsed_args.crate_dirs() {
+        WalkDir::new(&crate_dir.dir)
+            .follow_links(true)
+            .follow_root_links(true)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("rs"))
+            .map(|entry| {
+                let content = std::fs::read_to_string(entry.path()).expect("Failed to read file");
+                let syntax = syn::parse_file(&content).expect("Failed to parse file");
+                let crate_path = get_module_path(entry.path(), &crate_dir);
+                find_in_file(
+                    &crate_path,
+                    &syntax,
+                    &parsed_args.tags_attributes(),
+                    &parsed_args.paths_attributes(),
+                    &parsed_args.schemas_attributes(),
+                    &ctx_macro_gen_idents,
+                )
+            })
+            .for_each(|(tag, path, schema)| {
+                if let Some(duplicate) = has_duplicates_idents(&found_paths, &path) {
                     panic!(
                         "Duplicate path found: {}",
                         duplicate.segments.last().unwrap().ident
                     );
                 } else {
-                    paths.extend(path);
+                    found_paths.extend(path);
                 }
 
-                if let Some(duplicate) = has_duplicates_idents(&schemas, &schema) {
+                if let Some(duplicate) = has_duplicates_idents(&found_schemas, &schema) {
                     panic!(
                         "Duplicate schema found: {}",
                         duplicate.segments.last().unwrap().ident
                     );
                 } else {
-                    schemas.extend(schema);
+                    found_schemas.extend(schema);
                 }
 
-                (tags, paths, schemas)
-            },
-        );
+                tags_found.extend(tag);
+            });
+    }
 
-    let item = parse_macro_input!(item as Item);
+    let title = parsed_args.title();
+    let version = parsed_args.version();
+    let modifiers = parsed_args.modifiers();
+    let servers = parsed_args.servers();
+
     let output = quote! {
         #[derive(utoipa::OpenApi)]
         #[openapi(
@@ -161,12 +215,8 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// Extract all macro idents from the given file.
-fn extract_ctx_macro_idents(path: impl Into<PathBuf>) -> Vec<Ident> {
-    let mut file = std::fs::File::open(path.into()).unwrap();
-    let mut buffer = String::new();
-    file.read_to_string(&mut buffer).unwrap();
-
-    let parsed_macros: Vec<ItemMacro> = syn::parse::<File>(buffer.parse().unwrap())
+fn extract_ctx_macro_idents() -> Vec<Ident> {
+    let parsed_macros: Vec<ItemMacro> = syn::parse::<File>(CTX_STATUS_FILE.parse().unwrap())
         .expect("Failed to parse file")
         .items
         .into_iter()
@@ -198,8 +248,8 @@ fn extract_ctx_macro_idents(path: impl Into<PathBuf>) -> Vec<Ident> {
 fn find_in_file(
     module: &str,
     syntax: &File,
-    tags_attribute: &Ident,
-    paths_attribute: &Ident,
+    tags_attribute: &[Ident],
+    paths_attribute: &[Ident],
     schemas_attributes: &[Ident],
     ctx_macro_gen_idents: &[Ident],
 ) -> (
@@ -213,7 +263,7 @@ fn find_in_file(
     for item in &syntax.items {
         // First, look for tags in macros
         if let Item::Macro(item) = item {
-            if item.mac.path.is_ident(tags_attribute) {
+            if is_last_segment_path(&item.mac.path, tags_attribute) {
                 let input = item.mac.tokens.clone();
                 let tag = parse_meta!(UtoipaTagArguments, input).unwrap();
                 let name = tag.name();
@@ -246,16 +296,11 @@ fn find_in_file(
         };
 
         for attr in attrs {
-            if attr.path().is_ident(paths_attribute) {
+            if is_last_segment_path(attr.path(), paths_attribute) {
                 let path = syn::parse_str(&format!("{}::{}", module, ident)).unwrap();
                 found_paths.push(path);
             }
-            if attr
-                .path()
-                .get_ident()
-                .map(|i| schemas_attributes.contains(i))
-                .unwrap_or(false)
-            {
+            if is_last_segment_path(attr.path(), schemas_attributes) {
                 let path = syn::parse_str(&format!("{}::{}", module, ident)).unwrap();
                 found_schemas.push(path);
             }
@@ -265,10 +310,17 @@ fn find_in_file(
     (found_tags, found_paths, found_schemas)
 }
 
+fn is_last_segment_path(path: &syn::Path, idents: &[Ident]) -> bool {
+    path.segments
+        .last()
+        .map(|segment| idents.iter().any(|attr| attr == &segment.ident))
+        .unwrap_or(false)
+}
+
 /// Get the module path from the given file path, stripping the root directory.
 /// If the crate is not in the root directory, it will fail.
-fn get_module_path(path: &Path, root_dir: &str) -> String {
-    let to_strip = Path::new(root_dir);
+fn get_module_path(path: &Path, crate_dir: &CrateDir) -> String {
+    let to_strip = Path::new(&crate_dir.dir);
     let path = path.strip_prefix(to_strip).unwrap();
 
     let segments = path
@@ -280,7 +332,7 @@ fn get_module_path(path: &Path, root_dir: &str) -> String {
     let mut remaining_segments: Vec<_> = segments;
 
     // Prepend 'crate' to the remaining segments
-    remaining_segments.insert(0, "crate".to_string());
+    remaining_segments.insert(0, crate_dir.name.to_string());
 
     // Remove mod
     let remaining_segments: Vec<_> = remaining_segments
@@ -320,8 +372,11 @@ pub mod tests {
     #[test]
     fn test_get_module_path() {
         let path = Path::new("src/lib/test_module.rs");
-        let root_dir = "src/lib";
-        let module_path = get_module_path(path, root_dir);
+        let crate_dir = CrateDir {
+            name: "crate".to_string(),
+            dir: "src/lib".to_string(),
+        };
+        let module_path = get_module_path(path, &crate_dir);
         assert_eq!(module_path, "crate::test_module");
     }
 }
