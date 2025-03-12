@@ -756,7 +756,12 @@ pub fn typed_timestamp(
         let default_tokens: proc_macro2::TokenStream = default.to_token_stream();
         quote! { #default_tokens }
     } else {
-        quote! { chrono::DateTime::<chrono::Utc>::default() }
+        quote! {
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current()
+                    .block_on(async { td_common::time::UniqueUtc::now_millis().await })
+            })
+        }
     };
 
     let expanded = quote! {

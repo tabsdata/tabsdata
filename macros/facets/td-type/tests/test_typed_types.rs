@@ -7,7 +7,6 @@ mod test;
 #[cfg(test)]
 mod tests {
     use super::test::*;
-    use crate::test::td_common::error::TdError;
     use td_error::td_error;
 
     macro_rules! typed_test {
@@ -70,13 +69,16 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_timestamp() -> Result<(), td_common::error::TdError> {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_timestamp() -> Result<(), td_common::error::TdError> {
         #[td_type::typed(timestamp)]
         struct TypedType;
 
+        let before = chrono::Utc::now();
         let typed = TypedType::default();
-        assert_eq!(*typed, chrono::DateTime::<chrono::Utc>::default());
+        let after = chrono::Utc::now();
+        assert!(*typed >= before);
+        assert!(after >= *typed);
 
         let typed = TypedType::parse(chrono::DateTime::<chrono::Utc>::default())?;
         assert_eq!(*typed, chrono::DateTime::<chrono::Utc>::default());
@@ -379,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_string_parser() {
-        fn parser(s: String) -> Result<String, TdError> {
+        fn parser(s: String) -> Result<String, td_common::error::TdError> {
             if s.starts_with("123") {
                 Ok(s)
             } else {

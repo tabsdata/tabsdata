@@ -28,10 +28,14 @@ pub enum IdError {
 /// It is a UUID v7 as a '[u8; 16]'.
 ///
 /// The string representation is a 26 character base32hex string as it does not require URL encoding.
-#[derive(
-    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash, Default,
-)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Id([u8; 16]);
+
+impl Default for Id {
+    fn default() -> Self {
+        id()
+    }
+}
 
 /// Generates a new unique identifier.
 pub fn id() -> Id {
