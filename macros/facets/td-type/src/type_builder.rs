@@ -138,6 +138,143 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+#[derive(FromMeta)]
+struct ParamArguments {
+    param: String,
+    id: Ident,
+    name: Ident,
+}
+
+pub fn id_name_param(args: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemStruct);
+    let parsed_args = parse_meta!(ParamArguments, args).unwrap();
+
+    if !input.fields.is_empty() {
+        panic!("the struct must be empty");
+    }
+
+    if !input.generics.params.is_empty() {
+        panic!("the struct must not have generics");
+    }
+
+    let ident = &input.ident;
+    let param = &parsed_args.param;
+    let id = &parsed_args.id;
+    let name = &parsed_args.name;
+
+    let expanded = quote! {
+        #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+        #[serde(try_from = "String", into = "String")]
+        pub struct #ident {
+            id: Option<#id>,
+            name: Option<#name>,
+        }
+
+        impl TryFrom<String> for #ident {
+            type Error = td_error::TdError;
+            fn try_from(s: String) -> Result<Self, Self::Error> {
+                if s.starts_with('~') {
+                    Ok(Self {
+                        id: Some(#id::try_from(s.trim_start_matches('~'))?),
+                        name: None,
+                    })
+                } else {
+                    Ok(Self {
+                        id: None,
+                        name: Some(#name::try_from(s)?),
+                    })
+                }
+            }
+        }
+
+        impl From<#ident> for String {
+            fn from(value: #ident) -> String {
+                match (&value.id, &value.name) {
+                    (Some(id), None) => format!("~{}", id),
+                    (None, Some(name)) => name.to_string(),
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        impl crate::types::IdOrName<#id, #name> for #ident {
+            fn id(&self) -> Option<&#id> {
+                self.id.as_ref()
+            }
+
+            fn name(&self) -> Option<&#name> {
+                self.name.as_ref()
+            }
+        }
+
+        impl utoipa::IntoParams for #ident {
+            fn into_params(
+                parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+            ) -> Vec<utoipa::openapi::path::Parameter> {
+                [Some(
+                    utoipa::openapi::path::ParameterBuilder::new()
+                        .name(#param)
+                        .parameter_in(parameter_in_provider().unwrap_or_default())
+                        .required(utoipa::openapi::Required::True)
+                        .schema(Some(
+                            utoipa::openapi::ObjectBuilder::new()
+                                .schema_type(utoipa::openapi::schema::Type::String)
+                                .format(Some(utoipa::openapi::SchemaFormat::Custom(
+                                    #param.to_string(),
+                                )))
+                                .description(Some(
+                                    "Name parameter. If it starts with a ~, it is considered an id.",
+                                ))
+                                .build(),
+                        ))
+                        .build(),
+                )]
+                .into_iter()
+                .filter(Option::is_some)
+                .flatten()
+                .collect()
+            }
+        }
+
+        impl utoipa::__dev::ComposeSchema for #ident {
+            fn compose(
+                mut generics: Vec<utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>>,
+            ) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+                {
+                    let mut object = utoipa::openapi::ObjectBuilder::new();
+                    object = object
+                        .property(
+                            #param,
+                            utoipa::openapi::ObjectBuilder::new().schema_type(
+                                utoipa::openapi::schema::SchemaType::new(
+                                    utoipa::openapi::schema::Type::String,
+                                ),
+                            ),
+                        )
+                        .required(#param);
+                    object
+                }
+                .into()
+            }
+        }
+        impl utoipa::ToSchema for #ident {
+            fn name() -> std::borrow::Cow<'static, str> {
+                std::borrow::Cow::Borrowed(stringify!(#ident))
+            }
+            fn schemas(
+                schemas: &mut Vec<(
+                    String,
+                    utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>,
+                )>,
+            ) {
+                schemas.extend([]);
+            }
+        }
+    };
+
+    expanded.into()
+}
+
 /// Derive type macro
 #[derive(FromDeriveInput)]
 #[darling(attributes(td_type))]

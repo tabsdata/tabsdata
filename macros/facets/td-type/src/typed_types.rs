@@ -703,6 +703,14 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
             }
         }
 
+        impl TryFrom<&str> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: &str) -> Result<Self, Self::Error> {
+                let val = td_common::id::Id::try_from(val)?;
+                #name::parse(val)
+            }
+        }
+
         impl std::fmt::Display for #name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}", self.0)

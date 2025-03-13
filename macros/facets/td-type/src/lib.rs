@@ -39,6 +39,12 @@ pub fn Dto(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+#[allow(non_snake_case)]
+pub fn IdNameParam(args: TokenStream, item: TokenStream) -> TokenStream {
+    type_builder::id_name_param(args, item)
+}
+
+#[proc_macro_attribute]
 pub fn typed(args: TokenStream, item: TokenStream) -> TokenStream {
     typed_types::typed_basic(args, item)
 }
