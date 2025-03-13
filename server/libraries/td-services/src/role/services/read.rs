@@ -75,7 +75,7 @@ mod tests {
         let service = ReadRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        assert_eq!(*response.id(), RoleId::try_from(sys_admin_id)?);
+        assert_eq!(*response.id(), RoleId::from(sys_admin_id));
         assert_eq!(*response.name(), RoleName::try_from("sys_admin")?);
         assert_eq!(
             *response.description(),
@@ -91,7 +91,7 @@ mod tests {
         let service = ReadRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        assert_eq!(*response.id(), RoleId::try_from(sys_admin_id)?);
+        assert_eq!(*response.id(), RoleId::from(sys_admin_id));
         assert_eq!(*response.name(), RoleName::try_from("sys_admin")?);
         assert_eq!(
             *response.description(),

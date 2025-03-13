@@ -3,6 +3,7 @@
 //
 
 use crate::entity_finder::EntityFinderError;
+use crate::types::basic::RoleId;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use getset::Getters;
@@ -25,21 +26,26 @@ use utoipa::IntoParams;
 #[getset(get = "pub")]
 pub struct RequestContext {
     /// The ID of the user making the request.
+    //TODO: change to UserId
     user_id: String,
     /// The role of the user making the request.
-    role_id: String,
+    role_id: RoleId,
     /// if the role has system admin privileges.
     sys_admin: bool,
     /// The time the request was made.
-    #[getset(get = "pub")]
+    //TODO: change to AtTime
     time: DateTime<Utc>,
 }
 
 impl RequestContext {
+    //TODO: change signature to
+    //    with(user_id: impl Into<UserId>, role_id: impl Into<RoleId>) -> Self
     pub async fn with(user_id: impl Into<String>, role_id: &str, sys_admin: bool) -> Self {
+        //TODO:   TEMP until we change signature
+        let role_id = role_id.try_into().unwrap_or(RoleId::default());
         Self {
             user_id: user_id.into(),
-            role_id: role_id.to_string(),
+            role_id,
             sys_admin,
             time: UniqueUtc::now_millis().await,
         }

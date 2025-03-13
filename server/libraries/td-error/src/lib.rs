@@ -19,7 +19,7 @@ pub enum ApiError {
     NotAllowed = 2000,
     /// Discriminants from 3000 to 3999 are reserved for not forbidden errors
     Forbidden = 3000,
-    /// Discriminants from 4000 to 4999 are reserved for internal errors
+    /// Discriminants from 4000 to 4999 are reserved for authorization errors
     NotAuthorized = 4000,
     /// Discriminants from 5000 to 5999 are reserved for internal errors
     InternalError = 5000,

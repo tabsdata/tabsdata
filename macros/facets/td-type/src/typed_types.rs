@@ -280,6 +280,12 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
             }
         }
 
+        impl From<&#name> for #name {
+            fn from(val: &#name) -> Self {
+                val.clone()
+            }
+        }
+
         impl TryFrom<String> for #name {
             type Error = #error_name;
             fn try_from(val: String) -> Result<#name, Self::Error> {
@@ -473,6 +479,12 @@ pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
             }
         }
 
+        impl From<&#name> for #name {
+            fn from(val: &#name) -> Self {
+                val.clone()
+            }
+        }
+
         impl TryFrom<#int_type> for #name {
             type Error = #error_name;
             fn try_from(val: #int_type) -> Result<#name, Self::Error> {
@@ -565,6 +577,12 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
             type Target = bool;
             fn deref(&self) -> &Self::Target {
                 &self.0
+            }
+        }
+
+        impl From<&#name> for #name {
+            fn from(val: &#name) -> Self {
+                val.clone()
             }
         }
 
@@ -688,10 +706,21 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
             }
         }
 
-        impl TryFrom<td_common::id::Id> for #name {
-            type Error = td_error::TdError;
-            fn try_from(val: td_common::id::Id) -> Result<Self, Self::Error> {
-                #name::parse(val)
+        impl From<&#name> for #name {
+            fn from(val: &#name) -> Self {
+                val.clone()
+            }
+        }
+
+        impl From<td_common::id::Id> for #name {
+            fn from(val: td_common::id::Id) -> Self {
+                Self(val)
+            }
+        }
+
+        impl From<&td_common::id::Id> for #name {
+            fn from(val: &td_common::id::Id) -> Self {
+                Self(val.clone())
             }
         }
 
@@ -837,6 +866,12 @@ pub fn typed_timestamp(
             type Target = chrono::DateTime<chrono::Utc>;
             fn deref(&self) -> &Self::Target {
                 &self.0
+            }
+        }
+
+        impl From<&#name> for #name {
+            fn from(val: &#name) -> Self {
+                val.clone()
             }
         }
 
