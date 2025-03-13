@@ -12,14 +12,17 @@ from typing import List
 
 import cloudpickle
 import polars as pl
+from pyiceberg.catalog import load_catalog
 from sqlalchemy import create_engine
 
 import tabsdata as td
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata import DestinationPlugin
 from tabsdata.format import CSVFormat, FileFormat, NDJSONFormat, ParquetFormat
+from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.tabsdatafunction import (
     AzureDestination,
+    Catalog,
     LocalFileDestination,
     MariaDBDestination,
     MySQLDestination,
@@ -397,15 +400,8 @@ def store_results_in_files(
 ):
     logger.info(f"Storing results in File destination '{destination}'")
     results = convert_none_to_empty_frame(results)
-    if isinstance(destination, LocalFileDestination):
-        destination_path = destination.path
-    elif isinstance(destination, (AzureDestination, S3Destination)):
-        destination_path = destination.uri
-    else:
-        logger.error(f"Storing results in destination '{destination}' not supported.")
-        raise TypeError(
-            f"Storing results in destination '{destination}' not supported."
-        )
+    destination_path = obtain_destination_path(destination)
+
     if isinstance(destination_path, list) and len(destination_path) == 1:
         if isinstance(results, list):
             logger.warning(
@@ -426,6 +422,13 @@ def store_results_in_files(
             output_folder,
             execution_context,
         )
+        if destination.catalog:
+            logger.info("Storing file in catalog")
+            catalog = destination.catalog
+            store_file_in_catalog(
+                catalog, destination_path[0], catalog.tables[0], results
+            )
+
     elif isinstance(destination_path, list) and len(destination_path) > 1:
         if isinstance(results, td.TableFrame):
             logger.error(
@@ -464,6 +467,12 @@ def store_results_in_files(
                 output_folder,
                 execution_context,
             )
+            if destination.catalog:
+                logger.info("Storing file in catalog")
+                catalog = destination.catalog
+                store_file_in_catalog(
+                    catalog, destination_file, catalog.tables[number], result
+                )
     else:
         # Path can't be a single string, since we bundle a single path as a list of
         # length one when registering a function.
@@ -478,11 +487,63 @@ def store_results_in_files(
     logger.info("Results stored in LocalFile destination")
 
 
+def obtain_destination_path(destination):
+    if isinstance(destination, LocalFileDestination):
+        destination_path = destination.path
+    elif isinstance(destination, (AzureDestination, S3Destination)):
+        destination_path = destination.uri
+    else:
+        logger.error(f"Storing results in destination '{destination}' not supported.")
+        raise TypeError(
+            f"Storing results in destination '{destination}' not supported."
+        )
+    return destination_path
+
+
 INPUT_FORMAT_CLASS_TO_EXTENSION = {
     CSVFormat: CSV_EXTENSION,
     NDJSONFormat: NDJSON_EXTENSION,
     ParquetFormat: PARQUET_EXTENSION,
 }
+
+
+def store_file_in_catalog(
+    catalog: Catalog, path_to_table_file: str, destination_table: str, df: td.TableFrame
+):
+    logger.debug(f"Storing file in catalog '{catalog}'")
+    definition = catalog.definition
+    logger.debug(f"Catalog definition: {definition}")
+    definition = _recursively_evaluate_secret(definition)
+    iceberg_catalog = load_catalog(**definition)
+    logger.debug(f"Catalog loaded: {iceberg_catalog}")
+    logger.debug(f"Obtaining or creating table '{destination_table}' in catalog")
+    schema = df.schema
+    data = {name: [] for name in schema.keys()}
+    pyarrow_empty_df = pl.DataFrame(data, schema=schema).to_arrow()
+    pyarrow_schema = pyarrow_empty_df.schema
+    logger.debug(f"Converted schema '{schema} to pyarrow schema '{pyarrow_schema}'")
+    table = iceberg_catalog.create_table_if_not_exists(
+        identifier=destination_table,
+        schema=pyarrow_schema,
+    )
+    logger.debug(f"Table obtained or created: {table}")
+
+    with table.update_schema(
+        allow_incompatible_changes=catalog.allow_incompatible_changes
+    ) as update_schema:
+        logger.debug(
+            f"Unioning schema by name with schema {pyarrow_schema} and "
+            "allow_incompatible_changes "
+            f"set to '{catalog.allow_incompatible_changes}'"
+        )
+        update_schema.union_by_name(pyarrow_schema)
+
+    if catalog.if_table_exists == "replace":
+        logger.debug(f"Replacing table '{destination_table}'")
+        table.overwrite(pyarrow_empty_df)
+    logger.debug(f"Adding files to table '{destination_table}'")
+    table.add_files([path_to_table_file], check_duplicate_files=False)
+    logger.debug(f"Files added to table '{destination_table}'")
 
 
 def store_result_using_transporter(

@@ -12,7 +12,12 @@ from tabsdata.exceptions import (
     FormatConfigurationError,
     OutputConfigurationError,
 )
-from tabsdata.tabsdatafunction import LocalFileDestination, Output, build_output
+from tabsdata.tabsdatafunction import (
+    Catalog,
+    LocalFileDestination,
+    Output,
+    build_output,
+)
 from tests.conftest import FORMAT_TYPE_TO_CONFIG
 
 
@@ -46,6 +51,7 @@ def test_all_correct_single_parameter_list():
             LocalFileDestination.FORMAT_KEY: {
                 CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
             },
+            LocalFileDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -66,6 +72,7 @@ def test_all_correct_single_parameter_uri():
             LocalFileDestination.FORMAT_KEY: {
                 CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
             },
+            LocalFileDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -93,6 +100,7 @@ def test_all_correct_implicit_format():
             LocalFileDestination.FORMAT_KEY: {
                 CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
             },
+            LocalFileDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -112,6 +120,7 @@ def test_all_correct_explicit_format():
         LocalFileDestination.IDENTIFIER: {
             LocalFileDestination.PATH_KEY: [path],
             "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
+            LocalFileDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -126,6 +135,7 @@ def test_identifier_string_unchanged():
         "localfile-output": {
             LocalFileDestination.PATH_KEY: [path],
             "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
+            LocalFileDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -180,6 +190,7 @@ def test_correct_dict_format():
         LocalFileDestination.IDENTIFIER: {
             LocalFileDestination.PATH_KEY: [path],
             "format": {CSVFormat.IDENTIFIER: expected_format},
+            LocalFileDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -349,3 +360,67 @@ def test_update_format():
     assert output.format == format
     output.format = CSVFormat(separator=";")
     assert output.format == CSVFormat(separator=";")
+
+
+def test_correct_catalog_implicit_format():
+    catalog = Catalog(
+        definition={
+            "name": "default",
+            "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+            "warehouse": "file:///tmp/path",
+        },
+        tables=["output1", "output2"],
+    )
+    path = "/path/to/data/data.parquet"
+    output = LocalFileDestination(path, catalog=catalog)
+    assert output.catalog == catalog
+    assert build_output(output.to_dict()).catalog == catalog
+
+
+def test_correct_catalog_explicit_format():
+    catalog = Catalog(
+        definition={
+            "name": "default",
+            "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+            "warehouse": "file:///tmp/path",
+        },
+        tables=["output1", "output2"],
+    )
+    path = "/path/to/data/data"
+    output = LocalFileDestination(path, catalog=catalog, format=ParquetFormat())
+    assert output.catalog == catalog
+    assert build_output(output.to_dict()).catalog == catalog
+
+
+def test_wrong_format_fails():
+    catalog = Catalog(
+        definition={
+            "name": "default",
+            "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+            "warehouse": "file:///tmp/path",
+        },
+        tables=["output1", "output2"],
+    )
+    path = "/path/to/data/data"
+    output = LocalFileDestination(path, catalog=catalog, format=ParquetFormat())
+    assert output.catalog == catalog
+    with pytest.raises(OutputConfigurationError) as e:
+        output.format = CSVFormat()
+    assert e.value.error_code == ErrorCode.OCE37
+
+    with pytest.raises(OutputConfigurationError) as e:
+        LocalFileDestination(path, catalog=catalog, format=CSVFormat())
+    assert e.value.error_code == ErrorCode.OCE37
+
+    output = LocalFileDestination("/path/to/data/data.csv")
+    with pytest.raises(OutputConfigurationError) as e:
+        output.catalog = catalog
+    assert e.value.error_code == ErrorCode.OCE37
+
+
+def test_catalog_wrong_type_raises_exception():
+    path = "/path/to/data/data.csv"
+    catalog = 42
+    with pytest.raises(OutputConfigurationError) as e:
+        LocalFileDestination(path, catalog=catalog)
+    assert e.value.error_code == ErrorCode.OCE34

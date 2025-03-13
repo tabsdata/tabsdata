@@ -36,7 +36,18 @@ CONFIG_ENTRY_POINT_KEY = "entryPoint"
 CONFIG_FILE_NAME = "configuration.json"
 CONFIG_INPUTS_KEY = "inputs"
 CONFIG_OUTPUT_KEY = "output"
-IGNORED_FOLDERS = (".venv", ".git", "__pycache__", "target")
+IGNORED_FOLDERS = (
+    ".venv",
+    ".git",
+    "__pycache__",
+    "build",
+    "local_dev",
+    "target",
+    "test",
+    "testing_resources",
+    "tests",
+    "venv",
+)
 LOCAL_PACKAGES_FOLDER = "local_packages"
 PLUGINS_FOLDER = "plugins"
 
@@ -47,6 +58,17 @@ PYTHON_PUBLIC_PACKAGES_KEY = "publicPackages"
 PYTHON_INSTALL_DEPENDENCIES_KEY = "installPackagesDependencies"
 PYTHON_VERSION_KEY = "pythonVersion"
 REQUIREMENTS_FILE_NAME = "requirements.yaml"
+
+
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        try:
+            return super().default(obj)
+        except Exception as e:
+            try:
+                return obj.to_dict()
+            except Exception:
+                raise e
 
 
 def create_configuration(function: TabsdataFunction, save_location: str):
@@ -61,7 +83,7 @@ def create_configuration(function: TabsdataFunction, save_location: str):
     )
     if save_location:
         with open(os.path.join(save_location, CONFIG_FILE_NAME), "w") as file:
-            json.dump(configuration, file)
+            json.dump(configuration, file, cls=CustomJSONEncoder)
     return configuration
 
 

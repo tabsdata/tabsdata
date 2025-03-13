@@ -598,28 +598,86 @@ class ErrorCode(Enum):
         "code": "OCE-026",
         "message": (
             "The 'if_table_exists' parameter in a MariaDBDestination must be one of the"
-            " following values {}, got '{}' instead"
+            " following values {}, got '{}' instead."
         ),
     }
     OCE27 = {
         "code": "OCE-027",
         "message": (
             "The 'if_table_exists' parameter in a MySQLDestination must be one of the "
-            "following values {}, got '{}' instead"
+            "following values {}, got '{}' instead."
         ),
     }
     OCE28 = {
         "code": "OCE-028",
         "message": (
             "The 'if_table_exists' parameter in a OracleDestination must be one of the "
-            "following values {}, got '{}' instead"
+            "following values {}, got '{}' instead."
         ),
     }
     OCE29 = {
         "code": "OCE-029",
         "message": (
             "The 'if_table_exists' parameter in a PostgresDestination must be one of"
-            " the following values {}, got '{}' instead"
+            " the following values {}, got '{}' instead."
+        ),
+    }
+    OCE30 = {
+        "code": "OCE-030",
+        "message": (
+            "The 'definition' parameter in a Catalog must be a dictionary, got "
+            "an object of type '{}' instead."
+        ),
+    }
+    OCE31 = {
+        "code": "OCE-031",
+        "message": (
+            "The 'tables' parameter in a Catalog must be a string or a list of "
+            "strings, got a list with elements that are not strings instead."
+        ),
+    }
+    OCE32 = {
+        "code": "OCE-032",
+        "message": (
+            "The 'tables' parameter in a Catalog must be a string or a list of "
+            "strings, got an object of type '{}' instead."
+        ),
+    }
+    OCE33 = {
+        "code": "OCE-033",
+        "message": (
+            "The 'if_table_exists' parameter in a Catalog must be one of the"
+            " following values {}, got '{}' instead."
+        ),
+    }
+    OCE34 = {
+        "code": "OCE-034",
+        "message": (
+            "The 'catalog' parameter must be either a dictionary or a Catalog object, "
+            "got '{}' instead."
+        ),
+    }
+    OCE35 = {
+        "code": "OCE-035",
+        "message": (
+            "The 'catalog' dictionary to build a Catalog must contain exactly one "
+            "key, which must be one of the following: {}. Instead, got the following "
+            "key(s) in the dictionary: {}."
+        ),
+    }
+    OCE36 = {
+        "code": "OCE-036",
+        "message": (
+            "The '{}' key in the dictionary to build a "
+            "Catalog must have an object of type 'dict' as its value. "
+            "Instead, got an object of type '{}'."
+        ),
+    }
+    OCE37 = {
+        "code": "OCE-037",
+        "message": (
+            "The 'catalog' option is only compatible with file format(s) '{}', "
+            "got '{}' instead."
         ),
     }
     RE1 = {

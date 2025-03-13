@@ -6,6 +6,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Any
 
 import hvac
 
@@ -307,3 +308,33 @@ def build_secret(
         raise SecretConfigurationError(
             ErrorCode.SCE3, [dict, str, Secret], type(configuration)
         )
+
+
+def _recursively_load_secret(value: Any) -> Any:
+    if isinstance(value, dict):
+        valid_identifiers = [element.value for element in SecretIdentifier]
+        if len(value) == 1 and list(value.keys())[0] in valid_identifiers:
+            return build_secret(value)
+        return {key: _recursively_load_secret(val) for key, val in value.items()}
+    elif isinstance(value, list):
+        return [_recursively_load_secret(val) for val in value]
+    elif isinstance(value, tuple):
+        return tuple(_recursively_load_secret(val) for val in value)
+    else:
+        return value
+
+
+def _recursively_evaluate_secret(value: Any) -> Any:
+    if isinstance(value, dict):
+        valid_identifiers = [element.value for element in SecretIdentifier]
+        if len(value) == 1 and list(value.keys())[0] in valid_identifiers:
+            return build_secret(value).secret_value
+        return {key: _recursively_evaluate_secret(val) for key, val in value.items()}
+    elif isinstance(value, Secret):
+        return value.secret_value
+    elif isinstance(value, list):
+        return [_recursively_evaluate_secret(val) for val in value]
+    elif isinstance(value, tuple):
+        return tuple(_recursively_evaluate_secret(val) for val in value)
+    else:
+        return value

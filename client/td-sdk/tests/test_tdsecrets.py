@@ -7,9 +7,17 @@ import os
 import pytest
 from pytest import MonkeyPatch
 
-from tabsdata import DirectSecret, EnvironmentSecret, HashiCorpSecret
+from tabsdata import (
+    DirectSecret,
+    EnvironmentSecret,
+    HashiCorpSecret,
+)
 from tabsdata.exceptions import ErrorCode, SecretConfigurationError
-from tabsdata.secret import build_secret
+from tabsdata.secret import (
+    _recursively_evaluate_secret,
+    _recursively_load_secret,
+    build_secret,
+)
 from tests.conftest import (
     HASHICORP_TESTING_SECRET_NAME,
     HASHICORP_TESTING_SECRET_PATH,
@@ -269,3 +277,120 @@ def test_environment_secret_value_not_exist():
     environment_secret = EnvironmentSecret("does_not_exist")
     with pytest.raises(ValueError):
         _ = environment_secret.secret_value
+
+
+def test_recursively_load_secret():
+    secret_dict = EnvironmentSecret("does_not_exist").to_dict()
+    assert _recursively_load_secret(secret_dict) == EnvironmentSecret("does_not_exist")
+    value = ("hello", secret_dict)
+    assert _recursively_load_secret(value) == (
+        "hello",
+        EnvironmentSecret("does_not_exist"),
+    )
+    value = "hello"
+    assert _recursively_load_secret(value) == "hello"
+    value = ["hello", secret_dict]
+    assert _recursively_load_secret(value) == [
+        "hello",
+        EnvironmentSecret("does_not_exist"),
+    ]
+    value = {"key": secret_dict}
+    assert _recursively_load_secret(value) == {
+        "key": EnvironmentSecret("does_not_exist")
+    }
+    value = {"key": "hello"}
+    assert _recursively_load_secret(value) == {"key": "hello"}
+    value = {"key": ["hello", secret_dict]}
+    assert _recursively_load_secret(value) == {
+        "key": ["hello", EnvironmentSecret("does_not_exist")]
+    }
+    value = {"key": {"subkey": secret_dict}}
+    assert _recursively_load_secret(value) == {
+        "key": {"subkey": EnvironmentSecret("does_not_exist")}
+    }
+    value = {"key": {"subkey": "hello"}}
+    assert _recursively_load_secret(value) == {"key": {"subkey": "hello"}}
+    value = {"key": {"subkey": ["hello", secret_dict]}}
+    assert _recursively_load_secret(value) == {
+        "key": {"subkey": ["hello", EnvironmentSecret("does_not_exist")]}
+    }
+    value = {"key": {"subkey": {"subsubkey": secret_dict}}}
+    assert _recursively_load_secret(value) == {
+        "key": {"subkey": {"subsubkey": EnvironmentSecret("does_not_exist")}}
+    }
+
+
+def test_recursively_evaluate_secret():
+    secret = DirectSecret("evaluated_secret_value")
+    secret_dict = secret.to_dict()
+    assert _recursively_evaluate_secret(secret_dict) == "evaluated_secret_value"
+    value = ("hello", secret_dict)
+    assert _recursively_evaluate_secret(value) == (
+        "hello",
+        "evaluated_secret_value",
+    )
+    value = "hello"
+    assert _recursively_evaluate_secret(value) == "hello"
+    value = ["hello", secret_dict]
+    assert _recursively_evaluate_secret(value) == [
+        "hello",
+        "evaluated_secret_value",
+    ]
+    value = {"key": secret_dict}
+    assert _recursively_evaluate_secret(value) == {"key": "evaluated_secret_value"}
+    value = {"key": "hello"}
+    assert _recursively_evaluate_secret(value) == {"key": "hello"}
+    value = {"key": ["hello", secret_dict]}
+    assert _recursively_evaluate_secret(value) == {
+        "key": ["hello", "evaluated_secret_value"]
+    }
+    value = {"key": {"subkey": secret_dict}}
+    assert _recursively_evaluate_secret(value) == {
+        "key": {"subkey": "evaluated_secret_value"}
+    }
+    value = {"key": {"subkey": "hello"}}
+    assert _recursively_evaluate_secret(value) == {"key": {"subkey": "hello"}}
+    value = {"key": {"subkey": ["hello", secret_dict]}}
+    assert _recursively_evaluate_secret(value) == {
+        "key": {"subkey": ["hello", "evaluated_secret_value"]}
+    }
+    value = {"key": {"subkey": {"subsubkey": secret_dict}}}
+    assert _recursively_evaluate_secret(value) == {
+        "key": {"subkey": {"subsubkey": "evaluated_secret_value"}}
+    }
+    # Now we use the secret directly instead of the secret_dict
+    assert _recursively_evaluate_secret(secret) == "evaluated_secret_value"
+    value = ("hello", secret)
+    assert _recursively_evaluate_secret(value) == (
+        "hello",
+        "evaluated_secret_value",
+    )
+    value = "hello"
+    assert _recursively_evaluate_secret(value) == "hello"
+    value = ["hello", secret]
+    assert _recursively_evaluate_secret(value) == [
+        "hello",
+        "evaluated_secret_value",
+    ]
+    value = {"key": secret}
+    assert _recursively_evaluate_secret(value) == {"key": "evaluated_secret_value"}
+    value = {"key": "hello"}
+    assert _recursively_evaluate_secret(value) == {"key": "hello"}
+    value = {"key": ["hello", secret]}
+    assert _recursively_evaluate_secret(value) == {
+        "key": ["hello", "evaluated_secret_value"]
+    }
+    value = {"key": {"subkey": secret}}
+    assert _recursively_evaluate_secret(value) == {
+        "key": {"subkey": "evaluated_secret_value"}
+    }
+    value = {"key": {"subkey": "hello"}}
+    assert _recursively_evaluate_secret(value) == {"key": {"subkey": "hello"}}
+    value = {"key": {"subkey": ["hello", secret]}}
+    assert _recursively_evaluate_secret(value) == {
+        "key": {"subkey": ["hello", "evaluated_secret_value"]}
+    }
+    value = {"key": {"subkey": {"subsubkey": secret}}}
+    assert _recursively_evaluate_secret(value) == {
+        "key": {"subkey": {"subsubkey": "evaluated_secret_value"}}
+    }

@@ -53,6 +53,7 @@ from tabsdata.tableuri import TableURI
 from tabsdata.tabsdatafunction import (
     AzureDestination,
     AzureSource,
+    Catalog,
     LocalFileDestination,
     LocalFileSource,
     MariaDBDestination,
@@ -77,6 +78,7 @@ logging.basicConfig(
 
 __all__ = [
     # from tabsdatafunction.py
+    "Catalog",
     "TabsdataFunction",
     # from tabsdatafunction.py Inputs
     "AzureSource",
