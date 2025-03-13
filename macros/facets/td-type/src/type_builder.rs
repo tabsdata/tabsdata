@@ -187,6 +187,13 @@ pub fn id_name_param(args: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
+        impl TryFrom<&str> for #ident {
+            type Error = td_error::TdError;
+            fn try_from(s: &str) -> Result<Self, Self::Error> {
+                Self::try_from(s.to_string())
+            }
+        }
+
         impl From<#ident> for String {
             fn from(value: #ident) -> String {
                 match (&value.id, &value.name) {
