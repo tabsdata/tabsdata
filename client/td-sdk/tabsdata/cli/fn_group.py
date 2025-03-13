@@ -306,8 +306,8 @@ def trigger(ctx: click.Context, name: str, collection: str, execution_plan_name:
             collection, name, execution_plan_name=execution_plan_name
         )
         click.echo("Function triggered successfully")
-        dot = response.json().get("dot")
-        execution_plan_real_name = response.json().get("name")
+        dot = response.json().get("data").get("dot")
+        execution_plan_real_name = response.json().get("data").get("name")
         if dot:
             os.makedirs(DOT_FOLDER, exist_ok=True)
             current_timestamp = int(
