@@ -103,8 +103,8 @@ toml = { workspace = true }
 
 ## Macros
 
-td-attach = { workspace = true }
 td-apiforge = { workspace = true }
+td-attach = { workspace = true }
 td-build = { workspace = true }
 td-concrete = { workspace = true }
 tm-workspace = { workspace = true }
@@ -120,6 +120,7 @@ td-interceptor-api = { workspace = true }
 td-objects = { workspace = true }
 td-python = { workspace = true }
 td-security = { workspace = true }
+td-services = { workspace = true }
 td-storage = { workspace = true }
 td-tower = { workspace = true }
 td-transaction = { workspace = true }

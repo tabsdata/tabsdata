@@ -2,6 +2,4 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-mod common;
-
-pub mod role;
+pub mod services;

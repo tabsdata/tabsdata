@@ -522,3 +522,12 @@ impl Creator<WorkerMessageParam> for WorkerMessageId {
         WorkerMessageId::new(value.into().worker_id())
     }
 }
+
+pub const ROLES: &str = "/roles";
+pub const ROLE: &str = concat!(ROLES, "/{role}");
+
+pub const LIST_ROLES: &str = ROLES;
+pub const GET_ROLE: &str = ROLE;
+pub const CREATE_ROLE: &str = ROLES;
+pub const UPDATE_ROLE: &str = ROLE;
+pub const DELETE_ROLE: &str = ROLE;

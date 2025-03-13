@@ -10,7 +10,7 @@ pub mod execution;
 pub mod functions;
 mod jwt_login;
 mod openapi;
-mod roles;
+pub mod roles;
 pub mod scheduler_server;
 mod server_status;
 mod users;

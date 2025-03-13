@@ -2,12 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::sql::{condition_builder, select_cols, Columns, Statement, Which, With};
+use crate::sql::{condition_builder, select_cols, Columns, Queries, Statement, Which, With};
 use crate::types::basic::RoleName;
 use tracing::trace;
 
 /// Roles Queries.
 pub struct RoleQueries {}
+impl Queries for RoleQueries {}
 
 impl RoleQueries {
     /// Constructor.
