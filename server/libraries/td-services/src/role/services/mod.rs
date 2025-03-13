@@ -3,15 +3,17 @@
 //
 
 use crate::role::services::create::CreateRoleService;
+use crate::role::services::delete::DeleteRoleService;
 use crate::role::services::read::ReadRoleService;
 use crate::role::services::update::UpdateRoleService;
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::{CreateRequest, ReadRequest, UpdateRequest};
+use td_objects::crudl::{CreateRequest, DeleteRequest, ReadRequest, UpdateRequest};
 use td_objects::types::role::{Role, RoleCreate, RoleParam, RoleUpdate};
 use td_tower::service_provider::TdBoxService;
 
 mod create;
+mod delete;
 mod read;
 mod update;
 
@@ -19,6 +21,7 @@ pub struct RoleServices {
     create: CreateRoleService,
     read: ReadRoleService,
     update: UpdateRoleService,
+    delete: DeleteRoleService,
 }
 
 impl RoleServices {
@@ -27,6 +30,7 @@ impl RoleServices {
             create: CreateRoleService::new(db.clone()),
             read: ReadRoleService::new(db.clone()),
             update: UpdateRoleService::new(db.clone()),
+            delete: DeleteRoleService::new(db.clone()),
         }
     }
 
@@ -42,5 +46,9 @@ impl RoleServices {
         &self,
     ) -> TdBoxService<UpdateRequest<RoleParam, RoleUpdate>, Role, TdError> {
         self.update.service().await
+    }
+
+    pub async fn delete_role(&self) -> TdBoxService<DeleteRequest<RoleParam>, (), TdError> {
+        self.delete.service().await
     }
 }

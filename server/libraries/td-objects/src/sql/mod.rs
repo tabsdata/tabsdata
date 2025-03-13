@@ -151,6 +151,50 @@ where
     }
 }
 
+// D is needed to get the fields types for the WHERE clauses
+pub trait UpdateBy<'a, E> {
+    fn update_by<U: DataAccessObject, D: DataAccessObject>(
+        &self,
+        dao: &'a U,
+        e: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+}
+
+macro_rules! generate_update_by {
+    (
+        [$($E:ident),*]
+    ) => {
+        #[allow(non_snake_case, unused_parens)]
+        impl<'a, Q, $($E),*> UpdateBy<'a, ($($E),*) > for Q
+        where
+            Q: Queries,
+            $($E: SqlEntity),*
+        {
+            fn update_by<U: DataAccessObject, D: DataAccessObject>(&self, dao: &'a U, ($($E),*): &'a ($($E),*)) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
+                let table = D::sql_table();
+                let fields = U::fields();
+                let sql = format!("UPDATE {} SET ", table);
+                let mut query_builder = dao.tuples_query_builder(sql, fields);
+
+                query_builder.push(" WHERE ");
+                let mut separated = query_builder.separated(" AND ");
+                $(
+                    let column = D::sql_field_for_type::<$E>()
+                        .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
+                    separated
+                        .push(format!("{} = ", column))
+                        .push_bind_unseparated($E.value());
+                )*
+
+                trace!("update_{}: sql: {}", table, query_builder.sql());
+                Ok(query_builder)
+            }
+        }
+    };
+}
+
+all_the_tuples!(generate_update_by);
+
 pub trait DeleteBy<'a, E> {
     fn delete_by<D: DataAccessObject>(
         &self,
