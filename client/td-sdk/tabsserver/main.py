@@ -7,7 +7,6 @@ import logging
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from tabsdata.utils.bundle_utils import REQUIREMENTS_FILE_NAME
@@ -18,25 +17,23 @@ if __name__ == "__main__" and __package__ is None:
     __package__ = "tabsserver"
 
 import tabsserver.function_execution.execute_function_from_bundle_path
-from tabsserver.function_execution.global_utils import CURRENT_PLATFORM, setup_logging
+from tabsserver.function_execution.global_utils import setup_logging
 from tabsserver.function_execution.yaml_parsing import parse_request_yaml
 from tabsserver.pyenv_creation import (
-    DEFAULT_ENVIRONMENT_FOLDER,
     create_virtual_environment,
+    get_path_to_environment_bin,
 )
 from tabsserver.utils import (
     ABSOLUTE_LOCATION,
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
     TimeBlock,
-    extract_tarfile_to_folder,
+    extract_context_folder,
 )
 
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()
 
 EXECUTION_CONTEXT_FILE_NAME = "request.yaml"
-FUNCTION_EXECUTION_LOGS_FILE = "function_execution.log"
-UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER = "uncompressed_function_bundle"
 
 
 def do(
@@ -61,40 +58,14 @@ def do(
     execution_context_content = parse_request_yaml(execution_context_file)
     logger.debug(f"Request YAML content: {execution_context_content}")
     compressed_context_folder = execution_context_content.function_bundle_uri
-    if bin_folder:
-        function_bundle_folder = os.path.join(
-            bin_folder, UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
-        )
-    else:
-        temporary_directory = tempfile.TemporaryDirectory()
-        if CURRENT_PLATFORM.is_windows():
-            import win32api
 
-            logger.debug(f"Short temp path: '{temporary_directory}")
-            temporary_directory = win32api.GetLongPathName(temporary_directory.name)
-            logger.debug(f"Long temp Path: {temporary_directory}")
-        else:
-            temporary_directory = temporary_directory.name
-        function_bundle_folder = os.path.join(
-            temporary_directory, UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
-        )
-    with time_block:
-        extract_tarfile_to_folder(
-            tarfile_uri=compressed_context_folder,
-            destination_folder=function_bundle_folder,
-        )
-    logger.info(
-        f"Extracted {compressed_context_folder} to {function_bundle_folder}. Time"
-        f" taken: {time_block.time_taken():.2f}s"
-    )
+    context_folder = extract_context_folder(bin_folder, compressed_context_folder)
 
-    logger.info(
-        f"Creating the virtual environment for the context {function_bundle_folder}"
-    )
+    logger.info(f"Creating the virtual environment for the context {context_folder}")
     with time_block:
         python_environment = create_virtual_environment(
             requirements_description_file=os.path.join(
-                function_bundle_folder, REQUIREMENTS_FILE_NAME
+                context_folder, REQUIREMENTS_FILE_NAME
             ),
             current_instance=current_instance,
             locks_folder=locks_folder,
@@ -103,29 +74,20 @@ def do(
         )
     if not python_environment:
         logger.error(
-            "Failed to create the virtual environment for the context"
-            f" {function_bundle_folder}"
+            f"Failed to create the virtual environment for the context {context_folder}"
         )
         return None, 1
     else:
         logger.info(
             f"Created the virtual environment {python_environment} for the context"
-            f" {function_bundle_folder}. Time taken: {time_block.time_taken():.2f}s"
-        )
-    if CURRENT_PLATFORM.is_windows():
-        path_to_environment_bin = os.path.join(
-            DEFAULT_ENVIRONMENT_FOLDER, python_environment, "Scripts", "python.exe"
-        )
-    else:
-        path_to_environment_bin = os.path.join(
-            DEFAULT_ENVIRONMENT_FOLDER, python_environment, "bin", "python3"
+            f" {context_folder}. Time taken: {time_block.time_taken():.2f}s"
         )
     command_to_execute = [
-        path_to_environment_bin,
+        get_path_to_environment_bin(python_environment),
         "-m",
         tabsserver.function_execution.execute_function_from_bundle_path.__name__,
         "--bundle-path",
-        function_bundle_folder,
+        context_folder,
         "--execution-context-file",
         execution_context_file,
         "--response-folder",

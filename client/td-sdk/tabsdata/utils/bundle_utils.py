@@ -17,7 +17,7 @@ import cloudpickle
 import yaml
 
 from tabsdata.exceptions import ErrorCode, RegistrationError
-from tabsdata.plugin import DestinationPlugin, SourcePlugin
+from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.tabsdatafunction import Input, Output, TabsdataFunction
 from tabsdata.utils.constants import TABSDATA_MODULE_NAME
 

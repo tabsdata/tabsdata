@@ -684,23 +684,27 @@ def atomic_environment_creation(
     return real_environment_name
 
 
+def get_path_to_environment_bin(python_environment):
+    if CURRENT_PLATFORM.is_windows():
+        path_to_environment_bin = os.path.join(
+            DEFAULT_ENVIRONMENT_FOLDER, python_environment, "Scripts", "python.exe"
+        )
+    else:
+        path_to_environment_bin = os.path.join(
+            DEFAULT_ENVIRONMENT_FOLDER, python_environment, "bin", "python"
+        )
+    return path_to_environment_bin
+
+
 def add_python_target_and_join_commands(
     command: list[str], environment_name: str
 ) -> str:
     """Given the command that we want to execute, return it as a string with the
     python target option appended at the end of it"""
-    if CURRENT_PLATFORM.is_windows():
-        python_target_option = [
-            "--python",
-            os.path.join(
-                DEFAULT_ENVIRONMENT_FOLDER, environment_name, "Scripts", "python.exe"
-            ),
-        ]
-    else:
-        python_target_option = [
-            "--python",
-            os.path.join(DEFAULT_ENVIRONMENT_FOLDER, environment_name, "bin", "python"),
-        ]
+    python_target_option = [
+        "--python",
+        get_path_to_environment_bin(environment_name),
+    ]
 
     joint_command = " ".join(command + python_target_option)
     return joint_command

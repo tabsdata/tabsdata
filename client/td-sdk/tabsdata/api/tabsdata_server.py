@@ -16,7 +16,9 @@ import polars as pl
 import requests
 
 from tabsdata.api.api_server import APIServer, obtain_connection
-from tabsdata.tabsdatafunction import TableInput, TableOutput, TabsdataFunction
+from tabsdata.io.input import TableInput
+from tabsdata.io.output import TableOutput
+from tabsdata.tabsdatafunction import TabsdataFunction
 from tabsdata.utils.bundle_utils import create_bundle_archive
 from tabsdata.utils.sql_utils import verify_output_sql_drivers
 

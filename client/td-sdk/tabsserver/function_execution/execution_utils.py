@@ -20,7 +20,6 @@ import polars as pl
 from uuid_v7.base import uuid7
 
 import tabsdata as td
-from tabsdata import SourcePlugin
 from tabsdata.format import (
     CSVFormat,
     FileFormat,
@@ -28,8 +27,7 @@ from tabsdata.format import (
     NDJSONFormat,
     ParquetFormat,
 )
-from tabsdata.tableuri import build_table_uri_object
-from tabsdata.tabsdatafunction import (
+from tabsdata.io.input import (
     AzureSource,
     Input,
     LocalFileSource,
@@ -41,6 +39,8 @@ from tabsdata.tabsdatafunction import (
     TableInput,
     build_input,
 )
+from tabsdata.io.plugin import SourcePlugin
+from tabsdata.tableuri import build_table_uri_object
 from tabsdata.utils.bundle_utils import (
     CODE_FOLDER,
     CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY,

@@ -42,7 +42,28 @@ from tabsdata.credentials import (
 )
 from tabsdata.decorators import ALL_DEPS, publisher, subscriber, transformer
 from tabsdata.format import CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
-from tabsdata.plugin import DestinationPlugin, SourcePlugin
+from tabsdata.io.input import (
+    AzureSource,
+    LocalFileSource,
+    MariaDBSource,
+    MySQLSource,
+    OracleSource,
+    PostgresSource,
+    S3Source,
+    TableInput,
+)
+from tabsdata.io.output import (
+    AzureDestination,
+    Catalog,
+    LocalFileDestination,
+    MariaDBDestination,
+    MySQLDestination,
+    OracleDestination,
+    PostgresDestination,
+    S3Destination,
+    TableOutput,
+)
+from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.secret import DirectSecret, EnvironmentSecret, HashiCorpSecret
 from tabsdata.tableframe.expr.expr import Expr as Expr
 from tabsdata.tableframe.functions.col import col as col
@@ -50,26 +71,7 @@ from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import TableURI
-from tabsdata.tabsdatafunction import (
-    AzureDestination,
-    AzureSource,
-    Catalog,
-    LocalFileDestination,
-    LocalFileSource,
-    MariaDBDestination,
-    MariaDBSource,
-    MySQLDestination,
-    MySQLSource,
-    OracleDestination,
-    OracleSource,
-    PostgresDestination,
-    PostgresSource,
-    S3Destination,
-    S3Source,
-    TableInput,
-    TableOutput,
-    TabsdataFunction,
-)
+from tabsdata.tabsdatafunction import TabsdataFunction
 
 logging.basicConfig(
     level=logging.getLevelName(logging.WARNING),

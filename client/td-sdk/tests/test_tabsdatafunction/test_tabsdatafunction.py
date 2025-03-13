@@ -13,14 +13,9 @@ from tabsdata.exceptions import (
     InputConfigurationError,
     OutputConfigurationError,
 )
-from tabsdata.tabsdatafunction import (
-    LocalFileSource,
-    MySQLDestination,
-    MySQLSource,
-    TabsdataFunction,
-    build_input,
-    build_output,
-)
+from tabsdata.io.input import LocalFileSource, MySQLSource, build_input
+from tabsdata.io.output import MySQLDestination, build_output
+from tabsdata.tabsdatafunction import TabsdataFunction
 
 QUERY_KEY = MySQLSource.QUERY_KEY
 URI_KEY = MySQLSource.URI_KEY

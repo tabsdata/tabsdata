@@ -6,15 +6,17 @@ import logging
 import urllib.parse
 
 from tabsdata.credentials import UserPasswordCredentials
-from tabsdata.tabsdatafunction import (
-    MariaDBDestination,
+from tabsdata.io.input import (
     MariaDBSource,
-    MySQLDestination,
     MySQLSource,
-    OracleDestination,
     OracleSource,
-    PostgresDestination,
     PostgresSource,
+)
+from tabsdata.io.output import (
+    MariaDBDestination,
+    MySQLDestination,
+    OracleDestination,
+    PostgresDestination,
 )
 from tabsdata.utils.sql_utils import SupportedSQL
 

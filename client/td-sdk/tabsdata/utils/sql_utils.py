@@ -8,16 +8,18 @@ from enum import Enum
 import sqlalchemy.dialects.mysql.mysqlconnector as mysqlconnector
 from sqlalchemy import create_engine
 
-from tabsdata.tabsdatafunction import (
-    MariaDBDestination,
+from tabsdata.io.input import (
     MariaDBSource,
-    MySQLDestination,
     MySQLSource,
-    OracleDestination,
     OracleSource,
+    PostgresSource,
+)
+from tabsdata.io.output import (
+    MariaDBDestination,
+    MySQLDestination,
+    OracleDestination,
     Output,
     PostgresDestination,
-    PostgresSource,
 )
 
 formatter = logging.Formatter("%(levelname)s: %(message)s")

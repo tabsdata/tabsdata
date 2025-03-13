@@ -6,26 +6,28 @@ import logging
 from typing import List, ParamSpec, TypeVar
 
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
-from tabsdata.plugin import DestinationPlugin, SourcePlugin
-from tabsdata.tabsdatafunction import (
-    AzureDestination,
+from tabsdata.io.input import (
     AzureSource,
-    LocalFileDestination,
     LocalFileSource,
-    MariaDBDestination,
     MariaDBSource,
-    MySQLDestination,
     MySQLSource,
-    OracleDestination,
     OracleSource,
-    PostgresDestination,
     PostgresSource,
-    S3Destination,
     S3Source,
     TableInput,
-    TableOutput,
-    TabsdataFunction,
 )
+from tabsdata.io.output import (
+    AzureDestination,
+    LocalFileDestination,
+    MariaDBDestination,
+    MySQLDestination,
+    OracleDestination,
+    PostgresDestination,
+    S3Destination,
+    TableOutput,
+)
+from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata.tabsdatafunction import TabsdataFunction
 
 P = ParamSpec("P")
 T = TypeVar("T")

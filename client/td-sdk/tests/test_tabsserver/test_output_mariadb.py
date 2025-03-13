@@ -1,0 +1,244 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+import inspect
+import logging
+import os
+import urllib.parse
+
+import polars as pl
+import pytest
+
+from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsserver.function_execution.response_utils import RESPONSE_FILE_NAME
+from tabsserver.main import EXECUTION_CONTEXT_FILE_NAME
+from tabsserver.main import do as tabsserver_main
+from tests.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    DB_HOST,
+    DB_NAME,
+    DB_PASSWORD,
+    DB_USER,
+    MARIADB_PORT,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    TESTING_RESOURCES_FOLDER,
+    clean_polars_df,
+    read_json_and_clean,
+    write_v1_yaml_file,
+)
+from tests.testing_resources.test_output_mariadb_driver_provided.example import (
+    output_mariadb_driver_provided,
+)
+from tests.testing_resources.test_output_mariadb_list.example import output_mariadb_list
+from tests.testing_resources.test_output_mariadb_with_charset.example import (
+    output_mariadb_with_charset,
+)
+from tests.testing_resources.test_output_mariadb_with_collation.example import (
+    output_mariadb_with_collation,
+)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+ESCAPED_USER = urllib.parse.quote(DB_USER)
+ESCAPED_PASSWORD = urllib.parse.quote(DB_PASSWORD)
+MARIADB_URI = (
+    f"mysql://{ESCAPED_USER}:{ESCAPED_PASSWORD}@{DB_HOST}:{MARIADB_PORT}/{DB_NAME}"
+)
+ROOT_PROJECT_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
+)
+RESPONSE_FOLDER = "response_folder"
+
+LOCAL_DEV_FOLDER = os.path.join(
+    os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION), "local_dev"
+)
+
+
+@pytest.mark.mariadb
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_mariadb_list(tmp_path, testing_mariadb):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        output_mariadb_list, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_mariadb_list", "mock_table.parquet"
+    )
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+    output = pl.read_database_uri(
+        uri=MARIADB_URI,
+        query="SELECT * FROM output_mariadb_list",
+    )
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mariadb_list",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+    output = pl.read_database_uri(
+        uri=MARIADB_URI,
+        query="SELECT * FROM second_output_mariadb_list",
+    )
+    output = clean_polars_df(output)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.mariadb
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        output_mariadb_with_charset,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mariadb_with_charset",
+        "mock_table.parquet",
+    )
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+    output = pl.read_database_uri(
+        uri=MARIADB_URI,
+        query="SELECT * FROM output_mariadb_with_charset",
+    )
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mariadb_with_charset",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.mariadb
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        output_mariadb_with_collation,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mariadb_with_collation",
+        "mock_table.parquet",
+    )
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+    output = pl.read_database_uri(
+        uri=MARIADB_URI,
+        query="SELECT * FROM output_mariadb_with_collation",
+    )
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mariadb_with_collation",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.mariadb
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        output_mariadb_driver_provided,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mariadb_driver_provided",
+        "mock_table.parquet",
+    )
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+    output = pl.read_database_uri(
+        uri=MARIADB_URI,
+        query="SELECT * FROM output_mariadb_driver_provided",
+    )
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mariadb_driver_provided",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)

@@ -5,53 +5,57 @@
 import inspect
 import logging
 import os
-import sys
 
 import polars as pl
 import pytest
-import yaml
 
-from tabsdata.utils.bundle_utils import (
-    PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
-    PYTHON_INSTALL_DEPENDENCIES_KEY,
-    PYTHON_LOCAL_PACKAGES_KEY,
-    PYTHON_PUBLIC_PACKAGES_KEY,
-    PYTHON_VERSION_KEY,
-    create_bundle_archive,
-)
+from tabsdata.utils.bundle_utils import create_bundle_archive
 from tabsserver.function_execution.response_utils import RESPONSE_FILE_NAME
-from tabsserver.main import (
-    EXECUTION_CONTEXT_FILE_NAME,
-)
+from tabsserver.main import EXECUTION_CONTEXT_FILE_NAME
 from tabsserver.main import do as tabsserver_main
-from tabsserver.utils import UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
 from tests.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
-    DEFAULT_LOGS_FILE,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
     write_v1_yaml_file,
 )
-from tests.testing_resources.test_custom_requirements.example import custom_requirements
-from tests.testing_resources.test_failed_execution_returns_error_code.example import (
-    failed_execution_returns_error_code,
+from tests.testing_resources.test_input_file_csv_modified_format.example import (
+    input_file_csv_modified_format,
 )
-from tests.testing_resources.test_failing_file_in_folder.example import (
-    failing_file_in_folder,
+from tests.testing_resources.test_input_file_csv_modified_path.example import (
+    input_file_csv_modified_path,
 )
-from tests.testing_resources.test_input_output_dataframe.example import (
-    input_output_dataframe,
+from tests.testing_resources.test_input_file_csv_separator.example import (
+    input_file_csv_separator,
 )
-from tests.testing_resources.test_multiple_inputs_multiple_outputs.example import (
-    multiple_inputs_multiple_outputs,
+from tests.testing_resources.test_input_file_csv_string_format.example import (
+    input_file_csv_string_format,
 )
-from tests.testing_resources.test_path_to_code.folder1.example import path_to_code
-from tests.testing_resources.test_relative_import.example import relative_import
+from tests.testing_resources.test_input_file_log_string_format.example import (
+    input_file_log_string_format,
+)
+from tests.testing_resources.test_input_file_log_wildcard.example import (
+    input_file_log_wildcard,
+)
+from tests.testing_resources.test_input_file_ndjson_string_format.example import (
+    input_file_ndjson_string_format,
+)
+from tests.testing_resources.test_input_file_ndjson_wildcard.example import (
+    input_file_ndjson_wildcard,
+)
+from tests.testing_resources.test_input_file_parquet_string_format.example import (
+    input_file_parquet_string_format,
+)
+from tests.testing_resources.test_input_file_parquet_wildcard.example import (
+    input_file_parquet_wildcard,
+)
+from tests.testing_resources.test_input_file_wildcard.example import input_file_wildcard
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
 
 ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
@@ -65,10 +69,10 @@ LOCAL_DEV_FOLDER = os.path.join(
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
-def test_input_output_dataframe(tmp_path):
+def test_input_file_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_output_dataframe, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_file_wildcard, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -93,7 +97,7 @@ def test_input_output_dataframe(tmp_path):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_input_output_dataframe",
+        "test_input_file_wildcard",
         "expected_result.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -102,71 +106,13 @@ def test_input_output_dataframe(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
-def test_multiple_inputs_multiple_outputs(tmp_path):
+def test_input_file_csv_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        multiple_inputs_multiple_outputs,
+        input_file_csv_string_format,
         local_packages=ROOT_PROJECT_DIR,
         save_location=tmp_path,
     )
-
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    output_file1 = os.path.join(tmp_path, "output1.parquet")
-    output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
-        input_yaml_file,
-        context_archive,
-        mock_table_location=[output_file1, output_file2],
-    )
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=logs_folder,
-    )
-    assert result == 0
-    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-    assert os.path.isfile(output_file1)
-    output = pl.read_parquet(output_file1)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_multiple_inputs_multiple_outputs",
-        "expected_result1.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-    assert os.path.isfile(output_file2)
-    output = pl.read_parquet(output_file2)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_multiple_inputs_multiple_outputs",
-        "expected_result2.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_path_to_code(tmp_path):
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        path_to_code,
-        local_packages=ROOT_PROJECT_DIR,
-        path_to_code=os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_path_to_code",
-        ),
-        save_location=tmp_path,
-    )
-
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
@@ -184,13 +130,13 @@ def test_path_to_code(tmp_path):
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
     assert os.path.isfile(output_file)
     output = pl.read_parquet(output_file)
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_path_to_code",
-        "folder1",
+        "test_input_file_csv_string_format",
         "expected_result.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -199,433 +145,12 @@ def test_path_to_code(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
-def test_custom_requirements(tmp_path):
+def test_input_file_parquet_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    correct_requirements = {
-        PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
-        PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
-        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3"],
-        PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
-    }
-    correct_custom_requirements_path = os.path.join(
-        tmp_path, "correct_custom_requirements.yaml"
-    )
-    with open(correct_custom_requirements_path, "w") as f:
-        yaml.dump(correct_requirements, f)
     context_archive = create_bundle_archive(
-        custom_requirements,
+        input_file_parquet_string_format,
         local_packages=ROOT_PROJECT_DIR,
         save_location=tmp_path,
-        requirements=correct_custom_requirements_path,
-    )
-
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    output1_path = os.path.join(tmp_path, "output1.parquet")
-    output2_path = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
-        input_yaml_file,
-        context_archive,
-        mock_table_location=[output1_path, output2_path],
-    )
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=logs_folder,
-    )
-    assert result == 0
-    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-    assert os.path.isfile(output1_path)
-    output = pl.read_parquet(output1_path)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_custom_requirements",
-        "expected_result1.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-    assert os.path.isfile(output2_path)
-    output = pl.read_parquet(output2_path)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_custom_requirements",
-        "expected_result2.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_custom_requirements_no_package_version(tmp_path):
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    correct_requirements = {
-        PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
-        PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
-        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas"],
-        PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
-    }
-    correct_custom_requirements_path = os.path.join(
-        tmp_path, "correct_custom_requirements.yaml"
-    )
-    with open(correct_custom_requirements_path, "w") as f:
-        yaml.dump(correct_requirements, f)
-    context_archive = create_bundle_archive(
-        custom_requirements,
-        local_packages=ROOT_PROJECT_DIR,
-        save_location=tmp_path,
-        requirements=correct_custom_requirements_path,
-    )
-
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    output_file1 = os.path.join(tmp_path, "output1.parquet")
-    output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
-        input_yaml_file,
-        context_archive,
-        mock_table_location=[output_file1, output_file2],
-    )
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=logs_folder,
-    )
-    assert result == 0
-    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-    assert os.path.isfile(output_file1)
-    output = pl.read_parquet(output_file1)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_custom_requirements",
-        "expected_result1.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-    assert os.path.isfile(output_file2)
-    output = pl.read_parquet(output_file2)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_custom_requirements",
-        "expected_result2.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    correct_requirements = {
-        PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
-        PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
-        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3"],
-        PYTHON_INSTALL_DEPENDENCIES_KEY: False,
-        PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
-    }
-    correct_custom_requirements_path = os.path.join(
-        tmp_path, "correct_custom_requirements.yaml"
-    )
-    with open(correct_custom_requirements_path, "w") as f:
-        yaml.dump(correct_requirements, f)
-    context_archive = create_bundle_archive(
-        custom_requirements,
-        local_packages=ROOT_PROJECT_DIR,
-        save_location=tmp_path,
-        requirements=correct_custom_requirements_path,
-    )
-
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    write_v1_yaml_file(input_yaml_file, context_archive)
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=logs_folder,
-    )
-    assert result != 0
-
-
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_failed_execution_returns_error_code(tmp_path):
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        failed_execution_returns_error_code,
-        local_packages=ROOT_PROJECT_DIR,
-        save_location=tmp_path,
-    )
-
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    write_v1_yaml_file(input_yaml_file, context_archive)
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=logs_folder,
-    )
-    assert result != 0
-
-
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_custom_logs_folder(tmp_path):
-    context_archive = create_bundle_archive(
-        multiple_inputs_multiple_outputs,
-        local_packages=ROOT_PROJECT_DIR,
-        save_location=tmp_path,
-    )
-    custom_logs_folder = os.path.join(tmp_path, "custom_logs_folder")
-
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    output_file1 = os.path.join(tmp_path, "output1.parquet")
-    output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
-        input_yaml_file,
-        context_archive,
-        mock_table_location=[output_file1, output_file2],
-    )
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=custom_logs_folder,
-    )
-    assert result == 0
-    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-    assert os.path.isdir(custom_logs_folder)
-    assert os.path.isfile(os.path.join(custom_logs_folder, DEFAULT_LOGS_FILE))
-
-    assert os.path.isfile(output_file1)
-    output = pl.read_parquet(output_file1)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_multiple_inputs_multiple_outputs",
-        "expected_result1.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-    assert os.path.isfile(output_file2)
-    output = pl.read_parquet(output_file2)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_multiple_inputs_multiple_outputs",
-        "expected_result2.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_sequential_runs_no_error(tmp_path):
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        multiple_inputs_multiple_outputs,
-        local_packages=ROOT_PROJECT_DIR,
-        save_location=tmp_path,
-    )
-
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    output_file1 = os.path.join(tmp_path, "output1.parquet")
-    output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
-        input_yaml_file,
-        context_archive,
-        mock_table_location=[output_file1, output_file2],
-    )
-
-    for _ in range(2):
-        tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-        environment_name, result = tabsserver_main(
-            tmp_path,
-            output_folder=tabsserver_output_folder,
-            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-            logs_folder=logs_folder,
-            response_folder=response_folder,
-        )
-        assert result == 0
-        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-        assert os.path.isfile(output_file1)
-        output = pl.read_parquet(output_file1)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_multiple_inputs_multiple_outputs",
-            "expected_result1.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
-
-        assert os.path.isfile(output_file2)
-        output = pl.read_parquet(output_file2)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_multiple_inputs_multiple_outputs",
-            "expected_result2.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
-
-
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_sequential_registers_no_error(tmp_path):
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    for _ in range(2):
-        context_archive = create_bundle_archive(
-            multiple_inputs_multiple_outputs,
-            local_packages=ROOT_PROJECT_DIR,
-            save_location=tmp_path,
-        )
-
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    output_file1 = os.path.join(tmp_path, "output1.parquet")
-    output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
-        input_yaml_file,
-        context_archive,
-        mock_table_location=[output_file1, output_file2],
-    )
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=logs_folder,
-    )
-    assert result == 0
-    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-    assert os.path.isfile(output_file1)
-    output = pl.read_parquet(output_file1)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_multiple_inputs_multiple_outputs",
-        "expected_result1.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-    assert os.path.isfile(output_file2)
-    output = pl.read_parquet(output_file2)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_multiple_inputs_multiple_outputs",
-        "expected_result2.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_custom_bin_folder(tmp_path):
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        multiple_inputs_multiple_outputs,
-        local_packages=ROOT_PROJECT_DIR,
-        save_location=tmp_path,
-    )
-
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    output_file1 = os.path.join(tmp_path, "output1.parquet")
-    output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
-        input_yaml_file,
-        context_archive,
-        mock_table_location=[output_file1, output_file2],
-    )
-    custom_bin_folder = os.path.join(tmp_path, "custom_bin_folder")
-    os.mkdir(custom_bin_folder)
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=logs_folder,
-        bin_folder=custom_bin_folder,
-    )
-    assert result == 0
-    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-    assert os.path.isdir(custom_bin_folder)
-    assert os.path.isdir(
-        os.path.join(custom_bin_folder, UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER)
-    )
-    assert os.path.isfile(output_file1)
-    output = pl.read_parquet(output_file1)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_multiple_inputs_multiple_outputs",
-        "expected_result1.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-    assert os.path.isfile(output_file2)
-    output = pl.read_parquet(output_file2)
-    output = clean_polars_df(output)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_multiple_inputs_multiple_outputs",
-        "expected_result2.json",
-    )
-    expected_output = read_json_and_clean(expected_output_file)
-    assert output.equals(expected_output)
-
-
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_relative_import(tmp_path):
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        relative_import, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -645,12 +170,13 @@ def test_relative_import(tmp_path):
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
     assert os.path.isfile(output_file)
     output = pl.read_parquet(output_file)
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_relative_import",
+        "test_input_file_parquet_string_format",
         "expected_result.json",
     )
     expected_output = read_json_and_clean(expected_output_file)
@@ -659,13 +185,53 @@ def test_relative_import(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
-def test_failing_file_in_folder(tmp_path):
+def test_input_file_parquet_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        failing_file_in_folder,
+        input_file_parquet_wildcard,
         local_packages=ROOT_PROJECT_DIR,
         save_location=tmp_path,
     )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_file_parquet_wildcard",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_input_file_csv_separator(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_file_csv_separator,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
@@ -689,7 +255,243 @@ def test_failing_file_in_folder(tmp_path):
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_failing_file_in_folder",
+        "test_input_file_csv_separator",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_input_file_csv_modified_path(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_file_csv_modified_path,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_file_csv_modified_path",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_input_file_csv_modified_format(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_file_csv_modified_format,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_file_csv_modified_format",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_input_file_log_string_format(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_file_log_string_format,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_file_log_string_format",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_input_file_log_wildcard(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_file_log_wildcard, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_file_log_wildcard",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_input_file_ndjson_string_format(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_file_ndjson_string_format,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_file_ndjson_string_format",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_input_file_ndjson_wildcard(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_file_ndjson_wildcard,
+        local_packages=ROOT_PROJECT_DIR,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_file_ndjson_wildcard",
         "expected_result.json",
     )
     expected_output = read_json_and_clean(expected_output_file)

@@ -5,9 +5,13 @@
 import logging.config
 import os
 import tarfile
+import tempfile
 from timeit import default_timer as timer
 
-from tabsserver.function_execution.global_utils import convert_uri_to_path
+from tabsserver.function_execution.global_utils import (
+    CURRENT_PLATFORM,
+    convert_uri_to_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +21,7 @@ DEFAULT_DEVELOPMENT_LOCKS_LOCATION = os.path.join(
     "local_dev",
     "environment_locks",
 )
+UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER = "uncompressed_function_bundle"
 
 
 class TimeBlock:
@@ -44,3 +49,32 @@ def extract_tarfile_to_folder(tarfile_uri, destination_folder):
             f"Error extracting tarfile {tarfile_uri}, file does not exist: {e}"
         )
         raise e
+
+
+def extract_context_folder(bin_folder, compressed_context_folder):
+    time_block = TimeBlock()
+    if bin_folder:
+        context_folder = os.path.join(bin_folder, UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER)
+    else:
+        temporary_directory = tempfile.TemporaryDirectory()
+        if CURRENT_PLATFORM.is_windows():
+            import win32api
+
+            logger.debug(f"Short temp path: '{temporary_directory}")
+            temporary_directory = win32api.GetLongPathName(temporary_directory.name)
+            logger.debug(f"Long temp Path: {temporary_directory}")
+        else:
+            temporary_directory = temporary_directory.name
+        context_folder = os.path.join(
+            temporary_directory, UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
+        )
+    with time_block:
+        extract_tarfile_to_folder(
+            tarfile_uri=compressed_context_folder,
+            destination_folder=context_folder,
+        )
+    logger.info(
+        f"Extracted {compressed_context_folder} to {context_folder}. Time"
+        f" taken: {time_block.time_taken():.2f}s"
+    )
+    return context_folder

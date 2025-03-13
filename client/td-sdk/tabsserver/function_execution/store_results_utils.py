@@ -17,10 +17,8 @@ from sqlalchemy import create_engine
 
 import tabsdata as td
 import tabsdata.utils.tableframe._helpers as td_helpers
-from tabsdata import DestinationPlugin
 from tabsdata.format import CSVFormat, FileFormat, NDJSONFormat, ParquetFormat
-from tabsdata.secret import _recursively_evaluate_secret
-from tabsdata.tabsdatafunction import (
+from tabsdata.io.output import (
     AzureDestination,
     Catalog,
     LocalFileDestination,
@@ -32,6 +30,8 @@ from tabsdata.tabsdatafunction import (
     TableOutput,
     build_output,
 )
+from tabsdata.io.plugin import DestinationPlugin
+from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.utils.bundle_utils import PLUGINS_FOLDER
 
 from . import sql_utils
@@ -541,9 +541,9 @@ def store_file_in_catalog(
     if catalog.if_table_exists == "replace":
         logger.debug(f"Replacing table '{destination_table}'")
         table.overwrite(pyarrow_empty_df)
-    logger.debug(f"Adding files to table '{destination_table}'")
+    logger.debug(f"Adding file '{path_to_table_file}' to table '{destination_table}'")
     table.add_files([path_to_table_file], check_duplicate_files=False)
-    logger.debug(f"Files added to table '{destination_table}'")
+    logger.debug(f"File '{path_to_table_file}' added to table '{destination_table}'")
 
 
 def store_result_using_transporter(
