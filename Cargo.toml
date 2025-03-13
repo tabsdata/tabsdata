@@ -39,6 +39,7 @@ members = [
     "server/libraries/td-python",
     "server/libraries/td-schema",
     "server/libraries/td-security",
+    "server/libraries/td-services",
     "server/libraries/td-storage",
     "server/libraries/td-tower",
     "server/libraries/td-transaction",
@@ -178,6 +179,10 @@ path = "server/libraries/td-schema"
 
 [workspace.dependencies.td-security]
 path = "server/libraries/td-security"
+
+[workspace.dependencies.td-services]
+path = "server/libraries/td-services"
+version = "0.9.2"
 
 [workspace.dependencies.td-server]
 path = "server/binaries/td-server"

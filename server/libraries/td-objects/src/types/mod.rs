@@ -19,7 +19,14 @@ pub trait SqlEntity: 'static {
     fn value(&self) -> &Self::Type;
 }
 
-pub trait DataAccessObject {
+pub trait IdOrName<I, N> {
+    fn id(&self) -> Option<&I>;
+    fn name(&self) -> Option<&N>;
+}
+
+pub trait DataAccessObject:
+    for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Unpin
+{
     fn sql_table() -> &'static str;
     fn fields() -> &'static [&'static str];
     fn sql_field_for_type<E: SqlEntity>() -> Option<&'static str>;

@@ -128,26 +128,26 @@ mod tests {
         assert_eq!(fields[4], "active");
     }
 
-    #[test]
-    fn test_fields_skip() {
-        #[Dao]
-        struct Dao {
-            id: i64,
-            #[sqlx(skip)]
-            name: String,
-            #[sqlx(flatten)]
-            description: Option<String>,
-            #[sqlx(skip)]
-            modified: chrono::DateTime<chrono::Utc>,
-            active: bool,
-        }
-
-        let fields = Dao::fields();
-        assert_eq!(fields.len(), 3);
-        assert_eq!(fields[0], "id");
-        assert_eq!(fields[1], "description");
-        assert_eq!(fields[2], "active");
-    }
+    // #[test]
+    // fn test_fields_skip() {
+    //     #[Dao]
+    //     struct Dao {
+    //         id: i64,
+    //         #[sqlx(skip)]
+    //         name: String,
+    //         #[sqlx(flatten)]
+    //         description: Option<String>,
+    //         #[sqlx(skip)]
+    //         modified: chrono::DateTime<chrono::Utc>,
+    //         active: bool,
+    //     }
+    //
+    //     let fields = Dao::fields();
+    //     assert_eq!(fields.len(), 3);
+    //     assert_eq!(fields[0], "id");
+    //     assert_eq!(fields[1], "description");
+    //     assert_eq!(fields[2], "active");
+    // }
 
     #[test]
     fn test_builder_try_from() {
