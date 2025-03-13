@@ -4,6 +4,7 @@
 
 pub mod create;
 pub mod read;
+pub mod update;
 
 use crate::bin::apisrv::api_server::RolesState;
 use crate::routers;
@@ -16,5 +17,6 @@ routers! {
     router => {
         create => { state ( RolesState ) },
         read => { state ( RolesState ) },
+        update => { state ( RolesState ) },
     }
 }

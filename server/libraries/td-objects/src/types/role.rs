@@ -57,6 +57,7 @@ pub struct RoleParam;
 
 #[td_type::Dao(sql_table = "roles__with_names")]
 pub struct RoleDBWithNames {
+    #[td_type(extractor)]
     id: RoleId,
     name: RoleName,
     description: Description,

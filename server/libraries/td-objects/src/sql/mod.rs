@@ -18,6 +18,7 @@ pub mod table;
 pub mod trigger;
 pub mod users_roles;
 
+use crate::crudl::ListParams;
 use crate::types::{DataAccessObject, SqlEntity};
 use getset::Getters;
 use std::marker::PhantomData;
@@ -117,6 +118,38 @@ macro_rules! generate_select_by {
 }
 
 all_the_tuples!(generate_select_by);
+
+pub trait List<'a> {
+    fn list<D: DataAccessObject>(
+        &self,
+        list_params: &ListParams,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+}
+
+impl<'a, Q> List<'a> for Q
+where
+    Q: Queries,
+{
+    fn list<D: DataAccessObject>(
+        &self,
+        list_params: &ListParams,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
+        let table = D::sql_table();
+        let fields = D::fields();
+        let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
+
+        let mut query_builder = sqlx::QueryBuilder::new(sql);
+        query_builder
+            .push(" LIMIT ")
+            .push_bind((list_params.len() + 1) as i64);
+        query_builder
+            .push(" OFFSET ")
+            .push_bind(*list_params.offset() as i64);
+
+        trace!("list_{}: sql: {}", table, query_builder.sql());
+        Ok(query_builder)
+    }
+}
 
 pub trait DeleteBy<'a, E> {
     fn delete_by<D: DataAccessObject>(
