@@ -4,6 +4,7 @@
 
 pub mod create;
 pub mod delete;
+pub mod list;
 pub mod read;
 pub mod update;
 
@@ -20,5 +21,6 @@ routers! {
         read => { state ( RolesState ) },
         update => { state ( RolesState ) },
         delete => { state ( RolesState ) },
+        list => { state ( RolesState ) },
     }
 }
