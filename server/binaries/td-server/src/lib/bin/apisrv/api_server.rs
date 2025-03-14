@@ -34,7 +34,7 @@
 use crate::api_server;
 use crate::bin::apisrv::config::Config;
 use crate::bin::apisrv::execution::update;
-use crate::bin::apisrv::{collections, functions, permissions, server_status};
+use crate::bin::apisrv::{collections, functions, permissions, server_status, user_roles};
 use crate::bin::apisrv::{data, openapi};
 use crate::bin::apisrv::{execution, jwt_login};
 use crate::bin::apisrv::{roles, users};
@@ -56,6 +56,7 @@ use td_database::sql::DbPool;
 use td_security::config::PasswordHashingConfig;
 use td_services::permission::services::PermissionServices;
 use td_services::role::services::RoleServices;
+use td_services::user_role::services::UserRoleServices;
 use td_storage::Storage;
 use tracing::debug;
 
@@ -71,6 +72,7 @@ pub type UsersState = Arc<UserServices>;
 pub type CollectionsState = Arc<CollectionServices>;
 pub type DatasetsState = Arc<DatasetServices>;
 pub type RolesState = Arc<RoleServices>;
+pub type UserRolesState = Arc<UserRoleServices>;
 pub type PermissionsState = Arc<PermissionServices>;
 
 pub type StorageState = Arc<Storage>;
@@ -130,6 +132,10 @@ impl ApiSrv {
         Arc::new(PermissionServices::new(self.db.clone()))
     }
 
+    fn user_roles_state(&self) -> UserRolesState {
+        Arc::new(UserRoleServices::new(self.db.clone()))
+    }
+
     fn timeout_service(&self) -> TimeoutService {
         TimeoutService::new(Duration::seconds(*self.config.request_timeout()))
     }
@@ -152,6 +158,7 @@ impl ApiSrv {
                     server_status => { state ( self.status_state() ) },
                     roles => { state ( self.roles_state() ) },
                     permissions => { state ( self.permissions_state() ) },
+                    user_roles => { state ( self.user_roles_state() ) },
                     users => { state ( self.users_state() ) },
                     collections => { state ( self.collection_state() ) },
                     functions => { state ( self.dataset_state() ) },

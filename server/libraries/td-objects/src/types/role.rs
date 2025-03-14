@@ -86,7 +86,6 @@ pub struct Role {
 }
 
 #[td_type::Dao(sql_table = "users_roles")]
-#[td_type(builder(skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct UserRoleDB {
     #[td_type(extractor)]

@@ -14,4 +14,5 @@ pub mod permissions;
 pub mod roles;
 pub mod scheduler_server;
 mod server_status;
+mod user_roles;
 mod users;

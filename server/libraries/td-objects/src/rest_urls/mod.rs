@@ -555,3 +555,19 @@ pub struct RolePermissionParam {
 pub const LIST_PERMISSIONS: &str = PERMISSIONS;
 pub const CREATE_PERMISSION: &str = PERMISSIONS;
 pub const DELETE_PERMISSION: &str = PERMISSION;
+
+pub const USER_ROLES: &str = concat!(ROLE, "/users");
+pub const USER_ROLE: &str = concat!(USER_ROLES, "/{user}");
+
+#[td_type::NestedParam]
+pub struct UserRoleParam {
+    #[td_type(extractor)]
+    role: RoleParam,
+    #[td_type(extractor)]
+    user: UserParam,
+}
+
+pub const LIST_USER_ROLES: &str = USER_ROLES;
+pub const GET_USER_ROLE: &str = USER_ROLE;
+pub const CREATE_USER_ROLE: &str = USER_ROLES;
+pub const DELETE_USER_ROLE: &str = USER_ROLE;
