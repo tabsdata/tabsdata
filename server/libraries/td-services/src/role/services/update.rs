@@ -7,6 +7,7 @@ use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
+use td_objects::rest_urls::RoleParam;
 use td_objects::sql::roles::RoleQueries;
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
@@ -17,8 +18,7 @@ use td_objects::tower_service::sql::{
 };
 use td_objects::types::basic::RoleId;
 use td_objects::types::role::{
-    Role, RoleBuilder, RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleDBWithNames, RoleParam,
-    RoleUpdate,
+    Role, RoleBuilder, RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleDBWithNames, RoleUpdate,
 };
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};

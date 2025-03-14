@@ -33,7 +33,7 @@ SELECT p.*,
        r.name                                        as role,
        -- When we support different entity types, we will need to change the
        -- resolution of the entity name to be a CASE statement.
-       c.name                                        as entity_id
+       c.name                                        as entity
 FROM permissions p
          LEFT JOIN users u ON p.granted_by_id = u.id
          LEFT JOIN roles r ON p.role_id = r.id

@@ -12,7 +12,8 @@ use td_error::TdError;
 use td_objects::crudl::{
     CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest,
 };
-use td_objects::types::role::{Role, RoleCreate, RoleParam, RoleUpdate};
+use td_objects::rest_urls::RoleParam;
+use td_objects::types::role::{Role, RoleCreate, RoleUpdate};
 use td_tower::service_provider::TdBoxService;
 
 mod create;

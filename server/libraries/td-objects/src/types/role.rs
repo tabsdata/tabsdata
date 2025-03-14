@@ -52,9 +52,6 @@ pub struct RoleDBUpdate {
 
 pub type RoleUpdate = RoleCreate;
 
-#[td_type::IdNameParam(param = "role", id = RoleId, name = RoleName)]
-pub struct RoleParam;
-
 #[td_type::Dao(sql_table = "roles__with_names")]
 pub struct RoleDBWithNames {
     #[td_type(extractor)]

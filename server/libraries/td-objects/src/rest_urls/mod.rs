@@ -5,6 +5,7 @@
 use crate::dlo::{
     CollectionName, Creator, DatasetName, ExecutionPlanId, TableName, WorkerMessageId,
 };
+use crate::types::basic::{PermissionId, RoleId, RoleName};
 use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
 use constcat::concat;
 use getset::Getters;
@@ -526,8 +527,28 @@ impl Creator<WorkerMessageParam> for WorkerMessageId {
 pub const ROLES: &str = "/roles";
 pub const ROLE: &str = concat!(ROLES, "/{role}");
 
+#[td_type::IdNameParam(param = "role", id = RoleId, name = RoleName)]
+pub struct RoleParam;
+
 pub const LIST_ROLES: &str = ROLES;
 pub const GET_ROLE: &str = ROLE;
 pub const CREATE_ROLE: &str = ROLES;
 pub const UPDATE_ROLE: &str = ROLE;
 pub const DELETE_ROLE: &str = ROLE;
+
+pub const PERMISSIONS: &str = concat!(ROLE, "/permissions");
+pub const PERMISSION: &str = concat!(PERMISSIONS, "/{permission}");
+
+#[td_type::IdNameParam(param = "permission", id = PermissionId, name = PermissionId)]
+pub struct PermissionParam;
+
+#[td_type::NestedParam]
+pub struct RolePermissionParam {
+    role: RoleParam,
+    #[td_type(extractor)]
+    permission: PermissionParam,
+}
+
+pub const LIST_PERMISSIONS: &str = PERMISSIONS;
+pub const CREATE_PERMISSION: &str = PERMISSIONS;
+pub const DELETE_PERMISSION: &str = PERMISSION;

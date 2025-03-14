@@ -15,8 +15,8 @@ use getset::Getters;
 use serde::Serialize;
 use td_apiforge::{api_server_path, update_status};
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::UPDATE_ROLE;
-use td_objects::types::role::{Role, RoleParam, RoleUpdate};
+use td_objects::rest_urls::{RoleParam, UPDATE_ROLE};
+use td_objects::types::role::{Role, RoleUpdate};
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 

@@ -226,7 +226,7 @@ pub struct Partition;
 #[td_type::typed(id)]
 pub struct PermissionId;
 
-#[td_type::typed(string(regex = PermissionType::REGEX ))]
+#[td_type::typed(string(regex = PermissionType::REGEX))]
 pub struct PermissionType;
 
 impl PermissionType {
@@ -269,7 +269,7 @@ impl PermissionType {
     }
 }
 
-#[td_type::typed(string(regex = PermissionEntityType::REGEX ))]
+#[td_type::typed(string(regex = PermissionEntityType::REGEX))]
 pub struct PermissionEntityType;
 
 impl PermissionEntityType {

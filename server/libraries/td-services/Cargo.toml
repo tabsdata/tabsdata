@@ -51,6 +51,7 @@ td-tower = { workspace = true }
 
 # External dependencies
 
+async-trait = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 

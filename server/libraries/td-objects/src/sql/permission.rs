@@ -2,14 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::sql::{condition_builder, select_cols, Columns, Statement, Which, With};
+use crate::sql::{condition_builder, select_cols, Columns, Queries, Statement, Which, With};
 use crate::types::basic::RoleId;
 use tracing::trace;
 
 /// Permission Queries.
-pub struct Queries {}
+pub struct PermissionQueries {}
+impl Queries for PermissionQueries {}
 
-impl Queries {
+impl PermissionQueries {
     /// Constructor.
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
@@ -90,19 +91,35 @@ mod tests {
 
         let statements: Vec<(Statement, Vec<&str>)> = vec![
             (
-                Queries::new().select_permissions(&Columns::All, &Which::all(), &With::Ids),
+                PermissionQueries::new().select_permissions(
+                    &Columns::All,
+                    &Which::all(),
+                    &With::Ids,
+                ),
                 vec![],
             ),
             (
-                Queries::new().select_permissions(&Columns::All, &Which::all(), &With::Names),
+                PermissionQueries::new().select_permissions(
+                    &Columns::All,
+                    &Which::all(),
+                    &With::Names,
+                ),
                 vec![],
             ),
             (
-                Queries::new().select_permissions(&Columns::All, &Which::one(), &With::Ids),
+                PermissionQueries::new().select_permissions(
+                    &Columns::All,
+                    &Which::one(),
+                    &With::Ids,
+                ),
                 vec!["r"],
             ),
             (
-                Queries::new().select_permissions(&Columns::All, &Which::set(2), &With::Ids),
+                PermissionQueries::new().select_permissions(
+                    &Columns::All,
+                    &Which::set(2),
+                    &With::Ids,
+                ),
                 vec!["r0", "r2"],
             ),
         ];
@@ -136,7 +153,7 @@ mod tests {
         .await
         .unwrap();
 
-        let statement = Queries::new().insert_permission();
+        let statement = PermissionQueries::new().insert_permission();
         let mut query = sqlx::query(statement.sql());
         query = query.bind("p0");
         query = query.bind("r0");
@@ -161,7 +178,7 @@ mod tests {
         let db = db().await.unwrap();
         let mut trx = db.begin().await.unwrap();
 
-        let statement = Queries::new().delete_permission();
+        let statement = PermissionQueries::new().delete_permission();
         let mut query = sqlx::query(statement.sql());
         query = query.bind("p0");
         query = query.bind("r0");

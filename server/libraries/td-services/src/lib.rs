@@ -4,4 +4,5 @@
 
 mod common;
 
+pub mod permission;
 pub mod role;
