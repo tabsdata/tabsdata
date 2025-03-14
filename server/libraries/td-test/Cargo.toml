@@ -28,7 +28,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum_macros", "td-build", "thiserror", "toml"]
+ignored = ["openssl", "strum_macros", "td-build", "thiserror", "tokio", "toml"]
 
 # Build dependencies
 
@@ -53,7 +53,9 @@ td-schema = { workspace = true }
 
 # External dependencies
 
+async-trait = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio", "macros"] }
+tokio = { workspace = true, features = ["full"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
