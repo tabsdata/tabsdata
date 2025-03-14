@@ -183,6 +183,7 @@ tower-service = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
+utoipa-axum = { version = "0.2.0" }
 utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
 walkdir = { workspace = true }
 wildmatch = { workspace = true }

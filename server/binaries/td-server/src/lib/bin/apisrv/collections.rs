@@ -7,7 +7,6 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use crate::bin::apisrv::api_server::CollectionsState;
-use crate::logic::apisrv::jwt::admin_only::AdminOnly;
 use crate::logic::apisrv::status::error_status::{
     CreateErrorStatus, DeleteErrorStatus, GetErrorStatus, ListErrorStatus, UpdateErrorStatus,
 };
@@ -15,8 +14,6 @@ use crate::logic::apisrv::status::extractors::Json;
 use crate::logic::apisrv::status::DeleteStatus;
 use crate::router;
 use axum::extract::{Path, Query, State};
-use axum::middleware::from_fn;
-use axum::routing::{delete, get, post};
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -41,16 +38,7 @@ api_server_tag!(name = "Collection", description = "Collections API");
 
 router! {
     state => { CollectionsState },
-    paths => {
-        {
-            LIST_COLLECTIONS => get(list_collections),
-            GET_COLLECTION => get(get_collection),
-            CREATE_COLLECTION => post(create_collection),
-            UPDATE_COLLECTION => post(update_collection),
-            DELETE_COLLECTION => delete(delete_collection),
-        }
-        .layer => |_| from_fn(AdminOnly::layer),
-    }
+    routes => { list_collections, get_collection, create_collection, update_collection, delete_collection }
 }
 
 list_status!(CollectionList);
@@ -161,9 +149,10 @@ mod tests {
         Arc::new(logic)
     }
 
-    async fn to_route(router: &Router) -> Router {
+    async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
         let context = RequestContext::with("", "", true).await;
-        router.clone().layer(Extension(context.clone()))
+        let router = router.clone().into();
+        router.layer(Extension(context.clone()))
     }
 
     #[tokio::test]

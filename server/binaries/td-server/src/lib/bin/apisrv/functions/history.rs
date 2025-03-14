@@ -7,7 +7,6 @@ use crate::bin::apisrv::functions::FUNCTIONS_TAG;
 use crate::logic::apisrv::status::error_status::ListErrorStatus;
 use crate::router;
 use axum::extract::{Path, Query, State};
-use axum::routing::get;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -23,9 +22,7 @@ use tower::ServiceExt;
 
 router! {
     state => { DatasetsState },
-    paths => {{
-        FUNCTION_HISTORY => get(list_dataset_functions),
-    }}
+    routes => { list_dataset_functions }
 }
 
 list_status!(FunctionList);

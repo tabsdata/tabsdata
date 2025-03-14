@@ -7,7 +7,6 @@ use crate::bin::apisrv::execution::EXECUTION_TAG;
 use crate::logic::apisrv::status::error_status::CreateErrorStatus;
 use crate::router;
 use axum::extract::{Query, State};
-use axum::routing::get;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -21,9 +20,7 @@ use tower::ServiceExt;
 
 router! {
     state => { DatasetsState },
-    paths => {{
-        LIST_WORKERS => get(list_worker_messages),
-    }}
+    routes => { list_worker_messages }
 }
 
 list_status!(WorkerMessageList);

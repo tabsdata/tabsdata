@@ -8,7 +8,6 @@ use crate::logic::apisrv::status::error_status::GetErrorStatus;
 use crate::logic::apisrv::status::DeleteStatus;
 use crate::router;
 use axum::extract::{Path, State};
-use axum::routing::delete;
 use axum::Extension;
 use td_apiforge::api_server_path;
 use td_objects::crudl::RequestContext;
@@ -17,9 +16,7 @@ use tower::ServiceExt;
 
 router! {
     state => { PermissionsState },
-    paths => {{
-        DELETE_PERMISSION => delete(delete_permission),
-    }}
+    routes => { delete_permission }
 }
 
 #[api_server_path(method = delete, path = DELETE_PERMISSION, tag = ROLES_TAG)]

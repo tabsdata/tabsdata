@@ -7,13 +7,10 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use crate::bin::apisrv::api_server::StatusState;
-use crate::logic::apisrv::jwt::admin_only::AdminOnly;
 use crate::logic::apisrv::status::error_status::ServerErrorStatus;
 use crate::logic::server_status::ApiStatus;
 use crate::router;
 use axum::extract::State;
-use axum::middleware::from_fn;
-use axum::routing::get;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::Serialize;
@@ -28,12 +25,7 @@ api_server_tag!(name = "Status", description = "Server Status API");
 
 router! {
     state => { StatusState },
-    paths => {
-        {
-            STATUS => get(status),
-        }
-        .layer => |_| from_fn(AdminOnly::layer),
-    }
+    routes => { status }
 }
 
 get_status!(ApiStatus);
@@ -64,9 +56,10 @@ mod tests {
         Arc::new(logic)
     }
 
-    async fn to_route(router: &Router) -> Router {
+    async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
         let context = RequestContext::with("", "", true).await;
-        router.clone().layer(Extension(context.clone()))
+        let router = router.clone().into();
+        router.layer(Extension(context.clone()))
     }
 
     #[tokio::test]

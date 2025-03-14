@@ -7,7 +7,6 @@ use crate::bin::apisrv::roles::ROLES_TAG;
 use crate::logic::apisrv::status::error_status::GetErrorStatus;
 use crate::router;
 use axum::extract::{Path, Query, State};
-use axum::routing::get;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -23,9 +22,7 @@ use tower::ServiceExt;
 
 router! {
     state => { UserRolesState },
-    paths => {{
-        LIST_USER_ROLES => get(list_user_role),
-    }}
+    routes => { list_user_role }
 }
 
 list_status!(UserRole);

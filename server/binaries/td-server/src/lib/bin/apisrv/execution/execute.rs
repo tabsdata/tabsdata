@@ -8,7 +8,6 @@ use crate::logic::apisrv::status::error_status::CreateErrorStatus;
 use crate::logic::apisrv::status::extractors::Json;
 use crate::router;
 use axum::extract::{Path, State};
-use axum::routing::post;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -22,9 +21,7 @@ use tower::ServiceExt;
 
 router! {
     state => { DatasetsState },
-    paths => {{
-        FUNCTION_EXECUTE => post(execute),
-    }}
+    routes => { execute }
 }
 
 create_status!(ExecutionPlanRead);

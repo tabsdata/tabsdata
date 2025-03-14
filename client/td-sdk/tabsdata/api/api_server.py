@@ -18,6 +18,9 @@ DEFAULT_APISERVER_PORT = "2457"
 HTTP_PROTOCOL = "http://"
 PORT_SEPARATOR = ":"
 
+BASE_API_URL_V1 = "/api/v1"
+BASE_API_URL = BASE_API_URL_V1
+
 CONNECTION_TIMEOUT = 60 * 5
 READ_TIMEOUT = 60 * 5
 MIN_CONNECTIONS = 2
@@ -110,6 +113,8 @@ def process_url(url: str) -> str:
     parsed_url = urlparse(url)
     if not parsed_url.port:
         url = url + PORT_SEPARATOR + DEFAULT_APISERVER_PORT
+    if not parsed_url.path.endswith(BASE_API_URL):
+        url = url + BASE_API_URL
     return url
 
 

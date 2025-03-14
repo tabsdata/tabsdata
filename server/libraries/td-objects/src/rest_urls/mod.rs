@@ -524,8 +524,32 @@ impl Creator<WorkerMessageParam> for WorkerMessageId {
     }
 }
 
-pub const ROLES: &str = "/roles";
-pub const ROLE: &str = concat!(ROLES, "/{role}");
+// TODO here starts the refactored apisrv
+macro_rules! url {
+    ($( $path:expr $(,)? )*) => {
+        concat!($( $path, )*)
+    };
+}
+
+// Base URL
+pub const BASE_API_URL: &str = url!("/api");
+
+pub const V1: &str = url!("/v1");
+pub const BASE_URL_V1: &str = url!(BASE_API_URL, V1);
+
+pub const BASE_URL: &str = BASE_URL_V1;
+
+// OpenApi URLs
+pub const DOCS_URL: &str = url!(BASE_API_URL, "/docs");
+pub const OPENAPI_JSON_URL: &str = url!(BASE_API_URL, "/api-docs/openapi.json");
+
+// Private URLs
+pub const INTERNAL_PREFIX: &str = url!("/internal");
+pub const UPDATE_DATA_VERSION: &str = url!(INTERNAL_PREFIX, "/data_version/{data_version_id}");
+
+// Endpoints URLs
+pub const ROLES: &str = url!("/roles");
+pub const ROLE: &str = url!(ROLES, "/{role}");
 
 #[td_type::UrlParam]
 pub struct RoleParam {
@@ -533,14 +557,14 @@ pub struct RoleParam {
     role: RoleIdName,
 }
 
-pub const LIST_ROLES: &str = ROLES;
-pub const GET_ROLE: &str = ROLE;
-pub const CREATE_ROLE: &str = ROLES;
-pub const UPDATE_ROLE: &str = ROLE;
-pub const DELETE_ROLE: &str = ROLE;
+pub const LIST_ROLES: &str = url!(ROLES);
+pub const GET_ROLE: &str = url!(ROLE);
+pub const CREATE_ROLE: &str = url!(ROLES);
+pub const UPDATE_ROLE: &str = url!(ROLE);
+pub const DELETE_ROLE: &str = url!(ROLE);
 
-pub const PERMISSIONS: &str = concat!(ROLE, "/permissions");
-pub const PERMISSION: &str = concat!(PERMISSIONS, "/{permission}");
+pub const PERMISSIONS: &str = url!(ROLE, "/permissions");
+pub const PERMISSION: &str = url!(PERMISSIONS, "/{permission}");
 
 #[td_type::UrlParam]
 pub struct RolePermissionParam {
@@ -549,12 +573,12 @@ pub struct RolePermissionParam {
     permission: PermissionIdName,
 }
 
-pub const LIST_PERMISSIONS: &str = PERMISSIONS;
-pub const CREATE_PERMISSION: &str = PERMISSIONS;
-pub const DELETE_PERMISSION: &str = PERMISSION;
+pub const LIST_PERMISSIONS: &str = url!(PERMISSIONS);
+pub const CREATE_PERMISSION: &str = url!(PERMISSIONS);
+pub const DELETE_PERMISSION: &str = url!(PERMISSION);
 
-pub const USER_ROLES: &str = concat!(ROLE, "/users");
-pub const USER_ROLE: &str = concat!(USER_ROLES, "/{user}");
+pub const USER_ROLES: &str = url!(ROLE, "/users");
+pub const USER_ROLE: &str = url!(USER_ROLES, "/{user}");
 
 #[td_type::UrlParam]
 pub struct UserRoleParam {
@@ -564,7 +588,7 @@ pub struct UserRoleParam {
     user: UserIdName,
 }
 
-pub const LIST_USER_ROLES: &str = USER_ROLES;
-pub const GET_USER_ROLE: &str = USER_ROLE;
-pub const CREATE_USER_ROLE: &str = USER_ROLES;
-pub const DELETE_USER_ROLE: &str = USER_ROLE;
+pub const LIST_USER_ROLES: &str = url!(USER_ROLES);
+pub const GET_USER_ROLE: &str = url!(USER_ROLE);
+pub const CREATE_USER_ROLE: &str = url!(USER_ROLES);
+pub const DELETE_USER_ROLE: &str = url!(USER_ROLE);

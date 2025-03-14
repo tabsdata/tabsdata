@@ -3,7 +3,6 @@
 //
 
 pub mod api_macros;
-pub mod api_router;
 pub mod api_server;
 pub mod jwt;
 pub mod layers;

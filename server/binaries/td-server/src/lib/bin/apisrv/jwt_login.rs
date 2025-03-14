@@ -10,7 +10,6 @@ use crate::logic::apisrv::status::error_status::AuthorizeErrorStatus;
 use crate::logic::apisrv::status::extractors::Json;
 use crate::router;
 use axum::extract::State;
-use axum::routing::post;
 use td_apiforge::{api_server_path, api_server_tag, auth_status_raw};
 use td_objects::users::dto::AuthenticateRequest;
 use td_tower::ctx_service::RawOneshot;
@@ -23,10 +22,7 @@ api_server_tag!(name = "Authentication", description = "Authentication API");
 router! {
     state => { UsersState },
     // state => { JwtState, UsersState, RolesState },
-    paths => {{
-        ACCESS => post(access),
-        REFRESH => post(refresh),
-    }}
+    routes => { access, refresh }
 }
 
 auth_status_raw!(TokenResponse);

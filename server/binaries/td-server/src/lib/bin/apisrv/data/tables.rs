@@ -7,7 +7,6 @@ use crate::bin::apisrv::data::DATA_TAG;
 use crate::logic::apisrv::status::error_status::ListErrorStatus;
 use crate::router;
 use axum::extract::{Path, Query, State};
-use axum::routing::get;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -23,9 +22,7 @@ use tower::ServiceExt;
 
 router! {
     state => { DatasetsState },
-    paths => {{
-        TABLES_LIST => get(tables_list),
-    }}
+    routes => { tables_list }
 }
 
 list_status!(TableList);

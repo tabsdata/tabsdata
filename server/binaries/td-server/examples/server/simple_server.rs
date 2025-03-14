@@ -33,15 +33,12 @@ async fn init_server() -> ApiServer {
 mod endpoint {
     use crate::counter::CounterState;
     use axum::extract::State;
-    use axum::routing::get;
     use tabsdatalib::router;
     use td_apiforge::status;
 
     router! {
         state => { CounterState },
-        paths => {{
-            "/count" => get(counter)
-        }}
+        routes => { counter }
     }
 
     status! {
@@ -49,6 +46,7 @@ mod endpoint {
         OK => usize
     }
 
+    #[utoipa::path(get, path = "/count")]
     pub async fn counter(State(state): State<CounterState>) -> CounterStatus {
         let count = state.lock().await.add();
         CounterStatus::OK(count)

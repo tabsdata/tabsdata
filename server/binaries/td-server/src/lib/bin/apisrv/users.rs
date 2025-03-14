@@ -7,7 +7,6 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use crate::bin::apisrv::api_server::UsersState;
-use crate::logic::apisrv::jwt::admin_only::AdminOnly;
 use crate::logic::apisrv::status::error_status::{
     CreateErrorStatus, DeleteErrorStatus, GetErrorStatus, ListErrorStatus, UpdateErrorStatus,
 };
@@ -15,8 +14,6 @@ use crate::logic::apisrv::status::extractors::Json;
 use crate::logic::apisrv::status::DeleteStatus;
 use crate::router;
 use axum::extract::{Path, Query, State};
-use axum::middleware::from_fn;
-use axum::routing::{delete, get, post};
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -38,16 +35,7 @@ api_server_tag!(name = "User", description = "Users API");
 
 router! {
     state => { UsersState },
-    paths => {
-        {
-            LIST_USERS => get(list_users),
-            GET_USER => get(get_user),
-            CREATE_USER => post(create_user),
-            UPDATE_USER => post(update_user),
-            DELETE_USER => delete(delete_user),
-        }
-        .layer => |_| from_fn(AdminOnly::layer),
-    }
+    routes => { list_users, get_user, create_user, update_user, delete_user }
 }
 
 #[derive(Deserialize, IntoParams, Getters)]
@@ -163,9 +151,10 @@ mod tests {
         Arc::new(logic)
     }
 
-    async fn to_route(router: &Router) -> Router {
+    async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
         let context = RequestContext::with("", "", true).await;
-        router.clone().layer(Extension(context.clone()))
+        let router = router.clone().into();
+        router.layer(Extension(context.clone()))
     }
 
     #[tokio::test]

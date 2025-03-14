@@ -8,7 +8,6 @@ use crate::logic::apisrv::status::error_status::UpdateErrorStatus;
 use crate::logic::apisrv::status::EmptyUpdateStatus;
 use crate::router;
 use axum::extract::{Path, State};
-use axum::routing::post;
 use axum::Extension;
 use td_apiforge::api_server_path;
 use td_objects::crudl::RequestContext;
@@ -17,9 +16,7 @@ use tower::ServiceExt;
 
 router! {
     state => { DatasetsState },
-    paths => {{
-        TRANSACTION_CANCEL => post(cancel_execution_plan),
-    }}
+    routes => { cancel_execution_plan }
 }
 
 #[api_server_path(method = post, path = TRANSACTION_CANCEL, tag = EXECUTION_TAG)]

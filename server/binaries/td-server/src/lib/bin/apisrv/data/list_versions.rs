@@ -7,7 +7,6 @@ use crate::bin::apisrv::data::DATA_TAG;
 use crate::logic::apisrv::status::error_status::ListErrorStatus;
 use crate::router;
 use axum::extract::{Path, Query, State};
-use axum::routing::get;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -24,9 +23,7 @@ use tower::ServiceExt;
 // TODO(TD-281) add Datasets logic, clean unused code serving as example
 router! {
     state => { DatasetsState },
-    paths => {{
-        LIST_DATASET_VERSIONS => get(list_dataset_versions),
-    }}
+    routes => { list_dataset_versions }
 }
 
 list_status!(DataVersionList);

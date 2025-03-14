@@ -23,7 +23,7 @@
 //
 // // TODO(TD-280) add Tables logic, clean unused code serving as example
 // router! {
-//     paths => {{
+//     routes => {{
 //         LIST_TABLES => get(list_tables),
 //         GET_TABLE => get(get_table),
 //     }}

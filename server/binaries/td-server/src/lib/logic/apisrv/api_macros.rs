@@ -2,61 +2,24 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-/// Create a router with the given routes.
-///
-/// # Examples
-///
-/// ```rust
-/// use axum::routing::get;
-/// use tabsdatalib::router;
-///
-/// async fn test() -> String {
-///    String::from("test")
-/// }
-///
-/// router! {
-///     paths => {{
-///         "/test" => get(test),
-///     }}
-/// }
-///
-/// let router = router();
-/// ```
+/// Create an Axum router using OpenApi router with the given routes.
 #[macro_export]
 macro_rules! router {
-    (
-        $(config => { $config:ty },)?
-        $(state => { $( $state:ident ),* $(,)? },)?
-        paths => {
-            $(
-                {
-                    $(
-                        $path:expr => $method:ident($handler:ident)
-                    ),* $(,)?
-                }
-                $(.layer => $layer:expr),*
-            ),* $(,)?
-        }
-    ) => {
+    {
+        $(
+            state => { $( $state:ident ),* $(,)? },
+        )?
+        routes => { $( $handler:ident ),* $(,)? }
+    }
+     => {
         paste::paste! {
             pub fn router(
-                $( [< $config:snake >]: $config, )?
                 $( $([< $state:snake >]: $state,)* )?
-            ) -> axum::Router {
-                #[allow(unused_imports)]
-                let _config = ($( [< $config:snake >] )?);
-                let mut router = axum::Router::new();
+            ) -> utoipa_axum::router::OpenApiRouter {
+                let router = utoipa_axum::router::OpenApiRouter::new()
                 $(
-                    #[allow(unused_mut)]
-                    let mut sub_router = axum::Router::new();
-                    $(
-                        sub_router = sub_router.route($path, $method($handler));
-                    )*
-                    $(
-                        sub_router = sub_router.layer($layer(&_config));
-                    )*
-                    router = router.merge(sub_router);
-                )*
+                    .routes(utoipa_axum::routes!($handler))
+                )*;
                 router$( .with_state(($([< $state:snake >]),*)) )?
             }
         }
@@ -99,46 +62,11 @@ macro_rules! routers {
 ///
 /// This macro helps in setting up an API server by combining multiple routers and applying
 /// optional middleware layer to them.
-///
-/// # Examples
-///
-/// ```rust
-/// use axum::routing::get;
-/// use axum::Router;
-///
-/// use tabsdatalib::api_server;
-///
-/// mod test {
-///     use axum::routing::get;
-///     use tabsdatalib::router;
-///
-///     async fn test() -> String {
-///         String::from("test")
-///     }
-///
-///     router! {
-///         paths => {{
-///             "/test" => get(test),
-///         }}
-///     }
-/// }
-///
-/// let _ = async {
-///     api_server! {
-///         my_server {
-///             router => {
-///                 test => {}
-///             },
-///         }
-///     }
-///
-///     let api_server = my_server;
-/// };
-/// ```
 #[macro_export]
 macro_rules! api_server {
     ($fn_name:ident {
         $(addresses => $addresses:expr,)?
+        $(openapi => $openapi_file:ident,)?
         $(router => { $($router_file:ident => {
             $(config ($($router_config:expr ),*))?
             $(,)?
@@ -151,18 +79,32 @@ macro_rules! api_server {
             let mut router = axum::Router::new();
             $(
                 let mut group_router = axum::Router::new();
-                $( group_router = group_router.merge(
-                    $router_file::router($($($router_config),*,)? $($($router_state),*)?)
-                ); )*
-                $( group_router = group_router.layer($layer); )*
+                $(
+                    group_router = group_router.merge(
+                        $router_file::router($($($router_config),*,)? $($($router_state),*)?)
+                    );
+                )*
+                $(
+                    group_router = group_router.layer($layer);
+                )*
                 router = router.merge(group_router);
             )*
-            $( router = router.layer($general_layer); )*
+            $(
+                router = router.layer($general_layer);
+            )*
+
+            let router = axum::Router::new()
+                $(
+                    .merge($openapi_file::router())
+                )?
+                .nest(td_objects::rest_urls::BASE_URL, router);
 
             let mut addresses_if_any = Vec::new();
-            $(if !$addresses.is_empty() {
-                addresses_if_any = $addresses.clone();
-            })?
+            $(
+                if !$addresses.is_empty() {
+                    addresses_if_any = $addresses.clone();
+                }
+            )?
 
             $crate::logic::apisrv::api_server
                 ::ApiServerBuilder::new(addresses_if_any, router).build().await.unwrap()
@@ -173,26 +115,25 @@ macro_rules! api_server {
 #[cfg(test)]
 mod tests {
     use axum::body::{to_bytes, Body};
+    use axum::Router;
     use reqwest::Client;
+    use td_objects::rest_urls::BASE_URL;
     use tower::ServiceExt;
 
     use crate::logic::apisrv::api_macros::tests::test::Server;
     use crate::logic::apisrv::api_server::tests::wait_for_server;
 
     mod test {
-        use axum::routing::get;
-
         use crate::logic::apisrv::api_macros::tests::test;
         use crate::logic::apisrv::api_server::{localhost_address, ApiServer};
 
+        #[utoipa::path(get, path = "/test")]
         async fn test_handler() -> &'static str {
             "test"
         }
 
         router! {
-            paths => {{
-                "/test" => get(test_handler),
-            }}
+            routes => { test_handler }
         }
 
         pub struct Server;
@@ -213,7 +154,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_router() {
-        let router = test::router();
+        let router: Router = test::router().into();
 
         let response = router
             .oneshot(
@@ -244,7 +185,12 @@ mod tests {
 
         let client = Client::new();
         let response = client
-            .get(format!("http://{}:{}/test", addr.ip(), addr.port()))
+            .get(format!(
+                "http://{}:{}{}/test",
+                addr.ip(),
+                addr.port(),
+                BASE_URL,
+            ))
             .send()
             .await
             .expect("Failed to send request");

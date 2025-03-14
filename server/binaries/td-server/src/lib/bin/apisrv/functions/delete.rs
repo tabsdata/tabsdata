@@ -12,16 +12,13 @@ use crate::logic::apisrv::status::error_status::DeleteErrorStatus;
 use crate::logic::apisrv::status::DeleteStatus;
 use crate::router;
 use axum::extract::Path;
-use axum::routing::delete;
 use td_apiforge::api_server_path;
 use td_objects::rest_urls::{FunctionParam, FUNCTION_DELETE};
 
 // TODO(TD-281) add Datasets logic, clean unused code serving as example
 router! {
     state => { DatasetsState },
-    paths => {{
-        FUNCTION_DELETE => delete(delete_dataset),
-    }}
+    routes => { delete_dataset }
 }
 
 #[api_server_path(method = delete, path = FUNCTION_DELETE, tag = FUNCTIONS_TAG)]

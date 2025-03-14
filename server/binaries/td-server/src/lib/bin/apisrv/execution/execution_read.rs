@@ -7,7 +7,6 @@ use crate::bin::apisrv::execution::EXECUTION_TAG;
 use crate::logic::apisrv::status::error_status::CreateErrorStatus;
 use crate::router;
 use axum::extract::{Path, State};
-use axum::routing::get;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -21,9 +20,7 @@ use tower::ServiceExt;
 
 router! {
     state => { DatasetsState },
-    paths => {{
-        EXECUTION_PLAN_GET => get(read_execution_plan),
-    }}
+    routes => { read_execution_plan }
 }
 
 get_status!(ExecutionPlanRead);

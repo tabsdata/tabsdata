@@ -5,12 +5,13 @@
 //! OpenApi service for the API Server. Routes are discovered and documented automatically, from
 //! the crates folders and files configured.
 
-use crate::logic::apisrv::api_router::OpenApiRouterBuilder;
 use axum::Router;
 use td_apiforge::api_server_docs;
 use td_build::version::TABSDATA_VERSION;
+use td_objects::rest_urls::{DOCS_URL, OPENAPI_JSON_URL};
 use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 use utoipa::{Modify, OpenApi};
+use utoipa_swagger_ui::{SwaggerUi, Url};
 
 pub fn router() -> Router {
     struct SecurityAddon;
@@ -24,18 +25,20 @@ pub fn router() -> Router {
         }
     }
 
+    // Sadly, url must be a literal for now. This is a limitation of the utoipa macro.
     #[api_server_docs(
         title = "Tabsdata API",
         version = TABSDATA_VERSION,
         modifier = &SecurityAddon,
-        server = (url = "/", description = "API Server"),
+        server = (url = "/api/v1", description = "API V1 Server"),
     )]
     struct ApiServerDocs;
 
-    OpenApiRouterBuilder::default()
-        .openapi(ApiServerDocs::openapi())
-        .build()
-        .unwrap()
+    SwaggerUi::new(DOCS_URL)
+        .url(
+            Url::new("API V1 Docs", OPENAPI_JSON_URL),
+            ApiServerDocs::openapi(),
+        )
         .into()
 }
 
@@ -54,7 +57,7 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/docs/")
+                    .uri(format!("{}/", DOCS_URL))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -66,7 +69,7 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/docs/")
+                    .uri(format!("{}/", DOCS_URL))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -82,7 +85,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/api-docs/openapi.json")
+                    .uri(OPENAPI_JSON_URL)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -138,7 +141,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/api-docs/openapi.json")
+                    .uri(OPENAPI_JSON_URL)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -211,7 +214,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/api-docs/openapi.json")
+                    .uri(OPENAPI_JSON_URL)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -288,7 +291,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/api-docs/openapi.json")
+                    .uri(OPENAPI_JSON_URL)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -313,7 +316,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/api-docs/openapi.json")
+                    .uri(OPENAPI_JSON_URL)
                     .body(Body::empty())
                     .unwrap(),
             )

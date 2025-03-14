@@ -7,7 +7,6 @@ use crate::bin::apisrv::data::DATA_TAG;
 use crate::logic::apisrv::status::error_status::GetErrorStatus;
 use crate::router;
 use axum::extract::{Path, Query, State};
-use axum::routing::get;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -24,9 +23,7 @@ use tower::ServiceExt;
 
 router! {
     state => { DatasetsState },
-    paths => {{
-        TABLE_SCHEMA => get(get_schema),
-    }}
+    routes => { get_schema }
 }
 
 type Schema = Vec<SchemaField>;

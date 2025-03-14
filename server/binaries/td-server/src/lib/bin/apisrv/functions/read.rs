@@ -7,7 +7,6 @@ use crate::bin::apisrv::functions::FUNCTIONS_TAG;
 use crate::logic::apisrv::status::error_status::GetErrorStatus;
 use crate::router;
 use axum::extract::{Path, State};
-use axum::routing::get;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -22,9 +21,7 @@ use tower::ServiceExt;
 // TODO(TD-281) add Datasets logic, clean unused code serving as example
 router! {
     state => { DatasetsState },
-    paths => {{
-        FUNCTION_GET => get(read_dataset_function),
-    }}
+    routes => { read_dataset_function }
 }
 
 pub type GetResponseFunction = FunctionRead;

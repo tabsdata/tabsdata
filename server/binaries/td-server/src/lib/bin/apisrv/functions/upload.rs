@@ -8,7 +8,6 @@ use crate::logic::apisrv::status::error_status::UpdateErrorStatus;
 use crate::logic::apisrv::status::EmptyUpdateStatus;
 use crate::router;
 use axum::extract::{Path, Request, State};
-use axum::routing::post;
 use axum::Extension;
 use td_apiforge::{api_server_path, api_server_schema};
 use td_objects::crudl::RequestContext;
@@ -19,9 +18,7 @@ use tower::ServiceExt;
 // TODO(TD-281) add Datasets logic, clean unused code serving as example
 router! {
     state => { DatasetsState },
-    paths => {{
-        FUNCTION_UPLOAD => post(upload_function),
-    }}
+    routes => { upload_function }
 }
 
 /// This struct is just used to document FileUpload in the OpenAPI schema.

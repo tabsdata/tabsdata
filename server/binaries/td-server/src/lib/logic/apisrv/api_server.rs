@@ -115,19 +115,17 @@ impl ApiServer {
 pub mod tests {
     use super::*;
     use crate::router;
-    use axum::routing::get;
     use reqwest::Client;
     use std::net::SocketAddr;
     use tokio::net::TcpStream;
 
+    #[utoipa::path(get, path = "/test")]
     async fn test() -> String {
         String::from("test")
     }
 
     router! {
-        paths => {{
-            "/test" => get(test),
-        }}
+        routes => { test }
     }
 
     pub async fn wait_for_server(
@@ -152,7 +150,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_api_server_run() {
-        let api_server = ApiServerBuilder::new(vec![], router())
+        let api_server = ApiServerBuilder::new(vec![], router().into())
             .build()
             .await
             .unwrap();

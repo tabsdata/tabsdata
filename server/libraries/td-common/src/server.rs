@@ -33,6 +33,7 @@ use std::option::Option;
 use std::path::PathBuf;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, Display, EnumString};
+use td_apiforge::api_server_schema;
 use td_error::td_error;
 use tracing::error;
 use url::Url;
@@ -83,6 +84,7 @@ pub enum QueueError {
     IOError(#[from] io::Error),
 }
 
+#[api_server_schema]
 #[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, AsRefStr)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -93,6 +95,7 @@ pub enum WorkerClass {
     EPHEMERAL,
 }
 
+#[api_server_schema]
 #[derive(
     Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, Display, AsRefStr,
 )]
@@ -155,7 +158,6 @@ where
 
 #[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
 #[getset(get = "pub", set = "pub")]
-#[builder(setter(into))]
 pub struct ResponseMessagePayload<T = Value>
 where
     T: Clone,

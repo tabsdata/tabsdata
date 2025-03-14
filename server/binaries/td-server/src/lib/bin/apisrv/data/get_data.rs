@@ -9,7 +9,6 @@ use crate::router;
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
-use axum::routing::get;
 use axum::Extension;
 #[allow(unused_imports)]
 use serde_json::json;
@@ -21,9 +20,7 @@ use tower::ServiceExt;
 
 router! {
     state => { DatasetsState, StorageState },
-    paths => {{
-        TABLE_DATA => get(get_data),
-    }}
+    routes => { get_data }
 }
 
 #[api_server_path(method = get, path = TABLE_DATA, tag = DATA_TAG, override_response = ParquetFile)]

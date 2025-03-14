@@ -8,7 +8,6 @@ use crate::logic::apisrv::status::error_status::UpdateErrorStatus;
 use crate::logic::apisrv::status::extractors::Json;
 use crate::router;
 use axum::extract::{Path, State};
-use axum::routing::post;
 use axum::Extension;
 use derive_builder::Builder;
 use getset::Getters;
@@ -22,9 +21,7 @@ use tower::ServiceExt;
 
 router! {
     state => { DatasetsState },
-    paths => {{
-       FUNCTION_UPDATE => post(update_function),
-    }}
+    routes => { update_function }
 }
 
 update_status!(DatasetRead);

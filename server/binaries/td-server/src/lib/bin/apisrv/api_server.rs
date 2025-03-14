@@ -147,10 +147,12 @@ impl ApiSrv {
                 // Server Addresses
                 addresses => self.config.addresses(),
 
+                // OpenAPI
+                openapi => openapi,
+
                 // Open Routes
                 router => {
                     jwt_login => { state ( self.users_state() ) },
-                    openapi => {},
                 },
 
                 // JWT Secured Routes

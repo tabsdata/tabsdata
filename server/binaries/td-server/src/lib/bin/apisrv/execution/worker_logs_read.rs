@@ -9,7 +9,6 @@ use crate::router;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
-use axum::routing::get;
 use axum::Extension;
 #[allow(unused_imports)]
 use serde_json::json;
@@ -22,9 +21,7 @@ use utoipa::IntoResponses;
 
 router! {
     state => { DatasetsState },
-    paths => {{
-        WORKER_LOGS => get(read_worker_logs),
-    }}
+    routes => { read_worker_logs }
 }
 
 /// This struct is just used to document ParquetFile in the OpenAPI schema.
