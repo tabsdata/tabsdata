@@ -8,14 +8,14 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
-use td_objects::sql::roles::RoleQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
     builder, BuildService, ExtractService, SetService, TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::SqlSelectIdOrNameService;
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
-use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserIdName, UserRoleId};
+use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserName, UserRoleId};
 use td_objects::types::role::{
     RoleDB, UserRole, UserRoleBuilder, UserRoleCreate, UserRoleDB, UserRoleDBBuilder,
     UserRoleDBWithNames,
@@ -33,14 +33,14 @@ pub struct CreateUserRoleService {
 
 impl CreateUserRoleService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<RoleQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 from_fn(extract_req_context::<CreateRequest<RoleParam, UserRoleCreate>>),
@@ -52,22 +52,22 @@ impl CreateUserRoleService {
                 from_fn(builder::<UserRoleDBBuilder>),
 
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
-                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDB>),
+                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
                 from_fn(With::<RoleId>::set::<UserRoleDBBuilder>),
 
-                from_fn(With::<UserRoleCreate>::extract::<UserIdName>),
-                from_fn(By::<UserIdName>::select::<RoleQueries, UserDB>),
+                from_fn(With::<UserRoleCreate>::extract::<UserName>),
+                from_fn(By::<UserName>::select::<DaoQueries, UserDB>),
                 from_fn(With::<UserDB>::extract::<UserId>),
                 from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
 
                 from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
                 from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
 
-                from_fn(insert::<RoleQueries, UserRoleDB>),
+                from_fn(insert::<DaoQueries, UserRoleDB>),
 
                 from_fn(With::<UserRoleDB>::extract::<UserRoleId>),
-                from_fn(By::<UserRoleId>::select::<RoleQueries, UserRoleDBWithNames>),
+                from_fn(By::<UserRoleId>::select::<DaoQueries, UserRoleDBWithNames>),
                 from_fn(With::<UserRoleDBWithNames>::convert_to::<UserRoleBuilder, _>),
                 from_fn(With::<UserRoleBuilder>::build::<UserRole, _>),
             ))
@@ -96,7 +96,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = CreateUserRoleService::provider(db, queries);
         let service = provider.make().await;
 
@@ -109,18 +109,18 @@ mod tests {
             type_of_val(&extract_req_name::<CreateRequest<RoleParam, UserRoleCreate>, _>),
             type_of_val(&builder::<UserRoleDBBuilder>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDB>),
+            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
             type_of_val(&With::<RoleId>::set::<UserRoleDBBuilder>),
-            type_of_val(&With::<UserRoleCreate>::extract::<UserIdName>),
-            type_of_val(&By::<UserIdName>::select::<RoleQueries, UserDB>),
+            type_of_val(&With::<UserRoleCreate>::extract::<UserName>),
+            type_of_val(&By::<UserName>::select::<DaoQueries, UserDB>),
             type_of_val(&With::<UserDB>::extract::<UserId>),
             type_of_val(&With::<UserId>::set::<UserRoleDBBuilder>),
             type_of_val(&With::<RequestContext>::update::<UserRoleDBBuilder, _>),
             type_of_val(&With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
-            type_of_val(&insert::<RoleQueries, UserRoleDB>),
+            type_of_val(&insert::<DaoQueries, UserRoleDB>),
             type_of_val(&With::<UserRoleDB>::extract::<UserRoleId>),
-            type_of_val(&By::<UserRoleId>::select::<RoleQueries, UserRoleDBWithNames>),
+            type_of_val(&By::<UserRoleId>::select::<DaoQueries, UserRoleDBWithNames>),
             type_of_val(&With::<UserRoleDBWithNames>::convert_to::<UserRoleBuilder, _>),
             type_of_val(&With::<UserRoleBuilder>::build::<UserRole, _>),
         ]);
@@ -140,7 +140,7 @@ mod tests {
         .await;
 
         let create = UserRoleCreate::builder()
-            .user(UserIdName::try_from("joaquin")?)
+            .user(UserName::try_from("joaquin")?)
             .build()?;
 
         let request = RequestContext::with(&admin_id, "r", true).await.create(

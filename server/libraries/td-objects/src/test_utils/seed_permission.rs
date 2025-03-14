@@ -3,8 +3,7 @@
 //
 
 use crate::crudl::{handle_sql_err, ReadRequest, RequestContext};
-use crate::sql::permission::PermissionQueries;
-use crate::sql::{Insert, SelectBy};
+use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::test_utils::seed_user::admin_user;
 use crate::types::basic::{EntityId, EntityName, PermissionEntityType, PermissionType};
 use crate::types::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
@@ -43,7 +42,7 @@ pub async fn seed_permission(
     builder.entity_id(entity_id);
     let permission_db = builder.build().unwrap();
 
-    let queries = PermissionQueries::new();
+    let queries = DaoQueries::default();
     queries
         .insert(&permission_db)
         .unwrap()
@@ -56,7 +55,7 @@ pub async fn seed_permission(
 }
 
 pub async fn get_permission<E: SqlEntity>(db: &DbPool, by: &E) -> Result<PermissionDB, TdError> {
-    let queries = PermissionQueries::new();
+    let queries = DaoQueries::default();
     queries
         .select_by::<PermissionDB>(by)?
         .build_query_as()

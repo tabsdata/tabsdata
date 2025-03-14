@@ -3,7 +3,7 @@
 //
 
 use crate::crudl::{handle_sql_err, list_result, ListRequest, ListResult};
-use crate::sql::{DeleteBy, Insert, ListBy, Queries, SelectBy, UpdateBy};
+use crate::sql::{DeleteBy, DerefQueries, Insert, ListBy, SelectBy, UpdateBy};
 use crate::types::{DataAccessObject, IdOrName, SqlEntity};
 use async_trait::async_trait;
 use std::marker::PhantomData;
@@ -15,7 +15,7 @@ pub struct By<E> {
     _phantom: PhantomData<E>,
 }
 
-pub async fn insert<Q: Queries, D: DataAccessObject>(
+pub async fn insert<Q: DerefQueries, D: DataAccessObject>(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<Q>,
     Input(dao): Input<D>,
@@ -40,8 +40,8 @@ pub trait SqlSelectService<E> {
         by: Input<E>,
     ) -> Result<D, TdError>
     where
-        Q: Queries + Send + Sync,
-        D: DataAccessObject + Send + Sync;
+        Q: DerefQueries,
+        D: DataAccessObject;
 }
 
 macro_rules! generate_select {
@@ -52,7 +52,7 @@ macro_rules! generate_select {
         #[async_trait]
         impl<$($E),*> SqlSelectService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity + Send + Sync),*
+            $($E: SqlEntity),*
         {
             async fn select<Q, D>(
                 Connection(connection): Connection,
@@ -60,8 +60,8 @@ macro_rules! generate_select {
                 Input(by): Input<($($E),*)>,
             ) -> Result<D, TdError>
             where
-                Q: Queries + Send + Sync,
-                D: DataAccessObject + Send + Sync,
+                Q: DerefQueries,
+                D: DataAccessObject,
             {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
@@ -89,16 +89,16 @@ pub trait SqlSelectIdOrNameService<T, I, N> {
         by: Input<T>,
     ) -> Result<D, TdError>
     where
-        Q: Queries + Send + Sync,
-        D: DataAccessObject + Send + Sync;
+        Q: DerefQueries,
+        D: DataAccessObject;
 }
 
 #[async_trait]
 impl<T, I, N> SqlSelectIdOrNameService<T, I, N> for By<T>
 where
-    for<'a> T: IdOrName<I, N> + Send + Sync + 'a,
-    I: SqlEntity + Send + Sync,
-    N: SqlEntity + Send + Sync,
+    for<'a> T: IdOrName<I, N> + 'a,
+    I: SqlEntity,
+    N: SqlEntity,
 {
     async fn select<Q, D>(
         Connection(connection): Connection,
@@ -106,8 +106,8 @@ where
         Input(by): Input<T>,
     ) -> Result<D, TdError>
     where
-        Q: Queries + Send + Sync,
-        D: DataAccessObject + Send + Sync,
+        Q: DerefQueries,
+        D: DataAccessObject,
     {
         let mut conn = connection.lock().await;
         let conn = conn.get_mut_connection()?;
@@ -142,9 +142,9 @@ pub trait SqlUpdateService<E> {
         by: Input<E>,
     ) -> Result<(), TdError>
     where
-        Q: Queries + Send + Sync,
-        U: DataAccessObject + Send + Sync,
-        D: DataAccessObject + Send + Sync;
+        Q: DerefQueries,
+        U: DataAccessObject,
+        D: DataAccessObject;
 }
 
 macro_rules! generate_update {
@@ -155,7 +155,7 @@ macro_rules! generate_update {
         #[async_trait]
         impl<$($E),*> SqlUpdateService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity + Send + Sync),*
+            $($E: SqlEntity),*
         {
             async fn update<Q, U, D>(
                 Connection(connection): Connection,
@@ -164,9 +164,9 @@ macro_rules! generate_update {
                 Input(by): Input<($($E),*)>,
             ) -> Result<(), TdError>
             where
-                Q: Queries + Send + Sync,
-                U: DataAccessObject + Send + Sync,
-                D: DataAccessObject + Send + Sync,
+                Q: DerefQueries,
+                U: DataAccessObject,
+                D: DataAccessObject,
             {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
@@ -195,7 +195,7 @@ pub trait SqlListService<E> {
     ) -> Result<ListResult<D>, TdError>
     where
         N: Send + Sync,
-        Q: Queries + Send + Sync,
+        Q: DerefQueries,
         D: DataAccessObject + for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin;
 }
 
@@ -207,7 +207,7 @@ macro_rules! generate_list {
         #[async_trait]
         impl<$($E),*> SqlListService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity + Send + Sync),*
+            $($E: SqlEntity),*
         {
             async fn list<N, Q, D>(
                 Connection(connection): Connection,
@@ -217,7 +217,7 @@ macro_rules! generate_list {
             ) -> Result<ListResult<D>, TdError>
             where
                 N: Send + Sync,
-                Q: Queries + Send + Sync,
+                Q: DerefQueries,
                 D: DataAccessObject + for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
             {
                 let mut conn = connection.lock().await;
@@ -247,8 +247,8 @@ pub trait SqlDeleteService<E> {
         by: Input<E>,
     ) -> Result<(), TdError>
     where
-        Q: Queries + Send + Sync,
-        D: DataAccessObject + Send + Sync;
+        Q: DerefQueries,
+        D: DataAccessObject;
 }
 
 macro_rules! generate_delete {
@@ -259,7 +259,7 @@ macro_rules! generate_delete {
         #[async_trait]
         impl<$($E),*> SqlDeleteService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity + Send + Sync),*
+            $($E: SqlEntity),*
         {
             async fn delete<Q, D>(
                 Connection(connection): Connection,
@@ -267,8 +267,8 @@ macro_rules! generate_delete {
                 Input(by): Input<($($E),*)>,
             ) -> Result<(), TdError>
             where
-                Q: Queries + Send + Sync,
-                D: DataAccessObject + Send + Sync,
+                Q: DerefQueries,
+                D: DataAccessObject,
             {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
@@ -291,14 +291,11 @@ all_the_tuples!(generate_delete);
 mod tests {
     use super::*;
     use crate::crudl::{ListParams, RequestContext};
-    use crate::sql::Queries;
+    use crate::sql::DaoQueries;
     use crate::tower_service::sql::insert;
     use td_error::TdError;
     use td_tower::extractors::{Connection, ConnectionType, Input, SrvCtx};
     use td_type::Dao;
-
-    struct TestQueries {}
-    impl Queries for TestQueries {}
 
     #[td_type::typed(string)]
     struct FooId;
@@ -320,14 +317,14 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let queries = SrvCtx::new(TestQueries {});
+        let queries = SrvCtx::new(DaoQueries::default());
         let dao = Input::new(FooDao {
             id: FooId::try_from("it's a me")?,
             name: FooName::try_from("mario")?,
         });
 
         insert(connection.clone(), queries.clone(), dao).await?;
-        let found = By::<FooName>::select::<TestQueries, FooDao>(
+        let found = By::<FooName>::select::<DaoQueries, FooDao>(
             connection,
             queries,
             Input::new(FooName::try_from("mario")?),
@@ -346,14 +343,14 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let queries = SrvCtx::new(TestQueries {});
+        let queries = SrvCtx::new(DaoQueries::default());
         let dao = Input::new(FooDao {
             id: FooId::try_from("it's a me")?,
             name: FooName::try_from("mario")?,
         });
 
         insert(connection.clone(), queries.clone(), dao).await?;
-        let found = By::<FooName>::select::<TestQueries, FooDao>(
+        let found = By::<FooName>::select::<DaoQueries, FooDao>(
             connection,
             queries,
             Input::new(FooName::try_from("not mario")?),
@@ -370,14 +367,14 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let queries = SrvCtx::new(TestQueries {});
+        let queries = SrvCtx::new(DaoQueries::default());
         let dao = Input::new(FooDao {
             id: FooId::try_from("it's a me")?,
             name: FooName::try_from("mario")?,
         });
 
         insert(connection.clone(), queries.clone(), dao).await?;
-        let found = By::<(FooId, FooName)>::select::<TestQueries, FooDao>(
+        let found = By::<(FooId, FooName)>::select::<DaoQueries, FooDao>(
             connection,
             queries,
             Input::new((FooId::try_from("it's a me")?, FooName::try_from("mario")?)),
@@ -396,14 +393,14 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let queries = SrvCtx::new(TestQueries {});
+        let queries = SrvCtx::new(DaoQueries::default());
         let dao = Input::new(FooDao {
             id: FooId::try_from("it's a me")?,
             name: FooName::try_from("mario")?,
         });
 
         insert(connection.clone(), queries.clone(), dao).await?;
-        let found = By::<(FooId, FooName)>::select::<TestQueries, FooDao>(
+        let found = By::<(FooId, FooName)>::select::<DaoQueries, FooDao>(
             connection,
             queries,
             Input::new((
@@ -423,7 +420,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let queries = SrvCtx::new(TestQueries {});
+        let queries = SrvCtx::new(DaoQueries::default());
         let dao = Input::new(FooDao {
             id: FooId::try_from("it's a me")?,
             name: FooName::try_from("mario")?,
@@ -435,7 +432,7 @@ mod tests {
         struct FooIdOrName;
 
         // id
-        let found = By::<FooIdOrName>::select::<TestQueries, FooDao>(
+        let found = By::<FooIdOrName>::select::<DaoQueries, FooDao>(
             connection.clone(),
             queries.clone(),
             Input::new(FooIdOrName::try_from("~it's a me")?),
@@ -446,7 +443,7 @@ mod tests {
         assert_eq!(found.name, FooName::try_from("mario")?);
 
         // name
-        let found = By::<FooIdOrName>::select::<TestQueries, FooDao>(
+        let found = By::<FooIdOrName>::select::<DaoQueries, FooDao>(
             connection,
             queries,
             Input::new(FooIdOrName::try_from("mario")?),
@@ -465,7 +462,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let queries = SrvCtx::new(TestQueries {});
+        let queries = SrvCtx::new(DaoQueries::default());
         let dao = Input::new(FooDao {
             id: FooId::try_from("it's a me")?,
             name: FooName::try_from("mario")?,
@@ -483,7 +480,7 @@ mod tests {
         )
         .await?;
 
-        let not_found = By::<FooName>::select::<TestQueries, FooDao>(
+        let not_found = By::<FooName>::select::<DaoQueries, FooDao>(
             connection.clone(),
             queries.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -491,7 +488,7 @@ mod tests {
         .await;
         assert!(not_found.is_err());
 
-        let found = By::<FooName>::select::<TestQueries, FooDao>(
+        let found = By::<FooName>::select::<DaoQueries, FooDao>(
             connection,
             queries,
             Input::new(FooName::try_from("luigi")?),
@@ -510,7 +507,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let queries = SrvCtx::new(TestQueries {});
+        let queries = SrvCtx::new(DaoQueries::default());
 
         let mario = FooDao {
             id: FooId::try_from("it's a me")?,
@@ -538,7 +535,7 @@ mod tests {
             .await
             .list((), ListParams::default());
 
-        let list = By::<()>::list::<(), TestQueries, FooDao>(
+        let list = By::<()>::list::<(), DaoQueries, FooDao>(
             connection,
             queries,
             Input::new(list_request),
@@ -560,7 +557,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let queries = SrvCtx::new(TestQueries {});
+        let queries = SrvCtx::new(DaoQueries::default());
 
         let mario = FooDao {
             id: FooId::try_from("it's a me")?,
@@ -584,7 +581,7 @@ mod tests {
         )
         .await?;
 
-        By::<FooName>::delete::<TestQueries, FooDao>(
+        By::<FooName>::delete::<DaoQueries, FooDao>(
             connection.clone(),
             queries.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -592,7 +589,7 @@ mod tests {
         .await?;
 
         // assert only one of them got deleted
-        let mario_not_found = By::<FooName>::select::<TestQueries, FooDao>(
+        let mario_not_found = By::<FooName>::select::<DaoQueries, FooDao>(
             connection.clone(),
             queries.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -600,7 +597,7 @@ mod tests {
         .await;
         assert!(mario_not_found.is_err());
 
-        let luigi_found = By::<FooName>::select::<TestQueries, FooDao>(
+        let luigi_found = By::<FooName>::select::<DaoQueries, FooDao>(
             connection,
             queries,
             Input::new(FooName::try_from("luigi")?),

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
-use td_objects::sql::roles::RoleQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{TryMapListService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::role::{Role, RoleBuilder, RoleDBWithNames};
@@ -22,19 +22,19 @@ pub struct ListRoleService {
 
 impl ListRoleService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<RoleQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
 
                 ConnectionProvider::new(db),
-                from_fn(By::<()>::list::<(), RoleQueries, RoleDBWithNames>),
+                from_fn(By::<()>::list::<(), DaoQueries, RoleDBWithNames>),
 
                 from_fn(With::<RoleDBWithNames>::try_map_list::<(), RoleBuilder, Role, _>),
             ))
@@ -61,7 +61,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = ListRoleService::provider(db, queries);
         let service = provider.make().await;
 
@@ -69,7 +69,7 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<ListRequest<()>, ListResponse<Role>>(&[
-            type_of_val(&By::<()>::list::<(), RoleQueries, RoleDBWithNames>),
+            type_of_val(&By::<()>::list::<(), DaoQueries, RoleDBWithNames>),
             type_of_val(&With::<RoleDBWithNames>::try_map_list::<(), RoleBuilder, Role, _>),
         ]);
     }

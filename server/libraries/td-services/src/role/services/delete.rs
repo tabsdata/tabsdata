@@ -7,7 +7,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
 use td_objects::rest_urls::RoleParam;
-use td_objects::sql::roles::RoleQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
@@ -25,14 +25,14 @@ pub struct DeleteRoleService {
 
 impl DeleteRoleService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<RoleQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 from_fn(extract_req_name::<DeleteRequest<RoleParam>, _>),
@@ -40,9 +40,9 @@ impl DeleteRoleService {
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
                 TransactionProvider::new(db),
-                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDB>),
+                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
-                from_fn(By::<RoleId>::delete::<RoleQueries, RoleDB>),
+                from_fn(By::<RoleId>::delete::<DaoQueries, RoleDB>),
             ))
         }
     }
@@ -67,7 +67,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = DeleteRoleService::provider(db, queries);
         let service = provider.make().await;
 
@@ -77,9 +77,9 @@ mod tests {
         metadata.assert_service::<DeleteRequest<RoleParam>, ()>(&[
             type_of_val(&extract_req_name::<DeleteRequest<RoleParam>, _>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDB>),
+            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
-            type_of_val(&By::<RoleId>::delete::<RoleQueries, RoleDB>),
+            type_of_val(&By::<RoleId>::delete::<DaoQueries, RoleDB>),
         ]);
     }
 

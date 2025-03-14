@@ -4,7 +4,7 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, Description, Fixed, RoleId, RoleName, UserId, UserIdName, UserName, UserRoleId,
+    AtTime, Description, Fixed, RoleId, RoleName, UserId, UserName, UserRoleId,
 };
 
 #[td_type::Dao(sql_table = "roles")]
@@ -105,8 +105,7 @@ pub struct UserRoleDB {
 #[td_type::Dto]
 pub struct UserRoleCreate {
     #[td_type(extractor)]
-    #[schema(value_type = String)] // openapi flattening
-    user: UserIdName,
+    user: UserName,
 }
 
 #[td_type::Dao(sql_table = "users_roles__with_names")]

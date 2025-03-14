@@ -7,7 +7,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
 use td_objects::rest_urls::RoleParam;
-use td_objects::sql::roles::RoleQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
@@ -26,14 +26,14 @@ pub struct ListUserRoleService {
 
 impl ListUserRoleService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<RoleQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 from_fn(extract_req_name::<ListRequest<RoleParam>, _>),
 
@@ -41,9 +41,9 @@ impl ListUserRoleService {
 
                 ConnectionProvider::new(db),
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
-                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDB>),
+                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
-                from_fn(By::<RoleId>::list::<RoleParam, RoleQueries, UserRoleDBWithNames>),
+                from_fn(By::<RoleId>::list::<RoleParam, DaoQueries, UserRoleDBWithNames>),
 
                 from_fn(With::<UserRoleDBWithNames>::try_map_list::<RoleParam, UserRoleBuilder, UserRole, _>),
             ))
@@ -73,7 +73,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = ListUserRoleService::provider(db, queries);
         let service = provider.make().await;
 
@@ -83,9 +83,9 @@ mod tests {
         metadata.assert_service::<ListRequest<RoleParam>, ListResponse<UserRole>>(&[
             type_of_val(&extract_req_name::<ListRequest<RoleParam>, _>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDB>),
+            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
-            type_of_val(&By::<RoleId>::list::<RoleParam, RoleQueries, UserRoleDBWithNames>),
+            type_of_val(&By::<RoleId>::list::<RoleParam, DaoQueries, UserRoleDBWithNames>),
             type_of_val(&With::<UserRoleDBWithNames>::try_map_list::<RoleParam, UserRoleBuilder, UserRole, _>),
         ]);
     }

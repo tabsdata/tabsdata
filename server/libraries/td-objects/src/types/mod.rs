@@ -15,18 +15,18 @@ pub mod user;
 #[cfg(test)]
 mod tests;
 
-pub trait SqlEntity: 'static {
+pub trait SqlEntity: Send + Sync + 'static {
     type Type: for<'a> sqlx::Encode<'a, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>;
     fn value(&self) -> &Self::Type;
 }
 
-pub trait IdOrName<I, N> {
+pub trait IdOrName<I, N>: Send + Sync {
     fn id(&self) -> Option<&I>;
     fn name(&self) -> Option<&N>;
 }
 
 pub trait DataAccessObject:
-    for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Unpin
+    for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin
 {
     fn sql_table() -> &'static str;
     fn fields() -> &'static [&'static str];

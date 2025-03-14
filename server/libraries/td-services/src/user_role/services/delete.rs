@@ -7,7 +7,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
 use td_objects::rest_urls::UserRoleParam;
-use td_objects::sql::roles::RoleQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{combine, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
@@ -26,14 +26,14 @@ pub struct DeleteUserRoleService {
 
 impl DeleteUserRoleService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<RoleQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 from_fn(extract_req_name::<DeleteRequest<UserRoleParam>, _>),
@@ -41,15 +41,15 @@ impl DeleteUserRoleService {
                 TransactionProvider::new(db),
 
                 from_fn(With::<UserRoleParam>::extract::<RoleIdName>),
-                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDB>),
+                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
 
                 from_fn(With::<UserRoleParam>::extract::<UserIdName>),
-                from_fn(By::<UserIdName>::select::<RoleQueries, UserDB>),
+                from_fn(By::<UserIdName>::select::<DaoQueries, UserDB>),
                 from_fn(With::<UserDB>::extract::<UserId>),
 
                 from_fn(combine::<RoleId, UserId>),
-                from_fn(By::<(RoleId, UserId)>::delete::<RoleQueries, UserRoleDB>),
+                from_fn(By::<(RoleId, UserId)>::delete::<DaoQueries, UserRoleDB>),
             ))
         }
     }
@@ -75,7 +75,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = DeleteUserRoleService::provider(db, queries);
         let service = provider.make().await;
 
@@ -85,13 +85,13 @@ mod tests {
         metadata.assert_service::<DeleteRequest<UserRoleParam>, ()>(&[
             type_of_val(&extract_req_name::<DeleteRequest<UserRoleParam>, _>),
             type_of_val(&With::<UserRoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDB>),
+            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
             type_of_val(&With::<UserRoleParam>::extract::<UserIdName>),
-            type_of_val(&By::<UserIdName>::select::<RoleQueries, UserDB>),
+            type_of_val(&By::<UserIdName>::select::<DaoQueries, UserDB>),
             type_of_val(&With::<UserDB>::extract::<UserId>),
             type_of_val(&combine::<RoleId, UserId>),
-            type_of_val(&By::<(RoleId, UserId)>::delete::<RoleQueries, UserRoleDB>),
+            type_of_val(&By::<(RoleId, UserId)>::delete::<DaoQueries, UserRoleDB>),
         ]);
     }
 

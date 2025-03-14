@@ -7,7 +7,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
 use td_objects::rest_urls::RolePermissionParam;
-use td_objects::sql::permission::PermissionQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
@@ -25,14 +25,14 @@ pub struct DeletePermissionService {
 
 impl DeletePermissionService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(PermissionQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<PermissionQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 from_fn(extract_req_name::<DeleteRequest<RolePermissionParam>, _>),
@@ -41,9 +41,9 @@ impl DeletePermissionService {
                 from_fn(With::<RolePermissionParam>::extract::<PermissionIdName>),
 
                 TransactionProvider::new(db),
-                from_fn(By::<PermissionIdName>::select::<PermissionQueries, PermissionDB>),
+                from_fn(By::<PermissionIdName>::select::<DaoQueries, PermissionDB>),
                 from_fn(With::<PermissionDB>::extract::<PermissionId>),
-                from_fn(By::<PermissionId>::delete::<PermissionQueries, PermissionDB>),
+                from_fn(By::<PermissionId>::delete::<DaoQueries, PermissionDB>),
             ))
         }
     }
@@ -69,7 +69,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(PermissionQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = DeletePermissionService::provider(db, queries);
         let service = provider.make().await;
 
@@ -79,9 +79,9 @@ mod tests {
         metadata.assert_service::<DeleteRequest<RolePermissionParam>, ()>(&[
             type_of_val(&extract_req_name::<DeleteRequest<RolePermissionParam>, _>),
             type_of_val(&With::<RolePermissionParam>::extract::<PermissionIdName>),
-            type_of_val(&By::<PermissionIdName>::select::<PermissionQueries, PermissionDB>),
+            type_of_val(&By::<PermissionIdName>::select::<DaoQueries, PermissionDB>),
             type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
-            type_of_val(&By::<PermissionId>::delete::<PermissionQueries, PermissionDB>),
+            type_of_val(&By::<PermissionId>::delete::<DaoQueries, PermissionDB>),
         ]);
     }
 

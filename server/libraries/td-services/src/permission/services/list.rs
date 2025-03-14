@@ -7,7 +7,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
 use td_objects::rest_urls::RoleParam;
-use td_objects::sql::permission::PermissionQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
@@ -26,23 +26,23 @@ pub struct ListPermissionService {
 
 impl ListPermissionService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(PermissionQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<PermissionQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 from_fn(extract_req_name::<ListRequest<RoleParam>, _>),
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
                 SrvCtxProvider::new(queries),
                 ConnectionProvider::new(db),
-                from_fn(By::<RoleIdName>::select::<PermissionQueries, RoleDB>),
+                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
-                from_fn(By::<RoleId>::list::<RoleParam, PermissionQueries, PermissionDBWithNames>),
+                from_fn(By::<RoleId>::list::<RoleParam, DaoQueries, PermissionDBWithNames>),
 
                 from_fn(With::<PermissionDBWithNames>::try_map_list::<RoleParam, PermissionBuilder, Permission, _>),
             ))
@@ -72,7 +72,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(PermissionQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = ListPermissionService::provider(db, queries);
         let service = provider.make().await;
 
@@ -82,9 +82,9 @@ mod tests {
         metadata.assert_service::<ListRequest<RoleParam>, ListResponse<Permission>>(&[
             type_of_val(&extract_req_name::<ListRequest<RoleParam>, _>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<PermissionQueries, RoleDB>),
+            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
-            type_of_val(&By::<RoleId>::list::<RoleParam, PermissionQueries, PermissionDBWithNames>),
+            type_of_val(&By::<RoleId>::list::<RoleParam, DaoQueries, PermissionDBWithNames>),
             type_of_val(
                 &With::<PermissionDBWithNames>::try_map_list::<
                     RoleParam,

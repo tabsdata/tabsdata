@@ -7,7 +7,7 @@ use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
-use td_objects::sql::roles::RoleQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::extract_req_context;
 use td_objects::tower_service::from::{
     BuildService, ExtractService, TryIntoService, UpdateService, With,
@@ -29,14 +29,14 @@ pub struct CreateRoleService {
 
 impl CreateRoleService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<RoleQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 from_fn(extract_req_context::<CreateRequest<(), RoleCreate>>),
@@ -47,9 +47,9 @@ impl CreateRoleService {
                 from_fn(With::<RoleDBBuilder>::build::<RoleDB, _>),
 
                 TransactionProvider::new(db),
-                from_fn(insert::<RoleQueries, RoleDB>),
+                from_fn(insert::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
-                from_fn(By::<RoleId>::select::<RoleQueries, RoleDBWithNames>),
+                from_fn(By::<RoleId>::select::<DaoQueries, RoleDBWithNames>),
                 from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
                 from_fn(With::<RoleBuilder>::build::<Role, _>),
             ))
@@ -76,7 +76,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = CreateRoleService::provider(db, queries);
         let service = provider.make().await;
 
@@ -89,9 +89,9 @@ mod tests {
             type_of_val(&With::<RoleCreate>::convert_to::<RoleDBBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<RoleDBBuilder, _>),
             type_of_val(&With::<RoleDBBuilder>::build::<RoleDB, _>),
-            type_of_val(&insert::<RoleQueries, RoleDB>),
+            type_of_val(&insert::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
-            type_of_val(&By::<RoleId>::select::<RoleQueries, RoleDBWithNames>),
+            type_of_val(&By::<RoleId>::select::<DaoQueries, RoleDBWithNames>),
             type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
             type_of_val(&With::<RoleBuilder>::build::<Role, _>),
         ]);

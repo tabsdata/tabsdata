@@ -3,8 +3,7 @@
 //
 
 use crate::crudl::{handle_sql_err, ReadRequest, RequestContext};
-use crate::sql::roles::RoleQueries;
-use crate::sql::{Insert, SelectBy};
+use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::test_utils::seed_user::admin_user;
 use crate::types::basic::{Description, RoleName};
 use crate::types::role::{RoleCreate, RoleDB, RoleDBBuilder};
@@ -28,7 +27,7 @@ pub async fn seed_role(db: &DbPool, name: RoleName, description: Description) ->
     let builder = RoleDBBuilder::try_from((request_context, builder)).unwrap();
     let role_db = builder.build().unwrap();
 
-    let queries = RoleQueries::new();
+    let queries = DaoQueries::default();
     queries
         .insert(&role_db)
         .unwrap()
@@ -41,7 +40,7 @@ pub async fn seed_role(db: &DbPool, name: RoleName, description: Description) ->
 }
 
 pub async fn get_role<E: SqlEntity>(db: &DbPool, by: &E) -> Result<RoleDB, TdError> {
-    let queries = RoleQueries::new();
+    let queries = DaoQueries::default();
     queries
         .select_by::<RoleDB>(by)?
         .build_query_as()

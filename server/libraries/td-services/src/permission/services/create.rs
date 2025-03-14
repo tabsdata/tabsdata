@@ -9,7 +9,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
-use td_objects::sql::permission::PermissionQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
     BuildService, ExtractService, TryIntoService, UpdateService, With,
@@ -34,14 +34,14 @@ pub struct CreatePermissionService {
 
 impl CreatePermissionService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(PermissionQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<PermissionQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 from_fn(extract_req_context::<CreateRequest<RoleParam, PermissionCreate>>),
@@ -53,14 +53,14 @@ impl CreatePermissionService {
                 from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
 
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
-                from_fn(By::<RoleIdName>::select::<PermissionQueries, RoleDB>),
+                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
 
                 from_fn(With::<PermissionDBBuilder>::build_permission_db),
 
-                from_fn(insert::<PermissionQueries, PermissionDB>),
+                from_fn(insert::<DaoQueries, PermissionDB>),
                 from_fn(With::<PermissionDB>::extract::<PermissionId>),
-                from_fn(By::<PermissionId>::select::<PermissionQueries, PermissionDBWithNames>),
+                from_fn(By::<PermissionId>::select::<DaoQueries, PermissionDBWithNames>),
                 from_fn(With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
                 from_fn(With::<PermissionBuilder>::build::<Permission, _>),
             ))
@@ -88,7 +88,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(PermissionQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = CreatePermissionService::provider(db, queries);
         let service = provider.make().await;
 
@@ -102,12 +102,12 @@ mod tests {
             type_of_val(&With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<PermissionDBBuilder, _>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<PermissionQueries, RoleDB>),
+            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
             type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
-            type_of_val(&insert::<PermissionQueries, PermissionDB>),
+            type_of_val(&insert::<DaoQueries, PermissionDB>),
             type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
-            type_of_val(&By::<PermissionId>::select::<PermissionQueries, PermissionDBWithNames>),
+            type_of_val(&By::<PermissionId>::select::<DaoQueries, PermissionDBWithNames>),
             type_of_val(&With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
             type_of_val(&With::<PermissionBuilder>::build::<Permission, _>),
         ]);

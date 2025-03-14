@@ -7,7 +7,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::ReadRequest;
 use td_objects::rest_urls::RoleParam;
-use td_objects::sql::roles::RoleQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{BuildService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService};
@@ -25,21 +25,21 @@ pub struct ReadRoleService {
 
 impl ReadRoleService {
     pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         Self {
             provider: Self::provider(db, queries),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<RoleQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 from_fn(extract_req_name::<ReadRequest<RoleParam>, _>),
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
                 ConnectionProvider::new(db),
-                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDBWithNames>),
+                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDBWithNames>),
 
                 from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
                 from_fn(With::<RoleBuilder>::build::<Role, _>),
@@ -67,7 +67,7 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(RoleQueries::new());
+        let queries = Arc::new(DaoQueries::default());
         let provider = ReadRoleService::provider(db, queries);
         let service = provider.make().await;
 
@@ -77,7 +77,7 @@ mod tests {
         metadata.assert_service::<ReadRequest<RoleParam>, Role>(&[
             type_of_val(&extract_req_name::<ReadRequest<RoleParam>, _>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDBWithNames>),
+            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDBWithNames>),
             type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
             type_of_val(&With::<RoleBuilder>::build::<Role, _>),
         ]);
