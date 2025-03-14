@@ -169,6 +169,15 @@ impl ListParams {
             order_by: String::new(),
         }
     }
+
+    pub fn all() -> Self {
+        ListParams {
+            offset: 0,
+            len: usize::MAX - 1,
+            filter: String::new(),
+            order_by: String::new(),
+        }
+    }
 }
 
 impl Default for ListParams {

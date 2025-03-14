@@ -16,6 +16,7 @@ pub mod manifest;
 pub mod monitor;
 pub mod name;
 pub mod os;
+pub mod provider;
 pub mod server;
 pub mod settings;
 pub mod status;

@@ -11,6 +11,7 @@ use crate::types::table::TableVersionDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::trigger::TriggerVersionDBWithNames;
 use td_error::TdError;
+use constcat::concat;
 
 #[td_type::typed(timestamp)]
 pub struct AtTime;
@@ -18,7 +19,7 @@ pub struct AtTime;
 #[td_type::typed(id)]
 pub struct BundleId;
 
-#[td_type::typed(id)]
+#[td_type::typed(id, try_from=EntityId)]
 pub struct CollectionId;
 
 #[td_type::typed(string(parser = parse_collection))]
@@ -129,38 +130,86 @@ pub struct PermissionId;
 #[td_type::typed(id_name(id = PermissionId))]
 pub struct PermissionIdName;
 
-#[td_type::typed(string(regex = PermissionType::REGEX))]
+#[td_type::typed(string(regex = PERMISSION_ENTITY_TYPE_REGEX))]
+pub struct PermissionEntityType;
+
+const PERMISSION_ENTITY_TYPE_REGEX: &'static str = concat!(
+    "^(",
+    PermissionEntityType::SYS,
+    "|",
+    PermissionEntityType::COLL,
+    ")$"
+);
+
+impl PermissionEntityType {
+    pub const SYS: &'static str = "s";
+    pub const COLL: &'static str = "c";
+
+    pub fn system() -> Self {
+        Self(Self::SYS.to_string())
+    }
+
+    pub fn collection() -> Self {
+        Self(Self::COLL.to_string())
+    }
+}
+
+#[td_type::typed(string(regex = PERMISSION_TYPE_REGEX))]
 pub struct PermissionType;
 
+const PERMISSION_TYPE_REGEX: &'static str = concat!(
+    "^(",
+    PermissionType::SA,
+    "|",
+    PermissionType::SS,
+    "|",
+    PermissionType::CA,
+    "|",
+    PermissionType::CD,
+    "|",
+    PermissionType::CX,
+    "|",
+    PermissionType::CR,
+    "|",
+    PermissionType::CR_ALL,
+    ")$"
+);
+
 impl PermissionType {
-    const REGEX: &'static str = "^(sa|ss|ca|cd|cx|cr|cR)$";
+    pub const SA: &'static str = concat!(PermissionEntityType::SYS, "a");
+    pub const SS: &'static str = concat!(PermissionEntityType::SYS, "s");
+    pub const CA: &'static str = concat!(PermissionEntityType::COLL, "a");
+    pub const CD: &'static str = concat!(PermissionEntityType::COLL, "d");
+    pub const CX: &'static str = concat!(PermissionEntityType::COLL, "x");
+    pub const CR: &'static str = concat!(PermissionEntityType::COLL, "r");
+    pub const CR_ALL: &'static str = concat!(PermissionEntityType::COLL, "R");
 
     pub fn sys_admin() -> Self {
-        Self("sa".to_string())
+        Self(Self::SA.to_string())
     }
 
     pub fn sec_admin() -> Self {
-        Self("ss".to_string())
+        Self(Self::SS.to_string())
     }
 
     pub fn collection_admin() -> Self {
-        Self("ca".to_string())
+        Self(Self::CA.to_string())
     }
 
     pub fn collection_dev() -> Self {
-        Self("cd".to_string())
+        Self(Self::CD.to_string())
     }
 
     pub fn collection_exec() -> Self {
-        Self("cx".to_string())
+        Self(Self::CX.to_string())
     }
 
     pub fn collection_read() -> Self {
-        Self("cr".to_string())
+        Self(Self::CR.to_string())
     }
 
     pub fn collection_read_all() -> Self {
-        Self("cR".to_string())
+        Self(Self::CR_ALL.to_string())
     }
 
     pub fn on_entity_type(&self) -> PermissionEntityType {
@@ -169,21 +218,6 @@ impl PermissionType {
         } else {
             PermissionEntityType::collection()
         }
-    }
-}
-
-#[td_type::typed(string(regex = PermissionEntityType::REGEX))]
-pub struct PermissionEntityType;
-
-impl PermissionEntityType {
-    const REGEX: &'static str = "^(s|c)$";
-
-    pub fn system() -> Self {
-        Self("s".to_string())
-    }
-
-    pub fn collection() -> Self {
-        Self("c".to_string())
     }
 }
 

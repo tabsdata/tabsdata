@@ -62,16 +62,26 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{CollectionId, RoleId, UserId};
+use async_trait::async_trait;
 use std::any::type_name;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::ops::Deref;
+use std::sync::Arc;
 use td_error::TdError;
 use td_tower::extractors::{Input, SrvCtx};
 
+#[async_trait]
 pub trait AuthzContext {
-    fn role_permissions(&self, role: &RoleId) -> Option<&Vec<Permission>>;
+    async fn role_permissions(
+        &self,
+        role: &RoleId,
+    ) -> Result<Option<Arc<Vec<Permission>>>, TdError>;
+
+    async fn refresh(&self) -> Result<(), TdError> {
+        Ok(())
+    }
 }
 
 #[td_error::td_error]
@@ -489,10 +499,11 @@ impl<
         if required_permissions.is_empty() {
             Ok(())
         } else {
-            if let Some(role_permissions) =
-                authz_context.role_permissions(request_context.role_id())
+            if let Some(role_permissions) = authz_context
+                .role_permissions(request_context.role_id())
+                .await?
             {
-                for perm in role_permissions {
+                for perm in role_permissions.deref() {
                     if required_permissions.contains(perm) {
                         return Ok(());
                     }
@@ -515,11 +526,13 @@ mod test {
         CollExec, CollRead, CollReadAll, NoPermissions, Permission, Requester, SecAdmin, SysAdmin,
     };
     use crate::types::basic::{CollectionId, RoleId, UserId};
+    use async_trait::async_trait;
     use lazy_static::lazy_static;
     use std::collections::HashMap;
     use std::marker::PhantomData;
     use std::sync::Arc;
     use td_common::id;
+    use td_error::TdError;
     use td_tower::extractors::{Input, SrvCtx};
 
     fn sys_admin_role() -> &'static RoleId {
@@ -545,7 +558,7 @@ mod test {
 
     #[derive(Debug)]
     struct AuthzContextForTest {
-        role_permissions_map: HashMap<RoleId, Vec<Permission>>,
+        role_permissions_map: HashMap<RoleId, Arc<Vec<Permission>>>,
     }
 
     impl AuthzContextForTest {
@@ -555,7 +568,7 @@ mod test {
             permissions: impl Into<Vec<Permission>>,
         ) -> Self {
             self.role_permissions_map
-                .insert(role.into(), permissions.into());
+                .insert(role.into(), Arc::new(permissions.into()));
             self
         }
 
@@ -599,9 +612,13 @@ mod test {
         }
     }
 
+    #[async_trait]
     impl AuthzContext for AuthzContextForTest {
-        fn role_permissions(&self, role: &RoleId) -> Option<&Vec<Permission>> {
-            self.role_permissions_map.get(role)
+        async fn role_permissions(
+            &self,
+            role: &RoleId,
+        ) -> Result<Option<Arc<Vec<Permission>>>, TdError> {
+            Ok(self.role_permissions_map.get(role).map(Arc::clone))
         }
     }
 

@@ -89,6 +89,13 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
                         Ok(Self::parse(val.0)?)
                     }
                 }
+                #[allow(clippy::needless_question_mark)]
+                impl TryFrom<&#from> for #name {
+                    type Error = td_error::TdError;
+                    fn try_from(val: &#from) -> Result<Self, Self::Error> {
+                        Ok(Self::parse(val.0.clone())?)
+                    }
+                }
             }
         })
         .collect();

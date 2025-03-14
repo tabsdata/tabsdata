@@ -32,6 +32,7 @@ version = "0.9.6"
 members = [
     "devutils/automation/tasks/cargo/td-build",
     "devutils/automation/tasks/makers/td-xtask",
+    "server/libraries/td-authz",
     "server/libraries/td-common",
     "server/libraries/td-database",
     "server/libraries/td-error",
@@ -154,6 +155,9 @@ path = "macros/facets/tm-test"
 path = "macros/facets/tm-workspace"
 
 ## Libraries
+
+[workspace.dependencies.td-authz]
+path = "server/libraries/td-authz"
 
 [workspace.dependencies.td-common]
 path = "server/libraries/td-common"
