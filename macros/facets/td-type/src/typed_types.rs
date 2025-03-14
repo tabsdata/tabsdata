@@ -10,11 +10,10 @@ use std::any::type_name;
 use std::marker::PhantomData;
 use std::str::FromStr;
 use syn::{parse_macro_input, ItemStruct};
-use td_shared::meta_parser::{OptionWrapper, SynMetaOrLit};
+use td_shared::meta_parser::{some_or_none, OptionWrapper, SynMetaOrLit};
 use td_shared::{downcast_option, parse_meta};
 
 #[derive(Debug, FromMeta)]
-#[allow(non_camel_case_types)]
 struct FromTyped {
     #[darling(multiple)]
     try_from: Vec<Ident>,
@@ -97,14 +96,6 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     expanded.into()
-}
-
-fn some_or_none<T: ToTokens>(option: Option<T>) -> proc_macro2::TokenStream {
-    if let Some(v) = option {
-        quote! { Some(#v) }
-    } else {
-        quote! { None }
-    }
 }
 
 #[derive(Debug, Default, FromMeta)]

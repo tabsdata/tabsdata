@@ -41,6 +41,7 @@ members = [
     "server/libraries/td-security",
     "server/libraries/td-services",
     "server/libraries/td-storage",
+    "server/libraries/td-test",
     "server/libraries/td-tower",
     "server/libraries/td-transaction",
     "plugins/rust/td-transaction-interceptor",
@@ -53,8 +54,9 @@ exclude = [
     "macros/facets/td-apiforge",
     "macros/facets/td-attach",
     "macros/facets/td-concrete",
-    "macros/facets/tm-error",
     "macros/facets/td-type",
+    "macros/facets/tm-error",
+    "macros/facets/tm-test",
     "macros/facets/tm-workspace",
 ]
 
@@ -144,6 +146,9 @@ path = "macros/facets/td-type"
 [workspace.dependencies.tm-error]
 path = "macros/facets/tm-error"
 
+[workspace.dependencies.tm-test]
+path = "macros/facets/tm-test"
+
 [workspace.dependencies.tm-workspace]
 path = "macros/facets/tm-workspace"
 
@@ -189,6 +194,9 @@ path = "server/binaries/td-server"
 
 [workspace.dependencies.td-storage]
 path = "server/libraries/td-storage"
+
+[workspace.dependencies.td-test]
+path = "server/libraries/td-test"
 
 [workspace.dependencies.td-tower]
 path = "server/libraries/td-tower"

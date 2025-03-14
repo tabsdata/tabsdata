@@ -4,7 +4,7 @@
 
 use darling::ast::NestedMeta;
 use darling::FromMeta;
-use quote::ToTokens;
+use quote::{quote, ToTokens};
 use std::any::Any;
 
 /// A macro to parse meta attributes using the `darling` crate.
@@ -177,4 +177,12 @@ macro_rules! downcast_option {
                 .ok()
         })
     };
+}
+
+pub fn some_or_none<T: ToTokens>(option: Option<T>) -> proc_macro2::TokenStream {
+    if let Some(v) = option {
+        quote! { Some(#v) }
+    } else {
+        quote! { None }
+    }
 }

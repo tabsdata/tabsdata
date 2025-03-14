@@ -32,8 +32,9 @@ members = [
     "facets/td-apiforge",
     "facets/td-attach",
     "facets/td-concrete",
-    "facets/tm-error",
     "facets/td-type",
+    "facets/tm-error",
+    "facets/tm-test",
     "facets/tm-workspace"
 ]
 
