@@ -357,6 +357,8 @@ struct TdTypeFields {
     #[darling(multiple)]
     updater: Vec<TdTryFromField>,
     #[darling(default)]
+    setter: bool,
+    #[darling(default)]
     extractor: bool,
 }
 
@@ -557,6 +559,20 @@ fn gen_td_type_field_getset(target: &ItemStruct) -> proc_macro2::TokenStream {
                 impl #impl_generics From<& #to #ty_generics> for #field_type #where_clause {
                     fn from(from: & #to #ty_generics) -> Self {
                         from.#field_name.clone()
+                    }
+                }
+            });
+        } else if td_type_fields.setter {
+            let field_name = field.ident.as_ref().unwrap();
+            let field_type = &field.ty;
+            let builder_type = format_ident!("{}Builder", to);
+
+            expanded.extend(quote! {
+                impl From<(&#field_type, #builder_type #ty_generics)> for #builder_type #ty_generics #where_clause {
+                    fn from(value: (&#field_type, #builder_type #ty_generics)) -> Self {
+                        let (from, mut this) = value;
+                        this.#field_name::<#field_type>(from.clone());
+                        this
                     }
                 }
             });

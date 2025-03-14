@@ -92,7 +92,9 @@ pub struct UserRoleDB {
     #[td_type(extractor)]
     #[builder(default)]
     id: UserRoleId,
+    #[td_type(setter)]
     user_id: UserId,
+    #[td_type(setter)]
     role_id: RoleId,
     #[td_type(updater(include, field = "time"))]
     added_on: AtTime,

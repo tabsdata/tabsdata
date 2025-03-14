@@ -124,6 +124,35 @@ where
 }
 
 #[async_trait]
+pub trait SetService<T> {
+    async fn set<F>(from: Input<T>, setter: Input<F>) -> Result<F, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        for<'a> F: From<(&'a T, F)> + Clone + Send + Sync;
+}
+
+#[async_trait]
+impl<T> SetService<T> for With<T>
+where
+    T: Send + Sync,
+{
+    async fn set<F>(Input(from): Input<T>, Input(setter): Input<F>) -> Result<F, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        for<'a> F: From<(&'a T, F)> + Clone + Send + Sync,
+    {
+        Ok(F::from((from.deref(), setter.deref().clone())))
+    }
+}
+
+pub async fn builder<F>() -> Result<F, TdError>
+where
+    F: for<'a> From<()>,
+{
+    Ok(F::from(()))
+}
+
+#[async_trait]
 pub trait BuildService<T> {
     async fn build<F, E>(input: Input<T>) -> Result<F, TdError>
     where
@@ -148,7 +177,6 @@ where
 }
 
 /// This one can be used to combine inputs, so BY sql clauses can use all of them as a single one.
-#[allow(dead_code)]
 pub async fn combine<T: Clone, U: Clone>(
     Input(t): Input<T>,
     Input(u): Input<U>,
@@ -224,6 +252,22 @@ mod tests {
         let updater = Input::new(Foo::builder().value(2).build()?);
         let input = Input::new(UpdateThis::builder());
         let result = With::<Foo>::update::<UpdateThisBuilder, _>(updater, input).await?;
+        let result = result.build()?;
+        assert_eq!(result.value, 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_set() -> Result<(), TdError> {
+        #[Dao]
+        struct SetThis {
+            #[td_type(setter)]
+            value: i32,
+        }
+
+        let setter = Input::new(2);
+        let input = Input::new(SetThis::builder());
+        let result = With::<i32>::set::<SetThisBuilder>(setter, input).await?;
         let result = result.build()?;
         assert_eq!(result.value, 2);
         Ok(())
