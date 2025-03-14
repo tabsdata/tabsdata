@@ -474,12 +474,12 @@ mod tests {
 
         let now = chrono::Utc::now();
         let mut dao_builder = TestDao::builder();
-        let dao_builder = dao_builder
+        dao_builder
             .name("dlo")
             .description(Some("desc".to_string()))
             .modified(now)
             .active(false);
-        let dao = dao_builder.update_from(&dto)?.build()?;
+        let dao = TestDaoBuilder::try_from((&dto, dao_builder))?.build()?;
 
         assert_eq!(dao.id, 123);
         assert_eq!(dao.name, "dlo");
@@ -526,8 +526,8 @@ mod tests {
 
         let dto = TestDto::builder().id(123).build()?;
 
-        let dao = TestDaoBuilder::try_from(&dlo)?
-            .update_from(&dto)?
+        let builder = TestDaoBuilder::try_from(&dlo)?;
+        let dao = TestDaoBuilder::try_from((&dto, builder))?
             .active(true)
             .build()?;
 
@@ -575,7 +575,8 @@ mod tests {
             .build()?;
 
         let dto = TestDto::builder().id(123).build()?;
-        let dao = TestDaoBuilder::try_from(&dlo)?.update_from(&dto)?.build()?;
+        let builder = TestDaoBuilder::try_from(&dlo)?;
+        let dao = TestDaoBuilder::try_from((&dto, builder))?.build()?;
 
         assert_eq!(dao.id, 123);
         assert_eq!(dao.name, "dlo");

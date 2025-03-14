@@ -282,6 +282,56 @@ pub fn id_name_param(args: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+pub fn nested_param(_args: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemStruct);
+
+    if !input.generics.params.is_empty() {
+        panic!("the struct must not have generics");
+    }
+
+    let ident = &input.ident;
+    let fields = &input.fields;
+    let field_names = gen_fields_as_list(fields);
+
+    let expanded = quote! {
+        #[td_apiforge::api_server_schema]
+        #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
+        #input
+
+        impl utoipa::IntoParams for #ident {
+            fn into_params(
+                parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+            ) -> Vec<utoipa::openapi::path::Parameter> {
+                [
+                    #(
+                        Some(
+                            utoipa::openapi::path::ParameterBuilder::new()
+                                .name(stringify!(#field_names))
+                                .parameter_in(parameter_in_provider().unwrap_or_default())
+                                .required(utoipa::openapi::Required::True)
+                                .schema(Some(
+                                    utoipa::openapi::ObjectBuilder::new()
+                                        .schema_type(utoipa::openapi::schema::Type::String)
+                                        .format(Some(utoipa::openapi::SchemaFormat::Custom(
+                                            stringify!(#field_names).to_string(),
+                                        )))
+                                        .build(),
+                                ))
+                                .build(),
+                        ),
+                    )*
+                ]
+                .into_iter()
+                .filter(Option::is_some)
+                .flatten()
+                .collect()
+            }
+        }
+    };
+
+    expanded.into()
+}
+
 /// Derive type macro
 #[derive(FromDeriveInput)]
 #[darling(attributes(td_type))]
@@ -479,18 +529,11 @@ fn gen_updated_from(from: &Ident, target: &ItemStruct, skip_all: bool) -> proc_m
     let (_, ty_generics, where_clause) = target.generics.split_for_impl();
 
     let expanded = quote! {
-        impl #builder #ty_generics #where_clause {
-            fn update_from(&mut self, from: & #from #ty_generics) -> Result<&mut Self, #builder_error_type> {
-                self #(#initializers)*;
-                Ok(self)
-            }
-        }
-
-        impl TryFrom<(& #from #ty_generics, #builder #ty_generics)> for #builder #ty_generics {
+        impl TryFrom<(& #from #ty_generics, #builder #ty_generics)> for #builder #ty_generics #where_clause {
             type Error = #builder_error_type;
             fn try_from(value: (& #from #ty_generics, #builder #ty_generics)) -> Result<Self, Self::Error> {
-                let (update, mut this) = value;
-                this.update_from(update)?;
+                let (from, mut this) = value;
+                this #(#initializers)*;
                 Ok(this)
             }
         }
