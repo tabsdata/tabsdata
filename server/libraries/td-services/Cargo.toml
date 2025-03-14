@@ -45,15 +45,12 @@ td-error = { workspace = true }
 
 ## Libraries
 
-td-common = { workspace = true }
 td-database = { workspace = true }
 td-objects = { workspace = true }
-td-security = { workspace = true }
 td-tower = { workspace = true }
 
 # External dependencies
 
-sqlx = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 

@@ -2,14 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extract;
-use crate::common::layers::sql::{delete_by, select_by_id_or_name};
 use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
 use td_objects::sql::roles::RoleQueries;
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
+use td_objects::tower_service::extractor::extract_req_name;
+use td_objects::tower_service::from::{ExtractService, With};
+use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
 use td_objects::types::basic::RoleId;
 use td_objects::types::role::{RoleDB, RoleParam};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
@@ -34,13 +34,12 @@ impl DeleteRoleService {
         provider(db: DbPool, queries: Arc<RoleQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_context::<DeleteRequest<RoleParam>>),
                 from_fn(extract_req_name::<DeleteRequest<RoleParam>, _>),
 
                 TransactionProvider::new(db),
-                from_fn(select_by_id_or_name::<RoleQueries, RoleParam, _, _, RoleDB>),
-                from_fn(extract::<RoleDB, RoleId>),
-                from_fn(delete_by::<RoleQueries, RoleDB, RoleId>),
+                from_fn(By::<RoleParam>::select::<RoleQueries, RoleDB>),
+                from_fn(With::<RoleDB>::extract::<RoleId>),
+                from_fn(By::<RoleId>::delete::<RoleQueries, RoleDB>),
             ))
         }
     }
@@ -53,41 +52,81 @@ impl DeleteRoleService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::role::services::CreateRoleService;
-    use crate::role::services::RoleCreate;
     use td_objects::crudl::RequestContext;
+    use td_objects::test_utils::seed_role::{get_role, seed_role};
     use td_objects::test_utils::seed_user::admin_user;
+    use td_objects::types::basic::{Description, RoleName};
     use td_tower::ctx_service::RawOneshot;
 
+    #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
-    async fn test() -> Result<(), TdError> {
+    async fn test_tower_metadata_delete_role() {
+        use td_tower::metadata::{type_of_val, Metadata};
+
+        let db = td_database::test_utils::db().await.unwrap();
+        let queries = Arc::new(RoleQueries::new());
+        let provider = DeleteRoleService::provider(db, queries);
+        let service = provider.make().await;
+
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
+        let metadata = response.get();
+
+        metadata.assert_service::<DeleteRequest<RoleParam>, ()>(&[
+            type_of_val(&extract_req_name::<DeleteRequest<RoleParam>, _>),
+            type_of_val(&By::<RoleParam>::select::<RoleQueries, RoleDB>),
+            type_of_val(&With::<RoleDB>::extract::<RoleId>),
+            type_of_val(&By::<RoleId>::delete::<RoleQueries, RoleDB>),
+        ]);
+    }
+
+    #[tokio::test]
+    async fn test_delete_role_by_id() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
         let admin_id = admin_user(&db).await;
 
-        //
-        let service = CreateRoleService::new(db.clone()).service().await;
+        let role = seed_role(
+            &db,
+            RoleName::try_from("joaquin")?,
+            Description::try_from("super user")?,
+        )
+        .await;
 
-        let create = RoleCreate::builder()
-            .try_name("test")?
-            .try_description("test")?
-            .build()?;
-
+        // By id
         let request = RequestContext::with(&admin_id, "r", true)
             .await
-            .create((), create);
-
-        let response = service.raw_oneshot(request).await;
-        let _response = response?;
-        //
+            .delete(RoleParam::try_from(format!("~{}", role.id()))?);
 
         let service = DeleteRoleService::new(db.clone()).service().await;
+        service.raw_oneshot(request).await?;
+
+        let found = get_role(&db, role.id()).await;
+        // It should not be found
+        assert!(found.is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_role_by_name() -> Result<(), TdError> {
+        let db = td_database::test_utils::db().await?;
+        let admin_id = admin_user(&db).await;
+
+        let _role = seed_role(
+            &db,
+            RoleName::try_from("joaquin")?,
+            Description::try_from("super user")?,
+        )
+        .await;
 
         let request = RequestContext::with(&admin_id, "r", true)
             .await
-            .delete(RoleParam::try_from("test")?);
+            .delete(RoleParam::try_from("joaquin")?);
 
-        let response = service.raw_oneshot(request).await;
-        response?;
+        let service = DeleteRoleService::new(db.clone()).service().await;
+        service.raw_oneshot(request).await?;
+
+        let found = get_role(&db, &RoleName::try_from("joaquin")?).await;
+        // It should not be found
+        assert!(found.is_err());
         Ok(())
     }
 }

@@ -2,14 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::sql::select_by_id_or_name;
-use crate::common::layers::{build, try_from};
 use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::ReadRequest;
 use td_objects::sql::roles::RoleQueries;
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
+use td_objects::tower_service::extractor::extract_req_name;
+use td_objects::tower_service::from::{BuildService, TryIntoService, With};
+use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService};
 use td_objects::types::role::{Role, RoleBuilder, RoleDBWithNames, RoleParam};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
@@ -33,14 +33,13 @@ impl ReadRoleService {
         provider(db: DbPool, queries: Arc<RoleQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_context::<ReadRequest<RoleParam >>),
                 from_fn(extract_req_name::<ReadRequest<RoleParam>, _>),
 
                 ConnectionProvider::new(db),
-                from_fn(select_by_id_or_name::<RoleQueries, RoleParam, _, _, RoleDBWithNames>),
+                from_fn(By::<RoleParam>::select::<RoleQueries, RoleDBWithNames>),
 
-                from_fn(try_from::<RoleDBWithNames, RoleBuilder>),
-                from_fn(build::<RoleBuilder, Role>),
+                from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+                from_fn(With::<RoleBuilder>::build::<Role, _>),
             ))
         }
     }
@@ -53,51 +52,92 @@ impl ReadRoleService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use td_common::id::Id;
     use td_objects::crudl::RequestContext;
+    use td_objects::test_utils::seed_role::{get_role, seed_role};
     use td_objects::test_utils::seed_user::admin_user;
-    use td_objects::types::basic::{Description, Fixed, RoleId, RoleName};
-    use td_security::ENCODED_ID_ROLE_SYS_ADMIN;
+    use td_objects::types::basic::{Description, RoleName};
     use td_tower::ctx_service::RawOneshot;
 
+    #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
-    async fn test() -> Result<(), TdError> {
+    async fn test_tower_metadata_read_role() {
+        use td_tower::metadata::{type_of_val, Metadata};
+
+        let db = td_database::test_utils::db().await.unwrap();
+        let queries = Arc::new(RoleQueries::new());
+        let provider = ReadRoleService::provider(db, queries);
+        let service = provider.make().await;
+
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
+        let metadata = response.get();
+
+        metadata.assert_service::<ReadRequest<RoleParam>, Role>(&[
+            type_of_val(&extract_req_name::<ReadRequest<RoleParam>, _>),
+            type_of_val(&By::<RoleParam>::select::<RoleQueries, RoleDBWithNames>),
+            type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+            type_of_val(&With::<RoleBuilder>::build::<Role, _>),
+        ]);
+    }
+
+    #[tokio::test]
+    async fn test_read_role_with_id() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
         let admin_id = admin_user(&db).await;
 
-        let sys_admin_id = Id::try_from(ENCODED_ID_ROLE_SYS_ADMIN)?;
+        let role = seed_role(
+            &db,
+            RoleName::try_from("joaquin")?,
+            Description::try_from("super user")?,
+        )
+        .await;
 
-        // With name
         let request = RequestContext::with(&admin_id, "r", true)
             .await
-            .read(RoleParam::try_from("sys_admin")?);
+            .read(RoleParam::try_from(format!("~{}", role.id()))?);
 
         let service = ReadRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        assert_eq!(*response.id(), RoleId::from(sys_admin_id));
-        assert_eq!(*response.name(), RoleName::try_from("sys_admin")?);
-        assert_eq!(
-            *response.description(),
-            Description::try_from("System Administrator Role")?
-        );
-        assert_eq!(*response.fixed(), Fixed::try_from(true)?);
+        let found = get_role(&db, &RoleName::try_from("joaquin").unwrap()).await?;
+        assert_eq!(response.id(), found.id());
+        assert_eq!(response.name(), found.name());
+        assert_eq!(response.description(), found.description());
+        assert_eq!(response.created_on(), found.created_on());
+        assert_eq!(response.created_by_id(), found.created_by_id());
+        assert_eq!(response.modified_on(), found.modified_on());
+        assert_eq!(response.modified_by_id(), found.modified_by_id());
+        assert_eq!(response.fixed(), found.fixed());
+        Ok(())
+    }
 
-        // With id
+    #[tokio::test]
+    async fn test_read_role_with_name() -> Result<(), TdError> {
+        let db = td_database::test_utils::db().await?;
+        let admin_id = admin_user(&db).await;
+
+        let _role = seed_role(
+            &db,
+            RoleName::try_from("joaquin")?,
+            Description::try_from("super user")?,
+        )
+        .await;
+
         let request = RequestContext::with(&admin_id, "r", true)
             .await
-            .read(RoleParam::try_from(format!("~{}", sys_admin_id))?);
+            .read(RoleParam::try_from("joaquin")?);
 
         let service = ReadRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        assert_eq!(*response.id(), RoleId::from(sys_admin_id));
-        assert_eq!(*response.name(), RoleName::try_from("sys_admin")?);
-        assert_eq!(
-            *response.description(),
-            Description::try_from("System Administrator Role")?
-        );
-        assert_eq!(*response.fixed(), Fixed::try_from(true)?);
+        let found = get_role(&db, &RoleName::try_from("joaquin").unwrap()).await?;
+        assert_eq!(response.id(), found.id());
+        assert_eq!(response.name(), found.name());
+        assert_eq!(response.description(), found.description());
+        assert_eq!(response.created_on(), found.created_on());
+        assert_eq!(response.created_by_id(), found.created_by_id());
+        assert_eq!(response.modified_on(), found.modified_on());
+        assert_eq!(response.modified_by_id(), found.modified_by_id());
+        assert_eq!(response.fixed(), found.fixed());
         Ok(())
     }
 }

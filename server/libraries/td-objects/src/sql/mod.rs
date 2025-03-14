@@ -35,22 +35,6 @@ pub enum QueryError {
 // pub trait Queries<DB: sqlx::Database> we can do this to generalize the queries
 pub trait Queries {}
 
-#[rustfmt::skip]
-macro_rules! all_the_tuples {
-    ($name:ident) => {
-        $name!([E1]);
-        $name!([E1, E2]);
-        $name!([E1, E2, E3]);
-        $name!([E1, E2, E3, E4]);
-        $name!([E1, E2, E3, E4, E5]);
-        $name!([E1, E2, E3, E4, E5, E6]);
-        $name!([E1, E2, E3, E4, E5, E6, E7]);
-        $name!([E1, E2, E3, E4, E5, E6, E7, E8]);
-        $name!([E1, E2, E3, E4, E5, E6, E7, E8, E9]);
-        $name!([E1, E2, E3, E4, E5, E6, E7, E8, E9, E10]);
-    };
-}
-
 pub trait Insert<'a> {
     fn insert<D: DataAccessObject>(
         &self,
@@ -77,6 +61,21 @@ where
     }
 }
 
+macro_rules! generate_where_clause {
+    ($query_builder:expr, ) => {};
+    ($query_builder:expr, $($E:ident),+) => {
+        $query_builder.push(" WHERE ");
+        let mut separated = $query_builder.separated(" AND ");
+        $(
+            let column = D::sql_field_for_type::<$E>()
+                .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
+            separated
+                .push(format!("{} = ", column))
+                .push_bind_unseparated($E.value());
+        )*
+    };
+}
+
 pub trait SelectBy<'a, E> {
     fn select_by<D: DataAccessObject>(
         &self,
@@ -88,7 +87,7 @@ macro_rules! generate_select_by {
     (
         [$($E:ident),*]
     ) => {
-        #[allow(non_snake_case, unused_parens)]
+        #[allow(non_snake_case, unused_parens, unused_variables, unused_mut)]
         impl<'a, Q, $($E),*> SelectBy<'a, ($($E),*) > for Q
         where
             Q: Queries,
@@ -99,17 +98,7 @@ macro_rules! generate_select_by {
                 let fields = D::fields();
                 let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
-
-                query_builder.push(" WHERE ");
-                let mut separated = query_builder.separated(" AND ");
-                $(
-                    let column = D::sql_field_for_type::<$E>()
-                        .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
-                    separated
-                        .push(format!("{} = ", column))
-                        .push_bind_unseparated($E.value());
-                )*
-
+                generate_where_clause!(query_builder, $($E),*);
                 trace!("select_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }
@@ -119,37 +108,50 @@ macro_rules! generate_select_by {
 
 all_the_tuples!(generate_select_by);
 
-pub trait List<'a> {
-    fn list<D: DataAccessObject>(
+pub trait ListBy<'a, E> {
+    fn list_by<D: DataAccessObject>(
         &self,
         list_params: &ListParams,
+        e: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
 }
 
-impl<'a, Q> List<'a> for Q
-where
-    Q: Queries,
-{
-    fn list<D: DataAccessObject>(
-        &self,
-        list_params: &ListParams,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
-        let table = D::sql_table();
-        let fields = D::fields();
-        let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
+macro_rules! generate_list_by {
+    (
+        [$($E:ident),*]
+    ) => {
+        #[allow(non_snake_case, unused_parens, unused_variables, unused_mut)]
+        impl<'a, Q, $($E),*> ListBy<'a, ($($E),*)> for Q
+        where
+            Q: Queries,
+            $($E: SqlEntity),*
+        {
+            fn list_by<D: DataAccessObject>(
+                &self,
+                list_params: &ListParams,
+                ($($E),*): &'a ($($E),*),
+            ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
+                let table = D::sql_table();
+                let fields = D::fields();
+                let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
 
-        let mut query_builder = sqlx::QueryBuilder::new(sql);
-        query_builder
-            .push(" LIMIT ")
-            .push_bind((list_params.len() + 1) as i64);
-        query_builder
-            .push(" OFFSET ")
-            .push_bind(*list_params.offset() as i64);
+                let mut query_builder = sqlx::QueryBuilder::new(sql);
+                generate_where_clause!(query_builder, $($E),*);
+                query_builder
+                    .push(" LIMIT ")
+                    .push_bind((list_params.len() + 1) as i64);
+                query_builder
+                    .push(" OFFSET ")
+                    .push_bind(*list_params.offset() as i64);
 
-        trace!("list_{}: sql: {}", table, query_builder.sql());
-        Ok(query_builder)
-    }
+                trace!("list_{}: sql: {}", table, query_builder.sql());
+                Ok(query_builder)
+            }
+        }
+    };
 }
+
+all_the_tuples!(generate_list_by);
 
 // D is needed to get the fields types for the WHERE clauses
 pub trait UpdateBy<'a, E> {
@@ -164,7 +166,7 @@ macro_rules! generate_update_by {
     (
         [$($E:ident),*]
     ) => {
-        #[allow(non_snake_case, unused_parens)]
+        #[allow(non_snake_case, unused_parens, unused_variables, unused_mut)]
         impl<'a, Q, $($E),*> UpdateBy<'a, ($($E),*) > for Q
         where
             Q: Queries,
@@ -175,17 +177,7 @@ macro_rules! generate_update_by {
                 let fields = U::fields();
                 let sql = format!("UPDATE {} SET ", table);
                 let mut query_builder = dao.tuples_query_builder(sql, fields);
-
-                query_builder.push(" WHERE ");
-                let mut separated = query_builder.separated(" AND ");
-                $(
-                    let column = D::sql_field_for_type::<$E>()
-                        .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
-                    separated
-                        .push(format!("{} = ", column))
-                        .push_bind_unseparated($E.value());
-                )*
-
+                generate_where_clause!(query_builder, $($E),*);
                 trace!("update_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }
@@ -206,7 +198,7 @@ macro_rules! generate_delete_by {
     (
         [$($E:ident),*]
     ) => {
-        #[allow(non_snake_case, unused_parens)]
+        #[allow(non_snake_case, unused_parens, unused_variables, unused_mut)]
         impl<'a, Q, $($E),*> DeleteBy<'a, ($($E),*) > for Q
         where
             Q: Queries,
@@ -216,17 +208,7 @@ macro_rules! generate_delete_by {
                 let table = D::sql_table();
                 let sql = format!("DELETE FROM {} ", table);
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
-
-                query_builder.push(" WHERE ");
-                let mut separated = query_builder.separated(" AND ");
-                $(
-                    let column = D::sql_field_for_type::<$E>()
-                        .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
-                    separated
-                        .push(format!("{} = ", column))
-                        .push_bind_unseparated($E.value());
-                )*
-
+                generate_where_clause!(query_builder, $($E),*);
                 trace!("delete_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }

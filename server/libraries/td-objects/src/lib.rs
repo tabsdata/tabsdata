@@ -4,6 +4,9 @@
 
 extern crate core;
 
+#[macro_use]
+pub mod all_the_tuples;
+
 pub mod collections;
 pub mod crudl;
 pub mod datasets;
