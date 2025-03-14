@@ -10,6 +10,7 @@ pub mod permission;
 pub mod role;
 pub mod table;
 pub mod trigger;
+pub mod user;
 
 #[cfg(test)]
 mod tests;

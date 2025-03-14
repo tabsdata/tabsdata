@@ -418,7 +418,7 @@ pub struct UserId;
 pub struct UserName;
 
 #[td_type::typed(id)]
-pub struct UsersRolesId;
+pub struct UserRoleId;
 
 #[cfg(test)]
 mod tests {

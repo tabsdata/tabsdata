@@ -5,7 +5,7 @@
 use crate::dlo::{
     CollectionName, Creator, DatasetName, ExecutionPlanId, TableName, WorkerMessageId,
 };
-use crate::types::basic::{PermissionId, RoleId, RoleName};
+use crate::types::basic::{PermissionId, RoleId, RoleName, UserId, UserName};
 use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
 use constcat::concat;
 use getset::Getters;
@@ -523,6 +523,9 @@ impl Creator<WorkerMessageParam> for WorkerMessageId {
         WorkerMessageId::new(value.into().worker_id())
     }
 }
+
+#[td_type::IdNameParam(param = "user", id = UserId, name = UserName)]
+pub struct UserParam;
 
 pub const ROLES: &str = "/roles";
 pub const ROLE: &str = concat!(ROLES, "/{role}");

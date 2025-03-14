@@ -21,7 +21,7 @@ pub struct PermissionCreate {
 #[td_type(updater(try_from = RoleDB, skip_all))]
 pub struct PermissionDB {
     #[td_type(extractor)]
-    #[td_type(builder(default))]
+    #[builder(default)]
     id: PermissionId,
     #[td_type(updater(try_from = RoleDB, field = "id"))]
     role_id: RoleId,
@@ -33,7 +33,7 @@ pub struct PermissionDB {
     granted_by_id: UserId,
     #[td_type(updater(try_from = RequestContext, field = "time"))]
     granted_on: AtTime,
-    #[td_type(builder(default))]
+    #[builder(default)]
     fixed: FixedRole,
 }
 

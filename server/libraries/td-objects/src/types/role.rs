@@ -3,8 +3,9 @@
 //
 
 use crate::crudl::RequestContext;
+use crate::rest_urls::UserParam;
 use crate::types::basic::{
-    AtTime, Description, Fixed, RoleId, RoleName, UserId, UserName, UsersRolesId,
+    AtTime, Description, Fixed, RoleId, RoleName, UserId, UserName, UserRoleId,
 };
 
 #[td_type::Dao(sql_table = "roles")]
@@ -12,7 +13,7 @@ use crate::types::basic::{
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct RoleDB {
     #[td_type(extractor)]
-    #[td_type(builder(default))]
+    #[builder(default)]
     id: RoleId,
     #[td_type(builder(include))]
     name: RoleName,
@@ -26,7 +27,7 @@ pub struct RoleDB {
     modified_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
     modified_by_id: UserId,
-    #[td_type(builder(default))]
+    #[builder(default)]
     fixed: Fixed,
 }
 
@@ -84,30 +85,33 @@ pub struct Role {
     modified_by: UserName,
 }
 
-#[td_type::Dao]
-pub struct UsersRolesDB {
-    id: UsersRolesId,
+#[td_type::Dao(sql_table = "users_roles")]
+#[td_type(builder(skip_all))]
+#[td_type(updater(try_from = RequestContext, skip_all))]
+pub struct UserRoleDB {
+    #[td_type(extractor)]
+    #[builder(default)]
+    id: UserRoleId,
     user_id: UserId,
     role_id: RoleId,
+    #[td_type(updater(include, field = "time"))]
     added_on: AtTime,
+    #[td_type(updater(include, field = "user_id"))]
     added_by_id: UserId,
+    #[builder(default)]
     fixed: Fixed,
 }
 
 #[td_type::Dto]
-pub struct UsersRolesCreate {
-    user: UserName,
+pub struct UserRoleCreate {
+    #[td_type(extractor)]
+    #[schema(value_type = String)] // openapi flattening
+    user: UserParam,
 }
 
-#[td_type::Dto]
-pub struct UsersRolesContext {
-    added_on: AtTime,
-    added_by_id: UserId,
-}
-
-#[td_type::Dao]
-pub struct UsersRolesDBWithNames {
-    id: UsersRolesId,
+#[td_type::Dao(sql_table = "users_roles__with_names")]
+pub struct UserRoleDBWithNames {
+    id: UserRoleId,
     user_id: UserId,
     role_id: RoleId,
     added_on: AtTime,
@@ -120,9 +124,9 @@ pub struct UsersRolesDBWithNames {
 }
 
 #[td_type::Dto]
-#[td_type(builder(try_from = UsersRolesDBWithNames))]
-pub struct UsersRolesRead {
-    id: UsersRolesId,
+#[td_type(builder(try_from = UserRoleDBWithNames))]
+pub struct UserRole {
+    id: UserRoleId,
     user_id: UserId,
     role_id: RoleId,
     added_on: AtTime,
@@ -191,8 +195,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_users_roles_db_with_names_to_users_roles_read() {
-        let users_roles_db_with_names = UsersRolesDBWithNames {
-            id: UsersRolesId::default(),
+        let users_roles_db_with_names = UserRoleDBWithNames {
+            id: UserRoleId::default(),
             user_id: UserId::default(),
             role_id: RoleId::default(),
             added_on: AtTime::default(),
@@ -202,7 +206,7 @@ mod tests {
             role: RoleName::try_from("Admin".to_string()).unwrap(),
             added_by: UserName::try_from("adder".to_string()).unwrap(),
         };
-        let users_roles_read = UsersRolesReadBuilder::try_from(&users_roles_db_with_names).unwrap();
+        let users_roles_read = UserRoleBuilder::try_from(&users_roles_db_with_names).unwrap();
         assert_eq!(users_roles_read.id, Some(users_roles_db_with_names.id));
         assert_eq!(
             users_roles_read.user_id,

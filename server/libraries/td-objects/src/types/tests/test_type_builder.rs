@@ -293,7 +293,8 @@ mod tests {
         #[getset(get = "pub")]
         #[td_type(builder(try_from = FooDao))]
         struct TestDto {
-            #[td_type(builder(default))]
+            #[td_type(builder(skip))]
+            #[builder(default)]
             name: String,
             description: Option<String>,
         }
@@ -354,11 +355,13 @@ mod tests {
             #[td_type(builder(try_from = FooDto, skip))]
             id: i64,
             #[td_type(builder(try_from = FooDao, include))]
-            #[td_type(builder(try_from = FooDlo, default))]
+            #[td_type(builder(try_from = FooDlo, skip))]
+            #[builder(default)]
             name: String,
             #[td_type(builder(try_from = FooDao, include))]
             #[td_type(builder(try_from = FooDto, skip))]
-            #[td_type(builder(try_from = FooDlo, default))]
+            #[td_type(builder(try_from = FooDlo, skip))]
+            #[builder(default)]
             description: Option<String>,
             #[td_type(builder(try_from = FooDao, include, field = "name"))]
             #[td_type(builder(try_from = FooDto, field = "name"))]
@@ -408,8 +411,8 @@ mod tests {
 
         let mut dxo_builder = TestDxoBuilder::try_from(&dlo).unwrap();
         assert_eq!(dxo_builder.id, Some(789));
-        assert_eq!(dxo_builder.name, Some("".to_string()));
-        assert_eq!(dxo_builder.description, Some(None));
+        assert_eq!(dxo_builder.name, None);
+        assert_eq!(dxo_builder.description, None);
         assert_eq!(dxo_builder.new_name, None);
 
         let dxo = dxo_builder
@@ -563,7 +566,8 @@ mod tests {
             name: String,
             description: Option<String>,
             modified: chrono::DateTime<chrono::Utc>,
-            #[td_type(builder(default))]
+            #[builder(default)]
+            #[td_type(builder(skip))]
             active: bool,
         }
 

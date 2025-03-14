@@ -54,7 +54,7 @@ impl Queries {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::role::UsersRolesDB;
+    use crate::types::role::UserRoleDB;
     use crate::types::DataAccessObject;
     use td_database::test_utils::db;
 
@@ -82,7 +82,7 @@ mod tests {
             ),
             (
                 Queries::new().select_users_roles(
-                    &Columns::Some(UsersRolesDB::fields()),
+                    &Columns::Some(UserRoleDB::fields()),
                     &Which::set(2),
                     &With::Ids,
                 ),
@@ -90,7 +90,7 @@ mod tests {
             ),
             (
                 Queries::new().select_users_roles(
-                    &Columns::Some(&[UsersRolesDB::fields().first().unwrap()]),
+                    &Columns::Some(&[UserRoleDB::fields().first().unwrap()]),
                     &Which::set(2),
                     &With::Ids,
                 ),

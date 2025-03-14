@@ -368,8 +368,6 @@ struct TdTryFromField {
     #[darling(default)]
     include: bool,
     field: Option<String>,
-    #[darling(default)]
-    default: bool,
 }
 
 pub fn td_type(input: TokenStream) -> TokenStream {
@@ -395,14 +393,10 @@ pub fn td_type(input: TokenStream) -> TokenStream {
     let builder_type = format_ident!("{}Builder", type_);
     let builder_error_type = format_ident!("{}BuilderError", type_);
 
-    let mut setters = vec![];
-    for field in fields.iter() {
-        let field_name = field.ident.as_ref().unwrap();
-        let setting = quote! {
-            .#field_name(self.#field_name.clone())
-        };
-        setters.push(setting);
-    }
+    let field_names: Vec<_> = fields
+        .iter()
+        .map(|field| field.ident.as_ref().unwrap())
+        .collect();
 
     let td_types_froms = gen_td_types_froms(&args, &item);
     let error_impl = gen_error(type_);
@@ -418,7 +412,7 @@ pub fn td_type(input: TokenStream) -> TokenStream {
 
             pub fn to_builder(&self) -> #builder_type #ty_generics {
                 let mut builder = #builder_type::default();
-                builder #(#setters)*;
+                builder #( .#field_names(self.#field_names.clone()) )*;
                 builder
             }
         }
@@ -427,6 +421,12 @@ pub fn td_type(input: TokenStream) -> TokenStream {
             type Error = #builder_error_type;
             fn try_from(from: &#builder_type #ty_generics) -> Result<Self, Self::Error> {
                 from.build()
+            }
+        }
+
+        impl From<()> for #builder_type #ty_generics {
+            fn from(from: ()) -> Self {
+                #type_::builder()
             }
         }
 
@@ -482,7 +482,7 @@ fn gen_td_types_froms(args: &TdTypeArgs, target: &ItemStruct) -> proc_macro2::To
             expanded.extend(gen_updated_from(update_from, target, arg.skip_all));
         }
     }
-    expanded.extend(gen_extractor(target));
+    expanded.extend(gen_td_type_field_getset(target));
     expanded
 }
 
@@ -542,7 +542,7 @@ fn gen_updated_from(from: &Ident, target: &ItemStruct, skip_all: bool) -> proc_m
     expanded
 }
 
-fn gen_extractor(target: &ItemStruct) -> proc_macro2::TokenStream {
+fn gen_td_type_field_getset(target: &ItemStruct) -> proc_macro2::TokenStream {
     let to = &target.ident;
     let (impl_generics, ty_generics, where_clause) = target.generics.split_for_impl();
 
@@ -550,8 +550,7 @@ fn gen_extractor(target: &ItemStruct) -> proc_macro2::TokenStream {
 
     for field in target.fields.iter() {
         let td_type_fields = TdTypeFields::from_field(field).unwrap();
-        let extractor = &td_type_fields.extractor;
-        if *extractor {
+        if td_type_fields.extractor {
             let field_name = field.ident.as_ref().unwrap();
             let field_type = &field.ty;
             expanded.extend(quote! {
@@ -604,17 +603,6 @@ fn gen_from_fields_initializers(
                 initializers.push(initializer);
             }
             IncludeField::Skip => {}
-            IncludeField::Default => {
-                let field_name = field.ident.as_ref().unwrap();
-                let field_type = &field.ty;
-                let field_type = quote! { #field_type }.to_string();
-                let field_type_without_generics = field_type.split('<').next().unwrap().trim();
-                let field_type_without_generics = format_ident!("{}", field_type_without_generics);
-                let initializer = quote! {
-                    .#field_name(#field_type_without_generics::default())
-                };
-                initializers.push(initializer);
-            }
             IncludeField::Rename(name) => {
                 let field_type = field.ty.clone();
                 let field_name = field.ident.as_ref().unwrap();
@@ -639,7 +627,6 @@ fn gen_from_fields_initializers(
 enum IncludeField {
     Include,
     Skip,
-    Default,
     Rename(String),
 }
 
@@ -661,14 +648,8 @@ fn should_include_from_field(
                 .clone()
                 .map_or(IncludeField::Include, IncludeField::Rename);
         }
-        if let Some(_f) = find_field(|f| f.default) {
-            return IncludeField::Default;
-        }
         if let Some(f) = find_field(|f| f.field.is_some()) {
             return IncludeField::Rename(f.field.clone().unwrap());
-        }
-        if find_field(|f| f.default).is_some() {
-            return IncludeField::Default;
         }
         IncludeField::Skip
     } else if from_args.is_empty() {
@@ -676,9 +657,6 @@ fn should_include_from_field(
     } else {
         if find_field(|f| f.skip).is_some() {
             return IncludeField::Skip;
-        }
-        if find_field(|f| f.default).is_some() {
-            return IncludeField::Default;
         }
         if let Some(f) = find_field(|f| f.field.is_some()) {
             return IncludeField::Rename(f.field.clone().unwrap());
