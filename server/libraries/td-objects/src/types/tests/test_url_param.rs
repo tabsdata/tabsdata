@@ -12,18 +12,18 @@ mod tests {
     #[td_type::typed(string)]
     pub struct Name;
 
-    #[td_type::IdNameParam(param = "Foo", id = Id, name = Name)]
-    struct FooParam;
+    #[td_type::typed(id_name(id = Id, name = Name))]
+    struct Foo;
 
-    #[td_type::NestedParam]
+    #[td_type::UrlParam]
     struct VarParam {
-        foo: FooParam,
+        foo: Foo,
     }
 
     #[test]
     fn test_id() -> Result<(), TdError> {
         let param = VarParam {
-            foo: FooParam::try_from("~foo_id".to_string())?,
+            foo: Foo::try_from("~foo_id".to_string())?,
         };
         assert_eq!(param.foo.id, Some("foo_id".try_into()?));
         assert_eq!(param.foo.name, None);
@@ -35,7 +35,7 @@ mod tests {
     #[test]
     fn test_name() -> Result<(), TdError> {
         let param = VarParam {
-            foo: FooParam::try_from("foo_name".to_string())?,
+            foo: Foo::try_from("foo_name".to_string())?,
         };
         assert_eq!(param.foo.id, None);
         assert_eq!(param.foo.name, Some("foo_name".try_into()?));

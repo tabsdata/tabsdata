@@ -226,6 +226,9 @@ pub struct Partition;
 #[td_type::typed(id)]
 pub struct PermissionId;
 
+#[td_type::typed(id_name(id = PermissionId))]
+pub struct PermissionIdName;
+
 #[td_type::typed(string(regex = PermissionType::REGEX))]
 pub struct PermissionType;
 
@@ -292,6 +295,9 @@ pub struct RoleId;
 
 #[td_type::typed(string(parser = parse_role))]
 pub struct RoleName;
+
+#[td_type::typed(id_name(id = RoleId, name = RoleName))]
+pub struct RoleIdName;
 
 #[td_type::typed(string(min_len = 0, max_len = 4096))]
 pub struct Snippet;
@@ -416,6 +422,9 @@ pub struct UserId;
 
 #[td_type::typed(string(parser = parse_user))]
 pub struct UserName;
+
+#[td_type::typed(id_name(id = UserId, name = UserName))]
+pub struct UserIdName;
 
 #[td_type::typed(id)]
 pub struct UserRoleId;

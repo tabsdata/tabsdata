@@ -46,6 +46,8 @@ enum Typed {
     Id(OptionWrapper<TypedId>),
     #[darling(rename = "timestamp")]
     Timestamp(OptionWrapper<TypedTimestamp>),
+    #[darling(rename = "id_name")]
+    IdName(OptionWrapper<TypedIdName>),
 }
 
 pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -68,6 +70,7 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
         Typed::bool(t) => typed_bool(&input, t.into()),
         Typed::Id(t) => typed_id(&input, t.into()),
         Typed::Timestamp(t) => typed_timestamp(&input, t.into()),
+        Typed::IdName(t) => typed_id_name(&input, t.into()),
     };
 
     let name = &input.ident;
@@ -88,18 +91,8 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let sql_entity = quote! {
-        impl crate::types::SqlEntity for #name {
-            type Type = #name;
-            fn value(&self) -> &Self::Type {
-                &self
-            }
-        }
-    };
-
     let expanded = quote! {
         #typed
-        #sql_entity
         #(#froms)*
     };
 
@@ -342,6 +335,13 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
                 <String as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
             }
         }
+
+        impl crate::types::SqlEntity for #name {
+            type Type = #name;
+            fn value(&self) -> &Self::Type {
+                &self
+            }
+        }
     };
 
     expanded
@@ -528,6 +528,12 @@ pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
             }
         }
 
+        impl crate::types::SqlEntity for #name {
+            type Type = #name;
+            fn value(&self) -> &Self::Type {
+                &self
+            }
+        }
     };
 
     expanded
@@ -629,6 +635,12 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
             }
         }
 
+        impl crate::types::SqlEntity for #name {
+            type Type = #name;
+            fn value(&self) -> &Self::Type {
+                &self
+            }
+        }
     };
 
     expanded
@@ -777,6 +789,12 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
             }
         }
 
+        impl crate::types::SqlEntity for #name {
+            type Type = #name;
+            fn value(&self) -> &Self::Type {
+                &self
+            }
+        }
     };
 
     expanded
@@ -918,6 +936,106 @@ pub fn typed_timestamp(
             }
         }
 
+        impl crate::types::SqlEntity for #name {
+            type Type = #name;
+            fn value(&self) -> &Self::Type {
+                &self
+            }
+        }
+    };
+
+    expanded
+}
+
+#[derive(Debug, Default, FromMeta)]
+pub struct TypedIdName {
+    id: Option<Ident>,
+    name: Option<Ident>,
+}
+
+pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_macro2::TokenStream {
+    let (id, name) = typed
+        .and_then(|typed| typed.id.map(|id| (id.clone(), typed.name.unwrap_or(id))))
+        .expect("TypedIdName must have at least id field");
+
+    let ident = &input.ident;
+
+    let expanded = quote! {
+        #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+        #[serde(try_from = "String", into = "String")]
+        pub struct #ident {
+            id: Option<#id>,
+            name: Option<#name>,
+        }
+
+        impl TryFrom<String> for #ident {
+            type Error = td_error::TdError;
+            fn try_from(s: String) -> Result<Self, Self::Error> {
+                if s.starts_with('~') {
+                    Ok(Self {
+                        id: Some(#id::try_from(s.trim_start_matches('~'))?),
+                        name: None,
+                    })
+                } else {
+                    Ok(Self {
+                        id: None,
+                        name: Some(#name::try_from(s)?),
+                    })
+                }
+            }
+        }
+
+        impl TryFrom<&str> for #ident {
+            type Error = td_error::TdError;
+            fn try_from(s: &str) -> Result<Self, Self::Error> {
+                Self::try_from(s.to_string())
+            }
+        }
+
+        impl From<#ident> for String {
+            fn from(value: #ident) -> String {
+                match (&value.id, &value.name) {
+                    (Some(id), None) => format!("~{}", id),
+                    (None, Some(name)) => name.to_string(),
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        impl crate::types::IdOrName<#id, #name> for #ident {
+            fn id(&self) -> Option<&#id> {
+                self.id.as_ref()
+            }
+
+            fn name(&self) -> Option<&#name> {
+                self.name.as_ref()
+            }
+        }
+
+        impl utoipa::__dev::ComposeSchema for #ident {
+            fn compose(
+                mut generics: Vec<utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>>,
+            ) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+                utoipa::openapi::ObjectBuilder::new()
+                    .schema_type(utoipa::openapi::schema::SchemaType::new(
+                        utoipa::openapi::schema::Type::String,
+                    ))
+                    .into()
+            }
+        }
+        impl utoipa::ToSchema for #ident {
+            fn name() -> std::borrow::Cow<'static, str> {
+                std::borrow::Cow::Borrowed(stringify!(#ident))
+            }
+            fn schemas(
+                schemas: &mut Vec<(
+                    String,
+                    utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>,
+                )>,
+            ) {
+                schemas.extend([]);
+            }
+        }
     };
 
     expanded

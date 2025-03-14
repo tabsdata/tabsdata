@@ -16,7 +16,7 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{
     By, SqlSelectIdOrNameService, SqlSelectService, SqlUpdateService,
 };
-use td_objects::types::basic::RoleId;
+use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::role::{
     Role, RoleBuilder, RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleDBWithNames, RoleUpdate,
 };
@@ -50,8 +50,10 @@ impl UpdateRoleService {
                 from_fn(With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
                 from_fn(With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate, _>),
 
+                from_fn(With::<RoleParam>::extract::<RoleIdName>),
+
                 TransactionProvider::new(db),
-                from_fn(By::<RoleParam>::select::<RoleQueries, RoleDBWithNames>),
+                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDBWithNames>),
                 from_fn(With::<RoleDBWithNames>::extract::<RoleId>),
                 from_fn(By::<RoleId>::update::<RoleQueries, RoleDBUpdate, RoleDB>),
 
@@ -98,7 +100,8 @@ mod tests {
             type_of_val(&With::<RoleUpdate>::convert_to::<RoleDBUpdateBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
             type_of_val(&With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate, _>),
-            type_of_val(&By::<RoleParam>::select::<RoleQueries, RoleDBWithNames>),
+            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
+            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDBWithNames>),
             type_of_val(&With::<RoleDBWithNames>::extract::<RoleId>),
             type_of_val(&By::<RoleId>::update::<RoleQueries, RoleDBUpdate, RoleDB>),
             type_of_val(&By::<RoleId>::select::<RoleQueries, RoleDBWithNames>),
@@ -124,9 +127,12 @@ mod tests {
             .try_description("new desc")?
             .build()?;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .update(RoleParam::try_from("joaquin")?, update);
+        let request = RequestContext::with(&admin_id, "r", true).await.update(
+            RoleParam::builder()
+                .role(RoleIdName::try_from("joaquin")?)
+                .build()?,
+            update,
+        );
 
         let service = UpdateRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;

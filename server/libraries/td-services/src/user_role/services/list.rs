@@ -11,7 +11,7 @@ use td_objects::sql::roles::RoleQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
-use td_objects::types::basic::RoleId;
+use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::role::RoleDB;
 use td_objects::types::role::{UserRole, UserRoleBuilder, UserRoleDBWithNames};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
@@ -40,7 +40,8 @@ impl ListUserRoleService {
                 SrvCtxProvider::new(queries),
 
                 ConnectionProvider::new(db),
-                from_fn(By::<RoleParam>::select::<RoleQueries, RoleDB>),
+                from_fn(With::<RoleParam>::extract::<RoleIdName>),
+                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
                 from_fn(By::<RoleId>::list::<RoleParam, RoleQueries, UserRoleDBWithNames>),
 
@@ -81,7 +82,8 @@ mod tests {
 
         metadata.assert_service::<ListRequest<RoleParam>, ListResponse<UserRole>>(&[
             type_of_val(&extract_req_name::<ListRequest<RoleParam>, _>),
-            type_of_val(&By::<RoleParam>::select::<RoleQueries, RoleDB>),
+            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
+            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
             type_of_val(&By::<RoleId>::list::<RoleParam, RoleQueries, UserRoleDBWithNames>),
             type_of_val(&With::<UserRoleDBWithNames>::try_map_list::<RoleParam, UserRoleBuilder, UserRole, _>),
@@ -102,9 +104,12 @@ mod tests {
         .await;
         let user_role = seed_user_role(&db, &UserId::from(user_id), role.id()).await;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .list(RoleParam::try_from("king")?, ListParams::default());
+        let request = RequestContext::with(&admin_id, "r", true).await.list(
+            RoleParam::builder()
+                .role(RoleIdName::try_from("king")?)
+                .build()?,
+            ListParams::default(),
+        );
 
         let service = ListUserRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;

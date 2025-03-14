@@ -5,7 +5,7 @@
 use crate::dlo::{
     CollectionName, Creator, DatasetName, ExecutionPlanId, TableName, WorkerMessageId,
 };
-use crate::types::basic::{PermissionId, RoleId, RoleName, UserId, UserName};
+use crate::types::basic::{PermissionIdName, RoleIdName, UserIdName};
 use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
 use constcat::concat;
 use getset::Getters;
@@ -524,14 +524,14 @@ impl Creator<WorkerMessageParam> for WorkerMessageId {
     }
 }
 
-#[td_type::IdNameParam(param = "user", id = UserId, name = UserName)]
-pub struct UserParam;
-
 pub const ROLES: &str = "/roles";
 pub const ROLE: &str = concat!(ROLES, "/{role}");
 
-#[td_type::IdNameParam(param = "role", id = RoleId, name = RoleName)]
-pub struct RoleParam;
+#[td_type::UrlParam]
+pub struct RoleParam {
+    #[td_type(extractor)]
+    role: RoleIdName,
+}
 
 pub const LIST_ROLES: &str = ROLES;
 pub const GET_ROLE: &str = ROLE;
@@ -542,14 +542,11 @@ pub const DELETE_ROLE: &str = ROLE;
 pub const PERMISSIONS: &str = concat!(ROLE, "/permissions");
 pub const PERMISSION: &str = concat!(PERMISSIONS, "/{permission}");
 
-#[td_type::IdNameParam(param = "permission", id = PermissionId, name = PermissionId)]
-pub struct PermissionParam;
-
-#[td_type::NestedParam]
+#[td_type::UrlParam]
 pub struct RolePermissionParam {
-    role: RoleParam,
+    role: RoleIdName,
     #[td_type(extractor)]
-    permission: PermissionParam,
+    permission: PermissionIdName,
 }
 
 pub const LIST_PERMISSIONS: &str = PERMISSIONS;
@@ -559,12 +556,12 @@ pub const DELETE_PERMISSION: &str = PERMISSION;
 pub const USER_ROLES: &str = concat!(ROLE, "/users");
 pub const USER_ROLE: &str = concat!(USER_ROLES, "/{user}");
 
-#[td_type::NestedParam]
+#[td_type::UrlParam]
 pub struct UserRoleParam {
     #[td_type(extractor)]
-    role: RoleParam,
+    role: RoleIdName,
     #[td_type(extractor)]
-    user: UserParam,
+    user: UserIdName,
 }
 
 pub const LIST_USER_ROLES: &str = USER_ROLES;

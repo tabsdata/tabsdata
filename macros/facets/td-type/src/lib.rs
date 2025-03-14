@@ -40,14 +40,8 @@ pub fn Dto(args: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
-pub fn IdNameParam(args: TokenStream, item: TokenStream) -> TokenStream {
-    type_builder::id_name_param(args, item)
-}
-
-#[proc_macro_attribute]
-#[allow(non_snake_case)]
-pub fn NestedParam(args: TokenStream, item: TokenStream) -> TokenStream {
-    type_builder::nested_param(args, item)
+pub fn UrlParam(args: TokenStream, item: TokenStream) -> TokenStream {
+    type_builder::url_param(args, item)
 }
 
 #[proc_macro_attribute]

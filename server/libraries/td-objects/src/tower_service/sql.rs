@@ -431,7 +431,7 @@ mod tests {
 
         insert(connection.clone(), queries.clone(), dao).await?;
 
-        #[td_type::IdNameParam(param = "id_or_name", id = FooId, name = FooName)]
+        #[td_type::typed(id_name(id = FooId, name = FooName))]
         struct FooIdOrName;
 
         // id

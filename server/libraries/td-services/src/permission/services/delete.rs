@@ -6,12 +6,12 @@ use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
-use td_objects::rest_urls::{PermissionParam, RolePermissionParam};
+use td_objects::rest_urls::RolePermissionParam;
 use td_objects::sql::permission::PermissionQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
-use td_objects::types::basic::PermissionId;
+use td_objects::types::basic::{PermissionId, PermissionIdName};
 use td_objects::types::permission::PermissionDB;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
@@ -38,10 +38,10 @@ impl DeletePermissionService {
                 from_fn(extract_req_name::<DeleteRequest<RolePermissionParam>, _>),
 
                 // TODO check RoleParam exists
-                from_fn(With::<RolePermissionParam>::extract::<PermissionParam>),
+                from_fn(With::<RolePermissionParam>::extract::<PermissionIdName>),
 
                 TransactionProvider::new(db),
-                from_fn(By::<PermissionParam>::select::<PermissionQueries, PermissionDB>),
+                from_fn(By::<PermissionIdName>::select::<PermissionQueries, PermissionDB>),
                 from_fn(With::<PermissionDB>::extract::<PermissionId>),
                 from_fn(By::<PermissionId>::delete::<PermissionQueries, PermissionDB>),
             ))
@@ -56,12 +56,11 @@ impl DeletePermissionService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::permission::services::RoleParam;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_permission::{get_permission, seed_permission};
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::admin_user;
-    use td_objects::types::basic::{Description, PermissionType, RoleName};
+    use td_objects::types::basic::{Description, PermissionType, RoleIdName, RoleName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -79,8 +78,8 @@ mod tests {
 
         metadata.assert_service::<DeleteRequest<RolePermissionParam>, ()>(&[
             type_of_val(&extract_req_name::<DeleteRequest<RolePermissionParam>, _>),
-            type_of_val(&With::<RolePermissionParam>::extract::<PermissionParam>),
-            type_of_val(&By::<PermissionParam>::select::<PermissionQueries, PermissionDB>),
+            type_of_val(&With::<RolePermissionParam>::extract::<PermissionIdName>),
+            type_of_val(&By::<PermissionIdName>::select::<PermissionQueries, PermissionDB>),
             type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
             type_of_val(&By::<PermissionId>::delete::<PermissionQueries, PermissionDB>),
         ]);
@@ -101,8 +100,8 @@ mod tests {
 
         let request = RequestContext::with(&admin_id, "r", true).await.delete(
             RolePermissionParam::builder()
-                .role(RoleParam::try_from("king")?)
-                .permission(PermissionParam::try_from(seeded.id().to_string())?)
+                .role(RoleIdName::try_from("king")?)
+                .permission(PermissionIdName::try_from(seeded.id().to_string())?)
                 .build()?,
         );
 

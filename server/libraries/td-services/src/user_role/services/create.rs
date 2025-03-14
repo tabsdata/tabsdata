@@ -7,7 +7,7 @@ use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
-use td_objects::rest_urls::{RoleParam, UserParam};
+use td_objects::rest_urls::RoleParam;
 use td_objects::sql::roles::RoleQueries;
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
@@ -15,9 +15,7 @@ use td_objects::tower_service::from::{
 };
 use td_objects::tower_service::sql::SqlSelectIdOrNameService;
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
-use td_objects::types::basic::RoleId;
-use td_objects::types::basic::UserId;
-use td_objects::types::basic::UserRoleId;
+use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserIdName, UserRoleId};
 use td_objects::types::role::{
     RoleDB, UserRole, UserRoleBuilder, UserRoleCreate, UserRoleDB, UserRoleDBBuilder,
     UserRoleDBWithNames,
@@ -49,17 +47,17 @@ impl CreateUserRoleService {
                 from_fn(extract_req_dto::<CreateRequest<RoleParam, UserRoleCreate>, _>),
                 from_fn(extract_req_name::<CreateRequest<RoleParam, UserRoleCreate>, _>),
 
-                from_fn(With::<UserRoleCreate>::extract::<UserParam>),
-
                 TransactionProvider::new(db),
 
                 from_fn(builder::<UserRoleDBBuilder>),
 
-                from_fn(By::<RoleParam>::select::<RoleQueries, RoleDB>),
+                from_fn(With::<RoleParam>::extract::<RoleIdName>),
+                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
                 from_fn(With::<RoleId>::set::<UserRoleDBBuilder>),
 
-                from_fn(By::<UserParam>::select::<RoleQueries, UserDB>),
+                from_fn(With::<UserRoleCreate>::extract::<UserIdName>),
+                from_fn(By::<UserIdName>::select::<RoleQueries, UserDB>),
                 from_fn(With::<UserDB>::extract::<UserId>),
                 from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
 
@@ -109,12 +107,13 @@ mod tests {
             type_of_val(&extract_req_context::<CreateRequest<RoleParam, UserRoleCreate>>),
             type_of_val(&extract_req_dto::<CreateRequest<RoleParam, UserRoleCreate>, _>),
             type_of_val(&extract_req_name::<CreateRequest<RoleParam, UserRoleCreate>, _>),
-            type_of_val(&With::<UserRoleCreate>::extract::<UserParam>),
             type_of_val(&builder::<UserRoleDBBuilder>),
-            type_of_val(&By::<RoleParam>::select::<RoleQueries, RoleDB>),
+            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
+            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
             type_of_val(&With::<RoleId>::set::<UserRoleDBBuilder>),
-            type_of_val(&By::<UserParam>::select::<RoleQueries, UserDB>),
+            type_of_val(&With::<UserRoleCreate>::extract::<UserIdName>),
+            type_of_val(&By::<UserIdName>::select::<RoleQueries, UserDB>),
             type_of_val(&With::<UserDB>::extract::<UserId>),
             type_of_val(&With::<UserId>::set::<UserRoleDBBuilder>),
             type_of_val(&With::<RequestContext>::update::<UserRoleDBBuilder, _>),
@@ -141,12 +140,15 @@ mod tests {
         .await;
 
         let create = UserRoleCreate::builder()
-            .user(UserParam::try_from("joaquin")?)
+            .user(UserIdName::try_from("joaquin")?)
             .build()?;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .create(RoleParam::try_from("king")?, create);
+        let request = RequestContext::with(&admin_id, "r", true).await.create(
+            RoleParam::builder()
+                .role(RoleIdName::try_from("king")?)
+                .build()?,
+            create,
+        );
 
         let service = CreateUserRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;

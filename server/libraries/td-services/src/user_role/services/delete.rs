@@ -6,12 +6,12 @@ use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
-use td_objects::rest_urls::{RoleParam, UserParam, UserRoleParam};
+use td_objects::rest_urls::UserRoleParam;
 use td_objects::sql::roles::RoleQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{combine, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
-use td_objects::types::basic::{RoleId, UserId};
+use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserIdName};
 use td_objects::types::role::{RoleDB, UserRoleDB};
 use td_objects::types::user::UserDB;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
@@ -40,12 +40,12 @@ impl DeleteUserRoleService {
 
                 TransactionProvider::new(db),
 
-                from_fn(With::<UserRoleParam>::extract::<RoleParam>),
-                from_fn(By::<RoleParam>::select::<RoleQueries, RoleDB>),
+                from_fn(With::<UserRoleParam>::extract::<RoleIdName>),
+                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
 
-                from_fn(With::<UserRoleParam>::extract::<UserParam>),
-                from_fn(By::<UserParam>::select::<RoleQueries, UserDB>),
+                from_fn(With::<UserRoleParam>::extract::<UserIdName>),
+                from_fn(By::<UserIdName>::select::<RoleQueries, UserDB>),
                 from_fn(With::<UserDB>::extract::<UserId>),
 
                 from_fn(combine::<RoleId, UserId>),
@@ -84,11 +84,11 @@ mod tests {
 
         metadata.assert_service::<DeleteRequest<UserRoleParam>, ()>(&[
             type_of_val(&extract_req_name::<DeleteRequest<UserRoleParam>, _>),
-            type_of_val(&With::<UserRoleParam>::extract::<RoleParam>),
-            type_of_val(&By::<RoleParam>::select::<RoleQueries, RoleDB>),
+            type_of_val(&With::<UserRoleParam>::extract::<RoleIdName>),
+            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
-            type_of_val(&With::<UserRoleParam>::extract::<UserParam>),
-            type_of_val(&By::<UserParam>::select::<RoleQueries, UserDB>),
+            type_of_val(&With::<UserRoleParam>::extract::<UserIdName>),
+            type_of_val(&By::<UserIdName>::select::<RoleQueries, UserDB>),
             type_of_val(&With::<UserDB>::extract::<UserId>),
             type_of_val(&combine::<RoleId, UserId>),
             type_of_val(&By::<(RoleId, UserId)>::delete::<RoleQueries, UserRoleDB>),
@@ -111,8 +111,8 @@ mod tests {
 
         let request = RequestContext::with(&admin_id, "r", true).await.delete(
             UserRoleParam::builder()
-                .role(RoleParam::try_from("king")?)
-                .user(UserParam::try_from("joaquin")?)
+                .role(RoleIdName::try_from("king")?)
+                .user(UserIdName::try_from("joaquin")?)
                 .build()?,
         );
 

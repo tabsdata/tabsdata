@@ -16,7 +16,7 @@ use td_objects::tower_service::from::{
 };
 use td_objects::tower_service::sql::SqlSelectIdOrNameService;
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
-use td_objects::types::basic::PermissionId;
+use td_objects::types::basic::{PermissionId, RoleIdName};
 use td_objects::types::permission::{
     Permission, PermissionBuilder, PermissionCreate, PermissionDB, PermissionDBBuilder,
     PermissionDBWithNames,
@@ -52,7 +52,8 @@ impl CreatePermissionService {
                 from_fn(With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
                 from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
 
-                from_fn(By::<RoleParam>::select::<PermissionQueries, RoleDB>),
+                from_fn(With::<RoleParam>::extract::<RoleIdName>),
+                from_fn(By::<RoleIdName>::select::<PermissionQueries, RoleDB>),
                 from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
 
                 from_fn(With::<PermissionDBBuilder>::build_permission_db),
@@ -100,7 +101,8 @@ mod tests {
             type_of_val(&extract_req_name::<CreateRequest<RoleParam, PermissionCreate>, _>),
             type_of_val(&With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<PermissionDBBuilder, _>),
-            type_of_val(&By::<RoleParam>::select::<PermissionQueries, RoleDB>),
+            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
+            type_of_val(&By::<RoleIdName>::select::<PermissionQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
             type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
             type_of_val(&insert::<PermissionQueries, PermissionDB>),
@@ -122,9 +124,12 @@ mod tests {
             .unwrap()
             .build()?;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .create(RoleParam::try_from("sys_admin")?, create);
+        let request = RequestContext::with(&admin_id, "r", true).await.create(
+            RoleParam::builder()
+                .role(RoleIdName::try_from("sys_admin")?)
+                .build()?,
+            create,
+        );
 
         let service = CreatePermissionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;

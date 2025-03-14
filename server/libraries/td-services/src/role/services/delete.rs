@@ -11,7 +11,7 @@ use td_objects::sql::roles::RoleQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
-use td_objects::types::basic::RoleId;
+use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::role::RoleDB;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
@@ -37,8 +37,10 @@ impl DeleteRoleService {
                 SrvCtxProvider::new(queries),
                 from_fn(extract_req_name::<DeleteRequest<RoleParam>, _>),
 
+                from_fn(With::<RoleParam>::extract::<RoleIdName>),
+
                 TransactionProvider::new(db),
-                from_fn(By::<RoleParam>::select::<RoleQueries, RoleDB>),
+                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
                 from_fn(By::<RoleId>::delete::<RoleQueries, RoleDB>),
             ))
@@ -74,7 +76,8 @@ mod tests {
 
         metadata.assert_service::<DeleteRequest<RoleParam>, ()>(&[
             type_of_val(&extract_req_name::<DeleteRequest<RoleParam>, _>),
-            type_of_val(&By::<RoleParam>::select::<RoleQueries, RoleDB>),
+            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
+            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
             type_of_val(&By::<RoleId>::delete::<RoleQueries, RoleDB>),
         ]);
@@ -93,9 +96,11 @@ mod tests {
         .await;
 
         // By id
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .delete(RoleParam::try_from(format!("~{}", role.id()))?);
+        let request = RequestContext::with(&admin_id, "r", true).await.delete(
+            RoleParam::builder()
+                .role(RoleIdName::try_from(format!("~{}", role.id()))?)
+                .build()?,
+        );
 
         let service = DeleteRoleService::new(db.clone()).service().await;
         service.raw_oneshot(request).await?;
@@ -118,9 +123,11 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .delete(RoleParam::try_from("joaquin")?);
+        let request = RequestContext::with(&admin_id, "r", true).await.delete(
+            RoleParam::builder()
+                .role(RoleIdName::try_from("joaquin")?)
+                .build()?,
+        );
 
         let service = DeleteRoleService::new(db.clone()).service().await;
         service.raw_oneshot(request).await?;

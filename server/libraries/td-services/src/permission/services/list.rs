@@ -11,7 +11,7 @@ use td_objects::sql::permission::PermissionQueries;
 use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
-use td_objects::types::basic::RoleId;
+use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::permission::{Permission, PermissionBuilder, PermissionDBWithNames};
 use td_objects::types::role::RoleDB;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
@@ -36,11 +36,11 @@ impl ListPermissionService {
         provider(db: DbPool, queries: Arc<PermissionQueries>) -> TdError {
             service_provider!(layers!(
                 from_fn(extract_req_name::<ListRequest<RoleParam>, _>),
+                from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
                 SrvCtxProvider::new(queries),
-
                 ConnectionProvider::new(db),
-                from_fn(By::<RoleParam>::select::<PermissionQueries, RoleDB>),
+                from_fn(By::<RoleIdName>::select::<PermissionQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
                 from_fn(By::<RoleId>::list::<RoleParam, PermissionQueries, PermissionDBWithNames>),
 
@@ -81,7 +81,8 @@ mod tests {
 
         metadata.assert_service::<ListRequest<RoleParam>, ListResponse<Permission>>(&[
             type_of_val(&extract_req_name::<ListRequest<RoleParam>, _>),
-            type_of_val(&By::<RoleParam>::select::<PermissionQueries, RoleDB>),
+            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
+            type_of_val(&By::<RoleIdName>::select::<PermissionQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
             type_of_val(&By::<RoleId>::list::<RoleParam, PermissionQueries, PermissionDBWithNames>),
             type_of_val(
@@ -108,9 +109,12 @@ mod tests {
         .await;
         let seeded = seed_permission(&db, PermissionType::try_from("sa")?, None, None, &role).await;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .list(RoleParam::try_from("king")?, ListParams::default());
+        let request = RequestContext::with(&admin_id, "r", true).await.list(
+            RoleParam::builder()
+                .role(RoleIdName::try_from("king")?)
+                .build()?,
+            ListParams::default(),
+        );
 
         let service = ListPermissionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;

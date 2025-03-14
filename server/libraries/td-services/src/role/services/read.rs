@@ -9,8 +9,9 @@ use td_objects::crudl::ReadRequest;
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::roles::RoleQueries;
 use td_objects::tower_service::extractor::extract_req_name;
-use td_objects::tower_service::from::{BuildService, TryIntoService, With};
+use td_objects::tower_service::from::{BuildService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService};
+use td_objects::types::basic::RoleIdName;
 use td_objects::types::role::{Role, RoleBuilder, RoleDBWithNames};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
@@ -35,9 +36,10 @@ impl ReadRoleService {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 from_fn(extract_req_name::<ReadRequest<RoleParam>, _>),
+                from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
                 ConnectionProvider::new(db),
-                from_fn(By::<RoleParam>::select::<RoleQueries, RoleDBWithNames>),
+                from_fn(By::<RoleIdName>::select::<RoleQueries, RoleDBWithNames>),
 
                 from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
                 from_fn(With::<RoleBuilder>::build::<Role, _>),
@@ -56,7 +58,7 @@ mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_role::{get_role, seed_role};
     use td_objects::test_utils::seed_user::admin_user;
-    use td_objects::types::basic::{Description, RoleName};
+    use td_objects::types::basic::{Description, RoleIdName, RoleName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -74,7 +76,8 @@ mod tests {
 
         metadata.assert_service::<ReadRequest<RoleParam>, Role>(&[
             type_of_val(&extract_req_name::<ReadRequest<RoleParam>, _>),
-            type_of_val(&By::<RoleParam>::select::<RoleQueries, RoleDBWithNames>),
+            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
+            type_of_val(&By::<RoleIdName>::select::<RoleQueries, RoleDBWithNames>),
             type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
             type_of_val(&With::<RoleBuilder>::build::<Role, _>),
         ]);
@@ -92,9 +95,11 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .read(RoleParam::try_from(format!("~{}", role.id()))?);
+        let request = RequestContext::with(&admin_id, "r", true).await.read(
+            RoleParam::builder()
+                .role(RoleIdName::try_from(format!("~{}", role.id()))?)
+                .build()?,
+        );
 
         let service = ReadRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
@@ -123,9 +128,11 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .read(RoleParam::try_from("joaquin")?);
+        let request = RequestContext::with(&admin_id, "r", true).await.read(
+            RoleParam::builder()
+                .role(RoleIdName::try_from("joaquin")?)
+                .build()?,
+        );
 
         let service = ReadRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
