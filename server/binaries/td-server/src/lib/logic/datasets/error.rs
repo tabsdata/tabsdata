@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use polars::prelude::PolarsError;
-use td_common::uri::TdUriError;
+use td_common::uri::{TdUriError, Version};
 use td_error::td_error;
 use td_storage::StorageError;
 
@@ -63,12 +63,14 @@ pub enum DatasetError {
 
     #[error("Fixed version not found")]
     FixedVersionNotFound = 1000,
-    #[error("HEAD Relative version not found")]
-    HeadRelativeVersionNotFound = 1001,
+    #[error("Table version {0} does not exist")]
+    HeadRelativeVersionNotFound(Version) = 1001,
     #[error("Table not found in the given version")]
     TableNotFound = 1002,
     #[error("Execution plan not found")]
     ExecutionPlanNotFound = 1003,
+    #[error("Table exists but it has no data. The associated function has no successful run yet.")]
+    HeadVersionNotFound = 1004,
 
     #[error("The function bundle has already been uploaded")]
     FunctionBundleAlreadyUploaded = 2000,

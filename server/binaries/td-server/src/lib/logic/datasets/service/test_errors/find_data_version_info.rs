@@ -5,6 +5,7 @@
 use crate::logic::datasets::error::DatasetError;
 use crate::logic::datasets::service::data::DataService;
 use td_common::id;
+use td_common::uri::Version;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{AtParam, TableCommitParam, TableParam};
@@ -101,7 +102,25 @@ async fn test_head_relative_version_not_found() {
         );
 
     assert_service_error(service, request, |err| match err {
-        DatasetError::HeadRelativeVersionNotFound => {}
+        DatasetError::HeadRelativeVersionNotFound(Version::Head(-1)) => {}
+        other => panic!("Expected 'HeadRelativeVersionNotFound', got {:?}", other),
+    })
+    .await;
+
+    let service = DataService::new(db.clone()).service().await;
+
+    let request = RequestContext::with(&creator_id.to_string(), "r", false)
+        .await
+        .read(
+            TableCommitParam::new(
+                &TableParam::new("ds0".to_string(), "t0".to_string()),
+                &AtParam::version(Some("HEAD".to_string())),
+            )
+            .unwrap(),
+        );
+
+    assert_service_error(service, request, |err| match err {
+        DatasetError::HeadVersionNotFound => {}
         other => panic!("Expected 'HeadRelativeVersionNotFound', got {:?}", other),
     })
     .await;

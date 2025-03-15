@@ -42,7 +42,7 @@ pub async fn find_data_version_info_by_version(
                 ))?;
             version_info
         }
-        Version::Head(from_last) => {
+        Version::Head(relative) => {
             const SELECT_LAST_VERSIONS: &str = r#"
                 SELECT v.commit_id, v.collection_id, v.dataset_id, v.function_id, v.id as version_id, f.storage_location_version, f.data_location
                 FROM ds_data_versions_with_names v
@@ -52,7 +52,7 @@ pub async fn find_data_version_info_by_version(
                 ORDER BY v.commit_id DESC
                 LIMIT ?2
             "#;
-            let from_last = -from_last + 1;
+            let from_last = -relative + 1;
             let mut version_infos: Vec<VersionInfo> = sqlx::query_as(SELECT_LAST_VERSIONS)
                 .bind(dataset_id.value())
                 .bind(from_last as i64)
@@ -61,8 +61,12 @@ pub async fn find_data_version_info_by_version(
                 .map_err(DbError::SqlError)?;
             if version_infos.len() == from_last as usize {
                 version_infos.pop().unwrap()
+            } else if *relative == 0 {
+                Err(TdError::new(DatasetError::HeadVersionNotFound))?
             } else {
-                return Err(TdError::new(DatasetError::HeadRelativeVersionNotFound));
+                Err(TdError::new(DatasetError::HeadRelativeVersionNotFound(
+                    version.clone(),
+                )))?
             }
         }
     };
