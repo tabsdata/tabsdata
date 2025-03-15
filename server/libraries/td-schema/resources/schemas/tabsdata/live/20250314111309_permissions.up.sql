@@ -26,6 +26,97 @@ CREATE INDEX permissions___role_id___idx ON permissions (role_id);
 CREATE UNIQUE INDEX permissions___role_id__permission_type__entity___idx
     ON permissions (role_id, permission_type, entity_type, entity_id);
 
+INSERT INTO permissions
+SELECT '00000000000000000000000010',
+       r.id,
+       'sa',
+       'S',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       true
+FROM roles r
+WHERE r.name = 'sys_admin'
+;
+
+INSERT INTO permissions
+SELECT '00000000000000000000000014',
+       r.id,
+       'ss',
+       'S',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       true
+FROM roles r
+WHERE r.name = 'sec_admin'
+;
+
+INSERT INTO permissions
+SELECT '00000000000000000000000100',
+       r.id,
+       'ca',
+       'C',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       true
+FROM roles r
+WHERE r.name = 'sec_admin'
+;
+
+INSERT INTO permissions
+SELECT '00000000000000000000000104',
+       r.id,
+       'cd',
+       'C',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       false
+FROM roles r
+WHERE r.name = 'user'
+;
+
+INSERT INTO permissions
+SELECT '00000000000000000000000108',
+       r.id,
+       'cx',
+       'C',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       false
+FROM roles r
+WHERE r.name = 'user'
+;
+
+INSERT INTO permissions
+SELECT '0000000000000000000000010C',
+       r.id,
+       'cR',
+       'C',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       false
+FROM roles r
+WHERE r.name = 'user'
+;
+
+INSERT INTO permissions
+SELECT '0000000000000000000000010G',
+       r.id,
+       'cr',
+       'C',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       false
+FROM roles r
+WHERE r.name = 'user'
+;
+
 CREATE VIEW permissions__with_names AS
 SELECT p.*,
        -- If the user is deleted, we show the internal id

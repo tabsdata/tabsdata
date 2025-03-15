@@ -26,8 +26,10 @@ pub async fn db_with_schema(
 mod tests {
     use crate::sql::SqliteConfigBuilder;
     use td_security::{
-        ENCODED_ID_ROLE_SEC_ADMIN, ENCODED_ID_ROLE_SYS_ADMIN, ENCODED_ID_ROLE_USER,
-        ENCODED_ID_USER_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN,
+        ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CD_ALL_USER, ENCODED_ID_CRR_ALL_USER,
+        ENCODED_ID_CR_ALL_USER, ENCODED_ID_CX_ALL_USER, ENCODED_ID_ROLE_SEC_ADMIN,
+        ENCODED_ID_ROLE_SYS_ADMIN, ENCODED_ID_ROLE_USER, ENCODED_ID_S_SEC_ADMIN,
+        ENCODED_ID_S_SYS_ADMIN, ENCODED_ID_USER_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN,
         ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_USER,
     };
     use testdir::testdir;
@@ -39,21 +41,27 @@ mod tests {
         assert!(!crate::db(&config).await.unwrap().is_closed());
     }
 
+    #[derive(sqlx::FromRow)]
+    struct Value {
+        id: String,
+    }
+
     #[tokio::test]
-    async fn test_tabsdata_db_defaults() {
+    async fn test_tabsdata_db_default_users() {
         let db = crate::test_utils::db().await.unwrap();
         let mut conn = db.acquire().await.unwrap();
-
-        #[derive(sqlx::FromRow)]
-        struct Value {
-            id: String,
-        }
 
         let row: Value = sqlx::query_as("SELECT id FROM users WHERE name = 'admin'")
             .fetch_one(&mut *conn)
             .await
             .unwrap();
         assert_eq!(row.id, ENCODED_ID_USER_ADMIN);
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_db_default_roles() {
+        let db = crate::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
 
         let row: Value = sqlx::query_as("SELECT id FROM roles WHERE name = 'sys_admin'")
             .fetch_one(&mut *conn)
@@ -72,6 +80,12 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(row.id, ENCODED_ID_ROLE_USER);
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_db_default_user_roles() {
+        let db = crate::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
 
         let row: Value =
             sqlx::query_as("SELECT id FROM users_roles WHERE user_id = ?1 AND role_id = ?2")
@@ -99,5 +113,123 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(row.id, ENCODED_ID_USER_ROLE_ADMIN_USER);
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_db_default_permissions() {
+        let db = crate::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'sa' AND
+                entity_type = 'S' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_SYS_ADMIN)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_S_SYS_ADMIN);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'ss' AND
+                entity_type = 'S' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_SEC_ADMIN)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_S_SEC_ADMIN);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'ca' AND
+                entity_type = 'C' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_SEC_ADMIN)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CA_ALL_SEC_ADMIN);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'cd' AND
+                entity_type = 'C' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_USER)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CD_ALL_USER);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'cx' AND
+                entity_type = 'C' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_USER)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CX_ALL_USER);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'cR' AND
+                entity_type = 'C' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_USER)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CRR_ALL_USER);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'cr' AND
+                entity_type = 'C' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_USER)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CR_ALL_USER);
     }
 }
