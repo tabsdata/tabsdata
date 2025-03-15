@@ -156,3 +156,10 @@ __all__ = [
     UInt32,
     UInt64,
 ]
+
+try:
+    from tabsdata_salesforce import SalesforceSource
+
+    __all__.append(SalesforceSource)
+except ImportError:
+    pass
