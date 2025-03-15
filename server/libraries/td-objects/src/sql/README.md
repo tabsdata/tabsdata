@@ -7,10 +7,10 @@ Copyright 2025 Tabs Data Inc.
 ## Register Function
 
 * Check function name does not exist in collection.
-* Check function output tables do not exits in collection, or if they do they are frozen.
+* Check function output tables do not exist in collection, or if they do they are frozen.
 * Normalize all dependency table_versions (collection_id/table_name/versions).
 * Normalize all trigger dependencies (collection_id/table_name).
-* Check dependency tables (collection_id/table_name) exist or they are produced
+* Check dependency tables (collection_id/table_name) exist, or they are produced
   by the function itself.
 * Check trigger tables (collection_id/table_name) exist.
 * Find function output tables that are frozen tables to reuse their table_id.
@@ -30,11 +30,11 @@ Copyright 2025 Tabs Data Inc.
 
 * Check function exists in collection.
 * If function has a new name, check new name does not exist in collection.
-* Check function output tables do not exits in collection. Or if they do, 
-  they have status=Frozen or they already belonged to the function.
+* Check function output tables do not exist in collection. Or if they do, 
+  they have status=Frozen, or they already belonged to the function.
 * Normalize all dependency table_versions (collection_id/table_name/versions).
 * Normalize all trigger dependencies (collection_id/table_name).
-* Check dependency tables (collection_id/table_name) exist or they are produced
+* Check dependency tables (collection_id/table_name) exist, or they are produced
   by the function itself.
 * Check trigger tables (collection_id/table_name) exist.
 * Find function output tables that are frozen tables to reuse their table_id.

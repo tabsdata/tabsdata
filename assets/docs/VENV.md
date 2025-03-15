@@ -12,7 +12,7 @@ Tabsdata relies heavily on Python virtual environments to isolate it from the sy
 environments for each instance and for each group of functions sharing the same requirements. All the environments below
 are expected to have installed the Python package **tabsdata** and its dependencies. In some cases they might contain 
 additional packages. Some of them can have different versions of Python aligned with the compatibility matrix; others
-will support only an specific version of Python.
+will support only a specific version of Python.
 
 There are two basic types of environments:
 

@@ -1,0 +1,6 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+polars==1.23.0
+simple-salesforce==1.12.6

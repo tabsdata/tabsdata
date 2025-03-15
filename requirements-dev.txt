@@ -5,6 +5,7 @@
 # Required packages to test and build the project. They should not be installed by the client.
 
 -r requirements.txt
+-r connectors/python/tabsdata_salesforce/requirements.txt
 azure-storage-blob==12.24.1
 black==25.1.0
 boto3==1.37.2

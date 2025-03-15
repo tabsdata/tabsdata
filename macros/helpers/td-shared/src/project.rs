@@ -6,6 +6,7 @@ use duct::cmd;
 use std::path::PathBuf;
 
 const GIT_FOLDER: &str = ".git";
+pub const ROOT_FILE: &str = ".root";
 const CARGO_FILE: &str = "Cargo.toml";
 
 pub fn get_project_root() -> String {
@@ -28,6 +29,10 @@ pub fn get_project_root() -> String {
     let mut current_dir = PathBuf::from(current_folder);
     let mut cargo_dir: Option<PathBuf> = None;
     loop {
+        let root_file = current_dir.join(ROOT_FILE);
+        if root_file.exists() && root_file.is_file() {
+            return current_dir.as_os_str().to_string_lossy().to_string();
+        }
         let git_dir = current_dir.join(GIT_FOLDER);
         if git_dir.exists() && git_dir.is_dir() {
             return current_dir.as_os_str().to_string_lossy().to_string();

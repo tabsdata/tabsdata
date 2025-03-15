@@ -53,7 +53,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 *.local
-!client/td-sdk/tests/testing_resources/**/*.log
+!**/testing_resources/**/*.log
 MANIFEST
 !assets/manifest
 !variant/assets/manifest

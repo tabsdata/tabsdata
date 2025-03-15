@@ -13,6 +13,7 @@ const CARGO_MANIFEST_DIR: &str = "CARGO_MANIFEST_DIR";
 
 const GIT_FOLDER: &str = ".git";
 const CARGO_FILE: &str = "Cargo.toml";
+const ROOT_FILE: &str = ".root";
 
 #[proc_macro]
 pub fn workspace_root(_: TokenStream) -> TokenStream {
@@ -48,6 +49,10 @@ fn get_workspace_root() -> Option<PathBuf> {
     );
     let mut cargo_folder: Option<PathBuf> = None;
     loop {
+        let root_file = build_root.join(ROOT_FILE);
+        if root_file.exists() && root_file.is_file() {
+            return Some(build_root.clone());
+        }
         let git_folder = build_root.join(GIT_FOLDER);
         if git_folder.exists() && git_folder.is_dir() {
             return Some(build_root.clone());

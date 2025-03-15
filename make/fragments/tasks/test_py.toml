@@ -8,26 +8,14 @@ dependencies = ["set_mode_test_py"]
 run_task = [
     { name = [
         "pre-test_py",
-        "test_py_tabsdata",
         "test_py_td_features",
         "test_py_ta_interceptor",
         "test_py_td_interceptor",
-        "test_py_td-sdk",
+        "test_py_tabsdata",
+        "test_py_tabsdata_salesforce",
         "post-test_py"
     ] }
 ]
-
-[tasks.test_py_tabsdata]
-dependencies = ["set_mode_test_py"]
-cwd = "${PROJECT_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
-    ''']
 
 [tasks.test_py_td_features]
 private = true
@@ -43,11 +31,11 @@ script = [
     cd "${PROJECT_TD_FEATURES_ROOT}"
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TD_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_TD_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TD_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TD_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
     if not eq ${exit_code} "5"
         code = exit ${exit_code}
@@ -68,11 +56,11 @@ script = [
     cd "${PROJECT_TA_INTERCEPTOR_ROOT}"
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TA_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_TA_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TA_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TA_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
     if not eq ${exit_code} "5"
         code = exit ${exit_code}
@@ -93,18 +81,18 @@ script = [
     cd ${PROJECT_TD_INTERCEPTOR_ROOT}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TD_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16  --dist=loadfile ${TESTS_TD_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_TD_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TD_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
     if not eq ${exit_code} "5"
         code = exit ${exit_code}
     end
     ''']
 
-[tasks.test_py_td-sdk]
+[tasks.test_py_tabsdata]
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -118,11 +106,36 @@ script = [
     cd ${PROJECT_TD_SDK_ROOT}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     else
-        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 ${TESTS_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    end
+    if not eq ${exit_code} "5"
+        code = exit ${exit_code}
+    end
+    ''']
+
+[tasks.test_py_tabsdata_salesforce]
+private = true
+dependencies = ["set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+    compile = get_env TD_COMPILE
+
+    cd ${PROJECT_TABSDATA_SALESFORCE_ROOT}
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    else
+        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
     if not eq ${exit_code} "5"
         code = exit ${exit_code}
@@ -196,8 +209,9 @@ script = [
     exec --fail-on-error python3 setup.py --quiet develop --script-dir target/pytest/build
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
-    debug "🚀 python3 ${PROJECT_TD_SDK_ROOT}/tests/bootest.py"
-    output = exec python3 ${PROJECT_TD_SDK_ROOT}/tests/bootest.py
+    debug "🚀 python3 ${PROJECT_TD_SDK_ROOT}/tests_tabsdata/bootest.py"
+    output = exec --fail-on-error python3 ${PROJECT_TD_SDK_ROOT}tests_tabsdata/bootest.py
+    debug "📦 The received pythonpath is ${output.stdout}"
     pythonpath = set ${output.stdout}
     debug "✅ Python system path will be added: ${pythonpath}"
     old_pythonpath = get_env PYTHONPATH

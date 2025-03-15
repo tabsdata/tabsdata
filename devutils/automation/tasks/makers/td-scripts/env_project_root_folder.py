@@ -36,10 +36,17 @@ def env_project_root_folder():
             logging.info(f"Root project folder is: {current_folder}")
             os.environ["ROOT_PROJECT_FOLDER"] = current_folder
             return
+        elif os.path.isfile(os.path.join(current_folder, ".root")):
+            logging.info(f"Root project folder is: {current_folder}")
+            os.environ["ROOT_PROJECT_FOLDER"] = current_folder
+            return
         else:
             parent_folder = os.path.abspath(os.path.join(current_folder, os.pardir))
             if current_folder == parent_folder:
-                raise FileNotFoundError("Current folder not inside a Git repository")
+                raise FileNotFoundError(
+                    "Current folder not inside a Git repository or "
+                    "owned by a .root file"
+                )
             current_folder = parent_folder
 
 

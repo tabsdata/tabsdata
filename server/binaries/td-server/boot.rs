@@ -7,6 +7,7 @@ use td_build::structure::find_workspace_root;
 use toml::Value;
 
 const GIT_FOLDER: &str = ".git";
+pub const ROOT_FILE: &str = ".root";
 const CARGO_TOML_FILE: &str = "Cargo.toml";
 
 const TAG_WORKSPACE: &str = "workspace";
@@ -29,7 +30,8 @@ impl Loader for Boot {
 fn set_rust_environment() {
     let root_folder = find_workspace_root();
     let git_dir = root_folder.join(GIT_FOLDER);
-    if git_dir.exists() && git_dir.is_dir() {
+    let root_file = root_folder.join(ROOT_FILE);
+    if git_dir.exists() && git_dir.is_dir() || root_file.exists() && git_dir.is_file() {
         let cargo_toml_file = root_folder.join(CARGO_TOML_FILE);
         if cargo_toml_file.exists() {
             let cargo_toml_content =

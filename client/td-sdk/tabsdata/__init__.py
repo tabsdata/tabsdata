@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 
 from polars import (
@@ -157,9 +158,16 @@ __all__ = [
     UInt64,
 ]
 
-try:
-    from tabsdata_salesforce import SalesforceSource
 
-    __all__.append(SalesforceSource)
-except ImportError:
-    pass
+def _lazy_load_salesforce_source():
+    salesforce_module = importlib.import_module("tabsdata_salesforce")
+    return getattr(salesforce_module, "SalesforceSource")
+
+
+def __getattr__(name):
+    if name == "SalesforceSource":
+        return _lazy_load_salesforce_source()
+    raise AttributeError(f"Module {__name__} has no attribute {name}")
+
+
+__all__.append("SalesforceSource")

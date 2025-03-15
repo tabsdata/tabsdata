@@ -44,8 +44,8 @@ members = [
     "server/libraries/td-test",
     "server/libraries/td-tower",
     "server/libraries/td-transaction",
-    "plugins/rust/td-transaction-interceptor",
-    "plugins/rust/td-interceptor",
+    "extensions/rust/td-transaction-interceptor",
+    "extensions/rust/td-interceptor",
     "server/binaries/td-server",
 ]
 exclude = [
@@ -168,7 +168,7 @@ version = "0.9.2"
 path = "server/libraries/td-execution"
 
 [workspace.dependencies.td-interceptor]
-path = "plugins/rust/td-interceptor"
+path = "extensions/rust/td-interceptor"
 
 [workspace.dependencies.td-interceptor-api]
 path = "server/libraries/td-interceptor-api"
@@ -205,7 +205,7 @@ path = "server/libraries/td-tower"
 path = "server/libraries/td-transaction"
 
 [workspace.dependencies.td-transaction-interceptor]
-path = "plugins/rust/td-transaction-interceptor"
+path = "extensions/rust/td-transaction-interceptor"
 
 # External dependencies
 

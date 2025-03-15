@@ -15,6 +15,7 @@ from setuptools.command.build import build as _build
 from setuptools.command.sdist import sdist as _sdist
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
+# noinspection DuplicatedCode
 if platform.python_implementation() != "CPython":
     raise RuntimeError("The Tabsdata package requires CPython to function correctly.")
 
@@ -137,7 +138,7 @@ datafiles = [
 print(f"Including tabsdata binaries: {datafiles}")
 
 # noinspection DuplicatedCode
-print(f"Current path in bootest is {Path.cwd()}")
+print(f"Current path in setup is {Path.cwd()}")
 variant_assets_folder = os.path.join("variant", "assets")
 client_assets_folder = os.path.join("client", "td-sdk", "tabsdata", "assets")
 print(f"Copying contents of {variant_assets_folder} to {client_assets_folder}")
@@ -257,7 +258,7 @@ setup(
         ),
         # ToDo: this requires being revisited for a cleaner and more pythonic approach
         *find_packages(
-            where=os.path.join("plugins", "python", "td-lib"),
+            where=os.path.join("extensions", "python", "td-lib"),
             exclude=[
                 "tests",
                 "tests.*",
@@ -279,14 +280,35 @@ setup(
         ),
     ],
     package_dir={
-        "ta_interceptor": os.path.join("client", "td-lib", "ta_interceptor"),
-        "td_features": os.path.join("client", "td-lib", "td_features"),
-        "tabsdata": os.path.join("client", "td-sdk", "tabsdata"),
-        "tabsserver": os.path.join("client", "td-sdk", "tabsserver"),
-        "tabsserver.function_execution": os.path.join(
-            "client", "td-sdk", "tabsserver", "function_execution"
+        "ta_interceptor": os.path.join(
+            "client",
+            "td-lib",
+            "ta_interceptor",
         ),
-        "td_interceptor": os.path.join("plugins", "python", "td-lib", "td_interceptor"),
+        "td_features": os.path.join(
+            "client",
+            "td-lib",
+            "td_features",
+        ),
+        "tabsdata": os.path.join(
+            "client",
+            "td-sdk",
+            "tabsdata",
+        ),
+        "tabsserver": os.path.join(
+            "client",
+            "td-sdk",
+            "tabsserver",
+        ),
+        "tabsserver.function_execution": os.path.join(
+            "client",
+            "td-sdk",
+            "tabsserver",
+            "function_execution",
+        ),
+        "td_interceptor": os.path.join(
+            "extensions", "python", "td-lib", "td_interceptor"
+        ),
     },
     package_data={
         "tabsdata": [

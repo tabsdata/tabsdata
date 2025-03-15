@@ -13,7 +13,7 @@ Copyright 2025 Tabs Data Inc.
 To report bugs and to request new features please use
 [Github Issues](https://github.com/tabsdata/tabsdata/issues).
 
-Before creating a bug report or a feature request, please check the
+Before creating a bug report or a feature request, please check
 if the issue has already been reported. If it has, please add a comment
 to the original issue.
 

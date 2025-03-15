@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::descriptor::GIT_FOLDER;
+use crate::descriptor::{GIT_FOLDER, ROOT_FILE};
 use duct::cmd;
 use std::path::PathBuf;
 
@@ -21,6 +21,10 @@ pub fn find_workspace_root() -> PathBuf {
             PathBuf::from(current_path)
         });
     loop {
+        let root_file = current_dir.join(ROOT_FILE);
+        if root_file.exists() && root_file.is_file() {
+            return current_dir;
+        }
         let git_dir = current_dir.join(GIT_FOLDER);
         if git_dir.exists() && git_dir.is_dir() {
             return current_dir;
