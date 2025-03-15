@@ -9,6 +9,7 @@ use td_common::server::{Callback, HttpCallbackBuilder};
 use td_error::td_error;
 use td_error::TdError;
 use td_objects::datasets::dao::DsReadyToExecute;
+use td_objects::rest_urls::{BASE_URL, UPDATE_DATA_VERSION};
 use td_tower::extractors::{Input, SrvCtx};
 use url::Url;
 
@@ -17,10 +18,12 @@ pub async fn build_execution_callback(
     Input(ds): Input<DsReadyToExecute>,
 ) -> Result<Callback, TdError> {
     // This is loopback address, because this endpoint is only available to the server.
+    let endpoint = UPDATE_DATA_VERSION.replace("{data_version_id}", ds.data_version());
     let callback_url = format!(
-        "http://127.0.0.1:{}/data_version/{}",
+        "http://127.0.0.1:{}{}{}",
         server_url.port(),
-        ds.data_version()
+        BASE_URL,
+        endpoint
     );
     let callback_url = Url::parse(&callback_url).map_err(UrlParseError::ParseError)?;
 

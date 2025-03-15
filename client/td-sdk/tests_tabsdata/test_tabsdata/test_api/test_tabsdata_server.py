@@ -11,7 +11,7 @@ import polars as pl
 import pytest
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, API_SERVER_URL
 
-from tabsdata.api.api_server import APIServerError
+from tabsdata.api.api_server import BASE_API_URL, APIServerError
 from tabsdata.api.tabsdata_server import (
     Collection,
     Commit,
@@ -35,7 +35,7 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.requires_internet
 def test_tabsdata_server_create():
     tabsdata_server = TabsdataServer(API_SERVER_URL, "admin", "tabsdata")
-    real_url = f"http://{API_SERVER_URL}"
+    real_url = f"http://{API_SERVER_URL}{BASE_API_URL}"
     assert tabsdata_server.connection.url == real_url
 
 

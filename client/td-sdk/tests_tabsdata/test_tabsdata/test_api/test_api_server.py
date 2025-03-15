@@ -7,7 +7,12 @@ import hashlib
 import pytest
 from tests_tabsdata.conftest import API_SERVER_URL
 
-from tabsdata.api.api_server import APIServer, APIServerError, obtain_connection
+from tabsdata.api.api_server import (
+    BASE_API_URL,
+    APIServer,
+    APIServerError,
+    obtain_connection,
+)
 
 FUNCTION_TESTING_Collection_NAME = "function_testing_collection"
 FUNCTION_TESTING_Collection_DESCRIPTION = "function_testing_collection_description"
@@ -23,7 +28,7 @@ def calculate_sha256(binary_data: bytes) -> str:
 @pytest.mark.requires_internet
 def test_obtain_connection():
     connection = obtain_connection(API_SERVER_URL, "admin", "tabsdata")
-    real_url = f"http://{API_SERVER_URL}"
+    real_url = f"http://{API_SERVER_URL}{BASE_API_URL}"
     assert connection.url == real_url
     assert connection.bearer_token is not None
     assert connection.refresh_token is not None
