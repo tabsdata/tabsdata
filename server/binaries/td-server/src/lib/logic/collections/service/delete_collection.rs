@@ -44,6 +44,7 @@ impl DeleteCollectionService {
             ))
             .layer(from_fn(find_by_name::<CollectionName, Collection>))
             .layer(from_fn(extract_collection_id::<Collection>))
+            // TODO delete permissions with this collection
             .layer(from_fn(delete_collection_contents))
             .layer(from_fn(delete_collection_sql_delete))
             .service(ServiceReturn)

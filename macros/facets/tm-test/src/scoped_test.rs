@@ -119,7 +119,7 @@ fn sqlx_test(func_sig: &Signature, args: Option<SqlxArguments>) -> InnerFnSetup 
                 .collect::<Vec<_>>();
             (migrator, fixtures)
         }
-        None => (quote! {}, vec![]),
+        None => (quote! { None }, vec![]),
     };
 
     // Check if the function has a DbPool parameter

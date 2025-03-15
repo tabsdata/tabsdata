@@ -43,6 +43,7 @@ impl DeleteUserService {
             .layer(from_fn(find_by_name::<UserName, User>))
             .layer(from_fn(extract_user_id::<User>))
             .layer(from_fn(delete_user_validate))
+            // TODO delete user from user roles
             .layer(from_fn(delete_user_sql_delete))
             .service(ServiceReturn)
             .into_service_provider()

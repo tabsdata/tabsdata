@@ -36,7 +36,7 @@ pub async fn seed_permission(
 
     let permission_entity_type = match permission_type.on_entity_type().starts_with("s") {
         true => PermissionEntityType::try_from("s").unwrap(),
-        false => PermissionEntityType::try_from("r").unwrap(),
+        false => PermissionEntityType::try_from("c").unwrap(),
     };
     builder.entity_type(permission_entity_type);
     builder.entity_id(entity_id);

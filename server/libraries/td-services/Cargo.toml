@@ -57,6 +57,7 @@ tower = { workspace = true }
 
 [dev-dependencies]
 td-objects = { workspace = true, features = ["td-test"] }
+td-test = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
