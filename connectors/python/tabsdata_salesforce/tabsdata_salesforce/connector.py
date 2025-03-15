@@ -7,9 +7,14 @@ import logging
 import os
 from typing import List
 
-import polars as pl
-from dateutil import parser
-from simple_salesforce import Salesforce, api
+try:
+    import polars as pl
+    from dateutil import parser
+    from simple_salesforce import Salesforce, api
+
+    MISSING_LIBRARIES = False
+except ImportError:
+    MISSING_LIBRARIES = True
 
 from tabsdata.io.plugin import SourcePlugin
 from tabsdata.secret import DirectSecret, EnvironmentSecret, HashiCorpSecret, Secret
@@ -35,6 +40,11 @@ class SalesforceSource(SourcePlugin):
         initial_last_modified: str = None,
         api_version: str = None,
     ):
+        if MISSING_LIBRARIES:
+            raise ImportError(
+                "The 'tabsdata_salesforce' package is missing some dependencies. You "
+                "can get them by running 'pip install tabsdata['salesforce']'"
+            )
         self.username = username
         self.password = password
         self.security_token = security_token
