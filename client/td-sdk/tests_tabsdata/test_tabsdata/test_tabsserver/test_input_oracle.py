@@ -14,6 +14,7 @@ from tests_tabsdata.conftest import (
     DB_HOST,
     DB_PASSWORD,
     DB_USER,
+    LOCAL_PACKAGES_LIST,
     ORACLE_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
@@ -54,7 +55,7 @@ LOCAL_DEV_FOLDER = os.path.join(
 def test_input_oracle(testing_oracle, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_oracle, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_oracle, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -111,7 +112,7 @@ def test_input_oracle_initial_values(testing_oracle, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_oracle_initial_values,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -175,7 +176,7 @@ def test_input_oracle_initial_values_stored_number_0(testing_oracle, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_oracle_initial_values,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -245,7 +246,7 @@ def test_input_oracle_initial_values_stored_number_2(testing_oracle, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_oracle_initial_values,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 

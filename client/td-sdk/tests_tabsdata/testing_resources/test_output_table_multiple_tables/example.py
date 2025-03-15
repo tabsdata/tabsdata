@@ -37,6 +37,6 @@ if __name__ == "__main__":
     os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
     create_bundle_archive(
         output_table_multiple_tables,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=DEFAULT_SAVE_LOCATION,
     )

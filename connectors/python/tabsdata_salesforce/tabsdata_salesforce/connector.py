@@ -11,14 +11,14 @@ import polars as pl
 from dateutil import parser
 from simple_salesforce import Salesforce, api
 
-import tabsdata as td
-from tabsdata.secret import Secret
+from tabsdata.io.plugin import SourcePlugin
+from tabsdata.secret import DirectSecret, EnvironmentSecret, HashiCorpSecret, Secret
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class SalesforceSource(td.SourcePlugin):
+class SalesforceSource(SourcePlugin):
 
     LAST_MODIFIED_COLUMN = "SystemModstamp"
     DATE_FORMAT = "%Y-%m-%dT%H:%M:%S.%f%z"
@@ -26,11 +26,9 @@ class SalesforceSource(td.SourcePlugin):
 
     def __init__(
         self,
-        username: str | td.HashiCorpSecret | td.DirectSecret | td.EnvironmentSecret,
-        password: str | td.HashiCorpSecret | td.DirectSecret | td.EnvironmentSecret,
-        security_token: (
-            str | td.HashiCorpSecret | td.DirectSecret | td.EnvironmentSecret
-        ),
+        username: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
+        password: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
+        security_token: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
         query: str | List[str],
         instance_url: str = None,
         include_deleted: bool = False,
@@ -84,18 +82,18 @@ class SalesforceSource(td.SourcePlugin):
     @property
     def username(
         self,
-    ) -> td.HashiCorpSecret | td.DirectSecret | td.EnvironmentSecret:
+    ) -> HashiCorpSecret | DirectSecret | EnvironmentSecret:
         return self._username
 
     @username.setter
     def username(
         self,
-        username: str | td.HashiCorpSecret | td.DirectSecret | td.EnvironmentSecret,
+        username: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
     ):
         if isinstance(username, Secret):
             self._username = username
         elif isinstance(username, str):
-            self._username = td.DirectSecret(username)
+            self._username = DirectSecret(username)
         else:
             raise TypeError(
                 "The 'username' parameter must be either a string or a "
@@ -105,18 +103,18 @@ class SalesforceSource(td.SourcePlugin):
     @property
     def password(
         self,
-    ) -> td.HashiCorpSecret | td.DirectSecret | td.EnvironmentSecret:
+    ) -> HashiCorpSecret | DirectSecret | EnvironmentSecret:
         return self._password
 
     @password.setter
     def password(
         self,
-        password: str | td.HashiCorpSecret | td.DirectSecret | td.EnvironmentSecret,
+        password: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
     ):
         if isinstance(password, Secret):
             self._password = password
         elif isinstance(password, str):
-            self._password = td.DirectSecret(password)
+            self._password = DirectSecret(password)
         else:
             raise TypeError(
                 "The 'password' parameter must be either a string or a "
@@ -126,20 +124,18 @@ class SalesforceSource(td.SourcePlugin):
     @property
     def security_token(
         self,
-    ) -> td.HashiCorpSecret | td.DirectSecret | td.EnvironmentSecret:
+    ) -> HashiCorpSecret | DirectSecret | EnvironmentSecret:
         return self._security_token
 
     @security_token.setter
     def security_token(
         self,
-        security_token: (
-            str | td.HashiCorpSecret | td.DirectSecret | td.EnvironmentSecret
-        ),
+        security_token: str | HashiCorpSecret | DirectSecret | EnvironmentSecret,
     ):
         if isinstance(security_token, Secret):
             self._security_token = security_token
         elif isinstance(security_token, str):
-            self._security_token = td.DirectSecret(security_token)
+            self._security_token = DirectSecret(security_token)
         else:
             raise TypeError(
                 "The 'security_token' parameter must be either a string or a "
@@ -156,6 +152,7 @@ class SalesforceSource(td.SourcePlugin):
             )
         if using_initial_values:
             self.initial_values.pop("initial_last_modified", None)
+        logger.debug(f"Destination files: {resulting_files}")
         return resulting_files
 
     def _trigger_single_input(
@@ -167,7 +164,7 @@ class SalesforceSource(td.SourcePlugin):
         destination_file = f"{number}.parquet"
         destination_path = os.path.join(working_dir, destination_file)
         res = sf.query_all_iter(query, include_deleted=self.include_deleted)
-        origin_file = f"{number}.csv"
+        origin_file = os.path.join(working_dir, f"{number}.csv")
         with open(origin_file, "w", newline="") as f:
             writer = None
             for rec in res:
@@ -182,12 +179,11 @@ class SalesforceSource(td.SourcePlugin):
                 writer.writerow(rec)
         try:
             pl.scan_csv(origin_file).sink_parquet(destination_path)
+            resulting_files.append(destination_file)
         except pl.exceptions.NoDataError:
             logger.warning(f"No data to write in {destination_file}")
-            pl.DataFrame({}).write_parquet(destination_path)
+            resulting_files.append(None)
         logger.info(f"Query number {number} finished")
-        resulting_files.append(destination_file)
-        logger.debug(f"Destination files: {resulting_files}")
         if using_initial_values:
             self.initial_values[f"initial_last_modified_{number}"] = max_date
 

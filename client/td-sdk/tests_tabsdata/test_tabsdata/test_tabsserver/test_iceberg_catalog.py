@@ -11,6 +11,7 @@
 # import pytest
 # from pyiceberg.catalog import load_catalog
 # from tests_tabsdata.conftest import (
+#     LOCAL_PACKAGES_LIST,
 #     ABSOLUTE_TEST_FOLDER_LOCATION,
 #     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 #     TESTING_RESOURCES_FOLDER,
@@ -59,7 +60,7 @@
 #     ]
 #     context_archive = create_bundle_archive(
 #         output_file_catalog,
-#         local_packages=ROOT_PROJECT_DIR,
+#         local_packages=LOCAL_PACKAGES_LIST,
 #         save_location=tmp_path,
 #     )
 #
@@ -174,7 +175,7 @@
 #     ]
 #     context_archive = create_bundle_archive(
 #         output_file_catalog_append,
-#         local_packages=ROOT_PROJECT_DIR,
+#         local_packages=LOCAL_PACKAGES_LIST,
 #         save_location=tmp_path,
 #     )
 #
@@ -292,7 +293,7 @@
 #     ]
 #     context_archive = create_bundle_archive(
 #         output_file_catalog_replace,
-#         local_packages=ROOT_PROJECT_DIR,
+#         local_packages=LOCAL_PACKAGES_LIST,
 #         save_location=tmp_path,
 #     )
 #

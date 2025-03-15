@@ -13,6 +13,7 @@ import yaml
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     DEFAULT_LOGS_FILE,
+    LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
@@ -74,7 +75,9 @@ LOCAL_DEV_FOLDER = os.path.join(
 def test_input_output_dataframe(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_output_dataframe, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_output_dataframe,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -112,7 +115,7 @@ def test_multiple_inputs_multiple_outputs(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         multiple_inputs_multiple_outputs,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -165,7 +168,7 @@ def test_path_to_code(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         path_to_code,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         path_to_code=os.path.join(
             TESTING_RESOURCES_FOLDER,
             "test_path_to_code",
@@ -208,9 +211,9 @@ def test_path_to_code(tmp_path):
 def test_custom_requirements(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     correct_requirements = {
-        PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
+        PYTHON_LOCAL_PACKAGES_KEY: LOCAL_PACKAGES_LIST,
         PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
-        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3"],
+        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3", "simple-salesforce==1.12.6"],
         PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
     correct_custom_requirements_path = os.path.join(
@@ -220,7 +223,7 @@ def test_custom_requirements(tmp_path):
         yaml.dump(correct_requirements, f)
     context_archive = create_bundle_archive(
         custom_requirements,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
         requirements=correct_custom_requirements_path,
     )
@@ -274,9 +277,9 @@ def test_custom_requirements(tmp_path):
 def test_custom_requirements_no_package_version(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     correct_requirements = {
-        PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
+        PYTHON_LOCAL_PACKAGES_KEY: LOCAL_PACKAGES_LIST,
         PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
-        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas"],
+        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas", "simple-salesforce==1.12.6"],
         PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
     correct_custom_requirements_path = os.path.join(
@@ -286,7 +289,7 @@ def test_custom_requirements_no_package_version(tmp_path):
         yaml.dump(correct_requirements, f)
     context_archive = create_bundle_archive(
         custom_requirements,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
         requirements=correct_custom_requirements_path,
     )
@@ -340,9 +343,9 @@ def test_custom_requirements_no_package_version(tmp_path):
 def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     correct_requirements = {
-        PYTHON_LOCAL_PACKAGES_KEY: [ROOT_PROJECT_DIR],
+        PYTHON_LOCAL_PACKAGES_KEY: LOCAL_PACKAGES_LIST,
         PYTHON_VERSION_KEY: f"{sys.version_info.major}.{sys.version_info.minor}",
-        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3"],
+        PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3", "simple-salesforce==1.12.6"],
         PYTHON_INSTALL_DEPENDENCIES_KEY: False,
         PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
@@ -353,7 +356,7 @@ def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
         yaml.dump(correct_requirements, f)
     context_archive = create_bundle_archive(
         custom_requirements,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
         requirements=correct_custom_requirements_path,
     )
@@ -379,7 +382,7 @@ def test_failed_execution_returns_error_code(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         failed_execution_returns_error_code,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -403,7 +406,7 @@ def test_failed_execution_returns_error_code(tmp_path):
 def test_custom_logs_folder(tmp_path):
     context_archive = create_bundle_archive(
         multiple_inputs_multiple_outputs,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
     custom_logs_folder = os.path.join(tmp_path, "custom_logs_folder")
@@ -460,7 +463,7 @@ def test_sequential_runs_no_error(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         multiple_inputs_multiple_outputs,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -517,7 +520,7 @@ def test_sequential_registers_no_error(tmp_path):
     for _ in range(2):
         context_archive = create_bundle_archive(
             multiple_inputs_multiple_outputs,
-            local_packages=ROOT_PROJECT_DIR,
+            local_packages=LOCAL_PACKAGES_LIST,
             save_location=tmp_path,
         )
 
@@ -571,7 +574,7 @@ def test_custom_bin_folder(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         multiple_inputs_multiple_outputs,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -631,7 +634,7 @@ def test_custom_bin_folder(tmp_path):
 def test_relative_import(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        relative_import, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        relative_import, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -669,7 +672,7 @@ def test_failing_file_in_folder(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         failing_file_in_folder,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)

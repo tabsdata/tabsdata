@@ -60,11 +60,18 @@ def get_binaries_folder():
 
 
 def read_requirements(path):
-    return [
+    requirements = [
         line.strip()
         for line in read(path).split("\n")
         if not line.startswith(('"', "#", "-", "git+"))
     ]
+    if os.environ.get("TD_IGNORE_CONNECTOR_REQUIREMENTS"):
+        requirements = [
+            requirement
+            for requirement in requirements
+            if not requirement.startswith("tabsdata")
+        ]
+    return requirements
 
 
 profile = os.getenv("profile") or os.getenv("PROFILE", "debug")
@@ -209,7 +216,10 @@ setup(
     author="Tabs Data Inc.",
     python_requires=">=3.12",
     install_requires=read_requirements("requirements.txt"),
-    extras_require={"test": read_requirements("requirements-dev.txt")},
+    extras_require={
+        "salesforce": read_requirements("requirements-salesforce.txt"),
+        "test": read_requirements("requirements-dev.txt"),
+    },
     options={
         "bdist_wheel": {
             "python_tag": "py312",

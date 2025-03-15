@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
@@ -57,7 +58,7 @@ def test_output_file_parquet(tmp_path):
     output_file_format_testing.output = td.LocalFileDestination(output_file)
     context_archive = create_bundle_archive(
         output_file_format_testing,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -122,7 +123,7 @@ def test_output_file_multiple_files(tmp_path):
     )
     context_archive = create_bundle_archive(
         output_file_multiple_files,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -194,7 +195,7 @@ def test_output_file_csv(tmp_path):
     )
     context_archive = create_bundle_archive(
         output_file_format_testing,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -252,7 +253,7 @@ def test_output_file_ndjson(tmp_path):
     output_file_format_testing.output = td.LocalFileDestination(output_file)
     context_archive = create_bundle_archive(
         output_file_format_testing,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -317,7 +318,7 @@ def test_output_file_multiple_files_with_none(tmp_path):
     )
     context_archive = create_bundle_archive(
         output_file_multiple_files_with_none,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -383,7 +384,7 @@ def test_output_file_with_none(tmp_path):
     output_file_with_none.output = td.LocalFileDestination(output_file)
     context_archive = create_bundle_archive(
         output_file_with_none,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 

@@ -2,9 +2,6 @@
 #  Copyright 2025 Tabs Data Inc.
 #
 
-#
-#
-
 import io
 import os
 import platform
@@ -62,10 +59,13 @@ setup(
     description="Tabsdata plugin to access Salesforce data.",
     long_description=read("tabsdata_salesforce/README-PyPi.md"),
     long_description_content_type="text/markdown",
-    license_files=(os.path.join("variant", "assets", "manifest", "LICENSE"),),
+    license_files=(
+        os.path.join("..", "..", "..", "variant", "assets", "manifest", "LICENSE"),
+    ),
     author="Tabs Data Inc.",
     python_requires=">=3.12",
-    install_requires=read_requirements("requirements.txt"),
+    install_requires=[],
+    extras_require={"deps": read_requirements("requirements.txt")},
     options={
         "bdist_wheel": {
             "python_tag": "py312",

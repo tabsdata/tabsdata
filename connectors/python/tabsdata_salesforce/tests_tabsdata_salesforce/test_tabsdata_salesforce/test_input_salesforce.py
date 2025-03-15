@@ -11,6 +11,7 @@ import pytest
 from tests_tabsdata.bootest import root_folder
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
     read_json_and_clean,
@@ -49,12 +50,7 @@ def test_input_salesforce(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_salesforce,
-        local_packages=[
-            ROOT_PROJECT_DIR,
-            os.path.join(
-                ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_salesforce"
-            ),
-        ],
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -100,12 +96,7 @@ def test_input_salesforce_initial_values(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_salesforce_initial_values,
-        local_packages=[
-            ROOT_PROJECT_DIR,
-            os.path.join(
-                ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_salesforce"
-            ),
-        ],
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 

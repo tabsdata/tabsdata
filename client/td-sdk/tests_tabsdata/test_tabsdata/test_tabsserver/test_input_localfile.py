@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
@@ -59,9 +60,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-ROOT_PROJECT_DIR = os.path.dirname(
-    os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
-)
 RESPONSE_FOLDER = "response_folder"
 
 LOCAL_DEV_FOLDER = os.path.join(
@@ -74,7 +72,7 @@ LOCAL_DEV_FOLDER = os.path.join(
 def test_input_file_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_file_wildcard, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_file_wildcard, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -112,7 +110,7 @@ def test_input_file_csv_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_file_csv_string_format,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -151,7 +149,7 @@ def test_input_file_parquet_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_file_parquet_string_format,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -191,7 +189,7 @@ def test_input_file_parquet_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_file_parquet_wildcard,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -230,7 +228,7 @@ def test_input_file_csv_separator(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_file_csv_separator,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -270,7 +268,7 @@ def test_input_file_csv_modified_path(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_file_csv_modified_path,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -310,7 +308,7 @@ def test_input_file_csv_modified_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_file_csv_modified_format,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -350,7 +348,7 @@ def test_input_file_log_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_file_log_string_format,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -389,7 +387,9 @@ def test_input_file_log_string_format(tmp_path):
 def test_input_file_log_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_file_log_wildcard, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_file_log_wildcard,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -427,7 +427,7 @@ def test_input_file_ndjson_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_file_ndjson_string_format,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -467,7 +467,7 @@ def test_input_file_ndjson_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_file_ndjson_wildcard,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 

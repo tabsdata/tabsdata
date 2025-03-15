@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
@@ -54,7 +55,7 @@ LOCAL_DEV_FOLDER = os.path.join(
 def test_input_azure_csv(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_azure_csv, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_azure_csv, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -97,7 +98,7 @@ def test_input_azure_csv(tmp_path):
 def test_input_azure_log(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_azure_log, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_azure_log, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -140,7 +141,7 @@ def test_input_azure_log(tmp_path):
 def test_input_azure_parquet(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_azure_parquet, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_azure_parquet, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -183,7 +184,7 @@ def test_input_azure_parquet(tmp_path):
 def test_input_azure_ndjson(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_azure_ndjson, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_azure_ndjson, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)

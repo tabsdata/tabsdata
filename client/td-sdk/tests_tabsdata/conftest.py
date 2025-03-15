@@ -22,9 +22,6 @@ import yaml
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
 
-from tabsdata import HashiCorpSecret
-from tabsdata.utils.tableframe._generators import _id
-
 # The following non-import code must execute early to set up the environment correctly.
 # Suppressing E402 to allow imports after this setup.
 # flake8: noqa: E402
@@ -46,7 +43,9 @@ check_assets()
 import tabsdata.utils.tableframe._constants as td_constants
 from tabsdata.api.api_server import APIServer, APIServerError, obtain_connection
 from tabsdata.api.tabsdata_server import TabsdataServer
+from tabsdata.secret import HashiCorpSecret
 from tabsdata.tabsdatafunction import TableInput, TableOutput
+from tabsdata.utils.tableframe._generators import _id
 from tabsserver.function_execution.sql_utils import MARIADB_COLLATION
 from tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
@@ -77,6 +76,14 @@ HASHICORP_TESTING_SECRET_NAME = "testing_secret_name"
 HASHICORP_TESTING_SECRET_VALUE = "testing_secret_value"
 HASHICORP_TESTING_TOKEN = "testing_token"
 HASHICORP_TESTING_URL = "http://127.0.0.1:8200"
+
+ROOT_PROJECT_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
+)
+LOCAL_PACKAGES_LIST = [
+    ROOT_PROJECT_DIR,
+    os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_salesforce"),
+]
 
 TESTING_AWS_ACCESS_KEY_ID = "TRANSPORTER_AWS_ACCESS_KEY_ID"
 TESTING_AWS_SECRET_ACCESS_KEY = "TRANSPORTER_AWS_SECRET_ACCESS_KEY"

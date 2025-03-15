@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
@@ -72,7 +73,7 @@ LOCAL_DEV_FOLDER = os.path.join(
 def test_input_s3(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_s3, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_s3, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -116,7 +117,7 @@ def test_input_s3_eu_north_region(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_eu_north_region,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -161,7 +162,7 @@ def test_input_s3_environment_secret(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_environment_secret,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -200,7 +201,9 @@ def test_input_s3_environment_secret(tmp_path):
 def test_input_s3_modified_uri(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_s3_modified_uri, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_s3_modified_uri,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -239,7 +242,7 @@ def test_input_s3_explicit_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_explicit_format,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -278,7 +281,7 @@ def test_input_s3_explicit_format(tmp_path):
 def test_input_s3_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        input_s3_wildcard, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        input_s3_wildcard, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -317,7 +320,7 @@ def test_input_s3_select_datetime(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_select_datetime,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -368,7 +371,7 @@ def test_input_s3_select_datetime_stored_valid_last_modified(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_select_datetime,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -425,7 +428,7 @@ def test_input_s3_select_datetime_stored_late_last_modified(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_select_datetime,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -462,7 +465,7 @@ def test_input_s3_uri_list(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_uri_list,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -517,7 +520,7 @@ def test_input_s3_explicit_format_object(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_explicit_format_object,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -558,7 +561,7 @@ def test_input_s3_hashicorp_secret(tmp_path, testing_hashicorp_vault):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_hashicorp_secret,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -599,7 +602,7 @@ def test_input_s3_hashicorp_secret_vault_name(tmp_path, testing_hashicorp_vault)
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         input_s3_hashicorp_secret_vault_name,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 

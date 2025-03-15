@@ -13,6 +13,7 @@ import pytest
 from azure.core.exceptions import ResourceNotFoundError
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
@@ -59,7 +60,7 @@ def test_output_azure_parquet(tmp_path, azure_client):
     output_azure_parquet.output.uri = output_file
     context_archive = create_bundle_archive(
         output_azure_parquet,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -143,7 +144,7 @@ def test_output_azure_csv(tmp_path, azure_client):
     )
     context_archive = create_bundle_archive(
         output_azure_csv,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -224,7 +225,7 @@ def test_output_azure_ndjson(tmp_path, azure_client):
     output_azure_ndjson.output.uri = output_file
     context_archive = create_bundle_archive(
         output_azure_ndjson,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 

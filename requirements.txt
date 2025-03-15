@@ -24,6 +24,7 @@ requests==2.32.3
 rich==13.9.4
 rich-click==1.8.6
 sqlalchemy==2.0.38
+tabsdata_salesforce==0.9.3
 typing_extensions==4.12.2
 uuid-v7==1.0.0
 uv==0.6.3

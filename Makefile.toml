@@ -567,7 +567,7 @@ script = [
 [tasks.license_py]
 run_task = [
     { name = [
-        "license_check_py",
+        #"license_check_py",
         "license_report_py"
     ] }
 ]

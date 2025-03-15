@@ -14,6 +14,7 @@ from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     FAKE_SCHEDULED_TIME,
     FAKE_TRIGGERED_TIME,
+    LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
@@ -55,7 +56,7 @@ def test_output_s3_parquet(tmp_path, s3_client):
     output_s3_parquet.output.uri = output_file
     context_archive = create_bundle_archive(
         output_s3_parquet,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -124,7 +125,7 @@ def test_output_s3_parquet_with_data_version(tmp_path, s3_client):
     output_s3_parquet_with_data_version.output.uri = output_file
     context_archive = create_bundle_archive(
         output_s3_parquet_with_data_version,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
     output_file = output_file.replace("$DATA_VERSION", "fake_dataset_version")
@@ -195,7 +196,7 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client):
     output_s3_parquet_with_export_timestamp.output.uri = output_file
     context_archive = create_bundle_archive(
         output_s3_parquet_with_export_timestamp,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -276,7 +277,7 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client):
     output_s3_parquet_with_trigger_timestamp.output.uri = output_file
     context_archive = create_bundle_archive(
         output_s3_parquet_with_trigger_timestamp,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -358,7 +359,7 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client):
     output_s3_parquet_with_scheduler_timestamp.output.uri = output_file
     context_archive = create_bundle_archive(
         output_s3_parquet_with_scheduler_timestamp,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -442,7 +443,7 @@ def test_output_s3_csv(tmp_path, s3_client):
     )
     context_archive = create_bundle_archive(
         output_s3_csv,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -511,7 +512,7 @@ def test_output_s3_ndjson(tmp_path, s3_client):
     output_s3_ndjson.output.uri = output_file
     context_archive = create_bundle_archive(
         output_s3_ndjson,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 

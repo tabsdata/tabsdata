@@ -152,19 +152,66 @@ def obtain_met_parameters(config, execution_context, working_dir):
         )
         if importer_plugin.initial_values:
             INITIAL_VALUES.returns_values = True
-        if isinstance(resulting_files, str):
-            resulting_files_paths = os.path.join(destination_dir, resulting_files)
-        else:
-            resulting_files_paths = [
-                os.path.join(destination_dir, file) for file in resulting_files
+
+        if isinstance(resulting_files, str) or resulting_files is None:
+            parameters = [
+                import_plugin_file_from_single_element(
+                    destination_dir, resulting_files, working_dir
+                )
             ]
-        source_config = LocalFileSource(path=resulting_files_paths)
-        logger.info(f"Triggering source with config: {source_config}")
-        parameters = trigger_source(source_config, working_dir)
+        elif isinstance(resulting_files, (list, tuple)):
+            parameters = []
+            for element in resulting_files:
+                if isinstance(element, (list, tuple)):
+                    parameters.append(
+                        [
+                            import_plugin_file_from_single_element(
+                                destination_dir, single_element, working_dir
+                            )
+                            for single_element in element
+                        ]
+                    )
+                elif isinstance(element, str) or element is None:
+                    parameters.append(
+                        import_plugin_file_from_single_element(
+                            destination_dir, element, working_dir
+                        )
+                    )
+                else:
+                    logger.error(
+                        f"Invalid type for resulting files: {type(element)}. No data"
+                        " imported."
+                    )
+                    raise TypeError(
+                        f"Invalid type for resulting files: {type(element)}. No data"
+                        " imported."
+                    )
+            logger.debug(
+                f"List of parameters obtained after plugin import: {parameters}"
+            )
+        else:
+            logger.error(
+                f"Invalid type for resulting files: {type(resulting_files)}. No data"
+                " imported."
+            )
+            raise TypeError(
+                f"Invalid type for resulting files: {type(resulting_files)}. No data"
+                " imported."
+            )
     else:
         source_config = build_input(config.get(CONFIG_INPUTS_KEY))
         parameters = trigger_source(source_config, working_dir, execution_context)
     return importer_plugin, input_config, parameters
+
+
+def import_plugin_file_from_single_element(
+    destination_dir, resulting_files: str | None, working_dir
+):
+    if resulting_files is None:
+        return None
+    resulting_files_paths = os.path.join(destination_dir, resulting_files)
+    source_config = LocalFileSource(path=resulting_files_paths)
+    return trigger_source(source_config, working_dir)[0]
 
 
 def convert_tuple_to_list(

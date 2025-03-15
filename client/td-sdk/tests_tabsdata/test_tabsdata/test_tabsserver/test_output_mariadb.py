@@ -15,6 +15,7 @@ from tests_tabsdata.conftest import (
     DB_NAME,
     DB_PASSWORD,
     DB_USER,
+    LOCAL_PACKAGES_LIST,
     MARIADB_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
@@ -65,7 +66,7 @@ LOCAL_DEV_FOLDER = os.path.join(
 def test_output_mariadb_list(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_mariadb_list, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        output_mariadb_list, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -115,7 +116,7 @@ def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         output_mariadb_with_charset,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -161,7 +162,7 @@ def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         output_mariadb_with_collation,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -207,7 +208,7 @@ def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         output_mariadb_driver_provided,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 

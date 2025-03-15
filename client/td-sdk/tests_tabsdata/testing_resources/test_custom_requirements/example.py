@@ -54,6 +54,6 @@ if __name__ == "__main__":
     create_bundle_archive(
         custom_requirements,
         requirements=os.path.join(ABSOLUTE_LOCATION, "custom_requirements.yaml"),
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=DEFAULT_SAVE_LOCATION,
     )

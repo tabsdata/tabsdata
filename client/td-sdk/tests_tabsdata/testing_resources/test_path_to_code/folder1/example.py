@@ -34,7 +34,7 @@ if __name__ == "__main__":
     os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
     create_bundle_archive(
         path_to_code,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         path_to_code=os.path.dirname(ABSOLUTE_LOCATION),
         save_location=DEFAULT_SAVE_LOCATION,
     )

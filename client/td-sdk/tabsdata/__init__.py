@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 
 from polars import (
@@ -27,6 +26,7 @@ from polars import (
     UInt32,
     UInt64,
 )
+from tabsdata_salesforce.connector import SalesforceSource
 
 from tabsdata.api.tabsdata_server import (
     Collection,
@@ -155,18 +155,6 @@ __all__ = [
     UInt16,
     UInt32,
     UInt64,
+    # From tabsdata_salesforce.connector
+    "SalesforceSource",
 ]
-
-
-def _lazy_load_salesforce_source():
-    salesforce_module = importlib.import_module("tabsdata_salesforce")
-    return getattr(salesforce_module, "SalesforceSource")
-
-
-def __getattr__(name):
-    if name == "SalesforceSource":
-        return _lazy_load_salesforce_source()
-    raise AttributeError(f"Module {__name__} has no attribute {name}")
-
-
-__all__.append("SalesforceSource")

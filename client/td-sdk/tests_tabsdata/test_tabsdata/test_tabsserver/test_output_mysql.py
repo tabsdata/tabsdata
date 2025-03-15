@@ -15,6 +15,7 @@ from tests_tabsdata.conftest import (
     DB_NAME,
     DB_PASSWORD,
     DB_USER,
+    LOCAL_PACKAGES_LIST,
     MYSQL_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
@@ -71,7 +72,7 @@ LOCAL_DEV_FOLDER = os.path.join(
 def test_output_sql_list(tmp_path, testing_mysql):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_sql_list, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        output_sql_list, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -121,7 +122,7 @@ def test_output_sql_modified_params(tmp_path, testing_mysql):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         output_sql_modified_params,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -174,7 +175,7 @@ def test_output_sql_wrong_driver_fails(tmp_path, testing_mysql):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         output_sql_wrong_driver_fails,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -207,7 +208,7 @@ def test_output_sql_driver_provided(tmp_path, testing_mysql):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         output_sql_driver_provided,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
@@ -252,7 +253,7 @@ def test_output_sql_driver_provided(tmp_path, testing_mysql):
 def test_output_sql_list_none(tmp_path, testing_mysql):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
-        output_sql_list_none, local_packages=ROOT_PROJECT_DIR, save_location=tmp_path
+        output_sql_list_none, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
@@ -293,7 +294,7 @@ def test_output_sql_none(tmp_path, testing_mysql):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
         output_sql_none,
-        local_packages=ROOT_PROJECT_DIR,
+        local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
 
