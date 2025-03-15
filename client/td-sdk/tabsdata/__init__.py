@@ -53,9 +53,8 @@ from tabsdata.io.input import (
     S3Source,
     TableInput,
 )
-from tabsdata.io.output import (
+from tabsdata.io.output import (  # Catalog,
     AzureDestination,
-    Catalog,
     LocalFileDestination,
     MariaDBDestination,
     MySQLDestination,
@@ -81,7 +80,7 @@ logging.basicConfig(
 
 __all__ = [
     # from tabsdatafunction.py
-    "Catalog",
+    # "Catalog",
     "TabsdataFunction",
     # from tabsdatafunction.py Inputs
     "AzureSource",

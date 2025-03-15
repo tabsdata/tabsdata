@@ -15,7 +15,7 @@ from tabsdata.exceptions import (
     FormatConfigurationError,
     OutputConfigurationError,
 )
-from tabsdata.io.output import Catalog, Output, S3Destination, build_output
+from tabsdata.io.output import Output, S3Destination, build_output
 
 TEST_ACCESS_KEY_ID = "test_access_key_id"
 TEST_SECRET_ACCESS_KEY = "test_secret_access_key"
@@ -51,7 +51,7 @@ def test_all_correct_implicit_format():
             },
             S3Destination.CREDENTIALS_KEY: CREDENTIALS_DICT,
             S3Destination.REGION_KEY: None,
-            S3Destination.CATALOG_KEY: None,
+            #            S3Destination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -75,7 +75,7 @@ def test_all_correct_uri_list():
             },
             S3Destination.CREDENTIALS_KEY: CREDENTIALS_DICT,
             S3Destination.REGION_KEY: None,
-            S3Destination.CATALOG_KEY: None,
+            #            S3Destination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -235,7 +235,7 @@ def test_all_correct_explicit_format():
             },
             S3Destination.CREDENTIALS_KEY: CREDENTIALS_DICT,
             S3Destination.REGION_KEY: None,
-            S3Destination.CATALOG_KEY: None,
+            #            S3Destination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -312,7 +312,7 @@ def test_correct_format_object():
             S3Destination.FORMAT_KEY: {CSVFormat.IDENTIFIER: expected_format},
             S3Destination.CREDENTIALS_KEY: CREDENTIALS_DICT,
             S3Destination.REGION_KEY: None,
-            S3Destination.CATALOG_KEY: None,
+            #            S3Destination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -375,7 +375,7 @@ def test_identifier_string_unchanged():
             },
             S3Destination.CREDENTIALS_KEY: CREDENTIALS_DICT,
             S3Destination.REGION_KEY: None,
-            S3Destination.CATALOG_KEY: None,
+            #            S3Destination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -398,7 +398,7 @@ def test_region():
             },
             S3Destination.CREDENTIALS_KEY: CREDENTIALS_DICT,
             S3Destination.REGION_KEY: region,
-            S3Destination.CATALOG_KEY: None,
+            #            S3Destination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -414,65 +414,65 @@ def test_region_wrong_type_raises_error():
     assert e.value.error_code == ErrorCode.OCE18
 
 
-def test_correct_catalog_implicit_format():
-    catalog = Catalog(
-        definition={
-            "name": "default",
-            "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
-            "warehouse": "file:///tmp/uri",
-        },
-        tables=["output1", "output2"],
-    )
-    uri = "s3://uri/to/data/data.parquet"
-    output = S3Destination(uri, S3_CREDENTIALS, catalog=catalog)
-    assert output.catalog == catalog
-    assert build_output(output.to_dict()).catalog == catalog
-
-
-def test_correct_catalog_explicit_format():
-    catalog = Catalog(
-        definition={
-            "name": "default",
-            "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
-            "warehouse": "file:///tmp/uri",
-        },
-        tables=["output1", "output2"],
-    )
-    uri = "s3://uri/to/data/data"
-    output = S3Destination(uri, S3_CREDENTIALS, catalog=catalog, format=ParquetFormat())
-    assert output.catalog == catalog
-    assert build_output(output.to_dict()).catalog == catalog
-
-
-def test_wrong_format_fails():
-    catalog = Catalog(
-        definition={
-            "name": "default",
-            "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
-            "warehouse": "file:///tmp/uri",
-        },
-        tables=["output1", "output2"],
-    )
-    uri = "s3://uri/to/data/data"
-    output = S3Destination(uri, S3_CREDENTIALS, catalog=catalog, format=ParquetFormat())
-    assert output.catalog == catalog
-    with pytest.raises(OutputConfigurationError) as e:
-        output.format = CSVFormat()
-    assert e.value.error_code == ErrorCode.OCE37
-
-    with pytest.raises(OutputConfigurationError) as e:
-        S3Destination(uri, S3_CREDENTIALS, catalog=catalog, format=CSVFormat())
-    assert e.value.error_code == ErrorCode.OCE37
-
-    output = S3Destination("s3://uri/to/data/data.csv", S3_CREDENTIALS)
-    with pytest.raises(OutputConfigurationError) as e:
-        output.catalog = catalog
-    assert e.value.error_code == ErrorCode.OCE37
-
-
-def test_catalog_wrong_type_raises_exception():
-    uri = "s3://uri/to/data/data.csv"
-    catalog = 42
-    with pytest.raises(OutputConfigurationError) as e:
-        S3Destination(uri, S3_CREDENTIALS, catalog=catalog)
-    assert e.value.error_code == ErrorCode.OCE34
+# def test_correct_catalog_implicit_format():
+#     catalog = Catalog(
+#         definition={
+#             "name": "default",
+#             "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
+#             "warehouse": "file:///tmp/uri",
+#         },
+#         tables=["output1", "output2"],
+#     )
+#     uri = "s3://uri/to/data/data.parquet"
+#     output = S3Destination(uri, S3_CREDENTIALS, catalog=catalog)
+#     assert output.catalog == catalog
+#     assert build_output(output.to_dict()).catalog == catalog
+#
+#
+# def test_correct_catalog_explicit_format():
+#     catalog = Catalog(
+#         definition={
+#             "name": "default",
+#             "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
+#             "warehouse": "file:///tmp/uri",
+#         },
+#         tables=["output1", "output2"],
+#     )
+#     uri = "s3://uri/to/data/data"
+#     output = S3Destination(uri, S3_CREDENTIALS, catalog=catalog, format=ParquetFormat())
+#     assert output.catalog == catalog
+#     assert build_output(output.to_dict()).catalog == catalog
+#
+#
+# def test_wrong_format_fails():
+#     catalog = Catalog(
+#         definition={
+#             "name": "default",
+#             "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
+#             "warehouse": "file:///tmp/uri",
+#         },
+#         tables=["output1", "output2"],
+#     )
+#     uri = "s3://uri/to/data/data"
+#     output = S3Destination(uri, S3_CREDENTIALS, catalog=catalog, format=ParquetFormat())
+#     assert output.catalog == catalog
+#     with pytest.raises(OutputConfigurationError) as e:
+#         output.format = CSVFormat()
+#     assert e.value.error_code == ErrorCode.OCE37
+#
+#     with pytest.raises(OutputConfigurationError) as e:
+#         S3Destination(uri, S3_CREDENTIALS, catalog=catalog, format=CSVFormat())
+#     assert e.value.error_code == ErrorCode.OCE37
+#
+#     output = S3Destination("s3://uri/to/data/data.csv", S3_CREDENTIALS)
+#     with pytest.raises(OutputConfigurationError) as e:
+#         output.catalog = catalog
+#     assert e.value.error_code == ErrorCode.OCE37
+#
+#
+# def test_catalog_wrong_type_raises_exception():
+#     uri = "s3://uri/to/data/data.csv"
+#     catalog = 42
+#     with pytest.raises(OutputConfigurationError) as e:
+#         S3Destination(uri, S3_CREDENTIALS, catalog=catalog)
+#     assert e.value.error_code == ErrorCode.OCE34

@@ -15,7 +15,7 @@ from tabsdata.exceptions import (
     FormatConfigurationError,
     OutputConfigurationError,
 )
-from tabsdata.io.output import AzureDestination, Catalog, Output, build_output
+from tabsdata.io.output import AzureDestination, Output, build_output
 
 TEST_ACCOUNT_NAME = "test_account_name"
 TEST_ACCOUNT_KEY = "test_account_key"
@@ -50,7 +50,7 @@ def test_all_correct_implicit_format():
                 CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
             },
             AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            AzureDestination.CATALOG_KEY: None,
+            #            AzureDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -73,7 +73,7 @@ def test_all_correct_uri_list():
                 CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
             },
             AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            AzureDestination.CATALOG_KEY: None,
+            #            AzureDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -234,7 +234,7 @@ def test_all_correct_explicit_format():
                 CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
             },
             AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            AzureDestination.CATALOG_KEY: None,
+            #            AzureDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -310,7 +310,7 @@ def test_correct_format_object():
             AzureDestination.URI_KEY: [uri],
             AzureDestination.FORMAT_KEY: {CSVFormat.IDENTIFIER: expected_format},
             AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            AzureDestination.CATALOG_KEY: None,
+            #            AzureDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
@@ -372,76 +372,76 @@ def test_identifier_string_unchanged():
                 CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
             },
             AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            AzureDestination.CATALOG_KEY: None,
+            #            AzureDestination.CATALOG_KEY: None,
         }
     }
     assert output.to_dict() == expected_dict
     assert isinstance(build_output(output.to_dict()), AzureDestination)
 
 
-def test_correct_catalog_implicit_format():
-    catalog = Catalog(
-        definition={
-            "name": "default",
-            "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
-            "warehouse": "file:///tmp/uri",
-        },
-        tables=["output1", "output2"],
-    )
-    uri = "az://uri/to/data/data.parquet"
-    output = AzureDestination(uri, AZURE_CREDENTIALS, catalog=catalog)
-    assert output.catalog == catalog
-    assert build_output(output.to_dict()).catalog == catalog
-
-
-def test_correct_catalog_explicit_format():
-    catalog = Catalog(
-        definition={
-            "name": "default",
-            "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
-            "warehouse": "file:///tmp/uri",
-        },
-        tables=["output1", "output2"],
-    )
-    uri = "az://uri/to/data/data"
-    output = AzureDestination(
-        uri, AZURE_CREDENTIALS, catalog=catalog, format=ParquetFormat()
-    )
-    assert output.catalog == catalog
-    assert build_output(output.to_dict()).catalog == catalog
-
-
-def test_wrong_format_fails():
-    catalog = Catalog(
-        definition={
-            "name": "default",
-            "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
-            "warehouse": "file:///tmp/uri",
-        },
-        tables=["output1", "output2"],
-    )
-    uri = "az://uri/to/data/data"
-    output = AzureDestination(
-        uri, AZURE_CREDENTIALS, catalog=catalog, format=ParquetFormat()
-    )
-    assert output.catalog == catalog
-    with pytest.raises(OutputConfigurationError) as e:
-        output.format = CSVFormat()
-    assert e.value.error_code == ErrorCode.OCE37
-
-    with pytest.raises(OutputConfigurationError) as e:
-        AzureDestination(uri, AZURE_CREDENTIALS, catalog=catalog, format=CSVFormat())
-    assert e.value.error_code == ErrorCode.OCE37
-
-    output = AzureDestination("az://uri/to/data/data.csv", AZURE_CREDENTIALS)
-    with pytest.raises(OutputConfigurationError) as e:
-        output.catalog = catalog
-    assert e.value.error_code == ErrorCode.OCE37
-
-
-def test_catalog_wrong_type_raises_exception():
-    uri = "az://uri/to/data/data.csv"
-    catalog = 42
-    with pytest.raises(OutputConfigurationError) as e:
-        AzureDestination(uri, AZURE_CREDENTIALS, catalog=catalog)
-    assert e.value.error_code == ErrorCode.OCE34
+# def test_correct_catalog_implicit_format():
+#     catalog = Catalog(
+#         definition={
+#             "name": "default",
+#             "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
+#             "warehouse": "file:///tmp/uri",
+#         },
+#         tables=["output1", "output2"],
+#     )
+#     uri = "az://uri/to/data/data.parquet"
+#     output = AzureDestination(uri, AZURE_CREDENTIALS, catalog=catalog)
+#     assert output.catalog == catalog
+#     assert build_output(output.to_dict()).catalog == catalog
+#
+#
+# def test_correct_catalog_explicit_format():
+#     catalog = Catalog(
+#         definition={
+#             "name": "default",
+#             "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
+#             "warehouse": "file:///tmp/uri",
+#         },
+#         tables=["output1", "output2"],
+#     )
+#     uri = "az://uri/to/data/data"
+#     output = AzureDestination(
+#         uri, AZURE_CREDENTIALS, catalog=catalog, format=ParquetFormat()
+#     )
+#     assert output.catalog == catalog
+#     assert build_output(output.to_dict()).catalog == catalog
+#
+#
+# def test_wrong_format_fails():
+#     catalog = Catalog(
+#         definition={
+#             "name": "default",
+#             "uri": "sqlite:////tmp/uri/pyiceberg_catalog.db",
+#             "warehouse": "file:///tmp/uri",
+#         },
+#         tables=["output1", "output2"],
+#     )
+#     uri = "az://uri/to/data/data"
+#     output = AzureDestination(
+#         uri, AZURE_CREDENTIALS, catalog=catalog, format=ParquetFormat()
+#     )
+#     assert output.catalog == catalog
+#     with pytest.raises(OutputConfigurationError) as e:
+#         output.format = CSVFormat()
+#     assert e.value.error_code == ErrorCode.OCE37
+#
+#     with pytest.raises(OutputConfigurationError) as e:
+#         AzureDestination(uri, AZURE_CREDENTIALS, catalog=catalog, format=CSVFormat())
+#     assert e.value.error_code == ErrorCode.OCE37
+#
+#     output = AzureDestination("az://uri/to/data/data.csv", AZURE_CREDENTIALS)
+#     with pytest.raises(OutputConfigurationError) as e:
+#         output.catalog = catalog
+#     assert e.value.error_code == ErrorCode.OCE37
+#
+#
+# def test_catalog_wrong_type_raises_exception():
+#     uri = "az://uri/to/data/data.csv"
+#     catalog = 42
+#     with pytest.raises(OutputConfigurationError) as e:
+#         AzureDestination(uri, AZURE_CREDENTIALS, catalog=catalog)
+#     assert e.value.error_code == ErrorCode.OCE34
