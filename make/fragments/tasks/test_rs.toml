@@ -65,7 +65,7 @@ script = [
 
     if eq ${td-cargo} "cross"
         debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging"
-        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging
+        exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logginge
     else
         debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging"
         exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging
@@ -81,7 +81,7 @@ script = [
     !include_files ./make/libraries/log.ds
 
     if eq ${td-cargo} "cross"
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata"
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadatae"
         exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} test %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata
     else
         debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_ROOT_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata"

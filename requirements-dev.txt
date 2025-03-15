@@ -6,33 +6,11 @@
 
 -r requirements.txt
 -r connectors/python/tabsdata_salesforce/requirements.txt
-azure-storage-blob==12.24.1
-black==25.1.0
-boto3==1.37.2
-build
-colorlog==6.9.0
-csvkit==2.0.1
-cx_Oracle==8.3.0
-docker==7.1.0
-flake8==7.1.2
-GitPython==3.1.44
-isort==6.0.1
-liccheck==0.9.2
-licensecheck==2024.3
-matplotlib==3.10.0
-mkdocs==1.6.1
-mimesis==18.0.0
-mysql-connector-python==9.2.0
-oracledb==2.5.1
-pdoc==15.0.1
-pipdeptree==2.25.0
-psycopg2-binary==2.9.10
-pytest==8.3.4
-pytest-check==2.5.0
-pytest-cov==6.0.0
-pytest-xdist==3.6.1
-python-dateutil==2.9.0.post0
-setuptools
-tabsdata_salesforce[deps]==0.9.3
-tabulate==0.9.0
-wheel
+
+# Third-party dependencies
+
+-r requirements-dev-third-party.txt_
+
+# First-party dependencies
+
+-r requirements-dev-first-party.txt_

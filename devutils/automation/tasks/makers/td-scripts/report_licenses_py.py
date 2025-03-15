@@ -32,7 +32,7 @@ logger = load("log").get_logger()
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-TARGET_DIR = os.path.join(".", "target", "audit")
+TARGET_DIR = os.path.join("..", "target", "audit")
 TARGET_FILE = os.path.join(TARGET_DIR, "licenses_py.txt")
 
 normalized_licenses = {

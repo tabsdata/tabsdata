@@ -204,9 +204,18 @@ script = [
     !include_files ./make/libraries/log.ds
 
     debug "🔷 _____ Setting up tabsdata pytest context..."
+
+    debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata)..."
     debug "🚀 python3 setup.py --quiet develop --script-dir target/pytest/build"
     set_env PYTHONWARNINGS ignore
     exec --fail-on-error python3 setup.py --quiet develop --script-dir target/pytest/build
+
+    debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata_salesforce)..."
+    cd connectors/python/tabsdata_salesforce
+    debug "🚀 python3 setup.py --quiet develop --script-dir target/pytest/build"
+    set_env PYTHONWARNINGS ignore
+    exec --fail-on-error python3 setup.py --quiet develop --script-dir target/pytest/build
+    cd ../../..
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
     debug "🚀 python3 ${PROJECT_TD_SDK_ROOT}/tests_tabsdata/bootest.py"

@@ -1,0 +1,5 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+-e devutils/automation/tasks/python/td_setup

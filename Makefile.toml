@@ -578,16 +578,21 @@ cwd = "${PROJECT_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/report_licenses_py.py
+    exec --fail-on-error pip-compile ./requirements-third-party-all.txt_ --output-file ./target/requirements.txt
+    cd target
+    exec --fail-on-error python ../devutils/automation/tasks/makers/td-scripts/report_licenses_py.py
     ''']
 
 [tasks.license_check_py]
 private = true
 cwd = "${PROJECT_ROOT_FOLDER}"
+script_runner = "@duckscript"
 script = [
     '''
-    liccheck -s ./.cargo/liccheck.cfg -r requirements.txt
-    licensecheck -u requirements:requirements.txt
+    exec --fail-on-error pip-compile ./requirements-third-party-all.txt_ --output-file ./target/requirements.txt
+    cd target
+    exec --fail-on-error licensecheck -u requirements:requirements.txt
+    cd ..
     ''']
 
 [tasks.sourcetrack]
