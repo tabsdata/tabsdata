@@ -71,6 +71,7 @@ path = "src/lib/lib.rs"
 
 [features]
 
+api-docs = []
 enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []

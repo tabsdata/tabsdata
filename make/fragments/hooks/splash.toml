@@ -1,0 +1,43 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.splash]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    os_family = os_family
+    if eq ${os_family} "windows"
+        cm_run_task splash_windows
+    else
+        if eq ${os_family} "mac"
+            cm_run_task splash_mac
+        else
+            if eq ${os_family} "linux"
+                cm_run_task splash_linux
+            end
+        end
+    end
+    ''']
+
+[tasks.splash_windows]
+ignore_errors = true
+condition = { env = { MAKE_SUCCESS = "true" } }
+
+[tasks.splash_linux]
+ignore_errors = true
+condition = { env = { MAKE_SUCCESS = "true" } }
+
+[tasks.splash_mac]
+ignore_errors = true
+condition = { env = { MAKE_SUCCESS = "true" } }
+script = [
+    '''
+    if command -v viu &> /dev/null; then
+        echo
+        viu --width 32 ${ROOT_PROJECT_FOLDER}/make/resources/images/tabsdata.png
+        echo
+    fi
+    ''']

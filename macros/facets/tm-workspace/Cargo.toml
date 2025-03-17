@@ -36,6 +36,7 @@ dummy = []
 # External dependencies
 
 quote = { workspace = true }
+rand = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

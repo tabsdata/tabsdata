@@ -9,6 +9,7 @@ mod data;
 pub mod execution;
 pub mod functions;
 mod jwt_login;
+#[cfg(feature = "api-docs")]
 mod openapi;
 pub mod permissions;
 pub mod roles;

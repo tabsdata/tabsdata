@@ -6,15 +6,16 @@
 description = "Task 'clean' for Python projects"
 run_task = [
     { name = [
-        "clean_py_tabsdata",
+        "clean_py_root",
         "clean_py_td_features",
         "clean_py_ta_interceptor",
         "clean_py_td_interceptor",
-        "clean_py_td-sdk"
+        "clean_py_tabsdata",
+        "clean_py_tabsdata_salesforce",
     ] }
 ]
 
-[tasks.clean_py_tabsdata]
+[tasks.clean_py_root]
 private = true
 command = "python3"
 args = ["${CLEAN_PYTHON_PY}", "${PROJECT_ROOT_FOLDER}", "py"]
@@ -22,19 +23,24 @@ args = ["${CLEAN_PYTHON_PY}", "${PROJECT_ROOT_FOLDER}", "py"]
 [tasks.clean_py_td_features]
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_FEATURES_ROOT}", "py"]
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_FEATURES_FOLDER}", "py"]
 
 [tasks.clean_py_ta_interceptor]
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TA_INTERCEPTOR_ROOT}", "py"]
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TA_INTERCEPTOR_FOLDER}", "py"]
 
 [tasks.clean_py_td_interceptor]
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_INTERCEPTOR_ROOT}", "py"]
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_INTERCEPTOR_FOLDER}", "py"]
 
-[tasks.clean_py_td-sdk]
+[tasks.clean_py_tabsdata]
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_SDK_ROOT}", "py"]
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_SDK_FOLDER}", "py"]
+
+[tasks.clean_py_tabsdata_salesforce]
+private = true
+command = "python3"
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TABSDATA_SALESFORCE_FOLDER}", "py"]

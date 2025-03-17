@@ -66,12 +66,19 @@ macro_rules! routers {
 macro_rules! api_server {
     ($fn_name:ident {
         $(addresses => $addresses:expr,)?
-        $(openapi => $openapi_file:ident,)?
+        $(base_url => $base_url:expr,)?
+
+        $(
+            $(#[cfg(feature = $feature:literal)])?
+            openapi => $openapi_file:ident,
+        )?
+
         $(router => { $($router_file:ident => {
             $(config ($($router_config:expr ),*))?
             $(,)?
             $(state ($($router_state:expr ),*))?
         }),* $(,)? }
+
         $(.layer => $layer:expr)*),* $(,)?}
     $(.layer => $general_layer:expr $(,)?)*
     ) => {
@@ -92,12 +99,15 @@ macro_rules! api_server {
             $(
                 router = router.layer($general_layer);
             )*
+            $(
+                router = axum::Router::new().nest($base_url, router);
+            )?
 
-            let router = axum::Router::new()
-                $(
-                    .merge($openapi_file::router())
-                )?
-                .nest(td_objects::rest_urls::BASE_URL, router);
+            $(
+                $(#[cfg(feature = $feature)])? {
+                    router = router.merge($openapi_file::router());
+                }
+            )?
 
             let mut addresses_if_any = Vec::new();
             $(
@@ -117,7 +127,6 @@ mod tests {
     use axum::body::{to_bytes, Body};
     use axum::Router;
     use reqwest::Client;
-    use td_objects::rest_urls::BASE_URL;
     use tower::ServiceExt;
 
     use crate::logic::apisrv::api_macros::tests::test::Server;
@@ -185,12 +194,7 @@ mod tests {
 
         let client = Client::new();
         let response = client
-            .get(format!(
-                "http://{}:{}{}/test",
-                addr.ip(),
-                addr.port(),
-                BASE_URL,
-            ))
+            .get(format!("http://{}:{}/test", addr.ip(), addr.port()))
             .send()
             .await
             .expect("Failed to send request");

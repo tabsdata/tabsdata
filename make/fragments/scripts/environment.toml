@@ -216,5 +216,5 @@ env_scripts = [
     tdx = join_path ${tmp_dir} ${tmp_folder} tdx
     set_env TDX ${tdx}
     TDX = get_env TDX
-    debug "✅ Using TDX temprary folder: '${TDX}'"
+    debug "✅ Using TDX temporary folder: '${TDX}'"
     ''']

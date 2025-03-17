@@ -28,7 +28,7 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd "${PROJECT_TD_FEATURES_ROOT}"
+    cd "${PROJECT_TD_FEATURES_FOLDER}"
 
     if eq ${verbose} "false"
         debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TD_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
@@ -53,7 +53,7 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd "${PROJECT_TA_INTERCEPTOR_ROOT}"
+    cd "${PROJECT_TA_INTERCEPTOR_FOLDER}"
 
     if eq ${verbose} "false"
         debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TA_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
@@ -78,7 +78,7 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd ${PROJECT_TD_INTERCEPTOR_ROOT}
+    cd ${PROJECT_TD_INTERCEPTOR_FOLDER}
 
     if eq ${verbose} "false"
         debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TD_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
@@ -103,7 +103,7 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd ${PROJECT_TD_SDK_ROOT}
+    cd ${PROJECT_TD_SDK_FOLDER}
 
     if eq ${verbose} "false"
         debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
@@ -128,7 +128,7 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd ${PROJECT_TABSDATA_SALESFORCE_ROOT}
+    cd ${PROJECT_TABSDATA_SALESFORCE_FOLDER}
 
     if eq ${verbose} "false"
         debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
@@ -218,8 +218,8 @@ script = [
     cd ../../..
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
-    debug "🚀 python3 ${PROJECT_TD_SDK_ROOT}/tests_tabsdata/bootest.py"
-    output = exec --fail-on-error python3 ${PROJECT_TD_SDK_ROOT}tests_tabsdata/bootest.py
+    debug "🚀 python3 ${PROJECT_TD_SDK_FOLDER}/tests_tabsdata/bootest.py"
+    output = exec --fail-on-error python3 ${PROJECT_TD_SDK_FOLDER}tests_tabsdata/bootest.py
     debug "📦 The received pythonpath is ${output.stdout}"
     pythonpath = set ${output.stdout}
     debug "✅ Python system path will be added: ${pythonpath}"
@@ -241,7 +241,13 @@ script = [
     debug "🔷 _____ Setting up tabsdata development package mode..."
     set_env TD_TABSDATA_DEV_PKG ${PROJECT_ROOT_FOLDER}
     set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
-    debug "🔅 Tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
+    debug "🔅 tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
+
+    debug "🔷 _____ Setting up tabsdata_salesforce development package mode..."
+    set_env TD_TABSDATA_SALESFORCE_DEV_PKG ${PROJECT_TABSDATA_SALESFORCE_FOLDER}
+    set_td_tabsdata_salesforce_dev_pkg = get_env TD_TABSDATA_SALESFORCE_DEV_PKG
+    debug "🔅 tabsdata_salesforce development python package location set to: ${set_td_tabsdata_salesforce_dev_pkg}"
+
     ''']
 
 [tasks.start_pytest_tabsdata]

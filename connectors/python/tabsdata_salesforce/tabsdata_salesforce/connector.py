@@ -43,7 +43,7 @@ class SalesforceSource(SourcePlugin):
         if MISSING_LIBRARIES:
             raise ImportError(
                 "The 'tabsdata_salesforce' package is missing some dependencies. You "
-                "can get them by running 'pip install tabsdata['salesforce']'"
+                "can get them by installing 'tabsdata['salesforce']'"
             )
         self.username = username
         self.password = password

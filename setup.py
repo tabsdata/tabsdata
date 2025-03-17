@@ -18,7 +18,13 @@ from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 # noinspection DuplicatedCode
 TD_IGNORE_CONNECTOR_REQUIREMENTS = "TD_IGNORE_CONNECTOR_REQUIREMENTS"
 
+TD_SKIP_NON_EXISTING_ASSETS = "TD_SKIP_NON_EXISTING_ASSETS"
+
 TABSDATA_PACKAGES_PREFIX = "tabsdata_"
+
+TRUE_VALUES = {"1", "true", "yes", "y", "on"}
+
+THIRD_PARTY_connectors = "THIRD-PARTY_connectors"
 
 
 class CustomBuild(_build):
@@ -102,6 +108,7 @@ def get_binaries_folder():
         return "bin"
 
 
+# noinspection DuplicatedCode
 def read_requirements(path, visited=None):
     if visited is None:
         visited = set()
@@ -128,11 +135,13 @@ def read_requirements(path, visited=None):
             for requirement in requirements
             if not requirement.startswith(TABSDATA_PACKAGES_PREFIX)
         ]
+    print("📦 List of application requirements in setup.py:")
     for requirement in requirements:
-        print(f" - {requirement}")
+        print(f" - 📚 {requirement}")
     return requirements
 
 
+# noinspection DuplicatedCode
 if platform.python_implementation() != "CPython":
     raise RuntimeError("The Tabsdata package requires CPython to function correctly.")
 
@@ -147,22 +156,17 @@ print(f"Using tabsdata target: '{td_target}'")
 target_release_folder = os.path.join("target", td_target, profile)
 print(f"Using tabsdata target release folder: '{target_release_folder}'")
 
-REQUIRE_SERVER_BINARIES = os.getenv("REQUIRE_SERVER_BINARIES", "False").lower() in (
-    "1",
-    "true",
-    "yes",
-    "y",
-    "on",
+REQUIRE_SERVER_BINARIES = (
+    os.getenv("REQUIRE_SERVER_BINARIES", "False").lower() in TRUE_VALUES
 )
 
-REQUIRE_THIRD_PARTY = os.getenv("REQUIRE_THIRD_PARTY", "False").lower() in (
-    "1",
-    "true",
-    "yes",
-    "y",
-    "on",
+REQUIRE_THIRD_PARTY = os.getenv("REQUIRE_THIRD_PARTY", "False").lower() in TRUE_VALUES
+
+TD_SKIP_NON_EXISTING_ASSETS = (
+    os.getenv("TD_SKIP_NON_EXISTING_ASSETS", "False").lower() in TRUE_VALUES
 )
 
+# noinspection DuplicatedCode
 base_binaries = [
     "apisrv",
     "bootloader",
@@ -172,6 +176,7 @@ base_binaries = [
     "transporter",
 ]
 
+# noinspection DuplicatedCode
 binaries = [
     binary
     for base in base_binaries
@@ -205,9 +210,26 @@ print(f"Including tabsdata binaries: {datafiles}")
 # noinspection DuplicatedCode
 print(f"Current path in setup is {Path.cwd()}")
 
-variant_assets_folder = os.path.join("variant", "assets")
-client_assets_folder = os.path.join("client", "td-sdk", "tabsdata", "assets")
-print(f"Copying contents of {variant_assets_folder} to {client_assets_folder}")
+assets_folder = os.path.join(
+    "assets",
+)
+third_party_connectors = os.path.join(
+    assets_folder,
+    "manifest",
+    THIRD_PARTY_connectors,
+)
+variant_assets_folder = os.path.join(
+    "variant",
+    "assets",
+)
+package_assets_folder = os.path.join(
+    "client",
+    "td-sdk",
+    "tabsdata",
+    "assets",
+)
+# noinspection DuplicatedCode
+print(f"Copying contents of {variant_assets_folder} to {package_assets_folder}")
 if (
     not os.path.exists(os.path.join(variant_assets_folder, "manifest", "THIRD-PARTY"))
     and REQUIRE_THIRD_PARTY
@@ -215,10 +237,27 @@ if (
     raise FileNotFoundError(
         f"The THIRD-PARTY file is missing in {variant_assets_folder}."
     )
-shutil.copytree(variant_assets_folder, client_assets_folder, dirs_exist_ok=True)
+
+try:
+    shutil.copytree(variant_assets_folder, package_assets_folder, dirs_exist_ok=True)
+except Exception as e:
+    print(
+        f"🦠 Warning: Failed to copy {variant_assets_folder} to"
+        f" {package_assets_folder}: {e}"
+    )
+    if not TD_SKIP_NON_EXISTING_ASSETS:
+        print(
+            "🦠 Raising error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
+            f" {TD_SKIP_NON_EXISTING_ASSETS}"
+        )
+        raise
+    else:
+        print(
+            "🦠 Ignoring error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
+            f" {TD_SKIP_NON_EXISTING_ASSETS}"
+        )
 
 os.makedirs(os.path.join("target", "python", "egg"), exist_ok=True)
-
 
 setup(
     name="tabsdata",

@@ -55,7 +55,6 @@ mod endpoint {
 
 mod counter {
     use std::sync::Arc;
-
     use tokio::sync::Mutex;
 
     pub type CounterState = Arc<Mutex<Counter>>;

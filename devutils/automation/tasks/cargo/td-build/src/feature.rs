@@ -24,6 +24,9 @@ const MANIFEST_FILE: &str = "Manifest.toml";
 
 const FEATURE_FILE: &str = "feature.yaml";
 
+const ENV_TD_DISABLE_OPENAPI_DOCS_ENDPOINT: &str = "TD_DISABLE_OPENAPI_DOCS_ENDPOINT";
+const ENABLE_API_DOCS_FEATURE: &str = "api-docs";
+
 #[derive(Debug)]
 struct Feature {
     features: Vec<String>,
@@ -52,6 +55,13 @@ pub fn set_cargo_features() -> Result<(), Box<dyn Error>> {
             println!("{}", configuration);
         }
     }
+
+    let disable_openapi = env::var(ENV_TD_DISABLE_OPENAPI_DOCS_ENDPOINT).unwrap_or_default();
+    // Enable /api/docs unless explicitly disabled.
+    if disable_openapi != "true" {
+        println!("cargo:rustc-cfg=feature=\"{ENABLE_API_DOCS_FEATURE}\"");
+    }
+
     Ok(())
 }
 

@@ -34,7 +34,10 @@ from tabsdata.utils.bundle_utils import (
     PYTHON_PUBLIC_PACKAGES_KEY,
     PYTHON_VERSION_KEY,
 )
-from tabsdata.utils.constants import TABSDATA_MODULE_NAME
+from tabsdata.utils.constants import (
+    TABSDATA_MODULE_NAME,
+    TABSDATA_SALESFORCE_MODULE_NAME,
+)
 from tabsserver.function_execution.global_utils import CURRENT_PLATFORM
 from tabsserver.server.instance import (
     DEFAULT_ENVIRONMENT_FOLDER,
@@ -71,6 +74,7 @@ TARGET_FOLDER = "target"
 PYTHON_BASE_VERSION = "3.12"
 
 TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
+TD_TABSDATA_SALESFORCE_DEV_PKG = "TD_TABSDATA_SALESFORCE_DEV_PKG"
 
 UV_EXECUTABLE = "uv"
 
@@ -890,8 +894,11 @@ PackageProvider: TypeAlias = Literal[
 ]
 
 
-def get_tabsdata_package_metadata() -> tuple[str | None, PackageProvider | None]:
-    td_tabsdata_dev_pkg = os.getenv(TD_TABSDATA_DEV_PKG)
+def get_tabsdata_package_metadata(
+    module: str,
+    variable: str,
+) -> tuple[str | None, PackageProvider | None]:
+    td_tabsdata_dev_pkg = os.getenv(variable)
     if td_tabsdata_dev_pkg:
         provider = "Archive (Project)"
         location = pathlib.Path(td_tabsdata_dev_pkg)
@@ -901,13 +908,13 @@ def get_tabsdata_package_metadata() -> tuple[str | None, PackageProvider | None]
                 dist.metadata["Name"]: dist.version
                 for dist in importlib.metadata.distributions()
             }
-            if TABSDATA_MODULE_NAME in packages:
-                distribution = importlib.metadata.distribution(TABSDATA_MODULE_NAME)
+            if module in packages:
+                distribution = importlib.metadata.distribution(module)
                 site_packages = pathlib.Path(sysconfig.get_paths()["purelib"])
                 direct_url_file = pathlib.Path(
                     os.path.join(
                         site_packages,
-                        f"{TABSDATA_MODULE_NAME}-{distribution.version}.dist-info",
+                        f"{module}-{distribution.version}.dist-info",
                         "direct_url.json",
                     )
                 )
@@ -956,6 +963,20 @@ def get_tabsdata_package_metadata() -> tuple[str | None, PackageProvider | None]
 
 
 def main():
+    logger.setLevel(logging.INFO)
+
+    _packages = sorted(
+        [pkg.metadata["Name"] for pkg in importlib.metadata.distributions()]
+    )
+    _modules = sorted([module.name for module in pkgutil.iter_modules()])
+
+    logger.debug("📦 Installed Packages:")
+    for package in _packages:
+        logger.debug(f"   🗂️ · {package}")
+    logger.debug("📚 Available Modules:")
+    for module in _modules:
+        logger.debug(f"   🗂️ · {module}")
+
     parser = argparse.ArgumentParser(
         description=(
             "Create the server base Python virtual environment for a given tabsdata "
@@ -976,7 +997,11 @@ def main():
         mode="w",
         delete=False,
     ) as requirements_file:
-        tabsdata_provider, tabsdata_location = get_tabsdata_package_metadata()
+        development_packages = []
+
+        tabsdata_provider, tabsdata_location = get_tabsdata_package_metadata(
+            TABSDATA_MODULE_NAME, TD_TABSDATA_DEV_PKG
+        )
         logger.info(
             "Module tabsdata classified as: "
             f"provider: {tabsdata_provider} - "
@@ -990,11 +1015,27 @@ def main():
             "Folder (Editable)",
             "Folder (Frozen)",
         ):
-            development_packages = [
-                str(tabsdata_location),
-            ]
-        else:
-            development_packages = []
+            development_packages.append(str(tabsdata_location))
+
+        tabsdata_salesforce_provider, tabsdata_salesforce_location = (
+            get_tabsdata_package_metadata(
+                TABSDATA_SALESFORCE_MODULE_NAME, TD_TABSDATA_SALESFORCE_DEV_PKG
+            )
+        )
+        logger.info(
+            "Module tabsdata_salesforce classified as: "
+            f"provider: {tabsdata_salesforce_provider} - "
+            f"location: {tabsdata_salesforce_location}"
+        )
+
+        if tabsdata_salesforce_provider in (
+            "Archive (Project)",
+            "Archive (Folder)",
+            "Archive (Wheel)",
+            "Folder (Editable)",
+            "Folder (Frozen)",
+        ):
+            development_packages.append(str(tabsdata_salesforce_location))
 
         logger.debug(f"Temporary base requirements file: {requirements_file.name}")
         requirements_path = requirements_file.name

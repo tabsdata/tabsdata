@@ -3,15 +3,17 @@
 #
 
 env_files = [
-    { path = "./make/settings/output.env" },
     { path = "./make/settings/toolchain.env" },
     { path = "./make/settings/make.env" },
+    { path = "./make/settings/output.env" },
+    { path = "./make/settings/product.env" },
     { path = "${HOME}/.tabsdata/makers/settings.env" },
 ]
 
 extend = [
     { path = "./make/fragments/scripts/environment.toml" },
 
+    { path = "./make/fragments/hooks/splash.toml" },
     { path = "./make/fragments/hooks/init.toml" },
     { path = "./make/fragments/hooks/end.toml" },
     { path = "./make/fragments/hooks/error.toml" },
@@ -37,11 +39,11 @@ PROFILE = "${profile:dev}"
 
 PROJECT_ROOT_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/", normalize = true }
 PROJECT_MACROS_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/macros/", normalize = true }
-PROJECT_TD_FEATURES_ROOT = { value = "${ROOT_PROJECT_FOLDER}/client/td-lib/td_features/", normalize = true }
-PROJECT_TA_INTERCEPTOR_ROOT = { value = "${ROOT_PROJECT_FOLDER}/client/td-lib/ta_interceptor/", normalize = true }
-PROJECT_TD_INTERCEPTOR_ROOT = { value = "${ROOT_PROJECT_FOLDER}/extensions/python/td-lib/td_interceptor/", normalize = true }
-PROJECT_TD_SDK_ROOT = { value = "${ROOT_PROJECT_FOLDER}/client/td-sdk/", normalize = true }
-PROJECT_TABSDATA_SALESFORCE_ROOT = { value = "${ROOT_PROJECT_FOLDER}/connectors/python/tabsdata_salesforce/", normalize = true }
+PROJECT_TD_FEATURES_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/client/td-lib/td_features/", normalize = true }
+PROJECT_TA_INTERCEPTOR_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/client/td-lib/ta_interceptor/", normalize = true }
+PROJECT_TD_INTERCEPTOR_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/extensions/python/td-lib/td_interceptor/", normalize = true }
+PROJECT_TD_SDK_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/client/td-sdk/", normalize = true }
+PROJECT_TABSDATA_SALESFORCE_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/connectors/python/tabsdata_salesforce/", normalize = true }
 
 PROJECT_ROOT_CARGO_TOML = { value = "${ROOT_PROJECT_FOLDER}/Cargo.toml", normalize = true }
 PROJECT_MACROS_CARGO_TOML = { value = "${ROOT_PROJECT_FOLDER}/macros/Cargo.toml", normalize = true }
@@ -253,7 +255,7 @@ args = ["nextest", "run", "--nocapture", "--cargo-profile", "${td-profile}", "--
 
 [tasks.pytest]
 dependencies = ["set_mode_test_py"]
-cwd = "${PROJECT_TD_SDK_ROOT}"
+cwd = "${PROJECT_TD_SDK_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
@@ -578,7 +580,7 @@ cwd = "${PROJECT_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error pip-compile ./requirements-third-party-all.txt_ --output-file ./target/requirements.txt
+    exec --fail-on-error pip-compile --no-strip-extras --quiet ./requirements-third-party-all.txt_ --output-file ./target/requirements.txt
     cd target
     exec --fail-on-error python ../devutils/automation/tasks/makers/td-scripts/report_licenses_py.py
     ''']
@@ -907,7 +909,7 @@ run_task = [
 ]
 
 [tasks.doc_py]
-cwd = "${PROJECT_TD_SDK_ROOT}"
+cwd = "${PROJECT_TD_SDK_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
@@ -969,7 +971,7 @@ run_task = [
 script = "open -b com.google.Chrome ${RUST_DOCS}"
 
 [tasks.chrome_py]
-cwd = "${PROJECT_TD_SDK_ROOT}"
+cwd = "${PROJECT_TD_SDK_FOLDER}"
 script = "open -b com.google.Chrome ${PYTHON_DOCS}"
 
 [tasks.opendoc]
@@ -984,12 +986,12 @@ run_task = [
 script = "open ${RUST_DOCS}"
 
 [tasks.opendoc_py]
-cwd = "${PROJECT_TD_SDK_ROOT}"
+cwd = "${PROJECT_TD_SDK_FOLDER}"
 script = "open ${PYTHON_DOCS}"
 
 [tasks.examples]
 command = "pwsh"
-args = ["${PROJECT_TD_SDK_ROOT}examples/persons/persons.ps1", "${td-profile}"]
+args = ["${PROJECT_TD_SDK_FOLDER}examples/persons/persons.ps1", "${td-profile}"]
 
 [tasks.package]
 run_task = [
@@ -1002,7 +1004,24 @@ run_task = [
 [tasks.package_rs]
 
 [tasks.package_py]
+run_task = [
+    { name = [
+        "package_py_tabsdata",
+        "package_py_tabsdata_salesforce",
+    ] }
+]
+
+[tasks.package_py_tabsdata]
 cwd = "${ROOT_PROJECT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    echo "Running command: python3 setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
+    exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
+    ''']
+
+[tasks.package_py_tabsdata_salesforce]
+cwd = "${PROJECT_TABSDATA_SALESFORCE_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
@@ -1021,8 +1040,25 @@ run_task = [
 [tasks.assembly_rs]
 
 [tasks.assembly_py]
+run_task = [
+    { name = [
+        "assembly_py_tabsdata",
+        "assembly_py_tabsdata_salesforce",
+    ] }
+]
+
+[tasks.assembly_py_tabsdata]
 cwd = "${ROOT_PROJECT_FOLDER}"
 dependencies = ["license", "copy_assets"]
+script_runner = "@duckscript"
+script = [
+    '''
+    echo "Running command: python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    ''']
+
+[tasks.assembly_py_tabsdata_salesforce]
+cwd = "${PROJECT_TABSDATA_SALESFORCE_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
@@ -1042,12 +1078,33 @@ run_task = [
 [tasks.install_rs]
 
 [tasks.install_py]
+run_task = [
+    { name = [
+        "install_py_tabsdata_salesforce",
+        "install_py_tabsdata",
+    ] }
+]
+
+[tasks.install_py_tabsdata]
 cwd = "${ROOT_PROJECT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
     exec --fail-on-error pip3 uninstall tabsdata --yes
     wheels = glob_array ./target/python/dist/tabsdata*.whl
+    for wheel in ${wheels}
+        echo "Running command: pip3 install ${wheel}"
+        exec --fail-on-error pip3 install ${wheel}
+    end
+    ''']
+
+[tasks.install_py_tabsdata_salesforce]
+cwd = "${PROJECT_TABSDATA_SALESFORCE_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    exec --fail-on-error pip3 uninstall tabsdata_salesforce --yes
+    wheels = glob_array ./target/python/dist/tabsdata_salesforce*.whl
     for wheel in ${wheels}
         echo "Running command: pip3 install ${wheel}"
         exec --fail-on-error pip3 install ${wheel}
@@ -1065,6 +1122,14 @@ run_task = [
 [tasks.uninstall_rs]
 
 [tasks.uninstall_py]
+run_task = [
+    { name = [
+        "uninstall_py_tabsdata",
+        "uninstall_py_tabsdata_salesforce",
+    ] }
+]
+
+[tasks.uninstall_py_tabsdata]
 cwd = "${ROOT_PROJECT_FOLDER}"
 script_runner = "@duckscript"
 script = [
@@ -1073,6 +1138,17 @@ script = [
     exec uv cache clean
     exec python setup.py clean --all
     rm -r ${ROOT_PROJECT_FOLDER}/target/python/
+    ''']
+
+[tasks.uninstall_py_tabsdata_salesforce]
+cwd = "${PROJECT_TABSDATA_SALESFORCE_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    exec --fail-on-error pip3 uninstall tabsdata_salesforce --yes
+    exec uv cache clean
+    exec python setup.py clean --all
+    rm -r ${PROJECT_TABSDATA_SALESFORCE_FOLDER}/target/python/
     ''']
 
 [tasks.deploy]

@@ -33,9 +33,11 @@
 
 use crate::api_server;
 use crate::bin::apisrv::config::Config;
+use crate::bin::apisrv::data;
 use crate::bin::apisrv::execution::update;
+#[cfg(feature = "api-docs")]
+use crate::bin::apisrv::openapi;
 use crate::bin::apisrv::{collections, functions, permissions, server_status, user_roles};
-use crate::bin::apisrv::{data, openapi};
 use crate::bin::apisrv::{execution, jwt_login};
 use crate::bin::apisrv::{roles, users};
 use crate::logic::apisrv::api_server::ApiServer;
@@ -147,7 +149,11 @@ impl ApiSrv {
                 // Server Addresses
                 addresses => self.config.addresses(),
 
+                // Base URL
+                base_url => td_objects::rest_urls::BASE_URL,
+
                 // OpenAPI
+                #[cfg(feature = "api-docs")]
                 openapi => openapi,
 
                 // Open Routes

@@ -131,6 +131,9 @@ version = "1.0.93"
 [workspace.dependencies.quote]
 version = "1.0.38"
 
+[workspace.dependencies.rand]
+version = "0.9.0"
+
 [workspace.dependencies.regex]
 version = "1.11.1"
 

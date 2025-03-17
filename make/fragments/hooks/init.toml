@@ -8,6 +8,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
+    cm_run_task splash
+
     PATH = get_env PATH
     debug "✅ Real PATH: ${PATH}"
     ''']

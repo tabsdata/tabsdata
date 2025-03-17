@@ -94,15 +94,15 @@ test_tower_metadata = []
 #   tokio conosle
 tokio_console = []
 
-[profile.dev]
-codegen-units = 4096
-debug = true
-incremental = true
-lto = "off"
-opt-level = 0
-panic = "unwind"
-split-debuginfo = "off"
-strip = "none"
+#[profile.dev]
+#codegen-units = 4096
+#debug = true
+#incremental = true
+#lto = "off"
+#opt-level = 0
+#panic = "unwind"
+#split-debuginfo = "off"
+#strip = "none"
 
 [profile.integration]
 inherits = "release"
