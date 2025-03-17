@@ -56,6 +56,10 @@ lerna-debug.log*
 !**/testing_resources/**/*.log
 MANIFEST
 !assets/manifest
+!connectors/python/**/assets/manifest/
+connectors/python/**/assets/manifest/BANNER
+connectors/python/**/assets/manifest/LICENSE
+!connectors.ee/python/**/assets/manifest/
 !variant/assets/manifest
 *.manifest
 !.manifest

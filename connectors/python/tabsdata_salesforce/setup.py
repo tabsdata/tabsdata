@@ -9,11 +9,40 @@ import shutil
 from pathlib import Path
 from sysconfig import get_platform
 
+import psutil
 from setuptools import find_packages, setup
 from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
 from setuptools.command.build import build as _build
 from setuptools.command.sdist import sdist as _sdist
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
+
+
+# noinspection DuplicatedCode
+def root_folder() -> str:
+    current_folder = Path(os.getenv("PWD", psutil.Process().cwd()))
+    print(f"📁 Current setup folder is: {current_folder}")
+    while True:
+        root_file = Path(
+            os.path.join(
+                current_folder,
+                ".root",
+            )
+        )
+        root_file_exists = root_file.exists() and root_file.is_file()
+        if root_file_exists:
+            print(f"🗂️ Root project folder for setup is: {current_folder}")
+            return current_folder
+        else:
+            parent_folder = current_folder.parent
+            if current_folder == parent_folder:
+                raise FileNotFoundError(
+                    "⛔️ Root folder is unreachable from current setup folder!"
+                )
+            current_folder = parent_folder
+
+
+ROOT = root_folder()
+print(f"ROOT folder for setup is: {ROOT}")
 
 # noinspection DuplicatedCode
 TD_IGNORE_CONNECTOR_REQUIREMENTS = "TD_IGNORE_CONNECTOR_REQUIREMENTS"
@@ -24,13 +53,21 @@ TABSDATA_PACKAGES_PREFIX = "tabsdata_"
 
 TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
-THIRD_PARTY_connectors = "THIRD-PARTY_connectors"
+THIRD_PARTY = "THIRD-PARTY"
+
+BANNER = "BANNER"
+LICENSE = "LICENSE"
 
 
+# noinspection DuplicatedCode
 class CustomBuild(_build):
     def initialize_options(self):
         super().initialize_options()
-        self.build_base = os.path.join("target", "python", "build")
+        self.build_base = os.path.join(
+            "target",
+            "python",
+            "build",
+        )
         os.makedirs(self.build_base, exist_ok=True)
 
 
@@ -42,8 +79,16 @@ class CustomSDist(_sdist):
 
     def initialize_options(self):
         super().initialize_options()
-        self.dist_dir = os.path.join("target", "python", "dist")
-        self.temp_dir = os.path.join("target", "python", "sdist")
+        self.dist_dir = os.path.join(
+            "target",
+            "python",
+            "dist",
+        )
+        self.temp_dir = os.path.join(
+            "target",
+            "python",
+            "sdist",
+        )
         os.makedirs(self.temp_dir, exist_ok=True)
 
 
@@ -54,7 +99,11 @@ class CustomBDistWheel(_bdist_wheel):
 
     def initialize_options(self):
         super().initialize_options()
-        self.dist_dir = os.path.join("target", "python", "dist")
+        self.dist_dir = os.path.join(
+            "target",
+            "python",
+            "dist",
+        )
 
 
 class CustomBDistEgg(_bdist_egg):
@@ -64,14 +113,25 @@ class CustomBDistEgg(_bdist_egg):
 
     def initialize_options(self):
         super().initialize_options()
-        self.dist_dir = os.path.join("target", "python", "dist")
-        self.build_base = os.path.join("target", "python", "build")
+        self.dist_dir = os.path.join(
+            "target",
+            "python",
+            "dist",
+        )
+        self.build_base = os.path.join(
+            "target",
+            "python",
+            "build",
+        )
         os.makedirs(self.build_base, exist_ok=True)
 
 
 def read(*paths, **kwargs):
     with io.open(
-        os.path.join(os.path.dirname(__file__), *paths),
+        os.path.join(
+            os.path.dirname(__file__),
+            *paths,
+        ),
         encoding=kwargs.get("encoding", "utf8"),
     ) as open_file:
         content = open_file.read().strip()
@@ -153,7 +213,11 @@ print(f"Using Rust profile: '{profile}'")
 td_target = os.getenv("td-target", "")
 print(f"Using tabsdata target: '{td_target}'")
 
-target_release_folder = os.path.join("target", td_target, profile)
+target_release_folder = os.path.join(
+    "target",
+    td_target,
+    profile,
+)
 print(f"Using tabsdata target release folder: '{target_release_folder}'")
 
 REQUIRE_SERVER_BINARIES = (
@@ -174,14 +238,24 @@ binaries = [
     binary
     for base in base_binaries
     for binary in (base, f"{base}.exe")
-    if os.path.exists(os.path.join(target_release_folder, binary))
+    if os.path.exists(
+        os.path.join(
+            target_release_folder,
+            binary,
+        )
+    )
 ]
 
 missing_binaries = [
     base
     for base in base_binaries
     if not any(
-        os.path.exists(os.path.join(target_release_folder, binary))
+        os.path.exists(
+            os.path.join(
+                target_release_folder,
+                binary,
+            )
+        )
         for binary in (base, f"{base}.exe")
     )
 ]
@@ -195,49 +269,80 @@ if missing_binaries and REQUIRE_SERVER_BINARIES:
 datafiles = [
     (
         get_binaries_folder(),
-        [os.path.join(target_release_folder, binary) for binary in binaries],
+        [
+            os.path.join(
+                target_release_folder,
+                binary,
+            )
+            for binary in binaries
+        ],
     )
 ]
 print(f"Including tabsdata binaries: {datafiles}")
 
 # noinspection DuplicatedCode
-print(f"Current path in setup is {Path.cwd()}")
+print(f"Current path in setup is {ROOT}")
 
 assets_folder = os.path.join(
-    "..",
-    "..",
-    "..",
+    ROOT,
     "assets",
 )
-third_party_connectors = os.path.join(
-    assets_folder,
-    "manifest",
-    THIRD_PARTY_connectors,
-)
 variant_assets_folder = os.path.join(
-    "..",
-    "..",
-    "..",
+    ROOT,
     "variant",
     "assets",
 )
-package_assets_folder = os.path.join("assets")
+
+variant_manifest_folder = os.path.join(
+    ROOT,
+    "variant",
+    "assets",
+    "manifest",
+)
+
+package_manifest_folder = os.path.join(
+    "tabsdata_salesforce",
+    "assets",
+    "manifest",
+)
+
 # noinspection DuplicatedCode
-print(f"Copying contents of {variant_assets_folder} to {package_assets_folder}")
-if (
-    not os.path.exists(os.path.join(variant_assets_folder, "manifest", "THIRD-PARTY"))
-    and REQUIRE_THIRD_PARTY
-):
-    raise FileNotFoundError(
-        f"The THIRD-PARTY file is missing in {variant_assets_folder}."
-    )
-
+banner_file = os.path.join(
+    variant_manifest_folder,
+    BANNER,
+)
+print(
+    f"Copying {banner_file} ({os.path.abspath(banner_file)}) to"
+    f" {package_manifest_folder}"
+)
 try:
-    shutil.copytree(variant_assets_folder, package_assets_folder, dirs_exist_ok=True)
+    shutil.copy(banner_file, package_manifest_folder)
+except Exception as e:
+    print(f"🦠 Warning: Failed to copy {banner_file} to {package_manifest_folder}: {e}")
+    if not TD_SKIP_NON_EXISTING_ASSETS:
+        print(
+            "🦠 Raising error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
+            f" {TD_SKIP_NON_EXISTING_ASSETS}"
+        )
+        raise
+    else:
+        print(
+            "🦠 Ignoring error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
+            f" {TD_SKIP_NON_EXISTING_ASSETS}"
+        )
+
+# noinspection DuplicatedCode
+license_file = os.path.join(
+    variant_manifest_folder,
+    LICENSE,
+)
+print(f"Copying {license_file} to {package_manifest_folder}")
+try:
+    shutil.copy(license_file, package_manifest_folder)
 except Exception as e:
     print(
-        f"🦠 Warning: Failed to copy {variant_assets_folder} to"
-        f" {package_assets_folder}: {e}"
+        f"🦠 Warning: Failed to copy {license_file} ({os.path.abspath(license_file)})"
+        f" to {package_manifest_folder}: {e}"
     )
     if not TD_SKIP_NON_EXISTING_ASSETS:
         print(
@@ -251,37 +356,42 @@ except Exception as e:
             f" {TD_SKIP_NON_EXISTING_ASSETS}"
         )
 
-package_assets_file = os.path.join(package_assets_folder, THIRD_PARTY_connectors)
-try:
-    shutil.copy(third_party_connectors, package_assets_file)
-except Exception as e:
-    print(
-        f"🦠 Warning: Failed to copy {package_assets_folder} to"
-        f" {package_assets_file}: {e}"
-    )
-    if not TD_SKIP_NON_EXISTING_ASSETS:
-        print(
-            "🦠 Raising error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
-            f" {TD_SKIP_NON_EXISTING_ASSETS}"
-        )
-        raise
-    else:
-        print(
-            "🦠 Ignoring error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
-            f" {TD_SKIP_NON_EXISTING_ASSETS}"
-        )
-
-
-os.makedirs(os.path.join("target", "python", "egg"), exist_ok=True)
+os.makedirs(
+    os.path.join(
+        "target",
+        "python",
+        "egg",
+    ),
+    exist_ok=True,
+)
 
 setup(
     name="tabsdata_salesforce",
-    version=read("tabsdata_salesforce/VERSION"),
+    version=read(
+        os.path.join(
+            "tabsdata_salesforce",
+            "assets",
+            "manifest",
+            "VERSION",
+        )
+    ),
     description="Tabsdata plugin to access Salesforce data.",
-    long_description=read("tabsdata_salesforce/README-PyPi.md"),
+    long_description=read(
+        os.path.join(
+            "tabsdata_salesforce",
+            "assets",
+            "manifest",
+            "README-PyPi.md",
+        )
+    ),
     long_description_content_type="text/markdown",
     license_files=(
-        os.path.join("..", "..", "..", "variant", "assets", "manifest", "LICENSE"),
+        os.path.join(
+            "tabsdata_salesforce",
+            "assets",
+            "manifest",
+            "LICENSE",
+        ),
     ),
     author="Tabs Data Inc.",
     python_requires=">=3.12",
@@ -305,7 +415,15 @@ setup(
     package_dir={
         "tabsdata_salesforce": "tabsdata_salesforce",
     },
-    package_data={},
+    package_data={
+        "tabsdata_salesforce": [
+            os.path.join(
+                "assets",
+                "manifest",
+                "*",
+            ),
+        ],
+    },
     data_files=datafiles,
     entry_points={},
     include_package_data=True,
