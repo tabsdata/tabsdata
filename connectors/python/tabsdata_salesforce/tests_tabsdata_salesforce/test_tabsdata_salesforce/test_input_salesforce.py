@@ -83,6 +83,8 @@ def test_input_salesforce(tmp_path):
         "test_input_salesforce",
         "expected_result.json",
     )
+    print(expected_output_file)
+    print("-" * 200)
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
     assert not os.path.isfile(path_to_output_initial_values)

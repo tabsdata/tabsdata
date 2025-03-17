@@ -350,16 +350,8 @@ def store_results_in_sql(
             )
         elif isinstance(destination_table_configuration, list):
             if isinstance(results, td.TableFrame):
-                logger.error(
-                    "Multiple destination tables were provided, but only a "
-                    "single result was obtained."
-                )
-                logger.error(f"Destination: '{destination_table_configuration}'")
-                raise TypeError(
-                    "Multiple destination tables were provided, but only a "
-                    "single result was obtained."
-                )
-            elif len(results) != len(destination_table_configuration):
+                results = [results]
+            if len(results) != len(destination_table_configuration):
                 logger.error(
                     "The number of destination tables does not match the number "
                     "of results."
