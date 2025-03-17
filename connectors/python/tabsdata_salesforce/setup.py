@@ -35,12 +35,20 @@ def root_folder() -> str:
         else:
             parent_folder = current_folder.parent
             if current_folder == parent_folder:
-                raise FileNotFoundError(
-                    "⛔️ Root folder is unreachable from current setup folder!"
+                print(
+                    "☢️️ "
+                    "Root folder is unreachable from current setup folder! "
+                    "Defaulting to '../../..'"
+                )
+                return os.path.join(
+                    "..",
+                    "..",
+                    "..",
                 )
             current_folder = parent_folder
 
 
+# noinspection DuplicatedCode
 ROOT = root_folder()
 print(f"ROOT folder for setup is: {ROOT}")
 
