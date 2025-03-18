@@ -13,6 +13,7 @@ import os
 import os.path
 import pathlib
 import pkgutil
+import re
 import shutil
 import subprocess
 import sysconfig
@@ -81,6 +82,14 @@ UV_EXECUTABLE = "uv"
 ENVIRONMENT_LOCK_TIMEOUT = 5  # 5 seconds
 MAXIMUM_LOCK_TIME = 60 * 30  # 30 minutes
 PYTHON_VERSION_LOCK_TIMEOUT = 10  # 10 seconds
+
+
+def extract_package_name(requirement):
+    match = re.match(r"^\s*([A-Za-z0-9_.-]+)", requirement)
+    if match:
+        return match.group(1)
+    else:
+        raise ValueError(f"Invalid requirement format: {requirement}")
 
 
 def remove_path(path: str):
@@ -322,10 +331,14 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:
     """Inject the tabsdata version into the list of required modules"""
     tabsdata_version = get_current_tabsdata_version()
     previous_tabsdata_version = [
-        module for module in required_modules if TABSDATA_MODULE_NAME in module
+        module
+        for module in required_modules
+        if TABSDATA_MODULE_NAME == extract_package_name(module)
     ]
     required_modules = [
-        module for module in required_modules if TABSDATA_MODULE_NAME not in module
+        module
+        for module in required_modules
+        if TABSDATA_MODULE_NAME != extract_package_name(module)
     ]
     logger.debug(f"Injecting tabsdata version {tabsdata_version} into the requirements")
     new_tabsdata_version = f"{TABSDATA_MODULE_NAME}=={tabsdata_version}"

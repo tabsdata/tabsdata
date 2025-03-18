@@ -335,4 +335,8 @@ def test_inject_tabsdata_version_current_tabsdata():
         module
         for module in inject_tabsdata_version(requirements)
         if f"{TABSDATA_MODULE_NAME}==" in module
+        and module != f"{TABSDATA_MODULE_NAME}==$current"
     ]
+    assert not f"{TABSDATA_MODULE_NAME}==$current" in inject_tabsdata_version(
+        requirements
+    )

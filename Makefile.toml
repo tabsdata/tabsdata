@@ -1057,6 +1057,8 @@ script = [
     set_env REQUIRE_THIRD_PARTY "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    # This must be false when using a local PyPi reopsitory.
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
     echo "Running command: python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
@@ -1070,6 +1072,8 @@ script = [
     set_env REQUIRE_THIRD_PARTY "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    # This must be false when using a local PyPi reopsitory.
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
     echo "Running command: python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
@@ -1102,6 +1106,8 @@ script = [
     set_env REQUIRE_THIRD_PARTY "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    # This must be false when using a local PyPi reopsitory.
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
     exec --fail-on-error pip3 uninstall tabsdata_salesforce --yes
     wheels = glob_array ./target/python/dist/tabsdata_salesforce*.whl
     for wheel in ${wheels}
@@ -1119,6 +1125,8 @@ script = [
     set_env REQUIRE_THIRD_PARTY "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    # This must be false when using a local PyPi reopsitory.
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
     exec --fail-on-error pip3 uninstall tabsdata --yes
     wheels = glob_array ./target/python/dist/tabsdata*.whl
     for wheel in ${wheels}

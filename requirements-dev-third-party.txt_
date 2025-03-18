@@ -12,6 +12,7 @@ colorlog==6.9.0
 csvkit==2.0.1
 cx_Oracle==8.3.0
 docker==7.1.0
+fastapi==0.115.11
 flake8==7.1.2
 GitPython==3.1.44
 isort==6.0.1
@@ -34,6 +35,7 @@ pytest-xdist==3.6.1
 python-dateutil==2.9.0.post0
 setuptools
 tabulate==0.9.0
+uvicorn== 0.34.0
 wheel
 
 # Local

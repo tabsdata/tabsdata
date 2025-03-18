@@ -439,6 +439,8 @@ setup(
     packages=find_packages(
         where=os.getcwd(),
         exclude=[
+            "tests",
+            "tests*",
             "tests_tabsdata_salesforce",
             "tests_tabsdata_salesforce*",
         ],
