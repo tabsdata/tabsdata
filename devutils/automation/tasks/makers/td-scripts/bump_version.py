@@ -84,8 +84,6 @@ def get_bump_files(root_folder) -> set:
 
 
 def bump_version_in_file(path, old_version, new_version, bump_files, warnings):
-    if any(path.endswith(extension) for extension in IGNORED_EXTENSIONS):
-        return
     if path in bump_files:
         try:
             with open(path, "r", encoding="utf-8") as file:
@@ -100,6 +98,8 @@ def bump_version_in_file(path, old_version, new_version, bump_files, warnings):
         except (UnicodeDecodeError, PermissionError) as e:
             logger.error(f"❌ Error reading required file {path}: {e}")
     else:
+        if any(path.endswith(extension) for extension in IGNORED_EXTENSIONS):
+            return
         try:
             with open(path, "r", encoding="utf-8") as file:
                 content = file.read()
