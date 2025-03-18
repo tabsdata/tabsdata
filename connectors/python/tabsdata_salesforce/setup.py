@@ -52,14 +52,43 @@ def root_folder() -> str:
 ROOT = root_folder()
 print(f"ROOT folder for setup is: {ROOT}")
 
-# noinspection DuplicatedCode
-TD_IGNORE_CONNECTOR_REQUIREMENTS = "TD_IGNORE_CONNECTOR_REQUIREMENTS"
-
-TD_SKIP_NON_EXISTING_ASSETS = "TD_SKIP_NON_EXISTING_ASSETS"
-
 TABSDATA_PACKAGES_PREFIX = "tabsdata_"
 
+REQUIRE_SERVER_BINARIES = "REQUIRE_SERVER_BINARIES"
+REQUIRE_THIRD_PARTY = "REQUIRE_THIRD_PARTY"
+TD_IGNORE_CONNECTOR_REQUIREMENTS = "TD_IGNORE_CONNECTOR_REQUIREMENTS"
+TD_SKIP_NON_EXISTING_ASSETS = "TD_SKIP_NON_EXISTING_ASSETS"
+
 TRUE_VALUES = {"1", "true", "yes", "y", "on"}
+
+require_server_binaries = (
+    os.getenv(
+        REQUIRE_SERVER_BINARIES,
+        "False",
+    ).lower()
+    in TRUE_VALUES
+)
+require_third_party = (
+    os.getenv(
+        REQUIRE_THIRD_PARTY,
+        "False",
+    ).lower()
+    in TRUE_VALUES
+)
+ignore_connector_requirements = (
+    os.getenv(
+        TD_IGNORE_CONNECTOR_REQUIREMENTS,
+        "True",
+    ).lower()
+    in TRUE_VALUES
+)
+skip_non_existing_assets = (
+    os.getenv(
+        TD_SKIP_NON_EXISTING_ASSETS,
+        "True",
+    ).lower()
+    in TRUE_VALUES
+)
 
 THIRD_PARTY = "THIRD-PARTY"
 
@@ -197,7 +226,7 @@ def read_requirements(path, visited=None):
                 requirements.extend(read_requirements(included_path, visited))
             elif not line.startswith(("-", "git+")):
                 requirements.append(line)
-    if os.environ.get("TD_IGNORE_CONNECTOR_REQUIREMENTS"):
+    if ignore_connector_requirements:
         requirements = [
             requirement
             for requirement in requirements
@@ -227,16 +256,6 @@ target_release_folder = os.path.join(
     profile,
 )
 print(f"Using tabsdata target release folder: '{target_release_folder}'")
-
-REQUIRE_SERVER_BINARIES = (
-    os.getenv("REQUIRE_SERVER_BINARIES", "False").lower() in TRUE_VALUES
-)
-
-REQUIRE_THIRD_PARTY = os.getenv("REQUIRE_THIRD_PARTY", "False").lower() in TRUE_VALUES
-
-TD_SKIP_NON_EXISTING_ASSETS = (
-    os.getenv("TD_SKIP_NON_EXISTING_ASSETS", "False").lower() in TRUE_VALUES
-)
 
 # noinspection DuplicatedCode
 base_binaries = []
@@ -268,7 +287,7 @@ missing_binaries = [
     )
 ]
 
-if missing_binaries and REQUIRE_SERVER_BINARIES:
+if missing_binaries and require_server_binaries:
     raise FileNotFoundError(
         "The following binaries are missing in "
         f"{target_release_folder}: {', '.join(missing_binaries)}"
@@ -327,16 +346,16 @@ try:
     shutil.copy(banner_file, package_manifest_folder)
 except Exception as e:
     print(f"🦠 Warning: Failed to copy {banner_file} to {package_manifest_folder}: {e}")
-    if not TD_SKIP_NON_EXISTING_ASSETS:
+    if not skip_non_existing_assets:
         print(
             "🦠 Raising error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
-            f" {TD_SKIP_NON_EXISTING_ASSETS}"
+            f" {skip_non_existing_assets}"
         )
         raise
     else:
         print(
             "🦠 Ignoring error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
-            f" {TD_SKIP_NON_EXISTING_ASSETS}"
+            f" {skip_non_existing_assets}"
         )
 
 # noinspection DuplicatedCode
@@ -352,16 +371,16 @@ except Exception as e:
         f"🦠 Warning: Failed to copy {license_file} ({os.path.abspath(license_file)})"
         f" to {package_manifest_folder}: {e}"
     )
-    if not TD_SKIP_NON_EXISTING_ASSETS:
+    if not skip_non_existing_assets:
         print(
             "🦠 Raising error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
-            f" {TD_SKIP_NON_EXISTING_ASSETS}"
+            f" {skip_non_existing_assets}"
         )
         raise
     else:
         print(
             "🦠 Ignoring error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
-            f" {TD_SKIP_NON_EXISTING_ASSETS}"
+            f" {skip_non_existing_assets}"
         )
 
 os.makedirs(

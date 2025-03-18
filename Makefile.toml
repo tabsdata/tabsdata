@@ -1053,6 +1053,10 @@ dependencies = ["license", "copy_assets"]
 script_runner = "@duckscript"
 script = [
     '''
+    set_env REQUIRE_SERVER_BINARIES "true"
+    set_env REQUIRE_THIRD_PARTY "true"
+    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
     echo "Running command: python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
@@ -1062,6 +1066,10 @@ cwd = "${PROJECT_TABSDATA_SALESFORCE_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
+    set_env REQUIRE_SERVER_BINARIES "true"
+    set_env REQUIRE_THIRD_PARTY "true"
+    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
     echo "Running command: python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
@@ -1085,26 +1093,34 @@ run_task = [
     ] }
 ]
 
-[tasks.install_py_tabsdata]
-cwd = "${ROOT_PROJECT_FOLDER}"
+[tasks.install_py_tabsdata_salesforce]
+cwd = "${PROJECT_TABSDATA_SALESFORCE_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error pip3 uninstall tabsdata --yes
-    wheels = glob_array ./target/python/dist/tabsdata*.whl
+    set_env REQUIRE_SERVER_BINARIES "true"
+    set_env REQUIRE_THIRD_PARTY "true"
+    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    exec --fail-on-error pip3 uninstall tabsdata_salesforce --yes
+    wheels = glob_array ./target/python/dist/tabsdata_salesforce*.whl
     for wheel in ${wheels}
         echo "Running command: pip3 install ${wheel}"
         exec --fail-on-error pip3 install ${wheel}
     end
     ''']
 
-[tasks.install_py_tabsdata_salesforce]
-cwd = "${PROJECT_TABSDATA_SALESFORCE_FOLDER}"
+[tasks.install_py_tabsdata]
+cwd = "${ROOT_PROJECT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error pip3 uninstall tabsdata_salesforce --yes
-    wheels = glob_array ./target/python/dist/tabsdata_salesforce*.whl
+    set_env REQUIRE_SERVER_BINARIES "true"
+    set_env REQUIRE_THIRD_PARTY "true"
+    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    exec --fail-on-error pip3 uninstall tabsdata --yes
+    wheels = glob_array ./target/python/dist/tabsdata*.whl
     for wheel in ${wheels}
         echo "Running command: pip3 install ${wheel}"
         exec --fail-on-error pip3 install ${wheel}
