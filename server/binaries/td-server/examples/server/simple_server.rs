@@ -3,7 +3,7 @@
 //
 
 use tabsdatalib::api_server;
-use tabsdatalib::logic::apisrv::api_server::ApiServer;
+use tabsdatalib::logic::apisrv::api_server::{localhost_address, ApiServer};
 
 use crate::counter::Counter;
 
@@ -21,6 +21,7 @@ async fn init_server() -> ApiServer {
 
     api_server! {
         simple_server {
+            addresses => vec![localhost_address(0)],
             router => {
                 endpoint => { state ( counter ) },
             }
