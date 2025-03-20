@@ -59,7 +59,9 @@ MANIFEST
 !connectors/python/**/assets/manifest/
 connectors/python/**/assets/manifest/BANNER
 connectors/python/**/assets/manifest/LICENSE
+connectors/python/**/assets/manifest/SOURCETRACK.yaml
 !connectors.ee/python/**/assets/manifest/
+connectors.ee/python/**/assets/manifest/SOURCETRACK.yaml
 !variant/assets/manifest
 *.manifest
 !.manifest
