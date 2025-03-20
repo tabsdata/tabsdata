@@ -618,7 +618,7 @@ script = [
     '''
     exec --fail-on-error pip-compile ./requirements-third-party-all.txt_ --output-file ./target/requirements.txt
     cd target
-    exec --fail-on-error licensecheck -u requirements:requirements.txt
+    exec --fail-on-error licensecheck -r requirements.txt
     cd ..
     ''']
 

@@ -439,7 +439,8 @@ def test_output_s3_csv(tmp_path, s3_client):
     )
     output_s3_csv.output.uri = output_file
     output_s3_csv.output.format = td.CSVFormat(
-        eol_char="\t", separator="|", output_float_precision=4
+        # ToDo: Undo when https://github.com/pola-rs/polars/issues/21802 fix is available
+        eol_char="\n", separator=",", output_float_precision=4
     )
     context_archive = create_bundle_archive(
         output_s3_csv,
@@ -474,7 +475,8 @@ def test_output_s3_csv(tmp_path, s3_client):
 
         temporary_output_file = os.path.join(tabsserver_output_folder, "0.csv")
         assert os.path.isfile(temporary_output_file)
-        output = pl.read_csv(temporary_output_file, separator="|", eol_char="\t")
+        # ToDo: Undo when https://github.com/pola-rs/polars/issues/21802 fix is available
+        output = pl.read_csv(temporary_output_file, separator=",", eol_char="\n")
         output = clean_polars_df(output)
         expected_output_file = os.path.join(
             TESTING_RESOURCES_FOLDER,
@@ -486,7 +488,8 @@ def test_output_s3_csv(tmp_path, s3_client):
 
         copy_destination = os.path.join(tmp_path, "output.csv")
         s3_client.download_file(bucket_name, file_name, copy_destination)
-        output = pl.read_csv(copy_destination, separator="|", eol_char="\t")
+        # ToDo: Undo when https://github.com/pola-rs/polars/issues/21802 fix is available
+        output = pl.read_csv(copy_destination, separator=",", eol_char="\n")
         output = clean_polars_df(output)
         expected_output_file = os.path.join(
             TESTING_RESOURCES_FOLDER,

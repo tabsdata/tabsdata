@@ -81,7 +81,7 @@ if os.path.exists(TARGET_FILE):
 
 try:
     result = subprocess.run(
-        ["licensecheck", "-u", "requirements:requirements.txt", "--format", "json"],
+        ["licensecheck", "-r", "requirements.txt", "--format", "json"],
         capture_output=True,
         text=True,
         check=True,
