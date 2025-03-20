@@ -67,7 +67,6 @@ pub mod tests {
     use axum::body::Body;
     use http::Request;
     use sha2::{Digest, Sha256};
-    use std::collections::HashMap;
     use std::sync::Arc;
     use td_objects::crudl::select_by;
     use td_objects::datasets::dao::DsFunction;
@@ -108,13 +107,12 @@ pub mod tests {
 
         let db = td_database::test_utils::db().await.unwrap();
         let mound_def = MountDef::builder()
+            .id("id")
             .mount_path("/")
             .uri(dummy_file())
             .build()
             .unwrap();
-        let storage = Storage::from(vec![mound_def], &HashMap::new())
-            .await
-            .unwrap();
+        let storage = Storage::from(vec![mound_def]).await.unwrap();
         let provider = UploadFunctionService::provider(db, Arc::new(storage));
         let service = provider.make().await;
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -153,14 +151,12 @@ pub mod tests {
 
         let test_dir = testdir!();
         let url = Url::from_directory_path(test_dir).unwrap();
-        let storage = Storage::from(
-            vec![MountDef::builder()
-                .uri(url)
-                .mount_path("/")
-                .build()
-                .unwrap()],
-            &HashMap::new(),
-        )
+        let storage = Storage::from(vec![MountDef::builder()
+            .id("id")
+            .uri(url)
+            .mount_path("/")
+            .build()
+            .unwrap()])
         .await
         .unwrap();
 

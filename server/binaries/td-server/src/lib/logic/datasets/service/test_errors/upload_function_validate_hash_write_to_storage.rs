@@ -7,7 +7,6 @@ use crate::logic::datasets::service::upload_function::UploadFunctionService;
 use axum::body::Body;
 use axum::extract::Request;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 use std::sync::Arc;
 use td_error::assert_service_error;
 use td_objects::datasets::dto::UploadFunction;
@@ -43,14 +42,12 @@ async fn test_function_bundle_already_uploaded() {
 
     let test_dir = testdir!();
     let url = Url::from_directory_path(test_dir).unwrap();
-    let storage = Storage::from(
-        vec![MountDef::builder()
-            .uri(url)
-            .mount_path("/")
-            .build()
-            .unwrap()],
-        &HashMap::new(),
-    )
+    let storage = Storage::from(vec![MountDef::builder()
+        .id("id")
+        .uri(url)
+        .mount_path("/")
+        .build()
+        .unwrap()])
     .await
     .unwrap();
 
@@ -108,14 +105,12 @@ async fn test_function_bundle_hash_mismatch() {
 
     let test_dir = testdir!();
     let url = Url::from_directory_path(test_dir).unwrap();
-    let storage = Storage::from(
-        vec![MountDef::builder()
-            .uri(url)
-            .mount_path("/")
-            .build()
-            .unwrap()],
-        &HashMap::new(),
-    )
+    let storage = Storage::from(vec![MountDef::builder()
+        .id("id")
+        .uri(url)
+        .mount_path("/")
+        .build()
+        .unwrap()])
     .await
     .unwrap();
 

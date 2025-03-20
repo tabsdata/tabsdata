@@ -39,13 +39,12 @@ pub async fn build_worker_info(
         .dataset(ds.dataset_id())
         .function(ds.function_id())
         .build();
-    let external_path = storage.to_external_uri(&path)?;
+    let (external_path, mount_def) = storage.to_external_uri(&path)?;
     let location = Location::builder()
         .uri(external_path)
-        .env_prefix(None)
+        .env_prefix(mount_def.id_as_prefix())
         .build()
         .unwrap();
-
     let info = Info::builder()
         .dataset(dataset.to_string())
         .dataset_id(dataset_id.to_string())

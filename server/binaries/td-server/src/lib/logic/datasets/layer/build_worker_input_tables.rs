@@ -73,10 +73,10 @@ pub async fn build_worker_input_tables(
                     .version(data_version)
                     .table(req.table_name())
                     .build();
-                let external_path = storage.to_external_uri(&path)?;
+                let (external_path, mount_def) = storage.to_external_uri(&path)?;
                 let location = Location::builder()
                     .uri(external_path)
-                    .env_prefix(None)
+                    .env_prefix(mount_def.id_as_prefix())
                     .build()
                     .unwrap();
                 Some(location)
@@ -84,15 +84,19 @@ pub async fn build_worker_input_tables(
             None => None,
         };
 
-        let input_table = InputTableVersion::builder()
+        let mut builder = InputTableVersion::builder();
+
+        builder
             .name(req.table_name())
             .table(td_uri_with_names.to_string())
             .table_id(td_uri_with_ids.to_string())
-            .location(location)
             .table_pos(*req.pos())
-            .version_pos(*req.data_version_pos())
-            .build()
-            .unwrap();
+            .version_pos(*req.data_version_pos());
+
+        if let Some(location) = location {
+            builder.location(location);
+        }
+        let input_table = builder.build().unwrap();
 
         input_tables_map
             .entry(*req.pos())

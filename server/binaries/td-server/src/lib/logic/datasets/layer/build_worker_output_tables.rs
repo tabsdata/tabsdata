@@ -126,10 +126,10 @@ pub async fn build_worker_output_tables(
             .table(table.name())
             .build();
 
-        let external_path = storage.to_external_uri(&path)?;
+        let (external_path, mount_def) = storage.to_external_uri(&path)?;
         let location = Location::builder()
             .uri(external_path)
-            .env_prefix(None)
+            .env_prefix(mount_def.id_as_prefix())
             .build()
             .unwrap();
 

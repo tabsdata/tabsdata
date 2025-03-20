@@ -5,7 +5,6 @@
 use crate::logic::datasets::error::DatasetError;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{Field, LazyFrame, ScanArgsParquet, SchemaExt};
-use std::collections::HashMap;
 use td_error::TdError;
 use td_objects::datasets::dto::SchemaField;
 use td_storage::{SPath, Storage};
@@ -15,11 +14,10 @@ pub async fn get_table_schema(
     SrvCtx(storage): SrvCtx<Storage>,
     Input(table_path): Input<SPath>,
 ) -> Result<Vec<SchemaField>, TdError> {
-    let url = storage.to_external_uri(&table_path)?;
+    let (url, mount_def) = storage.to_external_uri(&table_path)?;
     let url_str = url.to_string();
-    let cloud_config =
-        CloudOptions::from_untyped_config(&url_str, HashMap::<String, String>::new())
-            .map_err(DatasetError::CouldNotCreateStorageConfig)?;
+    let cloud_config = CloudOptions::from_untyped_config(&url_str, mount_def.configs())
+        .map_err(DatasetError::CouldNotCreateStorageConfig)?;
     let parquet_config = ScanArgsParquet {
         cloud_options: Some(cloud_config),
         ..ScanArgsParquet::default()

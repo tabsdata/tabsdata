@@ -6,6 +6,7 @@ use super::{Result, SPath, StorageError};
 use crate::mount::{Mount, MountDef};
 use bytes::Bytes;
 use futures_util::stream::BoxStream;
+use itertools::Itertools;
 use object_store::path::{Path, PathPart};
 use std::collections::HashMap;
 use url::Url;
@@ -20,7 +21,7 @@ pub struct MountsStorage {
 
 impl MountsStorage {
     /// Create a new Store from a list of MountDefs. There must be definition for the root mount `/`.
-    pub async fn from(mount_defs: Vec<MountDef>, vars: &HashMap<String, String>) -> Result<Self> {
+    pub async fn from(mount_defs: Vec<MountDef>) -> Result<Self> {
         let mut has_root = false;
         static ROOT: &str = "/";
         for mount_def in mount_defs.iter() {
@@ -35,11 +36,26 @@ impl MountsStorage {
             ));
         }
         let mut fs_mounts = HashMap::new();
+        let mut dups = HashMap::new();
         for mount_def in mount_defs {
-            let mount = Mount::new(mount_def, vars)?;
+            *dups.entry(mount_def.id().clone()).or_insert(0) += 1;
+            let mount = Mount::new(mount_def)?;
             fs_mounts.insert(mount.mount_path().clone(), mount);
         }
-        Ok(Self { mounts: fs_mounts })
+        let dup_ids = dups
+            .into_iter()
+            .filter(|(_, v)| *v > 1)
+            .map(|(k, _)| k)
+            .collect_vec();
+        if dup_ids.is_empty() {
+            Ok(Self { mounts: fs_mounts })
+        } else {
+            let dup_ids = dup_ids.join(",");
+            Err(StorageError::ConfigurationError(format!(
+                "There are mounts with duplicate IDs: {}",
+                dup_ids
+            )))
+        }
     }
 
     /// Get the mount definitions.
@@ -60,9 +76,9 @@ impl MountsStorage {
         }
     }
 
-    pub fn to_external_uri(&self, path: &SPath) -> Result<Url> {
+    pub fn to_external_uri(&self, path: &SPath) -> Result<(Url, &MountDef)> {
         let mount = self.find_mount(path);
-        mount.to_external_uri(path)
+        Ok((mount.to_external_uri(path)?, mount.def()))
     }
 
     pub async fn exists(&self, path: &SPath) -> Result<bool> {
@@ -103,9 +119,45 @@ impl MountsStorage {
 mod tests {
     use crate::{MountDef, SPath};
     use futures_util::StreamExt;
-    use std::collections::HashMap;
     use std::fs;
     use testdir::testdir;
+
+    #[tokio::test]
+    async fn test_store_dup_ids() {
+        let test_dir = testdir!();
+        let mount1_dir = test_dir.join("mount1");
+        fs::create_dir(&mount1_dir).unwrap();
+        let mount2_dir = test_dir.join("mount2");
+        fs::create_dir(&mount2_dir).unwrap();
+
+        #[cfg(target_os = "windows")]
+        let uri1 = format!("file:///{}", mount1_dir.to_string_lossy());
+        #[cfg(not(target_os = "windows"))]
+        let uri1 = format!("file://{}", mount1_dir.to_string_lossy());
+
+        let mount1 = MountDef::builder()
+            .id("id")
+            .mount_path("/")
+            .uri(uri1)
+            .build()
+            .unwrap();
+
+        #[cfg(target_os = "windows")]
+        let uri2 = format!("file:///{}", mount2_dir.to_string_lossy());
+        #[cfg(not(target_os = "windows"))]
+        let uri2 = format!("file://{}", mount2_dir.to_string_lossy());
+
+        let mount2 = MountDef::builder()
+            .id("id")
+            .mount_path("/foo")
+            .uri(uri2)
+            .build()
+            .unwrap();
+        assert!(matches!(
+            super::MountsStorage::from(vec![mount1, mount2]).await,
+            Err(super::StorageError::ConfigurationError(_))
+        ));
+    }
 
     #[tokio::test]
     async fn test_store() {
@@ -121,6 +173,7 @@ mod tests {
         let uri1 = format!("file://{}", mount1_dir.to_string_lossy());
 
         let mount1 = MountDef::builder()
+            .id("id0")
             .mount_path("/")
             .uri(uri1)
             .build()
@@ -132,11 +185,12 @@ mod tests {
         let uri2 = format!("file://{}", mount2_dir.to_string_lossy());
 
         let mount2 = MountDef::builder()
+            .id("id1")
             .mount_path("/foo")
             .uri(uri2)
             .build()
             .unwrap();
-        let store = super::MountsStorage::from(vec![mount1, mount2], &HashMap::new())
+        let store = super::MountsStorage::from(vec![mount1, mount2])
             .await
             .unwrap();
 

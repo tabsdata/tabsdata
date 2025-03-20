@@ -105,7 +105,6 @@ mod tests {
     use crate::logic::datasets::service::execution::create_plan::CreatePlanService;
     use crate::logic::datasets::service::execution::schedule::poll_datasets::PollDatasetsService;
     use crate::logic::datasets::service::execution::schedule::tests::td_uri;
-    use std::collections::HashMap;
     use std::path::PathBuf;
     use td_common::id;
     use td_common::id::Id;
@@ -145,15 +144,12 @@ mod tests {
 
         let db = td_database::test_utils::db().await.unwrap();
         let mound_def = MountDef::builder()
+            .id("id")
             .mount_path("/")
             .uri(dummy_file())
             .build()
             .unwrap();
-        let storage = Arc::new(
-            Storage::from(vec![mound_def], &HashMap::new())
-                .await
-                .unwrap(),
-        );
+        let storage = Arc::new(Storage::from(vec![mound_def]).await.unwrap());
         let message_queue = Arc::new(MockWorkerMessageQueue::new(vec![]));
         let server_url = Arc::new(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2457));
         let provider = CreateMessageService::provider(db, message_queue, storage, server_url);
@@ -240,15 +236,12 @@ mod tests {
         let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
+            .id("id")
             .mount_path("/")
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(
-            Storage::from(vec![mount_def], &HashMap::new())
-                .await
-                .unwrap(),
-        );
+        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -331,7 +324,15 @@ mod tests {
             message.info().function_bundle().as_path(),
             storage_path(&test_dir, collection_id, d0, f0, None, None)
         );
-        assert!(message.info().function_bundle().env_prefix().is_none());
+        assert_eq!(
+            message
+                .info()
+                .function_bundle()
+                .env_prefix()
+                .as_ref()
+                .unwrap(),
+            "ID_"
+        );
         assert_eq!(
             message.info().dataset_data_version(),
             ds_ready_to_execute.data_version()
@@ -380,7 +381,7 @@ mod tests {
                         Some("t0")
                     )
                 );
-                assert!(location.env_prefix().is_none());
+                assert_eq!(location.env_prefix().as_ref().unwrap(), "ID_");
             }
             _ => panic!("Unexpected Output Table type"),
         };
@@ -393,15 +394,12 @@ mod tests {
         let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
+            .id("id")
             .mount_path("/")
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(
-            Storage::from(vec![mount_def], &HashMap::new())
-                .await
-                .unwrap(),
-        );
+        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -472,7 +470,15 @@ mod tests {
             message.info().function_bundle().as_path(),
             storage_path(&test_dir, collection_id, d0, f0, None, None)
         );
-        assert!(message.info().function_bundle().env_prefix().is_none());
+        assert_eq!(
+            message
+                .info()
+                .function_bundle()
+                .env_prefix()
+                .as_ref()
+                .unwrap(),
+            "ID_"
+        );
         assert_eq!(
             message.info().dataset_data_version(),
             ds_ready_to_execute.data_version()
@@ -504,7 +510,7 @@ mod tests {
                         Some("t0")
                     )
                 );
-                assert!(location.env_prefix().is_none());
+                assert_eq!(location.env_prefix().as_ref().unwrap(), "ID_");
             }
             _ => panic!("Unexpected Output Table type"),
         };
@@ -517,15 +523,12 @@ mod tests {
         let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
+            .id("id")
             .mount_path("/")
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(
-            Storage::from(vec![mount_def], &HashMap::new())
-                .await
-                .unwrap(),
-        );
+        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -666,7 +669,15 @@ mod tests {
                     None
                 )
             );
-            assert!(message.info().function_bundle().env_prefix().is_none());
+            assert_eq!(
+                message
+                    .info()
+                    .function_bundle()
+                    .env_prefix()
+                    .as_ref()
+                    .unwrap(),
+                "ID_"
+            );
             assert_eq!(
                 message.info().dataset_data_version(),
                 message.info().dataset_data_version()
@@ -689,15 +700,12 @@ mod tests {
         let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
+            .id("id")
             .mount_path("/")
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(
-            Storage::from(vec![mount_def], &HashMap::new())
-                .await
-                .unwrap(),
-        );
+        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -776,7 +784,7 @@ mod tests {
                         Some("t0")
                     )
                 );
-                assert!(location.env_prefix().is_none());
+                assert_eq!(location.env_prefix().as_ref().unwrap(), "ID_");
             }
             _ => panic!("Unexpected Output Table type"),
         };
@@ -795,7 +803,7 @@ mod tests {
                         Some("t1")
                     )
                 );
-                assert!(location.env_prefix().is_none());
+                assert_eq!(location.env_prefix().as_ref().unwrap(), "ID_");
             }
             _ => panic!("Unexpected Output Table type"),
         };
@@ -808,15 +816,12 @@ mod tests {
         let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
+            .id("id")
             .mount_path("/")
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(
-            Storage::from(vec![mount_def], &HashMap::new())
-                .await
-                .unwrap(),
-        );
+        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -932,15 +937,12 @@ mod tests {
         let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
+            .id("id")
             .mount_path("/")
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(
-            Storage::from(vec![mount_def], &HashMap::new())
-                .await
-                .unwrap(),
-        );
+        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -1010,15 +1012,12 @@ mod tests {
         let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir).unwrap());
 
         let mount_def = MountDef::builder()
+            .id("id")
             .mount_path("/")
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(
-            Storage::from(vec![mount_def], &HashMap::new())
-                .await
-                .unwrap(),
-        );
+        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;

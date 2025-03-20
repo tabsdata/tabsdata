@@ -9,7 +9,6 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use object_store::path::Path;
 use regex::Regex;
-use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -184,15 +183,15 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub async fn from(mount_defs: Vec<MountDef>, vars: &HashMap<String, String>) -> Result<Self> {
-        let storage = MountsStorage::from(mount_defs, vars).await?;
+    pub async fn from(mount_defs: Vec<MountDef>) -> Result<Self> {
+        let storage = MountsStorage::from(mount_defs).await?;
         Ok(Self { storage })
     }
 
-    pub fn to_external_uri(&self, path: &SPath) -> Result<Url> {
+    pub fn to_external_uri(&self, path: &SPath) -> Result<(Url, &MountDef)> {
         let res = self.storage.to_external_uri(path);
         match &res {
-            Ok(uri) => trace!("to_external_uri({}) -> {}", path, uri),
+            Ok((uri, _)) => trace!("to_external_uri({}) -> {}", path, uri),
             Err(e) => warn!("to_external_uri({}) error: {}", path, e),
         }
         res
@@ -260,7 +259,6 @@ impl Storage {
 mod tests {
     use crate::{MountDef, SPath, Storage};
     use object_store::path::Path;
-    use std::collections::HashMap;
     use std::fs;
     use std::ops::Deref;
     use testdir::testdir;
@@ -325,6 +323,7 @@ mod tests {
         let uri1 = format!("file://{}", mount1_dir.to_string_lossy());
 
         let mount1 = MountDef::builder()
+            .id("id0")
             .mount_path("/")
             .uri(uri1)
             .build()
@@ -336,13 +335,12 @@ mod tests {
         let uri2 = format!("file://{}", mount2_dir.to_string_lossy());
 
         let mount2 = MountDef::builder()
+            .id("id1")
             .mount_path("/foo")
             .uri(uri2)
             .build()
             .unwrap();
-        let storage = Storage::from(vec![mount1, mount2], &HashMap::new())
-            .await
-            .unwrap();
+        let storage = Storage::from(vec![mount1, mount2]).await.unwrap();
 
         #[cfg(target_os = "windows")]
         let match1 = format!("file:///{}", mount1_dir.to_string_lossy());
@@ -353,6 +351,7 @@ mod tests {
             storage
                 .to_external_uri(&SPath::parse("/").unwrap())
                 .unwrap()
+                .0
                 .as_str(),
             &match1.replace("\\", "/")
         );
@@ -366,6 +365,7 @@ mod tests {
             storage
                 .to_external_uri(&SPath::parse("/foo.txt").unwrap())
                 .unwrap()
+                .0
                 .as_str(),
             &match2.replace("\\", "/")
         );
@@ -379,6 +379,7 @@ mod tests {
             storage
                 .to_external_uri(&SPath::parse("/foo/bar.txt").unwrap())
                 .unwrap()
+                .0
                 .as_str(),
             &match3.replace("\\", "/")
         );

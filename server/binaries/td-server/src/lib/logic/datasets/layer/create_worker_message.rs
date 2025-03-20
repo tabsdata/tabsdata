@@ -19,6 +19,8 @@ pub async fn create_worker_message<T: WorkerMessageQueue>(
     Input(callback): Input<Callback>,
     Input(function_input): Input<FunctionInput>,
 ) -> Result<(), TdError> {
+    // TODO set _env prefixes as ENVs for supervisor to expose to the worker
+    let _env_prefixes = function_input.env_prefixes();
     let message_payload: RequestMessagePayload<FunctionInput> =
         RequestMessagePayloadBuilder::default()
             .class(WorkerClass::EPHEMERAL)

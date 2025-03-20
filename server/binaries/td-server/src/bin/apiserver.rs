@@ -2,7 +2,6 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 use tabsdatalib::bin::apiserver::config::{Config, Params};
@@ -52,6 +51,7 @@ fn main() {
 
             // Create storage, for now we use a single mount and in local filesystem
             let mount_def = match MountDef::builder()
+                .id("id")
                 .mount_path("/")
                 .uri(config.storage_url().as_ref().unwrap()) // at this point we know it's Some
                 .build()
@@ -63,8 +63,7 @@ fn main() {
                 }
             };
 
-            let envs: HashMap<String, String> = std::env::vars().collect();
-            let storage = match Storage::from(vec![mount_def], &envs).await {
+            let storage = match Storage::from(vec![mount_def]).await {
                 Ok(storage) => storage,
                 Err(e) => {
                     error!("Error creating storage: {}", e);

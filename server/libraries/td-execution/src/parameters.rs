@@ -5,7 +5,7 @@
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use url::Url;
 
 // Aliases used for yaml serde of the different entities (for example, serialize TdUri as a string)
@@ -22,6 +22,7 @@ mod yaml_repr {
 #[builder(setter(into))]
 pub struct Location {
     uri: Url,
+    #[builder(setter(strip_option), default)]
     env_prefix: Option<yaml_repr::EnvPrefix>,
 }
 
@@ -54,18 +55,33 @@ impl Info {
     }
 }
 
+pub trait Locations {
+    fn locations(&self) -> Vec<&Location>;
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Builder, Getters, Serialize, Deserialize)]
 #[getset(get = "pub")]
 #[builder(setter(into))]
 pub struct InputTableVersion {
     name: yaml_repr::TableName,
     table: yaml_repr::TdUri,
+    #[builder(setter(strip_option), default)]
     table_id: Option<yaml_repr::TdUri>,
+    #[builder(setter(strip_option), default)]
     location: Option<Location>,
     table_pos: i64,
     version_pos: i64,
 }
 
+impl Locations for InputTableVersion {
+    fn locations(&self) -> Vec<&Location> {
+        if let Some(location) = &self.location {
+            vec![location]
+        } else {
+            vec![]
+        }
+    }
+}
 impl InputTableVersion {
     pub fn builder() -> InputTableVersionBuilder {
         InputTableVersionBuilder::default()
@@ -84,12 +100,39 @@ pub struct InputPartitionTableVersion {
     version_pos: i64,
 }
 
+impl InputPartitionTableVersion {
+    pub fn builder() -> InputPartitionTableVersionBuilder {
+        InputPartitionTableVersionBuilder::default()
+    }
+}
+
+impl Locations for InputPartitionTableVersion {
+    fn locations(&self) -> Vec<&Location> {
+        self.partitions.values().collect()
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum InputTable {
     Table(InputTableVersion),
     TableVersions(Vec<InputTableVersion>),
     PartitionedTable(InputPartitionTableVersion),
     PartitionedTableVersions(Vec<InputPartitionTableVersion>),
+}
+
+impl Locations for InputTable {
+    fn locations(&self) -> Vec<&Location> {
+        match self {
+            InputTable::Table(table) => table.locations(),
+            InputTable::TableVersions(tables) => {
+                tables.iter().flat_map(|t| t.locations()).collect()
+            }
+            InputTable::PartitionedTable(table) => table.locations(),
+            InputTable::PartitionedTableVersions(tables) => {
+                tables.iter().flat_map(|t| t.locations()).collect()
+            }
+        }
+    }
 }
 
 impl InputTable {
@@ -114,6 +157,15 @@ pub enum OutputTable {
         table_pos: i64,
         base_location: Location,
     },
+}
+
+impl Locations for OutputTable {
+    fn locations(&self) -> Vec<&Location> {
+        match self {
+            OutputTable::Table { location, .. } => vec![location],
+            OutputTable::PartitionedTable { base_location, .. } => vec![base_location],
+        }
+    }
 }
 
 impl OutputTable {
@@ -159,10 +211,45 @@ impl FunctionInputV1 {
     }
 }
 
+impl<T: Locations> Locations for Vec<T> {
+    fn locations(&self) -> Vec<&Location> {
+        self.iter().flat_map(|t| t.locations()).collect()
+    }
+}
+impl Locations for FunctionInputV1 {
+    fn locations(&self) -> Vec<&Location> {
+        let mut locations = self.system_input.locations();
+        locations.extend(self.input.locations());
+        locations.extend(self.system_output.locations());
+        locations.extend(self.output.locations());
+        locations
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FunctionInput {
     V0(String), // used in testing
     V1(Box<FunctionInputV1>),
+}
+
+impl Locations for FunctionInput {
+    fn locations(&self) -> Vec<&Location> {
+        match self {
+            FunctionInput::V0(_) => vec![],
+            FunctionInput::V1(input) => input.locations(),
+        }
+    }
+}
+
+impl FunctionInput {
+    pub fn env_prefixes(&self) -> HashSet<&str> {
+        self.locations()
+            .into_iter()
+            .map(|location| location.env_prefix())
+            .filter(|prefix| prefix.is_some())
+            .map(|prefix| prefix.as_ref().unwrap().as_str())
+            .collect::<HashSet<_>>()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -216,5 +303,194 @@ impl TablePosition for OutputTable {
             OutputTable::Table { table_pos, .. } => *table_pos,
             OutputTable::PartitionedTable { table_pos, .. } => *table_pos,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use url::Url;
+
+    #[test]
+    fn test_input_table_version_locations() {
+        let itv = InputTableVersion::builder()
+            .name("n")
+            .table("t")
+            .table_id("ti")
+            .table_pos(1)
+            .version_pos(1)
+            .build()
+            .unwrap();
+        assert_eq!(itv.locations().len(), 0);
+
+        let location = Location::builder()
+            .uri(Url::parse("file:///foo").unwrap())
+            .build()
+            .unwrap();
+        let itv = InputTableVersion::builder()
+            .name("n")
+            .table("t")
+            .table_id("ti")
+            .table_pos(1)
+            .version_pos(1)
+            .location(location.clone())
+            .build()
+            .unwrap();
+        assert_eq!(itv.locations(), vec![&location]);
+    }
+
+    #[test]
+    fn test_input_partition_table_version_locations() {
+        let itv = InputPartitionTableVersion::builder()
+            .name("n")
+            .table("t")
+            .table_id("ti")
+            .table_pos(1)
+            .version_pos(1)
+            .partitions(HashMap::new())
+            .build()
+            .unwrap();
+        assert_eq!(itv.locations().len(), 0);
+
+        let location = Location::builder()
+            .uri(Url::parse("file:///foo").unwrap())
+            .build()
+            .unwrap();
+        let partitions = HashMap::from([("p".to_string(), location.clone())]);
+        let itv = InputPartitionTableVersion::builder()
+            .name("n")
+            .table("t")
+            .table_id("ti")
+            .table_pos(1)
+            .version_pos(1)
+            .partitions(partitions)
+            .build()
+            .unwrap();
+        assert_eq!(itv.locations(), vec![&location]);
+    }
+
+    #[test]
+    fn test_input_table_locations() {
+        let location = Location::builder()
+            .uri(Url::parse("file:///foo").unwrap())
+            .build()
+            .unwrap();
+        let itv = InputTableVersion::builder()
+            .name("n")
+            .table("t")
+            .table_id("ti")
+            .table_pos(1)
+            .version_pos(1)
+            .location(location.clone())
+            .build()
+            .unwrap();
+        assert_eq!(InputTable::Table(itv.clone()).locations(), vec![&location]);
+        assert_eq!(
+            InputTable::TableVersions(vec![itv]).locations(),
+            vec![&location]
+        );
+
+        let itv = InputPartitionTableVersion::builder()
+            .name("n")
+            .table("t")
+            .table_id("ti")
+            .table_pos(1)
+            .version_pos(1)
+            .partitions(HashMap::from([("p".to_string(), location.clone())]))
+            .build()
+            .unwrap();
+        assert_eq!(
+            InputTable::PartitionedTable(itv.clone()).locations(),
+            vec![&location]
+        );
+        assert_eq!(
+            InputTable::PartitionedTableVersions(vec![itv]).locations(),
+            vec![&location]
+        );
+    }
+
+    #[test]
+    fn test_output_table_locations() {
+        let location = Location::builder()
+            .uri(Url::parse("file:///foo").unwrap())
+            .build()
+            .unwrap();
+        let ot = OutputTable::from_table("n".to_string(), location.clone(), 1);
+        assert_eq!(ot.locations(), vec![&location]);
+
+        let ot = OutputTable::from_partitioned_table("n".to_string(), location.clone(), 1);
+        assert_eq!(ot.locations(), vec![&location]);
+    }
+
+    #[test]
+    fn test_function_input_v1_locations() {
+        let location1 = Location::builder()
+            .uri(Url::parse("file:///foo1").unwrap())
+            .build()
+            .unwrap();
+        let location2 = Location::builder()
+            .uri(Url::parse("file:///foo2").unwrap())
+            .env_prefix("PA_")
+            .build()
+            .unwrap();
+        let location3 = Location::builder()
+            .uri(Url::parse("file:///foo3").unwrap())
+            .env_prefix("PA_")
+            .build()
+            .unwrap();
+        let location4 = Location::builder()
+            .uri(Url::parse("file:///foo4").unwrap())
+            .env_prefix("PB_")
+            .build()
+            .unwrap();
+        let itv1 = InputTableVersion::builder()
+            .name("n")
+            .table("t")
+            .table_id("ti")
+            .table_pos(1)
+            .version_pos(1)
+            .location(location1.clone())
+            .build()
+            .unwrap();
+        let itv2 = InputTableVersion::builder()
+            .name("n")
+            .table("t")
+            .table_id("ti")
+            .table_pos(1)
+            .version_pos(1)
+            .location(location2.clone())
+            .build()
+            .unwrap();
+        let ot3 = OutputTable::from_table("n".to_string(), location3.clone(), 1);
+        let ot4 = OutputTable::from_table("n".to_string(), location4.clone(), 1);
+
+        let info = Info::builder()
+            .dataset("d")
+            .dataset_id("di")
+            .function_id("fi")
+            .function_bundle(location1.clone())
+            .dataset_data_version("dv".to_string())
+            .triggered_on(1)
+            .transaction_id("ti".to_string())
+            .execution_plan_id("epid".to_string())
+            .execution_plan_dataset("epd".to_string())
+            .execution_plan_dataset_id("epdi".to_string())
+            .execution_plan_triggered_on(1)
+            .build()
+            .unwrap();
+        let function_input = FunctionInputV1::builder()
+            .info(info)
+            .system_input(vec![InputTable::Table(itv1)])
+            .input(vec![InputTable::Table(itv2)])
+            .system_output(vec![ot3])
+            .output(vec![ot4])
+            .build()
+            .unwrap();
+        let function_input = FunctionInput::V1(Box::from(function_input.clone()));
+        assert_eq!(
+            function_input.locations(),
+            vec![&location1, &location2, &location3, &location4]
+        );
+        assert_eq!(function_input.env_prefixes(), HashSet::from(["PA_", "PB_"]));
     }
 }
