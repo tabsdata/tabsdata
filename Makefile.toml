@@ -4,10 +4,10 @@
 
 env_files = [
     { path = "./make/settings/toolchain.env" },
-    { path = "./make/settings/make.env" },
+    { path = "./make/settings/makers.env" },
     { path = "./make/settings/output.env" },
     { path = "./make/settings/product.env" },
-    { path = "${HOME}/.tabsdata/makers/settings.env" },
+    { path = "${HOME}/.tabsdata-dev/make.env" },
 ]
 
 extend = [
@@ -33,6 +33,7 @@ extend = [
 
 [env]
 MAKE_SUCCESS = true
+ECHO_ENV_FILES = true
 
 CLEAN = "${clean:false}"
 PROFILE = "${profile:dev}"
@@ -78,7 +79,31 @@ load_script = [
     '''
     #!@duckscript
 
-    touch ${HOME}/.tabsdata/makers/settings.env
+    echo_env_files = get_env ECHO_ENV_FILES
+
+    LOCAL_ROOT = pwd
+
+    ok_make_env = is_path_exists ${HOME}/.tabsdata-dev/make.env
+    if ${ok_make_env}
+        if eq ${echo_env_files} "true"
+            echo "📎 File ${HOME}/.tabsdata-dev/make.env alredy exists"
+        end
+    else
+        if eq ${echo_env_files} "true"
+            echo "💈 Copying ${LOCAL_ROOT}/.custom/make-dev.env to ${HOME}/.tabsdata-dev/make.env"
+        end
+        cp ${LOCAL_ROOT}/.custom/make-dev.env ${HOME}/.tabsdata-dev/make.env
+    end
+
+    if eq ${echo_env_files} "true"
+        echo "🎈 This build is using the following environment variables files:"
+        files = glob_array ${LOCAL_ROOT}/make/settings/*.env
+        for file in ${files}
+            echo "   - 🪬 ${file}"
+        end
+        echo "   - 🪬 ${HOME}/.tabsdata-dev/make.env"
+    end
+    set_env ECHO_ENV_FILES "false"
     ''']
 skip_core_tasks = true
 skip_rust_env_info = true

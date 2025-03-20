@@ -119,6 +119,7 @@ profile_default/
 sdist/
 share/python-wheels/
 site
+SOURCETRACK.yaml
 /src/e2e/test-results/
 /src/e2e/playwright-report/
 /src/e2e/blob-report/
