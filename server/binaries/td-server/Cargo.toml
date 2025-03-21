@@ -38,8 +38,8 @@ name = "transporter"
 path = "src/bin/transporter.rs"
 
 [[example]]
-name = "interceptor"
-path = "examples/interceptor/interceptor.rs"
+name = "tableframe"
+path = "examples/tableframe/extension.rs"
 
 [[example]]
 name = "simple_server"
@@ -116,8 +116,8 @@ td-common = { workspace = true }
 td-database = { workspace = true }
 td-error = { workspace = true }
 td-execution = { workspace = true }
-td-interceptor = { workspace = true }
-td-interceptor-api = { workspace = true }
+te-tableframe = { workspace = true }
+ta-tableframe = { workspace = true }
 td-objects = { workspace = true }
 td-python = { workspace = true }
 td-security = { workspace = true }
@@ -194,8 +194,8 @@ windows = { workspace = true, features = ["Win32", "Win32_System_Threading"] }
 td-common = { workspace = true, features = ["td-test"] }
 td-schema = { workspace = true, features = ["td-test"] }
 td-database = { workspace = true, features = ["td-test"] }
-td-interceptor = { workspace = true, features = ["td-test"] }
-td-interceptor-api = { workspace = true, features = ["td-test"] }
+te-tableframe = { workspace = true, features = ["td-test"] }
+ta-tableframe = { workspace = true, features = ["td-test"] }
 td-objects = { workspace = true, features = ["td-test"] }
 td-server = { workspace = true, features = ["td-test"] }
 

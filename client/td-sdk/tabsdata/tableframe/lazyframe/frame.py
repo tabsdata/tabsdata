@@ -17,9 +17,6 @@ from polars import DataType, Schema, Series
 from polars._typing import ColumnNameOrSelector, JoinStrategy, UniqueKeepStrategy
 from polars.dependencies import numpy as np
 
-# noinspection PyProtectedMember
-from td_interceptor.interceptor import Interceptor
-
 import tabsdata as td
 
 # noinspection PyProtectedMember
@@ -49,6 +46,9 @@ import tabsdata.utils.tableframe._reflection as td_reflection
 import tabsdata.utils.tableframe._translator as td_translator
 from tabsdata.exceptions import ErrorCode, TableFrameError
 from tabsdata.utils.annotations import pydoc, unstable
+
+# noinspection PyProtectedMember
+from te_tableframe.extension import TableframeExtension
 
 # ToDo: SDK-128: Define the logging model for SDK CLI execution
 logger = logging.getLogger(__name__)
@@ -1514,10 +1514,14 @@ TdType = TypeVar("TdType", TableFrame, Series, td_expr.Expr)
 
 def _assemble_columns(f: TableFrame | pl.LazyFrame) -> td.TableFrame:
     if isinstance(f, pl.LazyFrame):
-        return td.TableFrame.__build__(Interceptor.instance().assemble_columns(f))
+        return td.TableFrame.__build__(
+            TableframeExtension.instance().assemble_columns(f),
+        )
     elif isinstance(f, td.TableFrame):
         # noinspection PyProtectedMember
-        return td.TableFrame.__build__(Interceptor.instance().assemble_columns(f._lf))
+        return td.TableFrame.__build__(
+            TableframeExtension.instance().assemble_columns(f._lf),
+        )
     else:
         raise TypeError(
             "Expected frame to be of type TableFrame or LazyFrame, but got"

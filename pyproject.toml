@@ -28,9 +28,9 @@ known_first_party = [
     "tabsdata_mongodb",
     "tabsdata_salesforce",
     "tabsserver",
-    "ta_interceptor",
     "td_features",
-    "td_interceptor_api",
+    "ta_tableframe",
+    "te_tableframe",
     "td_sdk",
     "tests",
 ]

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-pub use td_transaction_interceptor::{TransactionBy, TransactionKey};
+pub use te_transaction::{TransactionBy, TransactionKey};
 
 use std::collections::HashMap;
 use td_common::dataset::DatasetRef;
@@ -72,7 +72,7 @@ pub enum TransactionMapError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use td_transaction_interceptor::{TransactionBy, TransactionKey};
+    use te_transaction::{TransactionBy, TransactionKey};
 
     #[test]
     fn test_add() {

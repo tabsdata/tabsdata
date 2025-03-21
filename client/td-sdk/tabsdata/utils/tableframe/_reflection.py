@@ -13,7 +13,7 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 def check_required_columns(df: pl.DataFrame | pl.LazyFrame):
     """
     Check if any required column is missing.
-    This can depend on the interceptor implementation.
+    This can depend on the tableframe extension implementation.
     """
     columns = df.collect_schema().names()
     missing_columns = [

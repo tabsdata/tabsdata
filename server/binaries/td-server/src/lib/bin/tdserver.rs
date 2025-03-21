@@ -28,6 +28,7 @@ use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::{env, io};
 use sysinfo::Signal;
+use ta_tableframe::api::Extension;
 use tabled::{
     settings::{
         object::Columns,
@@ -41,10 +42,9 @@ use td_common::env::to_absolute;
 use td_common::files::ROOT;
 use td_common::os::{get_process_tree, terminate_process};
 use td_common::status::ExitStatus::{GeneralError, Success};
-use td_interceptor::engine::Interceptor;
-use td_interceptor_api::api::InterceptorPlugin;
 use td_python::upgrade::{get_source_version, get_target_version, upgrade};
 use td_python::venv::prepare;
+use te_tableframe::engine::TableframeExtension;
 use thiserror::Error;
 use tokio::time::{Duration, Instant};
 use tracing::{error, info, warn};
@@ -1031,7 +1031,7 @@ struct InstanceRow {
 pub fn show_mode() {
     warn!(
         "Activated tabsdata {} in production mode",
-        Interceptor.edition()
+        TableframeExtension.edition()
     );
 }
 
@@ -1039,7 +1039,7 @@ pub fn show_mode() {
 pub fn show_mode() {
     info!(
         "Activated tabsdata {} in development mode",
-        Interceptor.edition()
+        TableframeExtension.edition()
     );
 }
 

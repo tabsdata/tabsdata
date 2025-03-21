@@ -6,9 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
-import td_interceptor.interceptor as td_interceptor
-
 import tabsdata.utils.tableframe._constants as td_constants
+import te_tableframe.extension as te_tableframe
 
 
 def standard_system_columns() -> list[str]:
@@ -16,23 +15,23 @@ def standard_system_columns() -> list[str]:
 
 
 def extended_system_columns() -> list[str]:
-    return [member.value for member in td_interceptor.ExtendedSystemColumns]
+    return [member.value for member in te_tableframe.ExtendedSystemColumns]
 
 
 def system_columns() -> list[str]:
-    return [member.value for member in td_interceptor.SystemColumns]
+    return [member.value for member in te_tableframe.SystemColumns]
 
 
 def system_columns_metadata() -> dict[str, Any]:
-    return td_interceptor.SYSTEM_COLUMNS_METADATA
+    return te_tableframe.SYSTEM_COLUMNS_METADATA
 
 
 def required_columns() -> list[str]:
-    return [member.value for member in td_interceptor.RequiredColumns]
+    return [member.value for member in te_tableframe.RequiredColumns]
 
 
 def required_columns_metadata() -> dict[str, Any]:
-    return td_interceptor.REQUIRED_COLUMNS_METADATA
+    return te_tableframe.REQUIRED_COLUMNS_METADATA
 
 
 STANDARD_SYSTEM_COLUMNS = standard_system_columns()

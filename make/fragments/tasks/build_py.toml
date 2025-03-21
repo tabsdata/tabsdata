@@ -8,8 +8,8 @@ run_task = [
     { name = [
         "build_py_tabsdata",
         "build_py_td_features",
-        "build_py_ta_interceptor",
-        "build_py_td_interceptor",
+        "build_py_ta_tableframe",
+        "build_py_te_tableframe",
         "build_py_td-sdk"
     ] }
 ]
@@ -20,10 +20,10 @@ private = true
 [tasks.build_py_td_features]
 private = true
 
-[tasks.build_py_ta_interceptor]
+[tasks.build_py_ta_tableframe]
 private = true
 
-[tasks.build_py_td_interceptor]
+[tasks.build_py_te_tableframe]
 private = true
 
 [tasks.build_py_td-sdk]

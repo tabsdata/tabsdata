@@ -9,8 +9,8 @@ run_task = [
     { name = [
         "pre-test_py",
         "test_py_td_features",
-        "test_py_ta_interceptor",
-        "test_py_td_interceptor",
+        "test_py_ta_tableframe",
+        "test_py_te_tableframe",
         "test_py_tabsdata",
         "test_py_tabsdata_salesforce",
         "post-test_py"
@@ -42,7 +42,7 @@ script = [
     end
     ''']
 
-[tasks.test_py_ta_interceptor]
+[tasks.test_py_ta_tableframe]
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -53,21 +53,21 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd "${PROJECT_TA_INTERCEPTOR_FOLDER}"
+    cd "${PROJECT_TA_TABLEFRAME_FOLDER}"
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TA_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_TA_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TA_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TA_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
     if not eq ${exit_code} "5"
         code = exit ${exit_code}
     end
     ''']
 
-[tasks.test_py_td_interceptor]
+[tasks.test_py_te_tableframe]
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -78,14 +78,14 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd ${PROJECT_TD_INTERCEPTOR_FOLDER}
+    cd ${PROJECT_TD_TABLEFRAME_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TD_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16  --dist=loadfile ${TESTS_TD_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TD_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16  --dist=loadfile ${TESTS_TD_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_TD_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TD_INTERCEPTOR_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_TD_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TD_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
     if not eq ${exit_code} "5"
         code = exit ${exit_code}

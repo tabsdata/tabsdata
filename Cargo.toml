@@ -34,7 +34,7 @@ members = [
     "server/libraries/td-database",
     "server/libraries/td-error",
     "server/libraries/td-execution",
-    "server/libraries/td-interceptor-api",
+    "server/libraries/ta-tableframe",
     "server/libraries/td-objects",
     "server/libraries/td-python",
     "server/libraries/td-schema",
@@ -44,8 +44,8 @@ members = [
     "server/libraries/td-test",
     "server/libraries/td-tower",
     "server/libraries/td-transaction",
-    "extensions/rust/td-transaction-interceptor",
-    "extensions/rust/td-interceptor",
+    "extensions/rust/te-transaction",
+    "extensions/rust/te-tableframe",
     "server/binaries/td-server",
 ]
 exclude = [
@@ -166,11 +166,11 @@ version = "0.9.2"
 [workspace.dependencies.td-execution]
 path = "server/libraries/td-execution"
 
-[workspace.dependencies.td-interceptor]
-path = "extensions/rust/td-interceptor"
+[workspace.dependencies.te-tableframe]
+path = "extensions/rust/te-tableframe"
 
-[workspace.dependencies.td-interceptor-api]
-path = "server/libraries/td-interceptor-api"
+[workspace.dependencies.ta-tableframe]
+path = "server/libraries/ta-tableframe"
 
 [workspace.dependencies.td-objects]
 path = "server/libraries/td-objects"
@@ -203,8 +203,8 @@ path = "server/libraries/td-tower"
 [workspace.dependencies.td-transaction]
 path = "server/libraries/td-transaction"
 
-[workspace.dependencies.td-transaction-interceptor]
-path = "extensions/rust/td-transaction-interceptor"
+[workspace.dependencies.te-transaction]
+path = "extensions/rust/te-transaction"
 
 # External dependencies
 
@@ -516,8 +516,8 @@ toml = { workspace = true }
 
 ## Libraries
 
-td-interceptor = { workspace = true }
-td-interceptor-api = { workspace = true }
+te-tableframe = { workspace = true }
+ta-tableframe = { workspace = true }
 
 # External dependencies
 

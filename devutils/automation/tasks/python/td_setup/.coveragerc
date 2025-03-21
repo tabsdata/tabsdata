@@ -3,7 +3,9 @@
 #
 
 [run]
-omit = tests/*
+omit = 
+    test*
+    test*/**
 parallel = True
 
 [report]

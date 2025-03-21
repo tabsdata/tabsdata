@@ -2,8 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use td_interceptor::engine::Interceptor;
-use td_interceptor_api::api::InterceptorPlugin;
+use ta_tableframe::api::Extension;
+use te_tableframe::engine::TableframeExtension;
 
 fn main() {
     println!("Name.......: {}", env!("CARGO_PKG_NAME"));
@@ -24,5 +24,5 @@ fn edition() -> String {
 }
 
 fn summary() -> String {
-    Interceptor.summary().unwrap()
+    TableframeExtension.summary().unwrap()
 }

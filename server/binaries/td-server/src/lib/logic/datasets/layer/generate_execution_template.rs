@@ -2,16 +2,16 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use ta_tableframe::execution::from_graph::FromDatasetGraph;
 use td_error::TdError;
 use td_execution::dataset::Dataset;
 use td_execution::execution_planner::ExecutionTemplate;
 use td_execution::graphs::DatasetGraphBuilder;
 use td_execution::link::{DataGraph, TriggerGraph};
-use td_interceptor::execution::from_graph::ExecutionTemplateBuilder;
-use td_interceptor_api::execution::from_graph::FromDatasetGraph;
 use td_objects::dlo::{CollectionId, DatasetId};
 use td_tower::extractors::{Input, SrvCtx};
 use td_transaction::TransactionBy;
+use te_tableframe::execution::from_graph::ExecutionTemplateBuilder;
 
 pub async fn generate_execution_template(
     SrvCtx(transaction_by): SrvCtx<TransactionBy>,

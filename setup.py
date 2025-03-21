@@ -497,10 +497,10 @@ setup(
         ),
     ],
     package_dir={
-        "ta_interceptor": os.path.join(
+        "ta_tableframe": os.path.join(
             "client",
             "td-lib",
-            "ta_interceptor",
+            "ta_tableframe",
         ),
         "td_features": os.path.join(
             "client",
@@ -523,11 +523,11 @@ setup(
             "tabsserver",
             "function_execution",
         ),
-        "td_interceptor": os.path.join(
+        "te_tableframe": os.path.join(
             "extensions",
             "python",
             "td-lib",
-            "td_interceptor",
+            "te_tableframe",
         ),
     },
     package_data={

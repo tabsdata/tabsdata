@@ -144,7 +144,7 @@ def enrich_sys_path():
                 root,
                 "client",
                 "td-lib",
-                "ta_interceptor",
+                "ta_tableframe",
             )
         ),
     )
@@ -155,7 +155,7 @@ def enrich_sys_path():
                 "extensions",
                 "python",
                 "td-lib",
-                "td_interceptor",
+                "te_tableframe",
             )
         ),
     )

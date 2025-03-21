@@ -97,9 +97,8 @@ mod tests {
     use super::*;
     use crate::logic::datasets::service::update_dataset::UpdateDatasetService;
     use itertools::Itertools;
+    use ta_tableframe::execution::test_utils::FilterTriggered;
     use td_common::uri::TdUri;
-    use td_interceptor::execution::test_utils::TdUriFilter;
-    use td_interceptor_api::execution::test_utils::FilterTriggered;
     use td_objects::crudl::RequestContext;
     use td_objects::datasets::dto::DatasetWrite;
     use td_objects::rest_urls::FunctionParam;
@@ -107,6 +106,7 @@ mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
     use td_tower::ctx_service::RawOneshot;
+    use te_tableframe::execution::test_utils::TdUriFilter;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]

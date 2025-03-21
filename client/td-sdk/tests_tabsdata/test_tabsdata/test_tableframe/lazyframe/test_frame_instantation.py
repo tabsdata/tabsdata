@@ -6,7 +6,6 @@ import polars as pl
 
 # noinspection PyPackageRequirements
 import pytest
-from td_interceptor.interceptor import Interceptor
 
 import tabsdata as td
 from tabsdata.exceptions import ErrorCode, TabsDataException
@@ -18,6 +17,7 @@ from tabsdata.utils.tableframe._helpers import REQUIRED_COLUMNS
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._translator import _wrap_polars_frame
 from td_features.features import Feature, FeaturesManager
+from te_tableframe.extension import TableframeExtension
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -25,7 +25,7 @@ from .. import pytestmark  # noqa: F401
 
 def test_feature():
     enterprise = FeaturesManager.instance().is_enabled(Feature.ENTERPRISE)
-    summary = Interceptor.instance().summary
+    summary = TableframeExtension.instance().summary
     if enterprise:
         assert summary == "Enterprise"
     else:

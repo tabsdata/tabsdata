@@ -3,8 +3,9 @@
 #
 
 [package]
-description = "Tabsdata Transaction Features"
-name = "td-transaction"
+description = "Tabsdata Plugin API"
+name = "ta-tableframe"
+build = "build.rs"
 
 authors = { workspace = true }
 edition = { workspace = true }
@@ -16,6 +17,10 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
+[[example]]
+name = "ta-tableframe"
+path = "examples/ta-tableframe.rs"
+
 [lib]
 
 [features]
@@ -23,10 +28,12 @@ enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
 mock-env = []
+test_logging = []
+test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum_macros", "thiserror"]
+ignored = ["openssl", "td-build", "td-common", "toml"]
 
 # Build dependencies
 
@@ -34,25 +41,22 @@ ignored = ["openssl", "strum_macros", "thiserror"]
 
 # Internal dependencies
 
+td-build = { workspace = true }
+
 # External dependencies
+
+toml = { workspace = true }
 
 [dependencies]
 
 # Internal dependencies
 
-
-## Macros
-
 ## Libraries
 
 td-common = { workspace = true }
-td-error = { workspace = true }
-te-transaction = { workspace = true }
+td-execution = { workspace = true }
 
 # External dependencies
-
-strum_macros = { workspace = true }
-thiserror = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

@@ -3,8 +3,9 @@
 #
 
 [package]
-description = "Tabsdata Transaction Features"
-name = "td-transaction"
+description = "Tabsdata Transaction Extension Implementation - Standard"
+name = "te-transaction"
+build = "build.rs"
 
 authors = { workspace = true }
 edition = { workspace = true }
@@ -19,6 +20,7 @@ version = { workspace = true }
 [lib]
 
 [features]
+
 enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
@@ -26,33 +28,19 @@ mock-env = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum_macros", "thiserror"]
-
-# Build dependencies
-
-[build-dependencies]
-
-# Internal dependencies
-
-# External dependencies
+ignored = ["openssl"]
 
 [dependencies]
 
 # Internal dependencies
 
-
-## Macros
-
-## Libraries
-
 td-common = { workspace = true }
-td-error = { workspace = true }
-te-transaction = { workspace = true }
 
 # External dependencies
 
+serde = { workspace = true, features = ["derive"] }
+strum = { workspace = true }
 strum_macros = { workspace = true }
-thiserror = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

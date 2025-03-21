@@ -104,13 +104,12 @@ impl CreatePlanService {
 mod tests {
     use super::*;
     use itertools::Itertools;
+    use ta_tableframe::execution::test_utils::FilterTriggered;
     use td_common::execution_status::DataVersionStatus;
     use td_common::id::{id, Id};
     use td_common::time::UniqueUtc;
     use td_common::uri::{TdUri, Version, Versions};
     use td_database::sql::DbPool;
-    use td_interceptor::execution::test_utils::TdUriFilter;
-    use td_interceptor_api::execution::test_utils::FilterTriggered;
     use td_objects::crudl::{select_all_by, RequestContext};
     use td_objects::datasets::dao::{DsDataVersion, DsExecutionPlan, DsExecutionRequirement};
     use td_objects::datasets::dto::ExecutionPlanWriteBuilder;
@@ -120,6 +119,7 @@ mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
     use td_tower::ctx_service::RawOneshot;
+    use te_tableframe::execution::test_utils::TdUriFilter;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
