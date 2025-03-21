@@ -17,6 +17,11 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      job_timeout:
+        description: "Time in minutes before cancelling the job"
+        required: true
+        type: number
+        default: 60
       dump_server:
         description: "Dump full server instance contents for hard investigations"
         required: false
@@ -54,9 +59,23 @@ on:
         default: "false"
 
 jobs:
+  cap-job:
+    name: Cap Job
+    permissions: write-all
+    runs-on: ubuntu-latest
+    outputs:
+      job_timeout: ${{ steps.set-timeout.outputs.job_timeout }}
+
+    steps:
+      - name: Set Timeout
+        id: set-timeout
+        run: echo "job_timeout=${{ inputs.job_timeout || 60 }}" >> $GITHUB_OUTPUT
+
   permit-job:
     name: Permit Job
     permissions: write-all
+    needs:
+      - cap-job
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -64,6 +83,7 @@ jobs:
         working-directory: .
     outputs:
       permit_workflow: ${{ steps.check-label.outputs.permit_workflow }}
+    timeout-minutes: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
 
     steps:
       - name: Check label
@@ -96,7 +116,9 @@ jobs:
   describe-job:
     name: Describe Job
     permissions: write-all
-    needs: permit-job
+    needs:
+      - cap-job
+      - permit-job
     if: ${{ needs.permit-job.outputs.permit_workflow == 'true' }}
     runs-on: ubuntu-latest
     defaults:
@@ -110,6 +132,7 @@ jobs:
       run_on_macos_arm_64: ${{ steps.set-outputs.outputs.run_on_macos_arm_64 }}
       run_on_windows_x86_64: ${{ steps.set-outputs.outputs.run_on_windows_x86_64 }}
       run_on_windows_arm_64: ${{ steps.set-outputs.outputs.run_on_windows_arm_64 }}
+    timeout-minutes: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
 
     steps:
       - name: Show Inputs
@@ -168,7 +191,10 @@ jobs:
   dispatch-job:
     name: Dispatch Job
     permissions: write-all
-    needs: describe-job
+    needs:
+      - cap-job
+      - permit-job
+      - describe-job
     if: ${{ needs.permit-job.outputs.permit_workflow == 'true' }}
     uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@main
     secrets:
@@ -182,6 +208,7 @@ jobs:
       SALESFORCE_PASSWORD: ${{ secrets.SALESFORCE_PASSWORD }}
       SALESFORCE_SECURITY_TOKEN: ${{ secrets.SALESFORCE_SECURITY_TOKEN }}
     with:
+      job_timeout: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
       td_product: "standard"
       runner_mode: "integration"
       dump_server: ${{ inputs.dump_server }}
