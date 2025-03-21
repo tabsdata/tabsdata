@@ -5,10 +5,10 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use td_apiforge::api_server_schema;
+use td_apiforge::apiserver_schema;
 
 /// Data Security Level. 0 is the highest security level.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SecurityLevel(u16);
 

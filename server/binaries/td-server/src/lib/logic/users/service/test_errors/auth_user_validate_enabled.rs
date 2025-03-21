@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::apisrv::jwt::jwt_logic::JwtLogic;
+use crate::logic::apiserver::jwt::jwt_logic::JwtLogic;
 use crate::logic::users::error::UserError;
 use crate::logic::users::service::authenticate_user::AuthenticateUserService;
 use chrono::Duration;

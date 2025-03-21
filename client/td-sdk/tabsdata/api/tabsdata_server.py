@@ -15,7 +15,7 @@ from typing import List
 import polars as pl
 import requests
 
-from tabsdata.api.api_server import APIServer, obtain_connection
+from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.io.input import TableInput
 from tabsdata.io.output import TableOutput
 from tabsdata.tabsdatafunction import TabsdataFunction

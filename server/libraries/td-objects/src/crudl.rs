@@ -13,7 +13,7 @@ use sqlx::error::ErrorKind::{ForeignKeyViolation, UniqueViolation};
 use sqlx::sqlite::{SqliteQueryResult, SqliteRow};
 use sqlx::{Error, SqliteConnection};
 use std::fmt::Debug;
-use td_apiforge::api_server_schema;
+use td_apiforge::apiserver_schema;
 use td_common::time::UniqueUtc;
 use td_database::sql::DbError;
 use td_error::td_error;
@@ -126,7 +126,7 @@ pub struct ReadRequest<N> {
 }
 
 /// List parameters for list operations defining filtering, sorting and pagination.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(
     Debug, Clone, PartialEq, Serialize, Deserialize, Validate, Getters, IntoParams, Builder,
 )]

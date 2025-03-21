@@ -12,7 +12,7 @@ import rich_click as click
 from PIL import Image
 from rich_click import Option, UsageError
 
-from tabsdata.api.api_server import APIServer, obtain_connection
+from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.api.tabsdata_server import TabsdataServer
 
 CONNECTION_FILE = "connection.json"

@@ -2,8 +2,8 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use tabsdatalib::api_server;
-use tabsdatalib::logic::apisrv::api_server::{localhost_address, ApiServer};
+use tabsdatalib::apiserver;
+use tabsdatalib::logic::apiserver::{localhost_address, ApiServer};
 
 use crate::counter::Counter;
 
@@ -19,7 +19,7 @@ async fn main() {
 async fn init_server() -> ApiServer {
     let counter = Counter::create();
 
-    api_server! {
+    apiserver! {
         simple_server {
             addresses => vec![localhost_address(0)],
             router => {

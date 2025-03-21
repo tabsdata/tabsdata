@@ -14,26 +14,26 @@ mod status;
 
 // Attribute generation macros
 #[proc_macro_attribute]
-pub fn api_server_path(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn apiserver_path(args: TokenStream, item: TokenStream) -> TokenStream {
     // Alias to utoipa_path, used to find ApiServer paths
     utoipa_path(args, item)
 }
 
 #[proc_macro_attribute]
-pub fn api_server_schema(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn apiserver_schema(args: TokenStream, item: TokenStream) -> TokenStream {
     // Alias to utoipa_schema, used to find ApiServer schemas
     utoipa_schema(args, item)
 }
 
 #[proc_macro]
-pub fn api_server_tag(args: TokenStream) -> TokenStream {
+pub fn apiserver_tag(args: TokenStream) -> TokenStream {
     // Alias to utoipa_schema, used to find ApiServer tags
     utoipa_tag(args)
 }
 
 // Docs generation macros
 #[proc_macro_attribute]
-pub fn api_server_docs(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn apiserver_docs(args: TokenStream, item: TokenStream) -> TokenStream {
     utoipa_docs(args, item)
 }
 

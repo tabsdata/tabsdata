@@ -8,7 +8,7 @@ import os
 import pytest
 from click.testing import CliRunner
 from filelock import FileLock
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, API_SERVER_URL
+from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, APISERVER_URL
 
 from tabsdata.cli.cli import cli
 from tabsdata.utils.tableframe._generators import _id
@@ -37,7 +37,7 @@ def login(tmp_path_factory, worker_id):
 def atomic_login():
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["login", API_SERVER_URL, "--user", "admin"], input="tabsdata\n"
+        cli, ["login", APISERVER_URL, "--user", "admin"], input="tabsdata\n"
     )
     logger.debug(result.output)
     assert result.exit_code == 0

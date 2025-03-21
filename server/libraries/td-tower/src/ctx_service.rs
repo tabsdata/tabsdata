@@ -8,7 +8,7 @@ use getset::Getters;
 use serde::Serialize;
 use std::ops::Deref;
 use std::sync::Arc;
-use td_apiforge::api_server_schema;
+use td_apiforge::apiserver_schema;
 use td_error::TdError;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
@@ -55,7 +55,7 @@ impl<U> Deref for CtxResponse<U> {
 }
 
 /// Empty Response in given Context.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Serialize, Getters, Builder)]
 #[builder(pattern = "owned")]
 #[getset(get = "pub")]
@@ -76,7 +76,7 @@ impl From<CtxResponse<()>> for CtxEmptyResponse {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Builder)]
 #[builder(setter(into))]
 pub struct Message {
@@ -114,7 +114,7 @@ pub type Error = Message;
 pub type Warning = Message;
 pub type Notification = Message;
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Default, Eq, PartialEq, Serialize)]
 pub struct CtxMap {
     errors: Vec<Error>,

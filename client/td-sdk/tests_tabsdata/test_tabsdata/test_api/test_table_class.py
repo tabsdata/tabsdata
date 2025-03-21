@@ -8,7 +8,7 @@ import os
 import polars as pl
 import pytest
 
-from tabsdata.api.api_server import APIServerError
+from tabsdata.api.apiserver import APIServerError
 from tabsdata.api.tabsdata_server import Collection, Table
 
 

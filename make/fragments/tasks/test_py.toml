@@ -281,8 +281,8 @@ script = [
     debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
     TDX = get_env TDX
     debug "🔅 The tdserver process will use TDX location: '${TDX}'"
-    debug "🚀 ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apisrv --address 127.0.0.1:2467"
-    exec --fail-on-error ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apisrv --address 127.0.0.1:2467
+    debug "🚀 ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467"
+    exec --fail-on-error ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467
     ''']
 
 [tasks.status_pytest_tabsdata]

@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-pub mod apisrv;
+pub mod apiserver;
 pub mod collections;
 pub mod datasets;
 pub mod datasetsx;

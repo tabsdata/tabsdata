@@ -9,10 +9,10 @@ use axum::Json;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use td_apiforge::{api_server_path, api_server_schema, api_server_tag, get_status};
+use td_apiforge::{apiserver_path, apiserver_schema, apiserver_tag, get_status};
 use utoipa::{IntoParams, IntoResponses};
 
-api_server_tag!(name = "Test", description = "Test Service");
+apiserver_tag!(name = "Test", description = "Test Service");
 
 #[derive(Deserialize, IntoParams, Getters)]
 #[getset(get = "pub")]
@@ -28,7 +28,7 @@ pub struct TestQueryParams {
     page: usize,
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct TestRequest {
@@ -36,7 +36,7 @@ pub struct TestRequest {
     request_id: usize,
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Default, Serialize, Getters, IntoResponses)]
 #[response(status = 200)]
 #[getset(get = "pub")]
@@ -45,7 +45,7 @@ pub struct TestResponse {
     response_id: usize,
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Default, Serialize, Getters, IntoResponses)]
 #[response(status = 500)]
 #[getset(get = "pub")]
@@ -66,7 +66,7 @@ pub struct CtxResponse<U> {
 
 pub type CtxMap = String;
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Serialize)]
 pub struct ConcreteResponse {
     response: String,
@@ -75,7 +75,7 @@ pub struct ConcreteResponse {
 get_status!(ConcreteResponse);
 
 pub const TEST_GET: &str = "/get";
-#[api_server_path(method = get, path = TEST_GET, tag = TEST_TAG)]
+#[apiserver_path(method = get, path = TEST_GET, tag = TEST_TAG)]
 #[doc = "Get test"]
 pub async fn test_get(
     Path(_path_params): Path<TestPathParams>,
@@ -86,7 +86,7 @@ pub async fn test_get(
 }
 
 pub const TEST_POST: &str = "/post";
-#[api_server_path(method = post, path = TEST_POST, tag = TEST_TAG)]
+#[apiserver_path(method = post, path = TEST_POST, tag = TEST_TAG)]
 #[doc = "Post test"]
 pub async fn test_post(
     Path(_path_params): Path<TestPathParams>,

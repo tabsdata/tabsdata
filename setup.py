@@ -257,7 +257,7 @@ print(f"Using tabsdata target release folder: '{target_release_folder}'")
 
 # noinspection DuplicatedCode
 base_binaries = [
-    "apisrv",
+    "apiserver",
     "bootloader",
     "importer",
     "supervisor",

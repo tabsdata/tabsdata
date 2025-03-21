@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::apisrv::jwt::jwt_logic::{JwtLogic, TokenResponse};
+use crate::logic::apiserver::jwt::jwt_logic::{JwtLogic, TokenResponse};
 use crate::logic::users::error::UserError;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use std::ops::Deref;

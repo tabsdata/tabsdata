@@ -11,7 +11,7 @@ use constcat::concat;
 use getset::Getters;
 use serde::Deserialize;
 use serde_valid::Validate;
-use td_apiforge::api_server_schema;
+use td_apiforge::apiserver_schema;
 use td_common::id::Id;
 use td_common::uri::Version;
 use td_error::TdError;
@@ -26,7 +26,7 @@ pub const CREATE_COLLECTION: &str = COLLECTIONS;
 pub const UPDATE_COLLECTION: &str = COLLECTION;
 pub const DELETE_COLLECTION: &str = COLLECTION;
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Deserialize, Getters, IntoParams)]
 #[getset(get = "pub")]
 pub struct CollectionParam {
@@ -72,7 +72,7 @@ pub const FUNCTION_UPLOAD: &str = concat!(FUNCTION, "/upload/{function_id}");
 pub const FUNCTION_HISTORY: &str = concat!(FUNCTION, "/history");
 pub const FUNCTION_EXECUTE: &str = concat!(FUNCTION, "/execute");
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Deserialize, IntoParams)]
 #[getset(get = "pub")]
 pub struct FunctionParam {
@@ -119,7 +119,7 @@ impl Creator<FunctionParam> for DatasetName {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Deserialize, Getters, IntoParams)]
 #[getset(get = "pub")]
 #[allow(dead_code)]
@@ -155,7 +155,7 @@ pub const EXECUTION_PLAN: &str = concat!(EXECUTION_PLANS, "/{execution_plan_id}"
 pub const EXECUTION_PLAN_GET: &str = EXECUTION_PLAN;
 pub const EXECUTION_PLANS_LIST: &str = EXECUTION_PLANS;
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Deserialize, Getters, IntoParams)]
 #[getset(get = "pub")]
 #[allow(dead_code)]
@@ -198,7 +198,7 @@ pub const TRANSACTIONS_LIST: &str = TRANSACTIONS;
 pub const COMMITS: &str = "/commits";
 pub const COMMITS_LIST: &str = COMMITS;
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Deserialize, IntoParams)]
 #[getset(get = "pub")]
 pub struct TableParam {
@@ -239,7 +239,7 @@ impl Creator<TableParam> for TableName {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Deserialize, Validate, IntoParams)]
 #[getset(get = "pub")]
 pub struct AtParam {
@@ -390,7 +390,7 @@ pub const LIST_WORKERS: &str = WORKERS;
 pub const WORKER_LOGS: &str = concat!(WORKER, "/logs");
 
 // TODO this should be managed by filters once we have them
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Default, Getters, Deserialize, IntoParams)]
 #[getset(get = "pub")]
 pub struct ByParam {
@@ -497,7 +497,7 @@ impl Creator<WorkerMessageListParam> for By {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Deserialize, IntoParams)]
 #[getset(get = "pub")]
 pub struct WorkerMessageParam {
@@ -524,7 +524,7 @@ impl Creator<WorkerMessageParam> for WorkerMessageId {
     }
 }
 
-// TODO here starts the refactored apisrv
+// TODO here starts the refactored apiserver
 macro_rules! url {
     ($( $path:expr $(,)? )*) => {
         concat!($( $path, )*)

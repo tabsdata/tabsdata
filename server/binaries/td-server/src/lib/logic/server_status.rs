@@ -8,7 +8,7 @@ use getset::Getters;
 use serde::{Deserialize, Serialize};
 use sqlx::Connection;
 use std::time::Instant;
-use td_apiforge::api_server_schema;
+use td_apiforge::apiserver_schema;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
@@ -19,7 +19,7 @@ use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxServ
 use tower::ServiceBuilder;
 
 /// API: Status schema.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct ApiStatus {
@@ -36,7 +36,7 @@ impl ApiStatus {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HealthStatus {
     OK,

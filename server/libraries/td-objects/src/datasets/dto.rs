@@ -16,11 +16,11 @@ use getset::Getters;
 use polars::datatypes::Field;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use td_apiforge::api_server_schema;
+use td_apiforge::apiserver_schema;
 use tokio::sync::Mutex;
 use utoipa::IntoParams;
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Serialize, Deserialize)]
 #[getset(get = "pub")]
 pub struct DatasetWrite {
@@ -34,7 +34,7 @@ pub struct DatasetWrite {
     pub function_snippet: Option<String>,
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Serialize, Deserialize)]
 #[getset(get = "pub")]
 pub struct DatasetRead {
@@ -60,7 +60,7 @@ pub struct DatasetRead {
     function_snippet: Option<String>,
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct FunctionList {
@@ -114,7 +114,7 @@ impl FunctionList {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct DataVersionList {
@@ -211,7 +211,7 @@ impl UploadFunction {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Deserialize, Getters, Builder)]
 #[builder(setter(into))]
 #[getset(get = "pub")]
@@ -219,7 +219,7 @@ pub struct ExecutionPlanWrite {
     name: Option<String>,
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Getters, Builder)]
 #[builder(setter(into))]
 #[getset(get = "pub")]
@@ -236,7 +236,7 @@ impl ExecutionTemplateRead {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Builder, Serialize)]
 #[builder(setter(into))]
 #[getset(get = "pub")]
@@ -253,7 +253,7 @@ impl ExecutionPlanRead {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Deserialize, Serialize)]
 #[getset(get = "pub")]
 pub struct ExecutionPlanList {
@@ -290,7 +290,7 @@ impl From<&DsExecutionPlanWithNames> for ExecutionPlanList {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Deserialize, Serialize)]
 #[getset(get = "pub")]
 pub struct TransactionList {
@@ -319,7 +319,7 @@ impl From<&DsTransaction> for TransactionList {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Getters, Deserialize, Serialize)]
 #[getset(get = "pub")]
 pub struct CommitList {
@@ -372,7 +372,7 @@ impl From<&TableUriParams> for TableUriParams {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct SchemaField {
@@ -398,7 +398,7 @@ impl From<Field> for SchemaField {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct TableList {
@@ -421,7 +421,7 @@ impl From<&DsTableList> for TableList {
     }
 }
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct WorkerMessageList {

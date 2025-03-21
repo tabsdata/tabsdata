@@ -199,7 +199,7 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
 
     let expanded = quote! {
         #(#attrs)*
-        #[td_apiforge::api_server_schema]
+        #[td_apiforge::apiserver_schema]
         #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         pub struct #name(String);
 
@@ -354,7 +354,7 @@ pub fn typed_int<T: FromStr + ToTokens + PartialOrd>(
     let expanded = typed_numeric(input, typed);
 
     let expanded = quote! {
-        #[td_apiforge::api_server_schema]
+        #[td_apiforge::apiserver_schema]
         #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         #expanded
     };
@@ -369,7 +369,7 @@ pub fn typed_float<T: FromStr + ToTokens + PartialOrd>(
     let expanded = typed_numeric(input, typed);
 
     let expanded = quote! {
-        #[td_apiforge::api_server_schema]
+        #[td_apiforge::apiserver_schema]
         #[derive(Debug, Clone, PartialEq, PartialOrd, sqlx::Decode, sqlx::Encode)]
         #expanded
     };
@@ -553,7 +553,7 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
 
     let expanded = quote! {
         #(#attrs)*
-        #[td_apiforge::api_server_schema]
+        #[td_apiforge::apiserver_schema]
         #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         pub struct #name(bool);
 

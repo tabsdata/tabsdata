@@ -165,7 +165,7 @@ macro_rules! ctx_macro_gen {
                     let indirection = quote! { $indirection };
                     indirections.extend(quote! {
                         #[td_concrete::concrete]
-                        #[td_apiforge::api_server_schema]
+                        #[td_apiforge::apiserver_schema]
                         type #type_name = #indirection<#indirection_type>;
                     });
                     type_conversion_impls.extend(quote! {
@@ -186,7 +186,7 @@ macro_rules! ctx_macro_gen {
 
             indirections.extend(quote! {
                 #[td_concrete::concrete]
-                #[td_apiforge::api_server_schema]
+                #[td_apiforge::apiserver_schema]
                 type #type_name = #indirection<#indirection_type>;
             });
 

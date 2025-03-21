@@ -6,10 +6,10 @@ use crate::users::dao::UserWithNames;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use td_apiforge::api_server_schema;
+use td_apiforge::apiserver_schema;
 
 /// API: Payload for user create.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, PartialEq, Deserialize, Getters, Builder)]
 #[builder(setter(into))]
 #[getset(get = "pub")]
@@ -27,7 +27,7 @@ impl UserCreate {
         UserCreateBuilder::default()
     }
 }
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub enum PasswordUpdate {
     ForceChange {
@@ -40,7 +40,7 @@ pub enum PasswordUpdate {
 }
 
 /// API: Payload for user update.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Getters, Builder)]
 #[builder(setter(into, strip_option), default)]
 #[getset(get = "pub")]
@@ -61,7 +61,7 @@ impl UserUpdate {
     }
 }
 /// API: Payload for user get.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Getters, Builder)]
 #[builder(setter(into))]
 #[getset(get = "pub")]

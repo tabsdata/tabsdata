@@ -76,7 +76,7 @@ impl CreateUserService {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::logic::apisrv::jwt::jwt_logic::JwtLogic;
+    use crate::logic::apiserver::jwt::jwt_logic::JwtLogic;
     use crate::logic::users::service::create_user::CreateUserService;
     use crate::logic::users::service::UserServices;
     use chrono::Duration;

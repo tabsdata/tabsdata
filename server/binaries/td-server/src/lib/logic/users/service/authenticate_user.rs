@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::apisrv::jwt::jwt_logic::{JwtLogic, TokenResponse};
+use crate::logic::apiserver::jwt::jwt_logic::{JwtLogic, TokenResponse};
 use crate::logic::users::layers::{
     auth_user_authenticate, auth_user_create_jwt, auth_user_extract_password_hash,
     auth_user_extract_req_password, auth_user_validate_enabled,
@@ -65,8 +65,8 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_authenticate_provider() {
-        use crate::logic::apisrv::jwt::jwt_logic::JwtLogic;
-        use crate::logic::apisrv::jwt::jwt_logic::TokenResponse;
+        use crate::logic::apiserver::jwt::jwt_logic::JwtLogic;
+        use crate::logic::apiserver::jwt::jwt_logic::TokenResponse;
         use crate::logic::users::layers::{
             auth_user_authenticate, auth_user_create_jwt, auth_user_extract_password_hash,
             auth_user_extract_req_password, auth_user_validate_enabled,

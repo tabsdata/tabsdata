@@ -12,15 +12,15 @@ use serde_json::Value;
 use std::str::FromStr;
 use strum::ParseError;
 use strum_macros::{Display, EnumString};
-use td_apiforge::api_server_schema;
+use td_apiforge::apiserver_schema;
 use td_concrete::concrete;
 
 // TODO: Value is a placeholder, we need to define the actual type
 #[concrete]
-#[api_server_schema]
+#[apiserver_schema]
 pub type DataVersionUpdateRequest = ResponseMessagePayload<Value>;
 
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ExecutionUpdateStatus {
     Running,

@@ -41,7 +41,7 @@ enrich_sys_path()
 check_assets()
 
 import tabsdata.utils.tableframe._constants as td_constants
-from tabsdata.api.api_server import APIServer, APIServerError, obtain_connection
+from tabsdata.api.apiserver import APIServer, APIServerError, obtain_connection
 from tabsdata.api.tabsdata_server import TabsdataServer
 from tabsdata.secret import HashiCorpSecret
 from tabsdata.tabsdatafunction import TableInput, TableOutput
@@ -58,7 +58,7 @@ ABSOLUTE_ROOT_FOLDER_LOCATION = os.path.dirname(
 )
 logger.debug(f"ABSOLUTE_ROOT_FOLDER_LOCATION: {ABSOLUTE_ROOT_FOLDER_LOCATION}")
 
-API_SERVER_URL = "127.0.0.1:2467"
+APISERVER_URL = "127.0.0.1:2467"
 CORRECT_SOURCE = TableInput("input")
 CORRECT_DESTINATION = TableOutput("output")
 
@@ -328,13 +328,13 @@ def testing_postgres(tmp_path_factory, worker_id):
 
 
 @pytest.fixture(scope="session")
-def api_server_connection() -> APIServer:
-    return obtain_connection(API_SERVER_URL, "admin", "tabsdata")
+def apiserver_connection() -> APIServer:
+    return obtain_connection(APISERVER_URL, "admin", "tabsdata")
 
 
 @pytest.fixture(scope="session")
 def tabsserver_connection() -> TabsdataServer:
-    return TabsdataServer(API_SERVER_URL, "admin", "tabsdata")
+    return TabsdataServer(APISERVER_URL, "admin", "tabsdata")
 
 
 @pytest.fixture

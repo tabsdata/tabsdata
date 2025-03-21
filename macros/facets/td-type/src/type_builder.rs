@@ -126,7 +126,7 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let where_clause = &input.generics.where_clause;
 
     let expanded = quote! {
-        #[td_apiforge::api_server_schema]
+        #[td_apiforge::apiserver_schema]
         #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
@@ -146,7 +146,7 @@ pub fn url_param(_args: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let expanded = quote! {
-        #[td_apiforge::api_server_schema]
+        #[td_apiforge::apiserver_schema]
         #[derive(Debug, Default, Clone, td_type::TdType, utoipa::IntoParams, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
         #input
     };

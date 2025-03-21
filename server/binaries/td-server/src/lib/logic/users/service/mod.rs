@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::apisrv::jwt::jwt_logic::{JwtLogic, TokenResponse};
+use crate::logic::apiserver::jwt::jwt_logic::{JwtLogic, TokenResponse};
 use crate::logic::users::service::authenticate_user::AuthenticateUserService;
 use crate::logic::users::service::create_user::CreateUserService;
 use crate::logic::users::service::delete_user::DeleteUserService;

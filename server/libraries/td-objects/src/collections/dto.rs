@@ -6,10 +6,10 @@ use crate::collections::dao::CollectionWithNames;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use td_apiforge::api_server_schema;
+use td_apiforge::apiserver_schema;
 
 /// API: Payload for collection create.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, PartialEq, Deserialize, Getters, Builder)]
 #[builder(setter(into))]
 #[getset(get = "pub")]
@@ -25,7 +25,7 @@ impl CollectionCreate {
 }
 
 /// API: Payload for collection update.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Getters, Builder)]
 #[builder(setter(into, strip_option), default)]
 #[getset(get = "pub")]
@@ -41,7 +41,7 @@ impl CollectionUpdate {
 }
 
 /// API: Payload for collection get.
-#[api_server_schema]
+#[apiserver_schema]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct CollectionRead {

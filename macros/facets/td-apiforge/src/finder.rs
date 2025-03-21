@@ -17,9 +17,9 @@ use td_shared::parse_meta;
 use td_shared::project::get_project_root;
 use walkdir::WalkDir;
 
-const DEFAULT_TAGS_MACROS: &[&str] = &["api_server_tag"];
-const DEFAULT_PATHS_ATTRIBUTES: &[&str] = &["api_server_path"];
-const DEFAULT_SCHEMA_ATTRIBUTES: &[&str] = &["api_server_schema", "Dto", "typed"];
+const DEFAULT_TAGS_MACROS: &[&str] = &["apiserver_tag"];
+const DEFAULT_PATHS_ATTRIBUTES: &[&str] = &["apiserver_path"];
+const DEFAULT_SCHEMA_ATTRIBUTES: &[&str] = &["apiserver_schema", "Dto", "typed"];
 
 const CTX_STATUS_FILE: &str = include_str!("status.rs");
 
