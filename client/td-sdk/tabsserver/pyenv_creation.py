@@ -37,6 +37,7 @@ from tabsdata.utils.bundle_utils import (
 )
 from tabsdata.utils.constants import (
     TABSDATA_MODULE_NAME,
+    TABSDATA_MONGODB_MODULE_NAME,
     TABSDATA_SALESFORCE_MODULE_NAME,
 )
 from tabsserver.function_execution.global_utils import CURRENT_PLATFORM
@@ -76,6 +77,7 @@ PYTHON_BASE_VERSION = "3.12"
 
 TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
 TD_TABSDATA_SALESFORCE_DEV_PKG = "TD_TABSDATA_SALESFORCE_DEV_PKG"
+TD_TABSDATA_MONGODB_DEV_PKG = "TD_TABSDATA_MONGODB_DEV_PKG"
 
 UV_EXECUTABLE = "uv"
 
@@ -1049,6 +1051,26 @@ def main():
             "Folder (Frozen)",
         ):
             development_packages.append(str(tabsdata_salesforce_location))
+
+        tabsdata_mongodb_provider, tabsdata_mongodb_location = (
+            get_tabsdata_package_metadata(
+                TABSDATA_MONGODB_MODULE_NAME, TD_TABSDATA_MONGODB_DEV_PKG
+            )
+        )
+        logger.info(
+            "Module tabsdata_mongodb classified as: "
+            f"provider: {tabsdata_mongodb_provider} - "
+            f"location: {tabsdata_mongodb_location}"
+        )
+
+        if tabsdata_mongodb_provider in (
+            "Archive (Project)",
+            "Archive (Folder)",
+            "Archive (Wheel)",
+            "Folder (Editable)",
+            "Folder (Frozen)",
+        ):
+            development_packages.append(str(tabsdata_mongodb_location))
 
         logger.debug(f"Temporary base requirements file: {requirements_file.name}")
         requirements_path = requirements_file.name

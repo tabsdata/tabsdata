@@ -12,6 +12,7 @@ run_task = [
         "clean_py_te_tableframe",
         "clean_py_tabsdata",
         "clean_py_tabsdata_salesforce",
+        "clean_py_tabsdata_mongodb",
     ] }
 ]
 
@@ -44,3 +45,8 @@ args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_SDK_FOLDER}", "py"]
 private = true
 command = "python3"
 args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TABSDATA_SALESFORCE_FOLDER}", "py"]
+
+[tasks.clean_py_tabsdata_mongodb]
+private = true
+command = "python3"
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TABSDATA_MONGODB_FOLDER}", "py"]

@@ -13,6 +13,7 @@ run_task = [
         "test_py_te_tableframe",
         "test_py_tabsdata",
         "test_py_tabsdata_salesforce",
+        "test_py_tabsdata_mongodb",
         "post-test_py"
     ] }
 ]
@@ -142,6 +143,31 @@ script = [
     end
     ''']
 
+[tasks.test_py_tabsdata_mongodb]
+private = true
+dependencies = ["set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+    compile = get_env TD_COMPILE
+
+    cd ${PROJECT_TABSDATA_MONGODB_FOLDER}
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    else
+        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+    end
+    if not eq ${exit_code} "5"
+        code = exit ${exit_code}
+    end
+    ''']
+
 [tasks.set_mode_test_py]
 private = true
 script_runner = "@duckscript"
@@ -217,6 +243,13 @@ script = [
     exec --fail-on-error python3 setup.py --quiet develop --script-dir target/pytest/build
     cd ../../..
 
+    debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata_mongodb)..."
+    cd connectors/python/tabsdata_mongodb
+    debug "🚀 python3 setup.py --quiet develop --script-dir target/pytest/build"
+    set_env PYTHONWARNINGS ignore
+    exec --fail-on-error python3 setup.py --quiet develop --script-dir target/pytest/build
+    cd ../../..
+
     debug "🔷 _____ Setting up tabsdata pytest python path..."
     debug "🚀 python3 ${PROJECT_TD_SDK_FOLDER}/tests_tabsdata/bootest.py"
     output = exec --fail-on-error python3 ${PROJECT_TD_SDK_FOLDER}tests_tabsdata/bootest.py
@@ -247,6 +280,11 @@ script = [
     set_env TD_TABSDATA_SALESFORCE_DEV_PKG ${PROJECT_TABSDATA_SALESFORCE_FOLDER}
     set_td_tabsdata_salesforce_dev_pkg = get_env TD_TABSDATA_SALESFORCE_DEV_PKG
     debug "🔅 tabsdata_salesforce development python package location set to: ${set_td_tabsdata_salesforce_dev_pkg}"
+
+    debug "🔷 _____ Setting up tabsdata_mongodb development package mode..."
+    set_env TD_TABSDATA_MONGODB_DEV_PKG ${PROJECT_TABSDATA_MONGODB_FOLDER}
+    set_td_tabsdata_mongodb_dev_pkg = get_env TD_TABSDATA_MONGODB_DEV_PKG
+    debug "🔅 tabsdata_mongodb development python package location set to: ${set_td_tabsdata_mongodb_dev_pkg}"
 
     ''']
 

@@ -4,3 +4,4 @@
 
 TABSDATA_MODULE_NAME = "tabsdata"
 TABSDATA_SALESFORCE_MODULE_NAME = "tabsdata_salesforce"
+TABSDATA_MONGODB_MODULE_NAME = "tabsdata_mongodb"

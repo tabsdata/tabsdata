@@ -23,6 +23,7 @@ mkdocs==1.6.1
 mimesis==18.0.0
 mysql-connector-python==9.2.0
 oracledb==3.0.0
+parquet-tools==0.2.16
 pdoc==15.0.1
 pipdeptree==2.25.1
 pip-tools==7.4.1
