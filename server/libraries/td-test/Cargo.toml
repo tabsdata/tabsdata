@@ -54,8 +54,15 @@ td-schema = { workspace = true }
 # External dependencies
 
 async-trait = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+homedir = { workspace = true }
+lazy_static = { workspace = true }
+sha2= { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio", "macros"] }
+testdir = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+whoami = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
