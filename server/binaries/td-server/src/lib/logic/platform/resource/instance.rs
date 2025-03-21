@@ -55,6 +55,9 @@ pub const WORKER_PID_FILE: &str = "pid";
 pub const WORKER_OUT_FILE: &str = "out.log";
 pub const WORKER_ERR_FILE: &str = "err.log";
 
+pub const MESSAGE_PATTERN: &str = "_*";
+pub const LOG_PATTERN: &str = "*.log";
+
 /// Get the instance path of a given instance.
 pub fn get_instance_path_for_instance(instance: &Option<PathBuf>) -> PathBuf {
     let root = dirs::home_dir().unwrap_or_else(|| PathBuf::from(ROOT));

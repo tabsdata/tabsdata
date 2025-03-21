@@ -95,6 +95,13 @@ pub enum WorkerClass {
     EPHEMERAL,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, AsRefStr)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum WorkerName {
+    FUNCTION,
+}
+
 #[apiserver_schema]
 #[derive(
     Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, Display, AsRefStr,

@@ -77,6 +77,7 @@ pub mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
     use td_common::id::Id;
+    use td_common::server::WorkerName::FUNCTION;
     use td_common::server::{
         Callback, HttpCallbackBuilder, MessageAction, QueueError, RequestMessagePayload,
         SupervisorMessage, SupervisorMessagePayload, WorkerClass, WorkerMessageQueue,
@@ -266,7 +267,7 @@ pub mod tests {
     ) -> SupervisorMessage<T> {
         SupervisorMessage::new(
             id.to_string(),
-            "dataset".to_string(),
+            FUNCTION.as_ref().to_string(),
             PathBuf::from("file"),
             SupervisorMessagePayload::SupervisorRequestMessagePayload(payload),
         )

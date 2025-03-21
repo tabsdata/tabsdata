@@ -86,23 +86,21 @@ impl WorkerSupplier for TabsDataWorkerSupplier {
 }
 
 #[derive(Default)]
-pub struct DataSetWorkerSupplier;
+pub struct FunctionWorkerSupplier;
 
-impl DataSetWorkerSupplier {
+impl FunctionWorkerSupplier {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl Debug for DataSetWorkerSupplier {
+impl Debug for FunctionWorkerSupplier {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DataSetWorkerSupplier").finish()
+        f.debug_struct("FunctionWorkerSupplier").finish()
     }
 }
 
-// Supplier for DataSet Functions.
-// ToDo: Dimas: Pending implementation. It will need to create a sub-workspace for each running function.
-impl WorkerSupplier for DataSetWorkerSupplier {
+impl WorkerSupplier for FunctionWorkerSupplier {
     fn supply(&self, _worker: &dyn Worker) -> Result<(), SupplierError> {
         Ok(())
     }

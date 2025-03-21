@@ -2,9 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::logic::platform::resource::instance::{
+    CAST_FOLDER, LOG_FOLDER, LOG_PATTERN, MESSAGE_PATTERN, PROC_FOLDER, WORK_FOLDER,
+};
 use glob::glob;
 use std::env;
 use std::path::PathBuf;
+use td_common::server::WorkerClass::EPHEMERAL;
+use td_common::server::WorkerName::FUNCTION;
 use td_common::server::WORKSPACE_ENV;
 use td_error::td_error;
 use td_error::TdError;
@@ -15,19 +20,18 @@ use td_tower::extractors::Input;
 pub async fn resolve_worker_log_path(
     Input(message): Input<DsWorkerMessageWithNames>,
 ) -> Result<WorkerLogPaths, TdError> {
-    // TODO resolve message location properly, temp workaround
     let worker_path = env::var(WORKSPACE_ENV).map_err(ResolveWorkerLogPathError::EnvVar)?;
     let pattern = PathBuf::from(worker_path)
-        .join("work")
-        .join("proc")
-        .join("ephemeral")
-        .join("dataset")
-        .join("work")
-        .join("cast")
-        .join(format!("{}_*", message.id()))
-        .join("work")
-        .join("log")
-        .join("*.log");
+        .join(WORK_FOLDER)
+        .join(PROC_FOLDER)
+        .join(EPHEMERAL.as_ref())
+        .join(FUNCTION.as_ref())
+        .join(WORK_FOLDER)
+        .join(CAST_FOLDER)
+        .join(format!("{}{}", message.id(), MESSAGE_PATTERN))
+        .join(WORK_FOLDER)
+        .join(LOG_FOLDER)
+        .join(LOG_PATTERN);
     let pattern = pattern
         .to_str()
         .ok_or(ResolveWorkerLogPathError::EmptyPattern)?;

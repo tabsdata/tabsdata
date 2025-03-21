@@ -137,24 +137,24 @@ fn obtain_env_vars() -> Vec<(String, String)> {
     env_vars
 }
 
-// Runner for DataSet Functions.
+// Runner for unctions.
 #[derive(Default)]
-pub struct DataSetWorkerRunner;
+pub struct FunctionWorkerRunner;
 
-impl DataSetWorkerRunner {
+impl FunctionWorkerRunner {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl Debug for DataSetWorkerRunner {
+impl Debug for FunctionWorkerRunner {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DataSetWorkerRunner").finish()
+        f.debug_struct("FunctionWorkerRunner").finish()
     }
 }
 
 // ToDo: Dimas: Pending implementation. It will need to add dedicated logic to this kind of workers.
-impl WorkerRunner for DataSetWorkerRunner {
+impl WorkerRunner for FunctionWorkerRunner {
     fn run(&self, _worker: &dyn Worker) -> Result<Child, RunnerError> {
         unimplemented!()
     }

@@ -29,7 +29,7 @@ controllers:
   ephemeral:
     concurrency: 8
     workers:
-      - name: dataset
+      - name: function
         kind: processor
         location: system
         program: tdmain

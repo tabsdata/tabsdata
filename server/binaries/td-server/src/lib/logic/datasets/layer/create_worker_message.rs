@@ -3,6 +3,7 @@
 //
 
 use std::ops::Deref;
+use td_common::server::WorkerName::FUNCTION;
 use td_common::server::{
     Callback, MessageAction, RequestMessagePayload, RequestMessagePayloadBuilder, WorkerClass,
     WorkerMessageQueue,
@@ -21,7 +22,7 @@ pub async fn create_worker_message<T: WorkerMessageQueue>(
     let message_payload: RequestMessagePayload<FunctionInput> =
         RequestMessagePayloadBuilder::default()
             .class(WorkerClass::EPHEMERAL)
-            .worker("dataset")
+            .worker(FUNCTION.as_ref())
             .action(MessageAction::Start)
             .arguments(vec![])
             .callback(callback.deref().clone())
