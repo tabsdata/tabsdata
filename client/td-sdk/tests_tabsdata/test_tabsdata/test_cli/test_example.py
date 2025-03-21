@@ -10,11 +10,11 @@ from time import sleep
 
 import pytest
 from click.testing import CliRunner
+from td_interceptor.interceptor_test import instance as checker
 from tests_tabsdata.conftest import ABSOLUTE_ROOT_FOLDER_LOCATION, MAXIMUM_RETRY_COUNT
 
 from tabsdata import TabsdataFunction
 from tabsdata.cli.cli import cli
-from td_interceptor.interceptor_test import instance as checker
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

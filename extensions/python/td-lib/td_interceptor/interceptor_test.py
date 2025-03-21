@@ -5,9 +5,9 @@
 import os
 from abc import ABC
 
-from ta_interceptor.api.api_test import InterceptorTestPlugin
-
 from td_interceptor.version import version
+
+from ta_interceptor.api.api_test import InterceptorTestPlugin
 
 
 class InterceptorTest(InterceptorTestPlugin, ABC):

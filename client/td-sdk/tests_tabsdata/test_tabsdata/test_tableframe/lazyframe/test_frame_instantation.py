@@ -6,6 +6,7 @@ import polars as pl
 
 # noinspection PyPackageRequirements
 import pytest
+from td_interceptor.interceptor import Interceptor
 
 import tabsdata as td
 from tabsdata.exceptions import ErrorCode, TabsDataException
@@ -17,7 +18,6 @@ from tabsdata.utils.tableframe._helpers import REQUIRED_COLUMNS
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._translator import _wrap_polars_frame
 from td_features.features import Feature, FeaturesManager
-from td_interceptor.interceptor import Interceptor
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

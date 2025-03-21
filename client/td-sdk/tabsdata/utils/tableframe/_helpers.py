@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import tabsdata.utils.tableframe._constants as td_constants
 import td_interceptor.interceptor as td_interceptor
+
+import tabsdata.utils.tableframe._constants as td_constants
 
 
 def standard_system_columns() -> list[str]:

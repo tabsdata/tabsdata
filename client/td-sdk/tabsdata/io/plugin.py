@@ -90,7 +90,7 @@ class DestinationPlugin(ABC):
     Abstract class for output plugins.
 
     Methods:
-        trigger_output(*args, **kwargs)
+        trigger_output(working_dir, *args, **kwargs)
             Trigger the exporting of the data. This function will receive the resulting
             data from the dataset function and must store it in the desired location.
     """
@@ -98,12 +98,15 @@ class DestinationPlugin(ABC):
     IDENTIFIER = "destination-plugin"
 
     @abstractmethod
-    def trigger_output(self, *args, **kwargs):
+    def trigger_output(self, working_dir: str, *args, **kwargs):
         """
         Trigger the exporting of the data. This function will receive the resulting data
             from the dataset function and must store it in the desired location.
 
         Args:
+            working_dir (str): The folder where any intermediate files generated must
+                be stored (this refers to temporary files that will be deleted after
+                the execution of the plugin, not the final destination of the data)
             *args: The data to be exported
             **kwargs: Additional parameters to be used in the export
 

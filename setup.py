@@ -413,6 +413,7 @@ setup(
     python_requires=">=3.12",
     install_requires=read_requirements("requirements.txt"),
     extras_require={
+        "mongodb": read_requirements("requirements-connector-mongodb.txt"),
         "salesforce": read_requirements("requirements-connector-salesforce.txt"),
         "test": read_requirements("requirements-dev.txt"),
     },

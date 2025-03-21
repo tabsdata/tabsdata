@@ -13,7 +13,7 @@ class CustomDestinationPlugin(DestinationPlugin):
         self.destination_ndjson_file = destination_json_file
         self.second_destination_ndjson_file = second_destination_json_file
 
-    def trigger_output(self, df: td.TableFrame, df2: td.TableFrame):
+    def trigger_output(self, _: str, df: td.TableFrame, df2: td.TableFrame):
         if df is not None:
             raise ValueError("df should be None")
         if df2 is not None:

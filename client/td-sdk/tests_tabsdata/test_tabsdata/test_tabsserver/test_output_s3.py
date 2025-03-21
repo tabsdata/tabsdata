@@ -440,7 +440,9 @@ def test_output_s3_csv(tmp_path, s3_client):
     output_s3_csv.output.uri = output_file
     output_s3_csv.output.format = td.CSVFormat(
         # ToDo: Undo when https://github.com/pola-rs/polars/issues/21802 fix is available
-        eol_char="\n", separator=",", output_float_precision=4
+        eol_char="\n",
+        separator=",",
+        output_float_precision=4,
     )
     context_archive = create_bundle_archive(
         output_s3_csv,

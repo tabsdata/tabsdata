@@ -1,0 +1,3 @@
+The third-party Rust crates and Python packages used by this project are included in the Tabsdata 0.9.4 package.
+
+With Tabsdata 0.9.4 installed, run `td info --third-party` for details.

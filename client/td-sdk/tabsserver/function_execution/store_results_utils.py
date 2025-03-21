@@ -147,10 +147,10 @@ def store_results(
         if isinstance(results, td.TableFrame):
             logger.debug("Exporting single result")
             results = remove_system_columns_and_convert(results)
-            exporter_plugin.trigger_output(results)
+            exporter_plugin.trigger_output(output_folder, results)
         elif results is None:
             logger.debug("Exporting None result")
-            exporter_plugin.trigger_output(results)
+            exporter_plugin.trigger_output(output_folder, results)
         elif isinstance(results, list):
             logger.debug("Exporting multiple results")
             results = [
@@ -161,7 +161,7 @@ def store_results(
                 )
                 for result in results
             ]
-            exporter_plugin.trigger_output(*results)
+            exporter_plugin.trigger_output(output_folder, *results)
         else:
             logger.error(
                 "The result of a registered function must be a TableFrame or a list "

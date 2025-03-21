@@ -1,0 +1,29 @@
+services:
+  mongodb:
+    image: mongo:5
+    container_name: pytest_exclusive_mongodb_container_with_replica_set
+    command: --replSet rs0
+    ports:
+      - '27017:27017'
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/admin --quiet
+      interval: 2s
+      timeout: 3s
+      retries: 5
+
+  mongo-init:
+    image: mongo:5
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: >
+      mongo --host mongodb:27017 --eval
+      '
+      rs.initiate( {
+        _id : "rs0",
+        members: [
+          { _id: 0, host: "localhost:27017" }
+        ]
+      })
+      '

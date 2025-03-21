@@ -3,4 +3,5 @@
 #
 
 -r requirements-third-party.txt_
+-r connectors/python/tabsdata_mongodb/requirements-third-party.txt_
 -r connectors/python/tabsdata_salesforce/requirements-third-party.txt_

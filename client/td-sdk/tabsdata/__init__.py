@@ -26,7 +26,6 @@ from polars import (
     UInt32,
     UInt64,
 )
-from tabsdata_salesforce.connector import SalesforceSource
 
 from tabsdata.api.tabsdata_server import (
     Collection,
@@ -72,6 +71,8 @@ from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import TableURI
 from tabsdata.tabsdatafunction import TabsdataFunction
+from tabsdata_mongodb.connector import MongoDBDestination
+from tabsdata_salesforce.connector import SalesforceSource
 
 logging.basicConfig(
     level=logging.getLevelName(logging.WARNING),
@@ -157,4 +158,6 @@ __all__ = [
     UInt64,
     # From tabsdata_salesforce.connector
     "SalesforceSource",
+    # From tabsdata_mongodb.connector
+    "MongoDBDestination",
 ]

@@ -40,6 +40,36 @@ class SalesforceSource(SourcePlugin):
         initial_last_modified: str = None,
         api_version: str = None,
     ):
+        """
+        Initializes the SalesforceSource with the given query(s) and the credentials
+            required to access Salesforce.
+
+        Args:
+            username (str | HashiCorpSecret | DirectSecret | EnvironmentSecret): The
+                username to access Salesforce.
+            password (str | HashiCorpSecret | DirectSecret | EnvironmentSecret): The
+                password to access Salesforce.
+            security_token (str | HashiCorpSecret | DirectSecret | EnvironmentSecret):
+                The security token to access Salesforce.
+            query (str | List[str]): The query or queries to execute in Salesforce.
+                It can be a single string or a list of strings.
+            instance_url (str, optional): The URL of the instance to which we want to
+                connect. Only necessary when the username and password are associated
+                to more than one instance. Defaults to None.
+            include_deleted (bool, optional): Whether to include deleted records in the
+                query results. Defaults to False.
+            initial_last_modified (str, optional): The initial last modified date to use
+                in the queries. This is useful when we want to query only the records
+                that have been modified since a certain date. Defaults to None. If
+                provided, it must be a string in Salesforce datetime format (with
+                informed timezone) and the query must contain the token
+                $lastModified, which will be replaced by the latest 'last_modified'
+                value in each execution.
+            api_version (str, optional): The Salesforce API version to use. Defaults to
+                None, which will default to the latest version supported by
+                simple_salesforce.
+
+        """
         if MISSING_LIBRARIES:
             raise ImportError(
                 "The 'tabsdata_salesforce' package is missing some dependencies. You "

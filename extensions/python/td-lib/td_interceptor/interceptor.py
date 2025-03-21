@@ -8,12 +8,12 @@ from enum import Enum
 from typing import Any, Type
 
 import polars as pl
-from ta_interceptor.api.api import InterceptorPlugin
+from td_interceptor.version import version
 
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._constants as td_constants
+from ta_interceptor.api.api import InterceptorPlugin
 from td_features.features import Feature, FeaturesManager
-from td_interceptor.version import version
 
 logger = logging.getLogger(__name__)
 

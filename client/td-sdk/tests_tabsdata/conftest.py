@@ -82,6 +82,7 @@ ROOT_PROJECT_DIR = os.path.dirname(
 )
 LOCAL_PACKAGES_LIST = [
     ROOT_PROJECT_DIR,
+    os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_mongodb"),
     os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_salesforce"),
 ]
 
@@ -643,10 +644,17 @@ def pytest_sessionfinish(session, exitstatus):
         return
     clean_python_virtual_environments()
     try:
-        remove_docker_containers()
+        name_pattern = (
+            f"({DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME}"
+            f"|{DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME}"
+            f"|{DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME}"
+            f"|{DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}"
+            f"|{DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME})"
+        )
+        remove_docker_containers(name_pattern)
     except Exception as e:
         logger.warning(
-            "Error removing Dokcer containers. You can safely ignore it if running"
+            "Error removing Docker containers. You can safely ignore it if running"
             f" tests on a Docker-less machine: {e}"
         )
 
@@ -669,15 +677,8 @@ def clean_python_virtual_environments():
         logger.info("No virtual environments to clean up.")
 
 
-def remove_docker_containers():
+def remove_docker_containers(name_pattern):
     client = docker.from_env()
-    name_pattern = (
-        f"({DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME}"
-        f"|{DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME}"
-        f"|{DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME}"
-        f"|{DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}"
-        f"|{DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME})"
-    )
     for container in client.containers.list(filters={"name": name_pattern}):
         try:
             logger.info(f"Removing container {container}")

@@ -207,6 +207,16 @@ def enrich_sys_path():
             )
         ),
     )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "connectors",
+                "python",
+                "tabsdata_mongodb",
+            )
+        ),
+    )
 
     logger.info("")
     logger.info("Using sys.path entries for td-sdk tests...:")
