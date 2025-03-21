@@ -105,6 +105,7 @@ mod tests {
     use crate::logic::datasets::service::execution::create_plan::CreatePlanService;
     use crate::logic::datasets::service::execution::schedule::poll_datasets::PollDatasetsService;
     use crate::logic::datasets::service::execution::schedule::tests::td_uri;
+    use std::collections::HashMap;
     use std::path::PathBuf;
     use td_common::id;
     use td_common::id::Id;
@@ -148,7 +149,11 @@ mod tests {
             .uri(dummy_file())
             .build()
             .unwrap();
-        let storage = Arc::new(Storage::from(vec![mound_def]).await.unwrap());
+        let storage = Arc::new(
+            Storage::from(vec![mound_def], &HashMap::new())
+                .await
+                .unwrap(),
+        );
         let message_queue = Arc::new(MockWorkerMessageQueue::new(vec![]));
         let server_url = Arc::new(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2457));
         let provider = CreateMessageService::provider(db, message_queue, storage, server_url);
@@ -239,7 +244,11 @@ mod tests {
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
+        let storage = Arc::new(
+            Storage::from(vec![mount_def], &HashMap::new())
+                .await
+                .unwrap(),
+        );
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -388,7 +397,11 @@ mod tests {
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
+        let storage = Arc::new(
+            Storage::from(vec![mount_def], &HashMap::new())
+                .await
+                .unwrap(),
+        );
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -508,7 +521,11 @@ mod tests {
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
+        let storage = Arc::new(
+            Storage::from(vec![mount_def], &HashMap::new())
+                .await
+                .unwrap(),
+        );
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -676,7 +693,11 @@ mod tests {
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
+        let storage = Arc::new(
+            Storage::from(vec![mount_def], &HashMap::new())
+                .await
+                .unwrap(),
+        );
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -791,7 +812,11 @@ mod tests {
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
+        let storage = Arc::new(
+            Storage::from(vec![mount_def], &HashMap::new())
+                .await
+                .unwrap(),
+        );
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -911,7 +936,11 @@ mod tests {
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
+        let storage = Arc::new(
+            Storage::from(vec![mount_def], &HashMap::new())
+                .await
+                .unwrap(),
+        );
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;
@@ -985,7 +1014,11 @@ mod tests {
             .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
-        let storage = Arc::new(Storage::from(vec![mount_def]).await.unwrap());
+        let storage = Arc::new(
+            Storage::from(vec![mount_def], &HashMap::new())
+                .await
+                .unwrap(),
+        );
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 2457)));
 
         let user_id = seed_user(&db, None, "u0", true).await;

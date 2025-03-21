@@ -48,6 +48,7 @@ ignored = ["openssl", "strum_macros", "td-build", "thiserror", "toml"]
 
 td-common = { workspace = true }
 td-error = { workspace = true }
+td-test = { workspace = true }
 
 # External dependencies
 

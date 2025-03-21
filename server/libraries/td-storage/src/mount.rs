@@ -42,12 +42,6 @@ pub struct MountDef {
     ///
     /// Google Cloud Storage: refer to https://docs.rs/object_store/0.11.0/object_store/gcp/enum.GoogleConfigKey.html
     configs: HashMap<String, String>,
-
-    #[builder(default)]
-    /// Environment variables prefixed with [`env_prefix`] are added (with precedence) to the configs.
-    ///
-    /// The [`env_prefix`] prefix is removed and the rest  of the environment variable name is lowercased.
-    env_prefix: Option<String>,
 }
 
 impl MountDef {
@@ -122,6 +116,7 @@ impl MountDefBuilder {
                     }
                 }
                 "s3" => {}
+                "az" => {}
                 _ => {
                     return Err(StorageError::ConfigurationError(format!(
                         "Unsupported schema {}",
@@ -151,7 +146,6 @@ impl From<&MountDef> for MountDefBuilder {
             mount_path: Some(mount.mount_path.clone()),
             uri: Some(mount.uri.clone()),
             configs: Some(mount.configs.clone()),
-            env_prefix: Some(mount.env_prefix.clone()),
         }
     }
 }
@@ -237,31 +231,51 @@ impl Debug for Mount {
 }
 
 impl Mount {
-    /// Merge environment variables with the configs.
-    fn merge_envs_into_configs(
-        env_prefix: &Option<String>,
-        configs: HashMap<String, String>,
-    ) -> HashMap<String, String> {
-        let mut configs = configs;
-        if let Some(env_prefix) = env_prefix {
-            for (key, value) in std::env::vars() {
-                if let Some(key) = key.strip_prefix(env_prefix) {
-                    configs.insert(key.to_lowercase(), value);
-                }
+    fn replace_if_var(val: &str, config_vars: &HashMap<String, String>) -> Result<String> {
+        if val.starts_with("$${") && val.ends_with("}") {
+            // escaped value, remove one $ and return
+
+            Ok(val[1..].to_string())
+        } else if val.starts_with("${") && val.ends_with("}") {
+            // extract value from variable and fully replace value
+
+            // we upper case variable names (case insensitive as in WIN env vars)
+            let var_name = &val[2..val.len() - 1].to_uppercase();
+            if let Some(val) = config_vars.get(var_name) {
+                Ok(val.to_string())
+            } else {
+                return Err(StorageError::ConfigurationError(format!(
+                    "Variable {} not found",
+                    var_name
+                )));
             }
+        } else {
+            // return value as is
+
+            Ok(val.to_string())
         }
-        configs
+    }
+
+    fn resolve_vars_in_configs(
+        configs: &HashMap<String, String>,
+        config_vars: &HashMap<String, String>,
+    ) -> Result<HashMap<String, String>> {
+        let mut resolved_configs = HashMap::new();
+        for (k, v) in configs.iter() {
+            resolved_configs.insert(k.to_string(), Self::replace_if_var(v, config_vars)?);
+        }
+        Ok(resolved_configs)
     }
 
     /// Create an object store from the URI and configs.
     fn create_store(
         uri: &Url,
         configs: &HashMap<String, String>,
-        env_prefix: &Option<String>,
+        config_vars: &HashMap<String, String>,
     ) -> Result<Box<dyn ObjectStore>> {
-        let configs = Self::merge_envs_into_configs(env_prefix, configs.clone());
+        let configs = Self::resolve_vars_in_configs(configs, config_vars)?;
         match uri.scheme() {
-            "file" | "s3" => {
+            "file" | "s3" | "az" => {
                 let store = object_store::parse_url_opts(uri, configs)
                     .map_err(StorageError::CouldNotCreateObjectStore)?
                     .0;
@@ -275,9 +289,9 @@ impl Mount {
     }
 
     /// Create a [`Mount`] with the given definition.
-    pub fn new(def: MountDef) -> Result<Self> {
+    pub fn new(def: MountDef, vars: &HashMap<String, String>) -> Result<Self> {
         let mut uri = Url::parse(def.uri()).unwrap();
-        let store = Self::create_store(&uri, def.configs(), def.env_prefix())?;
+        let store = Self::create_store(&uri, def.configs(), vars)?;
 
         let mount_path = SPath::parse(def.mount_path())?;
         let path_mapper_from_mount = PathMapperFromMount::new(mount_path.parts().count());
@@ -438,6 +452,9 @@ mod tests {
     use object_store::path::Path;
     use std::collections::HashMap;
     use td_common::absolute_path::AbsolutePath;
+    use td_test::reqs::{
+        AzureStorageWithAccountKeyReqs, S3WithAccessKeySecretKeyReqs, TestRequirements,
+    };
     use testdir::testdir;
     use url::Url;
 
@@ -488,18 +505,37 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_envs_into_configs() {
-        std::env::set_var("STORAGE_MOUNT_A", "aa");
+    fn test_replace_if_var() {
+        let env_vars = HashMap::from([("FOO".to_string(), "bar".to_string())]);
+        assert_eq!(
+            Mount::replace_if_var("FOO", &env_vars).unwrap(),
+            "FOO".to_string()
+        );
+        assert_eq!(
+            Mount::replace_if_var("${FOO}", &env_vars).unwrap(),
+            "bar".to_string()
+        );
+        assert_eq!(
+            Mount::replace_if_var("${foo}", &env_vars).unwrap(),
+            "bar".to_string()
+        );
+        assert_eq!(
+            Mount::replace_if_var("$${FOO}", &env_vars).unwrap(),
+            "${FOO}".to_string()
+        );
+    }
+
+    #[test]
+    fn test_resolve_vars_in_configs() {
+        let env_vars = HashMap::from([("STORAGE_MOUNT_A".to_string(), "aa".to_string())]);
 
         let mut configs = HashMap::new();
-        configs.insert("a".to_string(), "a".to_string());
+        configs.insert("a".to_string(), "${STORAGE_MOUNT_A}".to_string());
         configs.insert("x".to_string(), "x".to_string());
 
-        let merged =
-            Mount::merge_envs_into_configs(&Some("STORAGE_MOUNT_".to_string()), configs.clone());
+        let merged = Mount::resolve_vars_in_configs(&configs, &env_vars).unwrap();
         assert_eq!(merged["a"], "aa".to_string());
         assert_eq!(merged["x"], "x".to_string());
-        std::env::remove_var("STORAGE_MOUNT_A");
     }
 
     #[test]
@@ -512,22 +548,6 @@ mod tests {
         assert_eq!(mount_def.mount_path(), "/foo");
         assert_eq!(mount_def.uri(), &slashed_bar_file());
         assert_eq!(mount_def.configs(), &HashMap::new());
-        assert_eq!(mount_def.env_prefix(), &None);
-
-        let mount_def = MountDef::builder()
-            .mount_path("/foo")
-            .uri(slashed_bar_file())
-            .configs(HashMap::from([(String::from("foo"), String::from("bar"))]))
-            .env_prefix("FOO")
-            .build()
-            .unwrap();
-        assert_eq!(mount_def.mount_path(), "/foo");
-        assert_eq!(mount_def.uri(), &slashed_bar_file());
-        assert_eq!(
-            mount_def.configs(),
-            &HashMap::from([(String::from("foo"), String::from("bar"))])
-        );
-        assert_eq!(mount_def.env_prefix(), &Some("FOO".to_string()));
     }
 
     #[test]
@@ -629,7 +649,8 @@ mod tests {
 
         // exits()
         let file_in_mount = SPath::parse(mount_path).unwrap().child("exists").unwrap();
-        assert!(matches!(mount.exists(&file_in_mount).await, Ok(false)));
+        let res = mount.exists(&file_in_mount).await;
+        assert!(matches!(res, Ok(false)));
         let path_in_store = Path::parse(uri.abs_path()).unwrap().child("exists");
         store
             .put(&path_in_store, object_store::PutPayload::from(vec![1]))
@@ -741,7 +762,13 @@ mod tests {
             .unwrap();
         let uri = Url::parse(&uri).unwrap();
         let store = object_store::parse_url(&uri).unwrap().0;
-        test_mount(&uri, "/", store, Mount::new(mount_def).unwrap()).await;
+        test_mount(
+            &uri,
+            "/",
+            store,
+            Mount::new(mount_def, &HashMap::new()).unwrap(),
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -760,53 +787,96 @@ mod tests {
             .unwrap();
         let uri = Url::parse(&uri).unwrap();
         let store = object_store::parse_url(&uri).unwrap().0;
-        test_mount(&uri, "/mount", store, Mount::new(mount_def).unwrap()).await;
+        test_mount(
+            &uri,
+            "/mount",
+            store,
+            Mount::new(mount_def, &HashMap::new()).unwrap(),
+        )
+        .await;
     }
 
-    async fn test_if_envs(mount: &str, env_prefix: &str, envs: &[&str]) {
-        let r = envs
-            .iter()
-            .map(std::env::var)
-            .collect::<Result<Vec<_>, _>>();
-        if r.is_ok() {
-            let uri = std::env::var(envs[0]).unwrap();
+    async fn test_aws_mount(mount_path: &str, s3_info: &S3WithAccessKeySecretKeyReqs) {
+        let configs = HashMap::from([
+            ("aws_region".to_string(), s3_info.region.clone()),
+            ("aws_access_key_id".to_string(), s3_info.access_key.clone()),
+            (
+                "aws_secret_access_key".to_string(),
+                s3_info.secret_key.clone(),
+            ),
+        ]);
 
-            let mount_def = MountDef::builder()
-                .mount_path(mount)
-                .uri(&uri)
-                .env_prefix(env_prefix)
-                .build()
-                .unwrap();
+        let uri = format!("{}/{}", s3_info.uri, s3_info.test_path().to_str().unwrap());
+        let uri = Url::parse(&uri).unwrap();
 
-            let uri = Url::parse(&uri).unwrap();
-            let configs =
-                Mount::merge_envs_into_configs(&Some(env_prefix.to_string()), HashMap::new());
+        let object_store = object_store::parse_url_opts(&uri, &configs).unwrap().0;
 
-            let store = object_store::parse_url_opts(&uri, configs).unwrap().0;
+        let mount_def = MountDef::builder()
+            .mount_path(mount_path)
+            .uri(uri.to_string())
+            .configs(configs.clone())
+            .build()
+            .unwrap();
 
-            test_mount(&uri, mount, store, Mount::new(mount_def).unwrap()).await;
-        }
+        test_mount(
+            &uri,
+            mount_path,
+            object_store,
+            Mount::new(mount_def, &configs).unwrap(),
+        )
+        .await;
     }
 
-    #[tokio::test]
-    async fn test_s3_root_mount() {
-        let vars = vec![
-            "TEST_MOUNT_S3",
-            "TEST_MOUNT_AWS_REGION",
-            "TEST_MOUNT_AWS_ACCESS_KEY_ID",
-            "TEST_MOUNT_AWS_SECRET_ACCESS_KEY",
-        ];
-        test_if_envs("/", "TEST_MOUNT_", &vars).await;
+    #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
+    async fn test_s3_root_mount(reqas: S3WithAccessKeySecretKeyReqs) {
+        test_aws_mount("/", &reqas).await;
     }
 
-    #[tokio::test]
-    async fn test_s3_non_root_mount() {
-        let vars = vec![
-            "TEST_MOUNT_S3",
-            "TEST_MOUNT_AWS_REGION",
-            "TEST_MOUNT_AWS_ACCESS_KEY_ID",
-            "TEST_MOUNT_AWS_SECRET_ACCESS_KEY",
-        ];
-        test_if_envs("/foo", "TEST_MOUNT_", &vars).await;
+    #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
+    async fn test_s3_non_root_mount(reqs: S3WithAccessKeySecretKeyReqs) {
+        test_aws_mount("/foo", &reqs).await;
+    }
+
+    async fn test_azure_mount(mount_path: &str, az_info: &AzureStorageWithAccountKeyReqs) {
+        let configs = HashMap::from([
+            (
+                "azure_storage_account_name".to_string(),
+                az_info.account_name.clone(),
+            ),
+            (
+                "azure_storage_account_key".to_string(),
+                az_info.account_key.clone(),
+            ),
+        ]);
+
+        let uri = format!("{}/{}", az_info.uri, az_info.test_path().to_str().unwrap());
+        let uri = Url::parse(&uri).unwrap();
+
+        let object_store = object_store::parse_url_opts(&uri, &configs).unwrap().0;
+
+        let mount_def = MountDef::builder()
+            .mount_path(mount_path)
+            .uri(uri.to_string())
+            .configs(configs.clone())
+            .build()
+            .unwrap();
+
+        test_mount(
+            &uri,
+            mount_path,
+            object_store,
+            Mount::new(mount_def, &configs).unwrap(),
+        )
+        .await;
+    }
+
+    #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
+    async fn test_azure_root_mount(reqs: AzureStorageWithAccountKeyReqs) {
+        test_azure_mount("/", &reqs).await;
+    }
+
+    #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
+    async fn test_azure_non_root_mount(reqs: AzureStorageWithAccountKeyReqs) {
+        test_azure_mount("/foo", &reqs).await;
     }
 }

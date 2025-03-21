@@ -9,6 +9,7 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use object_store::path::Path;
 use regex::Regex;
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -183,8 +184,8 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub async fn from(mount_defs: Vec<MountDef>) -> Result<Self> {
-        let storage = MountsStorage::from(mount_defs).await?;
+    pub async fn from(mount_defs: Vec<MountDef>, vars: &HashMap<String, String>) -> Result<Self> {
+        let storage = MountsStorage::from(mount_defs, vars).await?;
         Ok(Self { storage })
     }
 
@@ -259,6 +260,7 @@ impl Storage {
 mod tests {
     use crate::{MountDef, SPath, Storage};
     use object_store::path::Path;
+    use std::collections::HashMap;
     use std::fs;
     use std::ops::Deref;
     use testdir::testdir;
@@ -338,7 +340,9 @@ mod tests {
             .uri(uri2)
             .build()
             .unwrap();
-        let storage = Storage::from(vec![mount1, mount2]).await.unwrap();
+        let storage = Storage::from(vec![mount1, mount2], &HashMap::new())
+            .await
+            .unwrap();
 
         #[cfg(target_os = "windows")]
         let match1 = format!("file:///{}", mount1_dir.to_string_lossy());

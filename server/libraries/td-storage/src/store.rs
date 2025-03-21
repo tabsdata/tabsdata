@@ -20,7 +20,7 @@ pub struct MountsStorage {
 
 impl MountsStorage {
     /// Create a new Store from a list of MountDefs. There must be definition for the root mount `/`.
-    pub async fn from(mount_defs: Vec<MountDef>) -> Result<Self> {
+    pub async fn from(mount_defs: Vec<MountDef>, vars: &HashMap<String, String>) -> Result<Self> {
         let mut has_root = false;
         static ROOT: &str = "/";
         for mount_def in mount_defs.iter() {
@@ -36,7 +36,7 @@ impl MountsStorage {
         }
         let mut fs_mounts = HashMap::new();
         for mount_def in mount_defs {
-            let mount = Mount::new(mount_def)?;
+            let mount = Mount::new(mount_def, vars)?;
             fs_mounts.insert(mount.mount_path().clone(), mount);
         }
         Ok(Self { mounts: fs_mounts })
@@ -103,6 +103,7 @@ impl MountsStorage {
 mod tests {
     use crate::{MountDef, SPath};
     use futures_util::StreamExt;
+    use std::collections::HashMap;
     use std::fs;
     use testdir::testdir;
 
@@ -135,7 +136,7 @@ mod tests {
             .uri(uri2)
             .build()
             .unwrap();
-        let store = super::MountsStorage::from(vec![mount1, mount2])
+        let store = super::MountsStorage::from(vec![mount1, mount2], &HashMap::new())
             .await
             .unwrap();
 

@@ -80,6 +80,7 @@ mod tests {
     use crate::logic::datasets::service::schema::SchemaService;
     use polars::datatypes::{Int64Chunked, StringChunked};
     use polars::prelude::{DataFrame, IntoColumn, IntoLazy, NamedFrom, ParquetWriteOptions};
+    use std::collections::HashMap;
     use std::path::Path;
     use std::sync::Arc;
     use td_common::absolute_path::AbsolutePath;
@@ -129,7 +130,9 @@ mod tests {
             .uri(dummy_file())
             .build()
             .unwrap();
-        let storage = Storage::from(vec![mound_def]).await.unwrap();
+        let storage = Storage::from(vec![mound_def], &HashMap::new())
+            .await
+            .unwrap();
         let provider = SchemaService::provider(db, Arc::new(storage));
         let service = provider.make().await;
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -155,11 +158,14 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let test_dir = testdir!();
         let url = Url::from_directory_path(test_dir).unwrap();
-        let storage = Storage::from(vec![MountDef::builder()
-            .uri(url)
-            .mount_path("/")
-            .build()
-            .unwrap()])
+        let storage = Storage::from(
+            vec![MountDef::builder()
+                .uri(url)
+                .mount_path("/")
+                .build()
+                .unwrap()],
+            &HashMap::new(),
+        )
         .await
         .unwrap();
         let storage = Arc::new(storage);
