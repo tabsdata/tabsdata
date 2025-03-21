@@ -8,6 +8,7 @@ env_files = [
     { path = "./make/settings/output.env" },
     { path = "./make/settings/product.env" },
     { path = "${HOME}/.tabsdata-dev/make.env" },
+    { path = "${HOME}/.tabsdata-dev/test.env" },
 ]
 
 extend = [
@@ -95,6 +96,18 @@ load_script = [
         cp ${LOCAL_ROOT}/.custom/make-dev.env ${HOME}/.tabsdata-dev/make.env
     end
 
+    ok_test_env = is_path_exists ${HOME}/.tabsdata-dev/test.env
+    if ${ok_test_env}
+        if eq ${echo_env_files} "true"
+            echo "📎 File ${HOME}/.tabsdata-dev/test.env alredy exists"
+        end
+    else
+        if eq ${echo_env_files} "true"
+            echo "💈 Copying ${LOCAL_ROOT}/.custom/test-dev.env to ${HOME}/.tabsdata-dev/test.env"
+        end
+        cp ${LOCAL_ROOT}/.custom/test-dev.env ${HOME}/.tabsdata-dev/test.env
+    end
+
     if eq ${echo_env_files} "true"
         echo "🎈 This build is using the following environment variables files:"
         files = glob_array ${LOCAL_ROOT}/make/settings/*.env
@@ -102,7 +115,9 @@ load_script = [
             echo "   - 🪬 ${file}"
         end
         echo "   - 🪬 ${HOME}/.tabsdata-dev/make.env"
+        echo "   - 🪬 ${HOME}/.tabsdata-dev/test.env"
     end
+
     set_env ECHO_ENV_FILES "false"
     ''']
 skip_core_tasks = true
