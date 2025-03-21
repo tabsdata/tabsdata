@@ -19,5 +19,6 @@ pub mod tower_service;
 pub mod types;
 pub mod users;
 
+pub mod location2;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
