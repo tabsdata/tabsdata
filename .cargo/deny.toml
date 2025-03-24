@@ -30,6 +30,7 @@ ignore = [
 
 deny = [{ crate = "log", reason = "We use 'tracing' crate instead, which has equivalent macros to the ones in 'log' crate", wrappers = [
     "globset",
+    "iana-time-zone",
     "ignore",
     "mio",
     "native-tls",
