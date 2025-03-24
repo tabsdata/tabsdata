@@ -176,3 +176,6 @@ version = "2.5.0"
 # Internal dependencies
 
 td-build = { workspace = true }
+
+[patch.crates-io]
+zip = { git = "https://github.com/zip-rs/zip2", tag = "v2.4.2" }
