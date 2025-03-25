@@ -1,0 +1,12 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[book]
+authors = ["Tabs Data Inc."]
+language = "en"
+multilingual = false
+src = "src"
+title = "Tabsdata Developer Guide"
+
+[preprocessor.image-size]
