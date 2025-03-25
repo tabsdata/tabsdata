@@ -244,16 +244,21 @@ class MongoDBDestination(DestinationPlugin):
             for index, (result, (collection, id_field)) in enumerate(
                 zip(results, self.collections_with_ids)
             ):
-                start = timer()
-                self._store_result_in_collection(
-                    result, collection, id_field, session, index
-                )
-                end = timer()
-                time_taken = end - start
-                logger.info(
-                    f"Time taken to store collection '{collection}': "
-                    f"{str(datetime.timedelta(seconds=time_taken))}"
-                )
+                if result is None:
+                    logger.warning(
+                        f"Result for collection '{collection}' is None. Skipping"
+                    )
+                else:
+                    start = timer()
+                    self._store_result_in_collection(
+                        result, collection, id_field, session, index
+                    )
+                    end = timer()
+                    time_taken = end - start
+                    logger.info(
+                        f"Time taken to store collection '{collection}': "
+                        f"{str(datetime.timedelta(seconds=time_taken))}"
+                    )
             logger.info("All results stored")
 
     def _store_result_in_collection(

@@ -2,11 +2,6 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-import sys
-
-
-
-
 from tests_tabsdata.bootest import enrich_sys_path
 from tests_tabsdata_mongodb.bootest import TESTING_RESOURCES_PATH
 
@@ -119,7 +114,17 @@ def create_docker_mongodb_database_with_replica_set():
         return
     else:
         compose_file = os.path.join("tests_tabsdata_mongodb", "compose.yaml")
-        subprocess.run(["docker-compose", "-f", compose_file, "up", "-d"], check=True)
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-f",
+                compose_file,
+                "up",
+                "-d",
+            ],
+            check=True,
+        )
         # Wait for the database to be ready
         retry = 0
         while True:
