@@ -218,6 +218,14 @@ def enrich_sys_path():
         ),
     )
 
+    visited_entries = set()
+    shiny_entries = []
+    for path in sys.path:
+        if path not in visited_entries:
+            visited_entries.add(path)
+            shiny_entries.append(path)
+    sys.path[:] = shiny_entries
+    
     logger.info("")
     logger.info("Using sys.path entries for td-sdk tests...:")
     for path in sys.path:
