@@ -5,12 +5,12 @@
 import os
 from abc import ABC
 
-from ta_tableframe.api.api_test import TestTableframeExtension
+from ta_tableframe.api.api_test import TestTableFrameExtension
 from te_tableframe.version import version
 
 
-class Test(TestTableframeExtension, ABC):
-    name = "Test Tableframe Extension (Standard)"
+class Test(TestTableFrameExtension, ABC):
+    name = "Test TableFrame Extension (Standard)"
     version = version()
 
     @classmethod

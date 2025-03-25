@@ -48,7 +48,7 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 from tabsdata.utils.annotations import pydoc, unstable
 
 # noinspection PyProtectedMember
-from te_tableframe.extension import TableframeExtension
+from te_tableframe.extension import TableFrameExtension
 
 # ToDo: SDK-128: Define the logging model for SDK CLI execution
 logger = logging.getLogger(__name__)
@@ -1515,12 +1515,12 @@ TdType = TypeVar("TdType", TableFrame, Series, td_expr.Expr)
 def _assemble_columns(f: TableFrame | pl.LazyFrame) -> td.TableFrame:
     if isinstance(f, pl.LazyFrame):
         return td.TableFrame.__build__(
-            TableframeExtension.instance().assemble_columns(f),
+            TableFrameExtension.instance().assemble_columns(f),
         )
     elif isinstance(f, td.TableFrame):
         # noinspection PyProtectedMember
         return td.TableFrame.__build__(
-            TableframeExtension.instance().assemble_columns(f._lf),
+            TableFrameExtension.instance().assemble_columns(f._lf),
         )
     else:
         raise TypeError(

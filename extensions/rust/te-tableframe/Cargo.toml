@@ -3,7 +3,7 @@
 #
 
 [package]
-description = "Tabsdata Tableframe Extension Implementation - Standard"
+description = "Tabsdata TableFrame Extension Implementation - Standard"
 name = "te-tableframe"
 build = "build.rs"
 

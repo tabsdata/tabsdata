@@ -3,10 +3,10 @@
 //
 
 use ta_tableframe::api::Extension;
-use te_tableframe::engine::TableframeExtension;
+use te_tableframe::engine::TableFrameExtension;
 
 fn main() {
     println!("Executing te-tableframe...");
-    println!("   - {}", TableframeExtension.summary().unwrap());
+    println!("   - {}", TableFrameExtension.summary().unwrap());
     println!("Done executing te-tableframe...");
 }

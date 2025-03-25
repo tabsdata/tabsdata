@@ -5,7 +5,7 @@
 from abc import ABC, abstractmethod
 
 
-class TestTableframeExtension(ABC):
+class TestTableFrameExtension(ABC):
     IDENTIFIER = "ta_tableframe_test"
 
     @abstractmethod

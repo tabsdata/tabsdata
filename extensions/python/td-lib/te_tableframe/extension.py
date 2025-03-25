@@ -47,19 +47,19 @@ REQUIRED_COLUMNS_METADATA = {
 }
 
 
-class TableframeExtension(Extension, ABC):
-    name = "Tableframe Extension (Standard)"
+class TableFrameExtension(Extension, ABC):
+    name = "TableFrame Extension (Standard)"
     version = version()
 
     def __init__(self) -> None:
         FeaturesManager.instance().disable(Feature.ENTERPRISE)
         logger.info(
-            f"Single instance of {Extension.__name__}: {TableframeExtension.name} -"
-            f" {TableframeExtension.version}"
+            f"Single instance of {Extension.__name__}: {TableFrameExtension.name} -"
+            f" {TableFrameExtension.version}"
         )
 
     @classmethod
-    def instance(cls) -> "TableframeExtension":
+    def instance(cls) -> "TableFrameExtension":
         return instance
 
     @property
@@ -103,4 +103,4 @@ class TableframeExtension(Extension, ABC):
         return lf
 
 
-instance = TableframeExtension()
+instance = TableFrameExtension()

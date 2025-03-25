@@ -5,13 +5,13 @@
 #[cfg(test)]
 pub mod tests {
     use ta_tableframe::api::Extension;
-    use te_tableframe::engine::TableframeExtension;
+    use te_tableframe::engine::TableFrameExtension;
 
     #[test]
     #[cfg(not(feature = "enterprise"))]
     fn test_summary_annotation() {
         assert_eq!(
-            TableframeExtension.summary().unwrap(),
+            TableFrameExtension.summary().unwrap(),
             "te-tableframe-standard".to_string()
         )
     }
@@ -20,14 +20,14 @@ pub mod tests {
     #[cfg(feature = "enterprise")]
     fn test_summary_annotation() {
         assert_eq!(
-            TableframeExtension.summary().unwrap(),
+            TableFrameExtension.summary().unwrap(),
             "te-tableframe-enterprise".to_string()
         )
     }
 
     #[test]
     fn test_summary_condition() {
-        let summary = TableframeExtension.summary().unwrap();
+        let summary = TableFrameExtension.summary().unwrap();
         if !cfg!(feature = "enterprise") {
             assert_eq!(summary, "te-tableframe-standard".to_string())
         } else {

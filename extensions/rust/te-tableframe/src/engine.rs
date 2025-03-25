@@ -5,9 +5,9 @@
 use std::io::Error;
 use ta_tableframe::api::Extension;
 
-pub struct TableframeExtension;
+pub struct TableFrameExtension;
 
-impl Extension for TableframeExtension {
+impl Extension for TableFrameExtension {
     fn edition(&self) -> String {
         "standard".to_string()
     }

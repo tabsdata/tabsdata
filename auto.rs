@@ -3,7 +3,7 @@
 //
 
 use ta_tableframe::api::Extension;
-use te_tableframe::engine::TableframeExtension;
+use te_tableframe::engine::TableFrameExtension;
 
 fn main() {
     println!("Name.......: {}", env!("CARGO_PKG_NAME"));
@@ -24,5 +24,5 @@ fn edition() -> String {
 }
 
 fn summary() -> String {
-    TableframeExtension.summary().unwrap()
+    TableFrameExtension.summary().unwrap()
 }
