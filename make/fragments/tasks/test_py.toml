@@ -79,14 +79,14 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd ${PROJECT_TD_TABLEFRAME_FOLDER}
+    cd ${PROJECT_TE_TABLEFRAME_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TD_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16  --dist=loadfile ${TESTS_TD_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16  --dist=loadfile ${TESTS_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_TD_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TD_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
     if not eq ${exit_code} "5"
         code = exit ${exit_code}

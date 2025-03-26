@@ -196,7 +196,7 @@ jobs:
       - permit-job
       - describe-job
     if: ${{ needs.permit-job.outputs.permit_workflow == 'true' }}
-    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@TDCI-20
+    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@main
     secrets:
       PAT_AOINOKIMI: ${{ secrets.PAT_AOINOKIMI }}
       TRANSPORTER_AWS_ACCESS_KEY_ID: ${{ secrets.TRANSPORTER_AWS_ACCESS_KEY_ID }}

@@ -43,7 +43,7 @@ PROJECT_ROOT_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/", normalize = true }
 PROJECT_MACROS_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/macros/", normalize = true }
 PROJECT_TD_FEATURES_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/client/td-lib/td_features/", normalize = true }
 PROJECT_TA_TABLEFRAME_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/client/td-lib/ta_tableframe/", normalize = true }
-PROJECT_TD_TABLEFRAME_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/extensions/python/td-lib/te_tableframe/", normalize = true }
+PROJECT_TE_TABLEFRAME_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/extensions/python/td-lib/te_tableframe/", normalize = true }
 PROJECT_TD_SDK_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/client/td-sdk/", normalize = true }
 PROJECT_TABSDATA_SALESFORCE_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/connectors/python/tabsdata_salesforce/", normalize = true }
 PROJECT_TABSDATA_MONGODB_FOLDER = { value = "${ROOT_PROJECT_FOLDER}/connectors/python/tabsdata_mongodb/", normalize = true }
@@ -53,7 +53,7 @@ PROJECT_MACROS_CARGO_TOML = { value = "${ROOT_PROJECT_FOLDER}/macros/Cargo.toml"
 
 TESTS_TD_FEATURES_FOLDER = { value = "tests_td_features/", normalize = true }
 TESTS_TA_TABLEFRAME_FOLDER = { value = "tests_ta_tableframe/", normalize = true }
-TESTS_TD_TABLEFRAME_FOLDER = { value = "tests_te_tableframe/", normalize = true }
+TESTS_TE_TABLEFRAME_FOLDER = { value = "tests_te_tableframe/", normalize = true }
 TESTS_TABSDATA_FOLDER = { value = "tests_tabsdata/", normalize = true }
 TESTS_TABSDATA_SALESFORCE_FOLDER = { value = "tests_tabsdata_salesforce/", normalize = true }
 TESTS_TABSDATA_MONGODB_FOLDER = { value = "tests_tabsdata_mongodb/", normalize = true }

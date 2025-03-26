@@ -34,7 +34,7 @@ args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TA_TABLEFRAME_FOLDER}", "py"]
 [tasks.clean_py_te_tableframe]
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TD_TABLEFRAME_FOLDER}", "py"]
+args = ["${CLEAN_PYTHON_PY}", "${PROJECT_TE_TABLEFRAME_FOLDER}", "py"]
 
 [tasks.clean_py_tabsdata]
 private = true
