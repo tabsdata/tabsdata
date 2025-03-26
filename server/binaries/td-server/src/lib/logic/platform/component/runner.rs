@@ -20,6 +20,11 @@ use td_common::env::get_current_dir;
 use td_common::logging::LOG_LOCATION;
 use td_common::monitor::check_show_env;
 use td_common::server::ResponseMessagePayloadBuilderError;
+use td_common::server::WorkerName::FUNCTION;
+use td_python::venv::{
+    ENV_CONDA_PREFIX, ENV_PYENV_VERSION, ENV_PYTHONHOME, ENV_PYTHONPATH, ENV_UV_VENV,
+    ENV_VIRTUAL_ENV, ENV_VIRTUAL_ENV_PROMPT,
+};
 use thiserror::Error;
 use tokio::process::{Child, Command};
 use tracing::{debug, error, info};
@@ -81,7 +86,7 @@ impl WorkerRunner for TabsDataWorkerRunner {
         let mut command = Command::new(worker.describer().program());
         command
             .current_dir(worker.describer().work())
-            .envs(obtain_env_vars())
+            .envs(obtain_env_vars(worker.describer().name()))
             .stdout(out)
             .stderr(err)
             .args(worker.describer().arguments());
@@ -112,7 +117,7 @@ impl WorkerRunner for TabsDataWorkerRunner {
 
 // Adjusts environment variables of new worker:
 // - PATH is enriched with directory of current running program.
-fn obtain_env_vars() -> Vec<(String, String)> {
+fn obtain_env_vars(worker: &str) -> Vec<(String, String)> {
     let mut env_vars: Vec<(String, String)> = env::vars().collect();
     if let Ok(program_path) = env::current_exe() {
         if let Some(program_folder) = program_path.parent() {
@@ -128,6 +133,20 @@ fn obtain_env_vars() -> Vec<(String, String)> {
             }
         }
     }
+
+    if worker == FUNCTION.as_ref() {
+        let python_envs = [
+            ENV_CONDA_PREFIX,
+            ENV_PYENV_VERSION,
+            ENV_PYTHONHOME,
+            ENV_PYTHONPATH,
+            ENV_UV_VENV,
+            ENV_VIRTUAL_ENV,
+            ENV_VIRTUAL_ENV_PROMPT,
+        ];
+        env_vars.retain(|(key, _)| !python_envs.contains(&key.as_str()));
+    }
+
     if check_show_env() {
         debug!("Using environment variables");
         for env in &env_vars {
@@ -137,7 +156,7 @@ fn obtain_env_vars() -> Vec<(String, String)> {
     env_vars
 }
 
-// Runner for unctions.
+// Runner for functions.
 #[derive(Default)]
 pub struct FunctionWorkerRunner;
 

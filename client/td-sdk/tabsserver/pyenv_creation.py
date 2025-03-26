@@ -1137,9 +1137,12 @@ def main():
         inject_current_tabsdata = True
         os.makedirs(locks_folder, exist_ok=True)
 
+        with open(requirements_description_file, "r", encoding="utf-8") as f:
+            requirements_description_contents = f.read()
         logger.debug(
             "Creating base virtual environment:"
             f"\n - Requirements File: '{requirements_description_file}'"
+            f"\n - Requirements File Contents: '{requirements_description_contents}'"
             f"\n - Lock Folder: '{locks_folder}'"
             f"\n - Current Instance: '{current_instance}'"
             f"\n - Environment Prefix: '{environment_prefix}'"

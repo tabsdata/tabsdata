@@ -27,9 +27,13 @@ pub const TDVENV_ARGUMENT_INSTANCE: &str = "--instance";
 
 pub const BIN: &str = "bin";
 
+pub const ENV_CONDA_PREFIX: &str = "CONDA_PREFIX";
+pub const ENV_PYENV_VERSION: &str = "PYENV_VERSION";
+pub const ENV_PYTHONHOME: &str = "PYTHONHOME";
+pub const ENV_PYTHONPATH: &str = "PYTHONPATH";
+pub const ENV_UV_VENV: &str = "UV_VENV";
 pub const ENV_VIRTUAL_ENV: &str = "VIRTUAL_ENV";
 pub const ENV_VIRTUAL_ENV_PROMPT: &str = "VIRTUAL_ENV_PROMPT";
-pub const ENV_PYTHONHOME: &str = "PYTHONHOME";
 
 const ENVIRONMENT_START: &str = "<environment>";
 const ENVIRONMENT_END: &str = "</environment>";
@@ -94,17 +98,25 @@ pub fn activate(venv: &PathBuf) -> Result<(), TdError> {
         .to_string();
 
     prepend_in_path(Path::new(venv.as_path()).join(BIN).to_str().unwrap(), None)?;
+    env::remove_var(ENV_CONDA_PREFIX);
+    env::remove_var(ENV_PYENV_VERSION);
+    env::remove_var(ENV_PYTHONHOME);
+    env::remove_var(ENV_PYTHONPATH);
+    env::remove_var(ENV_UV_VENV);
     env::set_var(ENV_VIRTUAL_ENV, venv);
     env::set_var(ENV_VIRTUAL_ENV_PROMPT, format!("({})", instance));
-    env::remove_var(ENV_PYTHONHOME);
     Ok(())
 }
 
 pub fn deactivate(venv: &PathBuf) -> Result<(), TdError> {
     remove_from_path(Path::new(venv).join(BIN).to_str().unwrap(), None)?;
+    env::remove_var(ENV_CONDA_PREFIX);
+    env::remove_var(ENV_PYENV_VERSION);
+    env::remove_var(ENV_PYTHONHOME);
+    env::remove_var(ENV_PYTHONPATH);
+    env::remove_var(ENV_UV_VENV);
     env::remove_var(ENV_VIRTUAL_ENV);
     env::remove_var(ENV_VIRTUAL_ENV_PROMPT);
-    env::remove_var(ENV_PYTHONHOME);
     Ok(())
 }
 

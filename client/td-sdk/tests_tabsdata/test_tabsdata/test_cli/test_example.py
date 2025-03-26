@@ -10,7 +10,7 @@ from time import sleep
 
 import pytest
 from click.testing import CliRunner
-from tests_tabsdata.conftest import ABSOLUTE_ROOT_FOLDER_LOCATION, MAXIMUM_RETRY_COUNT
+from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
 
 from tabsdata import TabsdataFunction
 from tabsdata.cli.cli import cli
@@ -61,8 +61,7 @@ def test_examples(login, tabsserver_connection):
             "examples",
             "--fn-path",
             f"{os.path.join(WORKING_FOLDER, "publisher.py")}::pub",
-            "--local-pkg",
-            ABSOLUTE_ROOT_FOLDER_LOCATION,
+            *[arg for path in LOCAL_PACKAGES_LIST for arg in ("--local-pkg", path)],
         ],
     )
     log_and_assert(result)
@@ -102,8 +101,7 @@ def test_examples(login, tabsserver_connection):
             "examples",
             "--fn-path",
             f"{os.path.join(WORKING_FOLDER, "transformer.py")}::tfr",
-            "--local-pkg",
-            ABSOLUTE_ROOT_FOLDER_LOCATION,
+            *[arg for path in LOCAL_PACKAGES_LIST for arg in ("--local-pkg", path)],
         ],
     )
     log_and_assert(result)
@@ -143,8 +141,7 @@ def test_examples(login, tabsserver_connection):
             "examples",
             "--fn-path",
             f"{os.path.join(WORKING_FOLDER, "subscriber.py")}::sub",
-            "--local-pkg",
-            ABSOLUTE_ROOT_FOLDER_LOCATION,
+            *[arg for path in LOCAL_PACKAGES_LIST for arg in ("--local-pkg", path)],
         ],
     )
     log_and_assert(result)

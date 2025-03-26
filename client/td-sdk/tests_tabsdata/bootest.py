@@ -18,6 +18,8 @@ TESTING_RESOURCES_PATH = os.path.join(
     "testing_resources",
 )
 
+TRUE_VALUES = {"1", "true", "yes", "y", "on"}
+
 
 def root_folder() -> str:
     current_folder = os.path.dirname(__file__)
@@ -225,7 +227,7 @@ def enrich_sys_path():
             visited_entries.add(path)
             shiny_entries.append(path)
     sys.path[:] = shiny_entries
-    
+
     logger.info("")
     logger.info("Using sys.path entries for td-sdk tests...:")
     for path in sys.path:
@@ -234,12 +236,8 @@ def enrich_sys_path():
 
 
 def check_assets():
-    require_third_party = os.getenv("REQUIRE_THIRD_PARTY", "False").lower() in (
-        "1",
-        "true",
-        "yes",
-        "y",
-        "on",
+    require_third_party = (
+        os.getenv("REQUIRE_THIRD_PARTY", "False").lower() in TRUE_VALUES
     )
     variant_assets_folder = os.path.join("..", "..", "variant", "assets")
     client_assets_folder = os.path.join("tabsdata", "assets")
