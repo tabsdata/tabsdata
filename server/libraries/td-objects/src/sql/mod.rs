@@ -103,19 +103,19 @@ where
 /// For example, ([E1, E2], E3) will generate (E1 OR E2) AND E3.
 macro_rules! gen_where_clause {
     // Cases for when there's no condition to add (empty input).
-    ($query_builder:expr, ) => {};
-    ($query_builder:expr, $vect:ident: []) => {};
+    ($query_builder:expr, $D:ident, ) => {};
+    ($query_builder:expr, $D:ident, $vect:ident: []) => {};
 
     // Case for when there's at least one condition.
-    ($query_builder:expr, $($rest:tt)+) => {{
+    ($query_builder:expr, $D:ident, $($rest:tt)+) => {{
         $query_builder.push(" WHERE ");
         let mut first = true;
-        gen_where_clause!(@munch $query_builder, first, $($rest)+);
+        gen_where_clause!(@munch $query_builder, $D, first, $($rest)+);
     }};
 
     // Binding
-    (@bind $query_builder:expr, $E:ident) => {{
-        let column = D::sql_field_for_type::<$E>()
+    (@bind $query_builder:expr, $D:ident, $E:ident) => {{
+        let column = $D::sql_field_for_type::<$E>()
             .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
         $query_builder
             .push(format!("{} = ", column))
@@ -123,21 +123,21 @@ macro_rules! gen_where_clause {
     }};
 
     // Base case: nothing to do here
-    (@munch $query_builder:expr, $first:ident) => {};
+    (@munch $query_builder:expr, $D:ident, $first:ident) => {};
 
     // Single identifier (normal case). AND group.
-    (@munch $query_builder:expr, $first:ident, $E:ident $(, $($rest:tt)*)?) => {{
+    (@munch $query_builder:expr, $D:ident, $first:ident, $E:ident $(, $($rest:tt)*)?) => {{
         if !$first { $query_builder.push(" AND "); }
         $first = false;
-        gen_where_clause!(@bind $query_builder, $E);
-        gen_where_clause!(@munch $query_builder, $first $(, $($rest)*)?);
+        gen_where_clause!(@bind $query_builder, $D, $E);
+        gen_where_clause!(@munch $query_builder, $D, $first $(, $($rest)*)?);
     }};
 
     // Case for an empty array (no expansion needed)
     (@munch $query_builder:expr, $first:ident, []) => {};
 
     // AND/OR group. Joining arrays.
-    (@munch $query_builder:expr, $first:ident,  $vect:ident: [ $($inner:ident),* ] $(, $($rest:tt)*)?) => {{
+    (@munch $query_builder:expr, $D:ident, $first:ident,  $vect:ident: [ $($inner:ident),* ] $(, $($rest:tt)*)?) => {{
         if !$first { $query_builder.push(" AND "); }
         $first = false;
 
@@ -151,11 +151,11 @@ macro_rules! gen_where_clause {
             $(
                 if !and_first { $query_builder.push(" AND "); }
                 and_first = false;
-                gen_where_clause!(@bind $query_builder, $inner);
+                gen_where_clause!(@bind $query_builder, $D, $inner);
             )*
             $query_builder.push(")");
         }
-        gen_where_clause!(@munch $query_builder, $first $(, $($rest)*)?);
+        gen_where_clause!(@munch $query_builder, $D, $first $(, $($rest)*)?);
     }};
 }
 
@@ -181,7 +181,7 @@ macro_rules! impl_select_by {
                 let fields = D::fields();
                 let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
-                gen_where_clause!(query_builder, $($E),*);
+                gen_where_clause!(query_builder, D, $($E),*);
                 query_builder.push(" ");
                 query_builder.push(D::order_by());
                 trace!("select_{}: sql: {}", table, query_builder.sql());
@@ -216,7 +216,7 @@ macro_rules! impl_find_by {
                 let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
                 if !e.is_empty() {
-                    gen_where_clause!(query_builder, e: [ $($E),* ]);
+                    gen_where_clause!(query_builder, D, e: [ $($E),* ]);
                 }
                 trace!("select_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
@@ -255,7 +255,7 @@ macro_rules! impl_list_by {
                 let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
 
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
-                gen_where_clause!(query_builder, $($E),*);
+                gen_where_clause!(query_builder, D, $($E),*);
                 query_builder
                     .push(" LIMIT ")
                     .push_bind((list_params.len() + 1) as i64);
@@ -296,7 +296,7 @@ macro_rules! impl_update_by {
                 let fields = U::fields();
                 let sql = format!("UPDATE {} SET ", table);
                 let mut query_builder = dao.tuples_query_builder(sql, fields);
-                gen_where_clause!(query_builder, $($E),*);
+                gen_where_clause!(query_builder, D, $($E),*);
                 trace!("update_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }
@@ -327,7 +327,7 @@ macro_rules! impl_delete_by {
                 let table = D::sql_table();
                 let sql = format!("DELETE FROM {}", table);
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
-                gen_where_clause!(query_builder, $($E),*);
+                gen_where_clause!(query_builder, D, $($E),*);
                 trace!("delete_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }

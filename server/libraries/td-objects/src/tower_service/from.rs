@@ -151,6 +151,21 @@ where
 }
 
 #[async_trait]
+pub trait EmptyVecService<T> {
+    async fn empty_vec() -> Result<Vec<T>, TdError>;
+}
+
+#[async_trait]
+impl<T> EmptyVecService<T> for With<T>
+where
+    T: Send + Sync,
+{
+    async fn empty_vec() -> Result<Vec<T>, TdError> {
+        Ok(Vec::new())
+    }
+}
+
+#[async_trait]
 pub trait VecUpdateService<T> {
     async fn vec_update<F, E>(
         try_from: Input<Vec<T>>,

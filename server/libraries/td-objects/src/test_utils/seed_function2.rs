@@ -5,7 +5,9 @@
 use crate::crudl::{ReadRequest, RequestContext};
 use crate::sql::{DaoQueries, Insert, SelectBy, UpdateBy};
 use crate::test_utils::seed_user::admin_user;
-use crate::types::basic::{DependencyPos, TableFunctionParamPos, TableId};
+use crate::types::basic::{
+    DependencyPos, DependencyStatus, TableFunctionParamPos, TableId, TableStatus, TriggerStatus,
+};
 use crate::types::collection::CollectionDB;
 use crate::types::dependency::{DependencyDBBuilder, DependencyVersionDBBuilder};
 use crate::types::function::{
@@ -99,6 +101,7 @@ pub async fn seed_function(
                 .table_id(TableId::default())
                 .name(table_name)
                 .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i16).unwrap()))
+                .status(TableStatus::active())
                 .build()
                 .unwrap();
 
@@ -174,6 +177,7 @@ pub async fn seed_function(
                 .table_name(table_db.name())
                 .table_versions(dependency_table.versions())
                 .dep_pos(DependencyPos::try_from(pos as i16).unwrap())
+                .status(DependencyStatus::active())
                 .build()
                 .unwrap();
 
@@ -226,6 +230,7 @@ pub async fn seed_function(
                 .trigger_by_function_id(table_db.function_id())
                 .trigger_by_function_version_id(table_db.function_version_id())
                 .trigger_by_table_id(table_db.id())
+                .status(TriggerStatus::active())
                 .build()
                 .unwrap();
 

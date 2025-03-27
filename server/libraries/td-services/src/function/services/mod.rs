@@ -279,145 +279,141 @@ pub(crate) mod tests {
             .map_err(handle_sql_err)?;
         assert!(tables.is_empty());
 
-        // Assert previous table versions were active and then frozen
+        // Assert tables
         for table in create.tables().as_deref().unwrap_or(&[]) {
-            let table_versions: Vec<TableVersionDB> = queries
-                .select_by::<TableVersionDB>(&(collection.id(), table))?
+            // We will always have the old active version
+            let old_version: Vec<TableVersionDB> = queries
+                .select_by::<TableVersionDB>(&(
+                    collection.id(),
+                    table,
+                    created_function_version.id(),
+                ))?
                 .build_query_as()
                 .fetch_all(db)
                 .await
                 .map_err(handle_sql_err)?;
-            // We will always have the old active version
-            let old_version = table_versions
-                .iter()
-                .find(|v| {
-                    v.function_version_id() == created_function_version.id()
-                        && *v.status() == TableStatus::active()
-                })
-                .unwrap();
+            assert_eq!(old_version.len(), 1);
+            assert_eq!(*old_version[0].status(), TableStatus::active());
 
             // And a new one, which will be active if still present, or else frozen
+            let new_version: Vec<TableVersionDB> = queries
+                .select_by::<TableVersionDB>(&(collection.id(), table, response.id()))?
+                .build_query_as()
+                .fetch_all(db)
+                .await
+                .map_err(handle_sql_err)?;
+            assert_eq!(new_version.len(), 1);
             let new_status = if update.tables().as_deref().unwrap_or(&[]).contains(table) {
                 TableStatus::active()
             } else {
                 TableStatus::frozen()
             };
+            assert_eq!(*new_version[0].status(), new_status);
 
-            let new_version = table_versions
-                .iter()
-                .find(|v| {
-                    v.function_version_id() != created_function_version.id()
-                        && *v.status() == new_status
-                })
-                .unwrap();
-
-            assert_eq!(new_version.table_id(), old_version.table_id());
+            // Both with the same table_id
+            assert_eq!(old_version[0].table_id(), new_version[0].table_id());
         }
 
         // Assert dependencies
         for dependency in create.dependencies().as_deref().unwrap_or(&[]) {
-            // Assert dependencies versions exist
-            let dependency_versions: Vec<DependencyVersionDBWithNames> = queries
+            // We will always have the old active version
+            let old_version: Vec<DependencyVersionDBWithNames> = queries
                 .select_by::<DependencyVersionDBWithNames>(&(
                     dependency
                         .collection()
                         .as_ref()
                         .unwrap_or(collection.name()),
                     dependency.table(),
+                    created_function_version.id(),
                 ))?
                 .build_query_as()
                 .fetch_all(db)
                 .await
                 .map_err(handle_sql_err)?;
+            assert_eq!(old_version.len(), 1);
+            assert_eq!(*old_version[0].status(), DependencyStatus::active());
 
-            // We will always have the old active version
-            let old_version = dependency_versions
-                .iter()
-                .find(|v| {
-                    v.function_version_id() == created_function_version.id()
-                        && *v.status() == DependencyStatus::active()
-                })
-                .unwrap();
+            // And a new one, which will be active if still present, or else deleted
+            let new_version: Vec<DependencyVersionDBWithNames> = queries
+                .select_by::<DependencyVersionDBWithNames>(&(
+                    dependency
+                        .collection()
+                        .as_ref()
+                        .unwrap_or(collection.name()),
+                    dependency.table(),
+                    response.id(),
+                ))?
+                .build_query_as()
+                .fetch_all(db)
+                .await
+                .map_err(handle_sql_err)?;
+            assert_eq!(new_version.len(), 1);
 
-            // And 2 new ones
-            // A deleted one
-            let new_version = dependency_versions
-                .iter()
-                .find(|v| {
-                    v.function_version_id() != created_function_version.id()
-                        && *v.status() == DependencyStatus::deleted()
-                })
-                .unwrap();
-            assert_eq!(new_version.dependency_id(), old_version.dependency_id());
-
-            // And a new one, if still present
-            if update
+            let new_status = if update
                 .dependencies()
                 .as_deref()
                 .unwrap_or(&[])
                 .contains(dependency)
             {
-                let _new_version = dependency_versions
-                    .iter()
-                    .find(|v| {
-                        v.function_version_id() != created_function_version.id()
-                            && *v.status() == DependencyStatus::active()
-                    })
-                    .unwrap();
-            }
+                DependencyStatus::active()
+            } else {
+                DependencyStatus::deleted()
+            };
+            assert_eq!(*new_version[0].status(), new_status);
+
+            // Both with the same dependency_id
+            assert_eq!(
+                old_version[0].dependency_id(),
+                new_version[0].dependency_id()
+            );
         }
 
         // Assert triggers
         for trigger in create.triggers().as_deref().unwrap_or(&[]) {
-            // Assert triggers versions exist
-            let trigger_versions: Vec<TriggerVersionDBWithNames> = queries
+            // We will always have the old active version
+            let old_version: Vec<TriggerVersionDBWithNames> = queries
                 .select_by::<TriggerVersionDBWithNames>(&(
                     trigger.collection().as_ref().unwrap_or(collection.name()),
                     trigger.table(),
+                    created_function_version.id(),
                 ))?
                 .build_query_as()
                 .fetch_all(db)
                 .await
                 .map_err(handle_sql_err)?;
+            assert_eq!(old_version.len(), 1);
+            assert_eq!(*old_version[0].status(), TriggerStatus::active());
 
-            // We will always have the old active version
-            let old_version = trigger_versions
-                .iter()
-                .find(|v| {
-                    v.function_version_id() == created_function_version.id()
-                        && *v.status() == TriggerStatus::active()
-                })
-                .unwrap();
+            // And a new one, which will be active if still present, or else deleted
+            let new_version: Vec<TriggerVersionDBWithNames> = queries
+                .select_by::<TriggerVersionDBWithNames>(&(
+                    trigger.collection().as_ref().unwrap_or(collection.name()),
+                    trigger.table(),
+                    response.id(),
+                ))?
+                .build_query_as()
+                .fetch_all(db)
+                .await
+                .map_err(handle_sql_err)?;
+            assert_eq!(old_version.len(), 1);
 
-            // And 2 new ones
-            // A deleted one
-            let new_version = trigger_versions
-                .iter()
-                .find(|v| {
-                    v.function_version_id() != created_function_version.id()
-                        && *v.status() == TriggerStatus::deleted()
-                })
-                .unwrap();
-            assert_eq!(new_version.trigger_id(), old_version.trigger_id());
-
-            // And a new one, if still present
-            if update
+            let new_status = if update
                 .triggers()
                 .as_deref()
                 .unwrap_or(&[])
                 .contains(trigger)
             {
-                let _new_version = trigger_versions
-                    .iter()
-                    .find(|v| {
-                        v.function_version_id() != created_function_version.id()
-                            && *v.status() == TriggerStatus::active()
-                    })
-                    .unwrap();
-            }
+                TriggerStatus::active()
+            } else {
+                TriggerStatus::deleted()
+            };
+            assert_eq!(*new_version[0].status(), new_status);
+
+            // Both with the same trigger_id
+            assert_eq!(old_version[0].trigger_id(), new_version[0].trigger_id());
         }
 
-        // New version should be the exact same as if it just got registered.
+        // And finally, new version should be the exact same as if it just got registered.
         assert_register(db, user_id, collection, update, response).await?;
         Ok(())
     }

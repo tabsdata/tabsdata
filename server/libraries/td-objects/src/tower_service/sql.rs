@@ -251,6 +251,7 @@ macro_rules! impl_find {
                 let conn = conn.get_mut_connection()?;
 
                 // TODO this is not getting chunked. If there are too many we can have issues.
+                // TODO care, if lookup is empty it gets everything
                 let lookup: Vec<_> = by.iter().map(|d| ($($E::from(d)),*)).collect();
                 let lookup: Vec<_> = lookup.iter().map(|($($E),*)| ($($E),*)).collect();
                 let result = queries

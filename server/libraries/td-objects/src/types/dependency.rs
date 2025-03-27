@@ -59,7 +59,6 @@ pub struct DependencyVersionDB {
     table_name: TableName,
     table_versions: TableVersions,
     dep_pos: DependencyPos,
-    #[builder(default = "DependencyStatus::active()")]
     status: DependencyStatus,
     #[td_type(updater(include, field = "time"))]
     defined_on: AtTime,

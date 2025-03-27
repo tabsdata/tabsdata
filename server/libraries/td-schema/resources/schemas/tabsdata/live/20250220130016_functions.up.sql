@@ -99,6 +99,7 @@ CREATE TABLE table_versions
     name                TEXT      NOT NULL,
     function_version_id TEXT      NOT NULL, -- using '~' when deleted
     function_param_pos  INTEGER   NULL,
+    private             BOOLEAN   NOT NULL,
 
     defined_on          TIMESTAMP NOT NULL,
     defined_by_id       TEXT      NOT NULL,
@@ -252,5 +253,3 @@ FROM trigger_versions tv
          LEFT JOIN function_versions tfv ON tv.trigger_by_function_version_id = tfv.id
          LEFT JOIN tables t ON tv.trigger_by_table_id = t.id
 ;
-
-

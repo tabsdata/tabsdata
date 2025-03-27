@@ -56,7 +56,6 @@ pub struct TriggerVersionDB {
     trigger_by_function_id: FunctionId,
     trigger_by_function_version_id: FunctionVersionId,
     trigger_by_table_id: TableId,
-    #[builder(default = "TriggerStatus::active()")]
     status: TriggerStatus,
     #[td_type(updater(include, field = "time"))]
     defined_on: AtTime,

@@ -20,7 +20,7 @@ pub struct FunctionDB {
     name: FunctionName,
     #[td_type(extractor, builder(include, field = "id"))]
     function_version_id: FunctionVersionId,
-    #[builder(default = "Frozen::from(false)")]
+    #[builder(default)]
     frozen: Frozen,
     #[td_type(builder(include, field = "defined_on"))]
     created_on: AtTime,
@@ -84,6 +84,7 @@ pub type FunctionUpdate = FunctionCreate;
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct FunctionVersionDB {
     #[builder(default)]
+    #[td_type(extractor)]
     id: FunctionVersionId,
     #[td_type(setter)]
     collection_id: CollectionId,
@@ -108,7 +109,7 @@ pub struct FunctionVersionDB {
     defined_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
     defined_by_id: UserId,
-    #[builder(default = "FunctionStatus::active()")]
+    #[builder(default)]
     status: FunctionStatus,
 }
 

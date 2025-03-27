@@ -27,6 +27,8 @@ Copyright 2025 Tabs Data Inc.
 * Insert into table_versions(sql) dropped function tables status=Frozen.
 * Insert into dependency_versions(sql) dropped function table dependencies status=Deleted.
 * Insert into trigger_versions(sql) dropped function trigger status=Deleted.
+* Delete previous/Insert dependencies(sql) function dependencies info.
+* Delete previous/Insert triggers(sql) function trigger info.
 
 * Insert into function_versions(sql) status=Active.
 * Insert into table_versions(sql) current function tables status=Active.
@@ -39,8 +41,6 @@ Copyright 2025 Tabs Data Inc.
   version of the function or already existing (status=Frozen).
 * Update tables(sql) with new table_version_id, function_version_id and status=Active for
   tables that were status=Frozen.
-* Delete previous/Insert dependencies(sql) function dependencies info.
-* Delete previous/Insert triggers(sql) function trigger info.
 
 ## Delete Function
 

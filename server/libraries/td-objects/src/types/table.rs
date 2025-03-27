@@ -27,23 +27,12 @@ pub struct TableDB {
     table_version_id: TableVersionId,
     #[builder(default = "Frozen::from(false)")]
     frozen: Frozen,
-    #[builder(default = "Private::from(false)")]
+    #[td_type(builder(include))]
     private: Private,
     #[td_type(builder(include, field = "defined_on"))]
     created_on: AtTime,
     #[td_type(builder(include, field = "defined_by_id"))]
     created_by_id: UserId,
-}
-
-#[td_type::Dao(sql_table = "tables")]
-#[td_type(builder(try_from = TableDB))]
-pub struct UpdateTableDB {
-    function_id: FunctionId,
-    function_version_id: FunctionVersionId,
-    table_version_id: TableVersionId,
-    #[td_type(builder(skip))]
-    frozen: Frozen,
-    private: Private,
 }
 
 #[td_type::Dao(sql_table = "tables__with_names")]
@@ -77,11 +66,12 @@ pub struct TableVersionDB {
     #[td_type(builder(include, field = "id"))]
     function_version_id: FunctionVersionId,
     function_param_pos: Option<TableFunctionParamPos>,
+    #[builder(default = "Private::from(false)")]
+    private: Private,
     #[td_type(updater(include, field = "time"))]
     defined_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
     defined_by_id: UserId,
-    #[builder(default = "TableStatus::active()")]
     status: TableStatus,
 }
 
