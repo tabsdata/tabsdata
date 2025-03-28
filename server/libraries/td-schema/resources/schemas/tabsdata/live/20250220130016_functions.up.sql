@@ -46,6 +46,7 @@ CREATE TABLE function_versions
     defined_on      TIMESTAMP NOT NULL,
     defined_by_id   TEXT      NOT NULL,
     status          TEXT      NOT NULL, -- Active/Frozen/Deleted
+
     FOREIGN KEY (collection_id) REFERENCES collections (id)
 );
 
@@ -74,8 +75,7 @@ CREATE TABLE tables
     created_on          TIMESTAMP NOT NULL,
     created_by_id       TEXT      NOT NULL,
 
-    FOREIGN KEY (collection_id) REFERENCES collections (id),
-    FOREIGN KEY (function_id) REFERENCES functions (id)
+    FOREIGN KEY (collection_id) REFERENCES collections (id)
 );
 CREATE UNIQUE INDEX tables___name__collection_id___idx
     ON tables (name, collection_id);

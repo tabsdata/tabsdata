@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+pub mod delete;
 pub mod read;
 pub mod read_version;
 pub mod register;
@@ -415,6 +416,102 @@ pub(crate) mod tests {
 
         // And finally, new version should be the exact same as if it just got registered.
         assert_register(db, user_id, collection, update, response).await?;
+        Ok(())
+    }
+
+    pub async fn assert_delete(
+        db: &DbPool,
+        _user_id: &UserId,
+        collection: &CollectionDB,
+        create: &FunctionCreate,
+        created_function: &FunctionDB,
+        created_function_version: &FunctionVersionDB,
+    ) -> Result<(), TdError> {
+        // First, assert updated entities removed old ones
+        let queries = DaoQueries::default();
+
+        // Assert function version does not have a function anymore
+        let function: Option<FunctionDB> = queries
+            .select_by::<FunctionDB>(&(created_function.function_version_id()))?
+            .build_query_as()
+            .fetch_optional(db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert!(function.is_none());
+
+        // Assert previous function version exists
+        let function_versions: Vec<FunctionVersionDB> = queries
+            .select_by::<FunctionVersionDB>(&(created_function_version.id()))?
+            .build_query_as()
+            .fetch_all(db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(function_versions.len(), 1);
+        assert_eq!(&function_versions[0], created_function_version);
+
+        // Assert previous table versions do not have tables
+        let tables: Vec<TableDB> = queries
+            .select_by::<TableDB>(&created_function_version.id())?
+            .build_query_as()
+            .fetch_all(db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert!(tables.is_empty());
+
+        // Assert tables
+        for table in create.tables().as_deref().unwrap_or(&[]) {
+            // We will always have the old active version
+            let old_version: Vec<TableVersionDB> = queries
+                .select_by::<TableVersionDB>(&(
+                    collection.id(),
+                    table,
+                    created_function_version.id(),
+                ))?
+                .build_query_as()
+                .fetch_all(db)
+                .await
+                .map_err(handle_sql_err)?;
+            assert_eq!(old_version.len(), 1);
+            assert_eq!(*old_version[0].status(), TableStatus::active());
+        }
+
+        // Assert dependencies
+        for dependency in create.dependencies().as_deref().unwrap_or(&[]) {
+            // We will always have the old active version
+            let old_version: Vec<DependencyVersionDBWithNames> = queries
+                .select_by::<DependencyVersionDBWithNames>(&(
+                    dependency
+                        .collection()
+                        .as_ref()
+                        .unwrap_or(collection.name()),
+                    dependency.table(),
+                    created_function_version.id(),
+                ))?
+                .build_query_as()
+                .fetch_all(db)
+                .await
+                .map_err(handle_sql_err)?;
+            assert_eq!(old_version.len(), 1);
+            assert_eq!(*old_version[0].status(), DependencyStatus::active());
+        }
+
+        // Assert triggers
+        for trigger in create.triggers().as_deref().unwrap_or(&[]) {
+            // We will always have the old active version
+            let old_version: Vec<TriggerVersionDBWithNames> = queries
+                .select_by::<TriggerVersionDBWithNames>(&(
+                    trigger.collection().as_ref().unwrap_or(collection.name()),
+                    trigger.table(),
+                    created_function_version.id(),
+                ))?
+                .build_query_as()
+                .fetch_all(db)
+                .await
+                .map_err(handle_sql_err)?;
+            assert_eq!(old_version.len(), 1);
+            assert_eq!(*old_version[0].status(), TriggerStatus::active());
+        }
+
         Ok(())
     }
 }

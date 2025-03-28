@@ -156,12 +156,24 @@ pub trait EmptyVecService<T> {
 }
 
 #[async_trait]
-impl<T> EmptyVecService<T> for With<T>
-where
-    T: Send + Sync,
-{
+impl<T> EmptyVecService<T> for With<T> {
     async fn empty_vec() -> Result<Vec<T>, TdError> {
         Ok(Vec::new())
+    }
+}
+
+#[async_trait]
+pub trait DefaultService<T> {
+    async fn default() -> Result<T, TdError>;
+}
+
+#[async_trait]
+impl<T> DefaultService<T> for With<T>
+where
+    T: Default,
+{
+    async fn default() -> Result<T, TdError> {
+        Ok(T::default())
     }
 }
 
