@@ -38,6 +38,33 @@ where
 }
 
 #[async_trait]
+pub trait ConvertIntoMapService<T> {
+    async fn vec_convert_to<F, E>(input: Input<Vec<T>>) -> Result<Vec<F>, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        F: for<'a> TryFrom<&'a T, Error = E>,
+        E: Into<TdError>;
+}
+
+#[async_trait]
+impl<T> ConvertIntoMapService<T> for With<T>
+where
+    T: Send + Sync,
+{
+    async fn vec_convert_to<F, E>(Input(input): Input<Vec<T>>) -> Result<Vec<F>, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        F: for<'a> TryFrom<&'a T, Error = E>,
+        E: Into<TdError>,
+    {
+        input
+            .iter()
+            .map(|item| F::try_from(item).map_err(Into::into))
+            .collect()
+    }
+}
+
+#[async_trait]
 pub trait TryMapListService<T> {
     async fn try_map_list<N, B, F, E>(
         request: Input<ListRequest<N>>,
@@ -124,6 +151,39 @@ where
 }
 
 #[async_trait]
+pub trait VecUpdateService<T> {
+    async fn vec_update<F, E>(
+        try_from: Input<Vec<T>>,
+        updater: Input<F>,
+    ) -> Result<Vec<F>, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        for<'a> F: TryFrom<(&'a T, F), Error = E> + Clone + Send + Sync,
+        E: Into<TdError>;
+}
+
+#[async_trait]
+impl<T> VecUpdateService<T> for With<T>
+where
+    T: Send + Sync,
+{
+    async fn vec_update<F, E>(
+        Input(try_from): Input<Vec<T>>,
+        Input(updater): Input<F>,
+    ) -> Result<Vec<F>, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        for<'a> F: TryFrom<(&'a T, F), Error = E> + Clone + Send + Sync,
+        E: Into<TdError>,
+    {
+        try_from
+            .iter()
+            .map(|item| F::try_from((item, updater.deref().clone())).map_err(Into::into))
+            .collect()
+    }
+}
+
+#[async_trait]
 pub trait SetService<T> {
     async fn set<F>(from: Input<T>, setter: Input<F>) -> Result<F, TdError>
     where
@@ -176,7 +236,35 @@ where
     }
 }
 
+#[async_trait]
+pub trait VecBuildService<T> {
+    async fn vec_build<F, E>(input: Input<Vec<T>>) -> Result<Vec<F>, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        F: for<'a> TryFrom<&'a T, Error = E>,
+        E: Into<TdError>;
+}
+
+#[async_trait]
+impl<T> VecBuildService<T> for With<T>
+where
+    T: Send + Sync,
+{
+    async fn vec_build<F, E>(Input(input): Input<Vec<T>>) -> Result<Vec<F>, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        F: for<'a> TryFrom<&'a T, Error = E>,
+        E: Into<TdError>,
+    {
+        input
+            .iter()
+            .map(|item| F::try_from(item).map_err(Into::into))
+            .collect()
+    }
+}
+
 /// This one can be used to combine inputs, so BY sql clauses can use all of them as a single one.
+/// We might need to generate more combines if needed. We should look for a better way to do this.
 pub async fn combine<T: Clone, U: Clone>(
     Input(t): Input<T>,
     Input(u): Input<U>,

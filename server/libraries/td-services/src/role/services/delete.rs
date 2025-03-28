@@ -174,7 +174,7 @@ mod tests {
     async fn assert_deleted_role<R: SqlEntity>(db: &DbPool, role_ref: &R) -> Result<(), TdError> {
         // Assert just one of the roles in the db got deleted
         let found: Vec<RoleDB> = DaoQueries::default()
-            .select_by::<RoleDB>(role_ref)?
+            .select_by::<RoleDB>(&role_ref)?
             .build_query_as()
             .fetch_all(db)
             .await
@@ -191,7 +191,7 @@ mod tests {
 
         // Assert that associated user roles got deleted, but not others
         let found: Vec<UserRoleDBWithNames> = DaoQueries::default()
-            .select_by::<UserRoleDBWithNames>(role_ref)?
+            .select_by::<UserRoleDBWithNames>(&role_ref)?
             .build_query_as()
             .fetch_all(db)
             .await
@@ -208,7 +208,7 @@ mod tests {
 
         // Assert that associated role permissions got deleted, but not others
         let found: Vec<PermissionDBWithNames> = DaoQueries::default()
-            .select_by::<PermissionDBWithNames>(role_ref)?
+            .select_by::<PermissionDBWithNames>(&role_ref)?
             .build_query_as()
             .fetch_all(db)
             .await

@@ -38,7 +38,7 @@ pub async fn seed_user_role(db: &DbPool, user: &UserId, role: &RoleId) -> UserRo
 pub async fn get_user_role<E: SqlEntity>(db: &DbPool, by: &E) -> Result<UserRoleDB, TdError> {
     let queries = DaoQueries::default();
     queries
-        .select_by::<UserRoleDB>(by)?
+        .select_by::<UserRoleDB>(&by)?
         .build_query_as()
         .fetch_one(db)
         .await

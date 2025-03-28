@@ -57,7 +57,7 @@ pub async fn seed_permission(
 pub async fn get_permission<E: SqlEntity>(db: &DbPool, by: &E) -> Result<PermissionDB, TdError> {
     let queries = DaoQueries::default();
     queries
-        .select_by::<PermissionDB>(by)?
+        .select_by::<PermissionDB>(&by)?
         .build_query_as()
         .fetch_one(db)
         .await
