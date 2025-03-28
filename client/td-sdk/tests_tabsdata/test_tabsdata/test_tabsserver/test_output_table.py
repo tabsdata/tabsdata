@@ -28,11 +28,11 @@ from tests_tabsdata.testing_resources.test_output_table_with_none.example import
     output_table_with_none,
 )
 
+from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata.tabsserver.main import EXECUTION_CONTEXT_FILE_NAME
+from tabsdata.tabsserver.main import do as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
 from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
-from tabsserver.function_execution.response_utils import RESPONSE_FILE_NAME
-from tabsserver.main import EXECUTION_CONTEXT_FILE_NAME
-from tabsserver.main import do as tabsserver_main
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

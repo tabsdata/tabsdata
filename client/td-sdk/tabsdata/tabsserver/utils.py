@@ -8,7 +8,7 @@ import tarfile
 import tempfile
 from timeit import default_timer as timer
 
-from tabsserver.function_execution.global_utils import (
+from tabsdata.tabsserver.function.global_utils import (
     CURRENT_PLATFORM,
     convert_uri_to_path,
 )

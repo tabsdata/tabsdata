@@ -9,31 +9,27 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tabsdata.utils.bundle_utils import REQUIREMENTS_FILE_NAME
-
-# This is a workaround to be able to import the module from the parent directory
-if __name__ == "__main__" and __package__ is None:
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    __package__ = "tabsserver"
-
-import tabsserver.function_execution.execute_function_from_bundle_path
-from tabsserver.function_execution.global_utils import setup_logging
-from tabsserver.function_execution.yaml_parsing import parse_request_yaml
-from tabsserver.pyenv_creation import (
+import tabsdata
+from tabsdata.tabsserver.function import execute_function_from_bundle_path
+from tabsdata.tabsserver.function.global_utils import setup_logging
+from tabsdata.tabsserver.function.yaml_parsing import parse_request_yaml
+from tabsdata.tabsserver.pyenv_creation import (
     create_virtual_environment,
     get_path_to_environment_bin,
 )
-from tabsserver.utils import (
+from tabsdata.tabsserver.utils import (
     ABSOLUTE_LOCATION,
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
     TimeBlock,
     extract_context_folder,
 )
+from tabsdata.utils.bundle_utils import REQUIREMENTS_FILE_NAME
 
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()
 
 EXECUTION_CONTEXT_FILE_NAME = "request.yaml"
+_ = execute_function_from_bundle_path
 
 
 def do(
@@ -64,8 +60,11 @@ def do(
     logger.info(f"Creating the virtual environment for the context {context_folder}")
     with time_block:
         python_environment = create_virtual_environment(
-            requirements_description_file=os.path.join(
-                context_folder, REQUIREMENTS_FILE_NAME
+            requirements_description_file=str(
+                os.path.join(
+                    context_folder,
+                    REQUIREMENTS_FILE_NAME,
+                )
             ),
             current_instance=current_instance,
             locks_folder=locks_folder,
@@ -85,7 +84,7 @@ def do(
     command_to_execute = [
         get_path_to_environment_bin(python_environment),
         "-m",
-        tabsserver.function_execution.execute_function_from_bundle_path.__name__,
+        tabsdata.tabsserver.function.execute_function_from_bundle_path.__name__,
         "--bundle-path",
         context_folder,
         "--execution-context-file",

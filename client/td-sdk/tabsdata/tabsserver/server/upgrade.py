@@ -11,12 +11,22 @@ from typing import Dict, Type
 import humanize
 from packaging.version import Version
 
-from tabsserver.server.entity import Upgrade
-from tabsserver.server.instance import VERSION_FILE, get_instance_path, get_version
-from tabsserver.server.upgraders.v0.v0_9.v0_9_1.upgrade import Upgrade_0_9_0_to_0_9_1
-from tabsserver.server.upgraders.v0.v0_9.v0_9_2.upgrade import Upgrade_0_9_1_to_0_9_2
-from tabsserver.server.upgraders.v0.v0_9.v0_9_3.upgrade import Upgrade_0_9_2_to_0_9_3
-from tabsserver.utils import TimeBlock
+from tabsdata.tabsserver.server.entity import Upgrade
+from tabsdata.tabsserver.server.instance import (
+    VERSION_FILE,
+    get_instance_path,
+    get_version,
+)
+from tabsdata.tabsserver.server.upgraders.v0.v0_9.v0_9_1.upgrade import (
+    Upgrade_0_9_0_to_0_9_1,
+)
+from tabsdata.tabsserver.server.upgraders.v0.v0_9.v0_9_2.upgrade import (
+    Upgrade_0_9_1_to_0_9_2,
+)
+from tabsdata.tabsserver.server.upgraders.v0.v0_9.v0_9_3.upgrade import (
+    Upgrade_0_9_2_to_0_9_3,
+)
+from tabsdata.tabsserver.utils import TimeBlock
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

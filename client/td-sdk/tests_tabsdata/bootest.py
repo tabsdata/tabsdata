@@ -125,16 +125,6 @@ def enrich_sys_path():
             os.path.join(
                 root,
                 "client",
-                "td-sdk",
-                "tabsserver",
-            )
-        ),
-    )
-    sys.path.append(
-        os.path.abspath(
-            os.path.join(
-                root,
-                "client",
                 "td-lib",
                 "td_features",
             )

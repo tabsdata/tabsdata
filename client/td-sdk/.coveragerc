@@ -5,7 +5,6 @@
 [run]
 source =
     tabsdata
-    tabsserver
 parallel = True
 
 [report]

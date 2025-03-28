@@ -27,6 +27,17 @@ from filelock import FileLock, Timeout
 from yaml import MappingNode
 from yaml.constructor import ConstructorError
 
+from tabsdata.tabsserver.function.global_utils import CURRENT_PLATFORM
+from tabsdata.tabsserver.server.instance import (
+    DEFAULT_ENVIRONMENT_FOLDER,
+    DEFAULT_INSTANCE,
+    DEFAULT_INSTANCES_FOLDER,
+    DEFAULT_TABSDATA_FOLDER,
+    LOCK_FOLDER,
+    WORK_FOLDER,
+    WORKSPACE_FOLDER,
+)
+from tabsdata.tabsserver.utils import TimeBlock
 from tabsdata.utils.bundle_utils import (
     LOCAL_PACKAGES_FOLDER,
     PYTHON_DEVELOPMENT_PACKAGES_KEY,
@@ -40,17 +51,6 @@ from tabsdata.utils.constants import (
     TABSDATA_MONGODB_MODULE_NAME,
     TABSDATA_SALESFORCE_MODULE_NAME,
 )
-from tabsserver.function_execution.global_utils import CURRENT_PLATFORM
-from tabsserver.server.instance import (
-    DEFAULT_ENVIRONMENT_FOLDER,
-    DEFAULT_INSTANCE,
-    DEFAULT_INSTANCES_FOLDER,
-    DEFAULT_TABSDATA_FOLDER,
-    LOCK_FOLDER,
-    WORK_FOLDER,
-    WORKSPACE_FOLDER,
-)
-from tabsserver.utils import TimeBlock
 
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()

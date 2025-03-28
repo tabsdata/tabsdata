@@ -28,7 +28,6 @@ known_first_party = [
     "tabsdata_mongodb",
     "tabsdata_salesforce",
     "tabsdata_mongodb",
-    "tabsserver",
     "td_features",
     "ta_tableframe",
     "te_tableframe",

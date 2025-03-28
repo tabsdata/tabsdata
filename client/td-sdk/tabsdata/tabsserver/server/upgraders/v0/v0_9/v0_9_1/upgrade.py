@@ -7,16 +7,16 @@ from pathlib import Path
 
 from packaging.version import Version
 
-from tabsserver.server.entity import Upgrade
+from tabsdata.tabsserver.server.entity import Upgrade
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
 # noinspection PyPep8Naming
-class Upgrade_0_9_1_to_0_9_2(Upgrade):
-    source_version = Version("0.9.1")
-    target_version = Version("0.9.2")
+class Upgrade_0_9_0_to_0_9_1(Upgrade):
+    source_version = Version("0.9.0")
+    target_version = Version("0.9.1")
 
     def upgrade(
         self,

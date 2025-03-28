@@ -512,17 +512,6 @@ setup(
             "td-sdk",
             "tabsdata",
         ),
-        "tabsserver": os.path.join(
-            "client",
-            "td-sdk",
-            "tabsserver",
-        ),
-        "tabsserver.function_execution": os.path.join(
-            "client",
-            "td-sdk",
-            "tabsserver",
-            "function_execution",
-        ),
         "te_tableframe": os.path.join(
             "extensions",
             "python",
@@ -546,11 +535,13 @@ setup(
                 "manifest",
                 "*",
             ),
-        ],
-        "tabsserver": [
-            "*.yaml",
             os.path.join(
-                "function_execution",
+                "tabsserver",
+                "*.yaml",
+            ),
+            os.path.join(
+                "tabsserver",
+                "function",
                 "*.yaml",
             ),
         ],
@@ -559,9 +550,9 @@ setup(
     entry_points={
         "console_scripts": [
             "td = tabsdata.cli.cli:cli",
-            "tdmain = tabsserver.main:main",
-            "tdvenv = tabsserver.pyenv_creation:main",
-            "tdupgrade = tabsserver.server.upgrade:main",
+            "tdmain = tabsdata.tabsserver.main:main",
+            "tdvenv = tabsdata.tabsserver.pyenv_creation:main",
+            "tdupgrade = tabsdata.tabsserver.server.upgrade:main",
         ]
     },
     include_package_data=True,

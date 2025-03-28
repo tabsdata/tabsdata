@@ -89,7 +89,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     setup_logging(
-        default_path=os.path.join(ABSOLUTE_LOCATION, "function_execution_logging.yaml"),
+        default_path=os.path.join(ABSOLUTE_LOCATION, "function_logging.yaml"),
         logs_folder=args.logs_folder,
     )
     try:

@@ -5,7 +5,7 @@
 import os
 import pathlib
 
-from tabsserver.utils import convert_uri_to_path
+from tabsdata.tabsserver.utils import convert_uri_to_path
 
 
 def test_convert_uri_to_path():

@@ -45,7 +45,7 @@ class SupportedSQL(Enum):
     )
 
 
-# TODO: Consider unifying this file and function_execution/sql_utils.py. For now,
+# TODO: Consider unifying this file and function/sql_utils.py. For now,
 #  there are enough differences to keep them separate.
 def obtain_uri(
     io_sql_configuration: (

@@ -42,6 +42,12 @@ from tests_tabsdata.testing_resources.test_relative_import.example import (
     relative_import,
 )
 
+from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata.tabsserver.main import (
+    EXECUTION_CONTEXT_FILE_NAME,
+)
+from tabsdata.tabsserver.main import do as tabsserver_main
+from tabsdata.tabsserver.utils import UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
 from tabsdata.utils.bundle_utils import (
     PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
     PYTHON_INSTALL_DEPENDENCIES_KEY,
@@ -50,12 +56,6 @@ from tabsdata.utils.bundle_utils import (
     PYTHON_VERSION_KEY,
     create_bundle_archive,
 )
-from tabsserver.function_execution.response_utils import RESPONSE_FILE_NAME
-from tabsserver.main import (
-    EXECUTION_CONTEXT_FILE_NAME,
-)
-from tabsserver.main import do as tabsserver_main
-from tabsserver.utils import UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

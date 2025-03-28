@@ -12,14 +12,7 @@ import pytest
 import yaml
 from tests_tabsdata.conftest import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 
-from tabsdata.utils.bundle_utils import (
-    PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
-    PYTHON_LOCAL_PACKAGES_KEY,
-    PYTHON_PUBLIC_PACKAGES_KEY,
-    PYTHON_VERSION_KEY,
-    TABSDATA_MODULE_NAME,
-)
-from tabsserver.pyenv_creation import (
+from tabsdata.tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_FOLDER,
     UV_EXECUTABLE,
     create_virtual_environment,
@@ -28,7 +21,14 @@ from tabsserver.pyenv_creation import (
     inject_tabsdata_version,
     remove_path,
 )
-from tabsserver.utils import DEFAULT_DEVELOPMENT_LOCKS_LOCATION
+from tabsdata.tabsserver.utils import DEFAULT_DEVELOPMENT_LOCKS_LOCATION
+from tabsdata.utils.bundle_utils import (
+    PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
+    PYTHON_LOCAL_PACKAGES_KEY,
+    PYTHON_PUBLIC_PACKAGES_KEY,
+    PYTHON_VERSION_KEY,
+    TABSDATA_MODULE_NAME,
+)
 
 
 @pytest.mark.requires_internet

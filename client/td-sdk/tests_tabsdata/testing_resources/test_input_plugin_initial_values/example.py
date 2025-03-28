@@ -5,6 +5,7 @@
 import os
 
 from custom_importer_with_initial_values import ImporterWithInitialValues
+from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 import tabsdata as td
 from tabsdata.utils.bundle_utils import create_bundle_archive

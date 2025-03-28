@@ -45,12 +45,12 @@ from tabsdata.api.apiserver import APIServer, APIServerError, obtain_connection
 from tabsdata.api.tabsdata_server import TabsdataServer
 from tabsdata.secret import HashiCorpSecret
 from tabsdata.tabsdatafunction import TableInput, TableOutput
-from tabsdata.utils.tableframe._generators import _id
-from tabsserver.function_execution.sql_utils import MARIADB_COLLATION
-from tabsserver.pyenv_creation import (
+from tabsdata.tabsserver.function.sql_utils import MARIADB_COLLATION
+from tabsdata.tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
     delete_virtual_environment,
 )
+from tabsdata.utils.tableframe._generators import _id
 
 ABSOLUTE_TEST_FOLDER_LOCATION = os.path.dirname(os.path.abspath(__file__))
 ABSOLUTE_ROOT_FOLDER_LOCATION = os.path.dirname(

@@ -1,6 +1,0 @@
-#
-# Copyright 2024 Tabs Data Inc.
-#
-
-include *.yaml
-include function_execution/*.yaml
