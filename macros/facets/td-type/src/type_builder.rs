@@ -39,7 +39,7 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
     let field_types = gen_field_types_as_list(fields);
 
     let expanded = quote! {
-        #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+        #[derive(Debug, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
@@ -107,7 +107,7 @@ pub fn dlo(_args: TokenStream, item: TokenStream) -> TokenStream {
     let where_clause = &input.generics.where_clause;
 
     let expanded = quote! {
-        #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+        #[derive(Debug, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
@@ -126,8 +126,8 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let where_clause = &input.generics.where_clause;
 
     let expanded = quote! {
+        #[derive(Debug, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
         #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Default, Clone, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
@@ -146,8 +146,10 @@ pub fn url_param(_args: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let expanded = quote! {
+        #[derive(Debug, Clone, td_type::TdType, utoipa::IntoParams, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
+        #[builder(try_setter, setter(into))]
+        #[getset(get = "pub")]
         #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Default, Clone, td_type::TdType, utoipa::IntoParams, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
         #input
     };
 

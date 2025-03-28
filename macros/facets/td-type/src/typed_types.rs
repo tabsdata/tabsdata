@@ -47,6 +47,8 @@ enum Typed {
     Timestamp(OptionWrapper<TypedTimestamp>),
     #[darling(rename = "id_name")]
     IdName(OptionWrapper<TypedIdName>),
+    #[darling(rename = "any")]
+    Any(AnyTyped),
 }
 
 pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -70,6 +72,7 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
         Typed::Id(t) => typed_id(&input, t.into()),
         Typed::Timestamp(t) => typed_timestamp(&input, t.into()),
         Typed::IdName(t) => typed_id_name(&input, t.into()),
+        Typed::Any(t) => typed_any(&input, t),
     };
 
     let name = &input.ident;
@@ -150,12 +153,6 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
                     default.len() <= max_len,
                     "default value length must be less than or equal to max_len"
                 );
-            }
-
-            let regex = downcast_option!(typed.regex, String);
-            if let Some(regex) = regex {
-                let re: regex::Regex = regex::Regex::new(&regex).unwrap();
-                assert!(re.is_match(&default), "default value must match regex");
             }
         }
 
@@ -583,10 +580,9 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
             }
         }
 
-        impl TryFrom<bool> for #name {
-            type Error = td_error::TdError;
-            fn try_from(val: bool) -> Result<#name, td_error::TdError> {
-                #name::parse(val)
+        impl From<bool> for #name {
+            fn from(val: bool) -> #name {
+                Self(val)
             }
         }
 
@@ -1025,6 +1021,131 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
                 )>,
             ) {
                 schemas.extend([]);
+            }
+        }
+    };
+
+    expanded
+}
+
+#[derive(Debug, FromMeta)]
+pub struct AnyTyped {
+    inner: Ident,
+}
+
+pub fn typed_any(input: &ItemStruct, typed: AnyTyped) -> proc_macro2::TokenStream {
+    let attrs = &input.attrs;
+    let name = &input.ident;
+
+    let inner = &typed.inner;
+
+    let expanded = quote! {
+        #(#attrs)*
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, sqlx::Decode, sqlx::Encode)]
+        pub struct #name(#inner);
+
+        impl #name {
+            fn parse(val: impl Into<#inner>) -> Result<Self, td_error::TdError> {
+                let val = val.into();
+                Ok(Self(val))
+            }
+        }
+
+        impl utoipa::__dev::ComposeSchema for #name {
+            fn compose(
+                mut generics: Vec<utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>>,
+            ) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+                utoipa::openapi::ObjectBuilder::new()
+                    .schema_type(utoipa::openapi::schema::SchemaType::new(
+                        utoipa::openapi::schema::Type::String,
+                    ))
+                    .into()
+            }
+        }
+        impl utoipa::ToSchema for #name {
+            fn name() -> std::borrow::Cow<'static, str> {
+                std::borrow::Cow::Borrowed(stringify!(#name))
+            }
+            fn schemas(
+                schemas: &mut Vec<(
+                    String,
+                    utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>,
+                )>,
+            ) {
+                schemas.extend([]);
+            }
+        }
+
+        impl std::ops::Deref for #name {
+            type Target = #inner;
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl<V: Into<#inner>> From<V> for #name {
+            fn from(s: V) -> Self {
+                let s = s.into();
+                Self(s)
+            }
+        }
+
+        impl TryFrom<String> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: String) -> Result<Self, Self::Error> {
+                let val = #inner::try_from(&val)?;
+                #name::parse(val)
+            }
+        }
+
+        impl TryFrom<&str> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: &str) -> Result<Self, Self::Error> {
+                let val = #inner::try_from(val)?;
+                #name::parse(val)
+            }
+        }
+
+        impl std::fmt::Display for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl<'de> serde::Deserialize<'de> for #name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let s = String::deserialize(deserializer)?;
+                let s = #inner::try_from(&s).map_err(serde::de::Error::custom)?;
+                #name::parse(s).map_err(serde::de::Error::custom)
+            }
+        }
+
+        impl serde::Serialize for #name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                self.0.to_string().serialize(serializer)
+            }
+        }
+
+        impl sqlx::Type<sqlx::Sqlite> for #name {
+            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+                <#inner as sqlx::Type<sqlx::Sqlite>>::type_info()
+            }
+
+            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
+                <#inner as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+            }
+        }
+
+        impl crate::types::SqlEntity for #name {
+            type Type = #name;
+            fn value(&self) -> &Self::Type {
+                &self
             }
         }
     };

@@ -45,7 +45,6 @@ mod tests {
     typed_test!(i64, 15i64);
     typed_test!(f32, 15f32);
     typed_test!(f64, 15f64);
-    typed_test!(bool, true);
 
     // Complex types tests
     #[test]

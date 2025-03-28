@@ -55,7 +55,7 @@ mod tests {
         let my_i64 = MyI64::try_from(64).unwrap();
         let my_f32 = Myf32::try_from(32.0).unwrap();
         let my_f64 = Myf64::try_from(64.0).unwrap();
-        let my_bool = MyBool::try_from(true).unwrap();
+        let my_bool = MyBool::from(true);
         let my_id = MyId::default();
         let my_timestamp = MyTimestamp::now().await;
 

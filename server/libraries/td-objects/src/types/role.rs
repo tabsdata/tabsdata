@@ -169,7 +169,7 @@ mod tests {
             created_by_id: UserId::default(),
             modified_on: AtTime::default(),
             modified_by_id: UserId::default(),
-            fixed: Fixed::try_from(false).unwrap(),
+            fixed: Fixed::from(false),
             created_by: UserName::try_from("creator".to_string()).unwrap(),
             modified_by: UserName::try_from("modifier".to_string()).unwrap(),
         };
@@ -200,7 +200,7 @@ mod tests {
             role_id: RoleId::default(),
             added_on: AtTime::default(),
             added_by_id: UserId::default(),
-            fixed: Fixed::try_from(false).unwrap(),
+            fixed: Fixed::from(false),
             user: UserName::try_from("user".to_string()).unwrap(),
             role: RoleName::try_from("Admin".to_string()).unwrap(),
             added_by: UserName::try_from("adder".to_string()).unwrap(),
