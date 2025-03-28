@@ -5,7 +5,10 @@
 use crate::dlo::{
     CollectionName, Creator, DatasetName, ExecutionPlanId, TableName, WorkerMessageId,
 };
-use crate::types::basic::{PermissionIdName, RoleIdName, UserIdName};
+use crate::types::basic::{
+    CollectionIdName, FunctionIdName, FunctionVersionIdName, PermissionIdName, RoleIdName,
+    UserIdName,
+};
 use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
 use constcat::concat;
 use getset::Getters;
@@ -17,28 +20,10 @@ use td_common::uri::Version;
 use td_error::TdError;
 use utoipa::IntoParams;
 
-pub const COLLECTIONS: &str = "/collections";
-pub const COLLECTION: &str = concat!(COLLECTIONS, "/{collection}");
-
-pub const LIST_COLLECTIONS: &str = COLLECTIONS;
-pub const GET_COLLECTION: &str = COLLECTION;
-pub const CREATE_COLLECTION: &str = COLLECTIONS;
-pub const UPDATE_COLLECTION: &str = COLLECTION;
-pub const DELETE_COLLECTION: &str = COLLECTION;
-
-#[apiserver_schema]
-#[derive(Debug, Clone, Deserialize, Getters, IntoParams)]
-#[getset(get = "pub")]
-pub struct CollectionParam {
-    /// Collection name URL path parameter
-    pub collection: String,
-}
-
 impl CollectionParam {
     pub fn new(collection: impl Into<String>) -> Self {
-        Self {
-            collection: collection.into(),
-        }
+        let collection = CollectionIdName::try_from(collection.into().as_str()).unwrap();
+        Self { collection }
     }
 }
 
@@ -50,7 +35,8 @@ impl From<&CollectionParam> for CollectionParam {
 
 impl From<CollectionParam> for CollectionName {
     fn from(params: CollectionParam) -> Self {
-        CollectionName::new(&params.collection)
+        let collection = String::from(params.collection);
+        CollectionName::new(collection)
     }
 }
 
@@ -60,31 +46,15 @@ impl Creator<CollectionParam> for CollectionName {
     }
 }
 
-pub const FUNCTIONS: &str = "/collections/{collection}/functions";
-pub const FUNCTION: &str = concat!(FUNCTIONS, "/{function}");
-
-pub const FUNCTION_CREATE: &str = FUNCTIONS;
-pub const FUNCTION_GET: &str = FUNCTION;
-pub const FUNCTION_DELETE: &str = FUNCTION;
-pub const FUNCTION_LIST: &str = FUNCTIONS;
-pub const FUNCTION_UPDATE: &str = FUNCTION;
-pub const FUNCTION_UPLOAD: &str = concat!(FUNCTION, "/upload/{function_id}");
-pub const FUNCTION_HISTORY: &str = concat!(FUNCTION, "/history");
-pub const FUNCTION_EXECUTE: &str = concat!(FUNCTION, "/execute");
-
-#[apiserver_schema]
-#[derive(Debug, Clone, Getters, Deserialize, IntoParams)]
-#[getset(get = "pub")]
-pub struct FunctionParam {
-    collection: String,
-    function: String,
-}
-
 impl FunctionParam {
     pub fn new(collection: impl Into<String>, dataset: impl Into<String>) -> Self {
+        let collection = collection.into();
+        let collection = CollectionIdName::try_from(collection).unwrap();
+        let function = dataset.into();
+        let function = FunctionIdName::try_from(function).unwrap();
         Self {
-            collection: collection.into(),
-            function: dataset.into(),
+            collection,
+            function,
         }
     }
 }
@@ -109,13 +79,13 @@ impl From<FunctionParam> for DatasetName {
 
 impl Creator<FunctionParam> for CollectionName {
     fn create(value: impl Into<FunctionParam>) -> Self {
-        CollectionName::new(value.into().collection())
+        CollectionName::new(value.into().collection)
     }
 }
 
 impl Creator<FunctionParam> for DatasetName {
     fn create(value: impl Into<FunctionParam>) -> Self {
-        DatasetName::new(value.into().function())
+        DatasetName::new(value.into().function)
     }
 }
 
@@ -548,6 +518,8 @@ pub const INTERNAL_PREFIX: &str = url!("/internal");
 pub const UPDATE_DATA_VERSION: &str = url!(INTERNAL_PREFIX, "/data_version/{data_version_id}");
 
 // Endpoints URLs
+
+// Roles
 pub const ROLES: &str = url!("/roles");
 pub const ROLE: &str = url!(ROLES, "/{role}");
 
@@ -563,6 +535,7 @@ pub const CREATE_ROLE: &str = url!(ROLES);
 pub const UPDATE_ROLE: &str = url!(ROLE);
 pub const DELETE_ROLE: &str = url!(ROLE);
 
+// Permissions
 pub const PERMISSIONS: &str = url!(ROLE, "/permissions");
 pub const PERMISSION: &str = url!(PERMISSIONS, "/{permission}");
 
@@ -577,6 +550,7 @@ pub const LIST_PERMISSIONS: &str = url!(PERMISSIONS);
 pub const CREATE_PERMISSION: &str = url!(PERMISSIONS);
 pub const DELETE_PERMISSION: &str = url!(PERMISSION);
 
+// User roles
 pub const USER_ROLES: &str = url!(ROLE, "/users");
 pub const USER_ROLE: &str = url!(USER_ROLES, "/{user}");
 
@@ -592,3 +566,40 @@ pub const LIST_USER_ROLES: &str = url!(USER_ROLES);
 pub const GET_USER_ROLE: &str = url!(USER_ROLE);
 pub const CREATE_USER_ROLE: &str = url!(USER_ROLES);
 pub const DELETE_USER_ROLE: &str = url!(USER_ROLE);
+
+// Collections
+pub const COLLECTIONS: &str = url!("/collections");
+pub const COLLECTION: &str = url!(COLLECTIONS, "/{collection}");
+
+#[td_type::UrlParam]
+pub struct CollectionParam {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+}
+
+pub const LIST_COLLECTIONS: &str = url!(COLLECTIONS);
+pub const GET_COLLECTION: &str = url!(COLLECTION);
+pub const CREATE_COLLECTION: &str = url!(COLLECTIONS);
+pub const UPDATE_COLLECTION: &str = url!(COLLECTION);
+pub const DELETE_COLLECTION: &str = url!(COLLECTION);
+
+// Functions
+pub const FUNCTIONS: &str = url!(COLLECTION, "/functions");
+pub const FUNCTION: &str = url!(FUNCTIONS, "/{function}");
+
+#[td_type::UrlParam]
+pub struct FunctionParam {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    function: FunctionIdName,
+}
+
+pub const FUNCTION_CREATE: &str = url!(FUNCTIONS);
+pub const FUNCTION_GET: &str = url!(FUNCTION);
+pub const FUNCTION_DELETE: &str = url!(FUNCTION);
+pub const FUNCTION_LIST: &str = url!(FUNCTIONS);
+pub const FUNCTION_UPDATE: &str = url!(FUNCTION);
+pub const FUNCTION_UPLOAD: &str = url!(FUNCTION, "/upload/{function_id}");
+pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
+pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");

@@ -11,5 +11,5 @@ use td_tower::extractors::Input;
 pub async fn read_to_dataset_name(
     Input(request): Input<ReadRequest<FunctionParam>>,
 ) -> Result<DatasetName, TdError> {
-    Ok(DatasetName::new(request.name().value().function()))
+    Ok(DatasetName::new(request.name().value().function().clone()))
 }

@@ -14,13 +14,13 @@ use td_objects::test_utils::seed_user::seed_user;
 async fn test_not_allowed_to_delete_collection() {
     let db = td_database::test_utils::db().await.unwrap();
     let user_id = seed_user(&db, None, "u0", false).await;
-    let collection_id = seed_collection(&db, None, "ds0").await;
+    let _ = seed_collection(&db, None, "ds0").await;
 
     let service = DeleteCollectionService::new(db.clone()).service().await;
 
     let request = RequestContext::with(&user_id.to_string(), "r", false)
         .await
-        .delete(CollectionParam::new(collection_id));
+        .delete(CollectionParam::new("ds0"));
 
     assert_service_error(service, request, |err| match err {
         CollectionError::NotAllowedToDeleteCollections => {}

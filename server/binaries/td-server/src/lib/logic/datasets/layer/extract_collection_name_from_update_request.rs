@@ -12,11 +12,13 @@ use td_tower::extractors::Input;
 pub async fn extract_collection_name_from_update_request(
     Input(request): Input<UpdateRequest<FunctionParam, DatasetWrite>>,
 ) -> Result<CollectionName, TdError> {
-    Ok(CollectionName::new(request.name().value().collection()))
+    Ok(CollectionName::new(
+        request.name().value().collection().clone(),
+    ))
 }
 
 pub trait CollectionNameProvider {
-    fn collection(&self) -> &str;
+    fn collection(&self) -> String;
 }
 
 pub async fn extract_collection_name<P: CollectionNameProvider>(
@@ -26,7 +28,7 @@ pub async fn extract_collection_name<P: CollectionNameProvider>(
 }
 
 impl CollectionNameProvider for UpdateRequest<FunctionParam, DatasetWrite> {
-    fn collection(&self) -> &str {
-        self.name().value().collection()
+    fn collection(&self) -> String {
+        String::from(self.name().value().collection().clone())
     }
 }

@@ -181,7 +181,7 @@ mod tests {
         // Create a new collection
         let collection_create = json!(
             {
-                "name": "joaquin's collection",
+                "name": "joaquin_collection",
                 "description": "mock collection",
                 "security_level": 5
             }
@@ -203,7 +203,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["data"]["name"], "joaquin's collection");
+        assert_eq!(body["data"]["name"], "joaquin_collection");
         assert_eq!(body["data"]["description"], "mock collection");
 
         // List again and assert we have 2 collections
@@ -230,7 +230,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(GET_COLLECTION.replace("{collection}", "joaquin%27s%20collection"))
+                    .uri(GET_COLLECTION.replace("{collection}", "joaquin_collection"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -240,7 +240,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["data"]["name"], "joaquin's collection");
+        assert_eq!(body["data"]["name"], "joaquin_collection");
         assert_eq!(body["data"]["description"], "mock collection");
 
         // Update the new collection
@@ -256,7 +256,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(UPDATE_COLLECTION.replace("{collection}", "joaquin%27s%20collection"))
+                    .uri(UPDATE_COLLECTION.replace("{collection}", "joaquin_collection"))
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&collection_update).unwrap())
                     .unwrap(),
@@ -267,7 +267,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["data"]["name"], "joaquin's collection");
+        assert_eq!(body["data"]["name"], "joaquin_collection");
         assert_eq!(body["data"]["description"], "not a mock anymore");
 
         // Delete the new collection
@@ -276,7 +276,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::DELETE)
-                    .uri(DELETE_COLLECTION.replace("{collection}", "joaquin%27s%20collection"))
+                    .uri(DELETE_COLLECTION.replace("{collection}", "joaquin_collection"))
                     .body(Body::empty())
                     .unwrap(),
             )

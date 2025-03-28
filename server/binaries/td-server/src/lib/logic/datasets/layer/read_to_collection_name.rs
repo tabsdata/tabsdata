@@ -11,5 +11,7 @@ use td_tower::extractors::Input;
 pub async fn read_to_collection_name(
     Input(request): Input<ReadRequest<FunctionParam>>,
 ) -> Result<CollectionName, TdError> {
-    Ok(CollectionName::new(request.name().value().collection()))
+    Ok(CollectionName::new(
+        request.name().value().collection().clone(),
+    ))
 }

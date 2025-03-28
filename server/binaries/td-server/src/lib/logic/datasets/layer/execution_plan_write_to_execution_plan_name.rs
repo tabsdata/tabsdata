@@ -11,5 +11,7 @@ use td_tower::extractors::Input;
 pub async fn execution_plan_write_to_execution_plan_name(
     Input(request): Input<CreateRequest<FunctionParam, ()>>,
 ) -> Result<CollectionName, TdError> {
-    Ok(CollectionName::new(request.name().value().collection()))
+    Ok(CollectionName::new(
+        request.name().value().collection().clone(),
+    ))
 }

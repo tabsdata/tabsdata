@@ -12,5 +12,5 @@ use td_tower::extractors::Input;
 pub async fn extract_dataset_name_from_update_request(
     Input(request): Input<UpdateRequest<FunctionParam, DatasetWrite>>,
 ) -> Result<DatasetName, TdError> {
-    Ok(DatasetName::new(request.name().value().function()))
+    Ok(DatasetName::new(request.name().value().function().clone()))
 }
