@@ -3,7 +3,7 @@
 #
 
 [build-system]
-requires = ["psutil>=7.0", "setuptools>=64.0"]
+requires = ["psutil>=7.0", "setuptools==78.0.2"]
 build-backend = "setuptools.build_meta"
 
 [tool.black]

@@ -1,0 +1,32 @@
+addresses:
+ - 127.0.0.1:2457
+jwt_secret: ${hashicorp:/tabsdata/dev;jwt_secret}
+access_jwt_expiration: 36288000
+refresh_jwt_expiration: 36288000
+request_timeout: 60
+database:
+ uri: file://${env:TD_REPOSITORY}/database/tabsdata.db
+ min_connections: 1
+ max_connections: 10
+ acquire_timeout: 30
+ max_lifetime: 3600
+ idle_timeout: 60
+ test_before_acquire: true
+storage:
+ mounts:
+   - id: TDS_LOCAL
+     path: /
+     uri: file://${env:TD_REPOSITORY}/storage
+   - id: TDS_S3A
+     path: /s3a
+     uri: ${hashicorp:/tabsdata/dev/s3a;bucket}
+     options:
+       aws_region: ${hashicorp:/tabsdata/dev/s3a;region}
+       aws_access_key_id: ${hashicorp:/tabsdata/dev/s3a;access_key}
+       aws_secret_access_key: ${hashicorp:/tabsdata/dev/s3a;secret_key}
+   - id: TDS_AZB
+     path: /aza
+     uri: az://my-az-bucket/a
+     options:
+       azure_storage_account_name: ${hashicorp:/td/dev/aza;azure_account_name}
+       azure_storage_account_key: ${hashicorp:/td/dev/aza;azure_account_key}
