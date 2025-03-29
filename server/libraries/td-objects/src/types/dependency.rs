@@ -6,7 +6,7 @@ use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyStatus,
     DependencyVersionId, FunctionId, FunctionName, FunctionVersionId, TableId, TableName,
-    TableVersionId, TableVersions, UserId, UserName,
+    TableVersions, UserId, UserName,
 };
 use crate::types::function::FunctionVersionDB;
 
@@ -57,7 +57,6 @@ pub struct DependencyVersionDB {
     table_collection_id: CollectionId,
     table_id: TableId,
     table_name: TableName,
-    table_version_id: TableVersionId,
     table_versions: TableVersions,
     dep_pos: DependencyPos,
     #[builder(default = "DependencyStatus::active()")]
@@ -78,7 +77,6 @@ pub struct DependencyVersionDBWithNames {
     table_collection_id: CollectionId,
     table_id: TableId,
     table_name: TableName,
-    table_version_id: TableVersionId,
     table_versions: TableVersions,
     dep_pos: DependencyPos,
     status: DependencyStatus,

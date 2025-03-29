@@ -156,7 +156,6 @@ CREATE TABLE dependency_versions
     table_collection_id TEXT      NOT NULL,
     table_id            TEXT      NOT NULL,
     table_name          TEXT      NOT NULL,
-    table_version_id    TEXT      NOT NULL,
     table_versions      TEXT      NOT NULL,
 
     dep_pos             INTEGER   NOT NULL,

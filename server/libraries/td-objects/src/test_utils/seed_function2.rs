@@ -172,7 +172,6 @@ pub async fn seed_function(
                 .table_collection_id(table_db.collection_id())
                 .table_id(table_db.id())
                 .table_name(table_db.name())
-                .table_version_id(table_db.table_version_id())
                 .table_versions(dependency_table.versions())
                 .dep_pos(DependencyPos::try_from(pos as i16).unwrap())
                 .build()
