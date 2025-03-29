@@ -113,10 +113,12 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::Metadata;
+                use crate::metadata::{type_of, Metadata};
 
                 // Add metadata to handler
-                handler.insert(Input::new(Metadata::new()));
+                let res_type_name = type_of::<ReqCtx>();
+                let metadata = Metadata::with_initial_types(&[res_type_name]);
+                handler.insert(Input::new(metadata));
             }
 
             // And send it to the next service, awaiting the completion

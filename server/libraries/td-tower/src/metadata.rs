@@ -89,10 +89,17 @@ pub struct MetadataFields {
 }
 
 impl MetadataFields {
-    fn new() -> Self {
+    fn with_initial_types(created: &[String]) -> Self {
+        let created_types = created
+            .iter()
+            .map(|c| MetadataType {
+                fn_type: "InitialValues".to_string(),
+                ty: c.clone(),
+            })
+            .collect();
         Self {
             fn_types: Vec::new(),
-            created_types: HashSet::new(),
+            created_types,
             used_types: HashSet::new(),
             overwritten_types: HashSet::new(),
             missing_types: HashSet::new(),
@@ -173,13 +180,13 @@ pub struct Metadata(Mutex<MetadataFields>);
 
 impl Default for Metadata {
     fn default() -> Self {
-        Metadata::new()
+        Metadata::with_initial_types(&[])
     }
 }
 
 impl Metadata {
-    pub fn new() -> Self {
-        Metadata(Mutex::new(MetadataFields::new()))
+    pub fn with_initial_types(created: &[String]) -> Self {
+        Metadata(Mutex::new(MetadataFields::with_initial_types(created)))
     }
 
     // This is different from the other FromHandler implementations because it's not sync, as we
@@ -265,7 +272,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tower_metadata_add_fn_name() {
-        let metadata = Metadata::new();
+        let metadata = Metadata::default();
         metadata.add_fn_name("test_fn".to_string()).await;
         let fields = metadata.get();
         assert_eq!(&fields.fn_types, &vec!["test_fn".to_string()]);
@@ -276,7 +283,7 @@ mod tests {
         struct InputType;
         struct OutputType;
 
-        let metadata = Metadata::new();
+        let metadata = Metadata::default();
         metadata.add_fn_name("test_fn".to_string()).await;
         metadata
             .created_type("fn1", type_of::<Input<OutputType>>())
