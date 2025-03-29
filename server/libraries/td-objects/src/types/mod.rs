@@ -15,6 +15,7 @@ pub mod user;
 
 mod parse;
 mod table_ref;
+
 #[cfg(test)]
 mod tests;
 
@@ -23,9 +24,12 @@ pub trait SqlEntity: Send + Sync + 'static {
     fn value(&self) -> &Self::Type;
 }
 
-pub trait IdOrName<I, N>: Send + Sync {
-    fn id(&self) -> Option<&I>;
-    fn name(&self) -> Option<&N>;
+pub trait IdOrName: Send + Sync {
+    type Id: SqlEntity;
+    fn id(&self) -> Option<&Self::Id>;
+
+    type Name: SqlEntity;
+    fn name(&self) -> Option<&Self::Name>;
 }
 
 pub trait DataAccessObject:

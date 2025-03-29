@@ -29,9 +29,18 @@ pub enum SqlError {
 }
 
 macro_rules! formatted_entity {
-    ($D:ty; $($E:ident),*) => {{
+    ($D:ty;) => {{
+        let columns = String::new();
+        let values = String::new();
+        let table = <$D>::sql_table().to_string();
+        Ok((columns, values, table))
+    }};
+    ($D:ty; $($E:ident),* $(,)?) => {{
+        formatted_entity!($D; $(( $E, $E )),*)
+    }};
+    ($D:ty; $(( $E:ident, $E_ty:ty )),* $(,)?) => {{
         let columns: Vec<&str> = vec![$(
-            <$D>::sql_field_for_type::<$E>()
+            <$D>::sql_field_for_type::<$E_ty>()
                 .ok_or(QueryError::TypeNotFound(
                     std::any::type_name::<$E>().to_string(),
                 ))?,
@@ -106,7 +115,7 @@ pub trait SqlSelectService<E> {
         D: DataAccessObject;
 }
 
-macro_rules! generate_select {
+macro_rules! impl_select {
     (
         [$($E:ident),*]
     ) => {
@@ -147,7 +156,7 @@ macro_rules! generate_select {
     };
 }
 
-all_the_tuples!(generate_select);
+all_the_tuples!(impl_select);
 
 #[async_trait]
 pub trait SqlSelectAllService<E> {
@@ -216,56 +225,72 @@ pub trait SqlSelectIdOrNameService<T> {
         D: DataAccessObject;
 }
 
-#[async_trait]
-impl<T, I, N> SqlSelectIdOrNameService<T, I, N> for By<T>
-where
-    for<'a> T: IdOrName<I, N> + 'a,
-    I: SqlEntity,
-    N: SqlEntity,
-{
-    #[allow(non_snake_case)]
-    async fn select<Q, D>(
-        Connection(connection): Connection,
-        SrvCtx(queries): SrvCtx<Q>,
-        Input(by): Input<T>,
-    ) -> Result<D, TdError>
-    where
-        Q: DerefQueries,
-        D: DataAccessObject,
-    {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
+macro_rules! impl_select_id_or_name {
+    (
+    [$($E:ident),*]
+    ) => {
+        #[allow(non_snake_case, unused_parens)]
+        #[async_trait]
+        impl<$($E),*> SqlSelectIdOrNameService<($($E),*)> for By<($($E),*)>
+        where
+            $( for<'a> $E: IdOrName + 'a ),*
+        {
+            #[allow(non_snake_case)]
+            async fn select<Q, D>(
+                Connection(connection): Connection,
+                SrvCtx(queries): SrvCtx<Q>,
+                Input(by): Input<($($E),*)>,
+            ) -> Result<D, TdError>
+            where
+                Q: DerefQueries,
+                D: DataAccessObject,
+            {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
+                let queries = queries.deref();
 
-        let queries = queries.deref();
-        let result = match (by.id(), by.name()) {
-            (Some(I), _) => queries
-                .select_by::<D>(&I)?
-                .build_query_as()
-                .fetch_one(&mut *conn)
-                .await
-                .map_err(|e| {
-                    formatted_entity!(D; I).map(|(columns, values, table)| {
-                        TdError::from(SqlError::SelectError(columns, values, table, e))
-                    })
-                })
-                .map_err(|e| e.unwrap_or_else(|e| e))?,
-            (_, Some(N)) => queries
-                .select_by::<D>(&N)?
-                .build_query_as()
-                .fetch_one(&mut *conn)
-                .await
-                .map_err(|e| {
-                    formatted_entity!(D; N).map(|(columns, values, table)| {
-                        TdError::from(SqlError::SelectError(columns, values, table, e))
-                    })
-                })
-                .map_err(|e| e.unwrap_or_else(|e| e))?,
-            _ => unreachable!("id or name must be provided"),
-        };
+                let ($($E),*) = by.deref();
 
-        Ok(result)
-    }
+                impl_select_id_or_name!(@recurse (queries, conn, D) ($($E),*) () ());
+            }
+        }
+    };
+
+    // Recursive case: build nested matches
+    (@recurse ($queries:ident, $conn:ident, $D:ident) ($head:ident $(, $rest:ident)*) ($($acc:tt)*) ($($meta:tt)*)) => {
+        match ($head.id(), $head.name()) {
+            (Some($head), None) => {
+                impl_select_id_or_name!(@recurse ($queries, $conn, $D) ($($rest),*)
+                    ($($acc)* $head)
+                    ($($meta)* ($head, $head::Id),));
+            },
+            (None, Some($head)) => {
+                impl_select_id_or_name!(@recurse ($queries, $conn, $D) ($($rest),*)
+                    ($($acc)* $head)
+                    ($($meta)* ($head, $head::Name),));
+            },
+            _ => unreachable!("id or name must be provided for each element"),
+        }
+    };
+
+    // Base case: no more elements, call select_by
+    (@recurse ($queries:ident, $conn:ident, $D:ident) () ($($values:tt)*) ($($meta:tt)*)) => {
+        let result = $queries
+            .select_by::<$D>(&($($values),*))?
+            .build_query_as()
+            .fetch_one(&mut *$conn)
+            .await
+            .map_err(|e| {
+                formatted_entity!($D; $($meta)*).map(|(columns, values, table)| {
+                    TdError::from(SqlError::SelectError(columns, values, table, e))
+                })
+            })
+            .map_err(|e| e.unwrap_or_else(|e| e))?;
+        return Ok(result);
+    };
 }
+
+all_the_tuples!(impl_select_id_or_name);
 
 #[async_trait]
 pub trait SqlAssertExistsService<E> {
@@ -279,7 +304,7 @@ pub trait SqlAssertExistsService<E> {
         D: DataAccessObject;
 }
 
-macro_rules! generate_assert_exists {
+macro_rules! impl_assert_exists {
     (
         [$($E:ident),*]
     ) => {
@@ -323,7 +348,7 @@ macro_rules! generate_assert_exists {
     };
 }
 
-all_the_tuples!(generate_assert_exists);
+all_the_tuples!(impl_assert_exists);
 
 #[async_trait]
 pub trait SqlAssertNotExistsService<E> {
@@ -337,7 +362,7 @@ pub trait SqlAssertNotExistsService<E> {
         D: DataAccessObject;
 }
 
-macro_rules! generate_assert_not_exists {
+macro_rules! impl_assert_not_exists {
     (
         [$($E:ident),*]
     ) => {
@@ -381,7 +406,7 @@ macro_rules! generate_assert_not_exists {
     };
 }
 
-all_the_tuples!(generate_assert_not_exists);
+all_the_tuples!(impl_assert_not_exists);
 
 #[async_trait]
 pub trait SqlUpdateService<E> {
@@ -397,7 +422,7 @@ pub trait SqlUpdateService<E> {
         D: DataAccessObject;
 }
 
-macro_rules! generate_update {
+macro_rules! impl_update {
     (
         [$($E:ident),*]
     ) => {
@@ -439,7 +464,7 @@ macro_rules! generate_update {
     };
 }
 
-all_the_tuples!(generate_update);
+all_the_tuples!(impl_update);
 
 #[async_trait]
 pub trait SqlListService<E> {
@@ -455,7 +480,7 @@ pub trait SqlListService<E> {
         D: DataAccessObject + for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin;
 }
 
-macro_rules! generate_list {
+macro_rules! impl_list {
     (
         [$($E:ident),*]
     ) => {
@@ -499,7 +524,7 @@ macro_rules! generate_list {
     };
 }
 
-all_the_tuples!(generate_list);
+all_the_tuples!(impl_list);
 
 #[async_trait]
 pub trait SqlDeleteService<E> {
@@ -513,7 +538,7 @@ pub trait SqlDeleteService<E> {
         D: DataAccessObject;
 }
 
-macro_rules! generate_delete {
+macro_rules! impl_delete {
     (
         [$($E:ident),*]
     ) => {
@@ -553,7 +578,7 @@ macro_rules! generate_delete {
     };
 }
 
-all_the_tuples!(generate_delete);
+all_the_tuples!(impl_delete);
 
 #[cfg(test)]
 mod tests {

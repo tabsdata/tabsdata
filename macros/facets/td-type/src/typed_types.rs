@@ -948,7 +948,7 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
     let ident = &input.ident;
 
     let expanded = quote! {
-        #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
         #[serde(try_from = "String", into = "String")]
         pub struct #ident {
             id: Option<#id>,
@@ -989,12 +989,14 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
             }
         }
 
-        impl crate::types::IdOrName<#id, #name> for #ident {
-            fn id(&self) -> Option<&#id> {
+        impl crate::types::IdOrName for #ident {
+            type Id = #id;
+            fn id(&self) -> Option<&Self::Id> {
                 self.id.as_ref()
             }
 
-            fn name(&self) -> Option<&#name> {
+            type Name = #name;
+            fn name(&self) -> Option<&Self::Name> {
                 self.name.as_ref()
             }
         }
