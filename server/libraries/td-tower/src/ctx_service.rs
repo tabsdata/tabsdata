@@ -97,8 +97,9 @@ impl Message {
     }
 }
 
-impl From<TdError> for Message {
-    fn from(value: TdError) -> Self {
+impl<E: Into<TdError>> From<E> for Message {
+    fn from(value: E) -> Self {
+        let value = value.into();
         Message {
             code: value.code().to_string(),
             group: value.domain().to_string(),

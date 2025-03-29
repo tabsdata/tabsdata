@@ -47,8 +47,8 @@ enum Typed {
     Timestamp(OptionWrapper<TypedTimestamp>),
     #[darling(rename = "id_name")]
     IdName(OptionWrapper<TypedIdName>),
-    #[darling(rename = "any")]
-    Any(AnyTyped),
+    #[darling(rename = "composed")]
+    Composed(ComposedTyped),
 }
 
 pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -72,7 +72,7 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
         Typed::Id(t) => typed_id(&input, t.into()),
         Typed::Timestamp(t) => typed_timestamp(&input, t.into()),
         Typed::IdName(t) => typed_id_name(&input, t.into()),
-        Typed::Any(t) => typed_any(&input, t),
+        Typed::Composed(t) => typed_composed(&input, t),
     };
 
     let name = &input.ident;
@@ -1029,11 +1029,11 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
 }
 
 #[derive(Debug, FromMeta)]
-pub struct AnyTyped {
+pub struct ComposedTyped {
     inner: Ident,
 }
 
-pub fn typed_any(input: &ItemStruct, typed: AnyTyped) -> proc_macro2::TokenStream {
+pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::TokenStream {
     let attrs = &input.attrs;
     let name = &input.ident;
 
@@ -1041,13 +1041,29 @@ pub fn typed_any(input: &ItemStruct, typed: AnyTyped) -> proc_macro2::TokenStrea
 
     let expanded = quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, sqlx::Decode, sqlx::Encode)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct #name(#inner);
 
         impl #name {
             fn parse(val: impl Into<#inner>) -> Result<Self, td_error::TdError> {
                 let val = val.into();
                 Ok(Self(val))
+            }
+        }
+
+        impl crate::types::ComposedString for #name {
+            fn parse(s: impl Into<String>) -> Result<Self, td_error::TdError>
+            where
+                Self: Sized,
+            {
+                use crate::types::ComposedString;
+                let s = #inner::parse(s)?;
+                Ok(Self::new(s))
+            }
+
+            fn compose(&self) -> String {
+                use crate::types::ComposedString;
+                self.0.compose()
             }
         }
 
@@ -1093,16 +1109,16 @@ pub fn typed_any(input: &ItemStruct, typed: AnyTyped) -> proc_macro2::TokenStrea
         impl TryFrom<String> for #name {
             type Error = td_error::TdError;
             fn try_from(val: String) -> Result<Self, Self::Error> {
-                let val = #inner::try_from(&val)?;
-                #name::parse(val)
+                use crate::types::ComposedString;
+                Self::parse(&val)
             }
         }
 
         impl TryFrom<&str> for #name {
             type Error = td_error::TdError;
             fn try_from(val: &str) -> Result<Self, Self::Error> {
-                let val = #inner::try_from(val)?;
-                #name::parse(val)
+                use crate::types::ComposedString;
+                Self::parse(val)
             }
         }
 
@@ -1117,9 +1133,9 @@ pub fn typed_any(input: &ItemStruct, typed: AnyTyped) -> proc_macro2::TokenStrea
             where
                 D: serde::Deserializer<'de>,
             {
+                use crate::types::ComposedString;
                 let s = String::deserialize(deserializer)?;
-                let s = #inner::try_from(&s).map_err(serde::de::Error::custom)?;
-                #name::parse(s).map_err(serde::de::Error::custom)
+                Self::parse(&s).map_err(serde::de::Error::custom)
             }
         }
 
@@ -1128,17 +1144,48 @@ pub fn typed_any(input: &ItemStruct, typed: AnyTyped) -> proc_macro2::TokenStrea
             where
                 S: serde::Serializer,
             {
-                self.0.to_string().serialize(serializer)
+                use crate::types::ComposedString;
+                self.compose().serialize(serializer)
             }
         }
 
         impl sqlx::Type<sqlx::Sqlite> for #name {
             fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
-                <#inner as sqlx::Type<sqlx::Sqlite>>::type_info()
+                <String as sqlx::Type<sqlx::Sqlite>>::type_info()
             }
 
             fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
-                <#inner as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+                <String as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+            }
+        }
+
+        impl<'q, DB: sqlx::Database> sqlx::Encode<'q, DB> for #name
+        where
+            String: sqlx::Encode<'q, DB>,
+        {
+            fn encode_by_ref(
+                &self,
+                buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'q>,
+            ) -> Result<::sqlx::encode::IsNull, ::sqlx::error::BoxDynError> {
+                <String as sqlx::Encode<'q, DB>>::encode_by_ref(&self.to_string(), buf)
+            }
+            fn produces(&self) -> Option<DB::TypeInfo> {
+                <String as sqlx::Encode<'q, DB>>::produces(&self.to_string())
+            }
+            fn size_hint(&self) -> usize {
+                <String as sqlx::Encode<'q, DB>>::size_hint(&self.to_string())
+            }
+        }
+
+        impl<'r, DB: sqlx::Database> sqlx::Decode<'r, DB> for #name
+        where
+            String: sqlx::Decode<'r, DB>,
+        {
+            fn decode(
+                value: <DB as sqlx::Database>::ValueRef<'r>,
+            ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+                let decoded = <String as sqlx::Decode<'r, DB>>::decode(value)?;
+                Ok(Self::try_from(decoded).map_err(Box::new)?)
             }
         }
 

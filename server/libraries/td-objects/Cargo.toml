@@ -67,6 +67,7 @@ bytes = { workspace = true }
 constcat = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 derive_builder = { workspace = true }
+derive-new = { workspace = true }
 futures-util = { workspace = true }
 getset = { workspace = true }
 itertools = { workspace = true }

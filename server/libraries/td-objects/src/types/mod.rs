@@ -12,11 +12,13 @@ pub mod table;
 pub mod trigger;
 pub mod user;
 
+mod parse;
+mod table_ref;
 #[cfg(test)]
 mod tests;
 
 pub trait SqlEntity: Send + Sync + 'static {
-    type Type: for<'a> sqlx::Encode<'a, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>;
+    type Type: for<'a> sqlx::Encode<'a, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + std::fmt::Display;
     fn value(&self) -> &Self::Type;
 }
 
@@ -46,3 +48,11 @@ pub trait DataAccessObject:
 pub trait DataLogicObject {}
 
 pub trait DataTransferObject {}
+
+pub trait ComposedString {
+    fn parse(s: impl Into<String>) -> Result<Self, td_error::TdError>
+    where
+        Self: Sized;
+
+    fn compose(&self) -> String;
+}

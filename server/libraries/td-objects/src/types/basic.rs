@@ -2,130 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use constcat::concat;
-use lazy_static::lazy_static;
-use regex::Regex;
-use td_error::td_error;
-use td_error::TdError;
-
-const IDENTIFIER_LEN: &str = "99";
-
-const IDENTIFIER_PATTERN: &str = concat!("[a-zA-Z_][a-zA-Z0-9_]{0,", IDENTIFIER_LEN, "}");
-
-const NAME_PATTERN: &str = concat!("^", IDENTIFIER_PATTERN, "$");
-const DATA_LOCATION_REGEX: &str = concat!("^(/|(/", IDENTIFIER_PATTERN, ")*)$");
-const TRIGGER_PATTERN: &str = concat!("^(", IDENTIFIER_PATTERN, "/)?(", IDENTIFIER_PATTERN, ")$");
-const VERSIONS_MARKER_REGEX: &str = "[^/@]*";
-const DEPENDENCY_PATTERN: &str = concat!(
-    "^(",
-    IDENTIFIER_PATTERN,
-    "/)?(",
-    IDENTIFIER_PATTERN,
-    ")(@",
-    VERSIONS_MARKER_REGEX,
-    ")?$"
-);
-
-const VERSION_PATTERN: &str = "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|[A-Z0-9]{26})";
-pub const VERSIONS_PATTERN: &str = concat!(
-    "^((?<single>",
-    VERSION_PATTERN,
-    ")|(?<list>(",
-    VERSION_PATTERN,
-    "(,",
-    VERSION_PATTERN,
-    ")+))|(?<range>(",
-    VERSION_PATTERN,
-    "..",
-    VERSION_PATTERN,
-    ")))$"
-);
-#[td_error]
-enum ParserError {
-    #[error("Could not parse '{0}', expected: {1}")]
-    CouldNotParse(String, String) = 0,
-}
-
-fn parser(regex: Regex, s: String, message: impl Into<String>) -> Result<String, TdError> {
-    if regex.is_match(&s) {
-        Ok(s)
-    } else {
-        Err(ParserError::CouldNotParse(s, message.into()))?
-    }
-}
-
-fn parse_dependency(s: String) -> Result<String, TdError> {
-    lazy_static! {
-        static ref DEPENDENCY_REGEX: Regex = Regex::new(DEPENDENCY_PATTERN).unwrap();
-    }
-    lazy_static! {
-        static ref VERSIONS_REGEX: Regex = Regex::new(VERSIONS_PATTERN).unwrap();
-    }
-    let s = parser(
-        DEPENDENCY_REGEX.clone(),
-        s,
-        "a table dependency, a [<COLLECTION>/]<TABLE>[@<VERSIONS>] with \
-<COLLECTION> and <NAME> being a [_A-Za-z0-9] word of up to 100 characters each \
-and <VERSIONS> being a single version, a range of versions or a list of versions",
-    )?;
-    if let Some(versions_marker) = s.find('@') {
-        let s = s.split_at(versions_marker + 1).1.to_string();
-        parser(
-            VERSIONS_REGEX.clone(),
-            s,
-            "a single <VERSION>, a range <VERSION>..<VERSION>, or a list <VERSION>, ....\
-Each version being a 'HEAD' relative version (Git notation) or a version ID",
-        )?;
-    }
-    Ok(s)
-}
-
-fn parse_name(s: String, name_type: &str) -> Result<String, TdError> {
-    lazy_static! {
-        static ref REGEX: Regex = Regex::new(NAME_PATTERN).unwrap();
-    }
-    parser(
-        REGEX.clone(),
-        s,
-        format!("{name_type}, a [_A-Za-z0-9] word of up to 100 characters"),
-    )
-}
-
-fn parse_collection(s: String) -> Result<String, TdError> {
-    parse_name(s, "Collection name")
-}
-
-fn parse_entity(s: String) -> Result<String, TdError> {
-    parse_name(s, "Entity name")
-}
-
-fn parse_function(s: String) -> Result<String, TdError> {
-    parse_name(s, "Function name")
-}
-
-fn parse_table(s: String) -> Result<String, TdError> {
-    parse_name(s, "Table name")
-}
-
-fn parse_role(s: String) -> Result<String, TdError> {
-    parse_name(s, "Role name")
-}
-
-fn parse_trigger(s: String) -> Result<String, TdError> {
-    lazy_static! {
-        static ref REGEX: Regex = Regex::new(TRIGGER_PATTERN).unwrap();
-    }
-    parser(
-        REGEX.clone(),
-        s,
-        "trigger name, a [<COLLECTION>/]<TABLE> with <COLLECTION> and <NAME> \
-being a [_A-Za-z0-9] word of up to 100 characters each",
-    )
-}
-
-fn parse_user(s: String) -> Result<String, TdError> {
-    parse_name(s, "User name")
-}
+use crate::types::parse::{
+    parse_collection, parse_entity, parse_function, parse_role, parse_table, parse_user,
+    DATA_LOCATION_REGEX,
+};
+use crate::types::table::TableVersionDBWithNames;
+use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 
 #[td_type::typed(timestamp)]
 pub struct AtTime;
@@ -138,6 +20,9 @@ pub struct CollectionId;
 
 #[td_type::typed(string(parser = parse_collection))]
 pub struct CollectionName;
+
+#[td_type::typed(id_name(id = CollectionId, name = CollectionName))]
+pub struct CollectionIdName;
 
 #[td_type::typed(string(regex = DATA_LOCATION_REGEX))]
 pub struct DataLocation;
@@ -187,15 +72,21 @@ pub struct FixedRole;
 #[td_type::typed(bool)]
 pub struct Frozen;
 
+#[td_type::typed(bool)]
+pub struct ReuseFrozen;
+
 #[td_type::typed(id)]
 pub struct FunctionId;
 
 #[td_type::typed(string(parser = parse_function))]
 pub struct FunctionName;
 
+#[td_type::typed(id_name(id = FunctionId, name = FunctionName))]
+pub struct FunctionIdName;
+
 // JSON blob with `version`, `envs` & `secrets` top entries.
 // info used in decorator.
-#[td_type::typed(string(max_len = 4096))]
+#[td_type::typed(string(max_len = 4096, default = "{}"))]
 pub struct FunctionRuntimeValues;
 
 #[td_type::typed(string(regex = FunctionStatus::REGEX))]
@@ -305,7 +196,7 @@ pub struct Snippet;
 #[td_type::typed(string(min_len = 1, max_len = 10))]
 pub struct StorageVersion;
 
-#[td_type::typed(string(parser = parse_dependency))]
+#[td_type::typed(composed(inner = VersionedTableRef))]
 pub struct TableDependency;
 
 #[td_type::typed(id)]
@@ -381,13 +272,13 @@ impl TableStatus {
     }
 }
 
-#[td_type::typed(string(parser = parse_trigger))]
+#[td_type::typed(composed(inner = TableRef))]
 pub struct TableTrigger;
 
 #[td_type::typed(id)]
 pub struct TableVersionId;
 
-#[td_type::typed(string(parser = parse_dependency))]
+#[td_type::typed(composed(inner = Versions))]
 pub struct TableVersions;
 
 #[td_type::typed(id)]
@@ -428,72 +319,3 @@ pub struct UserIdName;
 
 #[td_type::typed(id)]
 pub struct UserRoleId;
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn test_parse_name() {
-        let name = super::parse_name("abc".to_string(), "test").unwrap();
-        assert_eq!(name, "abc");
-
-        assert!(super::parse_name("".to_string(), "test").is_err());
-        assert!(super::parse_name(" a".to_string(), "test").is_err());
-        assert!(super::parse_name("a ".to_string(), "test").is_err());
-        assert!(super::parse_name(" a ".to_string(), "test").is_err());
-        assert!(super::parse_name("a a".to_string(), "test").is_err());
-        assert!(super::parse_name("0a".to_string(), "test").is_err());
-        assert!(super::parse_name("@".to_string(), "test").is_err());
-        assert!(super::parse_name("a".repeat(101), "test").is_err());
-
-        assert!(super::parse_name("A_".to_string(), "test").is_ok());
-        assert!(super::parse_name("A".to_string(), "test").is_ok());
-        assert!(super::parse_name("A1".to_string(), "test").is_ok());
-        assert!(super::parse_name("a".to_string(), "test").is_ok());
-        assert!(super::parse_name("a1".to_string(), "test").is_ok());
-        assert!(super::parse_name("AZaz09_".to_string(), "test").is_ok());
-        assert!(super::parse_name("a".repeat(100), "test").is_ok());
-    }
-
-    #[test]
-    fn test_parse_names() {
-        assert!(super::parse_user("abc".to_string()).is_ok());
-        assert!(super::parse_collection("abc".to_string()).is_ok());
-        assert!(super::parse_function("abc".to_string()).is_ok());
-        assert!(super::parse_table("abc".to_string()).is_ok());
-    }
-
-    #[test]
-    fn test_parse_trigger() {
-        assert!(super::parse_trigger("abc ".to_string()).is_err());
-        assert!(super::parse_trigger(" abc ".to_string()).is_err());
-        assert!(super::parse_trigger("abc/".to_string()).is_err());
-        assert!(super::parse_trigger("/abc".to_string()).is_err());
-        assert!(super::parse_trigger("@/a".to_string()).is_err());
-
-        assert!(super::parse_trigger("abc".to_string()).is_ok());
-        assert!(super::parse_trigger("xyz/abc".to_string()).is_ok());
-    }
-
-    #[test]
-    fn test_parse_dependency() {
-        assert!(super::parse_dependency(" abc".to_string()).is_err());
-        assert!(super::parse_dependency("abc ".to_string()).is_err());
-        assert!(super::parse_dependency("abc/abc ".to_string()).is_err());
-        assert!(super::parse_dependency(" abc/abc".to_string()).is_err());
-        assert!(super::parse_dependency("abc/abc@".to_string()).is_err());
-        assert!(super::parse_dependency("abc/abc@HEAD..HEAD,HEAD".to_string()).is_err());
-        assert!(super::parse_dependency("abc/abc@HEAD..HEAD..HEAD".to_string()).is_err());
-        assert!(super::parse_dependency("abc/abc@HEAD~".to_string()).is_err());
-
-        assert!(super::parse_dependency("abc".to_string()).is_ok());
-        assert!(super::parse_dependency("xyz/abc".to_string()).is_ok());
-        assert!(super::parse_dependency("xyz/abc@HEAD".to_string()).is_ok());
-        assert!(super::parse_dependency("xyz/abc@HEAD^^".to_string()).is_ok());
-        assert!(super::parse_dependency("xyz/abc@HEAD^,HEAD".to_string()).is_ok());
-        assert!(super::parse_dependency("xyz/abc@HEAD^..HEAD".to_string()).is_ok());
-        assert!(super::parse_dependency("xyz/abc@HEAD~1".to_string()).is_ok());
-        assert!(super::parse_dependency("xyz/abc@HEAD~10,HEAD".to_string()).is_ok());
-        assert!(super::parse_dependency("xyz/abc@HEAD~10..HEAD".to_string()).is_ok());
-    }
-}
