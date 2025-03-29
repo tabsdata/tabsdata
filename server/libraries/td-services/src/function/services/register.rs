@@ -18,7 +18,7 @@ use td_objects::tower_service::from::{
     combine, BuildService, ConvertIntoMapService, ExtractService, SetService, TryIntoService,
     UpdateService, VecBuildService, With,
 };
-use td_objects::tower_service::sql::{insert, insert_vec, By, SqlSelectService};
+use td_objects::tower_service::sql::{insert, insert_vec, By, SqlFindService, SqlSelectService};
 use td_objects::tower_service::sql::{SqlAssertNotExistsService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{
     CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName, ReuseFrozen,
@@ -32,7 +32,7 @@ use td_objects::types::function::{
     FunctionCreate, FunctionDB, FunctionDBBuilder, FunctionVersion, FunctionVersionBuilder,
     FunctionVersionDB, FunctionVersionDBBuilder, FunctionVersionDBWithNames,
 };
-use td_objects::types::table::{TableVersionDB, TableVersionDBBuilder};
+use td_objects::types::table::{TableDB, TableVersionDB, TableVersionDBBuilder};
 use td_objects::types::trigger::{
     TriggerDB, TriggerDBBuilder, TriggerVersionDB, TriggerVersionDBBuilder,
 };
@@ -103,7 +103,8 @@ impl RegisterFunctionService {
 
                 // Insert into tables(sql) function tables info and update already existing tables (frozen tables).
                 from_fn(With::<FunctionCreate>::extract::<ReuseFrozen>),
-                from_fn(insert_and_update_output_tables::<DaoQueries>),
+                from_fn(By::<(TableVersionDB, (CollectionId, TableName))>::find::<DaoQueries, TableDB>),
+                from_fn(insert_and_update_output_tables::<DaoQueries, false>),
 
                 // Insert into dependency_versions(sql) current function table dependencies status=Active.
                 from_fn(With::<FunctionVersionDB>::convert_to::<DependencyVersionDBBuilder, _>),
@@ -156,7 +157,6 @@ mod tests {
         BundleId, Frozen, FunctionRuntimeValues, FunctionStatus, TableStatus, UserId,
     };
     use td_objects::types::dependency::{DependencyDBWithNames, DependencyVersionDBWithNames};
-    use td_objects::types::table::TableDB;
     use td_objects::types::trigger::{TriggerDBWithNames, TriggerVersionDBWithNames};
     use td_tower::ctx_service::RawOneshot;
 
@@ -210,7 +210,8 @@ mod tests {
             type_of_val(&insert_vec::<DaoQueries, TableVersionDB>),
             // Insert into tables(sql) function tables info and update already existing tables (frozen tables).
             type_of_val(&With::<FunctionCreate>::extract::<ReuseFrozen>),
-            type_of_val(&insert_and_update_output_tables::<DaoQueries>),
+            type_of_val(&By::<(TableVersionDB, (CollectionId, TableName))>::find::<DaoQueries, TableDB>),
+            type_of_val(&insert_and_update_output_tables::<DaoQueries, false>),
             // Insert into dependency_versions(sql) current function table dependencies status=Active.
             type_of_val(&With::<FunctionVersionDB>::convert_to::<DependencyVersionDBBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<DependencyVersionDBBuilder, _>),

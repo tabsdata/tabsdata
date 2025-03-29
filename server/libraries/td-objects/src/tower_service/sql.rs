@@ -3,7 +3,7 @@
 //
 
 use crate::crudl::{handle_sql_err, list_result, ListRequest, ListResult};
-use crate::sql::{DeleteBy, DerefQueries, Insert, ListBy, QueryError, SelectBy, UpdateBy};
+use crate::sql::{DeleteBy, DerefQueries, FindBy, Insert, ListBy, QueryError, SelectBy, UpdateBy};
 use crate::types::{DataAccessObject, IdOrName, SqlEntity};
 use async_trait::async_trait;
 use std::marker::PhantomData;
@@ -26,6 +26,8 @@ pub enum SqlError {
     UpdateError(String, String, String, #[source] sqlx::Error) = 4,
     #[error("Could not delete entity with [{0}] [{1}] in '{2}': {3}")]
     DeleteError(String, String, String, #[source] sqlx::Error) = 5,
+    #[error("Could not find entity in '{0}': {1}")]
+    FindError(String, #[source] sqlx::Error) = 6,
 }
 
 macro_rules! formatted_entity {
@@ -212,6 +214,63 @@ macro_rules! impl_select_all {
 }
 
 all_the_tuples!(impl_select_all);
+
+#[async_trait]
+pub trait SqlFindService<D, E> {
+    async fn find<Q, F>(
+        connection: Connection,
+        queries: SrvCtx<Q>,
+        by: Input<Vec<D>>,
+    ) -> Result<Vec<F>, TdError>
+    where
+        Q: DerefQueries,
+        F: DataAccessObject;
+}
+
+macro_rules! impl_find {
+    (
+        [$($E:ident),*]
+    ) => {
+        #[allow(non_snake_case, unused_parens, unused_variables)]
+        #[async_trait]
+        impl<D, $($E),*> SqlFindService<D, ($($E),*)> for By<(D, ($($E),*))>
+        where
+            D: DataAccessObject + 'static,
+            $($E: SqlEntity + for<'a> From<&'a D>),*
+        {
+            async fn find<Q, F>(
+                Connection(connection): Connection,
+                SrvCtx(queries): SrvCtx<Q>,
+                Input(by): Input<Vec<D>>,
+            ) -> Result<Vec<F>, TdError>
+            where
+                Q: DerefQueries,
+                F: DataAccessObject,
+            {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
+
+                // TODO this is not getting chunked. If there are too many we can have issues.
+                let lookup: Vec<_> = by.iter().map(|d| ($($E::from(d)),*)).collect();
+                let lookup: Vec<_> = lookup.iter().map(|($($E),*)| ($($E),*)).collect();
+                let result = queries
+                    .find_by::<F>(&lookup)?
+                    .build_query_as()
+                    .fetch_all(&mut *conn)
+                    .await
+                    .map_err(|e| {
+                        formatted_entity!(F;)
+                            .map(|(_, _, table)| TdError::from(SqlError::FindError(table, e)))
+                    })
+                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+                Ok(result)
+            }
+        }
+    };
+}
+
+all_the_tuples!(impl_find);
 
 #[async_trait]
 pub trait SqlSelectIdOrNameService<T> {
