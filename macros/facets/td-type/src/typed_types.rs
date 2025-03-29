@@ -829,7 +829,7 @@ pub fn typed_timestamp(
         }
 
         impl #name {
-            async fn now() -> Self {
+            pub async fn now() -> Self {
                 Self(td_common::time::UniqueUtc::now_millis().await)
             }
 
@@ -1047,9 +1047,9 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
         pub struct #name(#inner);
 
         impl #name {
-            fn parse(val: impl Into<#inner>) -> Result<Self, td_error::TdError> {
+            pub fn new(val: impl Into<#inner>) -> Self {
                 let val = val.into();
-                Ok(Self(val))
+                Self(val)
             }
         }
 

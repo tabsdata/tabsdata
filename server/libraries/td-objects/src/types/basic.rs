@@ -2,12 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::types::dependency::DependencyVersionDBWithNames;
 use crate::types::parse::{
     parse_collection, parse_entity, parse_function, parse_role, parse_table, parse_user,
     DATA_LOCATION_REGEX,
 };
 use crate::types::table::TableVersionDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
+use crate::types::trigger::TriggerVersionDBWithNames;
+use td_error::TdError;
 
 #[td_type::typed(timestamp)]
 pub struct AtTime;
@@ -114,6 +117,9 @@ impl FunctionStatus {
 #[td_type::typed(id)]
 pub struct FunctionVersionId;
 
+#[td_type::typed(id_name(id = FunctionVersionId, name = FunctionName))]
+pub struct FunctionVersionIdName;
+
 #[td_type::typed(string(min_len = 1, max_len = 1024))]
 pub struct Partition;
 
@@ -202,6 +208,20 @@ pub struct StorageVersion;
 #[td_type::typed(composed(inner = VersionedTableRef))]
 pub struct TableDependency;
 
+impl TryFrom<&DependencyVersionDBWithNames> for TableDependency {
+    type Error = TdError;
+
+    fn try_from(v: &DependencyVersionDBWithNames) -> Result<Self, Self::Error> {
+        let versions = &**v.table_versions();
+        let table_dep = TableDependency::new(VersionedTableRef::new(
+            Some(v.collection().clone()),
+            v.table_name().clone(),
+            versions.clone(),
+        ));
+        Ok(table_dep)
+    }
+}
+
 #[td_type::typed(id)]
 pub struct TableDataId;
 
@@ -253,6 +273,15 @@ pub struct TableId;
 #[td_type::typed(string(parser = parse_table))]
 pub struct TableName;
 
+impl TryFrom<&TableVersionDBWithNames> for TableName {
+    type Error = TdError;
+
+    fn try_from(v: &TableVersionDBWithNames) -> Result<Self, Self::Error> {
+        let table = v.name().clone();
+        Ok(table)
+    }
+}
+
 #[td_type::typed(i16)]
 pub struct TableFunctionParamPos;
 
@@ -277,6 +306,18 @@ impl TableStatus {
 
 #[td_type::typed(composed(inner = TableRef))]
 pub struct TableTrigger;
+
+impl TryFrom<&TriggerVersionDBWithNames> for TableTrigger {
+    type Error = TdError;
+
+    fn try_from(v: &TriggerVersionDBWithNames) -> Result<Self, Self::Error> {
+        let table = TableTrigger::new(TableRef::new(
+            Some(v.collection().clone()),
+            v.trigger_by_table_name().clone(),
+        ));
+        Ok(table)
+    }
+}
 
 #[td_type::typed(id)]
 pub struct TableVersionId;

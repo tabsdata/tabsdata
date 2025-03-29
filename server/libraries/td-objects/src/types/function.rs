@@ -31,9 +31,11 @@ pub struct FunctionDB {
 
 #[td_type::Dao(sql_table = "functions__with_names")]
 pub struct FunctionDBWithNames {
+    #[td_type(extractor)]
     id: FunctionId,
     collection_id: CollectionId,
     name: FunctionName,
+    #[td_type(extractor)]
     function_version_id: FunctionVersionId,
     frozen: Frozen,
     created_on: AtTime,
@@ -110,8 +112,30 @@ pub struct FunctionVersionDB {
     status: FunctionStatus,
 }
 
-#[td_type::Dao]
-pub struct FunctionVersionDBWithNamesRead {
+#[td_type::Dao(sql_table = "function_versions__with_names")]
+pub struct FunctionVersionDBWithNames {
+    #[td_type(extractor)]
+    id: FunctionVersionId,
+    collection_id: CollectionId,
+    name: FunctionName,
+    description: Description,
+    #[td_type(extractor)]
+    function_id: FunctionId,
+    data_location: DataLocation,
+    storage_version: StorageVersion,
+    bundle_id: BundleId,
+    snippet: Snippet,
+    defined_on: AtTime,
+    defined_by_id: UserId,
+    status: FunctionStatus,
+
+    collection: CollectionName,
+    defined_by: UserName,
+}
+
+#[td_type::Dto]
+#[td_type(builder(try_from = FunctionVersionDBWithNames))]
+pub struct FunctionVersion {
     id: FunctionVersionId,
     collection_id: CollectionId,
     name: FunctionName,
@@ -130,30 +154,26 @@ pub struct FunctionVersionDBWithNamesRead {
 }
 
 #[td_type::Dto]
-#[td_type(builder(try_from = FunctionVersionDBWithNamesRead))]
-pub struct FunctionVersionRead {
-    id: FunctionVersionId,
-    collection_id: CollectionId,
-    name: FunctionName,
-    description: Description,
-    function_id: FunctionId,
-    data_location: DataLocation,
-    storage_version: StorageVersion,
-    bundle_id: BundleId,
-    snippet: Snippet,
-    defined_on: AtTime,
-    defined_by_id: UserId,
-    status: FunctionStatus,
+pub struct FunctionVersionWithTables {
+    #[serde(flatten)]
+    #[td_type(setter)]
+    function_version: FunctionVersion,
 
-    collection: CollectionName,
-    defined_by: UserName,
+    #[td_type(setter)]
+    dependencies: Vec<TableDependency>,
+    #[td_type(setter)]
+    triggers: Vec<TableTrigger>,
+    #[td_type(setter)]
+    tables: Vec<TableName>,
+}
 
-    #[td_type(builder(skip))]
-    dependencies: Option<Vec<TableDependency>>,
-    #[td_type(builder(skip))]
-    triggers: Option<Vec<TableTrigger>>,
-    #[td_type(builder(skip))]
-    tables: Option<Vec<TableName>>,
+#[td_type::Dto]
+pub struct FunctionVersionWithAllVersions {
+    #[serde(flatten)]
+    #[td_type(setter)]
+    current: FunctionVersionWithTables,
+    #[td_type(setter)]
+    all: Vec<FunctionVersion>,
 }
 
 #[td_type::Dao]
@@ -235,12 +255,12 @@ mod tests {
             .unwrap();
 
         let statement = function::Queries::new().select_functions_at_time(
-            &Columns::Some(FunctionVersionDBWithNamesRead::fields()),
+            &Columns::Some(FunctionVersionDBWithNames::fields()),
             &Which::all(),
             &Which::all(),
             &With::Names,
         );
-        let _res: Vec<FunctionVersionDBWithNamesRead> = sqlx::query_as(statement.sql())
+        let _res: Vec<FunctionVersionDBWithNames> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
             .fetch_all(&mut *conn)
             .await

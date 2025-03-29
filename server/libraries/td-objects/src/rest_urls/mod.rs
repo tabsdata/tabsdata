@@ -603,3 +603,11 @@ pub const FUNCTION_UPDATE: &str = url!(FUNCTION);
 pub const FUNCTION_UPLOAD: &str = url!(FUNCTION, "/upload/{function_id}");
 pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
 pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
+
+#[td_type::UrlParam]
+pub struct FunctionVersionParam {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    function_version: FunctionVersionIdName,
+}

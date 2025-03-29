@@ -85,7 +85,7 @@ pub struct TableVersionDB {
     sql_table = "table_versions__with_names",
     order_by = "function_param_pos"
 )]
-pub struct TableVersionDBWithNamesRead {
+pub struct TableVersionDBWithNames {
     id: TableVersionId,
     collection_id: CollectionId,
     table_id: TableId,
@@ -101,8 +101,8 @@ pub struct TableVersionDBWithNamesRead {
 }
 
 #[td_type::Dto]
-#[td_type(builder(try_from = TableVersionDBWithNamesRead))]
-pub struct TableVersionRead {
+#[td_type(builder(try_from = TableVersionDBWithNames))]
+pub struct TableVersion {
     id: TableVersionId,
     collection_id: CollectionId,
     table_id: TableId,
@@ -116,10 +116,6 @@ pub struct TableVersionRead {
     collection: CollectionName,
     defined_by: UserName,
 }
-
-pub type TableVersionDBWithNamesList = TableVersionDBWithNamesRead;
-
-pub type TableVersionList = TableVersionRead;
 
 #[cfg(test)]
 mod tests {
@@ -171,24 +167,12 @@ mod tests {
             .unwrap();
 
         let statement = table::Queries::new().select_tables_at_time(
-            &Columns::Some(TableVersionDBWithNamesRead::fields()),
+            &Columns::Some(TableVersionDBWithNames::fields()),
             &Which::all(),
             &Which::all(),
             &With::Names,
         );
-        let _res: Vec<TableVersionDBWithNamesRead> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = table::Queries::new().select_tables_at_time(
-            &Columns::Some(TableVersionDBWithNamesList::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<TableVersionDBWithNamesList> = sqlx::query_as(statement.sql())
+        let _res: Vec<TableVersionDBWithNames> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
             .fetch_all(&mut *conn)
             .await

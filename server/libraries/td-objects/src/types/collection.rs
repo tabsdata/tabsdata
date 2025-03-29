@@ -8,6 +8,7 @@ use td_type::Dao;
 #[Dao(sql_table = "collections")]
 pub struct CollectionDB {
     #[td_type(extractor)]
+    #[builder(default)]
     id: CollectionId,
     #[td_type(extractor)]
     name: CollectionName,

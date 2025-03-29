@@ -14,7 +14,7 @@ pub mod trigger;
 pub mod user;
 
 mod parse;
-mod table_ref;
+pub mod table_ref;
 
 #[cfg(test)]
 mod tests;
