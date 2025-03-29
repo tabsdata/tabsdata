@@ -2,23 +2,28 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, TableId,
-    TableName, TriggerId, TriggerVersionId, UserId, UserName,
+    TableName, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
 };
+use crate::types::function::FunctionVersionDB;
 
-#[td_type::Dao]
+#[td_type::Dao(sql_table = "triggers")]
+#[td_type(builder(try_from = TriggerVersionDB))]
 pub struct TriggerDB {
+    #[td_type(builder(field = "trigger_id"))]
     id: TriggerId,
     collection_id: CollectionId,
     function_id: FunctionId,
+    #[td_type(builder(field = "id"))]
     trigger_version_id: TriggerVersionId,
     trigger_by_collection_id: CollectionId,
     trigger_by_function_id: FunctionId,
     trigger_by_table_id: TableId,
 }
 
-#[td_type::Dao]
+#[td_type::Dao(sql_table = "triggers__with_names")]
 pub struct TriggerDBWithNames {
     id: TriggerId,
     collection_id: CollectionId,
@@ -33,23 +38,34 @@ pub struct TriggerDBWithNames {
     trigger_by_table_name: TableName,
 }
 
-#[td_type::Dao]
+#[td_type::Dao(sql_table = "trigger_versions")]
+#[td_type(builder(try_from = FunctionVersionDB, skip_all))]
+#[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct TriggerVersionDB {
+    #[builder(default)]
     id: TriggerVersionId,
+    #[td_type(builder(include))]
     collection_id: CollectionId,
+    #[builder(default)]
     trigger_id: TriggerId,
+    #[td_type(builder(include, field = "function_id"))]
     function_id: FunctionId,
+    #[td_type(builder(include, field = "id"))]
     function_version_id: FunctionVersionId,
     trigger_by_collection_id: CollectionId,
     trigger_by_function_id: FunctionId,
     trigger_by_function_version_id: FunctionVersionId,
     trigger_by_table_id: TableId,
+    #[builder(default = "TriggerStatus::active()")]
+    status: TriggerStatus,
+    #[td_type(updater(include, field = "time"))]
     defined_on: AtTime,
+    #[td_type(updater(include, field = "user_id"))]
     defined_by_id: UserId,
 }
 
-#[td_type::Dao]
-pub struct TriggerVersionDBWithNamesRead {
+#[td_type::Dao(sql_table = "trigger_versions__with_names")]
+pub struct TriggerVersionDBWithNames {
     id: TriggerVersionId,
     collection_id: CollectionId,
     trigger_id: TriggerId,
@@ -59,18 +75,20 @@ pub struct TriggerVersionDBWithNamesRead {
     trigger_by_function_id: FunctionId,
     trigger_by_function_version_id: FunctionVersionId,
     trigger_by_table_id: TableId,
+    status: TriggerStatus,
     defined_on: AtTime,
     defined_by_id: UserId,
 
     collection: CollectionName,
     function: FunctionName,
     trigger_by_collection: CollectionName,
+    trigger_by_table_name: TableName,
     trigger_by_function: FunctionName,
     defined_by: UserName,
 }
 
 #[td_type::Dto]
-#[td_type(builder(try_from = TriggerVersionDBWithNamesRead))]
+#[td_type(builder(try_from = TriggerVersionDBWithNames))]
 pub struct TriggerVersionRead {
     id: TriggerVersionId,
     collection_id: CollectionId,
@@ -91,7 +109,7 @@ pub struct TriggerVersionRead {
     defined_by: UserName,
 }
 
-pub type TriggerVersionDBWithNamesList = TriggerVersionDBWithNamesRead;
+pub type TriggerVersionDBWithNamesList = TriggerVersionDBWithNames;
 
 pub type TriggerVersionList = TriggerVersionRead;
 
@@ -145,12 +163,12 @@ mod tests {
             .unwrap();
 
         let statement = trigger::Queries::new().select_triggers_at_time(
-            &Columns::Some(TriggerVersionDBWithNamesRead::fields()),
+            &Columns::Some(TriggerVersionDBWithNames::fields()),
             &Which::all(),
             &Which::all(),
             &With::Names,
         );
-        let _res: Vec<TriggerVersionDBWithNamesRead> = sqlx::query_as(statement.sql())
+        let _res: Vec<TriggerVersionDBWithNames> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
             .fetch_all(&mut *conn)
             .await

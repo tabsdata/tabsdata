@@ -75,6 +75,9 @@ pub struct Frozen;
 #[td_type::typed(bool)]
 pub struct ReuseFrozen;
 
+#[td_type::typed(bool)]
+pub struct Private;
+
 #[td_type::typed(id)]
 pub struct FunctionId;
 

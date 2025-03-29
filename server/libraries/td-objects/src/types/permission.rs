@@ -75,8 +75,8 @@ mod tests {
     use crate::sql::dependency;
     use crate::sql::{Columns, Which, With};
     use crate::types::dependency::{
-        DependencyDB, DependencyDBWithNames, DependencyVersionDB, DependencyVersionDBWithNamesList,
-        DependencyVersionDBWithNamesRead,
+        DependencyDB, DependencyDBWithNames, DependencyVersionDB, DependencyVersionDBWithNames,
+        DependencyVersionDBWithNamesList,
     };
     use crate::types::DataAccessObject;
     use td_database::test_utils::db;
@@ -123,12 +123,12 @@ mod tests {
             .unwrap();
 
         let statement = dependency::Queries::new().select_dependencies_at_time(
-            &Columns::Some(DependencyVersionDBWithNamesRead::fields()),
+            &Columns::Some(DependencyVersionDBWithNames::fields()),
             &Which::all(),
             &Which::all(),
             &With::Names,
         );
-        let _res: Vec<DependencyVersionDBWithNamesRead> = sqlx::query_as(statement.sql())
+        let _res: Vec<DependencyVersionDBWithNames> = sqlx::query_as(statement.sql())
             .bind(chrono::Utc::now().to_utc())
             .fetch_all(&mut *conn)
             .await

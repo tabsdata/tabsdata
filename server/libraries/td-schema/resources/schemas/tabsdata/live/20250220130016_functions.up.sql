@@ -69,6 +69,7 @@ CREATE TABLE tables
     function_version_id TEXT      NULL,
     table_version_id    TEXT      NOT NULL,
     frozen              BOOLEAN   NOT NULL,
+    private             BOOLEAN   NOT NULL,
 
     created_on          TIMESTAMP NOT NULL,
     created_by_id       TEXT      NOT NULL,
@@ -173,11 +174,16 @@ CREATE VIEW dependency_versions__with_names AS
 SELECT dv.*,
        c.name                                         as collection,
        fv.name                                        as function,
+
+       tc.name                                        as trigger_by_collection,
+       tc.name                                        as table_collection,
+
        IFNULL(u.name, '[' || fv.defined_by_id || ']') as defined_by
 FROM dependency_versions dv
          LEFT JOIN collections c ON dv.collection_id = c.id
          LEFT JOIN function_versions fv ON dv.function_version_id = fv.id
-         LEFT JOIN users u ON dv.defined_by_id = u.id;
+         LEFT JOIN users u ON dv.defined_by_id = u.id
+         LEFT JOIN collections tc ON dv.table_collection_id = tc.id;
 
 -- Triggers  (table & __with_names view)
 
@@ -236,6 +242,7 @@ SELECT tv.*,
 
        tc.name                                        as trigger_by_collection,
        tfv.name                                       as trigger_by_function,
+       t.name                                         as trigger_by_table_name,
 
        IFNULL(u.name, '[' || fv.defined_by_id || ']') as defined_by
 FROM trigger_versions tv
@@ -243,6 +250,8 @@ FROM trigger_versions tv
          LEFT JOIN function_versions fv ON tv.function_version_id = fv.id
          LEFT JOIN users u ON tv.defined_by_id = u.id
          LEFT JOIN collections tc ON tv.trigger_by_collection_id = tc.id
-         LEFT JOIN function_versions tfv ON tv.trigger_by_function_version_id = tfv.id;
+         LEFT JOIN function_versions tfv ON tv.trigger_by_function_version_id = tfv.id
+         LEFT JOIN tables t ON tv.trigger_by_table_id = t.id
+;
 
 

@@ -4,6 +4,7 @@
 
 pub mod basic;
 
+pub mod collection;
 pub mod dependency;
 pub mod function;
 pub mod permission;
