@@ -6,13 +6,12 @@ Copyright 2025 Tabs Data Inc.
 
 ## Register Function
 
-* Extract collection from request.
 * Check function name does not exist in collection.
 * Extract output tables, table dependencies and triggers.
 * Insert into function_versions(sql) status=Active.
 * Insert into functions(sql) function info.
 * Insert into table_versions(sql) current function tables status=Active.
-* Reuse table_id for tables that existed (had status=Frozen)
+  Reuse table_id for tables that existed (had status=Frozen)
 * Insert into tables(sql) function tables info and update already existing tables (frozen tables).
 * Insert into dependency_versions(sql) current function table dependencies status=Active.
 * Insert into trigger_versions(sql) current function trigger status=Active.
@@ -23,23 +22,17 @@ Copyright 2025 Tabs Data Inc.
 
 * Check function exists in collection.
 * If function has a new name, check new name does not exist in collection.
-* Check function output tables do not exist in collection. Or if they do,
-  they have status=Frozen, or they already belonged to the function.
-* Normalize all dependency table_versions (collection_id/table_name/versions).
-* Normalize all trigger dependencies (collection_id/table_name).
-* Check dependency tables (collection_id/table_name) exist, or they are produced
-  by the function itself.
-* Check trigger tables (collection_id/table_name) exist.
-* Find function output tables that are frozen tables to reuse their table_id.
+    * Check function output tables do not exist in collection. Or if they do,
+      they have status=Frozen, or they already belonged to the function.
+* Insert into table_versions(sql) dropped function tables status=Frozen.
+* Insert into dependency_versions(sql) dropped function table dependencies status=Deleted.
+* Insert into trigger_versions(sql) dropped function trigger status=Deleted.
 
 * Insert into function_versions(sql) status=Active.
 * Insert into table_versions(sql) current function tables status=Active.
   Reuse table_id for tables that existed (had status=Frozen)
-* Insert into table_versions(sql) dropped function tables status=Frozen.
 * Insert into dependency_versions(sql) current function table dependencies status=Active.
-* Insert into dependency_versions(sql) dropped function table dependencies status=Deleted.
 * Insert into trigger_versions(sql) current function trigger status=Active.
-* Insert into trigger_versions(sql) dropped function trigger status=Deleted.
 
 * Update functions table.
 * Insert into tables(sql) function tables info, except for already existing from previous

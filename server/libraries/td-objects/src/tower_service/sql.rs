@@ -675,7 +675,6 @@ mod tests {
     struct FooName;
 
     #[Dao(sql_table = "foo")]
-    #[derive(PartialEq, Eq)]
     struct FooDao {
         id: FooId,
         name: FooName,

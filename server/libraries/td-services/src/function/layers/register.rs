@@ -2,18 +2,17 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ops::Deref;
-
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::{DerefQueries, FindBy, Insert, UpdateBy};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, DependencyPos, ReuseFrozen, TableDependency,
-    TableFunctionParamPos, TableId, TableName, TableTrigger,
+    CollectionId, CollectionName, DependencyPos, FunctionId, ReuseFrozen, TableDependency,
+    TableFunctionParamPos, TableId, TableName, TableStatus, TableTrigger,
 };
 use td_objects::types::dependency::{DependencyVersionDB, DependencyVersionDBBuilder};
-use td_objects::types::function::FunctionDB;
 use td_objects::types::table::{
     TableDB, TableDBBuilder, TableDBWithNames, TableVersionDB, TableVersionDBBuilder,
     UpdateTableDBBuilder,
@@ -22,8 +21,8 @@ use td_objects::types::trigger::{TriggerVersionDB, TriggerVersionDBBuilder};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 #[td_error]
-enum RegisterFunctionError {
-    #[error("Table '{0}' already exists in collection '{0}'")]
+pub enum RegisterFunctionError {
+    #[error("Table '{0}' already exists in collection '{1}'")]
     TableAlreadyExists(TableName, CollectionName) = 0,
     #[error("Dependency table '{0}' does not exist")]
     DependencyTableDoesNotExist(TableDependency) = 1,
@@ -50,7 +49,6 @@ pub async fn build_table_versions<Q: DerefQueries>(
         Some(tables) if !tables.is_empty() => {
             // TODO this is not getting chunked. If there are too many we can have issues.
             let tables_lookup: Vec<_> = tables.iter().map(|t| (&*collection_id, t)).collect();
-
             let tables_found: Vec<_> = queries
                 .find_by::<TableDB>(&tables_lookup)?
                 .build_query_as()
@@ -59,15 +57,15 @@ pub async fn build_table_versions<Q: DerefQueries>(
                 .map_err(handle_sql_err)?;
             let tables_found: HashMap<_, _> = tables_found
                 .iter()
-                .map(|t: &TableDB| (t.name(), t))
+                .map(|t: &TableDB| ((t.collection_id(), t.name()), t))
                 .collect();
 
             let mut table_versions = vec![];
             for (pos, table) in tables.iter().enumerate() {
-                let table_db = tables_found.get(table);
+                let table_db = tables_found.get(&(&*collection_id, table));
 
                 let id = match table_db {
-                    Some(table) if **table.frozen() => table.id(),
+                    Some(table) => table.id(),
                     _ => &TableId::default(),
                 };
 
@@ -145,7 +143,6 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
                     .table_collection_id(table_db.collection_id())
                     .table_id(table_db.id())
                     .table_name(table_db.name())
-                    .table_version_id(table_db.table_version_id())
                     .table_versions(dependency_table.versions())
                     .dep_pos(DependencyPos::try_from(pos as i16)?)
                     .build()?;
@@ -240,39 +237,39 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
     Ok(trigger_versions)
 }
 
-pub async fn insert_and_update_output_tables<Q: DerefQueries>(
+lazy_static! {
+    static ref ACTIVE_STATUS: TableStatus = TableStatus::active();
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_and_update_output_tables<Q: DerefQueries, const UPDATE: bool>(
     ReqCtx(ctx): ReqCtx,
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<Q>,
     Input(table_versions): Input<Vec<TableVersionDB>>,
-    Input(function_db): Input<FunctionDB>,
+    Input(tables): Input<Vec<TableDB>>,
+    Input(function_id): Input<FunctionId>,
     Input(collection_name): Input<CollectionName>,
     Input(reuse_frozen): Input<ReuseFrozen>,
 ) -> Result<(), TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
-    // TODO this is not getting chunked. If there are too many we can have issues.
-    let tables_lookup: Vec<_> = table_versions.iter().map(|t| t.table_id()).collect();
-    let tables_found: Vec<_> = queries
-        .find_by::<TableDB>(&tables_lookup)?
-        .build_query_as()
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(handle_sql_err)?;
-    let tables_found: HashMap<_, _> = tables_found.iter().map(|t: &TableDB| (t.id(), t)).collect();
-
+    let tables_found: HashMap<_, _> = tables.iter().map(|t: &TableDB| (t.id(), t)).collect();
     for table_version in &*table_versions {
         let table_db = TableDBBuilder::try_from(table_version)?
-            .function_id(function_db.id())
+            .function_id(&*function_id)
             .build()?;
 
         if let Some(found_table_db) = tables_found.get(table_db.id()) {
             if **found_table_db.frozen() {
                 if **reuse_frozen {
-                    let update_table_db = UpdateTableDBBuilder::try_from(table_version)?.build()?;
+                    let frozen = table_version.status() != ACTIVE_STATUS.deref();
+                    let update_table_db = UpdateTableDBBuilder::try_from(&table_db)?
+                        .frozen(frozen)
+                        .build()?;
                     queries
-                        .update_by::<_, TableDB>(&update_table_db, &(table_db.id()))?
+                        .update_by::<_, TableDB>(&update_table_db, &(found_table_db.id()))?
                         .build()
                         .execute(&mut *conn)
                         .await
@@ -291,6 +288,17 @@ pub async fn insert_and_update_output_tables<Q: DerefQueries>(
                         "could not reuse frozen table".to_string(),
                     ))?
                 }
+            } else if UPDATE {
+                let frozen = table_version.status() != ACTIVE_STATUS.deref();
+                let update_table_db = UpdateTableDBBuilder::try_from(&table_db)?
+                    .frozen(frozen)
+                    .build()?;
+                queries
+                    .update_by::<_, TableDB>(&update_table_db, &(found_table_db.id()))?
+                    .build()
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(handle_sql_err)?;
             } else {
                 Err(RegisterFunctionError::TableAlreadyExists(
                     table_db.name().clone(),

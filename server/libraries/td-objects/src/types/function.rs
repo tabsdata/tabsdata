@@ -12,14 +12,13 @@ use crate::types::basic::{
 #[td_type::Dao(sql_table = "functions")]
 #[td_type(builder(try_from = FunctionVersionDB, skip_all))]
 pub struct FunctionDB {
-    #[td_type(extractor)]
-    #[td_type(builder(include, field = "function_id"))]
+    #[td_type(extractor, builder(include, field = "function_id"))]
     id: FunctionId,
     #[td_type(builder(include))]
     collection_id: CollectionId,
     #[td_type(builder(include))]
     name: FunctionName,
-    #[td_type(builder(include, field = "id"))]
+    #[td_type(extractor, builder(include, field = "id"))]
     function_version_id: FunctionVersionId,
     #[builder(default = "Frozen::from(false)")]
     frozen: Frozen,
@@ -95,6 +94,7 @@ pub struct FunctionVersionDB {
     #[td_type(builder(include))]
     runtime_values: FunctionRuntimeValues,
     #[builder(default)]
+    #[td_type(setter)]
     function_id: FunctionId,
     #[builder(default)] // TODO: remove this
     data_location: DataLocation,

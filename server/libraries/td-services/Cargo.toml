@@ -45,6 +45,7 @@ td-error = { workspace = true }
 
 ## Libraries
 
+td-common = { workspace = true }
 td-database = { workspace = true }
 td-objects = { workspace = true }
 td-tower = { workspace = true }
@@ -52,6 +53,7 @@ td-tower = { workspace = true }
 # External dependencies
 
 async-trait = { workspace = true }
+lazy_static = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

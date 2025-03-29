@@ -570,7 +570,6 @@ mod tests {
     struct TestModifiedOn;
 
     #[Dao(sql_table = "test_table")]
-    #[derive(Eq, PartialEq)]
     struct TestDao {
         id: TestId,
         name: TestName,
@@ -648,7 +647,6 @@ mod tests {
     #[td_test::test(sqlx(fixture = "test_queries"))]
     async fn test_dao_select_by_order_by(db: DbPool) -> Result<(), TdError> {
         #[Dao(sql_table = "test_table", order_by = "modified_on")]
-        #[derive(Eq, PartialEq)]
         struct OrderedTestDao {
             id: TestId,
             name: TestName,

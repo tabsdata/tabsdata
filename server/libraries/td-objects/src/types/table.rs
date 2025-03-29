@@ -36,11 +36,14 @@ pub struct TableDB {
 }
 
 #[td_type::Dao(sql_table = "tables")]
-#[td_type(builder(try_from = TableVersionDB))]
+#[td_type(builder(try_from = TableDB))]
 pub struct UpdateTableDB {
-    #[td_type(builder(field = "id"))]
-    table_version_id: TableVersionId,
+    function_id: FunctionId,
     function_version_id: FunctionVersionId,
+    table_version_id: TableVersionId,
+    #[td_type(builder(skip))]
+    frozen: Frozen,
+    private: Private,
 }
 
 #[td_type::Dao(sql_table = "tables__with_names")]
@@ -66,9 +69,10 @@ pub struct TableDBWithNames {
 pub struct TableVersionDB {
     #[builder(default)]
     id: TableVersionId,
-    #[td_type(builder(include))]
+    #[td_type(extractor, builder(include))]
     collection_id: CollectionId,
     table_id: TableId,
+    #[td_type(extractor)]
     name: TableName,
     #[td_type(builder(include, field = "id"))]
     function_version_id: FunctionVersionId,
