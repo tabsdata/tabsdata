@@ -14,6 +14,7 @@ use td_shared::parse_meta;
 #[derive(FromMeta)]
 struct DaoArguments {
     sql_table: Option<String>,
+    order_by: Option<String>,
 }
 
 pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -28,6 +29,15 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
         None => {
             let table = input.ident.to_string().to_lowercase();
             quote! { #table }
+        }
+    };
+    let order_by = match parsed_args.order_by {
+        Some(order_by) => {
+            let order_by = order_by.as_str();
+            quote! { concat!("ORDER BY ", #order_by) }
+        }
+        None => {
+            quote! { "ORDER BY 1 DESC" }
         }
     };
     let ident = &input.ident;
@@ -47,6 +57,10 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
         impl<#ty_generics> crate::types::DataAccessObject for #ident #ty_generics #where_clause {
             fn sql_table() -> &'static str {
                 #sql_table
+            }
+
+            fn order_by() -> &'static str {
+                #order_by
             }
 
             fn fields() -> &'static [&'static str] {

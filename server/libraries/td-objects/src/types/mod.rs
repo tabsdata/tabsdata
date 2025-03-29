@@ -36,6 +36,7 @@ pub trait DataAccessObject:
     for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin
 {
     fn sql_table() -> &'static str;
+    fn order_by() -> &'static str;
     fn fields() -> &'static [&'static str];
     fn sql_field_for_type<E: SqlEntity>() -> Option<&'static str>;
     fn values_query_builder(

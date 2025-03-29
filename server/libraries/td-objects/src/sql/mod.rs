@@ -182,6 +182,8 @@ macro_rules! impl_select_by {
                 let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
                 gen_where_clause!(query_builder, $($E),*);
+                query_builder.push(" ");
+                query_builder.push(D::order_by());
                 trace!("select_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }
@@ -630,10 +632,42 @@ mod tests {
         let query = query_builder.build_query_as();
 
         let query_str = query.sql();
-        assert_eq!(query_str, "SELECT id, name, modified_on FROM test_table");
+        assert_eq!(
+            query_str,
+            "SELECT id, name, modified_on FROM test_table ORDER BY 1 DESC"
+        );
 
         let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result, *FIXTURE_DAOS);
+        assert_eq!(result.len(), 2);
+        // Due to DESC id order
+        assert_eq!(result[0], FIXTURE_DAOS[1]);
+        assert_eq!(result[1], FIXTURE_DAOS[0]);
+        Ok(())
+    }
+
+    #[td_test::test(sqlx(fixture = "test_queries"))]
+    async fn test_dao_select_by_order_by(db: DbPool) -> Result<(), TdError> {
+        #[Dao(sql_table = "test_table", order_by = "modified_on")]
+        #[derive(Eq, PartialEq)]
+        struct OrderedTestDao {
+            id: TestId,
+            name: TestName,
+            modified_on: TestModifiedOn,
+        }
+
+        let mut query_builder = TEST_QUERIES.select_by::<OrderedTestDao>(&())?;
+        let query = query_builder.build_query_as();
+
+        let query_str = query.sql();
+        assert_eq!(
+            query_str,
+            "SELECT id, name, modified_on FROM test_table ORDER BY modified_on"
+        );
+
+        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], FIXTURE_DAOS[0]);
+        assert_eq!(result[1], FIXTURE_DAOS[1]);
         Ok(())
     }
 
@@ -646,7 +680,7 @@ mod tests {
         let query_str = query.sql();
         assert_eq!(
             query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE name = ?"
+            "SELECT id, name, modified_on FROM test_table WHERE name = ? ORDER BY 1 DESC"
         );
 
         let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -667,7 +701,7 @@ mod tests {
         let query_str = query.sql();
         assert_eq!(
             query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE id = ? AND name = ?"
+            "SELECT id, name, modified_on FROM test_table WHERE id = ? AND name = ? ORDER BY 1 DESC"
         );
 
         let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();

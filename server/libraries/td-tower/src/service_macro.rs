@@ -16,6 +16,7 @@ macro_rules! service {
     ($($layers:expr)?) => {
         tower::builder::ServiceBuilder::new()
             $(.layer($layers))?
+            .map_err(td_error::TdError::from)
             .service($crate::default_services::ServiceReturn)
     };
 }
@@ -26,6 +27,7 @@ macro_rules! service_provider {
         tower::builder::ServiceBuilder::new()
             .layer($crate::default_services::ServiceEntry::default())
             .layer($layers)
+            .map_err(td_error::TdError::from)
             .service($crate::default_services::ServiceReturn)
             .into_service_provider()
     };
@@ -79,13 +81,13 @@ macro_rules! l {
 #[cfg(test)]
 mod tests {
     use crate::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
-    use crate::error::FromHandlerError;
     use crate::from_fn::from_fn;
     use crate::service_provider::{IntoServiceProvider, ServiceProvider};
+    use td_error::TdError;
     use tower::layer::util::Identity;
     use tower_service::Service;
 
-    async fn layer_fn() -> Result<(), FromHandlerError> {
+    async fn layer_fn() -> Result<(), TdError> {
         Ok(())
     }
 
@@ -98,13 +100,13 @@ mod tests {
     #[test]
     fn test_service_provider_macro() {
         let layers = layers!(Identity::new());
-        let _: ServiceProvider<(), (), FromHandlerError> = service_provider!(layers);
+        let _: ServiceProvider<(), (), TdError> = service_provider!(layers);
     }
 
     #[tokio::test]
     async fn test_p_macro_no_args() {
         p! {
-            test_provider() -> FromHandlerError {
+            test_provider() -> TdError {
                 service_provider!(layers!(Identity::new()))
             }
         }
@@ -114,7 +116,7 @@ mod tests {
     #[tokio::test]
     async fn test_p_macro_single_arg() {
         p! {
-            test_provider(_arg: u32) -> FromHandlerError {
+            test_provider(_arg: u32) -> TdError {
                 service_provider!(layers!(Identity::new()))
             }
         }
@@ -124,7 +126,7 @@ mod tests {
     #[tokio::test]
     async fn test_p_macro_multiple_arg() {
         p! {
-            test_provider(_arg_1: u32, _arg_2: &str) -> FromHandlerError {
+            test_provider(_arg_1: u32, _arg_2: &str) -> TdError {
                 service_provider!(layers!(Identity::new()))
             }
         }
@@ -139,7 +141,7 @@ mod tests {
     #[tokio::test]
     async fn test_l_macro() {
         l! {
-            test_layers() -> FromHandlerError {
+            test_layers() -> TdError {
                 layers!(
                     Identity::new(),
                     from_fn(layer_fn),
@@ -148,7 +150,7 @@ mod tests {
         }
 
         l! {
-            test_layers_with_args(_arg_1: u32, _arg_2: &str) -> FromHandlerError {
+            test_layers_with_args(_arg_1: u32, _arg_2: &str) -> TdError {
                 layers!(
                     Identity::new(),
                     from_fn(layer_fn),
@@ -157,7 +159,7 @@ mod tests {
         }
 
         p! {
-            test_provider(arg_1: u32, arg_2: &str) -> FromHandlerError {
+            test_provider(arg_1: u32, arg_2: &str) -> TdError {
                 service_provider!(layers!(
                     Identity::new(),
                     test_layers(),

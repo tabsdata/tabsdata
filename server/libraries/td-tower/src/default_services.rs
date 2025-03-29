@@ -497,7 +497,7 @@ impl Service<Handler> for ServiceReturn {
 /// ```rust
 /// use tower::ServiceBuilder;
 /// use td_tower::default_services::{conditional, Condition, Do, Else, If, ServiceReturn};
-/// use td_tower::extractors::FromHandlerError;
+/// use td_tower::error::FromHandlerError;
 /// use td_tower::from_fn::from_fn;
 ///
 /// async fn condition() -> Result<Condition, FromHandlerError> {
