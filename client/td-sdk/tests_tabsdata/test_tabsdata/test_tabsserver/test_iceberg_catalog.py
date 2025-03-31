@@ -10,6 +10,7 @@
 # import polars as pl
 # import pytest
 # from pyiceberg.catalog import load_catalog
+# from tests_tabsdata.bootest import TDLOCAL_FOLDER
 # from tests_tabsdata.conftest import (
 #     LOCAL_PACKAGES_LIST,
 #     ABSOLUTE_TEST_FOLDER_LOCATION,
@@ -43,9 +44,8 @@
 # )
 # RESPONSE_FOLDER = "response_folder"
 #
-# LOCAL_DEV_FOLDER = os.path.join(
-#     os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION), "local_dev"
-# )
+
+# LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 #
 #
 # @pytest.mark.requires_internet

@@ -4,8 +4,8 @@
 
 import logging.config
 import os
-import pathlib
 import platform
+from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
@@ -15,11 +15,6 @@ import tabsdata.utils.tableframe._constants as td_constants
 
 logger = logging.getLogger(__name__)
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DEVELOPMENT_LOCKS_LOCATION = os.path.join(
-    os.path.dirname(ABSOLUTE_LOCATION),
-    "local_dev",
-    "environment_locks",
-)
 
 CSV_EXTENSION = "csv"
 NDJSON_EXTENSION = "ndjson"
@@ -29,6 +24,12 @@ TABSDATA_EXTENSION = "t"
 TABSDATA_IDENTIFIER_COLUMN = td_constants.StandardSystemColumns.TD_IDENTIFIER.value
 
 FILE_URI_PREFIX = "file://"
+
+HOME_FOLDER_SYMBOL = "~"
+TABSDATA_FOLDER_NAME = ".tabsdata"
+TABSDATA_ROOT_FOLDER_NAME = ".root"
+TARGET_FOLDER_NAME = "target"
+TDLOCAL_FOLDER_NAME = "tdlocal"
 
 
 def setup_logging(
@@ -88,7 +89,64 @@ def convert_uri_to_path(uri: str) -> str:
 
 
 def convert_path_to_uri(path: str) -> str:
-    return path if path.startswith(FILE_URI_PREFIX) else pathlib.Path(path).as_uri()
+    return path if path.startswith(FILE_URI_PREFIX) else Path(path).as_uri()
 
+
+def _get_root_folder() -> str:
+    current_folder = os.path.dirname(__file__)
+    logging.info(f"Current conftest folder is: {current_folder}")
+    while True:
+        git_folder = Path(os.path.join(current_folder, ".git"))
+        root_file = Path(os.path.join(current_folder, ".root"))
+        git_folder_exists = git_folder.exists() and os.path.isdir(git_folder)
+        root_file_exists = root_file.exists() and root_file.is_file()
+        if git_folder_exists or root_file_exists:
+            logging.info(f"Root project folder for conftest is: {current_folder}")
+            return current_folder
+        else:
+            parent_folder = os.path.abspath(os.path.join(current_folder, os.pardir))
+            if current_folder == parent_folder:
+                raise FileNotFoundError(
+                    "Current folder not inside a Git repository or "
+                    "owned by a .root file"
+                )
+            current_folder = parent_folder
+
+
+try:
+    ROOT_FOLDER = _get_root_folder()
+except FileNotFoundError:
+    home_dir = os.path.expanduser(HOME_FOLDER_SYMBOL)
+    ROOT_FOLDER = os.path.join(
+        home_dir,
+        TABSDATA_FOLDER_NAME,
+        TABSDATA_ROOT_FOLDER_NAME,
+    )
+
+
+def _get_target_folder() -> str:
+    return os.path.join(ROOT_FOLDER, TARGET_FOLDER_NAME)
+
+
+TARGET_FOLDER = _get_target_folder()
+
+
+def _get_tdlocal_folder() -> str:
+    return os.path.join(TARGET_FOLDER, TDLOCAL_FOLDER_NAME)
+
+
+TDLOCAL_FOLDER = _get_tdlocal_folder()
+
+
+def _get_locks_folder():
+    return os.path.join(
+        _get_tdlocal_folder(),
+        "environment_locks",
+    )
+
+
+LOCKS_FOLDER = _get_locks_folder()
+
+DEFAULT_DEVELOPMENT_LOCKS_LOCATION = LOCKS_FOLDER
 
 CURRENT_PLATFORM = CurrentPlatform()

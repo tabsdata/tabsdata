@@ -13,6 +13,12 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+HOME_FOLDER_SYMBOL = "~"
+TABSDATA_FOLDER_NAME = ".tabsdata"
+TABSDATA_ROOT_FOLDER_NAME = ".root"
+TARGET_FOLDER_NAME = "target"
+TDLOCAL_FOLDER_NAME = "tdlocal"
+
 TESTING_RESOURCES_PATH = os.path.join(
     os.path.dirname(__file__),
     "testing_resources",
@@ -21,7 +27,7 @@ TESTING_RESOURCES_PATH = os.path.join(
 TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
 
-def root_folder() -> str:
+def _get_root_folder() -> str:
     current_folder = os.path.dirname(__file__)
     logging.info(f"Current conftest folder is: {current_folder}")
     while True:
@@ -42,9 +48,34 @@ def root_folder() -> str:
             current_folder = parent_folder
 
 
+try:
+    ROOT_FOLDER = _get_root_folder()
+except FileNotFoundError:
+    home_dir = os.path.expanduser(HOME_FOLDER_SYMBOL)
+    ROOT_FOLDER = os.path.join(
+        home_dir,
+        TABSDATA_FOLDER_NAME,
+        TABSDATA_ROOT_FOLDER_NAME,
+    )
+
+
+def _get_target_folder() -> str:
+    return os.path.join(ROOT_FOLDER, TARGET_FOLDER_NAME)
+
+
+TARGET_FOLDER = _get_target_folder()
+
+
+def _get_tdlocal_folder() -> str:
+    return os.path.join(TARGET_FOLDER, TDLOCAL_FOLDER_NAME)
+
+
+TDLOCAL_FOLDER = _get_tdlocal_folder()
+
+
 # Add different paths to sys.path to avoid issues with imports
 def enrich_sys_path():
-    root = root_folder()
+    root = ROOT_FOLDER
 
     sys.path.append(
         os.path.abspath(

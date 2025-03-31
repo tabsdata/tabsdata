@@ -5,6 +5,7 @@
 import os
 
 from custom_output_plugin_multiple_outputs_with_none import CustomDestinationPlugin
+from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 import tabsdata as td
@@ -18,7 +19,7 @@ ROOT_PROJECT_DIR = os.path.dirname(
         )
     )
 )
-DEFAULT_SAVE_LOCATION = os.path.join(ROOT_PROJECT_DIR, "local_dev")
+DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 
 
 @td.subscriber(

@@ -8,8 +8,8 @@ import os
 
 import polars as pl
 import pytest
+from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
-    ABSOLUTE_TEST_FOLDER_LOCATION,
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
@@ -62,9 +62,7 @@ logger.setLevel(logging.DEBUG)
 
 RESPONSE_FOLDER = "response_folder"
 
-LOCAL_DEV_FOLDER = os.path.join(
-    os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION), "local_dev"
-)
+LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
 @pytest.mark.requires_internet

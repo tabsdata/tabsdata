@@ -440,8 +440,6 @@ setup(
                 "tests*",
                 "examples",
                 "examples*",
-                "local_dev",
-                "local_dev*",
             ],
         ),
         # ToDo: this requires being revisited for a cleaner and more pythonic approach

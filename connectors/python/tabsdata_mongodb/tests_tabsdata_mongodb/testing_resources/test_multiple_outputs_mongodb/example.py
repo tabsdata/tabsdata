@@ -4,6 +4,8 @@
 
 import os
 
+from tests_tabsdata.bootest import TDLOCAL_FOLDER
+
 import tabsdata as td
 from tabsdata.utils.bundle_utils import create_bundle_archive
 
@@ -15,7 +17,7 @@ ROOT_PROJECT_DIR = os.path.dirname(
         )
     )
 )
-DEFAULT_SAVE_LOCATION = os.path.join(ROOT_PROJECT_DIR, "local_dev")
+DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 
 
 @td.subscriber(

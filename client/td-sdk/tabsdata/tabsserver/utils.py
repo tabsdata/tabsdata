@@ -15,12 +15,8 @@ from tabsdata.tabsserver.function.global_utils import (
 
 logger = logging.getLogger(__name__)
 
+
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DEVELOPMENT_LOCKS_LOCATION = os.path.join(
-    os.path.dirname(ABSOLUTE_LOCATION),
-    "local_dev",
-    "environment_locks",
-)
 UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER = "uncompressed_function_bundle"
 
 

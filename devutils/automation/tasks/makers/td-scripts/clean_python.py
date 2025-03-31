@@ -69,6 +69,7 @@ def clean_py(project_folder):
         "*.log.*",
         "site",
         "local_dev",
+        "tdlocal",
         "local_development_artifacts",
         "variant/assets/manifest/THIRD-PARTY",
         "client/td-sdk/tabsdata/assets",

@@ -11,7 +11,10 @@ from pathlib import Path
 
 import tabsdata
 from tabsdata.tabsserver.function import execute_function_from_bundle_path
-from tabsdata.tabsserver.function.global_utils import setup_logging
+from tabsdata.tabsserver.function.global_utils import (
+    DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
+    setup_logging,
+)
 from tabsdata.tabsserver.function.yaml_parsing import parse_request_yaml
 from tabsdata.tabsserver.pyenv_creation import (
     create_virtual_environment,
@@ -19,7 +22,6 @@ from tabsdata.tabsserver.pyenv_creation import (
 )
 from tabsdata.tabsserver.utils import (
     ABSOLUTE_LOCATION,
-    DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
     TimeBlock,
     extract_context_folder,
 )

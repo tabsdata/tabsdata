@@ -41,7 +41,6 @@ IGNORED_FOLDERS = (
     ".git",
     "__pycache__",
     "build",
-    "local_dev",
     "target",
     "test",
     "testing_resources",

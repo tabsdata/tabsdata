@@ -8,9 +8,8 @@ import os
 
 import polars as pl
 import pytest
-from tests_tabsdata.bootest import root_folder
+from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
-    ABSOLUTE_TEST_FOLDER_LOCATION,
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
@@ -34,12 +33,10 @@ from tabsdata.utils.bundle_utils import create_bundle_archive
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-ROOT_PROJECT_DIR = root_folder()
+ROOT_PROJECT_DIR = ROOT_FOLDER
 RESPONSE_FOLDER = "response_folder"
 
-LOCAL_DEV_FOLDER = os.path.join(
-    os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION), "local_dev"
-)
+LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
 @pytest.mark.integration

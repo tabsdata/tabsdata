@@ -5,6 +5,7 @@
 import os
 
 import pandas as pd
+from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 import tabsdata as td
@@ -19,7 +20,7 @@ ROOT_PROJECT_DIR = os.path.dirname(
         )
     )
 )
-DEFAULT_SAVE_LOCATION = os.path.join(ROOT_PROJECT_DIR, "local_dev")
+DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 
 # In this example, we are obtaining the data from the file invoice-headers.csv and
 # returning it as is in expected-result1.json. The files invoice-items-*.csv are being
