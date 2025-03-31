@@ -63,7 +63,7 @@ from tabsdata.io.output import (  # Catalog,
     TableOutput,
 )
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
-from tabsdata.secret import DirectSecret, EnvironmentSecret, HashiCorpSecret
+from tabsdata.secret import EnvironmentSecret, HashiCorpSecret
 from tabsdata.tableframe.expr.expr import Expr as Expr
 from tabsdata.tableframe.functions.col import col as col
 from tabsdata.tableframe.functions.eager import concat
@@ -119,7 +119,6 @@ __all__ = [
     "S3AccessKeyCredentials",
     "UserPasswordCredentials",
     # from secret.py
-    "DirectSecret",
     "EnvironmentSecret",
     "HashiCorpSecret",
     # from uri.py

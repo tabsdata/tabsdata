@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
-from tabsdata import CSVFormat, DirectSecret, ParquetFormat
+from tabsdata import CSVFormat, ParquetFormat
 from tabsdata.credentials import S3AccessKeyCredentials, UserPasswordCredentials
 from tabsdata.exceptions import (
     ErrorCode,
@@ -17,6 +17,7 @@ from tabsdata.exceptions import (
     InputConfigurationError,
 )
 from tabsdata.io.input import Input, S3Source, build_input
+from tabsdata.secret import DirectSecret
 
 TEST_ACCESS_KEY_ID = "test_access_key_id"
 TEST_SECRET_ACCESS_KEY = "test_secret_access_key"

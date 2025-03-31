@@ -13,12 +13,12 @@ from tests_tabsdata.conftest import (
 )
 
 from tabsdata import (
-    DirectSecret,
     EnvironmentSecret,
     HashiCorpSecret,
 )
 from tabsdata.exceptions import ErrorCode, SecretConfigurationError
 from tabsdata.secret import (
+    DirectSecret,
     _recursively_evaluate_secret,
     _recursively_load_secret,
     build_secret,

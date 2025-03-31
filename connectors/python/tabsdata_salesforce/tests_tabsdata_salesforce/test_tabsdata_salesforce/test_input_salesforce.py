@@ -25,6 +25,7 @@ from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_initial_v
 )
 
 import tabsdata as td
+from tabsdata.secret import DirectSecret
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata.tabsserver.main import EXECUTION_CONTEXT_FILE_NAME
 from tabsdata.tabsserver.main import do as tabsserver_main
@@ -205,9 +206,9 @@ def test_username_password_security_token():
         security_token="security_token",
         query="SELECT Name FROM Contact",
     )
-    assert source.username == td.DirectSecret("username")
-    assert source.password == td.DirectSecret("password")
-    assert source.security_token == td.DirectSecret("security_token")
+    assert source.username == DirectSecret("username")
+    assert source.password == DirectSecret("password")
+    assert source.security_token == DirectSecret("security_token")
     source = td.SalesforceSource(
         username=td.EnvironmentSecret("username"),
         password=td.EnvironmentSecret("password"),

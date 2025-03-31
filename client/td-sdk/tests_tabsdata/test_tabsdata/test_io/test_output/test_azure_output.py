@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
-from tabsdata import CSVFormat, DirectSecret, ParquetFormat
+from tabsdata import CSVFormat, ParquetFormat
 from tabsdata.credentials import AzureAccountKeyCredentials, UserPasswordCredentials
 from tabsdata.exceptions import (
     ErrorCode,
@@ -16,6 +16,7 @@ from tabsdata.exceptions import (
     OutputConfigurationError,
 )
 from tabsdata.io.output import AzureDestination, Output, build_output
+from tabsdata.secret import DirectSecret
 
 TEST_ACCOUNT_NAME = "test_account_name"
 TEST_ACCOUNT_KEY = "test_account_key"

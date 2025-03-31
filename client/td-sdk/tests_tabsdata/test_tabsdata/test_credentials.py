@@ -6,13 +6,13 @@ import pytest
 
 from tabsdata import (
     AzureAccountKeyCredentials,
-    DirectSecret,
     HashiCorpSecret,
     S3AccessKeyCredentials,
     UserPasswordCredentials,
 )
 from tabsdata.credentials import build_credentials
 from tabsdata.exceptions import CredentialsConfigurationError, ErrorCode
+from tabsdata.secret import DirectSecret
 
 
 def test_account_key_credentials_initialization():
