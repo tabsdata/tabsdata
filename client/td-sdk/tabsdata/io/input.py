@@ -611,9 +611,6 @@ class MariaDBSource(Input):
                 ErrorCode.ICE2, self._parsed_uri.scheme, MARIADB_SCHEME, self.uri
             )
 
-        self.host, self.port = self._parsed_uri.netloc.split(":")
-        self.database = self._parsed_uri.path[1:]
-
     @property
     def initial_values(self) -> dict:
         """
@@ -786,9 +783,6 @@ class MySQLSource(Input):
             raise InputConfigurationError(
                 ErrorCode.ICE2, self._parsed_uri.scheme, MYSQL_SCHEME, self.uri
             )
-
-        self.host, self.port = self._parsed_uri.netloc.split(":")
-        self.database = self._parsed_uri.path[1:]
 
     @property
     def initial_values(self) -> dict:
@@ -963,9 +957,6 @@ class OracleSource(Input):
                 ErrorCode.ICE2, self._parsed_uri.scheme, ORACLE_SCHEME, self.uri
             )
 
-        self.host, self.port = self._parsed_uri.netloc.split(":")
-        self.database = self._parsed_uri.path[1:]
-
     @property
     def initial_values(self) -> dict:
         """
@@ -1138,9 +1129,6 @@ class PostgresSource(Input):
             raise InputConfigurationError(
                 ErrorCode.ICE2, self._parsed_uri.scheme, POSTGRES_SCHEMES, self.uri
             )
-
-        self.host, self.port = self._parsed_uri.netloc.split(":")
-        self.database = self._parsed_uri.path[1:]
 
     @property
     def initial_values(self) -> dict:

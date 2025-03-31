@@ -756,8 +756,6 @@ class MariaDBDestination(Output):
             raise OutputConfigurationError(
                 ErrorCode.OCE2, self._parsed_uri.scheme, MARIADB_SCHEME, self.uri
             )
-        self.host, self.port = self._parsed_uri.netloc.split(":")
-        self.database = self._parsed_uri.path[1:]
 
     @property
     def destination_table(self) -> str | List[str]:
@@ -932,8 +930,6 @@ class MySQLDestination(Output):
             raise OutputConfigurationError(
                 ErrorCode.OCE2, self._parsed_uri.scheme, MYSQL_SCHEME, self.uri
             )
-        self.host, self.port = self._parsed_uri.netloc.split(":")
-        self.database = self._parsed_uri.path[1:]
 
     @property
     def destination_table(self) -> str | List[str]:
@@ -1107,8 +1103,6 @@ class OracleDestination(Output):
             raise OutputConfigurationError(
                 ErrorCode.OCE2, self._parsed_uri.scheme, ORACLE_SCHEME, self.uri
             )
-        self.host, self.port = self._parsed_uri.netloc.split(":")
-        self.database = self._parsed_uri.path[1:]
 
     @property
     def destination_table(self) -> str | List[str]:
@@ -1285,8 +1279,6 @@ class PostgresDestination(Output):
             raise OutputConfigurationError(
                 ErrorCode.OCE2, self._parsed_uri.scheme, POSTGRES_SCHEMES, self.uri
             )
-        self.host, self.port = self._parsed_uri.netloc.split(":")
-        self.database = self._parsed_uri.path[1:]
 
     @property
     def destination_table(self) -> str | List[str]:

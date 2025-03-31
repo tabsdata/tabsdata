@@ -17,9 +17,6 @@ def test_all_correct_destination_table_list():
     assert output.uri == uri
     assert output.destination_table == destination_table
     assert output.credentials == credentials
-    assert output.host == "DATABASE_IP"
-    assert output.port == "DATABASE_PORT"
-    assert output.database == "testing"
     assert isinstance(output, PostgresDestination)
     assert isinstance(output, Output)
     expected_dict = {
@@ -43,9 +40,6 @@ def test_all_correct_destination_table_list_postgresql():
     assert output.uri == uri
     assert output.destination_table == destination_table
     assert output.credentials == credentials
-    assert output.host == "DATABASE_IP"
-    assert output.port == "DATABASE_PORT"
-    assert output.database == "testing"
     assert isinstance(output, PostgresDestination)
     assert isinstance(output, Output)
     expected_dict = {
@@ -86,9 +80,6 @@ def test_all_correct_destination_table_string():
     assert output.uri == uri
     assert output.destination_table == destination_table
     assert output.credentials == credentials
-    assert output.host == "DATABASE_IP"
-    assert output.port == "DATABASE_PORT"
-    assert output.database == "testing"
     assert isinstance(output, PostgresDestination)
     assert isinstance(output, Output)
     expected_dict = {
@@ -138,9 +129,6 @@ def test_all_correct_destination_table_string_no_credentials():
     assert output.uri == uri
     assert output.destination_table == destination_table
     assert output.credentials is None
-    assert output.host == "DATABASE_IP"
-    assert output.port == "DATABASE_PORT"
-    assert output.database == "testing"
     assert isinstance(output, PostgresDestination)
     assert isinstance(output, Output)
     expected_dict = {
@@ -223,9 +211,6 @@ def test_update_uri():
     assert output.uri == uri
     output.uri = "postgres://DATABASE_IP:DATABASE_PORT/testing2"
     assert output.uri == "postgres://DATABASE_IP:DATABASE_PORT/testing2"
-    assert output.host == "DATABASE_IP"
-    assert output.port == "DATABASE_PORT"
-    assert output.database == "testing2"
 
 
 def test_update_if_table_exists():
@@ -256,9 +241,6 @@ def test_all_correct_driver():
     assert output.uri == uri
     assert output.destination_table == destination_table
     assert output.credentials == credentials
-    assert output.host == "DATABASE_IP"
-    assert output.port == "DATABASE_PORT"
-    assert output.database == "testing"
     assert isinstance(output, PostgresDestination)
     assert isinstance(output, Output)
     expected_dict = {
@@ -282,9 +264,6 @@ def test_all_correct_driver_postgresql():
     assert output.uri == uri
     assert output.destination_table == destination_table
     assert output.credentials == credentials
-    assert output.host == "DATABASE_IP"
-    assert output.port == "DATABASE_PORT"
-    assert output.database == "testing"
     assert isinstance(output, PostgresDestination)
     assert isinstance(output, Output)
     expected_dict = {

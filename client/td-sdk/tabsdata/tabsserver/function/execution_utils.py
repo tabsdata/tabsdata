@@ -48,9 +48,10 @@ from tabsdata.utils.bundle_utils import (
     CONFIG_INPUTS_KEY,
     PLUGINS_FOLDER,
 )
+from tabsdata.utils.sql_utils import obtain_uri
 from tabsdata.utils.tableframe._reflection import check_required_columns
 
-from . import environment_import_utils, sql_utils
+from . import environment_import_utils
 from .cloud_connectivity_utils import (
     obtain_and_set_azure_credentials,
     obtain_and_set_s3_credentials,
@@ -402,19 +403,19 @@ def execute_sql_query(
         query = replace_initial_values(query, initial_values)
     if isinstance(source, MySQLSource):
         logger.info("Importing SQL query from MySQL")
-        uri = sql_utils.obtain_uri(source)
+        uri = obtain_uri(source, log=True, add_credentials=True)
         loaded_frame = pl.read_database_uri(query=query, uri=uri)
     elif isinstance(source, PostgresSource):
         logger.info("Importing SQL query from Postgres")
-        uri = sql_utils.obtain_uri(source)
+        uri = obtain_uri(source, log=True, add_credentials=True)
         loaded_frame = pl.read_database_uri(query=query, uri=uri)
     elif isinstance(source, MariaDBSource):
         logger.info("Importing SQL query from MariaDB")
-        uri = sql_utils.obtain_uri(source)
+        uri = obtain_uri(source, log=True, add_credentials=True)
         loaded_frame = pl.read_database_uri(query=query, uri=uri)
     elif isinstance(source, OracleSource):
         logger.info("Importing SQL query from Oracle")
-        uri = sql_utils.obtain_uri(source)
+        uri = obtain_uri(source, log=True, add_credentials=True)
         loaded_frame = pl.read_database_uri(query=query, uri=uri)
     else:
         logger.error(f"Invalid SQL source type: {type(source)}. No data imported.")

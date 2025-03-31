@@ -34,6 +34,7 @@ from tabsdata.io.plugin import DestinationPlugin
 
 # from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.utils.bundle_utils import PLUGINS_FOLDER
+from tabsdata.utils.sql_utils import add_driver_to_uri, obtain_uri
 
 from . import sql_utils
 from .cloud_connectivity_utils import (
@@ -325,8 +326,8 @@ def store_results_in_sql(
         destination,
         (MariaDBDestination, MySQLDestination, OracleDestination, PostgresDestination),
     ):
-        uri = sql_utils.obtain_uri(destination)
-        uri = sql_utils.add_driver_to_uri(uri)
+        uri = obtain_uri(destination, log=True, add_credentials=True)
+        uri = add_driver_to_uri(uri, log=True)
         if isinstance(destination, MariaDBDestination):
             uri = sql_utils.add_mariadb_collation(uri)
         destination_table_configuration = destination.destination_table

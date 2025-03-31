@@ -66,9 +66,6 @@ def test_all_correct_mysql_input_dict():
     assert isinstance(function.input, MySQLSource)
     assert function.input.uri == input[MySQLSource.IDENTIFIER][URI_KEY]
     assert function.input.query == input[MySQLSource.IDENTIFIER][QUERY_KEY]
-    assert function.input.database == "testing"
-    assert function.input.host == "DATABASE_IP"
-    assert function.input.port == "DATABASE_PORT"
     assert isinstance(function, TabsdataFunction)
     assert function.output is None
     assert function.original_file == os.path.basename(__file__)
@@ -102,9 +99,6 @@ def test_all_correct_with_mysql_input_object():
     assert isinstance(function.input, MySQLSource)
     assert function.input.uri == input[MySQLSource.IDENTIFIER][URI_KEY]
     assert function.input.query == input[MySQLSource.IDENTIFIER][QUERY_KEY]
-    assert function.input.database == "testing"
-    assert function.input.host == "DATABASE_IP"
-    assert function.input.port == "DATABASE_PORT"
     assert isinstance(function, TabsdataFunction)
     assert function.output is None
     assert function.original_file == os.path.basename(__file__)

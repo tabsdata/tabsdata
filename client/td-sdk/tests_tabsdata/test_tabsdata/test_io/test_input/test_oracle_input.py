@@ -23,9 +23,6 @@ def test_all_correct_query_list():
     assert input.uri == uri
     assert input.query == query
     assert input.credentials == credentials
-    assert input.host == "DATABASE_IP"
-    assert input.port == "DATABASE_PORT"
-    assert input.database == "testing"
     assert input.initial_values == {}
     assert isinstance(input, OracleSource)
     assert isinstance(input, Input)
@@ -70,9 +67,6 @@ def test_all_correct_query_string():
     assert input.uri == uri
     assert input.query == query
     assert input.credentials == credentials
-    assert input.host == "DATABASE_IP"
-    assert input.port == "DATABASE_PORT"
-    assert input.database == "testing"
     assert input.initial_values == {}
     assert isinstance(input, OracleSource)
     assert isinstance(input, Input)
@@ -123,9 +117,6 @@ def test_all_correct_query_string_no_credentials():
     assert input.uri == uri
     assert input.query == query
     assert input.credentials is None
-    assert input.host == "DATABASE_IP"
-    assert input.port == "DATABASE_PORT"
-    assert input.database == "testing"
     assert isinstance(input, OracleSource)
     assert isinstance(input, Input)
     expected_dict = {
@@ -212,9 +203,6 @@ def test_all_correct_initial_values():
     assert input.uri == uri
     assert input.query == query
     assert input.credentials == credentials
-    assert input.host == "DATABASE_IP"
-    assert input.port == "DATABASE_PORT"
-    assert input.database == "testing"
     assert input.initial_values == initial_values
     assert isinstance(input, OracleSource)
     assert isinstance(input, Input)
@@ -297,9 +285,6 @@ def test_update_uri():
     uri = "oracle://DATABASE_IP:3308/testing2"
     input.uri = uri
     assert input.uri == uri
-    assert input.host == "DATABASE_IP"
-    assert input.port == "3308"
-    assert input.database == "testing2"
 
 
 def test_driver_uri_fails():

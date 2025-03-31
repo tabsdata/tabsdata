@@ -131,7 +131,7 @@ class HashiCorpSecret(Secret):
         """
         try:
             vault_url_env_var = (
-                self.VAULT_URL_ENV_VAR.replace("HASHICORP", self.vault)
+                self.VAULT_URL_ENV_VAR.replace("HASHICORP", self.vault, 1)
                 if self.vault
                 else self.VAULT_URL_ENV_VAR
             )
@@ -140,7 +140,7 @@ class HashiCorpSecret(Secret):
             raise ValueError(f"Environment variable {vault_url_env_var} not found.")
         try:
             vault_token_env_var = (
-                self.VAULT_TOKEN_ENV_VAR.replace("HASHICORP", self.vault)
+                self.VAULT_TOKEN_ENV_VAR.replace("HASHICORP", self.vault, 1)
                 if self.vault
                 else self.VAULT_TOKEN_ENV_VAR
             )
