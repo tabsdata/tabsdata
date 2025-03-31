@@ -72,7 +72,7 @@ pub struct Fixed;
 #[td_type::typed(bool)]
 pub struct FixedRole;
 
-#[td_type::typed(bool)]
+#[td_type::typed(bool(default = false))]
 pub struct Frozen;
 
 #[td_type::typed(bool)]
@@ -95,7 +95,7 @@ pub struct FunctionIdName;
 #[td_type::typed(string(max_len = 4096, default = "{}"))]
 pub struct FunctionRuntimeValues;
 
-#[td_type::typed(string(regex = FunctionStatus::REGEX))]
+#[td_type::typed(string(regex = FunctionStatus::REGEX, default = "A"))]
 pub struct FunctionStatus;
 
 impl FunctionStatus {
@@ -281,6 +281,9 @@ impl TryFrom<&TableVersionDBWithNames> for TableName {
         Ok(table)
     }
 }
+
+#[td_type::typed(id_name(id = TableId, name = TableName))]
+pub struct TableIdName;
 
 #[td_type::typed(i16)]
 pub struct TableFunctionParamPos;

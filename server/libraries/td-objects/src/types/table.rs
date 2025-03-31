@@ -37,11 +37,15 @@ pub struct TableDB {
 
 #[td_type::Dao(sql_table = "tables__with_names")]
 pub struct TableDBWithNames {
+    #[td_type(extractor)]
     id: TableId,
     collection_id: CollectionId,
     name: TableName,
+    #[td_type(extractor)]
     function_id: FunctionId,
+    #[td_type(extractor)]
     function_version_id: FunctionVersionId,
+    #[td_type(extractor)]
     table_version_id: TableVersionId,
     frozen: Frozen,
     private: Private,

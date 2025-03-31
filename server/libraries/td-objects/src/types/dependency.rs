@@ -17,6 +17,7 @@ pub struct DependencyDB {
     id: DependencyId,
     collection_id: CollectionId,
     function_id: FunctionId,
+    function_version_id: FunctionVersionId,
     #[td_type(builder(field = "id"))]
     dependency_version_id: DependencyVersionId,
     table_collection_id: CollectionId,

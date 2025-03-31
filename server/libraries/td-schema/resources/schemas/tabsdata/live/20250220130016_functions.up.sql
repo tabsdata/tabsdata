@@ -127,6 +127,7 @@ CREATE TABLE dependencies
     id                    TEXT PRIMARY KEY,
     collection_id         TEXT NOT NULL,
     function_id           TEXT NOT NULL,
+    function_version_id   TEXT NOT NULL,
     dependency_version_id TEXT NOT NULL,
     table_collection_id   TEXT NOT NULL,
     table_id              TEXT NOT NULL,

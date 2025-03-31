@@ -7,7 +7,7 @@ use crate::dlo::{
 };
 use crate::types::basic::{
     CollectionIdName, FunctionIdName, FunctionVersionIdName, PermissionIdName, RoleIdName,
-    UserIdName,
+    TableIdName, UserIdName,
 };
 use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
 use constcat::concat;
@@ -113,13 +113,6 @@ impl FunctionIdParam {
     }
 }
 
-pub const TABLES: &str = "/collections/{collection}/tables";
-pub const TABLES_LIST: &str = TABLES;
-pub const TABLE: &str = concat!(TABLES, "/{table}");
-pub const TABLE_SCHEMA: &str = concat!(TABLE, "/schema");
-pub const TABLE_SAMPLE: &str = concat!(TABLE, "/sample");
-pub const TABLE_DATA: &str = concat!(TABLE, "/data");
-
 pub const EXECUTION_PLANS: &str = "/execution_plans";
 pub const EXECUTION_PLAN: &str = concat!(EXECUTION_PLANS, "/{execution_plan_id}");
 pub const EXECUTION_PLAN_GET: &str = EXECUTION_PLAN;
@@ -168,20 +161,13 @@ pub const TRANSACTIONS_LIST: &str = TRANSACTIONS;
 pub const COMMITS: &str = "/commits";
 pub const COMMITS_LIST: &str = COMMITS;
 
-#[apiserver_schema]
-#[derive(Debug, Clone, Getters, Deserialize, IntoParams)]
-#[getset(get = "pub")]
-pub struct TableParam {
-    collection: String,
-    table: String,
-}
-
 impl TableParam {
     pub fn new(collection: impl Into<String>, table: impl Into<String>) -> Self {
-        Self {
-            collection: collection.into(),
-            table: table.into(),
-        }
+        let collection = collection.into();
+        let collection = CollectionIdName::try_from(collection).unwrap();
+        let table = table.into();
+        let table = TableIdName::try_from(table).unwrap();
+        Self { collection, table }
     }
 }
 
@@ -199,13 +185,13 @@ impl From<TableParam> for CollectionName {
 
 impl Creator<TableParam> for CollectionName {
     fn create(value: impl Into<TableParam>) -> Self {
-        CollectionName::new(value.into().collection())
+        CollectionName::new(value.into().collection)
     }
 }
 
 impl Creator<TableParam> for TableName {
     fn create(value: impl Into<TableParam>) -> Self {
-        TableName::new(value.into().table())
+        TableName::new(value.into().table)
     }
 }
 
@@ -310,8 +296,8 @@ pub struct TableCommitParam {
 impl TableCommitParam {
     pub fn new(table: &TableParam, at: &AtParam) -> Result<Self, TdError> {
         Ok(Self {
-            collection: table.collection.clone(),
-            table: table.table.clone(),
+            collection: CollectionName::new(table.collection.clone()).to_string(),
+            table: TableName::new(table.table.clone()).to_string(),
             at: at.try_into()?,
         })
     }
@@ -604,6 +590,10 @@ pub const FUNCTION_UPLOAD: &str = url!(FUNCTION, "/upload/{function_id}");
 pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
 pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
 
+// Function versions
+pub const FUNCTION_VERSIONS: &str = url!(COLLECTION, "/function_versions");
+pub const FUNCTION_VERSION: &str = url!(FUNCTION_VERSIONS, "/{function_version}");
+
 #[td_type::UrlParam]
 pub struct FunctionVersionParam {
     #[td_type(extractor)]
@@ -611,3 +601,23 @@ pub struct FunctionVersionParam {
     #[td_type(extractor)]
     function_version: FunctionVersionIdName,
 }
+
+pub const FUNCTION_VERSION_GET: &str = url!(FUNCTION_VERSION);
+
+// Tables
+pub const TABLES: &str = url!(COLLECTION, "/tables");
+pub const TABLE: &str = url!(TABLES, "/{table}");
+
+#[td_type::UrlParam]
+pub struct TableParam {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    table: TableIdName,
+}
+
+pub const TABLES_LIST: &str = TABLES;
+pub const TABLE_DELETE: &str = TABLE;
+pub const TABLE_SCHEMA: &str = concat!(TABLE, "/schema");
+pub const TABLE_SAMPLE: &str = concat!(TABLE, "/sample");
+pub const TABLE_DATA: &str = concat!(TABLE, "/data");
