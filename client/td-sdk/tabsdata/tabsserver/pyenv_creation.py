@@ -50,6 +50,7 @@ from tabsdata.utils.constants import (
     TABSDATA_MODULE_NAME,
     TABSDATA_MONGODB_MODULE_NAME,
     TABSDATA_SALESFORCE_MODULE_NAME,
+    TRUE_VALUES,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,13 @@ UV_EXECUTABLE = "uv"
 ENVIRONMENT_LOCK_TIMEOUT = 5  # 5 seconds
 MAXIMUM_LOCK_TIME = 60 * 30  # 30 minutes
 PYTHON_VERSION_LOCK_TIMEOUT = 10  # 10 seconds
+
+TABSDATA_PACKAGES = [
+    TABSDATA_MODULE_NAME,
+    TABSDATA_MONGODB_MODULE_NAME,
+    TABSDATA_SALESFORCE_MODULE_NAME,
+]
+TD_INHERIT_TABSDATA_PACKAGES = "TD_INHERIT_TABSDATA_PACKAGES"
 
 
 def extract_package_name(requirement):
@@ -195,14 +203,61 @@ def verify_package_installable_for_environment(
 
 
 def found_requirements(
-    requirements: list[str], real_environment_name: str
+    requirements: list[str],
+    development_packages: list[str],
+    real_environment_name: str,
 ) -> list[str]:
     logger.info(f"Checking if the packages {requirements} are available on PyPi")
-    available_packages = [
-        package
-        for package in requirements
-        if verify_package_installable_for_environment(package, real_environment_name)
-    ]
+
+    inherit_tabsdata_packages = (
+        os.getenv(
+            TD_INHERIT_TABSDATA_PACKAGES,
+            "False",
+        ).lower()
+        in TRUE_VALUES
+    )
+
+    available_packages = []
+    for package in requirements:
+        if verify_package_installable_for_environment(package, real_environment_name):
+            logger.info(f"Package {package} marked as: available")
+            available_packages.append(package)
+        else:
+            module = extract_package_name(package)
+            if module in TABSDATA_PACKAGES:
+                if inherit_tabsdata_packages:
+                    td_provider, td_location = get_tabsdata_package_metadata(
+                        module, None
+                    )
+                    logger.info(
+                        f"Package {package} determined as: "
+                        f"provider: {td_provider} - "
+                        f"location: {td_location}"
+                    )
+                    if td_provider in (
+                        "Archive (Project)",
+                        "Archive (Folder)",
+                        "Archive (Wheel)",
+                        "Folder (Editable)",
+                        "Folder (Frozen)",
+                    ):
+                        # This feature is only meant to be used for development.
+                        # Environment hash has already been computed. Therefore,
+                        # any changes in the inherited packages will not be reflected
+                        # in a new environment hash.
+                        development_packages.append(str(td_location))
+                        logger.info(f"Package {package} marked as: td-available")
+                        logger.info(
+                            f"Adding package {package} to the development packages"
+                            " specification"
+                        )
+                    else:
+                        logger.info(f"Package {package} marked as: td-non-available")
+                else:
+                    logger.info(f"Package {package} marked as: td-unavailable")
+            else:
+                logger.info(f"Package {package} marked as: unavailable")
+
     logger.info(f"Available packages: {available_packages}")
     if set(available_packages) != set(requirements):
         missing_packages = set(requirements) - set(available_packages)
@@ -432,7 +487,10 @@ def create_virtual_environment(
             environment_hash = add_hex_numbers(
                 environment_hash, get_dir_hash(development_package)
             )
-
+    else:
+        # Defaulting to an empty array to avoid references issue when inheriting
+        # tabsdata packages.
+        development_packages = []
     if salt:
         environment_hash = add_hex_numbers(environment_hash, hash_string(salt))
 
@@ -668,7 +726,11 @@ def atomic_environment_creation(
     logger.info("Selecting all the packages that are available on PyPi")
     with time_block:
         required_modules = (
-            found_requirements(required_modules, real_environment_name)
+            found_requirements(
+                required_modules,
+                development_packages,
+                real_environment_name,
+            )
             if check_module_availability
             else required_modules
         )
@@ -911,9 +973,12 @@ PackageProvider: TypeAlias = Literal[
 
 def get_tabsdata_package_metadata(
     module: str,
-    variable: str,
+    variable: str | None,
 ) -> tuple[str | None, PackageProvider | None]:
-    td_tabsdata_dev_pkg = os.getenv(variable)
+    if variable is not None:
+        td_tabsdata_dev_pkg = os.getenv(variable)
+    else:
+        td_tabsdata_dev_pkg = None
     if td_tabsdata_dev_pkg:
         provider = "Archive (Project)"
         location = pathlib.Path(td_tabsdata_dev_pkg)

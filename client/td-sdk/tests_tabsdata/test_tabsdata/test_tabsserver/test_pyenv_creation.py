@@ -99,7 +99,11 @@ def test_found_requirements_single_package():
             shell=True,
         )
         assert result.returncode == 0
-        assert found_requirements(["pandas"], real_environment_name) == ["pandas"]
+        assert found_requirements(
+            ["pandas"],
+            [],
+            real_environment_name,
+        ) == ["pandas"]
     finally:
         remove_path(environment_folder)
 
@@ -124,7 +128,14 @@ def test_found_requirements_single_package_wrong_version():
             shell=True,
         )
         assert result.returncode == 0
-        assert found_requirements(["pandas==999.999.999"], real_environment_name) == []
+        assert (
+            found_requirements(
+                ["pandas==999.999.999"],
+                [],
+                real_environment_name,
+            )
+            == []
+        )
     finally:
         remove_path(environment_folder)
 
@@ -150,7 +161,9 @@ def test_found_requirements_multiple_packages():
         )
         assert result.returncode == 0
         assert found_requirements(
-            ["pandas", "not_a_real_package"], real_environment_name
+            ["pandas", "not_a_real_package"],
+            [],
+            real_environment_name,
         ) == ["pandas"]
     finally:
         remove_path(environment_folder)
@@ -174,7 +187,14 @@ def test_found_requirements_all_not_found():
             shell=True,
         )
         assert result.returncode == 0
-        assert found_requirements(["not_a_real_package"], real_environment_name) == []
+        assert (
+            found_requirements(
+                ["not_a_real_package"],
+                [],
+                real_environment_name,
+            )
+            == []
+        )
     finally:
         remove_path(environment_folder)
 
@@ -197,7 +217,14 @@ def test_found_requirements_empty_list():
             shell=True,
         )
         assert result.returncode == 0
-        assert found_requirements([], real_environment_name) == []
+        assert (
+            found_requirements(
+                [],
+                [],
+                real_environment_name,
+            )
+            == []
+        )
     finally:
         remove_path(environment_folder)
 
@@ -227,6 +254,7 @@ def test_found_requirements_mixed():
                 "numpy",
                 "also_not_a_real_package==1.0.0",
             ],
+            [],
             real_environment_name,
         ) == ["pandas==2.0.1", "numpy"]
     finally:
