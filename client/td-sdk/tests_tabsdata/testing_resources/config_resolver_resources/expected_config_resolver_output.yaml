@@ -1,0 +1,36 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+access_jwt_expiration: 36288000
+addresses:
+- 127.0.0.1:2457
+database:
+  acquire_timeout: 30
+  idle_timeout: 60
+  max_connections: 10
+  max_lifetime: 3600
+  min_connections: 1
+  test_before_acquire: true
+  uri: file://td_repository_value/database/tabsdata.db
+jwt_secret: jwt_secret_value
+refresh_jwt_expiration: 36288000
+request_timeout: 60
+storage:
+  mounts:
+  - id: TDS_LOCAL
+    path: /
+    uri: file://td_repository_value/storage
+  - id: TDS_S3A
+    options:
+      aws_access_key_id: access_key_value
+      aws_region: region_value
+      aws_secret_access_key: secret_key_value
+    path: /s3a
+    uri: bucket_value
+  - id: TDS_AZB
+    options:
+      azure_storage_account_key: azure_account_key_value
+      azure_storage_account_name: azure_account_name_value
+    path: /aza
+    uri: az://my-az-bucket/a

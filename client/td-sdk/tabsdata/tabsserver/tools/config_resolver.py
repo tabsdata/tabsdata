@@ -13,7 +13,9 @@ HASHICORP_PATTERN = r"\${hashicorp:([^;]+;[^}]+)}"
 
 class ConfigResolver:
 
-    def __init__(self, hashicorp_url: str | None, hashicorp_token: str | None):
+    def __init__(
+        self, hashicorp_url: str | None = None, hashicorp_token: str | None = None
+    ):
         self.strategy_to_function = {
             "env": self.resolve_env_token,
             "hashicorp": self.resolve_hashicorp_token,
@@ -45,8 +47,14 @@ class ConfigResolver:
 
     def resolve_leaf(self, data: str, strategy: str) -> str:
         # Resolve any kind of secret that currently exists
-        data = self.strategy_to_function[strategy](data)
-        return data
+        try:
+            data = self.strategy_to_function[strategy](data)
+            return data
+        except KeyError:
+            raise ValueError(
+                f"The strategy {strategy} is not supported. Supported "
+                f"strategies are {list(self.strategy_to_function.keys())}"
+            )
 
     def resolve_hashicorp_token(self, leaf: str) -> str:
         match = re.search(HASHICORP_PATTERN, leaf)

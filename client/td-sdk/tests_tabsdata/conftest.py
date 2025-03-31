@@ -475,6 +475,27 @@ def create_docker_hashicorp_vault():
                         )
                     },
                 )
+                # Needed for the config_resolver tests to work
+                hashicorp_client.secrets.kv.v2.create_or_update_secret(
+                    path="/tabsdata/dev",
+                    secret={"jwt_secret": "jwt_secret_value"},
+                )
+                hashicorp_client.secrets.kv.v2.create_or_update_secret(
+                    path="/tabsdata/dev/s3a",
+                    secret={
+                        "bucket": "bucket_value",
+                        "region": "region_value",
+                        "access_key": "access_key_value",
+                        "secret_key": "secret_key_value",
+                    },
+                )
+                hashicorp_client.secrets.kv.v2.create_or_update_secret(
+                    path="/td/dev/aza",
+                    secret={
+                        "azure_account_name": "azure_account_name_value",
+                        "azure_account_key": "azure_account_key_value",
+                    },
+                )
                 return
             except Exception as err:
                 retry += 1

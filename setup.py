@@ -547,6 +547,7 @@ setup(
     data_files=datafiles,
     entry_points={
         "console_scripts": [
+            "_tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
             "td = tabsdata.cli.cli:cli",
             "tdmain = tabsdata.tabsserver.main:main",
             "tdvenv = tabsdata.tabsserver.pyenv_creation:main",
