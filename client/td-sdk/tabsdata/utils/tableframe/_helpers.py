@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import tabsdata.extensions.tableframe.extension as te_tableframe
 import tabsdata.utils.tableframe._constants as td_constants
-import te_tableframe.extension as te_tableframe
 
 
 def standard_system_columns() -> list[str]:

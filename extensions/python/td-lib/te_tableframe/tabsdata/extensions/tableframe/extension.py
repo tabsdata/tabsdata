@@ -11,9 +11,9 @@ import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._constants as td_constants
-from ta_tableframe.api.api import Extension
-from td_features.features import Feature, FeaturesManager
-from te_tableframe.version import version
+from tabsdata.extensions.features.api.features import Feature, FeaturesManager
+from tabsdata.extensions.tableframe.api.api import Extension
+from tabsdata.extensions.tableframe.version import version
 
 logger = logging.getLogger(__name__)
 

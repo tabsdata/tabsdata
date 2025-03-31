@@ -45,10 +45,10 @@ import tabsdata.utils.tableframe._reflection as td_reflection
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._translator as td_translator
 from tabsdata.exceptions import ErrorCode, TableFrameError
-from tabsdata.utils.annotations import pydoc, unstable
 
 # noinspection PyProtectedMember
-from te_tableframe.extension import TableFrameExtension
+from tabsdata.extensions.tableframe.extension import TableFrameExtension
+from tabsdata.utils.annotations import pydoc, unstable
 
 # ToDo: SDK-128: Define the logging model for SDK CLI execution
 logger = logging.getLogger(__name__)

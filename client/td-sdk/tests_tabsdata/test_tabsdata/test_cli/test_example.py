@@ -14,7 +14,7 @@ from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
 
 from tabsdata import TabsdataFunction
 from tabsdata.cli.cli import cli
-from te_tableframe.extension_test import instance as checker
+from tabsdata.extensions.tableframe.extension_test import instance as checker
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -36,6 +36,32 @@ def import_all_tabsdatafunctions(module_name):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_examples(login, tabsserver_connection):
+
+    import tabsdata
+
+    print(f"tabsdata namespace locations: {tabsdata.__path__}")
+    import tabsdata.extensions
+
+    print(f"tabsdata.extensions namespace locations: {tabsdata.extensions.__path__}")
+    import tabsdata.extensions.tableframe
+
+    print(
+        "tabsdata.extensions.tableframe namespace locations: "
+        f"{tabsdata.extensions.tableframe.__path__}"
+    )
+    import tabsdata.extensions.tableframe.extension
+
+    print(
+        "tabsdata.extensions.tableframe.extension: "
+        f"{tabsdata.extensions.tableframe.extension.__file__}"
+    )
+    import tabsdata.extensions.tableframe.extension
+
+    print(
+        "tabsdata.extensions.tableframe.extension_test: "
+        f"{tabsdata.extensions.tableframe.extension_test.__file__}"
+    )
+
     assert WORKING_FOLDER
     output_folder = os.path.join(WORKING_FOLDER, "output")
     logger.debug(f"Working folder: {WORKING_FOLDER}")

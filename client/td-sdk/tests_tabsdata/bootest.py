@@ -147,7 +147,6 @@ def enrich_sys_path():
                 root,
                 "client",
                 "td-sdk",
-                "tabsdata",
             )
         ),
     )
@@ -157,7 +156,7 @@ def enrich_sys_path():
                 root,
                 "client",
                 "td-lib",
-                "td_features",
+                "ta_features",
             )
         ),
     )
@@ -179,34 +178,6 @@ def enrich_sys_path():
                 "python",
                 "td-lib",
                 "te_tableframe",
-            )
-        ),
-    )
-    sys.path.append(
-        os.path.abspath(
-            os.path.join(
-                root,
-                "extensions",
-                "python",
-                "td-lib",
-            )
-        ),
-    )
-    sys.path.append(
-        os.path.abspath(
-            os.path.join(
-                root,
-                "client",
-                "td-lib",
-            )
-        ),
-    )
-    sys.path.append(
-        os.path.abspath(
-            os.path.join(
-                root,
-                "client",
-                "td-sdk",
             )
         ),
     )

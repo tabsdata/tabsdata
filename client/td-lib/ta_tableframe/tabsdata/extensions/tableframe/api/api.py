@@ -9,7 +9,7 @@ import polars as pl
 
 
 class Extension(ABC):
-    IDENTIFIER = "ta_tableframe"
+    IDENTIFIER = "tableframe"
 
     @classmethod
     @abstractmethod

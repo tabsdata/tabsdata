@@ -5,8 +5,8 @@
 import os
 from abc import ABC
 
-from ta_tableframe.api.api_test import TestTableFrameExtension
-from te_tableframe.version import version
+from tabsdata.extensions.tableframe.api.api_test import TestTableFrameExtension
+from tabsdata.extensions.tableframe.version import version
 
 
 class Test(TestTableFrameExtension, ABC):

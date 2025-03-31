@@ -430,6 +430,7 @@ setup(
         "bdist_egg": CustomBDistEgg,
     },
     packages=[
+        # tabsdata
         *find_packages(
             where=os.path.join(
                 "client",
@@ -442,79 +443,67 @@ setup(
                 "examples*",
             ],
         ),
-        # ToDo: this requires being revisited for a cleaner and more pythonic approach
+        # tabsdata.extensions.features.api
         *find_packages(
             where=os.path.join(
                 "client",
                 "td-lib",
+                "ta_features",
             ),
-            exclude=[
-                "tests",
-                "tests.*",
-                "*.tests",
-                "*.tests.*",
-                "tests*",
-                "tests*.*",
-                "*.tests*",
-                "*.tests*.*",
-                "examples",
-                "examples.*",
-                "*.examples",
-                "*.examples.*",
-                "examples*",
-                "examples*.*",
-                "*.examples*",
-                "*.examples*.*",
-            ],
+            include=["tabsdata.extensions.features.api*"],
         ),
-        # ToDo: this requires being revisited for a cleaner and more pythonic approach
+        # tabsdata.extensions.tableframe.api
+        *find_packages(
+            where=os.path.join(
+                "client",
+                "td-lib",
+                "ta_tableframe",
+            ),
+            include=["tabsdata.extensions.tableframe.api*"],
+        ),
+        # tabsdata.extensions.tableframe
         *find_packages(
             where=os.path.join(
                 "extensions",
                 "python",
                 "td-lib",
+                "te_tableframe",
             ),
-            exclude=[
-                "tests",
-                "tests.*",
-                "*.tests",
-                "*.tests.*",
-                "tests*",
-                "tests*.*",
-                "*.tests*",
-                "*.tests*.*",
-                "examples",
-                "examples.*",
-                "*.examples",
-                "*.examples.*",
-                "examples*",
-                "examples*.*",
-                "*.examples*",
-                "*.examples*.*",
-            ],
+            include=["tabsdata.extensions.tableframe*"],
         ),
     ],
     package_dir={
-        "ta_tableframe": os.path.join(
-            "client",
-            "td-lib",
-            "ta_tableframe",
-        ),
-        "td_features": os.path.join(
-            "client",
-            "td-lib",
-            "td_features",
-        ),
         "tabsdata": os.path.join(
             "client",
             "td-sdk",
             "tabsdata",
         ),
-        "te_tableframe": os.path.join(
+        "tabsdata.extensions.features.api": os.path.join(
+            "client",
+            "td-lib",
+            "ta_features",
+            "tabsdata",
+            "extensions",
+            "features",
+            "api",
+        ),
+        "tabsdata.extensions.tableframe.api": os.path.join(
+            "client",
+            "td-lib",
+            "ta_tableframe",
+            "tabsdata",
+            "extensions",
+            "tableframe",
+            "api",
+        ),
+        "tabsdata.extensions.tableframe": os.path.join(
             "extensions",
             "python",
             "td-lib",
             "te_tableframe",
+            "tabsdata",
+            "extensions",
+            "tableframe",
         ),
     },
     package_data={
