@@ -27,11 +27,15 @@ def test_class_attributes():
     assert resolver.strategy_to_function
     assert resolver.hashicorp_config.get("url") is None
     assert resolver.hashicorp_config.get("token") is None
+    assert resolver.hashicorp_config.get("namespace") is None
 
-    resolver = ConfigResolver(hashicorp_url="url", hashicorp_token="token")
+    resolver = ConfigResolver(
+        hashicorp_url="url", hashicorp_token="token", hashicorp_namespace="namespace"
+    )
     assert resolver.strategy_to_function
     assert resolver.hashicorp_config.get("url") == "url"
     assert resolver.hashicorp_config.get("token") == "token"
+    assert resolver.hashicorp_config.get("namespace") == "namespace"
 
 
 @pytest.mark.config_resolver

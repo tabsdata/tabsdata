@@ -71,6 +71,7 @@ class HashiCorpSecret(Secret):
     NAME_KEY = "name"
     VAULT_KEY = "vault"
 
+    VAULT_NAMESPACE_ENV_VAR = "TDS_HASHICORP_NAMESPACE"
     VAULT_TOKEN_ENV_VAR = "TDS_HASHICORP_TOKEN"
     VAULT_URL_ENV_VAR = "TDS_HASHICORP_URL"
 
@@ -148,7 +149,13 @@ class HashiCorpSecret(Secret):
         except KeyError:
             raise ValueError(f"Environment variable {vault_token_env_var} not found.")
         try:
-            client = hvac.Client(url=vault_url, token=vault_token)
+            namespace_env_var = (
+                self.VAULT_NAMESPACE_ENV_VAR.replace("HASHICORP", self.vault, 1)
+                if self.vault
+                else self.VAULT_NAMESPACE_ENV_VAR
+            )
+            namespace = os.environ.get(namespace_env_var)
+            client = hvac.Client(url=vault_url, token=vault_token, namespace=namespace)
             secret = client.secrets.kv.read_secret_version(
                 self.path, raise_on_deleted_version=False
             )
@@ -157,7 +164,8 @@ class HashiCorpSecret(Secret):
             raise ValueError(
                 "Error while retrieving secret from Hashicorp Vault. "
                 "Please verify the secret path and name, as well as the "
-                "environment variables for the URL and the token."
+                "environment variables for the URL and the token (and the namespace "
+                "if using one)."
             )
 
 

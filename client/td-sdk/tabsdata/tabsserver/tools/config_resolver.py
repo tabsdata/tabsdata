@@ -14,7 +14,10 @@ HASHICORP_PATTERN = r"\${hashicorp:([^;]+;[^}]+)}"
 class ConfigResolver:
 
     def __init__(
-        self, hashicorp_url: str | None = None, hashicorp_token: str | None = None
+        self,
+        hashicorp_url: str | None = None,
+        hashicorp_token: str | None = None,
+        hashicorp_namespace: str | None = None,
     ):
         self.strategy_to_function = {
             "env": self.resolve_env_token,
@@ -23,6 +26,7 @@ class ConfigResolver:
         self.hashicorp_config = {
             "url": hashicorp_url,
             "token": hashicorp_token,
+            "namespace": hashicorp_namespace,
         }
 
     def resolve_yaml(self, path_to_yaml: str, strategies: List[str]):
@@ -63,9 +67,12 @@ class ConfigResolver:
             vault_token = self.hashicorp_config["token"]
             if not vault_url or not vault_token:
                 raise ValueError("Hashicorp URL and token must be provided")
+            vault_namespace = self.hashicorp_config["namespace"]
             hashicorp_secret_specs = match.group(1)
             path, name = hashicorp_secret_specs.split(";")
-            client = hvac.Client(url=vault_url, token=vault_token)
+            client = hvac.Client(
+                url=vault_url, token=vault_token, namespace=vault_namespace
+            )
             secret = client.secrets.kv.read_secret_version(
                 path, raise_on_deleted_version=False
             )
@@ -136,6 +143,21 @@ def main():
         ),
         default=None,
     )
+    parser.add_argument(
+        "--hashicorp-namespace",
+        type=str,
+        help="Namespace of the Hashicorp Vault server to access.",
+        default=None,
+    )
+    parser.add_argument(
+        "--env-hashicorp-namespace",
+        type=str,
+        help=(
+            "Name of the environment variable with the namespace to access the "
+            "Hashicorp Vault server."
+        ),
+        default=None,
+    )
 
     args = parser.parse_args()
     if args.env_hashicorp_url and args.hashicorp_url:
@@ -145,6 +167,11 @@ def main():
     if args.env_hashicorp_token and args.hashicorp_token:
         raise ValueError(
             "Only one of hashicorp-token and env-hashicorp-token should be provided"
+        )
+    if args.env_hashicorp_namespace and args.hashicorp_namespace:
+        raise ValueError(
+            "Only one of hashicorp-namespace and env-hashicorp-namespace should be "
+            "provided"
         )
 
     hashicorp_url = (
@@ -157,8 +184,15 @@ def main():
         if args.env_hashicorp_token
         else args.hashicorp_token
     )
+    hashicorp_namespace = (
+        os.getenv(args.env_hashicorp_namespace)
+        if args.env_hashicorp_namespace
+        else args.hashicorp_namespace
+    )
     config_resolver = ConfigResolver(
-        hashicorp_url=hashicorp_url, hashicorp_token=hashicorp_token
+        hashicorp_url=hashicorp_url,
+        hashicorp_token=hashicorp_token,
+        hashicorp_namespace=hashicorp_namespace,
     )
     resolved_data = config_resolver.resolve_yaml(args.input, args.resolve.split(","))
     yaml.dump(resolved_data, sys.stdout)
