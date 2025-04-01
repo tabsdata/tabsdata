@@ -19,16 +19,16 @@ use tracing::error;
 const VERSION_FILE: &str = ".version";
 const SEED_VERSION: &str = "0.9.0";
 
-pub const TDUPGRADE_PROGRAM: &str = "tdupgrade";
-pub const TDUPGRADE_ARGUMENT_INSTANCE: &str = "--instance";
-pub const TDUPGRADE_ARGUMENT_EXECUTE: &str = "--execute";
+pub const TDUPGRADER_PROGRAM: &str = "_tdupgrader";
+pub const TDUPGRADER_ARGUMENT_INSTANCE: &str = "--instance";
+pub const TDUPGRADER_ARGUMENT_EXECUTE: &str = "--execute";
 
 pub fn perform(instance: &PathBuf, execute: bool) -> Result<(), TdError> {
-    let tdupgrade = name_program(&PathBuf::from(TDUPGRADE_PROGRAM));
-    let output = Command::new(tdupgrade)
-        .arg(TDUPGRADE_ARGUMENT_INSTANCE)
+    let tdupgrader = name_program(&PathBuf::from(TDUPGRADER_PROGRAM));
+    let output = Command::new(tdupgrader)
+        .arg(TDUPGRADER_ARGUMENT_INSTANCE)
         .arg(instance)
-        .args(execute.then_some(TDUPGRADE_ARGUMENT_EXECUTE).iter())
+        .args(execute.then_some(TDUPGRADER_ARGUMENT_EXECUTE).iter())
         .output()
         .map_err(InstanceUpgradePanic)?;
     dump(&output);

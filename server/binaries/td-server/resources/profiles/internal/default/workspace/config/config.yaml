@@ -32,7 +32,7 @@ controllers:
       - name: function
         kind: processor
         location: system
-        program: tdmain
+        program: _tdinvoker
         concurrency: 8
         retries: 2
         arguments:

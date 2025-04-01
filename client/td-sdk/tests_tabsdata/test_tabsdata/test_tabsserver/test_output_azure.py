@@ -27,8 +27,8 @@ from tests_tabsdata.testing_resources.test_output_azure.example import (
 
 import tabsdata as td
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.main import EXECUTION_CONTEXT_FILE_NAME
-from tabsdata.tabsserver.main import do as tabsserver_main
+from tabsdata.tabsserver.invoker import EXECUTION_CONTEXT_FILE_NAME
+from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
 
 logger = logging.getLogger(__name__)

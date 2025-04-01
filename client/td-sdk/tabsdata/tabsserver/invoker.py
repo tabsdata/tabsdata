@@ -34,7 +34,7 @@ EXECUTION_CONTEXT_FILE_NAME = "request.yaml"
 _ = execute_function_from_bundle_path
 
 
-def do(
+def invoke(
     request_folder: str | Path,
     response_folder: str,
     output_folder: str,
@@ -187,7 +187,7 @@ def main():
     )
 
     args = parser.parse_args()
-    environment_created, result = do(
+    environment_created, result = invoke(
         request_folder=args.request_folder,
         response_folder=args.response_folder,
         current_instance=args.current_instance,

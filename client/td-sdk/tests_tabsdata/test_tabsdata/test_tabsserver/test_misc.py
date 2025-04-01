@@ -44,10 +44,10 @@ from tests_tabsdata.testing_resources.test_relative_import.example import (
 )
 
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.main import (
+from tabsdata.tabsserver.invoker import (
     EXECUTION_CONTEXT_FILE_NAME,
 )
-from tabsdata.tabsserver.main import do as tabsserver_main
+from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.tabsserver.utils import UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
 from tabsdata.utils.bundle_utils import (
     PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
