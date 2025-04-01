@@ -1,0 +1,67 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Polars Module Supporting TableFrame Features"
+name = "ty-tableframe"
+
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+readme = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+
+[lib]
+name = "ty_tableframe"
+crate-type = ["cdylib"]
+
+[package.metadata.maturin]
+name = "tableframe"
+
+[features]
+
+td-test = ["dummy"]
+dummy = []
+
+extension-module = ["pyo3/extension-module"]
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "strum_macros", "td-build", "td-common", "td-error", "ta-tableframe", "te-tableframe", "thiserror", "toml", "polars-arrow"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+[dependencies]
+
+# Internal dependencies
+
+## Libraries
+
+td-build = { workspace = true }
+td-common = { workspace = true }
+td-error = { workspace = true }
+te-tableframe = { workspace = true }
+ta-tableframe = { workspace = true }
+
+## Macros
+
+# External dependencies
+
+polars = { workspace = true, default-features = false }
+polars-arrow = { workspace = true, default-features = false }
+pyo3 = { workspace = true, features = ["abi3-py311", "macros", "multiple-pymethods", "anyhow", "chrono", "chrono-tz", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"] }
+pyo3-polars = { workspace = true, features = ["derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }
+
+[patch.crates-io]
+zip = { git = "https://github.com/zip-rs/zip2", tag = "v2.4.2" }

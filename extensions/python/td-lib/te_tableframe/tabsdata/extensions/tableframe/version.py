@@ -4,8 +4,11 @@
 
 import importlib.metadata
 
-from tabsdata.utils.constants import TABSDATA_MODULE_NAME
+from tabsdata.utils.constants import NO_VERSION, TABSDATA_MODULE_NAME
 
 
 def version() -> str:
-    return importlib.metadata.version(TABSDATA_MODULE_NAME)
+    try:
+        return importlib.metadata.version(TABSDATA_MODULE_NAME)
+    except importlib.metadata.PackageNotFoundError:
+        return NO_VERSION

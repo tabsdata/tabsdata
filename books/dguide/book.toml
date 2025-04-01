@@ -10,3 +10,6 @@ src = "src"
 title = "Tabsdata Developer Guide"
 
 [preprocessor.image-size]
+
+[output.html]
+additional-css = ["./theme/custom.css"]

@@ -1,0 +1,152 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Rust Polars Expansions"
+name = "ty-expansions"
+edition = "2021"
+build = "build.rs"
+
+[workspace.package]
+authors = [
+    "Aleix Lascorz Guiu   (tabsleix)   <aleix@tabsdata.com>",
+    "Alejandro Abdelnur   (tucu0)      <tucu@tabsdata.com>",
+    "Arvind Prabhakar     (aptabs)     <arvind@tabsdata.com>",
+    "David Sánchez Frías  (tabsdavid)  <david@tabsdata.com>",
+    "Dimas Cabré i Chacón (aoinokimi)  <dragon@tabsdata.com>",
+    "Joaquín Bo Díaz      (joaquin041) <joaquin@tabsdata.com>"
+]
+edition = "2021"
+homepage = "https://www.tabsdata.com"
+license = ""
+publish = false
+readme = "../../README.md"
+repository = "https://github.com/tabsdata/tabsdata"
+rust-version = "1.85.0"
+version = "0.9.3"
+
+[workspace]
+members = [
+    "./modules/ty-tableframe",
+]
+
+[[bin]]
+name = "auto"
+path = "auto.rs"
+
+[profile.dev]
+codegen-units = 4096
+debug = true
+incremental = true
+lto = "off"
+opt-level = 0
+panic = "unwind"
+strip = "none"
+
+[profile.integration]
+inherits = "release"
+codegen-units = 16
+incremental = true
+lto = false
+opt-level = 0
+
+[profile.assembly]
+inherits = "release"
+codegen-units = 1
+debug = 0
+incremental = false
+lto = "fat"
+opt-level = "z"
+panic = "abort"
+strip = "debuginfo"
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "toml"]
+
+[features]
+
+# This feature enbles enterprise functionalities not available in the standard implementation.
+# It should be normally used only for cross-crates tests.
+enterprise = []
+
+td-test = ["dummy"]
+dummy = []
+
+# Internal dependencies
+
+## Libraries
+
+[workspace.dependencies.td-build]
+path = "../../devutils/automation/tasks/cargo/td-build"
+
+[workspace.dependencies.td-common]
+path = "../../server/libraries/td-common"
+
+[workspace.dependencies.td-error]
+path = "../../server/libraries/td-error"
+
+[workspace.dependencies.ta-tableframe]
+path = "../../server/libraries/ta-tableframe"
+
+[workspace.dependencies.te-tableframe]
+path = "../../extensions/rust/te-tableframe"
+
+# External dependencies
+
+[workspace.dependencies.polars]
+version = "0.46.0"
+default-features = false
+
+[workspace.dependencies.polars-arrow]
+version = "0.46.0"
+default-features = false
+
+# Note: Each pyo3-polars is tightly tied to an specific version of pyo3.
+# Pay attention to these any time you intend to upgrade pyo3 dependency version.
+
+[workspace.dependencies.openssl]
+version = "0.10.71"
+features = ["vendored"]
+
+[workspace.dependencies.pyo3]
+version = "0.23.5"
+features = ["abi3-py311", "macros", "multiple-pymethods", "anyhow", "chrono", "chrono-tz", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"]
+
+[workspace.dependencies.pyo3-polars]
+version = "0.20.0"
+features = ["derive"]
+
+[workspace.dependencies.serde]
+version = "1.0.219"
+features = ["derive"]
+
+[workspace.dependencies.toml]
+version = "0.8.20"
+
+[build-dependencies]
+
+# Internal dependencies
+
+td-build = { workspace = true }
+
+# External dependencies
+
+toml = { workspace = true }
+
+[dependencies]
+
+# Internal dependencies
+
+## Libraries
+
+te-tableframe = { workspace = true }
+ta-tableframe = { workspace = true }
+
+# External dependencies
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }
+
+[patch.crates-io]
+zip = { git = "https://github.com/zip-rs/zip2", tag = "v2.4.2" }

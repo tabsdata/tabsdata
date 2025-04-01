@@ -1,8 +1,7 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
-use std::env;
 use ta_tableframe::api::Extension;
 use te_tableframe::engine::TableFrameExtension;
 

@@ -1,0 +1,50 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[build-system]
+requires = ["psutil>=7.0", "setuptools==78.0.2", "maturin>=1.0,<2.0", "polars>=1.25.2"]
+build-backend = "maturin"
+
+[project]
+name = "ty-tableframe"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "tabsdata.expansions.tableframe._td"
+
+[tool.black]
+line-length = 88
+preview = true
+enable-unstable-feature = ["string_processing"]
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_also = [
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.isort]
+profile = "black"
+known_first_party = [
+    "tabsdata",
+    "tabsdata_mongodb",
+    "tabsdata_salesforce",
+    "tests_tabsdata",
+    "tests_tabsdata_mongodb",
+    "tests_tabsdata_salesforce",
+    "tests_ta_features",
+    "tests_ta_tableframe",
+    "tests_te_tableframe",
+]

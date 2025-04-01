@@ -1,0 +1,14 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[build]
+
+pre-build = [
+    "echo Showing maturin docker container current folder contents...",
+    "echo _____",
+    "pwd",
+    "echo _____",
+    "ls -lah .",
+    "echo _____",
+]

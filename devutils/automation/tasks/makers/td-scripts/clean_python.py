@@ -73,6 +73,17 @@ def clean_py(project_folder):
         "local_development_artifacts",
         "variant/assets/manifest/THIRD-PARTY",
         "client/td-sdk/tabsdata/assets",
+        "books/dguide/book",
+        "connectors/python/tabsdata_mongodb/tabsdata_mongodb/assets/manifest/BANNER",
+        "connectors/python/tabsdata_mongodb/tabsdata_mongodb/assets/manifest/LICENSE",
+        (
+            "connectors/python/tabsdata_salesforce/tabsdata_salesforce/"
+            "assets/manifest/BANNER"
+        ),
+        (
+            "connectors/python/tabsdata_salesforce/tabsdata_salesforce/"
+            "assets/manifest/LICENSE"
+        ),
     ]
 
     exclusion_patterns = [

@@ -3,28 +3,43 @@
 #
 
 [tasks.build_py]
+category = "02 - Build"
 description = "Task 'build' for Python projects"
 run_task = [
     { name = [
-        "build_py_tabsdata",
-        "build_py_td_features",
+        "build_py_ta_features",
         "build_py_ta_tableframe",
         "build_py_te_tableframe",
-        "build_py_td-sdk"
+        "build_py_td-sdk",
+        "build_py_tabsdata_salesforce",
+        "build_py_tabsdata_mongodb",
     ] }
 ]
 
 [tasks.build_py_tabsdata]
+category = "02 - Build"
 private = true
 
-[tasks.build_py_td_features]
+[tasks.build_py_ta_features]
+category = "02 - Build"
 private = true
 
 [tasks.build_py_ta_tableframe]
+category = "02 - Build"
 private = true
 
 [tasks.build_py_te_tableframe]
+category = "02 - Build"
 private = true
 
 [tasks.build_py_td-sdk]
+category = "02 - Build"
+private = true
+
+[tasks.build_py_tabsdata_salesforce]
+category = "02 - Build"
+private = true
+
+[tasks.build_py_tabsdata_mongodb]
+category = "02 - Build"
 private = true

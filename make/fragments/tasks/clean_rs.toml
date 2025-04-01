@@ -3,38 +3,55 @@
 #
 
 [tasks.clean_rs]
+category = "01 - Clean"
 description = "Task 'clean' for Rust projects"
 run_task = [
     { name = [
         "clean_rs_macros",
         "clean_rs_modules",
+        "clean_rs_expansions",
         "clean_rs_all"
     ] }
 ]
 
 [tasks.clean_rs_macros]
+category = "01 - Clean"
 private = true
 script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_MACROS_CARGO_TOML}"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_MACROS_CARGO_TOML}
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
     ''']
 
 [tasks.clean_rs_modules]
+category = "01 - Clean"
 private = true
 script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_ROOT_CARGO_TOML}"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_ROOT_CARGO_TOML}
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_ROOT_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_ROOT_CARGO_TOML}
+    ''']
+
+[tasks.clean_rs_expansions]
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}
     ''']
 
 [tasks.clean_rs_all]
+category = "01 - Clean"
 private = true
 command = "python3"
 args = ["${CLEAN_PYTHON_PY}", "${PROJECT_ROOT_FOLDER}", "rs"]

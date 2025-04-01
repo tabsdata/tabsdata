@@ -1,0 +1,11 @@
+/*
+  * Copyright 2025 Tabs Data Inc.
+  */
+
+:root {
+    --content-max-width: 40%;
+}
+
+p {
+    text-align: justify;
+}

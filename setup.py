@@ -471,6 +471,17 @@ setup(
             ),
             include=["tabsdata.extensions.tableframe*"],
         ),
+        # tabsdata.expansions.tableframe
+        *find_packages(
+            where=os.path.join(
+                "expansions",
+                "polars",
+                "modules",
+                "ty-tableframe",
+                "python",
+            ),
+            include=["tabsdata.expansions.tableframe*"],
+        ),
     ],
     package_dir={
         "tabsdata": os.path.join(
@@ -505,6 +516,16 @@ setup(
             "extensions",
             "tableframe",
         ),
+        "tabsdata.expansions.tableframe": os.path.join(
+            "expansions",
+            "polars",
+            "modules",
+            "ty-tableframe",
+            "python",
+            "tabsdata",
+            "expansions",
+            "tableframe",
+        ),
     },
     package_data={
         "tabsdata": [
@@ -530,6 +551,11 @@ setup(
                 "tabsserver",
                 "function",
                 "*.yaml",
+            ),
+        ],
+        "tabsdata.expansions.tableframe": [
+            os.path.join(
+                "_td*",
             ),
         ],
     },

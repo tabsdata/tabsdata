@@ -42,6 +42,15 @@ members = [
 name = "auto"
 path = "auto.rs"
 
+[profile.dev]
+codegen-units = 4096
+debug = true
+incremental = true
+lto = "off"
+opt-level = 0
+panic = "unwind"
+strip = "none"
+
 [profile.integration]
 inherits = "release"
 codegen-units = 16
@@ -60,7 +69,7 @@ panic = "abort"
 strip = "debuginfo"
 
 [package.metadata.cargo-machete]
-ignored = ["ta-tableframe"]
+ignored = ["openssl", "toml", "ta-tableframe"]
 
 [features]
 
@@ -161,6 +170,9 @@ features = ["full"]
 [workspace.dependencies.tokio]
 version = "1.44.1"
 
+[workspace.dependencies.toml]
+version = "0.8.20"
+
 [workspace.dependencies.thiserror]
 version = "2.0.12"
 
@@ -176,6 +188,17 @@ version = "2.5.0"
 # Internal dependencies
 
 td-build = { workspace = true }
+
+# External dependencies
+
+toml = { workspace = true }
+
+[dependencies]
+
+# External dependencies
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }
 
 [patch.crates-io]
 zip = { git = "https://github.com/zip-rs/zip2", tag = "v2.4.2" }
