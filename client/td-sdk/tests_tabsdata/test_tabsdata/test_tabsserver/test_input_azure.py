@@ -69,6 +69,7 @@ def test_input_azure_csv(tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -112,6 +113,7 @@ def test_input_azure_log(tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -155,6 +157,7 @@ def test_input_azure_parquet(tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -201,6 +204,7 @@ def test_input_azure_ndjson(tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,

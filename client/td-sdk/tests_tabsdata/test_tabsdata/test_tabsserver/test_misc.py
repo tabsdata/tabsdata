@@ -87,6 +87,7 @@ def test_input_output_dataframe(tmp_path):
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -129,6 +130,7 @@ def test_multiple_inputs_multiple_outputs(tmp_path):
         mock_table_location=[output_file1, output_file2],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -183,6 +185,7 @@ def test_path_to_code(tmp_path):
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -238,6 +241,7 @@ def test_custom_requirements(tmp_path):
         mock_table_location=[output1_path, output2_path],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -304,6 +308,7 @@ def test_custom_requirements_no_package_version(tmp_path):
         mock_table_location=[output_file1, output_file2],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -365,6 +370,7 @@ def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     write_v1_yaml_file(input_yaml_file, context_archive)
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -390,6 +396,7 @@ def test_failed_execution_returns_error_code(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     write_v1_yaml_file(input_yaml_file, context_archive)
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -421,6 +428,7 @@ def test_custom_logs_folder(tmp_path):
         mock_table_location=[output_file1, output_file2],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -534,6 +542,7 @@ def test_sequential_registers_no_error(tmp_path):
         mock_table_location=[output_file1, output_file2],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -590,6 +599,7 @@ def test_custom_bin_folder(tmp_path):
     custom_bin_folder = os.path.join(tmp_path, "custom_bin_folder")
     os.mkdir(custom_bin_folder)
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -644,6 +654,7 @@ def test_relative_import(tmp_path):
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -682,6 +693,7 @@ def test_failing_file_in_folder(tmp_path):
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,

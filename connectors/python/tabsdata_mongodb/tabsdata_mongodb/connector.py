@@ -3,11 +3,9 @@
 #
 
 import datetime
-import glob
 import json
 import logging
 import os
-import re
 from timeit import default_timer as timer
 from typing import List, Literal
 from urllib.parse import quote_plus
@@ -16,6 +14,7 @@ import polars as pl
 
 from tabsdata.credentials import UserPasswordCredentials
 from tabsdata.io.plugin import DestinationPlugin
+from tabsdata.tabsserver.function.store_results_utils import _get_matching_files
 
 try:
     import pymongo
@@ -417,18 +416,3 @@ def _drop_collection(collection):
     # We need to delete the document we just inserted to ensure that the
     # collection is empty
     collection.delete_one({})
-
-
-def _get_matching_files(pattern):
-    # Construct the full pattern
-    # Use glob to get the list of matching files
-    matching_files = glob.glob(pattern)
-    ordered_files = sorted(matching_files, key=_extract_index)
-    logger.debug(f"Matching files: {ordered_files}")
-    return ordered_files
-
-
-# Sort the files to ensure that they are processed in the correct order
-def _extract_index(filename):
-    match = re.search(r"_(\d+)\.jsonl$", filename)
-    return int(match.group(1)) if match else float("inf")

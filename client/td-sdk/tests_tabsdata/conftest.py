@@ -15,6 +15,7 @@ import cx_Oracle
 import docker
 import hvac
 import mysql.connector
+import numpy as np
 import polars as pl
 import psycopg2
 import pytest
@@ -143,6 +144,20 @@ if not os.environ.get("TD_CLI_SHOW"):
     os.environ["TD_CLI_SHOW"] = "false"
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--performance-size",
+        help="Amount of records per table when running performance tests",
+        default=25000,
+        type=int,
+    )
+
+
+def pytest_generate_tests(metafunc):
+    if "size" in metafunc.fixturenames:
+        metafunc.parametrize("size", [metafunc.config.getoption("performance_size")])
+
+
 def read_json_and_clean(path):
     """Reads a json file and removes the td.id column. Also sorts it to make
     comparison more stable"""
@@ -151,7 +166,7 @@ def read_json_and_clean(path):
     return df
 
 
-def clean_polars_df(df):
+def clean_polars_df(df) -> pl.DataFrame:
     """Removes the td column. Also sorts it to make comparison more stable"""
     # TODO: change to quote
 
@@ -652,6 +667,18 @@ def create_docker_oracle_database():
             'CREATE TABLE output_oracle_driver_provided ("Duration" INT, '
             '"Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
         )
+        mycursor.execute(
+            'CREATE TABLE second_output_oracle_list ("Duration" INT, '
+            '"Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
+        )
+        mycursor.execute(
+            'CREATE TABLE output_oracle_transaction ("Duration" INT, '
+            '"Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
+        )
+        mycursor.execute(
+            'CREATE TABLE second_output_oracle_transaction ("Duration" INT, '
+            '"Pulse" INT, "Maxpulse" INT, "Calories" FLOAT)'
+        )
         mydb.commit()
         logger.info("Oracle container created successfully")
         return
@@ -921,3 +948,19 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
     #         tabsserver_connection.collection_delete(collection_name)
     #     except APIServerError as e:
     #         logger.error(f"Failed to delete collection: {e}")
+
+
+def get_lf(size: int, chunk_size=1000):
+    final_lf = None
+    for start in range(0, size, chunk_size):
+        end = min(start + chunk_size, size)
+        id_column = range(start, end)
+        lf = pl.LazyFrame(
+            {
+                "id": id_column,
+                "name": [f"name_{i}" for i in id_column],
+                "value": np.random.rand(end - start),
+            }
+        )
+        final_lf = pl.concat([final_lf, lf]) if final_lf is not None else lf
+    return final_lf

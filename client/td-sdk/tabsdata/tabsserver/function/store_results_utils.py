@@ -4,8 +4,10 @@
 
 
 import datetime
+import glob
 import logging
 import os
+import re
 import subprocess
 import time
 from typing import List
@@ -14,7 +16,9 @@ import cloudpickle
 import polars as pl
 
 # from pyiceberg.catalog import load_catalog
+import sqlalchemy
 from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 import tabsdata as td
 import tabsdata.utils.tableframe._helpers as td_helpers
@@ -31,6 +35,7 @@ from tabsdata.io.output import (  # Catalog,
     build_output,
 )
 from tabsdata.io.plugin import DestinationPlugin
+from tabsdata.tabsserver.function.logging_utils import pad_string
 
 # from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.utils.bundle_utils import PLUGINS_FOLDER
@@ -68,6 +73,7 @@ from .yaml_parsing import (
 )
 
 logger = logging.getLogger(__name__)
+logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
 
 FORMAT_TO_POLARS_WRITE_FUNCTION = {
     CSV_EXTENSION: pl.LazyFrame.sink_csv,
@@ -133,6 +139,7 @@ def store_results(
     execution_context: InputYaml,
     output_folder: str,
 ) -> List[str]:
+    logger.info(pad_string("[Storing results]"))
     logger.info(
         f"Storing results in destination '{output_configuration}', "
         f"with working_dir '{working_dir}'"
@@ -185,7 +192,7 @@ def store_results(
                 PostgresDestination,
             ),
         ):
-            store_results_in_sql(results, destination)
+            store_results_in_sql(results, destination, output_folder)
         elif isinstance(destination, TableOutput):
             modified_tables = store_results_in_table(
                 results, destination, execution_context
@@ -320,6 +327,7 @@ def store_results_in_sql(
     destination: (
         MariaDBDestination | MySQLDestination | OracleDestination | PostgresDestination
     ),
+    output_folder: str,
 ):
     logger.info(f"Storing results in SQL destination '{destination}'")
     if isinstance(
@@ -332,6 +340,38 @@ def store_results_in_sql(
             uri = sql_utils.add_mariadb_collation(uri)
         destination_table_configuration = destination.destination_table
         destination_if_table_exists = destination.if_table_exists
+        engine = create_engine(uri)
+        try:
+            create_session_and_store(
+                engine,
+                results,
+                destination_table_configuration,
+                destination_if_table_exists,
+                output_folder,
+            )
+            logger.info("Results stored in SQL destination")
+        except Exception:
+            logger.error("Error storing results in SQL destination")
+            raise
+        finally:
+            engine.dispose()
+    else:
+        logger.error(f"Storing results in destination '{destination}' not supported.")
+        raise TypeError(
+            f"Storing results in destination '{destination}' not supported."
+        )
+
+
+def create_session_and_store(
+    engine: sqlalchemy.engine.base.Engine,
+    results: td.TableFrame | List[td.TableFrame],
+    destination_table_configuration: str | List[str],
+    destination_if_table_exists: str,
+    output_folder: str,
+):
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    with session.begin():
         if isinstance(destination_table_configuration, str):
             if isinstance(results, list):
                 logger.error(
@@ -345,29 +385,34 @@ def store_results_in_sql(
                 )
             store_result_in_sql_table(
                 results,
-                uri,
+                session,
                 destination_table_configuration,
                 destination_if_table_exists,
+                output_folder,
             )
         elif isinstance(destination_table_configuration, list):
             if isinstance(results, td.TableFrame):
                 results = [results]
             if len(results) != len(destination_table_configuration):
                 logger.error(
-                    "The number of destination tables does not match the number "
-                    "of results."
+                    "The number of destination tables does not match the number"
+                    " of results."
                 )
                 logger.error(f"Destination tables: '{destination_table_configuration}'")
                 logger.error(f"Number or results: {len(results)}")
                 raise TypeError(
-                    "The number of destination tables does not match the number "
-                    "of results."
+                    "The number of destination tables does not match the number"
+                    " of results."
                 )
             for result, destination_table in zip(
                 results, destination_table_configuration
             ):
                 store_result_in_sql_table(
-                    result, uri, destination_table, destination_if_table_exists
+                    result,
+                    session,
+                    destination_table,
+                    destination_if_table_exists,
+                    output_folder,
                 )
         else:
             logger.error(
@@ -378,12 +423,6 @@ def store_results_in_sql(
                 "destination_table must be a string or a list of strings, "
                 f"got {type(destination_table_configuration)} instead"
             )
-        logger.info("Results stored in SQL destination")
-    else:
-        logger.error(f"Storing results in destination '{destination}' not supported.")
-        raise TypeError(
-            f"Storing results in destination '{destination}' not supported."
-        )
 
 
 def store_results_in_files(
@@ -537,7 +576,7 @@ INPUT_FORMAT_CLASS_TO_EXTENSION = {
 #         logger.debug(f"Replacing table '{destination_table}'")
 #         table.overwrite(pyarrow_empty_df)
 #     logger.debug(f"Adding file '{path_to_table_file}' to table '{destination_table}'")
-#     table.add_files([path_to_table_file], check_duplicate_files=False)
+#     table.add_files([path_to_table_file], check_duplicate_files=True)
 #     logger.debug(f"File '{path_to_table_file}' added to table '{destination_table}'")
 
 
@@ -611,26 +650,48 @@ def store_result_using_transporter(
 
 
 def store_result_in_sql_table(
-    result: td.TableFrame | None, uri: str, destination_table: str, if_table_exists: str
+    result: td.TableFrame | None,
+    session: sqlalchemy.orm.Session,
+    destination_table: str,
+    if_table_exists: str,
+    output_folder: str,
 ):
     logger.info(f"Storing result in SQL table: {destination_table}")
     if result is None:
         logger.info("Result is None. No data stored.")
         return
-    engine = create_engine(uri, echo=True)
     # Note: this warning is due to the fact that if_table_exists must be one of
     # the following: "fail", "replace", "append". This is enforced by the
     # Output class, so we can safely ignore this warning.
     logger.debug(f"Using strategy in case table exists: {if_table_exists}")
     result: pl.LazyFrame = remove_system_columns_and_convert(result)
-    try:
-        result.collect().write_database(
-            table_name=destination_table,
-            connection=engine,
-            if_table_exists=if_table_exists,
-        )
-    finally:
-        engine.dispose()
+    current_timestamp = str(round(time.time() * 1000))
+    intermediate_file = f"intermediate_{destination_table}_{current_timestamp}.csv"
+    intermediate_file_path = os.path.join(output_folder, intermediate_file)
+    result.sink_csv(
+        intermediate_file_path,
+        maintain_order=True,
+    )
+    # Note: Currently polars ignores batch_size provided in read_csv_batched
+    #    so we leave it with the default value.
+    #    See: https://github.com/pola-rs/polars/issues/19978
+    reader = pl.read_csv_batched(intermediate_file_path)
+    cores = os.cpu_count()
+    logger.debug(f"Using {cores} cores to read the file")
+    # Note: next_batches recommends using a number of batches equal or
+    # greater to the amount of threads in the system. We use
+    # os.cpu_count() to get the number cores as an approximation.
+    while batches := reader.next_batches(2 * cores):
+        for batch in batches:
+            logger.debug(
+                f"Writing batch of shape {batch.shape} to table {destination_table}"
+            )
+            batch.write_database(
+                table_name=destination_table,
+                connection=session,
+                if_table_exists=if_table_exists,
+            )
+    logger.info(f"Result stored in SQL table: {destination_table}")
 
 
 def store_result_in_file(
@@ -695,3 +756,18 @@ def remove_system_columns_and_convert(result: td.TableFrame) -> pl.LazyFrame:
             f" '{td_helpers.SYSTEM_COLUMNS}'. This indicates tampering in the data."
             " Ensure you are not modifying system columns in your data."
         ) from e
+
+
+def _get_matching_files(pattern):
+    # Construct the full pattern
+    # Use glob to get the list of matching files
+    matching_files = glob.glob(pattern)
+    ordered_files = sorted(matching_files, key=_extract_index)
+    logger.debug(f"Matching files: {ordered_files}")
+    return ordered_files
+
+
+# Sort the files to ensure that they are processed in the correct order
+def _extract_index(filename):
+    match = re.search(r"_(\d+)\.*", filename)
+    return int(match.group(1)) if match else float("inf")

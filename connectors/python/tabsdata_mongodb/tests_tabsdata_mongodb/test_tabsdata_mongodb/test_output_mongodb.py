@@ -6,7 +6,6 @@ import inspect
 import logging
 import os
 
-import numpy as np
 import polars as pl
 import pymongo
 import pytest
@@ -14,6 +13,7 @@ from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    get_lf,
     read_json_and_clean,
     write_v1_yaml_file,
 )
@@ -121,43 +121,16 @@ def test_invalid_class_types():
 
 
 @pytest.mark.mongodb
-def test_extract_index():
-    from tabsdata_mongodb.connector import _extract_index
-
-    assert _extract_index("example_file_0.jsonl") == 0
-    assert _extract_index("example_file_1.jsonl") == 1
-    assert _extract_index("example_file_things_and_numbers_4732.jsonl") == 4732
-
-
-@pytest.mark.mongodb
-def test_get_matching_files(tmp_path):
-    from tabsdata_mongodb.connector import _get_matching_files
-
-    # Create some files
-    files_generated = []
-    for index in range(2000):
-        file = tmp_path / f"example_file_{index}.jsonl"
-        file.write_text("hi")
-        files_generated.append(str(file))
-    # Create some files that should not be matched
-    for index in range(2000):
-        file = tmp_path / f"example_file_{index}.csv"
-        file.write_text("hi")
-    assert (
-        _get_matching_files(os.path.join(tmp_path, "example_file_*.jsonl"))
-        == files_generated
-    )
-
-
-@pytest.mark.mongodb
-@pytest.mark.slow
+@pytest.mark.performance
 @pytest.mark.requires_internet
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "maintain_order,update_existing",
     [(True, True), (True, False), (False, True), (False, False)],
 )
-def test_trigger_output(tmp_path, testing_mongodb, maintain_order, update_existing):
-    size = 2500000
+def test_trigger_output(
+    tmp_path, testing_mongodb, maintain_order, update_existing, size
+):
     lf = get_lf(size)
     database_name = f"test_trigger_output_{maintain_order}_{update_existing}_database"
     collection_name = (
@@ -179,16 +152,16 @@ def test_trigger_output(tmp_path, testing_mongodb, maintain_order, update_existi
 
 
 @pytest.mark.mongodb
-@pytest.mark.slow
+@pytest.mark.performance
 @pytest.mark.requires_internet
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "maintain_order,update_existing",
     [(True, True), (True, False), (False, True), (False, False)],
 )
 def test_trigger_output_with_replica_set(
-    tmp_path, testing_mongodb_with_replica_set, maintain_order, update_existing
+    tmp_path, testing_mongodb_with_replica_set, maintain_order, update_existing, size
 ):
-    size = 2500000
     lf = get_lf(size)
     database_name = (
         f"test_trigger_output_with_replica_set_{maintain_order}"
@@ -622,18 +595,6 @@ def test_docs_per_trx(tmp_path, testing_mongodb):
     assert len(_get_matching_files(str(tmp_path / "*.jsonl"))) == 4
 
     assert collection.count_documents({}) == 200
-
-
-def get_lf(size: int):
-    id_column = np.random.choice(range(1, size * 10), size=size, replace=False)
-    lf = pl.LazyFrame(
-        {
-            "id": id_column,
-            "name": [f"name_{i}" for i in id_column],
-            "value": np.random.rand(size),
-        }
-    )
-    return lf
 
 
 @pytest.mark.requires_internet

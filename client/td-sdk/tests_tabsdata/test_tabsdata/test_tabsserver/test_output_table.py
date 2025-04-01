@@ -67,6 +67,7 @@ def test_output_table_multiple_tables(tmp_path):
         mock_table_location=[output1_path, output2_path],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -115,6 +116,7 @@ def test_output_table(tmp_path):
         mock_table_location=[output_path],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -158,6 +160,7 @@ def test_output_table_multiple_tables_with_none(tmp_path):
         mock_table_location=[output1_path, output2_path],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -208,6 +211,7 @@ def test_output_table_with_none(tmp_path):
         mock_table_location=[output_path],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,

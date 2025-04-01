@@ -21,6 +21,7 @@ from tests_tabsdata.conftest import (
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
+    get_lf,
     read_json_and_clean,
     write_v1_yaml_file,
 )
@@ -32,6 +33,9 @@ from tests_tabsdata.testing_resources.test_output_mariadb_list.example import (
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_list_single_element.example import (
     output_mariadb_list_single_element,
+)
+from tests_tabsdata.testing_resources.test_output_mariadb_transaction.example import (
+    output_mariadb_transaction,
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_with_charset.example import (
     output_mariadb_with_charset,
@@ -81,6 +85,7 @@ def test_output_mariadb_list(tmp_path, testing_mariadb):
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -134,6 +139,7 @@ def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -180,6 +186,7 @@ def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -226,6 +233,7 @@ def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -272,6 +280,7 @@ def test_output_mariadb_list_single_element(tmp_path, testing_mariadb):
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -293,3 +302,49 @@ def test_output_mariadb_list_single_element(tmp_path, testing_mariadb):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
+
+
+@pytest.mark.mariadb
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_mariadb_transaction(tmp_path, testing_mariadb):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        output_mariadb_transaction,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mariadb_transaction",
+        "mock_table.parquet",
+    )
+    write_v1_yaml_file(
+        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result != 0
+    output = pl.read_database_uri(
+        uri=MARIADB_URI,
+        query="SELECT * FROM output_mariadb_transaction",
+    )
+    output = clean_polars_df(output)
+    assert output.is_empty()
+
+    with pytest.raises(Exception):
+        pl.read_database_uri(
+            uri=MARIADB_URI,
+            query="SELECT * FROM second_output_mariadb_transaction",
+        )

@@ -75,7 +75,7 @@ def test_output_azure_parquet(tmp_path, azure_client):
         [mock_parquet_table],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     try:
         environment_name, result = tabsserver_main(
             tmp_path,
@@ -162,6 +162,7 @@ def test_output_azure_csv(tmp_path, azure_client):
 
     try:
         tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+        os.makedirs(tabsserver_output_folder, exist_ok=True)
         environment_name, result = tabsserver_main(
             tmp_path,
             response_folder,
@@ -243,7 +244,7 @@ def test_output_azure_ndjson(tmp_path, azure_client):
         [mock_parquet_table],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     try:
         environment_name, result = tabsserver_main(
             tmp_path,

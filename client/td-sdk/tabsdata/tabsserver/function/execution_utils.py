@@ -41,6 +41,7 @@ from tabsdata.io.input import (
 )
 from tabsdata.io.plugin import SourcePlugin
 from tabsdata.tableuri import build_table_uri_object
+from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.utils.bundle_utils import (
     CODE_FOLDER,
     CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY,
@@ -91,12 +92,13 @@ def execute_function_from_config(
 def execute_function_with_config(
     config: dict, met: Callable, working_dir: str, execution_context: InputYaml
 ):
-    logger.info("Obtaining function parameters")
+    logger.info(pad_string("[Obtaining function parameters]"))
     importer_plugin, input_config, parameters = obtain_met_parameters(
         config, execution_context, working_dir
     )
     logger.info("Function parameters obtained")
-    logger.info("Executing function provided by the user")
+    logger.info(pad_string("[Executing function]"))
+    logger.info("Starting execution of function provided by the user")
     result = met(*parameters)
     logger.info("Finished executing function provided by the user")
     if INITIAL_VALUES.returns_values:

@@ -24,6 +24,8 @@ from tests_tabsdata.conftest import (
     DB_USER,
     MAXIMUM_RETRY_COUNT,
     clean_python_virtual_environments,
+    pytest_addoption,
+    pytest_generate_tests,
     remove_docker_containers,
 )
 

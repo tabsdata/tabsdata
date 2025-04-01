@@ -7,6 +7,7 @@ import logging
 import os
 import traceback
 
+from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.utils.bundle_utils import CONFIG_OUTPUT_KEY
 
 from . import (
@@ -29,6 +30,7 @@ def execute_bundled_function(
     response_folder: str,
     output_folder: str,
 ):
+    create_outwards_folders(response_folder, output_folder)
     configuration = configuration_utils.load_configuration(bundle_folder)
     execution_context = yaml_parsing.parse_request_yaml(execution_context_file)
     INITIAL_VALUES.load_current_initial_values(execution_context)
@@ -51,6 +53,11 @@ def execute_bundled_function(
         modified_tables, response_folder, execution_context, new_initial_values
     )
     return results
+
+
+def create_outwards_folders(response_folder: str, output_folder: str):
+    os.makedirs(response_folder, exist_ok=True)
+    os.makedirs(output_folder, exist_ok=True)
 
 
 if __name__ == "__main__":
@@ -99,8 +106,10 @@ if __name__ == "__main__":
             response_folder=args.response_folder,
             output_folder=args.output_folder,
         )
+        logger.info(pad_string("[Exiting function execution]"))
         logger.info("Function executed successfully. Exiting.")
     except Exception as e:
+        logger.info(pad_string("[Exiting function execution]"))
         logger.error(f"Error executing the function: {e}")
         logger.error(traceback.format_exc())
         raise e

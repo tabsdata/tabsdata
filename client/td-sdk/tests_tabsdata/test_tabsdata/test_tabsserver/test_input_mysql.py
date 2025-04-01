@@ -76,6 +76,7 @@ def test_input_sql(testing_mysql, tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -134,6 +135,7 @@ def test_input_sql_initial_values(testing_mysql, tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -204,6 +206,7 @@ def test_input_sql_initial_values_stored_number_0(testing_mysql, tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -274,6 +277,7 @@ def test_input_sql_initial_values_stored_number_2(testing_mysql, tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -336,6 +340,7 @@ def test_input_sql_modified_params(testing_mysql, tmp_path):
         mock_table_location=[output_file1, output_file2],
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,

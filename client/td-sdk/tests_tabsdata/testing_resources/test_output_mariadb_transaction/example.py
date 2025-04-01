@@ -1,9 +1,10 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
 import os
 
+import polars as pl
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
@@ -26,22 +27,25 @@ DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 # contains the expected output of applying the function to the input data.
 @td.subscriber(
     "collection/table",
-    td.OracleDestination(
-        "oracle://127.0.0.1:1521/FREE",
-        ["output_oracle_list", "second_output_oracle_list"],
-        credentials=td.UserPasswordCredentials("system", "p@ssw0rd#"),
-        if_table_exists="append",
+    td.MariaDBDestination(
+        "mariadb://127.0.0.1:3307/testing",
+        ["output_mariadb_transaction", "second_output_mariadb_transaction"],
+        credentials=td.UserPasswordCredentials("@dmIn", "p@ssw0rd#"),
     ),
 )
-def output_oracle_list(df: td.TableFrame):
+def output_mariadb_transaction(df: td.TableFrame):
     new_df = df.drop_nulls()
-    return new_df, new_df
+    # Storing the next dataframe will fail. That is intended, as the aim of this test is
+    # to verify transactional behavior, specifically that the first dataframe is NOT
+    # stored in the database since there is a transaction rollback.
+    incorrect_df_to_store = td.TableFrame({"a": [[1], [2], [3]], "b": [4, 5, 6]})
+    return new_df, incorrect_df_to_store
 
 
 if __name__ == "__main__":
     os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
     create_bundle_archive(
-        output_oracle_list,
+        output_mariadb_transaction,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=DEFAULT_SAVE_LOCATION,
     )

@@ -6,6 +6,8 @@ import logging
 
 import polars as pl
 
+from tabsdata.tabsserver.function.logging_utils import pad_string
+
 from .global_utils import convert_uri_to_path
 from .yaml_parsing import InputYaml
 
@@ -112,6 +114,7 @@ def store_initial_values(execution_context: InputYaml) -> bool:
     Returns:
         True if the initial values were stored successfully, False otherwise.
     """
+    logger.info(pad_string("[Storing execution information]"))
     logger.info(f"Storing initial values {INITIAL_VALUES}")
     if not INITIAL_VALUES.new_initial_values:
         logger.warning("No initial values to store")

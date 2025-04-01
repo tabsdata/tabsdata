@@ -6,12 +6,14 @@ import json
 import logging
 import os
 
+from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.utils.bundle_utils import CONFIG_FILE_NAME
 
 logger = logging.getLogger(__name__)
 
 
 def load_configuration(bundle_folder: str | bytes) -> dict:
+    logger.info(pad_string("[Setting function execution environment]"))
     logger.info(f"Loading the configuration from the bundle folder '{bundle_folder}'")
     configuration_file = os.path.join(bundle_folder, CONFIG_FILE_NAME)
     with open(configuration_file) as f:

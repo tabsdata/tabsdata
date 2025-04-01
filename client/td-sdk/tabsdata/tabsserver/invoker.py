@@ -3,10 +3,12 @@
 #
 
 import argparse
+import copy
 import logging
 import os
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import tabsdata
@@ -32,6 +34,19 @@ time_block = TimeBlock()
 
 EXECUTION_CONTEXT_FILE_NAME = "request.yaml"
 _ = execute_function_from_bundle_path
+
+
+@contextmanager
+def clear_environment():
+    original_sys_path = copy.deepcopy(sys.path)
+    original_env = copy.deepcopy(os.environ)
+    os.environ["PYTHONPATH"] = ""
+    sys.path = []
+    try:
+        yield
+    finally:
+        sys.path = original_sys_path
+        os.environ = original_env
 
 
 def invoke(
@@ -101,13 +116,13 @@ def invoke(
     logger.info(
         "Executing the bundled function with command: " + " ".join(command_to_execute)
     )
-
-    with time_block:
-        result = subprocess.run(command_to_execute)
-    logger.info(
-        f"Result of executing the bundled function: {result}. Time taken:"
-        f" {time_block.time_taken():.2f}s"
-    )
+    with clear_environment():
+        with time_block:
+            result = subprocess.run(command_to_execute, env=os.environ)
+        logger.info(
+            f"Result of executing the bundled function: {result}. Time taken:"
+            f" {time_block.time_taken():.2f}s"
+        )
     return python_environment, result.returncode
 
 

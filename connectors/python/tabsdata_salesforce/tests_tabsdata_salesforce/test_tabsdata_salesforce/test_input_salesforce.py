@@ -64,6 +64,7 @@ def test_input_salesforce(tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -81,8 +82,6 @@ def test_input_salesforce(tmp_path):
         "test_input_salesforce",
         "expected_result.json",
     )
-    print(expected_output_file)
-    print("-" * 200)
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
     assert not os.path.isfile(path_to_output_initial_values)
@@ -113,6 +112,7 @@ def test_input_salesforce_initial_values(tmp_path):
         output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,

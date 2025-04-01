@@ -63,6 +63,7 @@ def test_output_plugin(tmp_path):
     )
     write_v1_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -121,6 +122,7 @@ def test_output_plugin_multiple_outputs(tmp_path):
     )
     write_v1_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -180,6 +182,7 @@ def test_output_plugin_multiple_outputs_with_none(tmp_path):
     )
     write_v1_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
@@ -209,6 +212,7 @@ def test_output_plugin_with_none(tmp_path):
     )
     write_v1_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
         tmp_path,
         response_folder,
