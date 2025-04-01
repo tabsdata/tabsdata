@@ -10,8 +10,17 @@ use crate::types::parse::{
 use crate::types::table::TableVersionDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::trigger::TriggerVersionDBWithNames;
-use td_error::TdError;
 use constcat::concat;
+use td_error::TdError;
+
+#[td_type::typed(string)]
+pub struct AccessToken;
+
+#[td_type::typed(i64)]
+pub struct AccessTokenExpiration;
+
+#[td_type::typed(id)]
+pub struct AccessTokenId;
 
 #[td_type::typed(timestamp)]
 pub struct AtTime;
@@ -121,8 +130,22 @@ pub struct FunctionVersionId;
 #[td_type::typed(id_name(id = FunctionVersionId, name = FunctionName))]
 pub struct FunctionVersionIdName;
 
+#[td_type::typed(string(regex = GRANT_TYPE_REGEX))]
+pub struct GrantType;
+
+const GRANT_TYPE_REGEX: &'static str = "^refresh_token$";
+
+#[td_type::typed(string)]
+pub struct NewPassword;
+
+#[td_type::typed(string)]
+pub struct OldPassword;
+
 #[td_type::typed(string(min_len = 1, max_len = 1024))]
 pub struct Partition;
+
+#[td_type::typed(string)]
+pub struct Password;
 
 #[td_type::typed(id)]
 pub struct PermissionId;
@@ -224,6 +247,12 @@ impl PermissionType {
 #[td_type::typed(timestamp)]
 pub struct PublishedOn;
 
+#[td_type::typed(string)]
+pub struct RefreshToken;
+
+#[td_type::typed(id)]
+pub struct RefreshTokenId;
+
 #[td_type::typed(id)]
 pub struct RoleId;
 
@@ -232,6 +261,44 @@ pub struct RoleName;
 
 #[td_type::typed(id_name(id = RoleId, name = RoleName))]
 pub struct RoleIdName;
+
+#[td_type::typed(string(regex = SESSION_INVALIDATION_REASON_REGEX))]
+pub struct SessionStatus;
+
+const SESSION_INVALIDATION_REASON_REGEX: &'static str = constcat::concat!(
+    "^(",
+    SessionStatus::ACTIVE,
+    "|",
+    SessionStatus::PASSW_RESET,
+    "|",
+    SessionStatus::INVALID_ROLE_CHANGE,
+    "|",
+    SessionStatus::INVALID_LOGOUT,
+    ")$"
+);
+
+impl SessionStatus {
+    pub const ACTIVE: &'static str = "a";
+    pub const PASSW_RESET: &'static str = "p";
+    pub const INVALID_ROLE_CHANGE: &'static str = "ir";
+    pub const INVALID_LOGOUT: &'static str = "il";
+
+    pub fn active() -> Self {
+        Self(Self::ACTIVE.to_string())
+    }
+
+    pub fn password_reset() -> Self {
+        Self(Self::PASSW_RESET.to_string())
+    }
+
+    pub fn invalid_role_change() -> Self {
+        Self(Self::INVALID_ROLE_CHANGE.to_string())
+    }
+
+    pub fn invalid_logout() -> Self {
+        Self(Self::INVALID_LOGOUT.to_string())
+    }
+}
 
 #[td_type::typed(string(min_len = 0, max_len = 4096))]
 pub struct Snippet;
@@ -361,6 +428,9 @@ pub struct TableVersionId;
 
 #[td_type::typed(composed(inner = Versions))]
 pub struct TableVersions;
+
+#[td_type::typed(string)]
+pub struct TokenType;
 
 #[td_type::typed(id)]
 pub struct TransactionId;

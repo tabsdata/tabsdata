@@ -158,14 +158,7 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
                 )
             })
             .for_each(|(tag, path, schema)| {
-                if let Some(duplicate) = has_duplicates_idents(&found_paths, &path) {
-                    panic!(
-                        "Duplicate path found: {}",
-                        duplicate.segments.last().unwrap().ident
-                    );
-                } else {
-                    found_paths.extend(path);
-                }
+                found_paths.extend(path);
 
                 if let Some(duplicate) = has_duplicates_idents(&found_schemas, &schema) {
                     panic!(

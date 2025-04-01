@@ -16,6 +16,8 @@ pub mod user;
 mod parse;
 pub mod table_ref;
 
+pub mod auth;
+
 #[cfg(test)]
 mod tests;
 

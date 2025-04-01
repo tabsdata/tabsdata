@@ -15,7 +15,7 @@ use td_objects::users::dto::AuthenticateRequest;
 use td_tower::ctx_service::RawOneshot;
 
 pub const ACCESS: &str = "/auth/access";
-pub const REFRESH: &str = "/auth/refresh";
+pub const REFRESH: &str = "/auth/refreshx";
 
 apiserver_tag!(name = "Authentication", description = "Authentication API");
 

@@ -31,6 +31,7 @@
 //!                    responses
 //! ```
 
+pub mod auth;
 mod collections;
 pub mod config;
 mod data;
@@ -47,6 +48,7 @@ mod user_roles;
 mod users;
 
 use crate::apiserver;
+use crate::bin::apiserver::auth::{auth_secure, auth_unsecure};
 use crate::bin::apiserver::config::Config;
 use crate::bin::apiserver::execution::update;
 use crate::logic::apiserver::jwt::jwt_logic::JwtLogic;
@@ -65,6 +67,7 @@ use chrono::Duration;
 use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_security::config::PasswordHashingConfig;
+use td_services::auth::services::AuthServices;
 use td_services::permission::services::PermissionServices;
 use td_services::role::services::RoleServices;
 use td_services::user_role::services::UserRoleServices;
@@ -77,6 +80,8 @@ pub struct ApiServerInstance {
     jwt_logic: Arc<JwtLogic>,
     storage: Arc<Storage>,
 }
+
+pub type AuthState = Arc<AuthServices>;
 
 pub type StatusState = Arc<StatusLogic>;
 pub type UsersState = Arc<UserServices>;
@@ -101,6 +106,10 @@ impl ApiServerInstance {
             jwt_logic,
             storage,
         }
+    }
+
+    fn auth_state(&self) -> AuthState {
+        Arc::new(AuthServices::new(self.db.clone()))
     }
 
     fn status_state(&self) -> StatusState {
@@ -167,11 +176,13 @@ impl ApiServerInstance {
 
                 // Open Routes
                 router => {
+                    auth_unsecure => { state ( self.auth_state() ) },
                     jwt_login => { state ( self.users_state() ) },
                 },
 
                 // JWT Secured Routes
                 router => {
+                    auth_secure => { state ( self.auth_state() ) },
                     server_status => { state ( self.status_state() ) },
                     roles => { state ( self.roles_state() ) },
                     permissions => { state ( self.permissions_state() ) },

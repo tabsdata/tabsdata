@@ -4,6 +4,7 @@
 
 mod common;
 
+pub mod auth;
 pub mod function;
 pub mod permission;
 pub mod role;

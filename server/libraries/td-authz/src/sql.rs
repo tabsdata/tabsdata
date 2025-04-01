@@ -53,7 +53,6 @@ fn try_to_permission(perm_db: &PermissionDB) -> Result<Permission, TdError> {
 
 #[async_trait]
 impl Provider<HashMap<RoleId, Arc<Vec<Permission>>>> for SqlRolePermissionsProvider {
-
     async fn get(&self) -> Result<Arc<HashMap<RoleId, Arc<Vec<Permission>>>>, TdError> {
         let permissions: Vec<PermissionDB> = DaoQueries::default()
             .list_by::<PermissionDB>(&ListParams::all(), &())?
@@ -86,9 +85,27 @@ mod tests {
         let provider = SqlRolePermissionsProvider::new(db);
         let permissions = provider.get().await.unwrap();
         assert_eq!(permissions.len(), 3);
-        assert_eq!(permissions.get(&RoleId::try_from(ENCODED_ID_ROLE_SYS_ADMIN).unwrap()).unwrap().len(), 1);
-        assert_eq!(permissions.get(&RoleId::try_from(ENCODED_ID_ROLE_SEC_ADMIN).unwrap()).unwrap().len(), 2);
-        assert_eq!(permissions.get(&RoleId::try_from(ENCODED_ID_ROLE_USER).unwrap()).unwrap().len(), 4);
+        assert_eq!(
+            permissions
+                .get(&RoleId::try_from(ENCODED_ID_ROLE_SYS_ADMIN).unwrap())
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            permissions
+                .get(&RoleId::try_from(ENCODED_ID_ROLE_SEC_ADMIN).unwrap())
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            permissions
+                .get(&RoleId::try_from(ENCODED_ID_ROLE_USER).unwrap())
+                .unwrap()
+                .len(),
+            4
+        );
         Ok(())
     }
 }
