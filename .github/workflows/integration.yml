@@ -21,7 +21,7 @@ on:
         description: "Time in minutes before cancelling the job"
         required: true
         type: number
-        default: 60
+        default: 120
       dump_server:
         description: "Dump full server instance contents for hard investigations"
         required: false
@@ -69,7 +69,7 @@ jobs:
     steps:
       - name: Set Timeout
         id: set-timeout
-        run: echo "job_timeout=${{ inputs.job_timeout || 60 }}" >> $GITHUB_OUTPUT
+        run: echo "job_timeout=${{ inputs.job_timeout || 120 }}" >> $GITHUB_OUTPUT
 
   permit-job:
     name: Permit Job
