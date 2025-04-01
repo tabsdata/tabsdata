@@ -3,12 +3,13 @@
 #
 
 env_files = [
-    { path = "./make/settings/toolchain.env" },
-    { path = "./make/settings/makers.env" },
-    { path = "./make/settings/output.env" },
-    { path = "./make/settings/product.env" },
-    { path = "${HOME}/.tabsdata-dev/make.env" },
-    { path = "${HOME}/.tabsdata-dev/test.env" },
+    { path = "${HOME}/.tabsdata-dev/test.env", defaults_only = true },
+    { path = "${HOME}/.tabsdata-dev/make.env", defaults_only = true },
+
+    { path = "./make/settings/product.env", defaults_only = true },
+    { path = "./make/settings/output.env", defaults_only = true },
+    { path = "./make/settings/makers.env", defaults_only = true },
+    { path = "./make/settings/toolchain.env", defaults_only = true },
 ]
 
 extend = [
@@ -118,12 +119,12 @@ load_script = [
 
     if eq ${echo_env_files} "true"
         echo "🎈 This build is using the following environment variables files:"
+        echo "   - 🪬 ${HOME}/.tabsdata-dev/test.env"
+        echo "   - 🪬 ${HOME}/.tabsdata-dev/make.env"
         files = glob_array ${LOCAL_ROOT}/make/settings/*.env
         for file in ${files}
             echo "   - 🪬 ${file}"
         end
-        echo "   - 🪬 ${HOME}/.tabsdata-dev/make.env"
-        echo "   - 🪬 ${HOME}/.tabsdata-dev/test.env"
     end
 
     set_env ECHO_ENV_FILES "false"
