@@ -11,3 +11,13 @@ fn dummy(inputs: &[Series]) -> PolarsResult<Series> {
     let result: Vec<String> = vec!["_dummy string".to_string(); length];
     Ok(Series::new("dummy_col".into(), result))
 }
+
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn dummy() {
+        assert!(true)
+    }
+}
