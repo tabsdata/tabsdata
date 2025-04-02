@@ -10,15 +10,11 @@ run_task = [
         "build_py_ta_features",
         "build_py_ta_tableframe",
         "build_py_te_tableframe",
-        "build_py_td-sdk",
-        "build_py_tabsdata_salesforce",
+        "build_py_tabsdata",
         "build_py_tabsdata_mongodb",
+        "build_py_tabsdata_salesforce",
     ] }
 ]
-
-[tasks.build_py_tabsdata]
-category = "02 - Build"
-private = true
 
 [tasks.build_py_ta_features]
 category = "02 - Build"
@@ -32,14 +28,14 @@ private = true
 category = "02 - Build"
 private = true
 
-[tasks.build_py_td-sdk]
-category = "02 - Build"
-private = true
-
-[tasks.build_py_tabsdata_salesforce]
+[tasks.build_py_tabsdata]
 category = "02 - Build"
 private = true
 
 [tasks.build_py_tabsdata_mongodb]
+category = "02 - Build"
+private = true
+
+[tasks.build_py_tabsdata_salesforce]
 category = "02 - Build"
 private = true

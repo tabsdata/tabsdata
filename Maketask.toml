@@ -27,8 +27,6 @@ run_task = [
     ] }
 ]
 
-## wip...
-
 [tasks.build]
 category = "02 - Build"
 description = "Compile and build"
@@ -38,6 +36,8 @@ run_task = [
         "build_py",
     ] }
 ]
+
+## wip...
 
 [tasks.test]
 category = "02 - Test"
