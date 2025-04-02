@@ -11,7 +11,7 @@ build
 colorlog==6.9.0
 csvkit==2.1.0
 cx_Oracle==8.3.0
-devpi-client=7.2.0
+devpi-client==7.2.0
 devpi-server==6.14.0
 devpi-web==4.3.0
 docker==7.1.0
