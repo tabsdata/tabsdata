@@ -368,6 +368,9 @@ version = "0.26.0"
 [workspace.dependencies.paste]
 version = "1.0.15"
 
+[workspace.dependencies.path-slash]
+version = "0.2.1"
+
 [workspace.dependencies.petgraph]
 version = "0.7.1"
 features = ["serde", "serde_derive"]

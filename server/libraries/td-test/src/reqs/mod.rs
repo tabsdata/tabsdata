@@ -296,6 +296,7 @@ impl TestRequirementsInEnv {
 #[cfg(test)]
 mod tests {
     use super::{test_dir, timestamp, user, TestRequirements, TestRequirementsInEnv, TEST_DIR_KEY};
+    use path_slash::PathBufExt;
     use sha2::Digest;
     use std::collections::HashMap;
     use std::fs::File;
@@ -371,8 +372,13 @@ mod tests {
         let timestamp = timestamp(&env_vars);
         let test_dir = &test_dir(&env_vars)[1..];
         let hash = hex::encode(&sha2::Sha256::digest(test_dir.as_bytes())[..]);
+
+        let path = reqs.test_path();
+        let check_path = path
+            .to_slash()
+            .expect(&format!("Invalid characters in path: {:?}", path));
         assert_eq!(
-            reqs.test_path().to_str().unwrap(),
+            check_path.as_ref(),
             &format!("{}/{}/{}", user, timestamp, test_dir)
         );
         assert_eq!(
