@@ -376,7 +376,7 @@ mod tests {
         let path = reqs.test_path();
         let check_path = path
             .to_slash()
-            .expect(&format!("Invalid characters in path: {:?}", path));
+            .unwrap_or_else(|| panic!("Invalid characters in path: {:?}", path));
         assert_eq!(
             check_path.as_ref(),
             &format!("{}/{}/{}", user, timestamp, test_dir)
