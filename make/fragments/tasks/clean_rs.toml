@@ -9,7 +9,7 @@ run_task = [
     { name = [
         "clean_rs_macros",
         "clean_rs_modules",
-        "clean_rs_expansions",
+        # "clean_rs_expansions",
         "clean_rs_all",
     ] }
 ]

@@ -21,7 +21,7 @@ run_task = [
     { name = [
         "build_all_rs_macros",
         "build_all_rs_modules",
-        "build_all_rs_expansions"
+        # "build_all_rs_expansions"
     ] }
 ]
 
@@ -71,7 +71,7 @@ run_task = [
     { name = [
         "build_none_rs_macros",
         "build_none_rs_modules",
-        "build_none_rs_expansions"
+        # "build_none_rs_expansions"
     ] }
 ]
 

@@ -9,7 +9,7 @@ run_task = [
     { name = [
         "test_rs_macros",
         "test_rs_modules",
-        "test_rs_expansions"
+        # "test_rs_expansions"
     ] }
 ]
 
