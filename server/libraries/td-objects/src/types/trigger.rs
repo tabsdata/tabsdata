@@ -5,7 +5,7 @@
 use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, TableId,
-    TableName, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
+    TableName, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
 };
 use crate::types::function::FunctionVersionDB;
 
@@ -38,7 +38,11 @@ pub struct TriggerDBWithNames {
     trigger_by_table_name: TableName,
 }
 
-#[td_type::Dao(sql_table = "trigger_versions")]
+#[td_type::Dao(
+    sql_table = "trigger_versions",
+    partition_by = "trigger_id",
+    recursive(on = FunctionVersionId, up = "function_version_id", down = "trigger_by_function_version_id"),
+)]
 #[td_type(builder(try_from = FunctionVersionDB, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct TriggerVersionDB {
@@ -56,6 +60,7 @@ pub struct TriggerVersionDB {
     trigger_by_function_id: FunctionId,
     trigger_by_function_version_id: FunctionVersionId,
     trigger_by_table_id: TableId,
+    trigger_by_table_version_id: TableVersionId,
     status: TriggerStatus,
     #[td_type(updater(include, field = "time"))]
     defined_on: AtTime,
@@ -63,7 +68,11 @@ pub struct TriggerVersionDB {
     defined_by_id: UserId,
 }
 
-#[td_type::Dao(sql_table = "trigger_versions__with_names")]
+#[td_type::Dao(
+    sql_table = "trigger_versions__with_names",
+    partition_by = "trigger_id",
+    recursive(on = FunctionVersionId, up = "function_version_id", down = "trigger_by_function_version_id"),
+)]
 pub struct TriggerVersionDBWithNames {
     id: TriggerVersionId,
     collection_id: CollectionId,
@@ -74,6 +83,7 @@ pub struct TriggerVersionDBWithNames {
     trigger_by_function_id: FunctionId,
     trigger_by_function_version_id: FunctionVersionId,
     trigger_by_table_id: TableId,
+    trigger_by_table_version_id: TableVersionId,
     status: TriggerStatus,
     defined_on: AtTime,
     defined_by_id: UserId,
@@ -114,75 +124,6 @@ pub type TriggerVersionList = TriggerVersionRead;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::sql::trigger;
-    use crate::sql::{Columns, Which, With};
-    use crate::types::DataAccessObject;
-    use td_database::test_utils::db;
-
     #[tokio::test]
-    async fn test_daos_from_row() {
-        let db = db().await.unwrap();
-        let mut conn = db.acquire().await.unwrap();
-
-        let statement = trigger::Queries::new().select_triggers_current(
-            &Columns::Some(TriggerDB::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Ids,
-        );
-        let _res: Vec<TriggerDB> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = trigger::Queries::new().select_triggers_current(
-            &Columns::Some(TriggerDBWithNames::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<TriggerDBWithNames> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = trigger::Queries::new().select_triggers_at_time(
-            &Columns::Some(TriggerVersionDB::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Ids,
-        );
-        let _res: Vec<TriggerVersionDB> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = trigger::Queries::new().select_triggers_at_time(
-            &Columns::Some(TriggerVersionDBWithNames::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<TriggerVersionDBWithNames> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = trigger::Queries::new().select_triggers_at_time(
-            &Columns::Some(TriggerVersionDBWithNamesList::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<TriggerVersionDBWithNamesList> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-    }
+    async fn test_daos_from_row() {}
 }

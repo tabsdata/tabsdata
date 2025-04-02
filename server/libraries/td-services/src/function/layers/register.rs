@@ -265,6 +265,8 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
             .dependency_id(dependency_id)
             .table_collection_id(table_db.collection_id())
             .table_id(table_db.id())
+            .table_version_id(table_db.table_version_id())
+            .table_function_version_id(table_db.function_version_id())
             .table_name(table_db.name())
             .table_versions(dependency_table.versions())
             .dep_pos(DependencyPos::try_from(pos as i16)?)
@@ -290,6 +292,8 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
                 .dependency_id(existing_version.dependency_id())
                 .table_collection_id(existing_version.table_collection_id())
                 .table_id(existing_version.table_id())
+                .table_version_id(existing_version.table_version_id())
+                .table_function_version_id(existing_version.table_function_version_id())
                 .table_name(existing_version.table_name())
                 .table_versions(existing_version.table_versions().clone())
                 .dep_pos(existing_version.dep_pos())
@@ -448,6 +452,7 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
             .trigger_by_function_id(table_db.function_id())
             .trigger_by_function_version_id(table_db.function_version_id())
             .trigger_by_table_id(table_db.id())
+            .trigger_by_table_version_id(table_db.table_version_id())
             .status(TriggerStatus::active())
             .build()?;
 
@@ -465,6 +470,7 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
                 .trigger_by_function_id(existing_version.trigger_by_function_id())
                 .trigger_by_function_version_id(existing_version.trigger_by_function_version_id())
                 .trigger_by_table_id(existing_version.trigger_by_table_id())
+                .trigger_by_table_version_id(existing_version.trigger_by_table_version_id())
                 .status(TriggerStatus::deleted())
                 .build()?;
 

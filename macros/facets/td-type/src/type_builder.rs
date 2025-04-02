@@ -15,12 +15,31 @@ use td_shared::parse_meta;
 struct DaoArguments {
     sql_table: Option<String>,
     order_by: Option<String>,
+    partition_by: Option<String>,
+    recursive: Option<DaoRecursiveArguments>,
+}
+
+#[derive(FromMeta)]
+struct DaoRecursiveArguments {
+    on: Ident,
+    up: String,
+    down: String,
 }
 
 pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
     let parsed_args = parse_meta!(DaoArguments, args).unwrap();
 
+    // Typed generic
+    let ident = &input.ident;
+    let fields = &input.fields;
+    let ty_generics = &input.generics;
+    let where_clause = &input.generics.where_clause;
+
+    let field_names = gen_fields_as_list(fields);
+    let field_types = gen_field_types_as_list(fields);
+
+    // Dao specifics
     let sql_table = match parsed_args.sql_table {
         Some(table) => {
             let table = table.as_str();
@@ -40,14 +59,46 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
             quote! { "ORDER BY 1 DESC" }
         }
     };
-    let ident = &input.ident;
-    let fields = &input.fields;
-    let ty_generics = &input.generics;
-    let where_clause = &input.generics.where_clause;
+    let partition_by = match parsed_args.partition_by {
+        Some(partition_by) => {
+            let partition_by = partition_by.as_str();
+            quote! {
+                impl<#ty_generics> crate::types::PartitionBy for #ident #ty_generics #where_clause {
+                    fn partition_by() -> &'static str {
+                        #partition_by
+                    }
+                }
+            }
+        }
+        None => {
+            quote! {}
+        }
+    };
+    let recursive = match parsed_args.recursive {
+        Some(recursive) => {
+            let on = recursive.on;
+            let up = recursive.up;
+            let down = recursive.down;
+            quote! {
+                impl<#ty_generics> crate::types::Recursive<#on> for #ident #ty_generics #where_clause {
+                    type Type = #on;
 
-    let field_names = gen_fields_as_list(fields);
-    let field_types = gen_field_types_as_list(fields);
+                    fn recurse_up() -> &'static str {
+                        #up
+                    }
 
+                    fn recurse_down() -> &'static str {
+                        #down
+                    }
+                }
+            }
+        }
+        None => {
+            quote! {}
+        }
+    };
+
+    // Expansion
     let expanded = quote! {
         #[derive(Debug, Clone, Eq, PartialEq, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
@@ -108,6 +159,9 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
                 query_builder
             }
         }
+
+        #partition_by
+        #recursive
     };
 
     expanded.into()

@@ -10,17 +10,12 @@
 // *  the `Queries` classes of function/dependency/table/trigger modules could be
 //    refactored into a Generic component providing that SQL building for the
 //    'current' and 'at_time' methods.
-pub mod dependency;
-pub mod function;
-pub mod table;
-pub mod trigger;
+mod cte;
+pub mod recursive;
 
 use crate::crudl::ListParams;
 use crate::types::{DataAccessObject, SqlEntity};
-use getset::Getters;
-use std::marker::PhantomData;
 use std::ops::Deref;
-use td_database::sql::create_bindings_literal;
 use td_error::td_error;
 
 #[cfg(feature = "td-test")]
@@ -101,6 +96,7 @@ where
 /// The arrays are used to create OR groups. For example, ([E1, E2]) will generate a E1 OR E2 clause.
 /// The macro will generate a WHERE clause with AND groups for the single values and OR groups for the arrays.
 /// For example, ([E1, E2], E3) will generate (E1 OR E2) AND E3.
+#[macro_export]
 macro_rules! gen_where_clause {
     // Cases for when there's no condition to add (empty input).
     ($query_builder:expr, $D:ident, ) => {};
@@ -337,162 +333,6 @@ macro_rules! impl_delete_by {
 
 all_the_tuples!(impl_delete_by);
 
-/// A SQL statement with parameters created by query functions.
-#[derive(Debug, Clone, Getters)]
-#[getset(get = "pub")]
-pub struct Statement {
-    /// The parameterized SQL statement.
-    sql: String,
-    /// The parameter names ordered by their position in the parameterized SQL.
-    params: Vec<String>,
-}
-
-impl Statement {
-    pub fn new<S, V>(sql: S, params: V) -> Self
-    where
-        S: AsRef<str>,
-        V: IntoIterator,
-        V::Item: AsRef<str>,
-    {
-        Self {
-            sql: sql.as_ref().to_string(),
-            params: params.into_iter().map(|s| s.as_ref().to_string()).collect(),
-        }
-    }
-}
-
-/// A typed column to use in query function conditions
-///
-/// Note: Use the variant constructors to create Which instances as they get typed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Which<T> {
-    All(PhantomData<T>) = 0,
-    One(PhantomData<T>) = 1,
-    Like(PhantomData<T>) = 2,
-    Set(usize, PhantomData<T>) = 3,
-}
-
-impl<T> Which<T> {
-    /// It means the query is not filtered by this column.
-    pub fn all() -> Self {
-        Which::All(PhantomData)
-    }
-
-    /// It means the query is filtered by this column with a single value.
-    pub fn one() -> Self {
-        Which::One(PhantomData)
-    }
-
-    /// It means the query is filtered by this column with a set of values (an SQL IN clause).
-    pub fn set(n: usize) -> Self {
-        Which::Set(n, PhantomData)
-    }
-}
-
-impl<T> Which<T> {
-    //TODO: <T> should implement a SqlLikeType marker trait to retrict use o like() to typed strings.
-
-    /// It means the query is filtered by this column with a LIKE value expression.
-    pub fn like() -> Self {
-        Which::Like(PhantomData)
-    }
-}
-
-/// Used internally by query functions to build conditions for WHERE clauses.
-#[derive(Debug)]
-struct Condition {
-    expr: Option<String>,
-    params: Vec<String>,
-    param_offset: usize,
-}
-
-impl Condition {
-    fn new(expr: Option<String>, params: Vec<String>, param_offset: usize) -> Self {
-        Condition {
-            expr,
-            params,
-            param_offset,
-        }
-    }
-}
-
-fn condition_builder<T>(
-    table_alias: Option<&str>,
-    column: &str,
-    param_offset: usize,
-    values: &Which<T>,
-) -> Condition {
-    let table_alias = table_alias
-        .map(|alias| format!("{}.", alias))
-        .unwrap_or_default();
-    match values {
-        Which::All(_) => Condition::new(None, vec![], param_offset),
-        Which::One(_) => {
-            let eq_condition = format!("{table_alias}{column} = ?{}", param_offset + 1);
-            Condition::new(
-                Some(eq_condition),
-                vec![column.to_string()],
-                param_offset + 1,
-            )
-        }
-        Which::Like(_) => {
-            let like_condition = format!("{table_alias}{column} LIKE ?{}", param_offset + 1);
-            Condition::new(
-                Some(like_condition),
-                vec![column.to_string()],
-                param_offset + 1,
-            )
-        }
-        Which::Set(n, _) => {
-            let in_condition = format!(
-                "{table_alias}{column} IN ({})",
-                create_bindings_literal(param_offset, *n)
-            );
-            let mut params = vec![];
-            for i in 0..*n {
-                params.push(format!("{column}#{i}"));
-            }
-            Condition::new(Some(in_condition), params, param_offset + n)
-        }
-    }
-}
-
-/// To indicate if the query is for a table or its `_with_names` view.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum With {
-    Ids = 0,
-    Names = 1,
-}
-
-impl With {
-    /// Returns the name of the table or its __with_names view based on the variant.
-    fn table_name(&self, table: &str) -> String {
-        match self {
-            With::Ids => table.to_string(),
-            With::Names => format!("{}__with_names", table),
-        }
-    }
-}
-
-/// To indicate the columns in the returned result set.
-pub enum Columns<'a> {
-    All,
-    One(&'a str),
-    Some(&'a [&'a str]),
-    Dyn(&'a Vec<String>),
-}
-
-fn select_cols(columns: &Columns) -> String {
-    match columns {
-        Columns::All => "*".to_string(),
-        Columns::One(column) => column.to_string(),
-        Columns::Some(columns) => columns.join(", "),
-        Columns::Dyn(columns) => columns.join(", "),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -502,63 +342,6 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_type::Dao;
-
-    #[test]
-    fn test_which() {
-        use super::Which;
-        assert_eq!(Which::<String>::all(), Which::All(std::marker::PhantomData));
-        assert_eq!(Which::<String>::one(), Which::One(std::marker::PhantomData));
-        assert_eq!(
-            Which::<String>::like(),
-            Which::Like(std::marker::PhantomData)
-        );
-        assert_eq!(
-            Which::<String>::set(3),
-            Which::Set(3, std::marker::PhantomData)
-        );
-    }
-    #[test]
-    fn test_condition_builder() {
-        use super::{condition_builder, Which};
-        let condition = condition_builder::<String>(Some("t"), "name", 0, &Which::all());
-        assert_eq!(condition.expr, None);
-        assert_eq!(condition.params, Vec::<String>::new());
-        assert_eq!(condition.param_offset, 0);
-        let condition = condition_builder::<String>(Some("t"), "name", 0, &Which::one());
-        assert_eq!(condition.expr, Some("t.name = ?1".to_string()));
-        assert_eq!(condition.params, vec!["name".to_string()]);
-        assert_eq!(condition.param_offset, 1);
-        let condition = condition_builder::<String>(None, "name", 0, &Which::like());
-        assert_eq!(condition.expr, Some("name LIKE ?1".to_string()));
-        assert_eq!(condition.params, vec!["name".to_string()]);
-        assert_eq!(condition.param_offset, 1);
-        let condition = condition_builder::<String>(Some("t"), "name", 0, &Which::set(3));
-        assert_eq!(condition.expr, Some("t.name IN (?1,?2,?3)".to_string()));
-        assert_eq!(
-            condition.params,
-            vec![
-                "name#0".to_string(),
-                "name#1".to_string(),
-                "name#2".to_string()
-            ]
-        );
-        assert_eq!(condition.param_offset, 3);
-    }
-
-    #[test]
-    fn test_select_cols() {
-        use super::Columns;
-        assert_eq!(super::select_cols(&Columns::All), "*");
-        assert_eq!(super::select_cols(&Columns::One("id")), "id");
-        assert_eq!(
-            super::select_cols(&Columns::Some(&["id", "name"])),
-            "id, name"
-        );
-        assert_eq!(
-            super::select_cols(&Columns::Dyn(&vec!["id".to_string(), "name".to_string()])),
-            "id, name"
-        );
-    }
 
     #[td_type::typed(id)]
     struct TestId;

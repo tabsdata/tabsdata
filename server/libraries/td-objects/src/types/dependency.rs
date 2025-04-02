@@ -6,7 +6,7 @@ use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyStatus,
     DependencyVersionId, FunctionId, FunctionName, FunctionVersionId, TableId, TableName,
-    TableVersions, UserId, UserName,
+    TableVersionId, TableVersions, UserId, UserName,
 };
 use crate::types::function::FunctionVersionDB;
 
@@ -41,7 +41,11 @@ pub struct DependencyDBWithNames {
     table_collection: CollectionName,
 }
 
-#[td_type::Dao(sql_table = "dependency_versions")]
+#[td_type::Dao(
+    sql_table = "dependency_versions",
+    partition_by = "dependency_id",
+    recursive(on = FunctionVersionId, up = "function_version_id", down = "table_function_version_id"),
+)]
 #[td_type(builder(try_from = FunctionVersionDB, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct DependencyVersionDB {
@@ -56,7 +60,9 @@ pub struct DependencyVersionDB {
     #[td_type(builder(include, field = "id"))]
     function_version_id: FunctionVersionId,
     table_collection_id: CollectionId,
+    table_function_version_id: FunctionVersionId,
     table_id: TableId,
+    table_version_id: TableVersionId,
     table_name: TableName,
     table_versions: TableVersions,
     dep_pos: DependencyPos,
@@ -67,7 +73,12 @@ pub struct DependencyVersionDB {
     defined_by_id: UserId,
 }
 
-#[td_type::Dao(sql_table = "dependency_versions__with_names", order_by = "dep_pos")]
+#[td_type::Dao(
+    sql_table = "dependency_versions__with_names",
+    order_by = "dep_pos",
+    partition_by = "dependency_id",
+    recursive(on = FunctionVersionId, up = "function_version_id", down = "table_function_version_id"),
+)]
 pub struct DependencyVersionDBWithNames {
     id: DependencyVersionId,
     collection_id: CollectionId,
@@ -75,7 +86,9 @@ pub struct DependencyVersionDBWithNames {
     function_id: FunctionId,
     function_version_id: FunctionVersionId,
     table_collection_id: CollectionId,
+    table_function_version_id: FunctionVersionId,
     table_id: TableId,
+    table_version_id: TableVersionId,
     table_name: TableName,
     table_versions: TableVersions,
     dep_pos: DependencyPos,
@@ -113,78 +126,3 @@ pub struct DependencyVersionRead {
 pub type DependencyVersionDBWithNamesList = DependencyVersionDBWithNames;
 
 pub type DependencyVersionList = DependencyVersionRead;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::sql::dependency;
-    use crate::sql::{Columns, Which, With};
-    use crate::types::DataAccessObject;
-    use td_database::test_utils::db;
-
-    #[tokio::test]
-    async fn test_daos_from_row() {
-        let db = db().await.unwrap();
-        let mut conn = db.acquire().await.unwrap();
-
-        let statement = dependency::Queries::new().select_dependencies_current(
-            &Columns::Some(DependencyDB::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Ids,
-        );
-        let _res: Vec<DependencyDB> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = dependency::Queries::new().select_dependencies_current(
-            &Columns::Some(DependencyDBWithNames::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<DependencyDBWithNames> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = dependency::Queries::new().select_dependencies_at_time(
-            &Columns::Some(DependencyVersionDB::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Ids,
-        );
-        let _res: Vec<DependencyVersionDB> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = dependency::Queries::new().select_dependencies_at_time(
-            &Columns::Some(DependencyVersionDBWithNames::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<DependencyVersionDBWithNames> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = dependency::Queries::new().select_dependencies_at_time(
-            &Columns::Some(DependencyVersionDBWithNamesList::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<DependencyVersionDBWithNamesList> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-    }
-}

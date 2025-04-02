@@ -173,7 +173,9 @@ pub async fn seed_function(
             let dependency_version = builder
                 .clone()
                 .table_collection_id(table_db.collection_id())
+                .table_function_version_id(table_db.function_version_id())
                 .table_id(table_db.id())
+                .table_version_id(table_db.table_version_id())
                 .table_name(table_db.name())
                 .table_versions(dependency_table.versions())
                 .dep_pos(DependencyPos::try_from(pos as i16).unwrap())
@@ -230,6 +232,7 @@ pub async fn seed_function(
                 .trigger_by_function_id(table_db.function_id())
                 .trigger_by_function_version_id(table_db.function_version_id())
                 .trigger_by_table_id(table_db.id())
+                .trigger_by_table_version_id(table_db.table_version_id())
                 .status(TriggerStatus::active())
                 .build()
                 .unwrap();

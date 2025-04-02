@@ -149,23 +149,25 @@ FROM dependencies d
 
 CREATE TABLE dependency_versions
 (
-    id                  TEXT PRIMARY KEY,
-    collection_id       TEXT      NOT NULL,
-    dependency_id       TEXT      NOT NULL,
-    function_id         TEXT      NOT NULL,
-    function_version_id TEXT      NOT NULL,
+    id                        TEXT PRIMARY KEY,
+    collection_id             TEXT      NOT NULL,
+    dependency_id             TEXT      NOT NULL,
+    function_id               TEXT      NOT NULL,
+    function_version_id       TEXT      NOT NULL,
 
-    table_collection_id TEXT      NOT NULL,
-    table_id            TEXT      NOT NULL,
-    table_name          TEXT      NOT NULL,
-    table_versions      TEXT      NOT NULL,
+    table_collection_id       TEXT      NOT NULL,
+    table_function_version_id TEXT      NOT NULL,
+    table_id                  TEXT      NOT NULL,
+    table_version_id          TEXT      NOT NULL,
+    table_name                TEXT      NOT NULL,
+    table_versions            TEXT      NOT NULL,
 
-    dep_pos             INTEGER   NOT NULL,
+    dep_pos                   INTEGER   NOT NULL,
 
-    status              TEXT      NOT NULL, -- Active/Deleted
+    status                    TEXT      NOT NULL, -- Active/Deleted
 
-    defined_on          TIMESTAMP NOT NULL,
-    defined_by_id       TEXT      NOT NULL,
+    defined_on                TIMESTAMP NOT NULL,
+    defined_by_id             TEXT      NOT NULL,
 
     FOREIGN KEY (collection_id) REFERENCES collections (id),
     FOREIGN KEY (function_version_id) REFERENCES function_versions (id)
@@ -178,13 +180,15 @@ SELECT dv.*,
 
        tc.name                                        as trigger_by_collection,
        tc.name                                        as table_collection,
+       tfv.name                                       as table_function,
 
        IFNULL(u.name, '[' || fv.defined_by_id || ']') as defined_by
 FROM dependency_versions dv
          LEFT JOIN collections c ON dv.collection_id = c.id
          LEFT JOIN function_versions fv ON dv.function_version_id = fv.id
          LEFT JOIN users u ON dv.defined_by_id = u.id
-         LEFT JOIN collections tc ON dv.table_collection_id = tc.id;
+         LEFT JOIN collections tc ON dv.table_collection_id = tc.id
+         LEFT JOIN function_versions tfv ON dv.table_function_version_id = tfv.id;
 
 -- Triggers  (table & __with_names view)
 
@@ -226,6 +230,7 @@ CREATE TABLE trigger_versions
     trigger_by_function_id         TEXT      NOT NULL,
     trigger_by_function_version_id TEXT      NOT NULL,
     trigger_by_table_id            TEXT      NOT NULL,
+    trigger_by_table_version_id    TEXT      NOT NULL,
 
     status                         TEXT      NOT NULL, -- Active/Deleted
 

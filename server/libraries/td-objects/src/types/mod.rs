@@ -62,3 +62,13 @@ pub trait ComposedString {
 
     fn compose(&self) -> String;
 }
+
+pub trait PartitionBy {
+    fn partition_by() -> &'static str;
+}
+
+pub trait Recursive<E: SqlEntity> {
+    type Type: SqlEntity;
+    fn recurse_up() -> &'static str;
+    fn recurse_down() -> &'static str;
+}

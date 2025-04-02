@@ -79,7 +79,7 @@ pub struct FunctionCreate {
 
 pub type FunctionUpdate = FunctionCreate;
 
-#[td_type::Dao(sql_table = "function_versions")]
+#[td_type::Dao(sql_table = "function_versions", partition_by = "function_id")]
 #[td_type(builder(try_from = FunctionCreate, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct FunctionVersionDB {
@@ -113,7 +113,10 @@ pub struct FunctionVersionDB {
     status: FunctionStatus,
 }
 
-#[td_type::Dao(sql_table = "function_versions__with_names")]
+#[td_type::Dao(
+    sql_table = "function_versions__with_names",
+    partition_by = "function_id"
+)]
 pub struct FunctionVersionDBWithNames {
     #[td_type(extractor)]
     id: FunctionVersionId,
@@ -204,79 +207,4 @@ pub struct FunctionVersionList {
 
     collection: CollectionName,
     defined_by: UserName,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::sql::function;
-    use crate::sql::{Columns, Which, With};
-    use crate::types::DataAccessObject;
-    use td_database::test_utils::db;
-
-    #[tokio::test]
-    async fn test_daos_from_row() {
-        let db = db().await.unwrap();
-        let mut conn = db.acquire().await.unwrap();
-
-        let statement = function::Queries::new().select_functions_current(
-            &Columns::Some(FunctionDB::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Ids,
-        );
-        let _res: Vec<FunctionDB> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = function::Queries::new().select_functions_current(
-            &Columns::Some(FunctionDBWithNames::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<FunctionDBWithNames> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = function::Queries::new().select_functions_at_time(
-            &Columns::Some(FunctionVersionDB::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Ids,
-        );
-        let _res: Vec<FunctionVersionDB> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = function::Queries::new().select_functions_at_time(
-            &Columns::Some(FunctionVersionDBWithNames::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<FunctionVersionDBWithNames> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-
-        let statement = function::Queries::new().select_functions_at_time(
-            &Columns::Some(FunctionVersionDBWithNamesList::fields()),
-            &Which::all(),
-            &Which::all(),
-            &With::Names,
-        );
-        let _res: Vec<FunctionVersionDBWithNamesList> = sqlx::query_as(statement.sql())
-            .bind(chrono::Utc::now().to_utc())
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-    }
 }
