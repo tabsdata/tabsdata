@@ -25,7 +25,7 @@ env_scripts = [
     fi
     ''',
 
-    # Set up root folder
+    # Set up root tabsdata project folder
     '''
     #!@duckscript
     !include_files ./make/libraries/log.ds
@@ -36,15 +36,22 @@ env_scripts = [
     while eq ${ko} true
         git_folder = concat ${current_folder} "/.git"
         if is_dir ${git_folder}
-            debug "✅ Root project folder is: ${current_folder}"
-            set_env ROOT_PROJECT_FOLDER ${current_folder}
+            debug "✅ Root project tabsdata folder is: ${current_folder}"
+            set_env ROOT_PROJECT_TABSDATA_FOLDER ${current_folder}
             ko = set false
         else
-            parent_folder = dirname ${current_folder}
-            if eq ${current_folder} ${parent_folder}
-                assert_fail "Current folder not inside a Git repository"
+            root_folder = concat ${current_folder} "/.root"
+            if is_file ${root_folder}
+                debug "✅ Root project tabsdata folder is: ${current_folder}"
+                set_env ROOT_PROJECT_TABSDATA_FOLDER ${current_folder}
+                ko = set false
             else
-                current_folder = set ${parent_folder}
+                parent_folder = dirname ${current_folder}
+                if eq ${current_folder} ${parent_folder}
+                    assert_fail "Current folder not inside a Git repository or owned by a .root file"
+                else
+                    current_folder = set ${parent_folder}
+                end
             end
         end
     end
@@ -63,7 +70,7 @@ env_scripts = [
         separator = set ":"
     end
 
-    root_folder = get_env ROOT_PROJECT_FOLDER
+    root_folder = get_env ROOT_PROJECT_TABSDATA_FOLDER
     root_tabsdata_folder = set ${root_folder}
     root_tabsdata_salesforce_folder = set ${root_folder}/connectors/python/tabsdata_salesforce
     root_tabsdata_mongodb_folder = set ${root_folder}/connectors/python/tabsdata_mongodb
@@ -145,14 +152,14 @@ env_scripts = [
 
     is_musl = eq ${td-target} "x86_64-unknown-linux-musl"
     if ${is_musl}
-        PROJECT_RS_ROOT_CARGO_TOML = set "./Cargo.toml"
+        PROJECT_RS_TABSDATA_CARGO_TOML = set "./Cargo.toml"
         PROJECT_RS_TD_MACROS_CARGO_TOML = set "./macros/Cargo.toml"
-        set_env PROJECT_RS_ROOT_CARGO_TOML ${PROJECT_RS_ROOT_CARGO_TOML}
+        set_env PROJECT_RS_TABSDATA_CARGO_TOML ${PROJECT_RS_TABSDATA_CARGO_TOML}
         set_env PROJECT_RS_TD_MACROS_CARGO_TOML ${PROJECT_RS_TD_MACROS_CARGO_TOML}
     end
-    PROJECT_RS_ROOT_CARGO_TOML = get_env PROJECT_RS_ROOT_CARGO_TOML
+    PROJECT_RS_TABSDATA_CARGO_TOML = get_env PROJECT_RS_TABSDATA_CARGO_TOML
     PROJECT_RS_TD_MACROS_CARGO_TOML = get_env PROJECT_RS_TD_MACROS_CARGO_TOML
-    debug "✅ Materialized PROJECT_RS_ROOT_CARGO_TOML: '${PROJECT_RS_ROOT_CARGO_TOML}'"
+    debug "✅ Materialized PROJECT_RS_TABSDATA_CARGO_TOML: '${PROJECT_RS_TABSDATA_CARGO_TOML}'"
     debug "✅ Materialized PROJECT_RS_TD_MACROS_CARGO_TOML: '${PROJECT_RS_TD_MACROS_CARGO_TOML}'"
 
     if not is_empty ${macros-features}

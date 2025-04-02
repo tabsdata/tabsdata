@@ -10,7 +10,7 @@ run_task = [
         "clean_rs_macros",
         "clean_rs_modules",
         "clean_rs_expansions",
-        "clean_rs_all"
+        "clean_rs_all",
     ] }
 ]
 
@@ -34,8 +34,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_ROOT_CARGO_TOML}"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_ROOT_CARGO_TOML}
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
     ''']
 
 [tasks.clean_rs_expansions]
@@ -54,4 +54,4 @@ script = [
 category = "01 - Clean"
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_ROOT_FOLDER}", "rs"]
+args = ["${CLEAN_PY}", "${PROJECT_TABSDATA_ROOT_FOLDER}", "rs"]

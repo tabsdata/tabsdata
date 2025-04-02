@@ -7,54 +7,54 @@ category = "01 - Clean"
 description = "Task 'clean' for Python projects"
 run_task = [
     { name = [
-        "clean_py_root",
         "clean_py_ta_features",
         "clean_py_ta_tableframe",
         "clean_py_te_tableframe",
         "clean_py_tabsdata",
-        "clean_py_tabsdata_salesforce",
         "clean_py_tabsdata_mongodb",
+        "clean_py_tabsdata_salesforce",
+        "clean_py_all",
     ] }
 ]
 
-[tasks.clean_py_root]
+[tasks.clean_py_all]
 category = "01 - Clean"
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_ROOT_FOLDER}", "py"]
+args = ["${CLEAN_PY}", "${PROJECT_TABSDATA_ROOT_FOLDER}", "py"]
 
 [tasks.clean_py_ta_features]
 category = "01 - Clean"
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_PY_TA_FEATURES_FOLDER}", "py"]
+args = ["${CLEAN_PY}", "${PROJECT_PY_TA_FEATURES_FOLDER}", "py"]
 
 [tasks.clean_py_ta_tableframe]
 category = "01 - Clean"
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_PY_TA_TABLEFRAME_FOLDER}", "py"]
+args = ["${CLEAN_PY}", "${PROJECT_PY_TA_TABLEFRAME_FOLDER}", "py"]
 
 [tasks.clean_py_te_tableframe]
 category = "01 - Clean"
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_PY_TE_TABLEFRAME_FOLDER}", "py"]
+args = ["${CLEAN_PY}", "${PROJECT_PY_TE_TABLEFRAME_FOLDER}", "py"]
 
 [tasks.clean_py_tabsdata]
 category = "01 - Clean"
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_PY_TD_SDK_FOLDER}", "py"]
-
-[tasks.clean_py_tabsdata_salesforce]
-category = "01 - Clean"
-private = true
-command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}", "py"]
+args = ["${CLEAN_PY}", "${PROJECT_PY_TD_SDK_FOLDER}", "py"]
 
 [tasks.clean_py_tabsdata_mongodb]
 category = "01 - Clean"
 private = true
 command = "python3"
-args = ["${CLEAN_PYTHON_PY}", "${PROJECT_PY_TABSDATA_MONGODB_FOLDER}", "py"]
+args = ["${CLEAN_PY}", "${PROJECT_PY_TABSDATA_MONGODB_FOLDER}", "py"]
+
+[tasks.clean_py_tabsdata_salesforce]
+category = "01 - Clean"
+private = true
+command = "python3"
+args = ["${CLEAN_PY}", "${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}", "py"]

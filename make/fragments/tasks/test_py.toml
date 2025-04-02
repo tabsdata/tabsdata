@@ -283,7 +283,7 @@ script = [
     debug "🔅 Python system path persisted: ${set_pythonpath}"
 
     debug "🔷 _____ Setting up tabsdata development package mode..."
-    set_env TD_TABSDATA_DEV_PKG ${PROJECT_ROOT_FOLDER}
+    set_env TD_TABSDATA_DEV_PKG ${PROJECT_TABSDATA_ROOT_FOLDER}
     set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
     debug "🔅 tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
 
@@ -331,8 +331,8 @@ script = [
     debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
     TDX = get_env TDX
     debug "🔅 The tdserver process will use TDX location: '${TDX}'"
-    debug "🚀 ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467"
-    exec --fail-on-error ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467
+    debug "🚀 ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467"
+    exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467
     ''']
 
 [tasks.status_pytest_tabsdata]
@@ -365,8 +365,8 @@ script = [
         tdserver = set "tdserver"
     end
     debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-    debug "🚀 ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest"
-    exec --fail-on-error ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+    debug "🚀 ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest"
+    exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
     ''']
 
 [tasks.stop_pytest_tabsdata]
@@ -399,8 +399,8 @@ script = [
         tdserver = set "tdserver"
     end
     debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-    debug "🚀 ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest"
-    exec --fail-on-error ${ROOT_PROJECT_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+    debug "🚀 ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest"
+    exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
     ''']
 
 [tasks.remove_pytest_tabsdata]

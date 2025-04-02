@@ -37,11 +37,11 @@ script = [
     '''
     if command -v viu &> /dev/null; then
         echo
-        viu --width 32 ${ROOT_PROJECT_FOLDER}/make/resources/images/ferri-sad.png
+        viu --width 32 ${ROOT_PROJECT_TABSDATA_FOLDER}/make/resources/images/ferri-sad.png
     fi
     if command -v lolcat &> /dev/null && command -v figlet &> /dev/null; then
         echo
-        figlet -f ${ROOT_PROJECT_FOLDER}/make/resources/fonts/3d.flf Failed! | lolcat
+        figlet -f ${ROOT_PROJECT_TABSDATA_FOLDER}/make/resources/fonts/3d.flf Failed! | lolcat
         echo
     else
         echo "⭕️ Ko!. You can install figlet and lolcat for cooler messages..."

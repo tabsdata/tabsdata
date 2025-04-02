@@ -27,27 +27,27 @@ def load(module_name) -> ModuleType:
 logger = load("log").get_logger()
 
 
-def env_project_root_folder():
+def env_root_project_tabsdata_folder():
     logging.basicConfig(level=INFO, format=BASIC_FORMAT)
     current_folder = os.getcwd()
-    logging.info(f"Current project folder is: {current_folder}")
+    logging.info(f"✅ Current project folder is: {current_folder}")
     while True:
         if os.path.isdir(os.path.join(current_folder, ".git")):
-            logging.info(f"Root project folder is: {current_folder}")
-            os.environ["ROOT_PROJECT_FOLDER"] = current_folder
+            logging.info(f"✅ Root project tabsdata folder is: {current_folder}")
+            os.environ["ROOT_PROJECT_TABSDATA_FOLDER"] = current_folder
             return
         elif os.path.isfile(os.path.join(current_folder, ".root")):
-            logging.info(f"Root project folder is: {current_folder}")
-            os.environ["ROOT_PROJECT_FOLDER"] = current_folder
+            logging.info(f"✅ Root project tabsdata folder is: {current_folder}")
+            os.environ["ROOT_PROJECT_TABSDATA_FOLDER"] = current_folder
             return
         else:
             parent_folder = os.path.abspath(os.path.join(current_folder, os.pardir))
             if current_folder == parent_folder:
                 raise FileNotFoundError(
-                    "Current folder not inside a Git repository or "
+                    "🧨 Current folder not inside a Git repository or "
                     "owned by a .root file"
                 )
             current_folder = parent_folder
 
 
-env_project_root_folder()
+env_root_project_tabsdata_folder()

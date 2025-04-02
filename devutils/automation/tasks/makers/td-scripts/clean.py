@@ -71,9 +71,7 @@ def clean_py(project_folder):
         "local_dev",
         "tdlocal",
         "local_development_artifacts",
-        "variant/assets/manifest/THIRD-PARTY",
         "client/td-sdk/tabsdata/assets",
-        "books/dguide/book",
         "connectors/python/tabsdata_mongodb/tabsdata_mongodb/assets/manifest/BANNER",
         "connectors/python/tabsdata_mongodb/tabsdata_mongodb/assets/manifest/LICENSE",
         (
@@ -103,6 +101,27 @@ def clean_rs(project_folder):
         "target",
         "*.log",
         "*.log.*",
+        "books/dguide/book",
+        "variant/assets/manifest/THIRD-PARTY",
+    ]
+
+    exclusion_patterns = [
+        ".coveragerc",
+        "data.log",
+        "another_file.log",
+        "source_1.log",
+        "source_2.log",
+    ]
+
+    clean(project_folder, inclusion_patterns, exclusion_patterns)
+
+
+def clean_ts(project_folder):
+    inclusion_patterns = [
+        "target",
+        "src/tests/coverage",
+        "src/e2e/test-results",
+        "src/e2e/playwright-report",
     ]
 
     exclusion_patterns = [
@@ -124,6 +143,8 @@ if __name__ == "__main__":
             clean_py(project)
         elif target == "rs":
             clean_rs(project)
+        elif target == "ts":
+            clean_ts(project)
         else:
             logger.error(f"⭕️ Error: Unknown target '{target}'", file=sys.stderr)
             sys.exit(1)

@@ -29,6 +29,6 @@ def get_logger() -> logging.Logger:
     logger.setLevel(log_level)
     logger.addHandler(handler)
 
-    logger.debug("📌 Python 'log' library loaded with '${log_level} level'")
+    logger.debug(f"📌 Python 'log' library loaded with '{log_level}' level")
 
     return logger

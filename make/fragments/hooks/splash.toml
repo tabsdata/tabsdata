@@ -37,7 +37,7 @@ script = [
     '''
     if command -v viu &> /dev/null; then
         echo
-        viu --width 32 ${ROOT_PROJECT_FOLDER}/make/resources/images/tabsdata.png
+        viu --width 32 ${ROOT_PROJECT_TABSDATA_FOLDER}/make/resources/images/tabsdata.png
         echo
     fi
     ''']
