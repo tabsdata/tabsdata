@@ -46,6 +46,9 @@ pub async fn create_object_store(
 }
 
 /// Query the object store for all files at a given base URL.
+// ToDo: On Windows, if the name of some  folder in the base path starts with dot (.), files inside are being silently
+//       ignored, therefore failing to import these files.
+//        https://tabsdata.atlassian.net/browse/TD-168
 async fn get_files_from_object_store(
     object_store: Box<dyn ObjectStore>,
     importer_options: &ImporterOptions,

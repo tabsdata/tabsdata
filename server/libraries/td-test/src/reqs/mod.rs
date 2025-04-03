@@ -301,6 +301,7 @@ mod tests {
     use std::collections::HashMap;
     use std::fs::File;
     use std::io::Write;
+    use std::path::PathBuf;
     use testdir::testdir;
 
     #[test]
@@ -373,13 +374,19 @@ mod tests {
         let test_dir = &test_dir(&env_vars)[1..];
         let hash = hex::encode(&sha2::Sha256::digest(test_dir.as_bytes())[..]);
 
-        let path = reqs.test_path();
-        let check_path = path
+        let test_path_pathbuf = reqs.test_path();
+        let test_path_pathbuf_check = test_path_pathbuf
             .to_slash()
-            .unwrap_or_else(|| panic!("Invalid characters in path: {:?}", path));
+            .unwrap_or_else(|| panic!("Invalid characters in test path: {:?}", test_path_pathbuf));
+
+        let test_dir_pathbuf = PathBuf::from(test_dir);
+        let test_dir_pathbuf_check = test_dir_pathbuf
+            .to_slash()
+            .unwrap_or_else(|| panic!("Invalid characters in test dir: {:?}", test_path_pathbuf));
+
         assert_eq!(
-            check_path.as_ref(),
-            &format!("{}/{}/{}", user, timestamp, test_dir)
+            test_path_pathbuf_check.as_ref(),
+            &format!("{}/{}/{}", user, timestamp, test_dir_pathbuf_check)
         );
         assert_eq!(
             reqs.test_identifier(None),

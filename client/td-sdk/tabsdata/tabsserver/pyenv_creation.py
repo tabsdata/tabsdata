@@ -1039,6 +1039,15 @@ def get_tabsdata_package_metadata(
         except importlib.metadata.PackageNotFoundError:
             provider = None
             location = None
+
+    # On Windows, Python can add a leading backslash to the location path, which has
+    # the side effect of path being unable to be 'installed'. If present, we remove this
+    # leading backslash to produce a regular file path.
+    if location is not None:
+        location_string = str(location)
+        if location_string.startswith("\\"):
+            location = Path(location_string[1:])
+            logger.info(f"Normalized location from '{location_string}' to '{location}'")
     return provider, location
 
 

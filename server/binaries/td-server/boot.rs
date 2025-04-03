@@ -31,7 +31,7 @@ fn set_rust_environment() {
     let root_folder = find_workspace_root();
     let git_dir = root_folder.join(GIT_FOLDER);
     let root_file = root_folder.join(ROOT_FILE);
-    if git_dir.exists() && git_dir.is_dir() || root_file.exists() && git_dir.is_file() {
+    if git_dir.exists() && git_dir.is_dir() || root_file.exists() && root_file.is_file() {
         let cargo_toml_file = root_folder.join(CARGO_TOML_FILE);
         if cargo_toml_file.exists() {
             let cargo_toml_content =
