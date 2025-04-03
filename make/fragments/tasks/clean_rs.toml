@@ -53,5 +53,5 @@ script = [
 [tasks.clean_rs_all]
 category = "01 - Clean"
 private = true
-command = "python3"
+command = "python"
 args = ["${CLEAN_PY}", "${PROJECT_TABSDATA_ROOT_FOLDER}", "rs"]

@@ -17,8 +17,8 @@ def command_exists(command):
     return shutil.which(command) is not None
 
 
-if not command_exists("python3"):
-    print("\nERROR: 'python3' is not installed\n")
+if not command_exists("python"):
+    print("\nERROR: 'python' is not installed\n")
     sys.exit(1)
 
 if not command_exists("sha256sum"):

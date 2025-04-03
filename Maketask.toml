@@ -962,8 +962,8 @@ cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: python3 setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
-    exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
+    echo "Running command: python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
+    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
     ''']
 
 [tasks.package_py_tabsdata_salesforce]
@@ -971,8 +971,8 @@ cwd = "${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: python3 setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
-    exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
+    echo "Running command: python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
+    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
     ''']
 
 [tasks.package_py_tabsdata_mongodb]
@@ -980,8 +980,8 @@ cwd = "${PROJECT_PY_TABSDATA_MONGODB_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: python3 setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
-    exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
+    echo "Running command: python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
+    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
     ''']
 
 [tasks.assembly]
@@ -1033,8 +1033,8 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-    exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    echo "Running command: python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
 [tasks.assembly_py_tabsdata_salesforce]
@@ -1066,8 +1066,8 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-    exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    echo "Running command: python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
 [tasks.assembly_py_tabsdata_mongodb]
@@ -1099,8 +1099,8 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-    exec --fail-on-error python3 setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    echo "Running command: python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
 [tasks.install]
@@ -1152,11 +1152,11 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    exec --fail-on-error pip3 uninstall tabsdata_salesforce --yes
+    exec --fail-on-error pip uninstall tabsdata_salesforce --yes
     wheels = glob_array ./target/python/dist/tabsdata_salesforce*.whl
     for wheel in ${wheels}
-        echo "Running command: pip3 install ${wheel}"
-        exec --fail-on-error pip3 install ${wheel}
+        echo "Running command: pip install ${wheel}"
+        exec --fail-on-error pip install ${wheel}
     end
     ''']
 
@@ -1189,11 +1189,11 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    exec --fail-on-error pip3 uninstall tabsdata_mongodb --yes
+    exec --fail-on-error pip uninstall tabsdata_mongodb --yes
     wheels = glob_array ./target/python/dist/tabsdata_mongodb*.whl
     for wheel in ${wheels}
-        echo "Running command: pip3 install ${wheel}"
-        exec --fail-on-error pip3 install ${wheel}
+        echo "Running command: pip install ${wheel}"
+        exec --fail-on-error pip install ${wheel}
     end
     ''']
 
@@ -1226,11 +1226,11 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    exec --fail-on-error pip3 uninstall tabsdata --yes
+    exec --fail-on-error pip uninstall tabsdata --yes
     wheels = glob_array ./target/python/dist/tabsdata*.whl
     for wheel in ${wheels}
-        echo "Running command: pip3 install ${wheel}"
-        exec --fail-on-error pip3 install ${wheel}
+        echo "Running command: pip install ${wheel}"
+        exec --fail-on-error pip install ${wheel}
     end
     ''']
 
@@ -1258,7 +1258,7 @@ cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error pip3 uninstall tabsdata --yes
+    exec --fail-on-error pip uninstall tabsdata --yes
     exec uv cache clean
     exec pip cache purge
     exec python setup.py clean --all
@@ -1270,7 +1270,7 @@ cwd = "${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error pip3 uninstall tabsdata_salesforce --yes
+    exec --fail-on-error pip uninstall tabsdata_salesforce --yes
     exec uv cache clean
     exec pip cache purge
     exec python setup.py clean --all
@@ -1282,7 +1282,7 @@ cwd = "${PROJECT_PY_TABSDATA_MONGODB_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error pip3 uninstall tabsdata_mongodb --yes
+    exec --fail-on-error pip uninstall tabsdata_mongodb --yes
     exec uv cache clean
     exec pip cache purge
     exec python setup.py clean --all
@@ -1330,7 +1330,7 @@ script = [
 [tasks.bump_other]
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "python3"
+command = "python"
 args = ["${BUMP_VERSION_PY}", "${PROJECT_TABSDATA_ROOT_FOLDER}", "${CARGO_MAKE_TASK_ARGS}"]
 
 [tasks.virtualenv]
@@ -1339,7 +1339,7 @@ script_runner = "@duckscript"
 script = [
     '''
     exec --fail-on-error rm -rf .venv
-    exec --fail-on-error python3 -m venv .venv
+    exec --fail-on-error python -m venv .venv
     exec --fail-on-error ${VIRTUAL_PIP} install -U pip
     exec --fail-on-error ${VIRTUAL_PIP} install -e .[test]
 

@@ -432,7 +432,7 @@ fn command_upgrade(arguments: UpgradeArguments) {
 
 fn command_start(arguments: StartArguments) {
     show_mode();
-    show_uv_repository_mode();
+    show_pip_uv_repository_mode();
     show_setup_and_launch();
 
     let supervisor_instance = get_instance_path_for_instance(arguments.instance());
@@ -771,7 +771,7 @@ fn command_stop(arguments: StopArguments) {
 
 fn command_status(arguments: ControlArguments) {
     show_mode();
-    show_uv_repository_mode();
+    show_pip_uv_repository_mode();
     let supervisor_workspace =
         get_workspace_path_for_instance(arguments.workspace(), &arguments.instance().clone());
     let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
@@ -1043,10 +1043,21 @@ pub fn show_mode() {
     );
 }
 
-pub fn show_uv_repository_mode() {
-    let uv_extra_index_url = "UV_EXTRA_INDEX_URL";
-    if env::var(uv_extra_index_url).is_ok() {
-        warn!("You are using additional uv repositories!!!")
+pub fn show_pip_uv_repository_mode() {
+    const PIP_ENV_VARS: [&str; 5] = [
+        "PIP_INDEX_URL",
+        "PIP_EXTRA_INDEX_URL",
+        "UV_DEFAULT_INDEX",
+        "UV_INDEX_URL",
+        "UV_EXTRA_INDEX_URL",
+    ];
+    for env_var in PIP_ENV_VARS {
+        if let Ok(env_value) = env::var(env_var) {
+            warn!(
+                "You are using a non-standard pip/uv setup: '{}' = '{}'",
+                env_var, env_value
+            );
+        }
     }
 }
 

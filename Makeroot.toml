@@ -69,7 +69,7 @@ BUMP_VERSION_PY = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/devutils/automation
 CLEAN_PY = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean.py", normalize = true }
 COPY_ASSETS_PY = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }
 
-VIRTUAL_PIP = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/client/td-sdk/.venv/bin/pip3", normalize = true }
+VIRTUAL_PIP = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/client/td-sdk/.venv/bin/pip", normalize = true }
 VIRTUAL_ACTIVATE = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/client/td-sdk/.venv/bin/activate", normalize = true }
 
 [config]

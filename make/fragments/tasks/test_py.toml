@@ -220,16 +220,16 @@ script = [
     cm_run_task stop_pytest_tabsdata
     sleep 10000
     cm_run_task remove_pytest_tabsdata
-    sleep 2000
+    sleep 5000
     cm_run_task start_pytest_tabsdata
-    sleep 15000
+    sleep 30000
     cm_run_task status_pytest_tabsdata
     ''']
 
 [tasks.copy_assets]
 category = "02 - Test"
 private = true
-command = "python3"
+command = "python"
 args = ["${COPY_ASSETS_PY}"]
 
 [tasks.setup_pytest_tabsdata]
@@ -243,27 +243,27 @@ script = [
     debug "🔷 _____ Setting up tabsdata pytest context..."
 
     debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata)..."
-    debug "🚀 python3 setup.py --quiet develop --script-dir target/pytest/build"
+    debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
     set_env PYTHONWARNINGS ignore
-    exec --fail-on-error python3 setup.py --quiet develop --script-dir target/pytest/build
+    exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build
 
     debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata_salesforce)..."
     cd connectors/python/tabsdata_salesforce
-    debug "🚀 python3 setup.py --quiet develop --script-dir target/pytest/build"
+    debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
     set_env PYTHONWARNINGS ignore
-    exec --fail-on-error python3 setup.py --quiet develop --script-dir target/pytest/build
+    exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build
     cd ../../..
 
     debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata_mongodb)..."
     cd connectors/python/tabsdata_mongodb
-    debug "🚀 python3 setup.py --quiet develop --script-dir target/pytest/build"
+    debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
     set_env PYTHONWARNINGS ignore
-    exec --fail-on-error python3 setup.py --quiet develop --script-dir target/pytest/build
+    exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build
     cd ../../..
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
-    debug "🚀 python3 ${PROJECT_PY_TD_SDK_FOLDER}/tests_tabsdata/bootest.py"
-    output = exec --fail-on-error python3 ${PROJECT_PY_TD_SDK_FOLDER}tests_tabsdata/bootest.py
+    debug "🚀 python ${PROJECT_PY_TD_SDK_FOLDER}/tests_tabsdata/bootest.py"
+    output = exec --fail-on-error python ${PROJECT_PY_TD_SDK_FOLDER}tests_tabsdata/bootest.py
     debug "📦 The received pythonpath is ${output.stdout}"
     pythonpath = set ${output.stdout}
     debug "✅ Python system path will be added: ${pythonpath}"

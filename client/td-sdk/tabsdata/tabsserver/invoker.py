@@ -36,15 +36,36 @@ EXECUTION_CONTEXT_FILE_NAME = "request.yaml"
 _ = execute_function_from_bundle_path
 
 
+# We keep entries whose last path segment is 'egg' as they are development
+# eggs that are not installed in the site-packages folder.
+# ToDo...
 @contextmanager
 def clear_environment():
     original_sys_path = copy.deepcopy(sys.path)
     original_env = copy.deepcopy(os.environ)
+
+    # pythonpath = original_env.get("PYTHONPATH", "")
+    # if pythonpath:
+    #     filtered_pythonpath = [
+    #         p for p in pythonpath.split(os.pathsep) if Path(p).name == "egg"
+    #     ]
+    #     os.environ["PYTHONPATH"] = os.pathsep.join(filtered_pythonpath)
+    # else:
+    #     os.environ["PYTHONPATH"] = ""
+    # sys.path = [p for p in original_sys_path if Path(p).name == "egg"]
+
+    # logger.info(f"Filtered PYTHONPATH: {os.environ['PYTHONPATH']}")
+    # logger.info(f"Filtered sys.path: {sys.path}")
+
     os.environ["PYTHONPATH"] = ""
     sys.path = []
+
     try:
         yield
     finally:
+        # os.environ.clear()
+        # os.environ.update(original_env)
+
         sys.path = original_sys_path
         os.environ = original_env
 
