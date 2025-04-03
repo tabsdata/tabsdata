@@ -57,8 +57,8 @@ def clear_environment():
     # logger.info(f"Filtered PYTHONPATH: {os.environ['PYTHONPATH']}")
     # logger.info(f"Filtered sys.path: {sys.path}")
 
-    os.environ["PYTHONPATH"] = ""
-    sys.path = []
+    # os.environ["PYTHONPATH"] = ""
+    # sys.path = []
 
     try:
         yield
