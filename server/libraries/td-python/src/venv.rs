@@ -25,7 +25,11 @@ pub const PYTHON_INTERPRETER_SCRIPT: &str =
 pub const TDVENV_PROGRAM: &str = "_tdvenv";
 pub const TDVENV_ARGUMENT_INSTANCE: &str = "--instance";
 
-pub const BIN: &str = "bin";
+#[cfg(not(target_os = "windows"))]
+pub const PYTHON_BIN_FOLDER: &str = "bin";
+
+#[cfg(target_os = "windows")]
+pub const PYTHON_BIN_FOLDER: &str = "Scripts";
 
 pub const ENV_CONDA_PREFIX: &str = "CONDA_PREFIX";
 pub const ENV_PYENV_VERSION: &str = "PYENV_VERSION";
@@ -96,14 +100,17 @@ pub fn activate(venv: &PathBuf) -> Result<(), TdError> {
         .ok_or_else(|| InstanceExtractionError(venv.clone()))?
         .to_string_lossy()
         .to_string();
-
-    prepend_in_path(Path::new(venv.as_path()).join(BIN).to_str().unwrap(), None)?;
+    prepend_in_path(
+        Path::new(venv.as_path())
+            .join(PYTHON_BIN_FOLDER)
+            .to_str()
+            .unwrap(),
+        None,
+    )?;
     env::remove_var(ENV_CONDA_PREFIX);
     env::remove_var(ENV_PYENV_VERSION);
     env::remove_var(ENV_PYTHONHOME);
-    // ToDo...
-    // env::remove_var(ENV_PYTHONPATH);
-    // filter_pythonpath();
+    env::remove_var(ENV_PYTHONPATH);
     env::remove_var(ENV_UV_VENV);
     env::set_var(ENV_VIRTUAL_ENV, venv);
     env::set_var(ENV_VIRTUAL_ENV_PROMPT, format!("({})", instance));
@@ -111,45 +118,19 @@ pub fn activate(venv: &PathBuf) -> Result<(), TdError> {
 }
 
 pub fn deactivate(venv: &PathBuf) -> Result<(), TdError> {
-    remove_from_path(Path::new(venv).join(BIN).to_str().unwrap(), None)?;
+    remove_from_path(
+        Path::new(venv).join(PYTHON_BIN_FOLDER).to_str().unwrap(),
+        None,
+    )?;
     env::remove_var(ENV_CONDA_PREFIX);
     env::remove_var(ENV_PYENV_VERSION);
     env::remove_var(ENV_PYTHONHOME);
-    // ToDo...
-    // env::remove_var(ENV_PYTHONPATH);
-    // filter_pythonpath();
+    env::remove_var(ENV_PYTHONPATH);
     env::remove_var(ENV_UV_VENV);
     env::remove_var(ENV_VIRTUAL_ENV);
     env::remove_var(ENV_VIRTUAL_ENV_PROMPT);
     Ok(())
 }
-
-// ToDo ...
-/*
-fn filter_pythonpath() {
-    if let Ok(sys_path) = env::var(ENV_PYTHONPATH) {
-        let path_sep = if cfg!(windows) { ';' } else { ':' };
-        let filtered_pythonpath: Vec<String> = sys_path
-            .split(path_sep)
-            .filter(|p| Path::new(p).file_name().is_some_and(|f| f == "egg"))
-            .map(String::from)
-            .collect();
-        if filtered_pythonpath.is_empty() {
-            env::remove_var(ENV_PYTHONPATH);
-        } else {
-            env::set_var(
-                ENV_PYTHONPATH,
-                filtered_pythonpath.join(&path_sep.to_string()),
-            );
-        }
-        info!(
-            "Filtered {}: {}",
-            ENV_PYTHONPATH,
-            filtered_pythonpath.join(&path_sep.to_string())
-        );
-    }
-}
-*/
 
 fn extract(string: &str, start: &str, end: &str) -> Option<String> {
     if let Some(start_i) = string.find(start) {
