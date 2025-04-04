@@ -24,7 +24,7 @@ publish = false
 readme = "../../README.md"
 repository = "https://github.com/tabsdata/tabsdata"
 rust-version = "1.85.0"
-version = "0.9.4"
+version = "0.9.5"
 
 [workspace]
 members = [
