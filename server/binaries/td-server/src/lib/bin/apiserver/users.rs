@@ -133,6 +133,9 @@ mod tests {
     use http::method::Method;
     use serde_json::json;
     use td_database::sql::DbPool;
+    use td_objects::types::basic::AccessTokenId;
+    use td_objects::types::basic::RoleId;
+    use td_objects::types::basic::UserId;
     use td_security::config::PasswordHashingConfig;
     use tower::ServiceExt;
 
@@ -152,7 +155,12 @@ mod tests {
     }
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
-        let context = RequestContext::with("", "", true).await;
+        let context = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        );
         let router = router.clone().into();
         router.layer(Extension(context.clone()))
     }

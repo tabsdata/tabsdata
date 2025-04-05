@@ -199,7 +199,7 @@ pub trait IsAdminRequestProvider {
 
 impl<C: RequestContextProvider> IsAdminRequestProvider for C {
     fn is_admin(&self) -> bool {
-        *self.context().sys_admin()
+        **self.context().sys_admin()
     }
 }
 
@@ -215,7 +215,7 @@ pub trait TimeProvider {
 
 impl<C: RequestContextProvider> TimeProvider for C {
     fn time(&self) -> DateTime<Utc> {
-        *self.context().time()
+        **self.context().time()
     }
 }
 

@@ -48,16 +48,26 @@ td-error = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }
 td-objects = { workspace = true }
+td-security = { workspace = true }
 td-tower = { workspace = true }
 
 # External dependencies
 
+argon2 = { workspace = true }
 async-trait = { workspace = true }
+axum = { workspace = true, features = ["macros"] }
+chrono = { workspace = true }
+getset = { workspace = true }
+jsonwebtoken = { workspace = true }
 lazy_static = { workspace = true }
+serde = { workspace = true}
+sqlx = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
+tracing = { workspace = true }
+
 
 [dev-dependencies]
 td-objects = { workspace = true, features = ["td-test"] }

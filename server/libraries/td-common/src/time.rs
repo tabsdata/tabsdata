@@ -5,7 +5,7 @@
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
 use std::marker::PhantomData;
-use tokio::sync::Mutex;
+use std::sync::Mutex;
 
 /// Type holder for [`UniqueUtc::now_millis`] function.
 pub struct UniqueUtc {
@@ -24,8 +24,8 @@ impl UniqueUtc {
     /// as the last time it was called. This is done by keeping track of the last time it was called.
     /// As son as the current time is greater than the last time it was called, it resets the time
     /// to the current time, thus correcting itself to the current time.
-    pub async fn now_millis() -> DateTime<Utc> {
-        let now = ELASTIC_UNIQUE_EPOCH.now().await;
+    pub fn now_millis() -> DateTime<Utc> {
+        let now = ELASTIC_UNIQUE_EPOCH.now();
         DateTime::<Utc>::from_timestamp_millis(now).unwrap()
     }
 }
@@ -89,8 +89,8 @@ impl ThreadSafeElasticUniqueEpoch {
 
     /// Returns the current unique time in milliseconds since the Unix epoch.
     #[inline]
-    async fn now(&self) -> i64 {
-        self.eue.lock().await.now()
+    fn now(&self) -> i64 {
+        self.eue.lock().unwrap().now()
     }
 }
 
@@ -117,11 +117,11 @@ mod tests {
         assert_eq!(time.now_with_clock(|| 6), 6);
     }
 
-    #[tokio::test]
-    async fn test_eut_now() {
+    #[test]
+    fn test_eut_now() {
         let mut times = Vec::with_capacity(1000);
         for _ in 0..1000 {
-            times.push(UniqueUtc::now_millis().await.timestamp_millis());
+            times.push(UniqueUtc::now_millis().timestamp_millis());
         }
         let mut uniq = HashSet::new();
         let uniq = times.into_iter().all(|t| uniq.insert(t));

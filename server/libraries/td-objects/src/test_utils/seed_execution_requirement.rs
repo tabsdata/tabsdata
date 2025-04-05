@@ -26,7 +26,7 @@ pub async fn seed_execution_requirement(
 ) -> Id {
     let mut conn = db.begin().await.unwrap();
 
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
     let er_id = id::id();
     let requirement = DsExecutionRequirement::builder()
         .id(er_id.to_string())
@@ -144,7 +144,7 @@ mod tests {
         let trigger = "M";
         let status = "S";
 
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
 
         let data_version_id = seed_data_version(
             &db,

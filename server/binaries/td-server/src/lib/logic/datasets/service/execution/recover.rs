@@ -72,6 +72,7 @@ mod tests {
     use td_objects::test_utils::seed_execution_requirement::seed_execution_requirement;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -152,9 +153,9 @@ mod tests {
         let provider = RecoverExecutionService::provider(db.clone());
         let service = provider.make().await;
 
-        let request: UpdateRequest<TransactionId, ()> = RequestContext::with(user_id, "r", false)
-            .await
-            .update(TransactionId::new(transaction_id.to_string()), ());
+        let request: UpdateRequest<TransactionId, ()> =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .update(TransactionId::new(transaction_id.to_string()), ());
         let _: () = service.raw_oneshot(request).await.unwrap();
 
         // Assert db state
@@ -334,9 +335,9 @@ mod tests {
         let provider = RecoverExecutionService::provider(db.clone());
         let service = provider.make().await;
 
-        let request: UpdateRequest<TransactionId, ()> = RequestContext::with(user_id, "r", false)
-            .await
-            .update(TransactionId::new(transaction_id_1.to_string()), ());
+        let request: UpdateRequest<TransactionId, ()> =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .update(TransactionId::new(transaction_id_1.to_string()), ());
         let _: () = service.raw_oneshot(request).await.unwrap();
 
         // Assert db state

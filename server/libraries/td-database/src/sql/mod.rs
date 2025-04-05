@@ -288,6 +288,12 @@ impl DbPool {
     }
 }
 
+impl From<&DbPool> for DbPool {
+    fn from(db_pool: &DbPool) -> Self {
+        db_pool.clone()
+    }
+}
+
 /// Trait for types that can be fetched from a database row.
 pub trait DbData: for<'a> FromRow<'a, SqliteRow> + Send + Unpin {}
 

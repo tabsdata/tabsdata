@@ -12,6 +12,7 @@ use td_objects::dlo::CollectionName;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::test_utils::seed_dataset::seed_dataset;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId};
 
 #[tokio::test]
 async fn test_invalid_trigger_uri() {
@@ -42,8 +43,7 @@ async fn test_invalid_trigger_uri() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     assert_service_error(service, request, |err| match err {
@@ -82,8 +82,7 @@ async fn test_trigger_uri_must_be_a_dataset_uri() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     assert_service_error(service, request, |err| match err {
@@ -124,8 +123,7 @@ async fn test_trigger_uri_cannot_have_versions() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     assert_service_error(service, request, |err| match err {
@@ -166,8 +164,7 @@ async fn test_trigger_uri_cannot_be_self() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     assert_service_error(service, request, |err| match err {
@@ -206,8 +203,7 @@ async fn test_could_not_find_collections() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     assert_service_error(service, request, |err| match err {
@@ -246,8 +242,7 @@ async fn test_could_not_find_datasets() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     assert_service_error(service, request, |err| match err {

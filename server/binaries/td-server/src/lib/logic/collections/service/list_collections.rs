@@ -48,7 +48,7 @@ pub mod tests {
     use crate::logic::collections::service::list_collections::ListCollectionsService;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_user::admin_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -78,14 +78,17 @@ pub mod tests {
 
     async fn test_list_collection(admin: bool) {
         let db = td_database::test_utils::db().await.unwrap();
-        let admin_id = admin_user(&db).await;
         seed_collection(&db, None, "ds0").await;
 
         let service = ListCollectionsService::new(db).service().await;
 
-        let request = RequestContext::with(&admin_id, "r", admin)
-            .await
-            .list((), ListParams::default());
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            admin,
+        )
+        .list((), ListParams::default());
 
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());

@@ -79,7 +79,7 @@ mod tests {
     use super::*;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_permission::get_permission;
-    use td_objects::test_utils::seed_user::admin_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -116,7 +116,6 @@ mod tests {
     #[tokio::test]
     async fn test_create_permission() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
-        let admin_id = admin_user(&db).await;
 
         let create = PermissionCreate::builder()
             .try_permission_type("sa")?
@@ -124,7 +123,13 @@ mod tests {
             .unwrap()
             .build()?;
 
-        let request = RequestContext::with(&admin_id, "r", true).await.create(
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sec_admin(),
+            true,
+        )
+        .create(
             RoleParam::builder()
                 .role(RoleIdName::try_from("sys_admin")?)
                 .build()?,

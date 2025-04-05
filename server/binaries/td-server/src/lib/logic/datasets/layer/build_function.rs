@@ -38,7 +38,7 @@ pub async fn build_function(
         .execution_template(None)
         .execution_template_created_on(None)
         .created_on(&*event_time)
-        .created_by_id(request_context.user_id())
+        .created_by_id(request_context.user_id().to_string())
         .build()
         .unwrap();
     Ok(function)

@@ -8,10 +8,20 @@ use crate::auth::services::password_change::PasswordChangeService;
 use crate::auth::services::refresh::RefreshService;
 use crate::auth::services::role_change::RoleChangeService;
 use crate::auth::services::user_info::UserInfoService;
+use crate::auth::session::Sessions;
+use argon2::{Argon2, Params, PasswordHasher, Version};
+use getset::Getters;
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use std::sync::Arc;
+use td_common::id;
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::{CreateRequest, ReadRequest, UpdateRequest};
-use td_objects::types::auth::{Login, PasswordChange, RoleChange, TokenResponseX, UserInfo};
+use td_objects::crudl::{ReadRequest, UpdateRequest};
+use td_objects::sql::DaoQueries;
+use td_objects::types::auth::UserInfo;
+use td_objects::types::auth::{Login, PasswordChange, RoleChange, TokenResponseX};
 use td_objects::types::basic::RefreshToken;
 use td_tower::service_provider::TdBoxService;
 
@@ -22,7 +32,107 @@ mod refresh;
 mod role_change;
 mod user_info;
 
+#[derive(Clone, Serialize, Deserialize, Getters)]
+#[getset(get = "pub")]
+pub struct PasswordHashConfig {
+    algorithm: String,
+    version: usize,
+    memory_cost_mib: usize,
+    time_cost: usize,
+    parallelism_cost: usize,
+}
+
+impl PasswordHashConfig {
+    pub fn new(
+        algorithm: &str,
+        version: usize,
+        memory_cost_mib: usize,
+        time_cost: usize,
+        parallelism_cost: usize,
+    ) -> Self {
+        Self {
+            algorithm: algorithm.into(),
+            version,
+            memory_cost_mib,
+            time_cost,
+            parallelism_cost,
+        }
+    }
+
+    pub fn hasher(&self) -> impl PasswordHasher {
+        Argon2::new(
+            argon2::Algorithm::from_str(&self.algorithm)
+                .unwrap_or_else(|_| panic!("Invalid configuration: unknown password hashing algorithm {}. Valid values: argon2d, argon2i, argon2id (default)", self.algorithm)),
+            Version::try_from(self.version as u32)
+                .unwrap_or_else(|_| panic!("Invalid configuration: unknown password hashing version {}. Valid values: 16, 19 (default)", self.version)),
+            Params::new(
+                self.memory_cost_mib as u32,
+                self.time_cost as u32,
+                self.parallelism_cost as u32,
+                None,
+            )
+                .unwrap(),
+        )
+    }
+}
+
+impl Default for PasswordHashConfig {
+    fn default() -> Self {
+        PasswordHashConfig::new("argon2d", 19, 65536, 4, 1)
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Getters)]
+#[getset(get = "pub")]
+pub struct JwtConfig {
+    secret: Option<String>,
+    access_token_expiration: i64,
+    #[serde(skip)]
+    #[getset(skip)]
+    encoding_key: Option<EncodingKey>,
+    #[serde(skip)]
+    #[getset(skip)]
+    decoding_key: Option<DecodingKey>,
+    #[serde(skip)]
+    validation: Validation,
+}
+
+impl JwtConfig {
+    pub fn new(secret: String, access_token_expiration: i64) -> Self {
+        let encoding_key = Some(EncodingKey::from_secret(secret.as_bytes()));
+        let decoding_key = Some(DecodingKey::from_secret(secret.as_bytes()));
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.leeway = 5;
+        validation.set_required_spec_claims(&["jti", "exp"]);
+
+        Self {
+            secret: Some(secret),
+            access_token_expiration,
+            encoding_key,
+            decoding_key,
+            validation,
+        }
+    }
+
+    pub fn encoding_key(&self) -> &EncodingKey {
+        self.encoding_key.as_ref().unwrap()
+    }
+
+    pub fn decoding_key(&self) -> &DecodingKey {
+        self.decoding_key.as_ref().unwrap()
+    }
+}
+
+impl Default for JwtConfig {
+    fn default() -> Self {
+        const EXPIRATION: i64 = 3600;
+        JwtConfig::new(id::id().to_string(), EXPIRATION)
+    }
+}
+
 pub struct AuthServices {
+    jwt_settings: Arc<JwtConfig>,
+    sessions: Arc<Sessions<'static>>,
     login: LoginService,
     refresh: RefreshService,
     logout: LogoutService,
@@ -32,24 +142,54 @@ pub struct AuthServices {
 }
 
 impl AuthServices {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(
+        db: &DbPool,
+        sessions: impl Into<Arc<Sessions<'static>>>,
+        password_settings: impl Into<PasswordHashConfig>,
+        jwt_settings: impl Into<JwtConfig>,
+    ) -> Self {
+        let queries = Arc::new(DaoQueries::default());
+        let password_settings = Arc::new(password_settings.into());
+        let jwt_settings = Arc::new(jwt_settings.into());
+        let sessions = sessions.into();
         Self {
-            login: LoginService::new(db.clone()),
-            refresh: RefreshService::new(db.clone()),
-            logout: LogoutService::new(db.clone()),
-            user_info: UserInfoService::new(db.clone()),
-            role_change: RoleChangeService::new(db.clone()),
-            password_change: PasswordChangeService::new(db),
+            jwt_settings: jwt_settings.clone(),
+            sessions: sessions.clone(),
+            login: LoginService::new(
+                db.clone(),
+                queries.clone(),
+                jwt_settings.clone(),
+                sessions.clone(),
+            ),
+            refresh: RefreshService::new(
+                db.clone(),
+                queries.clone(),
+                jwt_settings.clone(),
+                sessions.clone(),
+            ),
+            logout: LogoutService::new(db.clone(), queries.clone(), sessions.clone()),
+            user_info: UserInfoService::new(db.clone(), queries.clone()),
+            role_change: RoleChangeService::new(
+                db.clone(),
+                queries.clone(),
+                jwt_settings.clone(),
+                sessions.clone(),
+            ),
+            password_change: PasswordChangeService::new(
+                db.clone(),
+                queries.clone(),
+                password_settings.clone(),
+            ),
         }
     }
 
-    pub async fn login_service(
-        &self,
-    ) -> TdBoxService<CreateRequest<(), Login>, TokenResponseX, TdError> {
+    pub async fn login_service(&self) -> TdBoxService<Login, TokenResponseX, TdError> {
         self.login.service().await
     }
 
-    pub async fn refresh_service(&self) -> TdBoxService<RefreshToken, TokenResponseX, TdError> {
+    pub async fn refresh_service(
+        &self,
+    ) -> TdBoxService<UpdateRequest<(), RefreshToken>, TokenResponseX, TdError> {
         self.refresh.service().await
     }
 
@@ -71,5 +211,13 @@ impl AuthServices {
         &self,
     ) -> TdBoxService<UpdateRequest<(), PasswordChange>, (), TdError> {
         self.password_change.service().await
+    }
+
+    pub fn jwt_settings(&self) -> &JwtConfig {
+        &self.jwt_settings
+    }
+
+    pub fn sessions(&self) -> &Sessions {
+        &self.sessions
     }
 }

@@ -110,7 +110,7 @@ mod tests {
     use td_objects::test_utils::seed_function2::seed_function;
     use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
-        BundleId, FunctionRuntimeValues, TableDependency, TableName, UserId,
+        AccessTokenId, BundleId, FunctionRuntimeValues, RoleId, TableDependency, TableName, UserId,
     };
     use td_objects::types::function::{FunctionCreate, FunctionUpdate};
     use td_tower::ctx_service::RawOneshot;
@@ -202,29 +202,37 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .update(
-                FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
-                    .try_function("joaquin_workout")?
-                    .build()?,
-                update.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .update(
+            FunctionParam::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .try_function("joaquin_workout")?
+                .build()?,
+            update.clone(),
+        );
 
         let service = UpdateFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
         // Test remove tables.
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .delete(
-                TableParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
-                    .try_table("super_table")?
-                    .build()?,
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .delete(
+            TableParam::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .try_table("super_table")?
+                .build()?,
+        );
 
         let service = DeleteTableService::new(db.clone()).service().await;
         service.raw_oneshot(request).await?;
@@ -290,29 +298,37 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .update(
-                FunctionParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
-                    .try_function("joaquin_workout")?
-                    .build()?,
-                update.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .update(
+            FunctionParam::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .try_function("joaquin_workout")?
+                .build()?,
+            update.clone(),
+        );
 
         let service = UpdateFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
         // Test remove tables.
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .delete(
-                TableParam::builder()
-                    .try_collection(format!("~{}", collection.id()))?
-                    .try_table("super_table")?
-                    .build()?,
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .delete(
+            TableParam::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .try_table("super_table")?
+                .build()?,
+        );
 
         let service = DeleteTableService::new(db.clone()).service().await;
         service.raw_oneshot(request).await?;

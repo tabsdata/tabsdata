@@ -96,6 +96,7 @@ mod tests {
     use td_objects::test_utils::seed_data_version::seed_data_version;
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, SPath, Storage};
     use td_tower::ctx_service::RawOneshot;
@@ -246,9 +247,8 @@ mod tests {
 
         let service = SampleService::new(db.clone(), storage).service().await;
 
-        let request = RequestContext::with(&creator_id.to_string(), "r", false)
-            .await
-            .list(
+        let request =
+            RequestContext::with(AccessTokenId::default(), creator_id, RoleId::user(), false).list(
                 TableCommitParam::new(
                     &TableParam::new("ds0".to_string(), "t0".to_string()),
                     &AtParam::version(Some(version)),

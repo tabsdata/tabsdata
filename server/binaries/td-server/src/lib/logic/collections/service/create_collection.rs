@@ -74,6 +74,7 @@ mod tests {
     use td_objects::collections::dto::CollectionCreateBuilder;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_user::admin_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -131,14 +132,17 @@ mod tests {
             .unwrap();
 
         let before = UniqueUtc::now_millis()
-            .await
             .naive_utc()
             .and_utc()
             .timestamp_millis();
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .create((), create);
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create((), create);
 
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());

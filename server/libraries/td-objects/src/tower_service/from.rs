@@ -303,6 +303,7 @@ pub async fn combine<T: Clone, U: Clone>(
 mod tests {
     use super::*;
     use crate::crudl::{ListParams, RequestContext};
+    use crate::types::basic::{AccessTokenId, RoleId, UserId};
     use td_type::Dao;
 
     #[Dao]
@@ -326,9 +327,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_map_list() -> Result<(), TdError> {
-        let request: ListRequest<()> = RequestContext::with("test", "r", true)
-            .await
-            .list((), ListParams::default());
+        let request: ListRequest<()> = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+            true,
+        )
+        .list((), ListParams::default());
         let request = Input::new(request);
 
         let result = ListResult::new(vec![Foo::builder().value(1).build()?], false);

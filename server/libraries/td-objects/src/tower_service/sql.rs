@@ -645,6 +645,7 @@ mod tests {
     use super::*;
     use crate::crudl::{ListParams, RequestContext};
     use crate::sql::DaoQueries;
+    use crate::types::basic::{AccessTokenId, RoleId, UserId};
     use lazy_static::lazy_static;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -948,9 +949,13 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let list_request = RequestContext::with("user", "r", true)
-            .await
-            .list((), ListParams::default());
+        let list_request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+            true,
+        )
+        .list((), ListParams::default());
 
         let list = By::<()>::list::<(), DaoQueries, FooDao>(
             connection,

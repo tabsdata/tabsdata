@@ -17,7 +17,7 @@ pub async fn seed_collection(db: &DbPool, creator_id: Option<String>, name: &str
             .0
     };
 
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
 
     let collection = CollectionBuilder::default()
         .id(id::id())
@@ -68,7 +68,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_seed_collection() {
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
         let db = td_database::test_utils::db().await.unwrap();
         let collection_id = seed_collection(&db, None, "collection").await;
 

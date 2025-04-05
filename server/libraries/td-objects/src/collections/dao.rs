@@ -63,8 +63,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_collection_builder() {
-        let created_on = UniqueUtc::now_millis().await;
-        let modified_on = UniqueUtc::now_millis().await;
+        let created_on = UniqueUtc::now_millis();
+        let modified_on = UniqueUtc::now_millis();
         let collection_db = CollectionBuilder::default()
             .id(String::from("id"))
             .name(String::from("name"))
@@ -85,10 +85,10 @@ pub mod tests {
             .id("id")
             .name("name".to_string())
             .description("description".to_string())
-            .created_on(UniqueUtc::now_millis().await)
+            .created_on(UniqueUtc::now_millis())
             .created_by_id("created_by_id".to_string())
             .created_by("created_by".to_string())
-            .modified_on(UniqueUtc::now_millis().await)
+            .modified_on(UniqueUtc::now_millis())
             .modified_by_id("modified_by_id".to_string())
             .modified_by("modified_by".to_string())
             .build()

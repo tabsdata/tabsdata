@@ -36,6 +36,7 @@ mod tests {
     use axum::routing::get;
     use axum::Router;
     use td_objects::crudl::RequestContext;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use tower::ServiceExt;
 
     async fn test_handler() -> &'static str {
@@ -54,7 +55,12 @@ mod tests {
         let app = create_router();
 
         let mut req = Request::builder().uri("/test").body(Body::empty()).unwrap();
-        let context = RequestContext::with("user", "admin", true).await;
+        let context = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        );
         req.extensions_mut().insert(context);
 
         let response = app.oneshot(req).await.unwrap();
@@ -69,7 +75,12 @@ mod tests {
         let app = create_router();
 
         let mut req = Request::builder().uri("/test").body(Body::empty()).unwrap();
-        let context = RequestContext::with("user", "admin", false).await;
+        let context = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            false,
+        );
         req.extensions_mut().insert(context);
 
         let response = app.oneshot(req).await.unwrap();

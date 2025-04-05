@@ -514,7 +514,7 @@ impl<
                     }
                 }
             }
-            let user_id: UserId = request_context.user_id().as_str().try_into()?;
+            let user_id: UserId = request_context.user_id().clone();
             if required_permissions.contains(&Permission::User(AuthzEntity::On(user_id))) {
                 return Ok(());
             }
@@ -530,9 +530,8 @@ mod test {
         AuthzContext, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,
         CollExec, CollRead, CollReadAll, NoPermissions, Permission, Requester, SecAdmin, SysAdmin,
     };
-    use crate::types::basic::{CollectionId, RoleId, UserId};
+    use crate::types::basic::{AccessTokenId, CollectionId, RoleId, UserId};
     use async_trait::async_trait;
-    use lazy_static::lazy_static;
     use sqlx::SqliteConnection;
     use std::collections::HashMap;
     use std::marker::PhantomData;
@@ -540,27 +539,6 @@ mod test {
     use td_common::id;
     use td_error::TdError;
     use td_tower::extractors::{Connection, ConnectionType, Input, SrvCtx};
-
-    fn sys_admin_role() -> &'static RoleId {
-        lazy_static! {
-            static ref ROLE_ID: RoleId = id::id().into();
-        }
-        &ROLE_ID
-    }
-
-    fn sec_admin_role() -> &'static RoleId {
-        lazy_static! {
-            static ref ROLE_ID: RoleId = id::id().into();
-        }
-        &ROLE_ID
-    }
-
-    fn user_role() -> &'static RoleId {
-        lazy_static! {
-            static ref ROLE_ID: RoleId = id::id().into();
-        }
-        &ROLE_ID
-    }
 
     #[derive(Debug)]
     struct AuthzContextForTest {
@@ -588,7 +566,7 @@ mod test {
                 role_permissions_map: HashMap::new(),
             }
             .add(
-                sys_admin_role(),
+                RoleId::sys_admin(),
                 [
                     Permission::SysAdmin,
                     Permission::SecAdmin,
@@ -600,14 +578,14 @@ mod test {
                 ],
             )
             .add(
-                sec_admin_role(),
+                RoleId::sec_admin(),
                 [
                     Permission::SecAdmin,
                     Permission::CollectionAdmin(AuthzEntity::All),
                 ],
             )
             .add(
-                user_role(),
+                RoleId::user(),
                 [
                     Permission::CollectionDev(AuthzEntity::All),
                     Permission::CollectionExec(AuthzEntity::All),
@@ -747,11 +725,24 @@ mod test {
     async fn test_default_roles_and_permissions() {
         let authz_context = AuthzContextForTest::default();
 
-        let sys_admin_context =
-            RequestContext::with(id::id(), &sys_admin_role().to_string(), false).await;
-        let sec_admin_context =
-            RequestContext::with(id::id(), &sec_admin_role().to_string(), false).await;
-        let user_context = RequestContext::with(id::id(), &user_role().to_string(), false).await;
+        let sys_admin_context = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+            true,
+        );
+        let sec_admin_context = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sec_admin(),
+            true,
+        );
+        let user_context = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            false,
+        );
 
         let system_scope = Arc::new(AuthzScope::System);
 
@@ -934,8 +925,12 @@ mod test {
     async fn test_multiple_any_of_all_avail() {
         let authz_context = AuthzContextForTest::default();
 
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &sys_admin_role().to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+            false,
+        ));
 
         let scope = Arc::new(AuthzScope::System);
 
@@ -955,8 +950,12 @@ mod test {
     async fn test_multiple_any_of_one_avail() {
         let authz_context = AuthzContextForTest::default();
 
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &sec_admin_role().to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sec_admin(),
+            false,
+        ));
 
         let scope = Arc::new(AuthzScope::System);
 
@@ -976,8 +975,12 @@ mod test {
     async fn test_multiple_any_of_none_avail() {
         let authz_context = AuthzContextForTest::default();
 
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &user_role().to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            false,
+        ));
 
         let scope = Arc::new(AuthzScope::System);
 
@@ -1002,7 +1005,7 @@ mod test {
         let one_collection = RoleId::default();
 
         let authz_context = AuthzContextForTest::default()
-            .remove(user_role())
+            .remove(&RoleId::user())
             .add(
                 &all_collections,
                 [Permission::CollectionRead(AuthzEntity::All)],
@@ -1016,8 +1019,12 @@ mod test {
         let authz_context = Arc::new(authz_context);
 
         // role with permission granted on all collections
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &all_collections.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            all_collections,
+            false,
+        ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0.clone())));
         assert_ok(
             &authz_context,
@@ -1036,8 +1043,12 @@ mod test {
         .await;
 
         // role with permission granted on one collection
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &one_collection.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            one_collection,
+            false,
+        ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0.clone())));
         assert_ok(
             &authz_context,
@@ -1063,13 +1074,17 @@ mod test {
         let role = RoleId::default();
 
         let authz_context = AuthzContextForTest::default()
-            .remove(user_role())
+            .remove(&RoleId::user())
             .add(&role, [Permission::CollectionRead(AuthzEntity::All)]);
         let authz_context = Arc::new(authz_context);
 
         // positive
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &role.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role,
+            true,
+        ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection.clone())));
         assert_ok(
             &authz_context,
@@ -1138,8 +1153,12 @@ mod test {
 
         // negative
 
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &role.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role,
+            true,
+        ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection.clone())));
         assert_error(
             &authz_context,
@@ -1228,8 +1247,12 @@ mod test {
         );
         let authz_context = Arc::new(authz_context);
 
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &role.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            role,
+            false,
+        ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection.clone())));
         assert_ok(
             &authz_context,
@@ -1252,8 +1275,12 @@ mod test {
         );
         let authz_context = Arc::new(authz_context);
 
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &role.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            role,
+            false,
+        ));
         let scope = Arc::new(AuthzScope::System);
         assert_error(
             &authz_context,
@@ -1277,8 +1304,12 @@ mod test {
         );
         let authz_context = Arc::new(authz_context);
 
-        let request_context =
-            Arc::new(RequestContext::with(id::id(), &role.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            role,
+            false,
+        ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::All));
         assert_error(
             &authz_context,
@@ -1298,8 +1329,12 @@ mod test {
         let authz_context = AuthzContextForTest::default().add(&role, []);
         let authz_context = Arc::new(authz_context);
 
-        let request_context =
-            Arc::new(RequestContext::with(user.to_string(), &role.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            &user,
+            role,
+            false,
+        ));
 
         let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user.clone())));
 
@@ -1321,8 +1356,12 @@ mod test {
         let authz_context = Arc::new(authz_context);
 
         // different user
-        let request_context =
-            Arc::new(RequestContext::with(id::id().to_string(), &role.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role,
+            false,
+        ));
 
         let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user.clone())));
 
@@ -1340,8 +1379,12 @@ mod test {
         let authz_context = Arc::new(authz_context);
 
         // different user
-        let request_context =
-            Arc::new(RequestContext::with(id::id().to_string(), &role.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role,
+            false,
+        ));
 
         let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user.clone())));
 
@@ -1363,8 +1406,12 @@ mod test {
         let authz_context = AuthzContextForTest::default().add(&role, [Permission::SecAdmin]);
         let authz_context = Arc::new(authz_context);
 
-        let request_context =
-            Arc::new(RequestContext::with(id::id().to_string(), &role.to_string(), false).await);
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+            true,
+        ));
 
         let scope = Arc::new(AuthzScope::SystemUser(AuthzEntity::On(user.clone())));
 

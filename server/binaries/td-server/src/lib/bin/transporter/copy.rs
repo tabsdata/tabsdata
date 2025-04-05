@@ -117,13 +117,13 @@ impl CopyTask {
             self.source.url(),
             self.target.url()
         );
-        let start = UniqueUtc::now_millis().await;
+        let start = UniqueUtc::now_millis();
         let (sender, receiver) = channel::<Message>(self.parallelism);
         let writer = Writer::new(self.target.clone(), self.parallelism).await?;
         let writer = tokio::spawn(async move { writer.write(receiver).await });
         self.read(sender).await?;
         let _ = writer.await.unwrap();
-        let end = UniqueUtc::now_millis().await;
+        let end = UniqueUtc::now_millis();
         let report = FileCopyReport {
             idx: self.idx,
             from: self.source.url(),
@@ -266,12 +266,12 @@ mod tests {
         let target = Location::LocalFile {
             url: Url::from_file_path(&target_file).unwrap(),
         };
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
         let task = CopyTask::new(0, source.clone(), target.clone(), 2, 2)
             .await
             .unwrap();
         let report = task.copy().await.unwrap();
-        let after = UniqueUtc::now_millis().await;
+        let after = UniqueUtc::now_millis();
         assert_eq!(report.idx, 0);
         assert_eq!(report.from, source.url());
         assert_eq!(report.to, target.url());

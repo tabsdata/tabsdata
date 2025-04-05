@@ -66,8 +66,7 @@ mod tests {
     use super::*;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_role::get_role;
-    use td_objects::test_utils::seed_user::admin_user;
-    use td_objects::types::basic::RoleName;
+    use td_objects::types::basic::{AccessTokenId, RoleName, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -100,16 +99,19 @@ mod tests {
     #[tokio::test]
     async fn test_create_role() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
-        let admin_id = admin_user(&db).await;
 
         let create = RoleCreate::builder()
             .try_name("test")?
             .try_description("test desc")?
             .build()?;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .create((), create);
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sec_admin(),
+            true,
+        )
+        .create((), create);
 
         let service = CreateRoleService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;

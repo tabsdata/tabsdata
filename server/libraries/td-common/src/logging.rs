@@ -237,9 +237,8 @@ mod tests {
     use std::sync::mpsc::{channel, Receiver, Sender};
     use std::time::Duration;
 
-    use std::sync::Mutex;
-
     use super::*;
+    use std::sync::Mutex;
 
     lazy_static::lazy_static! {
         static ref TEST_LOGGING_MUTEX: Mutex<()> = Mutex::new(());

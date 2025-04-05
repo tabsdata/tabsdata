@@ -118,6 +118,7 @@ mod tests {
     use td_objects::test_utils::seed_data_version::seed_data_version;
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
     use te_tableframe::execution::test_utils::TdUriFilter;
 
@@ -216,8 +217,14 @@ mod tests {
     ) -> Id {
         let mut connection = db.acquire().await.unwrap();
 
-        let before = UniqueUtc::now_millis().await;
-        let request = RequestContext::with(user_id, "r", false).await.create(
+        let before = UniqueUtc::now_millis();
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::try_from(user_id).unwrap(),
+            RoleId::user(),
+            false,
+        )
+        .create(
             FunctionParam::new(collection_name, dataset_name),
             ExecutionPlanWriteBuilder::default()
                 .name("test".to_string())

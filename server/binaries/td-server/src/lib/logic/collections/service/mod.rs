@@ -84,6 +84,7 @@ pub mod tests {
     use td_database::sql::DbPool;
     use td_objects::collections::dto::{CollectionCreate, CollectionRead};
     use td_objects::crudl::RequestContext;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     /// Creates collections for tests.
@@ -99,25 +100,27 @@ pub mod tests {
         name_prefix: &str,
         count: usize,
     ) -> Vec<CollectionRead> {
-        let (mut admin_user, admin_role) =
-            td_database::test_utils::user_role_ids(db, td_security::ADMIN_USER).await;
-        if let Some(creator_id) = creator_id {
-            admin_user = creator_id;
-        }
+        let admin_user = creator_id
+            .map(|id| UserId::try_from(id).unwrap())
+            .unwrap_or(UserId::admin());
         let logic = CollectionServices::new(db.clone());
         let mut collections = Vec::new();
         for i in 0..count {
             let name = format!("{}{}", name_prefix, i);
-            let request = RequestContext::with(&admin_user, &admin_role, true)
-                .await
-                .create(
-                    (),
-                    CollectionCreate::builder()
-                        .name(&name)
-                        .description(format!("{} description", name.to_uppercase()))
-                        .build()
-                        .unwrap(),
-                );
+            let request = RequestContext::with(
+                AccessTokenId::default(),
+                &admin_user,
+                RoleId::sys_admin(),
+                true,
+            )
+            .create(
+                (),
+                CollectionCreate::builder()
+                    .name(&name)
+                    .description(format!("{} description", name.to_uppercase()))
+                    .build()
+                    .unwrap(),
+            );
             let service = logic.create_collection().await;
             let collection = service.raw_oneshot(request).await.unwrap();
             collections.push(collection);

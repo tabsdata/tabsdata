@@ -11,6 +11,7 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::test_utils::seed_dataset::seed_dataset;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId};
 
 #[tokio::test]
 async fn test_dataset_not_found() {
@@ -41,8 +42,7 @@ async fn test_dataset_not_found() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .update(FunctionParam::new("ds0", "dx"), update);
 
     assert_service_error(service, request, |err| match err {

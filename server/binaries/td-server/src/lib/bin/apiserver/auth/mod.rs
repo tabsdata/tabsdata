@@ -13,6 +13,7 @@ pub mod user_info;
 
 pub mod auth_secure;
 pub mod auth_unsecure;
+pub mod authorization_layer;
 pub mod refresh_token;
 
 auth_status_raw!(TokenResponseX);

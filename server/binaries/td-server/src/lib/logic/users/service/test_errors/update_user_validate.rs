@@ -7,7 +7,8 @@ use crate::logic::users::service::update_user::UpdateUserService;
 use std::sync::Arc;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
-use td_objects::test_utils::seed_user::{admin_user, seed_user};
+use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 use td_objects::users::dto::UserUpdate;
 use td_security::config::PasswordHashingConfig;
 
@@ -16,14 +17,18 @@ async fn test_update_request_has_nothing_to_update() {
     let db = td_database::test_utils::db().await.unwrap();
     let password_hashing_config = Arc::new(PasswordHashingConfig::default());
 
-    let admin_id = admin_user(&db).await;
     seed_user(&db, None, "u0", false).await;
 
     let service = UpdateUserService::new(db.clone(), password_hashing_config)
         .service()
         .await;
 
-    let ctx = RequestContext::with(admin_id, "r", true).await;
+    let ctx = RequestContext::with(
+        AccessTokenId::default(),
+        UserId::admin(),
+        RoleId::sec_admin(),
+        true,
+    );
 
     let update = UserUpdate {
         full_name: None,

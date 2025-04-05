@@ -8,6 +8,7 @@ use std::sync::Arc;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId};
 use td_objects::users::dto::UserUpdate;
 use td_security::config::PasswordHashingConfig;
 
@@ -22,7 +23,7 @@ async fn test_not_allowed_to_update_other_users() {
         .service()
         .await;
 
-    let ctx = RequestContext::with(user_id, "r", false).await;
+    let ctx = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false);
 
     let update = UserUpdate {
         full_name: Some("Full Name".to_string()),

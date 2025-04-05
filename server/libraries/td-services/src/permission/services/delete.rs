@@ -59,8 +59,9 @@ mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_permission::{get_permission, seed_permission};
     use td_objects::test_utils::seed_role::seed_role;
-    use td_objects::test_utils::seed_user::admin_user;
-    use td_objects::types::basic::{Description, PermissionType, RoleIdName, RoleName};
+    use td_objects::types::basic::{
+        AccessTokenId, Description, PermissionType, RoleId, RoleIdName, RoleName, UserId,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -88,7 +89,6 @@ mod tests {
     #[tokio::test]
     async fn test_delete_permission() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
-        let admin_id = admin_user(&db).await;
 
         let role = seed_role(
             &db,
@@ -98,7 +98,13 @@ mod tests {
         .await;
         let seeded = seed_permission(&db, PermissionType::try_from("sa")?, None, None, &role).await;
 
-        let request = RequestContext::with(&admin_id, "r", true).await.delete(
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sec_admin(),
+            true,
+        )
+        .delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::try_from("king")?)
                 .permission(PermissionIdName::try_from(seeded.id().to_string())?)

@@ -121,6 +121,7 @@ mod tests {
     use td_objects::test_utils::seed_data_version::seed_data_version;
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, SPath};
     use td_tower::ctx_service::RawOneshot;
@@ -271,13 +272,14 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(user_id, "r", false).await.create(
-            FunctionParam::new("ds0", "d0"),
-            ExecutionPlanWriteBuilder::default()
-                .name("test".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).create(
+                FunctionParam::new("ds0", "d0"),
+                ExecutionPlanWriteBuilder::default()
+                    .name("test".to_string())
+                    .build()
+                    .unwrap(),
+            );
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
@@ -417,13 +419,14 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(user_id, "r", false).await.create(
-            FunctionParam::new("ds0", "d0"),
-            ExecutionPlanWriteBuilder::default()
-                .name("test".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).create(
+                FunctionParam::new("ds0", "d0"),
+                ExecutionPlanWriteBuilder::default()
+                    .name("test".to_string())
+                    .build()
+                    .unwrap(),
+            );
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
@@ -570,39 +573,42 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(user_id, "r", false).await.create(
-            FunctionParam::new("ds0", "d0"),
-            ExecutionPlanWriteBuilder::default()
-                .name("exec_plan_0".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).create(
+                FunctionParam::new("ds0", "d0"),
+                ExecutionPlanWriteBuilder::default()
+                    .name("exec_plan_0".to_string())
+                    .build()
+                    .unwrap(),
+            );
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
             .raw_oneshot(request)
             .await
             .unwrap();
-        let request = RequestContext::with(user_id, "r", false).await.create(
-            FunctionParam::new("ds0", "d1"),
-            ExecutionPlanWriteBuilder::default()
-                .name("exec_plan_1".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).create(
+                FunctionParam::new("ds0", "d1"),
+                ExecutionPlanWriteBuilder::default()
+                    .name("exec_plan_1".to_string())
+                    .build()
+                    .unwrap(),
+            );
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
             .raw_oneshot(request)
             .await
             .unwrap();
-        let request = RequestContext::with(user_id, "r", false).await.create(
-            FunctionParam::new("ds0", "d2"),
-            ExecutionPlanWriteBuilder::default()
-                .name("exec_plan_2".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).create(
+                FunctionParam::new("ds0", "d2"),
+                ExecutionPlanWriteBuilder::default()
+                    .name("exec_plan_2".to_string())
+                    .build()
+                    .unwrap(),
+            );
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
@@ -723,13 +729,14 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(user_id, "r", false).await.create(
-            FunctionParam::new("ds0", "d0"),
-            ExecutionPlanWriteBuilder::default()
-                .name("test".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).create(
+                FunctionParam::new("ds0", "d0"),
+                ExecutionPlanWriteBuilder::default()
+                    .name("test".to_string())
+                    .build()
+                    .unwrap(),
+            );
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
@@ -866,13 +873,14 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(user_id, "r", false).await.create(
-            FunctionParam::new("ds0", "d0"),
-            ExecutionPlanWriteBuilder::default()
-                .name("test".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).create(
+                FunctionParam::new("ds0", "d0"),
+                ExecutionPlanWriteBuilder::default()
+                    .name("test".to_string())
+                    .build()
+                    .unwrap(),
+            );
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
@@ -960,13 +968,14 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(user_id, "r", false).await.create(
-            FunctionParam::new("ds0", "d0"),
-            ExecutionPlanWriteBuilder::default()
-                .name("test".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).create(
+                FunctionParam::new("ds0", "d0"),
+                ExecutionPlanWriteBuilder::default()
+                    .name("test".to_string())
+                    .build()
+                    .unwrap(),
+            );
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await
@@ -1035,13 +1044,14 @@ mod tests {
         )
         .await;
 
-        let request = RequestContext::with(user_id, "r", false).await.create(
-            FunctionParam::new("ds0", "d0"),
-            ExecutionPlanWriteBuilder::default()
-                .name("test".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).create(
+                FunctionParam::new("ds0", "d0"),
+                ExecutionPlanWriteBuilder::default()
+                    .name("test".to_string())
+                    .build()
+                    .unwrap(),
+            );
         let _ep = CreatePlanService::new(db.clone(), Arc::new(TransactionBy::default()))
             .service()
             .await

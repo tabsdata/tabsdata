@@ -62,8 +62,7 @@ mod tests {
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_permission::seed_permission;
     use td_objects::test_utils::seed_role::seed_role;
-    use td_objects::test_utils::seed_user::admin_user;
-    use td_objects::types::basic::{Description, PermissionType, RoleName};
+    use td_objects::types::basic::{AccessTokenId, Description, PermissionType, RoleName, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -99,7 +98,6 @@ mod tests {
     #[tokio::test]
     async fn test_list_permissions() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
-        let admin_id = admin_user(&db).await;
 
         let role = seed_role(
             &db,
@@ -109,7 +107,13 @@ mod tests {
         .await;
         let seeded = seed_permission(&db, PermissionType::try_from("sa")?, None, None, &role).await;
 
-        let request = RequestContext::with(&admin_id, "r", true).await.list(
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sec_admin(),
+            true,
+        )
+        .list(
             RoleParam::builder()
                 .role(RoleIdName::try_from("king")?)
                 .build()?,

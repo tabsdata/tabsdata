@@ -11,6 +11,7 @@ use std::net::ToSocketAddrs;
 use td_error::td_error;
 use td_error::TdError;
 use td_objects::crudl::RequestContext;
+use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 
 #[derive(Default)]
 pub struct LoopbackIpFilterService;
@@ -32,9 +33,12 @@ impl LoopbackIpFilterService {
         if is_loopback {
             // TODO create internal user and role
             // Insert the context into the request extensions.
-            let request_context =
-                RequestContext::with(td_security::ADMIN_USER, td_security::SYS_ADMIN_ROLE, true)
-                    .await;
+            let request_context = RequestContext::with(
+                AccessTokenId::default(),
+                UserId::admin(),
+                RoleId::sys_admin(),
+                true,
+            );
             let mut request = request;
             request.extensions_mut().insert(request_context);
 

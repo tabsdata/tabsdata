@@ -119,15 +119,12 @@ mod tests {
     #[tokio::test]
     async fn test_user_builder() {
         let created_on = UniqueUtc::now_millis()
-            .await
             .checked_sub_signed(TimeDelta::minutes(1))
             .unwrap();
         let modified_on = UniqueUtc::now_millis()
-            .await
             .checked_sub_signed(TimeDelta::minutes(2))
             .unwrap();
         let password_set_on = UniqueUtc::now_millis()
-            .await
             .checked_sub_signed(TimeDelta::minutes(3))
             .unwrap();
         let user = UserBuilder::default()

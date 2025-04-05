@@ -114,6 +114,7 @@ pub mod tests {
     use td_common::time::UniqueUtc;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_objects::users::dao::User;
     use td_objects::users::dto::{PasswordUpdate, UserUpdate};
     use td_security::config::PasswordHashingConfig;
@@ -206,14 +207,17 @@ pub mod tests {
         };
 
         let before = UniqueUtc::now_millis()
-            .await
             .naive_utc()
             .and_utc()
             .timestamp_millis();
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .update("u0", user_update);
-        let request_time = *request.context().time();
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sec_admin(),
+            true,
+        )
+        .update("u0", user_update);
+        let request_time = request.context().time().clone();
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let updated = response.unwrap();
@@ -262,14 +266,13 @@ pub mod tests {
         };
 
         let before = UniqueUtc::now_millis()
-            .await
             .naive_utc()
             .and_utc()
             .timestamp_millis();
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .update("u0", user_update);
-        let request_time = *request.context().time();
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .update("u0", user_update);
+        let request_time = request.context().time().clone();
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let updated = response.unwrap();

@@ -79,6 +79,7 @@ mod tests {
     use td_objects::test_utils::seed_data_version::seed_data_version;
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_storage::location::StorageLocation;
     use td_storage::SPath;
     use td_tower::ctx_service::RawOneshot;
@@ -186,9 +187,8 @@ mod tests {
 
         let service = DataService::new(db.clone()).service().await;
 
-        let request = RequestContext::with(&creator_id.to_string(), "r", false)
-            .await
-            .read(
+        let request =
+            RequestContext::with(AccessTokenId::default(), creator_id, RoleId::user(), false).read(
                 TableCommitParam::new(
                     &TableParam::new("ds0".to_string(), "t0".to_string()),
                     &AtParam::version(Some(version)),
@@ -384,15 +384,19 @@ mod tests {
 
         let service = DataService::new(db.clone()).service().await;
 
-        let request = RequestContext::with(&id::id().to_string(), "r", false)
-            .await
-            .read(
-                TableCommitParam::new(
-                    &TableParam::new("ds0".to_string(), "t0".to_string()),
-                    &AtParam::commit(commit_id),
-                )
-                .unwrap(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            false,
+        )
+        .read(
+            TableCommitParam::new(
+                &TableParam::new("ds0".to_string(), "t0".to_string()),
+                &AtParam::commit(commit_id),
+            )
+            .unwrap(),
+        );
         service.raw_oneshot(request).await
     }
 
@@ -439,7 +443,7 @@ mod tests {
             "P",
         )
         .await;
-        let trx0_time = UniqueUtc::now_millis().await;
+        let trx0_time = UniqueUtc::now_millis();
 
         // 1st version of the dataset we are testing
         let data_version1 = seed_data_version(
@@ -453,7 +457,7 @@ mod tests {
             "P",
         )
         .await;
-        let trx1_time = UniqueUtc::now_millis().await;
+        let trx1_time = UniqueUtc::now_millis();
         // another dataset part of the same trx
         let _data_version2 = seed_data_version(
             &db,
@@ -478,7 +482,7 @@ mod tests {
             "P",
         )
         .await;
-        let trx2_time = UniqueUtc::now_millis().await;
+        let trx2_time = UniqueUtc::now_millis();
         // 3rd version of the dataset we are testing
         let data_version4 = seed_data_version(
             &db,
@@ -491,7 +495,7 @@ mod tests {
             "P",
         )
         .await;
-        let trx3_time = UniqueUtc::now_millis().await;
+        let trx3_time = UniqueUtc::now_millis();
         // 4th version of the dataset we are testing, not published yet
         let _data_version5 = seed_data_version(
             &db,
@@ -504,7 +508,7 @@ mod tests {
             "D",
         )
         .await;
-        let trx4_time = UniqueUtc::now_millis().await;
+        let trx4_time = UniqueUtc::now_millis();
 
         // Note that these times are after the data version is seeded:
         // at trx0_time dataset version should be none
@@ -573,15 +577,19 @@ mod tests {
         let service = DataService::new(db.clone()).service().await;
 
         let time = time.format(DATE_TIME_FORMAT).to_string();
-        let request = RequestContext::with(&id::id().to_string(), "r", false)
-            .await
-            .read(
-                TableCommitParam::new(
-                    &TableParam::new("ds0".to_string(), "t0".to_string()),
-                    &AtParam::time(time),
-                )
-                .unwrap(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            false,
+        )
+        .read(
+            TableCommitParam::new(
+                &TableParam::new("ds0".to_string(), "t0".to_string()),
+                &AtParam::time(time),
+            )
+            .unwrap(),
+        );
         service.raw_oneshot(request).await
     }
 }

@@ -11,7 +11,7 @@ use crate::logic::datasets::layer::select_dataset_with_names::select_dataset_wit
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::ReadRequest;
-use td_objects::datasets::dto::*;
+use td_objects::datasets::dto::DatasetRead;
 use td_objects::rest_urls::FunctionParam;
 use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
 use td_tower::from_fn::from_fn;
@@ -55,9 +55,11 @@ mod tests {
     use crate::logic::collections::service::tests::create_test_collections;
     use crate::logic::datasets::service::create_dataset::CreateDatasetService;
     use crate::logic::datasets::service::read_dataset::ReadDatasetService;
+    use crate::logic::datasets::service::DatasetWrite;
     use crate::logic::users::service::create_user::tests::create_test_users;
     use td_objects::crudl::RequestContext;
     use td_objects::dlo::CollectionName;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -86,29 +88,37 @@ mod tests {
         let users = create_test_users(&db, None, "u", 1, true).await;
         let collection = create_test_collections(&db, None, "ds", 1).await;
 
-        let request = RequestContext::with(users[0].id(), "r", false)
-            .await
-            .create(
-                CollectionName::new(collection[0].name()),
-                DatasetWrite {
-                    name: "d0".to_string(),
-                    description: "D0".to_string(),
-                    data_location: None,
-                    bundle_hash: "hash".to_string(),
-                    tables: vec!["t0".to_string()],
-                    dependencies: vec![],
-                    trigger_by: Some(vec![]),
-                    function_snippet: None,
-                },
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::try_from(users[0].id().as_str()).unwrap(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionName::new(collection[0].name()),
+            DatasetWrite {
+                name: "d0".to_string(),
+                description: "D0".to_string(),
+                data_location: None,
+                bundle_hash: "hash".to_string(),
+                tables: vec!["t0".to_string()],
+                dependencies: vec![],
+                trigger_by: Some(vec![]),
+                function_snippet: None,
+            },
+        );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
         println!("{:#?}", response);
 
-        let request = RequestContext::with(users[0].id(), "r", false)
-            .await
-            .read(FunctionParam::new("ds0", "d0"));
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::try_from(users[0].id().as_str()).unwrap(),
+            RoleId::user(),
+            false,
+        )
+        .read(FunctionParam::new("ds0", "d0"));
 
         let service = ReadDatasetService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;

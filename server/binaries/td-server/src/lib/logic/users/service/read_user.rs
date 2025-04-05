@@ -57,6 +57,7 @@ pub mod tests {
     use crate::logic::users::service::read_user::ReadUserService;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -97,9 +98,9 @@ pub mod tests {
 
         let service = ReadUserService::new(db.clone()).service().await;
 
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .read("u0");
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .read("u0");
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let created = response.unwrap();

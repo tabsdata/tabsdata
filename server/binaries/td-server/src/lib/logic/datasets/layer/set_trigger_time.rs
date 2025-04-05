@@ -7,5 +7,5 @@ use td_common::time::UniqueUtc;
 use td_error::TdError;
 
 pub async fn set_trigger_time() -> Result<DateTime<Utc>, TdError> {
-    Ok(UniqueUtc::now_millis().await)
+    Ok(UniqueUtc::now_millis())
 }

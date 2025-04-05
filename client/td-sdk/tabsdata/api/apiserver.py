@@ -236,8 +236,8 @@ class APIServer:
             return response
 
     def authentication_access(self, name: str, password: str):
-        endpoint = "/auth/access"
-        data = {"name": name, "password": password}
+        endpoint = "/api/v1/auth/login"
+        data = {"name": name, "password": password, "role": "sys_admin"}
         response = self.post(endpoint, data)
         if response.status_code == 200:
             self.bearer_token = response.json()["access_token"]

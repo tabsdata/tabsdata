@@ -32,6 +32,13 @@ pub enum IdError {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Id([u8; 16]);
 
+impl Id {
+    /// For td_objects::types::basic::UserId/RoleI duse ONLY.
+    pub fn _new(bytes: [u8; 16]) -> Self {
+        Id(bytes)
+    }
+}
+
 impl Default for Id {
     fn default() -> Self {
         id()

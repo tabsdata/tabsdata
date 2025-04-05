@@ -4,9 +4,9 @@
 
 use crate::crudl::{ReadRequest, RequestContext};
 use crate::sql::{DaoQueries, Insert, SelectBy, UpdateBy};
-use crate::test_utils::seed_user::admin_user;
 use crate::types::basic::{
-    DependencyPos, DependencyStatus, TableFunctionParamPos, TableId, TableStatus, TriggerStatus,
+    AccessTokenId, DependencyPos, DependencyStatus, RoleId, TableFunctionParamPos, TableId,
+    TableStatus, TriggerStatus, UserId,
 };
 use crate::types::collection::CollectionDB;
 use crate::types::dependency::{DependencyDBBuilder, DependencyVersionDBBuilder};
@@ -22,9 +22,13 @@ pub async fn seed_function(
     collection: &CollectionDB,
     function_create: &FunctionCreate,
 ) -> (FunctionDB, FunctionVersionDB) {
-    let admin_id = admin_user(db).await;
-    let request_context: ReadRequest<String> =
-        RequestContext::with(&admin_id, "r", true).await.read("");
+    let request_context: ReadRequest<String> = RequestContext::with(
+        AccessTokenId::default(),
+        UserId::admin(),
+        RoleId::sec_admin(),
+        true,
+    )
+    .read("");
     let request_context = request_context.context();
 
     let queries = DaoQueries::default();

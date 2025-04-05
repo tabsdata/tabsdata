@@ -4,14 +4,16 @@
 
 use crate::types::dependency::DependencyVersionDBWithNames;
 use crate::types::parse::{
-    parse_collection, parse_entity, parse_function, parse_role, parse_table, parse_user,
-    DATA_LOCATION_REGEX,
+    parse_collection, parse_email, parse_entity, parse_function, parse_role, parse_table,
+    parse_user, DATA_LOCATION_REGEX,
 };
 use crate::types::table::TableVersionDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::trigger::TriggerVersionDBWithNames;
 use constcat::concat;
+use td_common::id::Id;
 use td_error::TdError;
+use td_security::{ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN, USER_ROLE};
 
 #[td_type::typed(string)]
 pub struct AccessToken;
@@ -66,6 +68,9 @@ impl DependencyStatus {
 
 #[td_type::typed(id)]
 pub struct DependencyVersionId;
+
+#[td_type::typed(string(parser = parse_email))]
+pub struct Email;
 
 #[td_type::typed(id)]
 pub struct EntityId;
@@ -133,19 +138,30 @@ pub struct FunctionVersionIdName;
 #[td_type::typed(string(regex = GRANT_TYPE_REGEX))]
 pub struct GrantType;
 
-const GRANT_TYPE_REGEX: &'static str = "^refresh_token$";
+const GRANT_TYPE_REGEX: &str = "^refresh_token$";
 
-#[td_type::typed(string)]
+const MIN_PASSWORD_LEN: usize = 8;
+const MAX_PASSWORD_LEN: usize = 64;
+#[td_type::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct NewPassword;
 
-#[td_type::typed(string)]
+#[td_type::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct OldPassword;
 
 #[td_type::typed(string(min_len = 1, max_len = 1024))]
 pub struct Partition;
 
-#[td_type::typed(string)]
+#[td_type::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct Password;
+
+#[td_type::typed(timestamp, try_from = AtTime)]
+pub struct PasswordChangeTime;
+
+#[td_type::typed(string)]
+pub struct PasswordHash;
+
+#[td_type::typed(bool(default = false))]
+pub struct PasswordMustChange;
 
 #[td_type::typed(id)]
 pub struct PermissionId;
@@ -156,7 +172,7 @@ pub struct PermissionIdName;
 #[td_type::typed(string(regex = PERMISSION_ENTITY_TYPE_REGEX))]
 pub struct PermissionEntityType;
 
-const PERMISSION_ENTITY_TYPE_REGEX: &'static str = concat!(
+const PERMISSION_ENTITY_TYPE_REGEX: &str = concat!(
     "^(",
     PermissionEntityType::SYS,
     "|",
@@ -180,7 +196,7 @@ impl PermissionEntityType {
 #[td_type::typed(string(regex = PERMISSION_TYPE_REGEX))]
 pub struct PermissionType;
 
-const PERMISSION_TYPE_REGEX: &'static str = concat!(
+const PERMISSION_TYPE_REGEX: &str = concat!(
     "^(",
     PermissionType::SA,
     "|",
@@ -256,20 +272,44 @@ pub struct RefreshTokenId;
 #[td_type::typed(id)]
 pub struct RoleId;
 
+impl RoleId {
+    pub fn sys_admin() -> Self {
+        Self(Id::_new(ID_ROLE_SYS_ADMIN))
+    }
+
+    pub fn sec_admin() -> Self {
+        Self(Id::_new(ID_ROLE_SEC_ADMIN))
+    }
+
+    pub fn user() -> Self {
+        Self(Id::_new(ID_ROLE_USER))
+    }
+}
 #[td_type::typed(string(parser = parse_role))]
 pub struct RoleName;
+
+impl RoleName {
+    pub fn user() -> Self {
+        Self(USER_ROLE.to_string())
+    }
+}
 
 #[td_type::typed(id_name(id = RoleId, name = RoleName))]
 pub struct RoleIdName;
 
+#[td_type::typed(id)]
+pub struct SessionId;
+
 #[td_type::typed(string(regex = SESSION_INVALIDATION_REASON_REGEX))]
 pub struct SessionStatus;
 
-const SESSION_INVALIDATION_REASON_REGEX: &'static str = constcat::concat!(
+const SESSION_INVALIDATION_REASON_REGEX: &str = constcat::concat!(
     "^(",
     SessionStatus::ACTIVE,
     "|",
     SessionStatus::PASSW_RESET,
+    "|",
+    SessionStatus::INVALID_NEW_TOKEN,
     "|",
     SessionStatus::INVALID_ROLE_CHANGE,
     "|",
@@ -280,6 +320,7 @@ const SESSION_INVALIDATION_REASON_REGEX: &'static str = constcat::concat!(
 impl SessionStatus {
     pub const ACTIVE: &'static str = "a";
     pub const PASSW_RESET: &'static str = "p";
+    pub const INVALID_NEW_TOKEN: &'static str = "it";
     pub const INVALID_ROLE_CHANGE: &'static str = "ir";
     pub const INVALID_LOGOUT: &'static str = "il";
 
@@ -289,6 +330,10 @@ impl SessionStatus {
 
     pub fn password_reset() -> Self {
         Self(Self::PASSW_RESET.to_string())
+    }
+
+    pub fn invalid_new_token() -> Self {
+        Self(Self::INVALID_NEW_TOKEN.to_string())
     }
 
     pub fn invalid_role_change() -> Self {
@@ -459,8 +504,17 @@ impl TriggerStatus {
 #[td_type::typed(id)]
 pub struct TriggerVersionId;
 
+#[td_type::typed(bool)]
+pub struct UserEnabled;
+
 #[td_type::typed(id)]
 pub struct UserId;
+
+impl UserId {
+    pub fn admin() -> Self {
+        Self(Id::_new(ID_USER_ADMIN))
+    }
+}
 
 #[td_type::typed(string(parser = parse_user))]
 pub struct UserName;

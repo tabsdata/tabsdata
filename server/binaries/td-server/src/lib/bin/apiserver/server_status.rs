@@ -48,6 +48,7 @@ mod tests {
     use http::{Method, StatusCode};
     use std::sync::Arc;
     use td_objects::crudl::RequestContext;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use tower::ServiceExt;
 
     async fn users_state() -> StatusState {
@@ -57,7 +58,12 @@ mod tests {
     }
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
-        let context = RequestContext::with("", "", true).await;
+        let context = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        );
         let router = router.clone().into();
         router.layer(Extension(context.clone()))
     }

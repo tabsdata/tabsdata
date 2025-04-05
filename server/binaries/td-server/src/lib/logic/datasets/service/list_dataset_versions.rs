@@ -78,6 +78,7 @@ mod tests {
     use td_objects::test_utils::seed_data_version::seed_data_version;
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -184,9 +185,9 @@ mod tests {
 
         let service = ListDatasetVersionsService::new(db.clone()).service().await;
 
-        let request = RequestContext::with(&creator_id.to_string(), "r", false)
-            .await
-            .list(FunctionParam::new("ds0", "d0"), ListParams::default());
+        let request =
+            RequestContext::with(AccessTokenId::default(), creator_id, RoleId::user(), false)
+                .list(FunctionParam::new("ds0", "d0"), ListParams::default());
         let response: ListResponse<DataVersionList> = service.raw_oneshot(request).await.unwrap();
         assert_eq!(*response.len(), 2);
         let versions = response

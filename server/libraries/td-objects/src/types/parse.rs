@@ -253,6 +253,18 @@ pub fn parse_user(s: impl Into<String>) -> Result<String, TdError> {
     parse_name(s, "User name")
 }
 
+pub fn parse_email(s: impl Into<String>) -> Result<String, TdError> {
+    const EMAIL_PATTERN: &str = "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}";
+    lazy_static! {
+        static ref REGEX: Regex = Regex::new(EMAIL_PATTERN).unwrap();
+    }
+    parser(
+        REGEX.clone(),
+        s.into().to_lowercase(),
+        "Invalid email address",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

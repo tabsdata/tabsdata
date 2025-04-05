@@ -8,7 +8,6 @@ use sqlx::SqliteConnection;
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_common::provider::{CachedProvider, Provider};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::tower_service::authz::{AuthzContext, NoPermissions, Permission};
 use td_objects::types::basic::RoleId;
@@ -24,13 +23,14 @@ pub struct AuthzContextImplWithCache<'a> {
     >,
 }
 
-impl AuthzContextImplWithCache<'_> {
-    pub fn new() -> Self {
+impl Default for AuthzContextImplWithCache<'_> {
+    fn default() -> Self {
         let provider = SqlRolePermissionsProvider;
-        let provider = CachedProvider::new(provider);
+        let provider = CachedProvider::cache(provider);
         Self { provider }
     }
 }
+
 #[async_trait]
 impl AuthzContext for AuthzContextImplWithCache<'_> {
     async fn role_permissions(
@@ -42,12 +42,12 @@ impl AuthzContext for AuthzContextImplWithCache<'_> {
             .provider
             .get(conn)
             .await?
-            .get(&role)
+            .get(role)
             .map(|permissions| permissions.clone()))
     }
 
     async fn refresh(&self, conn: &mut SqliteConnection) -> Result<(), TdError> {
-        self.provider.refresh(conn).await
+        self.provider.purge(conn).await
     }
 }
 

@@ -8,12 +8,11 @@ use td_error::assert_service_error;
 use td_objects::collections::dto::CollectionCreateBuilder;
 use td_objects::crudl::RequestContext;
 use td_objects::test_utils::seed_collection::seed_collection;
-use td_objects::test_utils::seed_user::admin_user;
+use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 
 #[tokio::test]
 async fn test_create_already_existing() {
     let db = td_database::test_utils::db().await.unwrap();
-    let admin_id = admin_user(&db).await;
     seed_collection(&db, None, "ds0").await;
 
     let service = CreateCollectionService::new(db.clone()).service().await;
@@ -24,9 +23,13 @@ async fn test_create_already_existing() {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(&admin_id.to_string(), "r", true)
-        .await
-        .create((), create);
+    let request = RequestContext::with(
+        AccessTokenId::default(),
+        UserId::admin(),
+        RoleId::user(),
+        true,
+    )
+    .create((), create);
 
     assert_service_error(service, request, |err| match err {
         CollectionError::AlreadyExists => {}

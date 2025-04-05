@@ -102,7 +102,7 @@ mod tests {
     async fn test_claims_new() {
         let user = "test_user".to_string();
         let role = "user".to_string();
-        let exp = UniqueUtc::now_millis().await.timestamp() + Duration::days(1).num_seconds();
+        let exp = UniqueUtc::now_millis().timestamp() + Duration::days(1).num_seconds();
 
         let claims = AccessTokenClaims::new(user.clone(), role.clone(), Duration::seconds(exp));
 

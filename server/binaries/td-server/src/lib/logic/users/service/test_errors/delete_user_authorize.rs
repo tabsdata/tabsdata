@@ -7,6 +7,7 @@ use crate::logic::users::service::delete_user::DeleteUserService;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId};
 
 #[tokio::test]
 async fn test_not_allowed_to_delete_users() {
@@ -16,7 +17,12 @@ async fn test_not_allowed_to_delete_users() {
 
     let service = DeleteUserService::new(db.clone()).service().await;
 
-    let ctx = RequestContext::with(requester_id, "r", false).await;
+    let ctx = RequestContext::with(
+        AccessTokenId::default(),
+        requester_id,
+        RoleId::user(),
+        false,
+    );
 
     let request = ctx.delete("u1");
 

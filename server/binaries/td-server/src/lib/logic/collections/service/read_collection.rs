@@ -59,6 +59,7 @@ pub mod tests {
     use td_objects::rest_urls::CollectionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_user::admin_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -92,7 +93,6 @@ pub mod tests {
 
     async fn test_read_collection(admin: bool) {
         let before = UniqueUtc::now_millis()
-            .await
             .naive_utc()
             .and_utc()
             .timestamp_millis();
@@ -103,9 +103,13 @@ pub mod tests {
 
         let service = ReadCollectionService::new(db).service().await;
 
-        let request = RequestContext::with(&admin_id, "r", admin)
-            .await
-            .read(CollectionParam::new("ds0"));
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            admin,
+        )
+        .read(CollectionParam::new("ds0"));
 
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());

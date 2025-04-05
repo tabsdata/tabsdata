@@ -117,8 +117,8 @@ mod tests {
     use td_objects::test_utils::seed_function2::seed_function;
     use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
-        BundleId, CollectionName, FunctionRuntimeValues, TableDependency, TableName, UserId,
-        UserName,
+        AccessTokenId, BundleId, CollectionName, FunctionRuntimeValues, RoleId, TableDependency,
+        TableName, UserId, UserName,
     };
     use td_objects::types::function::FunctionCreate;
     use td_tower::ctx_service::RawOneshot;
@@ -214,7 +214,13 @@ mod tests {
 
         let (function, function_version) = seed_function(&db, &collection, &create).await;
 
-        let request = RequestContext::with(&admin_id, "r", true).await.read(
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .read(
             FunctionVersionParam::builder()
                 .try_collection(format!("~{}", function.collection_id()))?
                 .try_function_version("joaquin_workout")?

@@ -817,10 +817,7 @@ pub fn typed_timestamp(
         quote! { #default_tokens }
     } else {
         quote! {
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current()
-                    .block_on(async { td_common::time::UniqueUtc::now_millis().await })
-            })
+            td_common::time::UniqueUtc::now_millis()
         }
     };
 
@@ -837,7 +834,7 @@ pub fn typed_timestamp(
 
         impl #name {
             pub async fn now() -> Self {
-                Self(td_common::time::UniqueUtc::now_millis().await)
+                Self(td_common::time::UniqueUtc::now_millis())
             }
 
             fn parse(val: impl Into<chrono::DateTime<chrono::Utc>>) -> Result<Self, td_error::TdError> {

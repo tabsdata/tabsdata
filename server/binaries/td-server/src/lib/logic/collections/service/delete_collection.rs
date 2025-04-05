@@ -62,7 +62,7 @@ mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_user::admin_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -104,14 +104,17 @@ mod tests {
     #[tokio::test]
     async fn test_delete_collection() {
         let db = td_database::test_utils::db().await.unwrap();
-        let admin_id = admin_user(&db).await;
         seed_collection(&db, None, "ds0").await;
 
         let service = DeleteCollectionService::new(db.clone()).service().await;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .delete(CollectionParam::new("ds0"));
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .delete(CollectionParam::new("ds0"));
 
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());

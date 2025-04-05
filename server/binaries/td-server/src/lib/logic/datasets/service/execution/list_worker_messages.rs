@@ -66,6 +66,7 @@ mod tests {
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_worker_message::seed_worker_message;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -137,8 +138,8 @@ mod tests {
         let transaction_id =
             seed_transaction(&db, &execution_plan_id, None, TransactionStatus::Scheduled).await;
 
-        let triggered_on = UniqueUtc::now_millis().await;
-        let started_on = UniqueUtc::now_millis().await;
+        let triggered_on = UniqueUtc::now_millis();
+        let started_on = UniqueUtc::now_millis();
         let data_version_id = seed_data_version_full(
             &db,
             &collection_id,
@@ -176,12 +177,10 @@ mod tests {
 
         let service = ListWorkerMessagesService::new(db.clone()).service().await;
         let request: ListRequest<WorkerMessageListParam> =
-            RequestContext::with(&user_id.to_string(), "r", false)
-                .await
-                .list(
-                    WorkerMessageListParam::new(&by_param).unwrap(),
-                    ListParams::default(),
-                );
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false).list(
+                WorkerMessageListParam::new(&by_param).unwrap(),
+                ListParams::default(),
+            );
 
         let response: ListResponse<WorkerMessageList> = service.raw_oneshot(request).await.unwrap();
 

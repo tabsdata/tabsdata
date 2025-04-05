@@ -23,7 +23,7 @@ use utoipa::IntoParams;
 pub const AUTH: &str = "/auth";
 pub const AUTH_LOGIN: &str = concat!(AUTH, "/login");
 pub const AUTH_REFRESH: &str = concat!(AUTH, "/refresh");
-pub const AUTH_ROLE_CHANGE: &str = concat!(AUTH, "/role");
+pub const AUTH_ROLE_CHANGE: &str = concat!(AUTH, "/role_change");
 pub const AUTH_LOGOUT: &str = concat!(AUTH, "/logout");
 pub const AUTH_USER_INFO: &str = concat!(AUTH, "/info");
 pub const AUTH_PASSWORD_CHANGE: &str = concat!(AUTH, "/password_change");

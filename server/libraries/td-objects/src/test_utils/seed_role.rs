@@ -4,8 +4,7 @@
 
 use crate::crudl::{handle_sql_err, ReadRequest, RequestContext};
 use crate::sql::{DaoQueries, Insert, SelectBy};
-use crate::test_utils::seed_user::admin_user;
-use crate::types::basic::{Description, RoleName};
+use crate::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
 use crate::types::role::{RoleCreate, RoleDB, RoleDBBuilder};
 use crate::types::SqlEntity;
 use td_database::sql::DbPool;
@@ -18,9 +17,13 @@ pub async fn seed_role(db: &DbPool, name: RoleName, description: Description) ->
         .build()
         .unwrap();
 
-    let admin_id = admin_user(db).await;
-    let request_context: ReadRequest<String> =
-        RequestContext::with(&admin_id, "r", true).await.read("");
+    let request_context: ReadRequest<String> = RequestContext::with(
+        AccessTokenId::default(),
+        UserId::admin(),
+        RoleId::sec_admin(),
+        true,
+    )
+    .read("");
     let request_context = request_context.context();
 
     let builder = RoleDBBuilder::try_from(&role_create).unwrap();

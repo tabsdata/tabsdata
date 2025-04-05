@@ -22,9 +22,9 @@ pub async fn build_dataset(
         .name(dataset.name())
         .collection_id(&*collection_id)
         .created_on(&*event_time) // when used for update this  fields not ignored during the DB update
-        .created_by_id(request_context.user_id())
+        .created_by_id(request_context.user_id().to_string())
         .modified_on(&*event_time)
-        .modified_by_id(request_context.user_id())
+        .modified_by_id(request_context.user_id().to_string())
         .current_function_id(&*function_id)
         .current_data_id(None)
         .last_run_on(None)

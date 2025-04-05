@@ -57,10 +57,10 @@ impl DeleteUserService {
 #[cfg(test)]
 pub mod tests {
     use crate::logic::users::service::delete_user::DeleteUserService;
-    use td_database::test_utils::user_role_ids;
     use td_objects::crudl::RequestContext;
     use td_objects::entity_finder::users::UserWithNamesFinder;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -98,14 +98,17 @@ pub mod tests {
     #[tokio::test]
     async fn test_delete_user() {
         let db = td_database::test_utils::db().await.unwrap();
-        let (admin_id, _) = user_role_ids(&db, td_security::ADMIN_USER).await;
         let user_id0 = seed_user(&db, None, "u0", true).await;
 
         let service = DeleteUserService::new(db.clone()).service().await;
 
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .delete("u0");
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+            true,
+        )
+        .delete("u0");
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
 

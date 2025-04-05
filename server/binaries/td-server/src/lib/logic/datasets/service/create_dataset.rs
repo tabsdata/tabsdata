@@ -121,6 +121,7 @@ pub mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
 
@@ -229,18 +230,14 @@ pub mod tests {
         collection_name: &str,
         dataset: DatasetWrite,
     ) -> Result<DatasetRead, TdError> {
-        let creator_id = if let Some(user_id) = creator_id {
-            user_id
-        } else {
-            td_database::test_utils::user_role_ids(&db, td_security::ADMIN_USER)
-                .await
-                .0
-        };
+        let creator_id = creator_id
+            .map(|s| UserId::try_from(s).unwrap())
+            .unwrap_or(UserId::admin());
         let service = CreateDatasetService::new(db).service().await;
         let collection_name = CollectionName::new(collection_name);
-        let request = RequestContext::with(&creator_id, "r", false)
-            .await
-            .create(collection_name, dataset);
+        let request =
+            RequestContext::with(AccessTokenId::default(), creator_id, RoleId::user(), true)
+                .create(collection_name, dataset);
         service.raw_oneshot(request).await
     }
 
@@ -290,10 +287,10 @@ pub mod tests {
             function_snippet: Some("snippet".to_string()),
         };
 
-        let before = UniqueUtc::now_millis().await;
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .create(CollectionName::new("ds0"), create);
+        let before = UniqueUtc::now_millis();
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .create(CollectionName::new("ds0"), create);
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let created = response.unwrap();
@@ -344,9 +341,9 @@ pub mod tests {
             function_snippet: Some("snippet".to_string()),
         };
 
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .create(CollectionName::new("ds0"), create);
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .create(CollectionName::new("ds0"), create);
         let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_TABLES_SELECT_SQL: &str = r#"
@@ -401,9 +398,9 @@ pub mod tests {
             function_snippet: Some("snippet".to_string()),
         };
 
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .create(CollectionName::new("ds0"), create);
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .create(CollectionName::new("ds0"), create);
         let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_FUNCTION_SELECT_SQL: &str = r#"
@@ -468,9 +465,9 @@ pub mod tests {
             function_snippet: Some("snippet".to_string()),
         };
 
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .create(CollectionName::new("ds0"), create);
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .create(CollectionName::new("ds0"), create);
         let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_FUNCTION_SELECT_SQL: &str = r#"
@@ -535,9 +532,9 @@ pub mod tests {
             function_snippet: Some("snippet".to_string()),
         };
 
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .create(CollectionName::new("ds0"), create);
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .create(CollectionName::new("ds0"), create);
         let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_DEPS_SELECT_SQL: &str = r#"
@@ -585,9 +582,9 @@ pub mod tests {
             function_snippet: Some("snippet".to_string()),
         };
 
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .create(CollectionName::new("ds0"), create);
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .create(CollectionName::new("ds0"), create);
         let created = service.raw_oneshot(request).await.unwrap();
 
         const DS_DEPS_SELECT_SQL: &str = r#"

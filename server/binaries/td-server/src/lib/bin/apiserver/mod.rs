@@ -48,11 +48,11 @@ mod user_roles;
 mod users;
 
 use crate::apiserver;
+use crate::bin::apiserver::auth::authorization_layer::authorization_layer;
 use crate::bin::apiserver::auth::{auth_secure, auth_unsecure};
 use crate::bin::apiserver::config::Config;
 use crate::bin::apiserver::execution::update;
 use crate::logic::apiserver::jwt::jwt_logic::JwtLogic;
-use crate::logic::apiserver::jwt::request::{JwtDecoderService, JwtState};
 use crate::logic::apiserver::layers::cors::CorsService;
 use crate::logic::apiserver::layers::timeout::TimeoutService;
 use crate::logic::apiserver::layers::tracing::TraceService;
@@ -67,7 +67,9 @@ use chrono::Duration;
 use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_security::config::PasswordHashingConfig;
-use td_services::auth::services::AuthServices;
+use td_services::auth::services::{AuthServices, PasswordHashConfig};
+use td_services::auth::session;
+use td_services::auth::session::Sessions;
 use td_services::permission::services::PermissionServices;
 use td_services::role::services::RoleServices;
 use td_services::user_role::services::UserRoleServices;
@@ -77,6 +79,7 @@ use tracing::debug;
 pub struct ApiServerInstance {
     config: Config,
     db: DbPool,
+    auth_services: Arc<AuthServices>,
     jwt_logic: Arc<JwtLogic>,
     storage: Arc<Storage>,
 }
@@ -95,29 +98,38 @@ pub type StorageState = Arc<Storage>;
 
 impl ApiServerInstance {
     pub fn new(config: Config, db: DbPool, storage: Arc<Storage>) -> Self {
+        let sessions: Arc<Sessions> = Arc::new(session::new(db.clone()));
+
+        // to verify up front configuration is OK.
+        let password_hash_config: PasswordHashConfig = (&config).into();
+        password_hash_config.hasher();
+
+        let auth_services: Arc<AuthServices> = Arc::new(AuthServices::new(
+            &db,
+            sessions.clone(),
+            password_hash_config,
+            &config,
+        ));
         let jwt_logic = Arc::new(JwtLogic::new(
-            config.jwt_secret().as_ref().unwrap(), // at this point we know it's not None
-            Duration::seconds(*config.access_jwt_expiration()),
-            Duration::seconds(*config.refresh_jwt_expiration()),
+            config.jwt().secret().as_ref().unwrap(), // at this point we know it's not None
+            Duration::seconds(*config.jwt().access_token_expiration()),
+            Duration::seconds(*config.jwt().access_token_expiration() * 2),
         ));
         Self {
             config,
             db,
+            auth_services,
             jwt_logic,
             storage,
         }
     }
 
     fn auth_state(&self) -> AuthState {
-        Arc::new(AuthServices::new(self.db.clone()))
+        self.auth_services.clone()
     }
 
     fn status_state(&self) -> StatusState {
         Arc::new(StatusLogic::new(self.db.clone()))
-    }
-
-    fn jwt_state(&self) -> JwtState {
-        self.jwt_logic.clone()
     }
 
     fn storage_state(&self) -> StorageState {
@@ -193,7 +205,7 @@ impl ApiServerInstance {
                     execution => { state ( self.dataset_state() ) },
                     data => { state ( self.dataset_state(), self.storage_state() ) },
                 }
-                .layer => from_fn_with_state(self.jwt_state(), JwtDecoderService::layer),
+                .layer => from_fn_with_state(self.auth_state(), authorization_layer),
 
                 router => {
                     // Specific endpoint reachable from localhost only, non-secured, for execution update.

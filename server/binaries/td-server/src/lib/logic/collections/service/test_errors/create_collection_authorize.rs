@@ -7,12 +7,11 @@ use crate::logic::collections::service::create_collection::CreateCollectionServi
 use td_error::assert_service_error;
 use td_objects::collections::dto::CollectionCreateBuilder;
 use td_objects::crudl::RequestContext;
-use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 
 #[tokio::test]
 async fn test_not_allowed_to_create_collection() {
     let db = td_database::test_utils::db().await.unwrap();
-    let user_id = seed_user(&db, None, "u0", false).await;
 
     let service = CreateCollectionService::new(db.clone()).service().await;
 
@@ -22,9 +21,13 @@ async fn test_not_allowed_to_create_collection() {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
-        .create((), create);
+    let request = RequestContext::with(
+        AccessTokenId::default(),
+        UserId::admin(),
+        RoleId::user(),
+        false,
+    )
+    .create((), create);
 
     assert_service_error(service, request, |err| match err {
         CollectionError::NotAllowedToCreateCollections => {}

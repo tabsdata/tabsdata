@@ -24,7 +24,7 @@ pub async fn seed_data_version(
 ) -> Id {
     // We seed that it was triggered 10 seconds ago, started 5 seconds after that, and ended now,
     // depending on the state.
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
     let triggered_on = now.checked_sub_signed(TimeDelta::seconds(10)).unwrap();
     let started_on = now.checked_sub_signed(TimeDelta::seconds(5)).unwrap();
     let ended_on = now;
@@ -162,7 +162,7 @@ mod tests {
         let trigger = "M";
         let status = "S";
 
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
         let before_triggered_on = before.checked_sub_signed(TimeDelta::seconds(10)).unwrap();
 
         let data_version_id = seed_data_version(
@@ -221,10 +221,10 @@ mod tests {
         let trigger = "M";
         let status = "S";
         let commit_id = id::id();
-        let triggered_on = UniqueUtc::now_millis().await;
-        let started_on = UniqueUtc::now_millis().await;
-        let ended_on = UniqueUtc::now_millis().await;
-        let commited_on = UniqueUtc::now_millis().await;
+        let triggered_on = UniqueUtc::now_millis();
+        let started_on = UniqueUtc::now_millis();
+        let ended_on = UniqueUtc::now_millis();
+        let commited_on = UniqueUtc::now_millis();
 
         let data_version_id = seed_data_version_full(
             &db,

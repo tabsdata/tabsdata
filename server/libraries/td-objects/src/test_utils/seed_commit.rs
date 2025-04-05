@@ -28,7 +28,7 @@ pub async fn seed_commit(
     };
 
     // We seed that it was triggered 10 seconds ago, started 5 seconds after that, and ended now.
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
     let triggered_on = now.checked_sub_signed(TimeDelta::seconds(10)).unwrap();
     let started_on = now.checked_sub_signed(TimeDelta::seconds(5)).unwrap();
     let ended_on = now;
@@ -116,7 +116,7 @@ mod tests {
         )
         .await;
 
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
 
         let execution_plan_id = seed_execution_plan(
             &db,

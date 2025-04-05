@@ -35,7 +35,7 @@ pub async fn seed_function(
             .0
     };
 
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
     let function_id = id::id();
 
     const UPDATE_SQL: &str = r#"
@@ -321,7 +321,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_seed_function() {
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
         let db = td_database::test_utils::db().await.unwrap();
         let collection_id = seed_collection(&db, None, "collection").await;
 
@@ -461,7 +461,7 @@ mod tests {
         assert_eq!(tables0[0].function_id(), function0.id());
 
         // with deps, with trigger
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
 
         seed_function(
             &db,

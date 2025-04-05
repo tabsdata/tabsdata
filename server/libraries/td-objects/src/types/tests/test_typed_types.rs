@@ -72,9 +72,9 @@ mod tests {
         #[td_type::typed(timestamp)]
         struct TypedType;
 
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
         let typed = TypedType::default();
-        let after = UniqueUtc::now_millis().await;
+        let after = UniqueUtc::now_millis();
         assert!(*typed > before);
         assert!(after > *typed);
 

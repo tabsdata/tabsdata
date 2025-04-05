@@ -67,9 +67,9 @@ mod tests {
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_permission::seed_permission;
     use td_objects::test_utils::seed_role::seed_role;
-    use td_objects::test_utils::seed_user::{admin_user, seed_user};
+    use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::seed_user_role;
-    use td_objects::types::basic::{Description, PermissionType, RoleName, UserId};
+    use td_objects::types::basic::{AccessTokenId, Description, PermissionType, RoleName, UserId};
     use td_objects::types::permission::PermissionDBWithNames;
     use td_objects::types::role::UserRoleDBWithNames;
     use td_objects::types::{IdOrName, SqlEntity};
@@ -155,10 +155,13 @@ mod tests {
     }
 
     async fn test_delete_role(db: &DbPool, role_id_name: RoleIdName) -> Result<(), TdError> {
-        let admin_id = admin_user(db).await;
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .delete(RoleParam::builder().role(role_id_name.clone()).build()?);
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sec_admin(),
+            true,
+        )
+        .delete(RoleParam::builder().role(role_id_name.clone()).build()?);
         let service = DeleteRoleService::new(db.clone()).service().await;
         service.raw_oneshot(request).await?;
 

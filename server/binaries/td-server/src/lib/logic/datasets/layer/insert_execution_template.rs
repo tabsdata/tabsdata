@@ -15,7 +15,7 @@ pub async fn update_execution_template(
     Input(execution_template): Input<ExecutionTemplate>,
 ) -> Result<(), TdError> {
     let serialized = serde_json::to_string(&execution_template).unwrap();
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
 
     const UPDATE_SQL: &str = r#"
         UPDATE ds_functions SET

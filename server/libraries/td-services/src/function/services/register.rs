@@ -187,7 +187,9 @@ mod tests {
     use td_common::id::Id;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_user::admin_user;
-    use td_objects::types::basic::{BundleId, FunctionRuntimeValues, UserId};
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, FunctionRuntimeValues, RoleId, UserId,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -303,14 +305,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
@@ -342,14 +348,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
@@ -381,14 +391,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
@@ -420,14 +434,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
@@ -459,14 +477,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let _response = service.raw_oneshot(request).await?;
@@ -489,14 +511,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
@@ -531,14 +557,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let _response = service.raw_oneshot(request).await?;
@@ -570,14 +600,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
@@ -614,14 +648,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name_1.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name_1.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let _response = service.raw_oneshot(request).await?;
@@ -658,14 +696,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(admin_id.to_string(), "r", true)
-            .await
-            .create(
-                CollectionParam::builder()
-                    .try_collection(collection_name_2.as_str())?
-                    .build()?,
-                create.clone(),
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name_2.as_str())?
+                .build()?,
+            create.clone(),
+        );
 
         let service = RegisterFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;

@@ -5,12 +5,11 @@
 use crate::bin::apiserver::AuthState;
 use crate::routers;
 
-use crate::bin::apiserver::auth::{login, password_change};
+use crate::bin::apiserver::auth::login;
 
 routers! {
     state => { AuthState },
     router => {
         login => { state ( AuthState ) },
-        password_change => { state ( AuthState ) },
     }
 }

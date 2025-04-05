@@ -14,6 +14,7 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::test_utils::seed_dataset::seed_dataset;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId};
 use td_transaction::TransactionBy;
 
 #[tokio::test]
@@ -58,8 +59,7 @@ async fn test_execution_plan_service_fixed_not_found() {
     let service = CreatePlanService::new(db, Arc::new(TransactionBy::default()))
         .service()
         .await;
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(
             FunctionParam::new("ds0", "d1"),
             ExecutionPlanWriteBuilder::default()
@@ -120,8 +120,7 @@ async fn test_execution_plan_service_range_fixed_not_found() {
     let service = CreatePlanService::new(db, Arc::new(TransactionBy::default()))
         .service()
         .await;
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(
             FunctionParam::new("ds0", "d1"),
             ExecutionPlanWriteBuilder::default()

@@ -27,7 +27,7 @@ pub async fn seed_user(db: &DbPool, creator_id: Option<String>, name: &str, enab
             .0
     };
 
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
 
     let user = UserBuilder::default()
         .id(id::id())
@@ -97,7 +97,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_seed_user() {
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
         let db = td_database::test_utils::db().await.unwrap();
         let user_id = seed_user(&db, None, "user", true).await;
 

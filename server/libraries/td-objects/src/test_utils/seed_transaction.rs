@@ -27,7 +27,7 @@ pub async fn seed_transaction(
             .0
     };
 
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
     let transaction_id = id::id();
     let transaction = DsTransactionBuilder::default()
         .id(transaction_id.to_string())
@@ -109,7 +109,7 @@ mod tests {
         )
         .await;
 
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
 
         let execution_plan_id = seed_execution_plan(
             &db,

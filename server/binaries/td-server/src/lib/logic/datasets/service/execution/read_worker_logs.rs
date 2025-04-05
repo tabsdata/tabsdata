@@ -62,6 +62,7 @@ mod tests {
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_worker_message::seed_worker_message;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -145,8 +146,7 @@ mod tests {
         let service = provider.make().await;
 
         let request: ReadRequest<WorkerMessageParam> =
-            RequestContext::with(&user_id.to_string(), "r", false)
-                .await
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
                 .read(WorkerMessageParam::new(message_id));
 
         let response: BoxedSyncStream = service.raw_oneshot(request).await.unwrap();

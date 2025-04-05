@@ -7,7 +7,7 @@ use crate::logic::users::service::update_user::UpdateUserService;
 use std::sync::Arc;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
-use td_objects::test_utils::seed_user::admin_user;
+use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 use td_objects::users::dto::UserUpdate;
 use td_security::config::PasswordHashingConfig;
 
@@ -16,13 +16,16 @@ async fn test_user_cannot_enable_disable_themselves() {
     let db = td_database::test_utils::db().await.unwrap();
     let password_hashing_config = Arc::new(PasswordHashingConfig::default());
 
-    let admin_id = admin_user(&db).await;
-
     let service = UpdateUserService::new(db.clone(), password_hashing_config)
         .service()
         .await;
 
-    let ctx = RequestContext::with(admin_id, "r", false).await;
+    let ctx = RequestContext::with(
+        AccessTokenId::default(),
+        UserId::admin(),
+        RoleId::user(),
+        false,
+    );
 
     let update = UserUpdate {
         full_name: None,

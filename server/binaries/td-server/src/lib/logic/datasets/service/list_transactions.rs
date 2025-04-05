@@ -54,6 +54,7 @@ mod tests {
     use td_objects::test_utils::seed_execution_plan::seed_execution_plan;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -103,9 +104,9 @@ mod tests {
 
         let service = ListTransactionsService::new(db).service().await;
 
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .list((), ListParams::default());
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .list((), ListParams::default());
         let response: ListResponse<TransactionList> = service.raw_oneshot(request).await.unwrap();
         assert_eq!(
             response

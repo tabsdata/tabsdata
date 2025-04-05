@@ -105,6 +105,7 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
     use te_tableframe::execution::test_utils::TdUriFilter;
 
@@ -149,9 +150,13 @@ mod tests {
     ) {
         let service_provider = TemplateService::new(db.clone(), Arc::new(TransactionBy::default()));
 
-        let request = RequestContext::with(user_id, "r", false)
-            .await
-            .read(FunctionParam::new(collection_name, dataset_name));
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::try_from(user_id).unwrap(),
+            RoleId::user(),
+            false,
+        )
+        .read(FunctionParam::new(collection_name, dataset_name));
 
         let service = service_provider.service().await;
         let response = service.raw_oneshot(request).await.unwrap();
@@ -436,9 +441,9 @@ mod tests {
             trigger_by: Some(vec![]),
             function_snippet: None,
         };
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .update(FunctionParam::new("ds0", "d0"), update);
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .update(FunctionParam::new("ds0", "d0"), update);
         let _ = service.raw_oneshot(request).await.unwrap();
 
         run_and_assert(

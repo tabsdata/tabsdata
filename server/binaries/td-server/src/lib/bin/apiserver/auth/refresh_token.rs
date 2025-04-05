@@ -27,10 +27,8 @@ pub async fn refresh(
     Extension(context): Extension<RequestContext>,
     Form(request): Form<RefreshRequestX>,
 ) -> Result<AuthStatusRaw, AuthorizeErrorStatus> {
-    let response = state
-        .refresh_service()
-        .await
-        .oneshot(request.refresh_token().into())
-        .await?;
+    let request = context.update((), request.refresh_token().clone());
+
+    let response = state.refresh_service().await.oneshot(request).await?;
     Ok(AuthStatusRaw::OK(response.into_data()))
 }

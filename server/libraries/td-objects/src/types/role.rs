@@ -112,6 +112,7 @@ pub struct UserRoleCreate {
 pub struct UserRoleDBWithNames {
     id: UserRoleId,
     user_id: UserId,
+    #[td_type(extractor)]
     role_id: RoleId,
     added_on: AtTime,
     added_by_id: UserId,

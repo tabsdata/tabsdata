@@ -15,6 +15,7 @@ use td_objects::dlo::CollectionName;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::test_utils::seed_dataset::seed_dataset;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId};
 use tower::ServiceExt;
 
 async fn create_fixed_fixed_version(
@@ -23,7 +24,7 @@ async fn create_fixed_fixed_version(
     dataset_id: &Id,
     function_id: &Id,
 ) -> Id {
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
     let version = id::id();
     let mut trx = db.begin().await.unwrap();
 
@@ -102,8 +103,7 @@ async fn test_assert_fixed_dependency_versions_exist() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     let service = CreateDatasetService::new(db.clone()).service().await;
@@ -147,8 +147,7 @@ async fn test_fixed_version_dependencies_not_found() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     let service = CreateDatasetService::new(db.clone()).service().await;

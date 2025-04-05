@@ -49,7 +49,7 @@ pub async fn seed_execution_plan_serialized(
             .0
     };
 
-    let now = UniqueUtc::now_millis().await;
+    let now = UniqueUtc::now_millis();
     let execution_plan_id = id::id();
     let execution_plan = DsExecutionPlanBuilder::default()
         .id(execution_plan_id)
@@ -119,7 +119,7 @@ mod tests {
         )
         .await;
 
-        let before = UniqueUtc::now_millis().await;
+        let before = UniqueUtc::now_millis();
 
         let execution_plan_id = seed_execution_plan_serialized(
             &db,

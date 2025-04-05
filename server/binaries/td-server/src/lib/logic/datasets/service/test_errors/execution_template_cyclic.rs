@@ -14,6 +14,7 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::test_utils::seed_dataset::seed_dataset;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId};
 use td_tower::ctx_service::RawOneshot;
 use td_transaction::TransactionBy;
 
@@ -59,8 +60,7 @@ async fn test_execution_template_cyclic() {
         trigger_by: Some(vec!["t1".to_string()]),
         function_snippet: None,
     };
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .update(FunctionParam::new("ds0", "d0"), update);
     let _ = service.raw_oneshot(request).await.unwrap();
 
@@ -68,8 +68,7 @@ async fn test_execution_template_cyclic() {
         .service()
         .await;
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .read(FunctionParam::new("ds0", "d0"));
 
     assert_service_error(service, request, |err| match err {
@@ -135,8 +134,7 @@ async fn test_execution_template_cyclic_more_nodes() {
         trigger_by: Some(vec!["t2".to_string()]),
         function_snippet: None,
     };
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .update(FunctionParam::new("ds0", "d0"), update);
     let _ = service.raw_oneshot(request).await.unwrap();
 
@@ -144,8 +142,7 @@ async fn test_execution_template_cyclic_more_nodes() {
         .service()
         .await;
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .read(FunctionParam::new("ds0", "d0"));
 
     assert_service_error(service, request, |err| match err {
@@ -208,8 +205,7 @@ async fn test_execution_template_cyclic_transaction() {
         .service()
         .await;
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .read(FunctionParam::new("ds0", "d0"));
 
     match TransactionBy::default() {

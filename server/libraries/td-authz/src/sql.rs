@@ -5,11 +5,9 @@
 use crate::Provider;
 use async_trait::async_trait;
 use itertools::Itertools;
-use sqlx::pool::PoolConnection;
-use sqlx::{Sqlite, SqliteConnection};
+use sqlx::SqliteConnection;
 use std::collections::HashMap;
 use std::sync::Arc;
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{handle_sql_err, ListParams};
 use td_objects::sql::{DaoQueries, ListBy};
@@ -33,11 +31,11 @@ fn try_to_permission(perm_db: &PermissionDB) -> Result<Permission, TdError> {
     let perm = match perm_db.permission_type().as_str() {
         PermissionType::SA => Permission::SysAdmin,
         PermissionType::SS => Permission::SecAdmin,
-        PermissionType::CA => Permission::CollectionAdmin(authz_entity(&perm_db)),
-        PermissionType::CD => Permission::CollectionDev(authz_entity(&perm_db)),
-        PermissionType::CX => Permission::CollectionExec(authz_entity(&perm_db)),
-        PermissionType::CR => Permission::CollectionRead(authz_entity(&perm_db)),
-        PermissionType::CR_ALL => Permission::CollectionReadAll(authz_entity(&perm_db)),
+        PermissionType::CA => Permission::CollectionAdmin(authz_entity(perm_db)),
+        PermissionType::CD => Permission::CollectionDev(authz_entity(perm_db)),
+        PermissionType::CX => Permission::CollectionExec(authz_entity(perm_db)),
+        PermissionType::CR => Permission::CollectionRead(authz_entity(perm_db)),
+        PermissionType::CR_ALL => Permission::CollectionReadAll(authz_entity(perm_db)),
         argh => panic!("TODO, proper error ARGH - '{}'", argh),
     };
     Ok(perm)
@@ -62,7 +60,7 @@ impl<'a> Provider<'a, HashMap<RoleId, Arc<Vec<Permission>>>, &'a mut SqliteConne
             .map(|p| (p.role_id().clone(), try_to_permission(p).unwrap())) //TODO change the try_to_permission
             .into_group_map()
             .into_iter()
-            .map(|(role, perms)| (role, Arc::new(perms)).into())
+            .map(|(role, perms)| (role, Arc::new(perms)))
             .collect();
         Ok(Arc::new(role_permissions_map))
     }
@@ -80,7 +78,10 @@ mod tests {
     #[td_test::test(sqlx(migrator = td_schema::schema()))]
     async fn test_sql_role_permissions_provider(db: DbPool) -> Result<(), TdError> {
         let provider = SqlRolePermissionsProvider;
-        let permissions = provider.get(&db.acquire().await.unwrap()).await.unwrap();
+        let permissions = provider
+            .get(&mut db.acquire().await.unwrap())
+            .await
+            .unwrap();
         assert_eq!(permissions.len(), 3);
         assert_eq!(
             permissions

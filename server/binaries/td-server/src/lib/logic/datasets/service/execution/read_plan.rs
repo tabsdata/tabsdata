@@ -73,6 +73,7 @@ mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_execution_plan::seed_execution_plan_serialized;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -211,9 +212,9 @@ mod tests {
             .service()
             .await;
 
-        let request = RequestContext::with(&user_id.to_string(), "r", false)
-            .await
-            .read(ExecutionPlanIdParam::new(execution_plan_id.to_string()));
+        let request =
+            RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
+                .read(ExecutionPlanIdParam::new(execution_plan_id.to_string()));
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let response = response.unwrap();

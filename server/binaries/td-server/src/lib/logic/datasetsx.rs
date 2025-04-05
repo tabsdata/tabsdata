@@ -71,9 +71,9 @@
 //
 //         let mut conn = db.begin().await.unwrap();
 //
-//         let t0 = UniqueUtc::now_millis().await;
-//         let t1 = UniqueUtc::now_millis().await;
-//         let t2 = UniqueUtc::now_millis().await;
+//         let t0 = UniqueUtc::now_millis();
+//         let t1 = UniqueUtc::now_millis();
+//         let t2 = UniqueUtc::now_millis();
 //
 //         insert_deps(
 //             &mut conn,

@@ -767,7 +767,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_params_with_optionals() {
-        let now = UniqueUtc::now_millis().await;
+        let now = UniqueUtc::now_millis();
         let to_format = r#"
         {
             "compression": "Uncompressed",

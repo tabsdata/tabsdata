@@ -11,6 +11,7 @@ use td_objects::dlo::CollectionName;
 use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::test_utils::seed_dataset::seed_dataset;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId};
 
 #[tokio::test]
 async fn test_invalid_table_names() {
@@ -41,8 +42,7 @@ async fn test_invalid_table_names() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     assert_service_error(service, request, |err| match err {
@@ -81,8 +81,7 @@ async fn test_duplicate_table_names() {
         function_snippet: None,
     };
 
-    let request = RequestContext::with(&user_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
         .create(CollectionName::new("ds0"), create);
 
     assert_service_error(service, request, |err| match err {

@@ -86,6 +86,7 @@ pub mod tests {
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_user::admin_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_objects::users::dto::{UserCreate, UserRead};
     use td_security::config::PasswordHashingConfig;
     use td_tower::ctx_service::RawOneshot;
@@ -153,13 +154,16 @@ pub mod tests {
         };
 
         let before = UniqueUtc::now_millis()
-            .await
             .naive_utc()
             .and_utc()
             .timestamp_millis();
-        let request = RequestContext::with(&admin_id, "r", true)
-            .await
-            .create((), create);
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+            true,
+        )
+        .create((), create);
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let created = response.unwrap();
@@ -210,11 +214,9 @@ pub mod tests {
         count: usize,
         enabled: bool,
     ) -> Vec<UserRead> {
-        let (mut admin_user, sysadmin_role) =
-            td_database::test_utils::user_role_ids(db, td_security::ADMIN_USER).await;
-        if let Some(creator_id) = creator_id {
-            admin_user = creator_id;
-        }
+        let admin_user = creator_id
+            .map(|id| UserId::try_from(id).unwrap())
+            .unwrap_or(UserId::admin());
         let jwt_logic = Arc::new(JwtLogic::new(
             "SECRET",
             Duration::seconds(3600),
@@ -236,9 +238,13 @@ pub mod tests {
                 .enabled(enabled)
                 .build()
                 .unwrap();
-            let request = RequestContext::with(&admin_user, &sysadmin_role, true)
-                .await
-                .create((), user);
+            let request = RequestContext::with(
+                AccessTokenId::default(),
+                &admin_user,
+                RoleId::sys_admin(),
+                true,
+            )
+            .create((), user);
             let service = logic.create_user().await;
             let user = service.raw_oneshot(request).await.unwrap();
             users.push(user);

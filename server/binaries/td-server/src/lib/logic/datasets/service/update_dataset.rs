@@ -117,6 +117,7 @@ pub mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
 
@@ -244,10 +245,10 @@ pub mod tests {
 
         let service = UpdateDatasetService::new(db.clone()).service().await;
 
-        let before_update = UniqueUtc::now_millis().await;
-        let request = RequestContext::with(&updator_id.to_string(), "r", false)
-            .await
-            .update(FunctionParam::new("ds0", "d1"), update);
+        let before_update = UniqueUtc::now_millis();
+        let request =
+            RequestContext::with(AccessTokenId::default(), updator_id, RoleId::user(), false)
+                .update(FunctionParam::new("ds0", "d1"), update);
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let updated = response.unwrap();

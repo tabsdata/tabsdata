@@ -5,7 +5,6 @@
 //! API Server CLI configuration and parameters.
 
 use crate::logic::apiserver::addresses_default;
-use chrono::Duration;
 use clap_derive::Args;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
@@ -13,6 +12,7 @@ use std::fmt::Display;
 use std::net::{AddrParseError, SocketAddr};
 use strum::ParseError;
 use td_database::sql::SqliteConfig;
+use td_services::auth::services::{JwtConfig, PasswordHashConfig};
 use td_transaction::TransactionBy;
 
 #[derive(Clone, Serialize, Deserialize, Getters)]
@@ -21,10 +21,9 @@ pub struct Config {
     storage_url: Option<String>,
     #[serde(default)]
     addresses: Vec<SocketAddr>,
-    jwt_secret: Option<String>,
-    access_jwt_expiration: i64,  // in seconds
-    refresh_jwt_expiration: i64, // in seconds
-    request_timeout: i64,        // in seconds
+    password: PasswordHashConfig,
+    jwt: JwtConfig,
+    request_timeout: i64, // in seconds
     database: SqliteConfig,
     #[serde(default)]
     transaction_by: TransactionBy,
@@ -35,9 +34,8 @@ impl Default for Config {
         Self {
             storage_url: None,
             addresses: addresses_default(),
-            jwt_secret: None,
-            access_jwt_expiration: Duration::hours(1).num_seconds(),
-            refresh_jwt_expiration: Duration::hours(24).num_seconds(),
+            password: PasswordHashConfig::default(),
+            jwt: JwtConfig::default(),
             request_timeout: 60,
             database: SqliteConfig::default(),
             transaction_by: TransactionBy::default(),
@@ -58,6 +56,18 @@ impl Display for Config {
 
 impl td_common::config::Config for Config {}
 
+impl Into<JwtConfig> for &Config {
+    fn into(self) -> JwtConfig {
+        self.jwt.clone()
+    }
+}
+
+impl Into<PasswordHashConfig> for &Config {
+    fn into(self) -> PasswordHashConfig {
+        self.password.clone()
+    }
+}
+
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
 pub struct Params {
@@ -76,9 +86,6 @@ pub struct Params {
     #[clap(long)]
     /// JWT Access token expiration time in seconds
     access_jwt_expiration: Option<i64>,
-    #[clap(long)]
-    /// JWT Refresh token expiration time in seconds
-    refresh_jwt_expiration: Option<i64>,
     #[clap(long)]
     /// Request timeout in seconds
     request_timeout: Option<i64>,
@@ -108,17 +115,17 @@ impl Params {
                 .address
                 .clone()
                 .unwrap_or_else(|| config.addresses().clone()),
-            jwt_secret: self
-                .jwt_secret
-                .as_ref()
-                .map(|secret| secret.to_string())
-                .or(config.jwt_secret().clone()),
-            access_jwt_expiration: self
-                .access_jwt_expiration
-                .unwrap_or_else(|| *config.access_jwt_expiration()),
-            refresh_jwt_expiration: self
-                .refresh_jwt_expiration
-                .unwrap_or_else(|| *config.refresh_jwt_expiration()),
+            password: config.password().clone(),
+            jwt: {
+                let secret = self
+                    .jwt_secret
+                    .to_owned()
+                    .unwrap_or_else(|| config.jwt().secret().to_owned().unwrap());
+                let expiration = self
+                    .access_jwt_expiration
+                    .unwrap_or_else(|| *config.jwt().access_token_expiration());
+                JwtConfig::new(secret, expiration)
+            },
             request_timeout: self
                 .request_timeout
                 .unwrap_or_else(|| *config.request_timeout()),
@@ -132,7 +139,7 @@ impl Params {
             return Err(ConfigError::MissingAddress);
         }
 
-        if config.jwt_secret().is_none() {
+        if config.jwt().secret().is_none() {
             return Err(ConfigError::MissingJWTSecret);
         }
 
@@ -183,7 +190,9 @@ pub enum ConfigError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
     use std::net::SocketAddr;
+    use td_common::id;
 
     #[test]
     fn test_default_config() {
@@ -193,15 +202,11 @@ mod tests {
             config.addresses(),
             &vec![SocketAddr::from(([127, 0, 0, 1], 0))]
         );
-        assert_eq!(config.jwt_secret(), &None);
+        id::Id::try_from(config.jwt().secret().as_ref().unwrap()).unwrap();
         assert_eq!(config.storage_url(), &None);
         assert_eq!(
-            *config.access_jwt_expiration(),
+            *config.jwt().access_token_expiration(),
             Duration::hours(1).num_seconds()
-        );
-        assert_eq!(
-            *config.refresh_jwt_expiration(),
-            Duration::hours(24).num_seconds()
         );
         assert_eq!(*config.request_timeout(), 60);
     }
@@ -216,7 +221,6 @@ mod tests {
             address: Some(vec!["127.0.0.1:8080".parse().unwrap()]),
             jwt_secret: Some(String::from("NEW_SECRET")),
             access_jwt_expiration: Some(7200),
-            refresh_jwt_expiration: Some(14400),
             request_timeout: Some(120),
             transaction_by: Some(TransactionBy::default()),
         };
@@ -224,7 +228,7 @@ mod tests {
         let resolved_config = params.resolve(default_config.clone()).unwrap();
 
         assert_eq!(
-            resolved_config.jwt_secret(),
+            resolved_config.jwt().secret(),
             &Some("NEW_SECRET".to_string())
         );
         assert_eq!(
@@ -239,8 +243,6 @@ mod tests {
             resolved_config.storage_url().as_ref().unwrap(),
             "file:///storage"
         );
-        assert_eq!(*resolved_config.access_jwt_expiration(), 7200);
-        assert_eq!(*resolved_config.refresh_jwt_expiration(), 14400);
         assert_eq!(*resolved_config.request_timeout(), 120);
 
         // Test with some fields not set in Params
@@ -250,7 +252,6 @@ mod tests {
             address: None,
             jwt_secret: Some(String::from("NEW_SECRET")),
             access_jwt_expiration: Some(1800),
-            refresh_jwt_expiration: None,
             request_timeout: None,
             transaction_by: Some(TransactionBy::default()),
         };
@@ -262,10 +263,13 @@ mod tests {
             default_config.addresses()
         );
         assert_eq!(
-            resolved_config.jwt_secret(),
+            resolved_config.jwt().secret(),
             &Some("NEW_SECRET".to_string())
         );
-        assert_eq!(*partially_resolved_config.access_jwt_expiration(), 1800);
+        assert_eq!(
+            *partially_resolved_config.jwt().access_token_expiration(),
+            1800
+        );
         assert_eq!(
             *partially_resolved_config.request_timeout(),
             *default_config.request_timeout()

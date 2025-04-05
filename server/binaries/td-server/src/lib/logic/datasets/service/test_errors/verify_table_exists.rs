@@ -12,6 +12,7 @@ use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::test_utils::seed_data_version::seed_data_version;
 use td_objects::test_utils::seed_dataset::seed_dataset;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::types::basic::{AccessTokenId, RoleId};
 
 #[tokio::test]
 async fn test_table_not_found() {
@@ -43,8 +44,7 @@ async fn test_table_not_found() {
 
     let service = DataService::new(db.clone()).service().await;
 
-    let request = RequestContext::with(&creator_id.to_string(), "r", false)
-        .await
+    let request = RequestContext::with(AccessTokenId::default(), creator_id, RoleId::user(), false)
         .read(
             TableCommitParam::new(
                 &TableParam::new("ds0".to_string(), "t1".to_string()),

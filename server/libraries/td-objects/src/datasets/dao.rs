@@ -517,7 +517,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dataset_builder() {
-        let now = UniqueUtc::now_millis().await;
+        let now = UniqueUtc::now_millis();
         let dataset_db = Dataset::builder()
             .id(String::from("id"))
             .name(String::from("name"))

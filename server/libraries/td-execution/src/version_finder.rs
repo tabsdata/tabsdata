@@ -359,7 +359,7 @@ mod tests {
 
         let mut conn = db.acquire().await.unwrap();
         let dataset = Dataset::new(&collection_id.to_string(), &dataset_id.to_string());
-        let trigger_time = UniqueUtc::now_millis().await;
+        let trigger_time = UniqueUtc::now_millis();
 
         let mut finder = SqlVersionFinder::new(&mut conn, &dataset, &trigger_time);
         let resolved_id = finder.function_id().await.unwrap();
@@ -405,7 +405,7 @@ mod tests {
 
         let mut conn = db.acquire().await.unwrap();
         let dataset = Dataset::new(&collection_id.to_string(), &dataset_id.to_string());
-        let trigger_time = UniqueUtc::now_millis().await;
+        let trigger_time = UniqueUtc::now_millis();
 
         let mut finder = SqlVersionFinder::new(&mut conn, &dataset, &trigger_time);
         let resolved_id = finder.function_id().await.unwrap();
@@ -440,7 +440,7 @@ mod tests {
 
         let mut conn = db.acquire().await.unwrap();
         let dataset = Dataset::new(&collection_id.to_string(), &dataset_id.to_string());
-        let trigger_time = UniqueUtc::now_millis().await;
+        let trigger_time = UniqueUtc::now_millis();
 
         let mut finder = SqlVersionFinder::new(&mut conn, &dataset, &trigger_time);
         let resolved_id = finder.table_id(Some(&"t0".to_string())).await.unwrap();
@@ -478,7 +478,7 @@ mod tests {
 
         let mut conn = db.acquire().await.unwrap();
         let dataset = Dataset::new(&collection_id.to_string(), &dataset_id.to_string());
-        let trigger_time = UniqueUtc::now_millis().await;
+        let trigger_time = UniqueUtc::now_millis();
 
         let mut finder = SqlVersionFinder::new(&mut conn, &dataset, &trigger_time);
         let resolved_id = finder.table_id(None).await.unwrap();
@@ -536,7 +536,7 @@ mod tests {
 
         let mut conn = db.acquire().await.unwrap();
         let dataset = Dataset::new(&collection_id.to_string(), &dataset_id.to_string());
-        let trigger_time = UniqueUtc::now_millis().await;
+        let trigger_time = UniqueUtc::now_millis();
 
         let mut finder = SqlVersionFinder::new(&mut conn, &dataset, &trigger_time);
 
@@ -590,7 +590,7 @@ mod tests {
 
         let mut conn = db.acquire().await.unwrap();
         let dataset = Dataset::new(&collection_id.to_string(), &dataset_id.to_string());
-        let trigger_time = UniqueUtc::now_millis().await;
+        let trigger_time = UniqueUtc::now_millis();
 
         let mut finder = SqlVersionFinder::new(&mut conn, &dataset, &trigger_time);
 
@@ -644,7 +644,7 @@ mod tests {
 
         let mut conn = db.acquire().await.unwrap();
         let dataset = Dataset::new(&collection_id.to_string(), &dataset_id.to_string());
-        let trigger_time = UniqueUtc::now_millis().await;
+        let trigger_time = UniqueUtc::now_millis();
 
         let mut finder = SqlVersionFinder::new(&mut conn, &dataset, &trigger_time);
 

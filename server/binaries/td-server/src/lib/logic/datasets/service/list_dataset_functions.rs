@@ -81,6 +81,7 @@ mod tests {
     use td_objects::test_utils::seed_dataset::seed_dataset;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_user::seed_user;
+    use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -157,9 +158,9 @@ mod tests {
 
         let service = ListDatasetFunctionsService::new(db).service().await;
 
-        let request = RequestContext::with(&creator_id.to_string(), "r", false)
-            .await
-            .list(FunctionParam::new("ds0", "d11"), ListParams::default());
+        let request =
+            RequestContext::with(AccessTokenId::default(), creator_id, RoleId::user(), false)
+                .list(FunctionParam::new("ds0", "d11"), ListParams::default());
         let response: ListResponse<FunctionList> = service.raw_oneshot(request).await.unwrap();
         assert_eq!(*response.len(), 2);
         let functions: HashMap<_, _> = response

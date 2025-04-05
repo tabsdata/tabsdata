@@ -454,7 +454,8 @@ fn gen_td_type_field_getset(target: &ItemStruct) -> proc_macro2::TokenStream {
                     }
                 }
             });
-        } else if td_type_fields.setter {
+        };
+        if td_type_fields.setter {
             let field_name = field.ident.as_ref().unwrap();
             let field_type = &field.ty;
             let builder_type = format_ident!("{}Builder", to);

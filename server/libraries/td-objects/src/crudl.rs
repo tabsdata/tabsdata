@@ -3,8 +3,7 @@
 //
 
 use crate::entity_finder::EntityFinderError;
-use crate::types::basic::RoleId;
-use chrono::{DateTime, Utc};
+use crate::types::basic::{AccessTokenId, AtTime, RoleId, UserId};
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
@@ -14,45 +13,53 @@ use sqlx::sqlite::{SqliteQueryResult, SqliteRow};
 use sqlx::{Error, SqliteConnection};
 use std::fmt::Debug;
 use td_apiforge::apiserver_schema;
-use td_common::time::UniqueUtc;
 use td_database::sql::DbError;
 use td_error::td_error;
 use td_error::{TdDomainError, TdError};
 use td_tower::error::{ConnectionError, FromHandlerError};
 use utoipa::IntoParams;
 
+#[td_type::typed(bool)]
+pub struct SysAdmin;
+
 /// Request context for the logic layer.
-#[derive(Clone, Debug, Getters)]
-#[getset(get = "pub")]
+#[td_type::Dto]
 pub struct RequestContext {
+    /// The ID of the access token in the requeset.
+    #[td_type(extractor)]
+    access_token_id: AccessTokenId,
     /// The ID of the user making the request.
-    //TODO: change to UserId
-    user_id: String,
+    #[td_type(extractor)]
+    user_id: UserId,
     /// The role of the user making the request.
+    #[td_type(extractor)]
     role_id: RoleId,
     /// if the role has system admin privileges.
-    sys_admin: bool,
+    sys_admin: SysAdmin,
     /// The time the request was made.
-    //TODO: change to AtTime
-    time: DateTime<Utc>,
+    #[td_type(extractor)]
+    time: AtTime,
 }
 
 impl RequestContext {
-    //TODO: change signature to
-    //    with(user_id: impl Into<UserId>, role_id: impl Into<RoleId>) -> Self
-    pub async fn with(user_id: impl Into<String>, role_id: &str, sys_admin: bool) -> Self {
-        //TODO:   TEMP until we change signature
-        let role_id = role_id.try_into().unwrap_or(RoleId::default());
+    //TODO: change signature to remove sys_admin when permissions are fully integrated
+    pub fn with(
+        access_token_id: impl Into<AccessTokenId>,
+        user_id: impl Into<UserId>,
+        role_id: impl Into<RoleId>,
+        sys_admin: impl Into<SysAdmin>,
+    ) -> Self {
         Self {
+            access_token_id: access_token_id.into(),
             user_id: user_id.into(),
-            role_id,
-            sys_admin,
-            time: UniqueUtc::now_millis().await,
+            role_id: role_id.into(),
+            sys_admin: sys_admin.into(),
+            time: AtTime::default(),
         }
     }
 
     pub fn assert_sys_admin(&self) -> Result<(), TdError> {
-        if self.sys_admin {
+        if *self.sys_admin {
             Ok(())
         } else {
             Err(CrudlErrorX::Forbidden(String::from(

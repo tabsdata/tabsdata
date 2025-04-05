@@ -61,6 +61,7 @@ mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::datasets::dto::DatasetWrite;
     use td_objects::dlo::{CollectionName, DatasetId};
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
     use td_tower::extractors::*;
 
@@ -70,84 +71,100 @@ mod tests {
         let users = create_test_users(&db, None, "u", 1, true).await;
         let collection = create_test_collections(&db, None, "ds", 1).await;
 
-        let request = RequestContext::with(users[0].id(), "r", false)
-            .await
-            .create(
-                CollectionName::new(collection[0].name()),
-                DatasetWrite {
-                    name: "d0".to_string(),
-                    description: "D0".to_string(),
-                    data_location: None,
-                    bundle_hash: "hash".to_string(),
-                    tables: vec!["t0".to_string()],
-                    dependencies: vec![],
-                    trigger_by: None,
-                    function_snippet: None,
-                },
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::try_from(users[0].id().as_str()).unwrap(),
+            RoleId::sys_admin(),
+            true,
+        )
+        .create(
+            CollectionName::new(collection[0].name()),
+            DatasetWrite {
+                name: "d0".to_string(),
+                description: "D0".to_string(),
+                data_location: None,
+                bundle_hash: "hash".to_string(),
+                tables: vec!["t0".to_string()],
+                dependencies: vec![],
+                trigger_by: None,
+                function_snippet: None,
+            },
+        );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
         let d0 = service.raw_oneshot(request).await.unwrap();
         println!("{:#?}", d0);
 
-        let request = RequestContext::with(users[0].id(), "r", false)
-            .await
-            .create(
-                CollectionName::new(collection[0].name()),
-                DatasetWrite {
-                    name: "d1".to_string(),
-                    description: "D1".to_string(),
-                    data_location: None,
-                    bundle_hash: "hash".to_string(),
-                    tables: vec!["t1".to_string()],
-                    dependencies: vec!["t0@HEAD".to_string()],
-                    trigger_by: None,
-                    function_snippet: None,
-                },
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::try_from(users[0].id().as_str()).unwrap(),
+            RoleId::sys_admin(),
+            true,
+        )
+        .create(
+            CollectionName::new(collection[0].name()),
+            DatasetWrite {
+                name: "d1".to_string(),
+                description: "D1".to_string(),
+                data_location: None,
+                bundle_hash: "hash".to_string(),
+                tables: vec!["t1".to_string()],
+                dependencies: vec!["t0@HEAD".to_string()],
+                trigger_by: None,
+                function_snippet: None,
+            },
+        );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
         let d1 = service.raw_oneshot(request).await.unwrap();
         println!("{:#?}", d1);
 
-        let request = RequestContext::with(users[0].id(), "r", false)
-            .await
-            .create(
-                CollectionName::new(collection[0].name()),
-                DatasetWrite {
-                    name: "d2".to_string(),
-                    description: "D2".to_string(),
-                    data_location: None,
-                    bundle_hash: "hash".to_string(),
-                    tables: vec!["t2".to_string()],
-                    dependencies: vec!["t0@HEAD".to_string()],
-                    trigger_by: Some(vec!["t1".to_string()]),
-                    function_snippet: Some("def fn():\n".to_string()),
-                },
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::try_from(users[0].id().as_str()).unwrap(),
+            RoleId::sys_admin(),
+            true,
+        )
+        .create(
+            CollectionName::new(collection[0].name()),
+            DatasetWrite {
+                name: "d2".to_string(),
+                description: "D2".to_string(),
+                data_location: None,
+                bundle_hash: "hash".to_string(),
+                tables: vec!["t2".to_string()],
+                dependencies: vec!["t0@HEAD".to_string()],
+                trigger_by: Some(vec!["t1".to_string()]),
+                function_snippet: Some("def fn():\n".to_string()),
+            },
+        );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
         let d2 = service.raw_oneshot(request).await.unwrap();
         println!("{:#?}", d2);
 
-        let request = RequestContext::with(users[0].id(), "r", false)
-            .await
-            .create(
-                CollectionName::new(collection[0].name()),
-                DatasetWrite {
-                    name: "d3".to_string(),
-                    description: "D3".to_string(),
-                    data_location: None,
-                    bundle_hash: "hash".to_string(),
-                    tables: vec!["t3".to_string()],
-                    dependencies: vec![
-                        "t1@HEAD~10..HEAD".to_string(),
-                        "t2@HEAD~10..HEAD".to_string(),
-                    ],
-                    trigger_by: Some(vec!["ds0/t2".to_string()]),
-                    function_snippet: Some("def fn():\n".to_string()),
-                },
-            );
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::try_from(users[0].id().as_str()).unwrap(),
+            RoleId::sys_admin(),
+            true,
+        )
+        .create(
+            CollectionName::new(collection[0].name()),
+            DatasetWrite {
+                name: "d3".to_string(),
+                description: "D3".to_string(),
+                data_location: None,
+                bundle_hash: "hash".to_string(),
+                tables: vec!["t3".to_string()],
+                dependencies: vec![
+                    "t1@HEAD~10..HEAD".to_string(),
+                    "t2@HEAD~10..HEAD".to_string(),
+                ],
+                trigger_by: Some(vec!["ds0/t2".to_string()]),
+                function_snippet: Some("def fn():\n".to_string()),
+            },
+        );
 
         let service = CreateDatasetService::new(db.clone()).service().await;
         let d3 = service.raw_oneshot(request).await.unwrap();
