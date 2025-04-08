@@ -25,6 +25,9 @@ from tests_tabsdata.conftest import (
 from tests_tabsdata.testing_resources.test_output_s3.example import (
     output_s3 as output_s3_format_testing,
 )
+from tests_tabsdata.testing_resources.test_output_s3_frame_list.example import (
+    output_s3_frame_list,
+)
 
 import tabsdata as td
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
@@ -571,3 +574,73 @@ def test_output_s3_ndjson(tmp_path, s3_client):
     finally:
         # Clean up the S3 bucket
         s3_client.delete_object(Bucket=bucket_name, Key=file_name)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_frame_list(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_file = (
+        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_frame_list_"
+        f"{int(datetime.datetime.now().timestamp())}_$FRAGMENT_IDX.parquet"
+    )
+    output_s3_frame_list.output.uri = output_file
+    context_archive = create_bundle_archive(
+        output_s3_frame_list,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_s3_frame_list", "mock_table.parquet"
+    )
+    write_v1_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    bucket_name = output_file.split("/")[2]
+    file_name = "/".join(output_file.split("/")[3:])
+    file_name_0 = file_name.replace("$FRAGMENT_IDX", "0")
+    file_name_1 = file_name.replace("$FRAGMENT_IDX", "1")
+    try:
+        environment_name, result = tabsserver_main(
+            tmp_path,
+            response_folder,
+            tabsserver_output_folder,
+            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+            logs_folder=logs_folder,
+        )
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        copy_destination = os.path.join(tmp_path, "output.parquet")
+        s3_client.download_file(bucket_name, file_name_0, copy_destination)
+        output = pl.read_parquet(copy_destination)
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3_frame_list",
+            "expected_result_0.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+
+        s3_client.download_file(bucket_name, file_name_1, copy_destination)
+        output = pl.read_parquet(copy_destination)
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3_frame_list",
+            "expected_result_1.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+    finally:
+        # Clean up the S3 bucket
+        s3_client.delete_object(Bucket=bucket_name, Key=file_name_0)
+        s3_client.delete_object(Bucket=bucket_name, Key=file_name_1)

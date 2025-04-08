@@ -24,6 +24,7 @@ import tabsdata as td
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata.format import CSVFormat, FileFormat, NDJSONFormat, ParquetFormat
 from tabsdata.io.output import (  # Catalog,
+    FRAGMENT_INDEX_PLACEHOLDER,
     AzureDestination,
     LocalFileDestination,
     MariaDBDestination,
@@ -36,6 +37,7 @@ from tabsdata.io.output import (  # Catalog,
 )
 from tabsdata.io.plugin import DestinationPlugin
 from tabsdata.tabsserver.function.logging_utils import pad_string
+from tabsdata.tabsserver.function.results_collection import Result, ResultsCollection
 
 # from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.utils.bundle_utils import PLUGINS_FOLDER
@@ -118,22 +120,8 @@ def replace_placeholders_in_path(path: str, execution_context: InputYaml) -> str
     return new_path
 
 
-def convert_none_to_empty_frame(
-    results: td.TableFrame | None | List[td.TableFrame | None],
-) -> td.TableFrame | List[td.TableFrame]:
-    if results is None:
-        logger.debug("Result is None. Returning empty frame.")
-        return td.TableFrame({})
-    elif isinstance(results, td.TableFrame):
-        return results
-    elif isinstance(results, list):
-        return [convert_none_to_empty_frame(table) for table in results]
-    else:
-        raise TypeError(f"Invalid result type: {type(results)}")
-
-
 def store_results(
-    results: None | td.TableFrame | List[td.TableFrame | None],
+    results: ResultsCollection,
     output_configuration: dict,
     working_dir: str | os.PathLike,
     execution_context: InputYaml,
@@ -146,40 +134,7 @@ def store_results(
     )
     modified_tables = []
     if DestinationPlugin.IDENTIFIER in output_configuration:
-        exporter_plugin_file = output_configuration.get(DestinationPlugin.IDENTIFIER)
-        plugins_folder = os.path.join(working_dir, PLUGINS_FOLDER)
-        with open(os.path.join(plugins_folder, exporter_plugin_file), "rb") as f:
-            exporter_plugin = cloudpickle.load(f)
-        logger.info(f"Exporting files with plugin '{exporter_plugin}'")
-        logger.info("Starting plugin export")
-        if isinstance(results, td.TableFrame):
-            logger.debug("Exporting single result")
-            results = remove_system_columns_and_convert(results)
-            exporter_plugin.trigger_output(output_folder, results)
-        elif results is None:
-            logger.debug("Exporting None result")
-            exporter_plugin.trigger_output(output_folder, results)
-        elif isinstance(results, list):
-            logger.debug("Exporting multiple results")
-            results = [
-                (
-                    remove_system_columns_and_convert(result)
-                    if isinstance(result, td.TableFrame)
-                    else result
-                )
-                for result in results
-            ]
-            exporter_plugin.trigger_output(output_folder, *results)
-        else:
-            logger.error(
-                "The result of a registered function must be a TableFrame or a list "
-                f"of TableFrames, got {type(results)} instead"
-            )
-            raise TypeError(
-                "The result of a registered function must be a TableFrame or a list "
-                f"of TableFrames, got {type(results)} instead"
-            )
-        logger.info(f"Exported files with plugin '{exporter_plugin}'")
+        export_using_plugin(output_configuration, output_folder, results, working_dir)
     else:
         destination = build_output(output_configuration)
 
@@ -224,12 +179,56 @@ def store_results(
     return modified_tables
 
 
+def export_using_plugin(
+    output_configuration: dict,
+    output_folder: str,
+    results: ResultsCollection,
+    working_dir: str | os.PathLike,
+):
+    exporter_plugin_file = output_configuration.get(DestinationPlugin.IDENTIFIER)
+    plugins_folder = os.path.join(working_dir, PLUGINS_FOLDER)
+    with open(os.path.join(plugins_folder, exporter_plugin_file), "rb") as f:
+        exporter_plugin = cloudpickle.load(f)
+    logger.info(f"Exporting files with plugin '{exporter_plugin}'")
+    logger.info("Starting plugin export")
+    results_to_provide = []
+    for result in results:
+        result_value = result.value
+        if isinstance(result_value, td.TableFrame):
+            intermediate_result = remove_system_columns_and_convert(result_value)
+        elif result_value is None:
+            intermediate_result = None
+        elif isinstance(result_value, list):
+            intermediate_result = [
+                (
+                    remove_system_columns_and_convert(single_result)
+                    if isinstance(single_result, td.TableFrame)
+                    else result
+                )
+                for single_result in result_value
+            ]
+        else:
+            logger.error(
+                "The result of a registered function must be a TableFrame,"
+                f" None or a list of TableFrames, got '{type(result_value)}'"
+                " instead"
+            )
+            raise TypeError(
+                "The result of a registered function must be a TableFrame,"
+                f" None or a list of TableFrames, got '{type(result_value)}'"
+                " instead"
+            )
+        results_to_provide.append(intermediate_result)
+    exporter_plugin.trigger_output(output_folder, *results_to_provide)
+    logger.info(f"Exported files with plugin '{exporter_plugin}'")
+
+
 def store_results_in_table(
-    results: None | td.TableFrame | List[td.TableFrame | None],
+    results: ResultsCollection,
     destination: TableOutput,
     execution_context: InputYaml,
 ) -> List[str]:
-    results = convert_none_to_empty_frame(results)
+    results.convert_none_to_empty_frame()
     # Right now, source provides very little information, but we use it to do a small
     # sanity check and to ensure that everything is running properly
     # TODO: Decide if we want to add more checks here
@@ -278,8 +277,6 @@ def store_results_in_table(
                 " stored."
             )
     logger.debug(f"Table list obtained: {table_list}")
-    if isinstance(results, td.TableFrame):
-        results = [results]
     logger.debug(f"Obtained a total of {len(results)} results")
     if len(results) != len(table_list):
         logger.error(
@@ -295,7 +292,16 @@ def store_results_in_table(
         logger.info(f"Storing result in table '{table}'")
         table_path = convert_uri_to_path(table.get("uri"))
         logger.debug(f"URI converted to path {table_path}")
-        store_result_in_file(result._lf, table_path)
+        if isinstance(result.value, td.TableFrame):
+            result_value: td.TableFrame = result.value
+            store_polars_lf_in_file(result_value._lf, table_path)
+        else:
+            logger.error(
+                f"Invalid result type: '{type(result.value)}'. No data stored."
+            )
+            raise TypeError(
+                f"Invalid result type: '{type(result.value)}'. No data stored."
+            )
         modified_tables.append(table.get("name"))
         logger.debug(f"Result stored in table '{table}', added to modified_tables list")
     logger.info("Results stored in tables")
@@ -323,7 +329,7 @@ def obtain_table_uri_and_verify(
 
 
 def store_results_in_sql(
-    results: None | td.TableFrame | List[td.TableFrame | None],
+    results: ResultsCollection,
     destination: (
         MariaDBDestination | MySQLDestination | OracleDestination | PostgresDestination
     ),
@@ -364,7 +370,7 @@ def store_results_in_sql(
 
 def create_session_and_store(
     engine: sqlalchemy.engine.base.Engine,
-    results: td.TableFrame | List[td.TableFrame],
+    results: ResultsCollection,
     destination_table_configuration: str | List[str],
     destination_if_table_exists: str,
     output_folder: str,
@@ -373,47 +379,9 @@ def create_session_and_store(
     session = Session()
     with session.begin():
         if isinstance(destination_table_configuration, str):
-            if isinstance(results, list):
-                logger.error(
-                    "Multiple results were obtained, but only a single "
-                    "table was provided as a destination."
-                )
-                logger.error(f"Destination: '{destination_table_configuration}'")
-                raise TypeError(
-                    "Multiple results were obtained, but only a single "
-                    "table was provided as a destination."
-                )
-            store_result_in_sql_table(
-                results,
-                session,
-                destination_table_configuration,
-                destination_if_table_exists,
-                output_folder,
-            )
+            destination_table_configuration = [destination_table_configuration]
         elif isinstance(destination_table_configuration, list):
-            if isinstance(results, td.TableFrame):
-                results = [results]
-            if len(results) != len(destination_table_configuration):
-                logger.error(
-                    "The number of destination tables does not match the number"
-                    " of results."
-                )
-                logger.error(f"Destination tables: '{destination_table_configuration}'")
-                logger.error(f"Number or results: {len(results)}")
-                raise TypeError(
-                    "The number of destination tables does not match the number"
-                    " of results."
-                )
-            for result, destination_table in zip(
-                results, destination_table_configuration
-            ):
-                store_result_in_sql_table(
-                    result,
-                    session,
-                    destination_table,
-                    destination_if_table_exists,
-                    output_folder,
-                )
+            pass
         else:
             logger.error(
                 "destination_table must be a string or a list of strings, "
@@ -424,100 +392,155 @@ def create_session_and_store(
                 f"got {type(destination_table_configuration)} instead"
             )
 
+        if len(results) != len(destination_table_configuration):
+            logger.error(
+                "The number of destination tables does not match the number of results."
+            )
+            logger.error(f"Destination tables: '{destination_table_configuration}'")
+            logger.error(f"Number or results: {len(results)}")
+            raise TypeError(
+                "The number of destination tables does not match the number of results."
+            )
+        for result, destination_table in zip(results, destination_table_configuration):
+            store_result_in_sql_table(
+                result,
+                session,
+                destination_table,
+                destination_if_table_exists,
+                output_folder,
+            )
+
 
 def store_results_in_files(
-    results: td.TableFrame | List[td.TableFrame],
+    results: ResultsCollection,
     destination: LocalFileDestination | AzureDestination | S3Destination,
     output_folder: str,
     execution_context: InputYaml,
 ):
     logger.info(f"Storing results in File destination '{destination}'")
-    results = convert_none_to_empty_frame(results)
+    results.convert_none_to_empty_frame()
+
     destination_path = obtain_destination_path(destination)
-
-    if isinstance(destination_path, list) and len(destination_path) == 1:
-        if isinstance(results, list):
-            logger.warning(
-                "Multiple results were obtained, but only a single "
-                "file was provided as a destination."
-            )
-            logger.error(f"Destination: '{destination_path}'")
-            raise TypeError(
-                "Multiple results were obtained, but only a single "
-                "file was provided as a destination."
-            )
-        intermediate_file = os.path.join(output_folder, "0")
-        store_result_using_transporter(
-            results,
-            destination_path[0],
-            intermediate_file,
-            destination,
-            output_folder,
-            execution_context,
+    if isinstance(destination_path, str):
+        destination_path = [destination_path]
+    elif isinstance(destination_path, list):
+        pass
+    else:
+        logger.error(
+            "Parameter 'path' must be a string or a list of strings, got"
+            f" '{type(destination_path)}' instead"
         )
-        # if destination.catalog:
-        #     logger.info("Storing file in catalog")
-        #     catalog = destination.catalog
-        #     store_file_in_catalog(
-        #         catalog, destination_path[0], catalog.tables[0], results
-        #     )
+        raise TypeError(
+            "Parameter 'path' must be a string or a list of strings, got"
+            f" '{type(destination_path)}' instead"
+        )
 
-    elif isinstance(destination_path, list) and len(destination_path) > 1:
-        if isinstance(results, td.TableFrame):
-            logger.error(
-                "Multiple destination files were provided, but only a "
-                "single result was obtained."
-            )
-            logger.error(f"Destination: '{destination_path}'")
-            raise TypeError(
-                "Multiple destination files were provided, but only a "
-                "single result was obtained."
-            )
-        elif len(results) != len(destination_path):
-            logger.error(
-                "The number of destination files does not match the number of results."
-            )
-            logger.error(f"Destination files: '{destination_path}'")
-            logger.error(f"Number or results: {len(results)}")
-            raise TypeError(
-                "The number of destination tables does not match the number of results."
-            )
+    if len(results) != len(destination_path):
+        logger.error(
+            "The number of destination files does not match the number of results."
+        )
+        logger.error(f"Destination files: '{destination_path}'")
+        logger.error(f"Number or results: {len(results)}")
+        raise TypeError(
+            "The number of destination tables does not match the number of results."
+        )
+
+    logger.debug(
+        f"Pairing destination path '{destination_path}' with results '{results}'"
+    )
+    for number, (result, destination_file) in enumerate(zip(results, destination_path)):
         logger.debug(
-            f"Pairing destination path '{destination_path}' with results '{results}'"
+            f"Storing result {number} in destination file '{destination_file}'"
         )
-        for number, (result, destination_file) in enumerate(
-            zip(results, destination_path)
-        ):
-            logger.debug(
-                f"Storing result {number} in destination file '{destination_file}'"
+        result = result.value
+        if result is None:
+            logger.error(
+                "Result is None. However, any None result should have been "
+                "converted to an empty TableFrame."
             )
-            intermediate_file = os.path.join(output_folder, str(number))
+            raise ValueError(
+                "Result is None. However, any None result should have been "
+                "converted to an empty TableFrame."
+            )
+        elif isinstance(result, td.TableFrame):
+            intermediate_files = [os.path.join(output_folder, str(number))]
+            result = [result]
+            destination_files = [destination_file]
+        elif isinstance(result, list):
+            verify_fragment_destination(destination, destination_file)
+            intermediate_files = []
+            destination_files = []
+            for fragment_number in range(len(result)):
+                intermediate_file = os.path.join(
+                    output_folder, f"{number}_with_fragment_{fragment_number}"
+                )
+                intermediate_files.append(intermediate_file)
+                individual_destination_file = destination_file.replace(
+                    FRAGMENT_INDEX_PLACEHOLDER, str(fragment_number)
+                )
+                destination_files.append(individual_destination_file)
+        else:
+            logger.error(
+                "The result of a registered function must be a TableFrame,"
+                f" None or a list of TableFrames, got '{type(result)}' instead"
+            )
+            raise TypeError(
+                "The result of a registered function must be a TableFrame,"
+                f" None or a list of TableFrames, got '{type(result)}' instead"
+            )
+
+        # At this point, we should always have a list called result with all the
+        # results (either a single one for a single TableFrame or a list of
+        # TableFrames for a fragmented destination). The same should happen for
+        # intermediate_files and destination_files
+
+        for (
+            individual_result,
+            individual_intermediate_file,
+            individual_destination_file,
+        ) in zip(result, intermediate_files, destination_files):
             store_result_using_transporter(
-                result,
-                destination_file,
-                intermediate_file,
+                individual_result,
+                individual_destination_file,
+                individual_intermediate_file,
                 destination,
                 output_folder,
                 execution_context,
             )
-            # if destination.catalog:
-            #     logger.info("Storing file in catalog")
-            #     catalog = destination.catalog
-            #     store_file_in_catalog(
-            #         catalog, destination_file, catalog.tables[number], result
-            #     )
-    else:
-        # Path can't be a single string, since we bundle a single path as a list of
-        # length one when registering a function.
+        # if destination.catalog:
+        #     logger.info("Storing file in catalog")
+        #     catalog = destination.catalog
+        #     store_file_in_catalog(
+        #         catalog, destination_file, catalog.tables[number], result
+        #     )
+    logger.info("Results stored in LocalFile destination")
+
+
+def verify_fragment_destination(
+    destination: LocalFileDestination | AzureDestination | S3Destination,
+    destination_file: str,
+):
+    if not destination.allow_fragments:
         logger.error(
-            "Parameter 'path' must be a list of strings, got"
-            f" {type(destination_path)} instead"
+            "Destination does not allow fragments, but the result is a list "
+            "of TableFrames."
         )
         raise TypeError(
-            "Parameter 'path' must be a list of strings, got"
-            f" {type(destination_path)} instead"
+            "Destination does not allow fragments, but the result is a list "
+            "of TableFrames."
         )
-    logger.info("Results stored in LocalFile destination")
+    if FRAGMENT_INDEX_PLACEHOLDER not in destination_file:
+        logger.error(
+            f"Destination file '{destination_file}' does not contain the fragment index"
+            f" placeholder '{FRAGMENT_INDEX_PLACEHOLDER}', but is trying to store a"
+            " list of TableFrames."
+        )
+        raise ValueError(
+            f"Destination file '{destination_file}' does not contain the fragment index"
+            f" placeholder '{FRAGMENT_INDEX_PLACEHOLDER}', but is trying to store a"
+            " list of TableFrames."
+        )
+    return
 
 
 def obtain_destination_path(destination):
@@ -599,7 +622,7 @@ def store_result_using_transporter(
     )
     destination_path = replace_placeholders_in_path(destination_path, execution_context)
     result: pl.LazyFrame = remove_system_columns_and_convert(result)
-    store_result_in_file(result, intermediate_file, destination.format)
+    store_polars_lf_in_file(result, intermediate_file, destination.format)
 
     transporter_origin_file = convert_path_to_uri(intermediate_file)
     origin = TransporterLocalFile(transporter_origin_file)
@@ -650,16 +673,22 @@ def store_result_using_transporter(
 
 
 def store_result_in_sql_table(
-    result: td.TableFrame | None,
+    result: Result,
     session: sqlalchemy.orm.Session,
     destination_table: str,
     if_table_exists: str,
     output_folder: str,
 ):
     logger.info(f"Storing result in SQL table: {destination_table}")
+    result = result.value
     if result is None:
         logger.info("Result is None. No data stored.")
         return
+    elif isinstance(result, td.TableFrame):
+        pass
+    else:
+        logger.error(f"Incorrect result type: '{type(result)}'. No data stored.")
+        raise TypeError(f"Incorrect result type: '{type(result)}'. No data stored.")
     # Note: this warning is due to the fact that if_table_exists must be one of
     # the following: "fail", "replace", "append". This is enforced by the
     # Output class, so we can safely ignore this warning.
@@ -694,7 +723,7 @@ def store_result_in_sql_table(
     logger.info(f"Result stored in SQL table: {destination_table}")
 
 
-def store_result_in_file(
+def store_polars_lf_in_file(
     result: pl.LazyFrame,
     result_file: str | os.PathLike,
     format: FileFormat | CSVFormat | ParquetFormat | NDJSONFormat = None,

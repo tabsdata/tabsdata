@@ -42,6 +42,8 @@ from tabsdata.io.constants import (
 
 logger = logging.getLogger(__name__)
 
+FRAGMENT_INDEX_PLACEHOLDER = "$FRAGMENT_IDX"
+
 
 class OutputIdentifiers(Enum):
     """
@@ -324,6 +326,15 @@ class AzureDestination(Output):
         if hasattr(self, "_format") and self._format is None:
             self._verify_valid_format(build_file_format(self._implicit_format))
 
+        if not self.allow_fragments:
+            for uri in self._uri_list:
+                if FRAGMENT_INDEX_PLACEHOLDER in uri:
+                    raise OutputConfigurationError(
+                        ErrorCode.OCE38,
+                        FRAGMENT_INDEX_PLACEHOLDER,
+                        uri,
+                    )
+
     def to_dict(self) -> dict:
         """
         Converts the AzureDestination object to a dictionary with all the relevant
@@ -441,6 +452,13 @@ class AzureDestination(Output):
         if not (isinstance(credentials, AzureCredentials)):
             raise OutputConfigurationError(ErrorCode.OCE16, type(credentials))
         self._credentials = credentials
+
+    @property
+    def allow_fragments(self) -> bool:
+        """
+        bool: Whether to allow fragments in the output.
+        """
+        return False
 
 
 class LocalFileDestination(Output):
@@ -578,6 +596,13 @@ class LocalFileDestination(Output):
             format = build_file_format(format)
             self._verify_valid_format(format)
             self._format = format
+
+    @property
+    def allow_fragments(self) -> bool:
+        """
+        bool: Whether to allow fragments in the output.
+        """
+        return True
 
     #         if (
     #             hasattr(self, "_catalog")
@@ -1523,6 +1548,13 @@ class S3Destination(Output):
             format = build_file_format(format)
             self._verify_valid_format(format)
             self._format = format
+
+    @property
+    def allow_fragments(self) -> bool:
+        """
+        bool: Whether to allow fragments in the output.
+        """
+        return True
 
     #         if (
     #             hasattr(self, "_catalog")

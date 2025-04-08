@@ -680,6 +680,14 @@ class ErrorCode(Enum):
             "got '{}' instead."
         ),
     }
+    OCE38 = {
+        "code": "OCE-038",
+        "message": (
+            "The fragment index placeholder '{}' has been used in '{}', but this "
+            "class does not support fragments. You can see if a class allows fragments "
+            "by checking the 'allow_fragments' attribute of the class."
+        ),
+    }
     RE1 = {
         "code": "RE-001",
         "message": (

@@ -42,6 +42,7 @@ from tabsdata.io.input import (
 from tabsdata.io.plugin import SourcePlugin
 from tabsdata.tableuri import build_table_uri_object
 from tabsdata.tabsserver.function.logging_utils import pad_string
+from tabsdata.tabsserver.function.results_collection import ResultsCollection
 from tabsdata.utils.bundle_utils import (
     CODE_FOLDER,
     CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY,
@@ -50,7 +51,6 @@ from tabsdata.utils.bundle_utils import (
     PLUGINS_FOLDER,
 )
 from tabsdata.utils.sql_utils import obtain_uri
-from tabsdata.utils.tableframe._reflection import check_required_columns
 
 from . import environment_import_utils
 from .cloud_connectivity_utils import (
@@ -77,7 +77,7 @@ SOURCES_FOLDER = "sources"
 
 def execute_function_from_config(
     config: dict, working_dir: str, execution_context: InputYaml
-):
+) -> ResultsCollection:
     function_file = config[CONFIG_ENTRY_POINT_KEY][CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY]
     code_folder = os.path.join(working_dir, CODE_FOLDER)
     environment_import_utils.update_syspath(code_folder)
@@ -91,7 +91,7 @@ def execute_function_from_config(
 
 def execute_function_with_config(
     config: dict, met: Callable, working_dir: str, execution_context: InputYaml
-):
+) -> ResultsCollection:
     logger.info(pad_string("[Obtaining function parameters]"))
     importer_plugin, input_config, parameters = obtain_met_parameters(
         config, execution_context, working_dir
@@ -102,29 +102,35 @@ def execute_function_with_config(
     result = met(*parameters)
     logger.info("Finished executing function provided by the user")
     if INITIAL_VALUES.returns_values:
-        logger.info("New initial values generated")
-        if SourcePlugin.IDENTIFIER in input_config:
-            # If working with a plugin, the new initial values are stored in the plugin
-            new_initial_values = importer_plugin.initial_values
+        result = update_initial_values(importer_plugin, input_config, result)
+    result = ResultsCollection(result)
+    result.check_collection_integrity()
+    return result
+
+
+def update_initial_values(importer_plugin, input_config, result):
+    logger.info("New initial values generated")
+    if SourcePlugin.IDENTIFIER in input_config:
+        # If working with a plugin, the new initial values are stored in the plugin
+        new_initial_values = importer_plugin.initial_values
+    else:
+        # If working with a source, the new initial values are part of the result
+        if isinstance(result, tuple):
+            *result, new_initial_values = result
+            result = tuple(result)
         else:
-            # If working with a source, the new initial values are part of the result
-            if isinstance(result, tuple):
-                *result, new_initial_values = result
-            else:
-                new_initial_values = result
-                result = None
-        if not isinstance(new_initial_values, dict):
-            logger.error(
-                f"Invalid type for new initial values: {type(new_initial_values)}."
-                " No initial values stored."
-            )
-            raise TypeError(
-                f"Invalid type for new initial values: {type(new_initial_values)}."
-                " No initial values stored."
-            )
-        INITIAL_VALUES.update_new_values(new_initial_values)
-    result = convert_tuple_to_list(result)
-    check_frame_integrity(result)
+            new_initial_values = result
+            result = (None,)
+    if not isinstance(new_initial_values, dict):
+        logger.error(
+            f"Invalid type for new initial values: {type(new_initial_values)}."
+            " No initial values stored."
+        )
+        raise TypeError(
+            f"Invalid type for new initial values: {type(new_initial_values)}."
+            " No initial values stored."
+        )
+    INITIAL_VALUES.update_new_values(new_initial_values)
     return result
 
 
@@ -224,18 +230,6 @@ def convert_tuple_to_list(
         return list(result)
     else:
         return result
-
-
-def check_frame_integrity(frame: td.TableFrame | None | List[td.TableFrame | None]):
-    if isinstance(frame, td.TableFrame):
-        if frame is not None:
-            # noinspection PyProtectedMember
-            check_required_columns(frame._to_lazy())
-    elif isinstance(frame, list):
-        for table in frame:
-            if table is not None:
-                # noinspection PyProtectedMember
-                check_required_columns(table._to_lazy())
 
 
 def trigger_source(

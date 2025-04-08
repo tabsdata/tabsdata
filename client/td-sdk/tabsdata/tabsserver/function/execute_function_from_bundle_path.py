@@ -8,6 +8,7 @@ import os
 import traceback
 
 from tabsdata.tabsserver.function.logging_utils import pad_string
+from tabsdata.tabsserver.function.results_collection import ResultsCollection
 from tabsdata.utils.bundle_utils import CONFIG_OUTPUT_KEY
 
 from . import (
@@ -29,7 +30,7 @@ def execute_bundled_function(
     execution_context_file: str,
     response_folder: str,
     output_folder: str,
-):
+) -> ResultsCollection:
     create_outwards_folders(response_folder, output_folder)
     configuration = configuration_utils.load_configuration(bundle_folder)
     execution_context = yaml_parsing.parse_request_yaml(execution_context_file)

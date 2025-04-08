@@ -15,7 +15,12 @@ from tabsdata.exceptions import (
     FormatConfigurationError,
     OutputConfigurationError,
 )
-from tabsdata.io.output import AzureDestination, Output, build_output
+from tabsdata.io.output import (
+    FRAGMENT_INDEX_PLACEHOLDER,
+    AzureDestination,
+    Output,
+    build_output,
+)
 from tabsdata.secret import DirectSecret
 
 TEST_ACCOUNT_NAME = "test_account_name"
@@ -378,6 +383,24 @@ def test_identifier_string_unchanged():
     }
     assert output.to_dict() == expected_dict
     assert isinstance(build_output(output.to_dict()), AzureDestination)
+
+
+def test_allow_fragments():
+    uri = f"az://path/to/data/data_{FRAGMENT_INDEX_PLACEHOLDER}.csv"
+    with pytest.raises(OutputConfigurationError) as e:
+        AzureDestination(uri, AZURE_CREDENTIALS)
+    assert e.value.error_code == ErrorCode.OCE38
+    uri = [
+        "az://path/to/data/data",
+        f"az://path/to/data/data_{FRAGMENT_INDEX_PLACEHOLDER}.csv",
+    ]
+    with pytest.raises(OutputConfigurationError) as e:
+        AzureDestination(uri, AZURE_CREDENTIALS)
+    assert e.value.error_code == ErrorCode.OCE38
+    uri = "az://path/to/data/data.csv"
+    output = AzureDestination(uri, AZURE_CREDENTIALS)
+    assert output.uri == uri
+    assert not output.allow_fragments
 
 
 # def test_correct_catalog_implicit_format():

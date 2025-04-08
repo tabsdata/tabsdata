@@ -15,7 +15,12 @@ from tabsdata.exceptions import (
     FormatConfigurationError,
     OutputConfigurationError,
 )
-from tabsdata.io.output import Output, S3Destination, build_output
+from tabsdata.io.output import (
+    FRAGMENT_INDEX_PLACEHOLDER,
+    Output,
+    S3Destination,
+    build_output,
+)
 from tabsdata.secret import DirectSecret
 
 TEST_ACCESS_KEY_ID = "test_access_key_id"
@@ -413,6 +418,13 @@ def test_region_wrong_type_raises_error():
     with pytest.raises(OutputConfigurationError) as e:
         S3Destination(uri, S3_CREDENTIALS, region=region)
     assert e.value.error_code == ErrorCode.OCE18
+
+
+def test_allow_fragments():
+    uri = f"s3://path/to/data/data_{FRAGMENT_INDEX_PLACEHOLDER}.csv"
+    output = S3Destination(uri, S3_CREDENTIALS)
+    assert output.uri == uri
+    assert output.allow_fragments
 
 
 # def test_correct_catalog_implicit_format():

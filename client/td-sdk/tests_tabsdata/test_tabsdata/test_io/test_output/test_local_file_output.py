@@ -14,6 +14,7 @@ from tabsdata.exceptions import (
     OutputConfigurationError,
 )
 from tabsdata.io.output import (  # Catalog,
+    FRAGMENT_INDEX_PLACEHOLDER,
     LocalFileDestination,
     Output,
     build_output,
@@ -359,6 +360,13 @@ def test_update_format():
     assert output.format == format
     output.format = CSVFormat(separator=";")
     assert output.format == CSVFormat(separator=";")
+
+
+def test_allow_fragments():
+    path = f"file://path/to/data/data_{FRAGMENT_INDEX_PLACEHOLDER}.csv"
+    output = LocalFileDestination(path)
+    assert output.path == path
+    assert output.allow_fragments
 
 
 # def test_correct_catalog_implicit_format():

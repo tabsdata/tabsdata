@@ -21,6 +21,9 @@ from tests_tabsdata.conftest import (
 from tests_tabsdata.testing_resources.test_output_file.example import (
     output_file as output_file_format_testing,
 )
+from tests_tabsdata.testing_resources.test_output_file_frame_list.example import (
+    output_file_frame_list,
+)
 from tests_tabsdata.testing_resources.test_output_file_multiple_files.example import (
     output_file_multiple_files,
 )
@@ -437,4 +440,65 @@ def test_output_file_with_none(tmp_path):
         "expected_result.json",
     )
     expected_output = pl.read_json(expected_output_file)
+    assert output.equals(expected_output)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.aleix
+def test_output_file_frame_list(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_file = os.path.join(tmp_path, "output_file_frame_list_$FRAGMENT_IDX.parquet")
+    output_file_frame_list.output = td.LocalFileDestination(output_file)
+    context_archive = create_bundle_archive(
+        output_file_frame_list,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_file_frame_list", "mock_table.parquet"
+    )
+    write_v1_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    output_file = os.path.join(tmp_path, "output_file_frame_list_0.parquet")
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_file_frame_list",
+        "expected_result_0.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert output.equals(expected_output)
+
+    output_file = os.path.join(tmp_path, "output_file_frame_list_1.parquet")
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    output = clean_polars_df(output)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_file_frame_list",
+        "expected_result_1.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
