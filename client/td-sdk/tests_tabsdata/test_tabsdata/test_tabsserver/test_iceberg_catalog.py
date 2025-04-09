@@ -2,393 +2,758 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-# import inspect
-# import logging
-# import os
-# import shutil
-#
-# import polars as pl
-# import pytest
-# from pyiceberg.catalog import load_catalog
-# from tests_tabsdata.bootest import TDLOCAL_FOLDER
-# from tests_tabsdata.conftest import (
-#     LOCAL_PACKAGES_LIST,
-#     ABSOLUTE_TEST_FOLDER_LOCATION,
-#     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-#     TESTING_RESOURCES_FOLDER,
-#     clean_polars_df,
-#     read_json_and_clean,
-#     write_v1_yaml_file,
-# )
-# from tests_tabsdata.testing_resources.test_output_file_catalog.example import (
-#     output_file_catalog,
-# )
-# from tests_tabsdata.testing_resources.test_output_file_catalog_append.example import (
-#     output_file_catalog_append,
-# )
-# from tests_tabsdata.testing_resources.test_output_file_catalog_replace.example import (
-#     output_file_catalog_replace,
-# )
-#
-# from tabsdata.utils.bundle_utils import create_bundle_archive
-# from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-# from tabsdata.tabsserver.main import EXECUTION_CONTEXT_FILE_NAME
-# from tabsdata.tabsserver.main import do as tabsserver_main
-#
-# logger = logging.getLogger(__name__)
-# logger.setLevel(logging.DEBUG)
-#
-#
-# ROOT_PROJECT_DIR = os.path.dirname(
-#     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
-# )
-# RESPONSE_FOLDER = "response_folder"
-#
+import copy
+import datetime
+import inspect
+import logging
+import os
 
-# LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
-#
-#
-# @pytest.mark.requires_internet
-# @pytest.mark.slow
-# def test_output_file_catalog(tmp_path):
-#     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-#     first_output_file = os.path.join(tmp_path, "test_output_file_catalog1.parquet")
-#     second_output_file = os.path.join(tmp_path, "test_output_file_catalog2.parquet")
-#     output_file_catalog.output.path = [
-#         first_output_file,
-#         second_output_file,
-#     ]
-#     context_archive = create_bundle_archive(
-#         output_file_catalog,
-#         local_packages=LOCAL_PACKAGES_LIST,
-#         save_location=tmp_path,
-#     )
-#
-#     # Set up the catalog
-#     from tests_tabsdata.testing_resources.test_output_file_catalog.example import (
-#         warehouse_path,
-#     )
-#
-#     # Remove the folder if it exists
-#     if os.path.exists(warehouse_path):
-#         shutil.rmtree(warehouse_path)
-#
-#     # Create the folder
-#     os.makedirs(warehouse_path)
-#     catalog = load_catalog(**output_file_catalog.output.catalog.definition)
-#     catalog.create_namespace("testing_namespace")
-#
-#     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-#     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-#     os.makedirs(response_folder, exist_ok=True)
-#     mock_parquet_table = os.path.join(
-#         TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
-#     )
-#     write_v1_yaml_file(
-#         input_yaml_file,
-#         context_archive,
-#         [mock_parquet_table],
-#     )
-#     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-#     environment_name, result = tabsserver_main(
-#         tmp_path,
-#         response_folder,
-#         tabsserver_output_folder,
-#         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-#         logs_folder=logs_folder,
-#     )
-#     assert result == 0
-#     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-#
-#     temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-#     assert os.path.isfile(temporary_output_file)
-#     output = pl.read_parquet(temporary_output_file)
-#     output = clean_polars_df(output)
-#     expected_output_file = os.path.join(
-#         TESTING_RESOURCES_FOLDER,
-#         "test_output_file_catalog",
-#         "expected_result.json",
-#     )
-#     expected_output = read_json_and_clean(expected_output_file)
-#     assert output.equals(expected_output)
-#
-#     assert os.path.isfile(first_output_file)
-#     output = pl.read_parquet(first_output_file)
-#     output = clean_polars_df(output)
-#     expected_output_file = os.path.join(
-#         TESTING_RESOURCES_FOLDER,
-#         "test_output_file_catalog",
-#         "expected_result.json",
-#     )
-#     expected_output = read_json_and_clean(expected_output_file)
-#     assert output.equals(expected_output)
-#
-#     assert os.path.isfile(second_output_file)
-#     output = pl.read_parquet(second_output_file)
-#     output = clean_polars_df(output)
-#     expected_output_file = os.path.join(
-#         TESTING_RESOURCES_FOLDER,
-#         "test_output_file_catalog",
-#         "expected_result.json",
-#     )
-#     expected_output = read_json_and_clean(expected_output_file)
-#     assert output.equals(expected_output)
-#
-#     # Verify the catalog has the proper data
-#     table = catalog.load_table("testing_namespace.output_file_parquet")
-#     output = pl.DataFrame(table.scan().to_arrow())
-#     output = clean_polars_df(output)
-#     expected_output_file = os.path.join(
-#         TESTING_RESOURCES_FOLDER,
-#         "test_output_file_catalog",
-#         "expected_result.json",
-#     )
-#     expected_output = read_json_and_clean(expected_output_file)
-#     assert output.equals(expected_output)
-#
-#     # Verify the catalog has the proper data
-#     table = catalog.load_table("testing_namespace.second_output_file")
-#     output = pl.DataFrame(table.scan().to_arrow())
-#     output = clean_polars_df(output)
-#     expected_output_file = os.path.join(
-#         TESTING_RESOURCES_FOLDER,
-#         "test_output_file_catalog",
-#         "expected_result.json",
-#     )
-#     expected_output = read_json_and_clean(expected_output_file)
-#     assert output.equals(expected_output)
-#
-#
-# @pytest.mark.requires_internet
-# @pytest.mark.slow
-# def test_output_file_catalog_append(tmp_path):
-#     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-#     first_output_file = os.path.join(
-#         tmp_path, "test_output_file_catalog_append1.parquet"
-#     )
-#     second_output_file = os.path.join(
-#         tmp_path, "test_output_file_catalog_append2.parquet"
-#     )
-#     output_file_catalog_append.output.path = [
-#         first_output_file,
-#         second_output_file,
-#     ]
-#     context_archive = create_bundle_archive(
-#         output_file_catalog_append,
-#         local_packages=LOCAL_PACKAGES_LIST,
-#         save_location=tmp_path,
-#     )
-#
-#     # Set up the catalog
-#     from tests_tabsdata.testing_resources.test_output_file_catalog_append.example import (
-#         warehouse_path,
-#     )
-#
-#     # Remove the folder if it exists
-#     if os.path.exists(warehouse_path):
-#         shutil.rmtree(warehouse_path)
-#
-#     # Create the folder
-#     os.makedirs(warehouse_path)
-#     catalog = load_catalog(**output_file_catalog_append.output.catalog.definition)
-#     catalog.create_namespace("testing_namespace")
-#
-#     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-#     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-#     os.makedirs(response_folder, exist_ok=True)
-#     mock_parquet_table = os.path.join(
-#         TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
-#     )
-#     write_v1_yaml_file(
-#         input_yaml_file,
-#         context_archive,
-#         [mock_parquet_table],
-#     )
-#     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-#     for _ in range(2):
-#         environment_name, result = tabsserver_main(
-#             tmp_path,
-#             response_folder,
-#             tabsserver_output_folder,
-#             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-#             logs_folder=logs_folder,
-#         )
-#         assert result == 0
-#         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-#
-#         temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-#         assert os.path.isfile(temporary_output_file)
-#         output = pl.read_parquet(temporary_output_file)
-#         output = clean_polars_df(output)
-#         expected_output_file = os.path.join(
-#             TESTING_RESOURCES_FOLDER,
-#             "test_output_file_catalog_append",
-#             "expected_result.json",
-#         )
-#         expected_output = read_json_and_clean(expected_output_file)
-#         assert output.equals(expected_output)
-#
-#         assert os.path.isfile(first_output_file)
-#         output = pl.read_parquet(first_output_file)
-#         output = clean_polars_df(output)
-#         expected_output_file = os.path.join(
-#             TESTING_RESOURCES_FOLDER,
-#             "test_output_file_catalog_append",
-#             "expected_result.json",
-#         )
-#         expected_output = read_json_and_clean(expected_output_file)
-#         assert output.equals(expected_output)
-#
-#         assert os.path.isfile(second_output_file)
-#         output = pl.read_parquet(second_output_file)
-#         output = clean_polars_df(output)
-#         expected_output_file = os.path.join(
-#             TESTING_RESOURCES_FOLDER,
-#             "test_output_file_catalog_append",
-#             "expected_result.json",
-#         )
-#         expected_output = read_json_and_clean(expected_output_file)
-#         assert output.equals(expected_output)
-#
-#     # Verify the catalog has the proper data
-#     table = catalog.load_table("testing_namespace.output_file_parquet")
-#     output = pl.DataFrame(table.scan().to_arrow())
-#     output = clean_polars_df(output)
-#     expected_output_file = os.path.join(
-#         TESTING_RESOURCES_FOLDER,
-#         "test_output_file_catalog_append",
-#         "expected_result.json",
-#     )
-#     expected_output = read_json_and_clean(expected_output_file)
-#     expected_output = clean_polars_df(pl.concat([expected_output, expected_output]))
-#     assert output.equals(expected_output)
-#
-#     # Verify the catalog has the proper data
-#     table = catalog.load_table("testing_namespace.second_output_file")
-#     output = pl.DataFrame(table.scan().to_arrow())
-#     output = clean_polars_df(output)
-#     expected_output_file = os.path.join(
-#         TESTING_RESOURCES_FOLDER,
-#         "test_output_file_catalog_append",
-#         "expected_result.json",
-#     )
-#     expected_output = read_json_and_clean(expected_output_file)
-#     expected_output = clean_polars_df(pl.concat([expected_output, expected_output]))
-#     assert output.equals(expected_output)
-#
-#
-# @pytest.mark.requires_internet
-# @pytest.mark.slow
-# def test_output_file_catalog_replace(tmp_path):
-#     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-#     first_output_file = os.path.join(
-#         tmp_path, "test_output_file_catalog_replace1.parquet"
-#     )
-#     second_output_file = os.path.join(
-#         tmp_path, "test_output_file_catalog_replace2.parquet"
-#     )
-#     output_file_catalog_replace.output.path = [
-#         first_output_file,
-#         second_output_file,
-#     ]
-#     context_archive = create_bundle_archive(
-#         output_file_catalog_replace,
-#         local_packages=LOCAL_PACKAGES_LIST,
-#         save_location=tmp_path,
-#     )
-#
-#     # Set up the catalog
-#     from tests_tabsdata.testing_resources.test_output_file_catalog_replace.example import (
-#         warehouse_path,
-#     )
-#
-#     # Remove the folder if it exists
-#     if os.path.exists(warehouse_path):
-#         shutil.rmtree(warehouse_path)
-#
-#     # Create the folder
-#     os.makedirs(warehouse_path)
-#     catalog = load_catalog(**output_file_catalog_replace.output.catalog.definition)
-#     catalog.create_namespace("testing_namespace")
-#
-#     input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
-#     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-#     os.makedirs(response_folder, exist_ok=True)
-#     mock_parquet_table = os.path.join(
-#         TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
-#     )
-#     write_v1_yaml_file(
-#         input_yaml_file,
-#         context_archive,
-#         [mock_parquet_table],
-#     )
-#     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-#
-#     for _ in range(2):
-#         environment_name, result = tabsserver_main(
-#             tmp_path,
-#             response_folder,
-#             tabsserver_output_folder,
-#             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-#             logs_folder=logs_folder,
-#         )
-#         assert result == 0
-#         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-#
-#         temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-#         assert os.path.isfile(temporary_output_file)
-#         output = pl.read_parquet(temporary_output_file)
-#         output = clean_polars_df(output)
-#         expected_output_file = os.path.join(
-#             TESTING_RESOURCES_FOLDER,
-#             "test_output_file_catalog_replace",
-#             "expected_result.json",
-#         )
-#         expected_output = read_json_and_clean(expected_output_file)
-#         assert output.equals(expected_output)
-#
-#         assert os.path.isfile(first_output_file)
-#         output = pl.read_parquet(first_output_file)
-#         output = clean_polars_df(output)
-#         expected_output_file = os.path.join(
-#             TESTING_RESOURCES_FOLDER,
-#             "test_output_file_catalog_replace",
-#             "expected_result.json",
-#         )
-#         expected_output = read_json_and_clean(expected_output_file)
-#         assert output.equals(expected_output)
-#
-#         assert os.path.isfile(second_output_file)
-#         output = pl.read_parquet(second_output_file)
-#         output = clean_polars_df(output)
-#         expected_output_file = os.path.join(
-#             TESTING_RESOURCES_FOLDER,
-#             "test_output_file_catalog_replace",
-#             "expected_result.json",
-#         )
-#         expected_output = read_json_and_clean(expected_output_file)
-#         assert output.equals(expected_output)
-#
-#     # Verify the catalog has the proper data
-#     table = catalog.load_table("testing_namespace.output_file_parquet")
-#     output = pl.DataFrame(table.scan().to_arrow())
-#     output = clean_polars_df(output)
-#     expected_output_file = os.path.join(
-#         TESTING_RESOURCES_FOLDER,
-#         "test_output_file_catalog_replace",
-#         "expected_result.json",
-#     )
-#     expected_output = read_json_and_clean(expected_output_file)
-#     assert output.equals(expected_output)
-#
-#     # Verify the catalog has the proper data
-#     table = catalog.load_table("testing_namespace.second_output_file")
-#     output = pl.DataFrame(table.scan().to_arrow())
-#     output = clean_polars_df(output)
-#     expected_output_file = os.path.join(
-#         TESTING_RESOURCES_FOLDER,
-#         "test_output_file_catalog_replace",
-#         "expected_result.json",
-#     )
-#     expected_output = read_json_and_clean(expected_output_file)
-#     assert output.equals(expected_output)
+import numpy as np
+import pandas as pd
+import polars as pl
+import pytest
+from pyiceberg.catalog import load_catalog
+from pyiceberg.transforms import YearTransform
+from tests_tabsdata.bootest import TDLOCAL_FOLDER
+from tests_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    TESTING_RESOURCES_FOLDER,
+    clean_polars_df,
+    read_json_and_clean,
+    write_v1_yaml_file,
+)
+from tests_tabsdata.testing_resources.test_output_s3_catalog.example import (
+    output_s3_catalog,
+)
+from tests_tabsdata.testing_resources.test_output_s3_catalog_append.example import (
+    output_s3_catalog_append,
+)
+from tests_tabsdata.testing_resources.test_output_s3_catalog_partition.example import (
+    output_s3_catalog_partition,
+)
+from tests_tabsdata.testing_resources.test_output_s3_catalog_replace.example import (
+    output_s3_catalog_replace,
+)
+from tests_tabsdata.testing_resources.test_output_s3_catalog_schema_strategy.example import (
+    output_s3_catalog_schema_strategy,
+)
+
+from tabsdata.secret import _recursively_evaluate_secret
+from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata.tabsserver.invoker import EXECUTION_CONTEXT_FILE_NAME
+from tabsdata.tabsserver.invoker import invoke as tabsserver_main
+from tabsdata.utils.bundle_utils import create_bundle_archive
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+ROOT_PROJECT_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
+)
+RESPONSE_FOLDER = "response_folder"
+
+
+LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
+
+pytestmark = pytest.mark.catalog
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_catalog(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_file_0 = (
+        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_"
+        f"{int(datetime.datetime.now().timestamp())}_0.parquet"
+    )
+    output_file_1 = (
+        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_"
+        f"{int(datetime.datetime.now().timestamp())}_1.parquet"
+    )
+    output_s3_catalog.output.uri = [
+        output_file_0,
+        output_file_1,
+    ]
+    catalog_definition = _recursively_evaluate_secret(
+        output_s3_catalog.output.catalog.definition
+    )
+    catalog = load_catalog(**catalog_definition)
+    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    catalog.create_namespace(namespace)
+    table_0 = f"{namespace}.s3_catalog_0"
+    table_1 = f"{namespace}.s3_catalog_1"
+
+    output_s3_catalog.output.catalog.tables = [table_0, table_1]
+    output_s3_catalog.output.catalog.auto_create_at = [
+        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_0",
+        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_1",
+    ]
+
+    context_archive = create_bundle_archive(
+        output_s3_catalog,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_s3_catalog", "mock_table.parquet"
+    )
+    write_v1_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+
+    bucket_name = output_file_0.split("/")[2]
+    file_name_0 = "/".join(output_file_0.split("/")[3:])
+    file_name_1 = "/".join(output_file_1.split("/")[3:])
+    try:
+        environment_name, result = tabsserver_main(
+            tmp_path,
+            response_folder,
+            tabsserver_output_folder,
+            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+            logs_folder=logs_folder,
+        )
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        copy_destination = os.path.join(tmp_path, "output.parquet")
+        s3_client.download_file(bucket_name, file_name_0, copy_destination)
+        output = pl.read_parquet(copy_destination)
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3_catalog",
+            "expected_result.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+
+        copy_destination = os.path.join(tmp_path, "output.parquet")
+        s3_client.download_file(bucket_name, file_name_1, copy_destination)
+        output = pl.read_parquet(copy_destination)
+        output = clean_polars_df(output)
+        assert output.equals(expected_output)
+
+        # Verify the catalog has the proper data
+        table = catalog.load_table(table_0)
+        output = pl.DataFrame(table.scan().to_arrow())
+        output = clean_polars_df(output)
+        assert output.equals(expected_output)
+
+        table = catalog.load_table(table_1)
+        output = pl.DataFrame(table.scan().to_arrow())
+        output = clean_polars_df(output)
+        assert output.equals(expected_output)
+
+    finally:
+        operations = [
+            lambda: catalog.drop_table(table_0),
+            lambda: catalog.drop_table(table_1),
+            lambda: catalog.drop_namespace(namespace),
+            lambda: s3_client.delete_object(Bucket=bucket_name, Key=file_name_0),
+            lambda: s3_client.delete_object(Bucket=bucket_name, Key=file_name_1),
+        ]
+
+        for operation in operations:
+            try:
+                operation()
+            except:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_catalog_replace(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+
+    catalog_definition = _recursively_evaluate_secret(
+        output_s3_catalog_replace.output.catalog.definition
+    )
+    catalog = load_catalog(**catalog_definition)
+    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    catalog.create_namespace(namespace)
+    table_name = f"{namespace}.s3_catalog_replace"
+    output_s3_catalog_replace.output.catalog.tables = table_name
+    output_s3_catalog_replace.output.catalog.auto_create_at = (
+        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_replace"
+    )
+
+    files_to_delete = []
+    try:
+        for i in range(2):
+            output_file = (
+                "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_replace"
+                f"{int(datetime.datetime.now().timestamp())}_{i}.parquet"
+            )
+            output_s3_catalog_replace.output.uri = output_file
+
+            context_archive = create_bundle_archive(
+                output_s3_catalog_replace,
+                local_packages=LOCAL_PACKAGES_LIST,
+                save_location=tmp_path,
+            )
+
+            input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+            response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+            os.makedirs(response_folder, exist_ok=True)
+            mock_parquet_table = os.path.join(
+                TESTING_RESOURCES_FOLDER,
+                "test_output_s3_catalog_replace",
+                "mock_table.parquet",
+            )
+            write_v1_yaml_file(
+                input_yaml_file,
+                context_archive,
+                [mock_parquet_table],
+            )
+            tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+
+            bucket_name = output_file.split("/")[2]
+            file_name = "/".join(output_file.split("/")[3:])
+            files_to_delete.append(file_name)
+
+            environment_name, result = tabsserver_main(
+                tmp_path,
+                response_folder,
+                tabsserver_output_folder,
+                environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+                logs_folder=logs_folder,
+            )
+            assert result == 0
+            assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+            copy_destination = os.path.join(tmp_path, "output.parquet")
+            s3_client.download_file(bucket_name, file_name, copy_destination)
+            output = pl.read_parquet(copy_destination)
+            output = clean_polars_df(output)
+            expected_output_file = os.path.join(
+                TESTING_RESOURCES_FOLDER,
+                "test_output_s3_catalog_replace",
+                "expected_result.json",
+            )
+            expected_output = read_json_and_clean(expected_output_file)
+            assert output.equals(expected_output)
+
+        # Verify the catalog has the proper data
+        table = catalog.load_table(table_name)
+        output = pl.DataFrame(table.scan().to_arrow())
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3_catalog",
+            "expected_result.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert len(output) == len(expected_output)
+
+    finally:
+        operations = [
+            lambda: catalog.drop_table(table_name),
+            lambda: catalog.drop_namespace(namespace),
+        ]
+
+        for operation in operations:
+            try:
+                operation()
+            except:
+                pass
+
+        for file in files_to_delete:
+            s3_client.delete_object(Bucket=bucket_name, Key=file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_catalog_append(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+
+    catalog_definition = _recursively_evaluate_secret(
+        output_s3_catalog_append.output.catalog.definition
+    )
+    catalog = load_catalog(**catalog_definition)
+    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    catalog.create_namespace(namespace)
+    table_name = f"{namespace}.s3_catalog_append"
+    output_s3_catalog_append.output.catalog.tables = table_name
+    output_s3_catalog_append.output.catalog.auto_create_at = (
+        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_append"
+    )
+
+    files_to_delete = []
+    try:
+        for i in range(2):
+            output_file = (
+                "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_append"
+                f"{int(datetime.datetime.now().timestamp())}_{i}.parquet"
+            )
+            output_s3_catalog_append.output.uri = output_file
+
+            context_archive = create_bundle_archive(
+                output_s3_catalog_append,
+                local_packages=LOCAL_PACKAGES_LIST,
+                save_location=tmp_path,
+            )
+
+            input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+            response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+            os.makedirs(response_folder, exist_ok=True)
+            mock_parquet_table = os.path.join(
+                TESTING_RESOURCES_FOLDER,
+                "test_output_s3_catalog_append",
+                "mock_table.parquet",
+            )
+            write_v1_yaml_file(
+                input_yaml_file,
+                context_archive,
+                [mock_parquet_table],
+            )
+            tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+
+            bucket_name = output_file.split("/")[2]
+            file_name = "/".join(output_file.split("/")[3:])
+            files_to_delete.append(file_name)
+
+            environment_name, result = tabsserver_main(
+                tmp_path,
+                response_folder,
+                tabsserver_output_folder,
+                environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+                logs_folder=logs_folder,
+            )
+            assert result == 0
+            assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+            copy_destination = os.path.join(tmp_path, "output.parquet")
+            s3_client.download_file(bucket_name, file_name, copy_destination)
+            output = pl.read_parquet(copy_destination)
+            output = clean_polars_df(output)
+            expected_output_file = os.path.join(
+                TESTING_RESOURCES_FOLDER,
+                "test_output_s3_catalog_append",
+                "expected_result.json",
+            )
+            expected_output = read_json_and_clean(expected_output_file)
+            assert output.equals(expected_output)
+
+        # Verify the catalog has the proper data
+        table = catalog.load_table(table_name)
+        output = pl.DataFrame(table.scan().to_arrow())
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3_catalog",
+            "expected_result.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert len(output) == 2 * len(expected_output)
+
+    finally:
+        operations = [
+            lambda: catalog.drop_table(table_name),
+            lambda: catalog.drop_namespace(namespace),
+        ]
+
+        for operation in operations:
+            try:
+                operation()
+            except:
+                pass
+
+        for file in files_to_delete:
+            s3_client.delete_object(Bucket=bucket_name, Key=file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_s3_catalog_no_auto_create_at_fails = copy.deepcopy(output_s3_catalog)
+    output_file_0 = (
+        "s3://tabsdata-testing-bucket/testing_output"
+        "/test_output_s3_catalog_no_autocreate_"
+        f"{int(datetime.datetime.now().timestamp())}_0.parquet"
+    )
+    output_file_1 = (
+        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_no_autocreate_"
+        f"{int(datetime.datetime.now().timestamp())}_1.parquet"
+    )
+    output_s3_catalog_no_auto_create_at_fails.output.uri = [
+        output_file_0,
+        output_file_1,
+    ]
+    catalog_definition = _recursively_evaluate_secret(
+        output_s3_catalog_no_auto_create_at_fails.output.catalog.definition
+    )
+    catalog = load_catalog(**catalog_definition)
+    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    catalog.create_namespace(namespace)
+    table_0 = f"{namespace}.s3_catalog_no_autocreate_0"
+    table_1 = f"{namespace}.s3_catalog_no_autocreate_1"
+
+    output_s3_catalog_no_auto_create_at_fails.output.catalog.tables = [table_0, table_1]
+    output_s3_catalog_no_auto_create_at_fails.output.catalog.auto_create_at = None
+
+    context_archive = create_bundle_archive(
+        output_s3_catalog_no_auto_create_at_fails,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_s3_catalog", "mock_table.parquet"
+    )
+    write_v1_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+
+    bucket_name = output_file_0.split("/")[2]
+    file_name_0 = "/".join(output_file_0.split("/")[3:])
+    file_name_1 = "/".join(output_file_1.split("/")[3:])
+    try:
+        environment_name, result = tabsserver_main(
+            tmp_path,
+            response_folder,
+            tabsserver_output_folder,
+            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+            logs_folder=logs_folder,
+        )
+        assert result != 0
+
+    finally:
+        operations = [
+            lambda: catalog.drop_table(table_0),
+            lambda: catalog.drop_table(table_1),
+            lambda: catalog.drop_namespace(namespace),
+            lambda: s3_client.delete_object(Bucket=bucket_name, Key=file_name_0),
+            lambda: s3_client.delete_object(Bucket=bucket_name, Key=file_name_1),
+        ]
+
+        for operation in operations:
+            try:
+                operation()
+            except:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_catalog_schema_update(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_s3_catalog_schema_update = copy.deepcopy(output_s3_catalog_schema_strategy)
+    output_file = (
+        "s3://tabsdata-testing-bucket/testing_output"
+        "/test_output_s3_catalog_schema_update_"
+        f"{int(datetime.datetime.now().timestamp())}.parquet"
+    )
+    output_s3_catalog_schema_update.output.uri = output_file
+    catalog_definition = _recursively_evaluate_secret(
+        output_s3_catalog_schema_update.output.catalog.definition
+    )
+    catalog = load_catalog(**catalog_definition)
+    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    catalog.create_namespace(namespace)
+    table_name = f"{namespace}.s3_catalog_schema_update"
+
+    output_s3_catalog_schema_update.output.catalog.tables = table_name
+    output_s3_catalog_schema_update.output.catalog.schema_strategy = "update"
+
+    context_archive = create_bundle_archive(
+        output_s3_catalog_schema_update,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    table_location = (
+        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_schema_update"
+    )
+    example_df = pl.DataFrame({"first_column": [1, 2, 3], "second_column": [4, 5, 6]})
+    pyarrow_table = example_df.to_arrow()
+    catalog.create_table(
+        identifier=table_name,
+        location=table_location,
+        schema=pyarrow_table.schema,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_s3_catalog_schema_strategy",
+        "mock_table.parquet",
+    )
+    write_v1_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+
+    bucket_name = output_file.split("/")[2]
+    file_name = "/".join(output_file.split("/")[3:])
+    try:
+        environment_name, result = tabsserver_main(
+            tmp_path,
+            response_folder,
+            tabsserver_output_folder,
+            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+            logs_folder=logs_folder,
+        )
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        copy_destination = os.path.join(tmp_path, "output.parquet")
+        s3_client.download_file(bucket_name, file_name, copy_destination)
+        output = pl.read_parquet(copy_destination)
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3_catalog_schema_strategy",
+            "expected_result_bucket.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+
+        # Verify the catalog has the proper data
+        table = catalog.load_table(table_name)
+        output = pl.DataFrame(table.scan().to_arrow())
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3_catalog_schema_strategy",
+            "expected_result_catalog.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+    finally:
+        operations = [
+            lambda: catalog.drop_table(table_name),
+            lambda: catalog.drop_namespace(namespace),
+            lambda: s3_client.delete_object(Bucket=bucket_name, Key=file_name),
+        ]
+
+        for operation in operations:
+            try:
+                operation()
+            except:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_s3_catalog_schema_strict = copy.deepcopy(output_s3_catalog_schema_strategy)
+    output_file = (
+        "s3://tabsdata-testing-bucket/testing_output"
+        "/test_output_s3_catalog_schema_strict_"
+        f"{int(datetime.datetime.now().timestamp())}.parquet"
+    )
+    output_s3_catalog_schema_strict.output.uri = output_file
+    catalog_definition = _recursively_evaluate_secret(
+        output_s3_catalog_schema_strict.output.catalog.definition
+    )
+    catalog = load_catalog(**catalog_definition)
+    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    catalog.create_namespace(namespace)
+    table_name = f"{namespace}.s3_catalog_schema_strict"
+
+    output_s3_catalog_schema_strict.output.catalog.tables = table_name
+    output_s3_catalog_schema_strict.output.catalog.schema_strategy = "strict"
+
+    context_archive = create_bundle_archive(
+        output_s3_catalog_schema_strict,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    table_location = (
+        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_schema_strict"
+    )
+    example_df = pl.DataFrame({"first_column": [1, 2, 3], "second_column": [4, 5, 6]})
+    pyarrow_table = example_df.to_arrow()
+    catalog.create_table(
+        identifier=table_name,
+        location=table_location,
+        schema=pyarrow_table.schema,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_s3_catalog_schema_strategy",
+        "mock_table.parquet",
+    )
+    write_v1_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+
+    bucket_name = output_file.split("/")[2]
+    file_name = "/".join(output_file.split("/")[3:])
+    try:
+        environment_name, result = tabsserver_main(
+            tmp_path,
+            response_folder,
+            tabsserver_output_folder,
+            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+            logs_folder=logs_folder,
+        )
+        assert result != 0
+    finally:
+        operations = [
+            lambda: catalog.drop_table(table_name),
+            lambda: catalog.drop_namespace(namespace),
+            lambda: s3_client.delete_object(Bucket=bucket_name, Key=file_name),
+        ]
+
+        for operation in operations:
+            try:
+                operation()
+            except:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_catalog_partition(tmp_path, s3_client):
+
+    from tests_tabsdata.testing_resources.test_output_s3_catalog_partition.example import (
+        NUMBER_OF_PARTITIONS,
+    )
+
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_file = (
+        "s3://tabsdata-testing-bucket/testing_output"
+        "/test_output_s3_catalog_partition_"
+        f"{int(datetime.datetime.now().timestamp())}_$FRAGMENT_IDX.parquet"
+    )
+    output_s3_catalog_partition.output.uri = output_file
+    catalog_definition = _recursively_evaluate_secret(
+        output_s3_catalog_partition.output.catalog.definition
+    )
+    catalog = load_catalog(**catalog_definition)
+    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    catalog.create_namespace(namespace)
+    table_name = f"{namespace}.s3_catalog_partition"
+
+    output_s3_catalog_partition.output.catalog.tables = table_name
+
+    context_archive = create_bundle_archive(
+        output_s3_catalog_partition,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    table_location = (
+        f"s3://tabsdata-us-east-1-catalog-metadata/{namespace}/s3_catalog_partition"
+    )
+    date_range = pd.date_range(start="1900-01-01", end=pd.Timestamp.now(), freq="D")
+    random_dates = np.random.choice(date_range, size=10)
+    random_numbers = np.random.rand(10)
+    example_df = pl.DataFrame(
+        {"timestamp": random_dates, "random_number": random_numbers}
+    )
+    example_df = example_df.with_columns(
+        example_df["timestamp"].cast(pl.Datetime("us"))
+    )
+
+    pyarrow_table = example_df.to_arrow()
+    iceberg_table = catalog.create_table(
+        identifier=table_name,
+        location=table_location,
+        schema=pyarrow_table.schema,
+    )
+
+    with iceberg_table.update_spec() as update:
+        update.add_field("timestamp", YearTransform())
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_s3_catalog_partition",
+        "mock_table.parquet",
+    )
+    write_v1_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+
+    bucket_name = output_file.split("/")[2]
+    file_name = "/".join(output_file.split("/")[3:])
+    try:
+        environment_name, result = tabsserver_main(
+            tmp_path,
+            response_folder,
+            tabsserver_output_folder,
+            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+            logs_folder=logs_folder,
+        )
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        for i in range(NUMBER_OF_PARTITIONS):
+            copy_destination = os.path.join(tmp_path, "output.parquet")
+            s3_client.download_file(
+                bucket_name,
+                file_name.replace("$FRAGMENT_IDX", str(i)),
+                copy_destination,
+            )
+            output = pl.read_parquet(copy_destination)
+            assert len(output) == 1
+
+        # Verify the catalog has the proper data
+        table = catalog.load_table(table_name)
+        output = pl.DataFrame(table.scan().to_arrow())
+        output = clean_polars_df(output)
+        assert len(output) == NUMBER_OF_PARTITIONS
+
+    finally:
+        operations = [
+            lambda: catalog.drop_table(table_name),
+            lambda: catalog.drop_namespace(namespace),
+        ]
+
+        for operation in operations:
+            try:
+                operation()
+            except:
+                pass
+
+        for i in range(NUMBER_OF_PARTITIONS):
+            try:
+                s3_client.delete_object(
+                    Bucket=bucket_name, Key=file_name.replace("$FRAGMENT_IDX", str(i))
+                )
+            except:
+                pass

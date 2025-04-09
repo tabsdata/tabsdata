@@ -37,8 +37,7 @@ from tabsdata.io.constants import (
     URI_INDICATOR,
     SupportedAWSS3Regions,
 )
-
-# from tabsdata.secret import _recursively_load_secret
+from tabsdata.secret import _recursively_load_secret
 
 logger = logging.getLogger(__name__)
 
@@ -69,126 +68,240 @@ class IfTableExistsStrategy(Enum):
     REPLACE = "replace"
 
 
-# class Catalog:
-#
-#     IDENTIFIER = "catalog"
-#
-#     ALLOW_INCOMPATIBLE_CHANGES_KEY = "allow_incompatible_changes"
-#     DEFINITION_KEY = "definition"
-#     IF_TABLE_EXISTS_KEY = "if_table_exists"
-#     TABLES_KEY = "tables"
-#
-#     def __init__(
-#         self,
-#         definition: dict,
-#         tables: str | List[str],
-#         allow_incompatible_changes: bool = False,
-#         if_table_exists: Literal["append", "replace"] = "append",
-#     ):
-#         self.definition = definition
-#         self.tables = tables
-#         self.if_table_exists = if_table_exists
-#         self.allow_incompatible_changes = allow_incompatible_changes
-#
-#     @property
-#     def if_table_exists(self) -> Literal["append", "replace"]:
-#         """
-#         str: The strategy to follow when the table already exists.
-#         """
-#         return self._if_table_exists
-#
-#     @if_table_exists.setter
-#     def if_table_exists(self, if_table_exists: Literal["append", "replace"]):
-#         """
-#         Sets the strategy to follow when the table already exists.
-#
-#         Args:
-#             if_table_exists ({'append', 'replace'}): The strategy to
-#                 follow when the table already exists.
-#                 - ‘replace’ will create a new database table, overwriting an existing
-#                 one.
-#                 - ‘append’ will append to an existing table.
-#         """
-#         valid_values = [
-#             IfTableExistsStrategy.APPEND.value,
-#             IfTableExistsStrategy.REPLACE.value,
-#         ]
-#         if if_table_exists not in valid_values:
-#             raise OutputConfigurationError(
-#                 ErrorCode.OCE33, valid_values, if_table_exists
-#             )
-#         self._if_table_exists = if_table_exists
-#
-#     @property
-#     def definition(self) -> dict:
-#         return self._definition
-#
-#     @definition.setter
-#     def definition(self, definition: dict):
-#         if not isinstance(definition, dict):
-#             raise OutputConfigurationError(ErrorCode.OCE30, type(definition))
-#         self._definition = _recursively_load_secret(definition)
-#
-#     @property
-#     def tables(self) -> List[str]:
-#         return self._tables
-#
-#     @tables.setter
-#     def tables(self, tables: str | List[str]):
-#         if isinstance(tables, str):
-#             self._tables = [tables]
-#         elif isinstance(tables, list):
-#             if not all(isinstance(single_table, str) for single_table in tables):
-#                 raise OutputConfigurationError(ErrorCode.OCE31)
-#             self._tables = tables
-#         else:
-#             raise OutputConfigurationError(ErrorCode.OCE32, type(tables))
-#
-#     def to_dict(self) -> dict:
-#         # TODO: Right now, Secrets are stored as a secret object, and we rely on the
-#         #   json serializer to turn them into dictionaries when bundling. Once using
-#         #   description jsons becomes more usual, this will have to be revisited.
-#         return {
-#             self.IDENTIFIER: {
-#                 self.TABLES_KEY: self.tables,
-#                 self.DEFINITION_KEY: self.definition,
-#                 self.IF_TABLE_EXISTS_KEY: self.if_table_exists,
-#                 self.ALLOW_INCOMPATIBLE_CHANGES_KEY: self.allow_incompatible_changes,
-#             }
-#         }
-#
-#     def __eq__(self, other):
-#         if not isinstance(other, Catalog):
-#             return False
-#         return self.to_dict() == other.to_dict()
-#
-#
-# def build_catalog(catalog) -> Catalog:
-#     """
-#     Builds a Catalog object from a dictionary or a Catalog object.
-#
-#     Args:
-#         catalog (dict | Catalog): The dictionary or Catalog object to build the
-#           Catalog object from.
-#
-#     Returns:
-#         Catalog: The Catalog object built from the dictionary or Catalog object.
-#     """
-#     if isinstance(catalog, Catalog):
-#         return catalog
-#     elif not isinstance(catalog, dict):
-#         raise OutputConfigurationError(ErrorCode.OCE34, type(catalog))
-#     elif len(catalog) != 1 or next(iter(catalog)) != Catalog.IDENTIFIER:
-#         raise OutputConfigurationError(
-#             ErrorCode.OCE35, Catalog.IDENTIFIER, list(catalog.keys())
-#         )
-#     # Since we have only one key, we select the identifier and the configuration
-#     identifier, configuration = next(iter(catalog.items()))
-#     # The configuration must be a dictionary
-#     if not isinstance(configuration, dict):
-#         raise OutputConfigurationError(ErrorCode.OCE36, identifier,
-#           type(configuration))
-#     return Catalog(**configuration)
+class SchemaStrategy(Enum):
+    """
+    Enum for the strategies to follow when the table already exists.
+    """
+
+    UPDATE = "update"
+    STRICT = "strict"
+
+
+class Catalog:
+    pass
+
+
+class AWSGlue(Catalog):
+
+    IDENTIFIER = "aws-glue-catalog"
+
+    ALLOW_INCOMPATIBLE_CHANGES_KEY = "allow_incompatible_changes"
+    AUTO_CREATE_AT_KEY = "auto_create_at"
+    DEFINITION_KEY = "definition"
+    IF_TABLE_EXISTS_KEY = "if_table_exists"
+    PARTITIONED_TABLE_KEY = "partitioned_table"
+    SCHEMA_STRATEGY_KEY = "schema_strategy"
+    TABLES_KEY = "tables"
+
+    def __init__(
+        self,
+        definition: dict,
+        tables: str | List[str],
+        auto_create_at: List[str | None] | str | None = None,
+        if_table_exists: Literal["append", "replace"] = "append",
+        partitioned_table: bool = False,
+        schema_strategy: Literal["update", "strict"] = "update",
+        **kwargs,
+    ):
+        self.definition = definition
+        self.tables = tables
+        self.if_table_exists = if_table_exists
+        self.partitioned_table = partitioned_table
+        self.allow_incompatible_changes = kwargs.get(
+            "allow_incompatible_changes", False
+        )
+        self.auto_create_at = auto_create_at
+        self.schema_strategy = schema_strategy
+
+    @property
+    def partitioned_table(self) -> bool:
+        """
+        bool: Whether the table is partitioned or not.
+        """
+        return self._partitioned_table
+
+    @partitioned_table.setter
+    def partitioned_table(self, partitioned_table: bool):
+        """
+        Sets whether the table is partitioned or not.
+
+        Args:
+            partitioned_table (bool): Whether the table is partitioned or not.
+        """
+        if not isinstance(partitioned_table, bool):
+            raise OutputConfigurationError(ErrorCode.OCE40, type(partitioned_table))
+        self._partitioned_table = partitioned_table
+        if hasattr(self, "_if_table_exists"):
+            if (
+                self._if_table_exists == IfTableExistsStrategy.REPLACE.value
+            ) and partitioned_table:
+                raise OutputConfigurationError(ErrorCode.OCE39)
+
+    @property
+    def if_table_exists(self) -> Literal["append", "replace"]:
+        """
+        str: The strategy to follow when the table already exists.
+        """
+        return self._if_table_exists
+
+    @if_table_exists.setter
+    def if_table_exists(self, if_table_exists: Literal["append", "replace"]):
+        """
+        Sets the strategy to follow when the table already exists.
+
+        Args:
+            if_table_exists ({'append', 'replace'}): The strategy to
+                follow when the table already exists.
+                - ‘replace’ will create a new database table, overwriting an existing
+                one.
+                - ‘append’ will append to an existing table.
+        """
+        valid_values = [
+            IfTableExistsStrategy.APPEND.value,
+            IfTableExistsStrategy.REPLACE.value,
+        ]
+        if if_table_exists not in valid_values:
+            raise OutputConfigurationError(
+                ErrorCode.OCE33, valid_values, if_table_exists
+            )
+        self._if_table_exists = if_table_exists
+        if hasattr(self, "_partitioned_table"):
+            if (
+                self._partitioned_table
+                and if_table_exists == IfTableExistsStrategy.REPLACE.value
+            ):
+                raise OutputConfigurationError(ErrorCode.OCE39)
+
+    @property
+    def schema_strategy(self) -> Literal["update", "strict"]:
+        """
+        str: The strategy to follow when appending to a table with an existing schema.
+        """
+        return self._schema_strategy
+
+    @schema_strategy.setter
+    def schema_strategy(self, schema_strategy: Literal["update", "strict"]):
+        """
+        Sets the strategy to follow when appending to a table with an existing schema.
+
+        Args:
+            schema_strategy ({'update', 'strict'}): The strategy to
+                follow for the schema when the table already exists.
+                - ‘update’ will update the schema with the possible new columns that
+                    might exist in the TableFrame.
+                - ‘strict’ will not modify the schema, and will fail if there is any
+                    difference.
+        """
+        valid_values = [
+            SchemaStrategy.UPDATE.value,
+            SchemaStrategy.STRICT.value,
+        ]
+        if schema_strategy not in valid_values:
+            raise OutputConfigurationError(
+                ErrorCode.OCE41, valid_values, schema_strategy
+            )
+        self._schema_strategy = schema_strategy
+
+    @property
+    def definition(self) -> dict:
+        return self._definition
+
+    @definition.setter
+    def definition(self, definition: dict):
+        if not isinstance(definition, dict):
+            raise OutputConfigurationError(ErrorCode.OCE30, type(definition))
+        self._definition = _recursively_load_secret(definition)
+
+    @property
+    def tables(self) -> List[str]:
+        return self._tables
+
+    @tables.setter
+    def tables(self, tables: str | List[str]):
+        if isinstance(tables, str):
+            self._tables = [tables]
+        elif isinstance(tables, list):
+            if not all(isinstance(single_table, str) for single_table in tables):
+                raise OutputConfigurationError(ErrorCode.OCE31)
+            self._tables = tables
+        else:
+            raise OutputConfigurationError(ErrorCode.OCE32, type(tables))
+        if hasattr(self, "_auto_create_at") and len(self._auto_create_at) != len(
+            self._tables
+        ):
+            raise OutputConfigurationError(
+                ErrorCode.OCE42, self._tables, self._auto_create_at
+            )
+
+    @property
+    def auto_create_at(self) -> List[str | None]:
+        return self._auto_create_at
+
+    @auto_create_at.setter
+    def auto_create_at(self, auto_create_at: List[str | None]):
+        if auto_create_at is None:
+            self._auto_create_at = [None] * len(self._tables)
+        elif isinstance(auto_create_at, str):
+            self._auto_create_at = [auto_create_at]
+        elif isinstance(auto_create_at, list):
+            for single_location in auto_create_at:
+                if not (isinstance(single_location, str) or single_location is None):
+                    raise OutputConfigurationError(ErrorCode.OCE43)
+            self._auto_create_at = auto_create_at
+        else:
+            raise OutputConfigurationError(ErrorCode.OCE44, type(auto_create_at))
+        if hasattr(self, "_tables") and len(self._tables) != len(self._auto_create_at):
+            raise OutputConfigurationError(
+                ErrorCode.OCE42, self._tables, self._auto_create_at
+            )
+
+    def to_dict(self) -> dict:
+        # TODO: Right now, Secrets are stored as a secret object, and we rely on the
+        #   json serializer to turn them into dictionaries when bundling. Once using
+        #   description jsons becomes more usual, this will have to be revisited.
+        return {
+            self.IDENTIFIER: {
+                self.AUTO_CREATE_AT_KEY: self.auto_create_at,
+                self.ALLOW_INCOMPATIBLE_CHANGES_KEY: self.allow_incompatible_changes,
+                self.DEFINITION_KEY: self.definition,
+                self.IF_TABLE_EXISTS_KEY: self.if_table_exists,
+                self.PARTITIONED_TABLE_KEY: self.partitioned_table,
+                self.SCHEMA_STRATEGY_KEY: self.schema_strategy,
+                self.TABLES_KEY: self.tables,
+            }
+        }
+
+    def __eq__(self, other):
+        if not isinstance(other, AWSGlue):
+            return False
+        return self.to_dict() == other.to_dict()
+
+
+def build_catalog(catalog) -> AWSGlue:
+    """
+    Builds a Catalog object from a dictionary or a Catalog object.
+
+    Args:
+        catalog (dict | AWSGlue): The dictionary or Catalog object to build the
+          Catalog object from.
+
+    Returns:
+        AWSGlue: The Catalog object built from the dictionary or Catalog object.
+    """
+    if isinstance(catalog, AWSGlue):
+        return catalog
+    elif not isinstance(catalog, dict):
+        raise OutputConfigurationError(ErrorCode.OCE34, type(catalog))
+    elif len(catalog) != 1 or next(iter(catalog)) != AWSGlue.IDENTIFIER:
+        raise OutputConfigurationError(
+            ErrorCode.OCE35, AWSGlue.IDENTIFIER, list(catalog.keys())
+        )
+    # Since we have only one key, we select the identifier and the configuration
+    identifier, configuration = next(iter(catalog.items()))
+    # The configuration must be a dictionary
+    if not isinstance(configuration, dict):
+        raise OutputConfigurationError(ErrorCode.OCE36, identifier, type(configuration))
+    return AWSGlue(**configuration)
 
 
 class Output(ABC):
@@ -239,7 +352,6 @@ class AzureDestination(Output):
 
     IDENTIFIER = OutputIdentifiers.AZURE.value
 
-    #    CATALOG_KEY = "catalog"
     CREDENTIALS_KEY = "credentials"
     FORMAT_KEY = "format"
     URI_KEY = "uri"
@@ -258,7 +370,6 @@ class AzureDestination(Output):
         uri: str | List[str],
         credentials: dict | AzureCredentials,
         format: str | dict | FileFormat = None,
-        #        catalog: dict | Catalog = None,
     ):
         """
         Initializes the AzureDestination with the given URI and the credentials
@@ -283,8 +394,6 @@ class AzureDestination(Output):
         self.uri = uri
         self.format = format
         self.credentials = credentials
-
-    #        self.catalog = catalog
 
     @property
     def uri(self) -> str | List[str]:
@@ -349,8 +458,6 @@ class AzureDestination(Output):
                 self.FORMAT_KEY: self.format.to_dict(),
                 self.URI_KEY: self._uri_list,
                 self.CREDENTIALS_KEY: self.credentials.to_dict(),
-                #                self.CATALOG_KEY: self.catalog.to_dict() if
-                #                self.catalog else None,
             }
         }
 
@@ -383,41 +490,6 @@ class AzureDestination(Output):
             format = build_file_format(format)
             self._verify_valid_format(format)
             self._format = format
-            # if (
-            #     hasattr(self, "_catalog")
-            #     and self._catalog is not None
-            #     and not isinstance(self._format, ParquetFormat)
-            # ):
-            #     raise OutputConfigurationError(
-            #         ErrorCode.OCE37, ParquetFormat, self._format
-            #     )
-
-    #
-    # @property
-    # def catalog(self) -> Catalog:
-    #     """
-    #     Catalog: The catalog to store the data in.
-    #     """
-    #     return self._catalog
-    #
-    # @catalog.setter
-    # def catalog(self, catalog: dict | Catalog):
-    #     """
-    #     Sets the catalog to store the data in.
-    #
-    #     Args:
-    #         catalog (dict | Catalog): The catalog to store the data in.
-    #     """
-    #     if catalog is None:
-    #         self._catalog = None
-    #     else:
-    #         catalog = build_catalog(catalog)
-    #         if hasattr(self, "_format") and not isinstance(self.format,
-    #           ParquetFormat):
-    #             raise OutputConfigurationError(
-    #                 ErrorCode.OCE37, ParquetFormat, self.format
-    #             )
-    #         self._catalog = catalog
 
     def _verify_valid_format(self, format: FileFormat):
         """
@@ -464,7 +536,6 @@ class AzureDestination(Output):
 class LocalFileDestination(Output):
     IDENTIFIER = OutputIdentifiers.LOCALFILE.value
 
-    #    CATALOG_KEY = "catalog"
     FORMAT_KEY = "format"
     PATH_KEY = "path"
 
@@ -481,7 +552,6 @@ class LocalFileDestination(Output):
         self,
         path: str | List[str],
         format: str | dict | FileFormat = None,
-        #        catalog: dict | Catalog = None,
     ):
         """
         Initializes the LocalFileDestination with the given path; and optionally a
@@ -503,8 +573,6 @@ class LocalFileDestination(Output):
         """
         self.path = path
         self.format = format
-
-    #        self.catalog = catalog
 
     @property
     def path(self) -> str | List[str]:
@@ -561,8 +629,6 @@ class LocalFileDestination(Output):
             self.IDENTIFIER: {
                 self.FORMAT_KEY: self.format.to_dict(),
                 self.PATH_KEY: self._path_list,
-                #                self.CATALOG_KEY: self.catalog.to_dict() if
-                #                self.catalog else None,
             }
         }
 
@@ -603,41 +669,6 @@ class LocalFileDestination(Output):
         bool: Whether to allow fragments in the output.
         """
         return True
-
-    #         if (
-    #             hasattr(self, "_catalog")
-    #             and self._catalog is not None
-    #             and not isinstance(self._format, ParquetFormat)
-    #         ):
-    #             raise OutputConfigurationError(
-    #                 ErrorCode.OCE37, ParquetFormat, self._format
-    #             )
-    #
-    # @property
-    # def catalog(self) -> Catalog:
-    #     """
-    #     Catalog: The catalog to store the data in.
-    #     """
-    #     return self._catalog
-    #
-    # @catalog.setter
-    # def catalog(self, catalog: dict | Catalog):
-    #     """
-    #     Sets the catalog to store the data in.
-    #
-    #     Args:
-    #         catalog (dict | Catalog): The catalog to store the data in.
-    #     """
-    #     if catalog is None:
-    #         self._catalog = None
-    #     else:
-    #         catalog = build_catalog(catalog)
-    #         if hasattr(self, "_format") and not isinstance(self.format,
-    #           ParquetFormat):
-    #             raise OutputConfigurationError(
-    #                 ErrorCode.OCE37, ParquetFormat, self.format
-    #             )
-    #         self._catalog = catalog
 
     def _verify_valid_format(self, format: FileFormat):
         """
@@ -1372,7 +1403,7 @@ class S3Destination(Output):
 
     IDENTIFIER = OutputIdentifiers.S3.value
 
-    #    CATALOG_KEY = "catalog"
+    CATALOG_KEY = "catalog"
     CREDENTIALS_KEY = "credentials"
     FORMAT_KEY = "format"
     REGION_KEY = "region"
@@ -1393,7 +1424,7 @@ class S3Destination(Output):
         credentials: dict | S3Credentials,
         format: str | dict | FileFormat = None,
         region: str = None,
-        #        catalog: dict | Catalog = None,
+        catalog: dict | AWSGlue = None,
     ):
         """
         Initializes the S3Destination with the given URI and the credentials required to
@@ -1422,8 +1453,7 @@ class S3Destination(Output):
         self.format = format
         self.credentials = credentials
         self.region = region
-
-    #        self.catalog = catalog
+        self.catalog = catalog
 
     @property
     def uri(self) -> str | List[str]:
@@ -1480,8 +1510,7 @@ class S3Destination(Output):
                 self.URI_KEY: self._uri_list,
                 self.CREDENTIALS_KEY: self.credentials.to_dict(),
                 self.REGION_KEY: self.region,
-                #                self.CATALOG_KEY: self.catalog.to_dict()
-                #                   if self.catalog else None,
+                self.CATALOG_KEY: self.catalog.to_dict() if self.catalog else None,
             }
         }
 
@@ -1548,6 +1577,39 @@ class S3Destination(Output):
             format = build_file_format(format)
             self._verify_valid_format(format)
             self._format = format
+            if (
+                hasattr(self, "_catalog")
+                and self._catalog is not None
+                and not isinstance(self._format, ParquetFormat)
+            ):
+                raise OutputConfigurationError(
+                    ErrorCode.OCE37, ParquetFormat, self._format
+                )
+
+    @property
+    def catalog(self) -> AWSGlue:
+        """
+        Catalog: The catalog to store the data in.
+        """
+        return self._catalog
+
+    @catalog.setter
+    def catalog(self, catalog: dict | AWSGlue):
+        """
+        Sets the catalog to store the data in.
+
+        Args:
+            catalog (dict | AWSGlue): The catalog to store the data in.
+        """
+        if catalog is None:
+            self._catalog = None
+        else:
+            catalog = build_catalog(catalog)
+            if hasattr(self, "_format") and not isinstance(self.format, ParquetFormat):
+                raise OutputConfigurationError(
+                    ErrorCode.OCE37, ParquetFormat, self.format
+                )
+            self._catalog = catalog
 
     @property
     def allow_fragments(self) -> bool:
@@ -1555,41 +1617,6 @@ class S3Destination(Output):
         bool: Whether to allow fragments in the output.
         """
         return True
-
-    #         if (
-    #             hasattr(self, "_catalog")
-    #             and self._catalog is not None
-    #             and not isinstance(self._format, ParquetFormat)
-    #         ):
-    #             raise OutputConfigurationError(
-    #                 ErrorCode.OCE37, ParquetFormat, self._format
-    #             )
-    #
-    # @property
-    # def catalog(self) -> Catalog:
-    #     """
-    #     Catalog: The catalog to store the data in.
-    #     """
-    #     return self._catalog
-    #
-    # @catalog.setter
-    # def catalog(self, catalog: dict | Catalog):
-    #     """
-    #     Sets the catalog to store the data in.
-    #
-    #     Args:
-    #         catalog (dict | Catalog): The catalog to store the data in.
-    #     """
-    #     if catalog is None:
-    #         self._catalog = None
-    #     else:
-    #         catalog = build_catalog(catalog)
-    #         if hasattr(self, "_format") and not isinstance(self.format,
-    #           ParquetFormat):
-    #             raise OutputConfigurationError(
-    #                 ErrorCode.OCE37, ParquetFormat, self.format
-    #             )
-    #         self._catalog = catalog
 
     def _verify_valid_format(self, format: FileFormat):
         """

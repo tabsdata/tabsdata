@@ -4,6 +4,9 @@
 
 import os
 
+import numpy as np
+import pandas as pd
+import polars as pl
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
@@ -19,6 +22,7 @@ ROOT_PROJECT_DIR = os.path.dirname(
     )
 )
 DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
+NUMBER_OF_PARTITIONS = 10
 
 catalog_definition = {
     "name": "default",
@@ -32,12 +36,10 @@ catalog_definition = {
 
 catalog = td.AWSGlue(
     definition=catalog_definition,
-    tables=[
-        "testing_namespace.test_output_s3_catalog_first",
-        "testing_namespace.test_output_s3_catalog_second",
-    ],
+    tables="testing_namespace.test_output_s3_catalog_partition",
+    if_table_exists="append",
+    partitioned_table=True,
 )
-
 
 s3_credentials = td.S3AccessKeyCredentials(
     td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"),
@@ -52,33 +54,38 @@ s3_credentials = td.S3AccessKeyCredentials(
 # The URI provided is just a Mock, what will happen is we will inject the URI of
 # data.parquet into the input.yaml sent to the tabsserver.
 @td.subscriber(
-    name="output_s3_catalog",
+    name="output_s3_catalog_partition",
     tables="collection/table",
     destination=td.S3Destination(
-        [
-            (
-                "s3://tabsdata-testing-bucket/testing_output/output_s3_catalog_first"
-                ".parquet"
-            ),
-            (
-                "s3://tabsdata-testing-bucket/testing_output/output_s3_catalog_second"
-                ".parquet"
-            ),
-        ],
+        "s3://tabsdata-testing-bucket/testing_output"
+        "/output_s3_catalog_partition_$FRAGMENT_IDX.parquet",
         s3_credentials,
         catalog=catalog,
         region="us-east-1",
     ),
 )
-def output_s3_catalog(df: td.TableFrame):
-    new_df = df.drop_nulls()
-    return new_df, new_df
+def output_s3_catalog_partition(df: td.TableFrame):
+    date_range = pd.date_range(start="1900-01-01", end=pd.Timestamp.now(), freq="D")
+    random_dates = np.random.choice(date_range, size=NUMBER_OF_PARTITIONS)
+    random_numbers = np.random.rand(NUMBER_OF_PARTITIONS)
+    polars_df = pl.DataFrame(
+        {
+            "timestamp": random_dates,
+            "random_number": random_numbers,
+        }
+    )
+    polars_df = polars_df.with_columns(polars_df["timestamp"].cast(pl.Datetime("us")))
+    tfs = []
+    for i in range(NUMBER_OF_PARTITIONS):
+        tf = td.TableFrame(polars_df.slice(i, 1).to_dict())
+        tfs.append(tf)
+    return tfs
 
 
 if __name__ == "__main__":
     os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
     create_bundle_archive(
-        output_s3_catalog,
+        output_s3_catalog_partition,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=DEFAULT_SAVE_LOCATION,
     )

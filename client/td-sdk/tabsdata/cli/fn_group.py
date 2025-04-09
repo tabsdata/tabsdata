@@ -405,6 +405,6 @@ def update(
             requirements=requirements,
             local_packages=local_pkg,
         )
-        click.echo("Collection updated successfully")
+        click.echo("Function updated successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to update function: {e}")

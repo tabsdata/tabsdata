@@ -59,7 +59,8 @@ from tabsdata.io.input import (
     S3Source,
     TableInput,
 )
-from tabsdata.io.output import (  # Catalog,
+from tabsdata.io.output import (
+    AWSGlue,
     AzureDestination,
     LocalFileDestination,
     MariaDBDestination,
@@ -88,7 +89,7 @@ logging.basicConfig(
 
 __all__ = [
     # from tabsdatafunction.py
-    # "Catalog",
+    "AWSGlue",
     "TabsdataFunction",
     # from tabsdatafunction.py Inputs
     "AzureSource",

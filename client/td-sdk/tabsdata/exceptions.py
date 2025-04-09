@@ -688,6 +688,50 @@ class ErrorCode(Enum):
             "by checking the 'allow_fragments' attribute of the class."
         ),
     }
+    OCE39 = {
+        "code": "OCE-039",
+        "message": (
+            "Partitioned tables with replace data is not currently supported. Please "
+            "set either 'if_table_exists' to 'append' or 'partitioned_table' "
+            "to 'False'."
+        ),
+    }
+    OCE40 = {
+        "code": "OCE-040",
+        "message": (
+            "The catalog parameter 'partitioned_table' expects a bool, got value of "
+            "type '{}' instead."
+        ),
+    }
+    OCE41 = {
+        "code": "OCE-041",
+        "message": (
+            "The 'schema_strategy' parameter in a Catalog must be one of the"
+            " following values {}, got '{}' instead."
+        ),
+    }
+    OCE42 = {
+        "code": "OCE-042",
+        "message": (
+            "The 'tables' parameter and the 'auto_create_at' paramenter in a Catalog "
+            "must have the same length, got '{}' and '{}' instead."
+        ),
+    }
+    OCE43 = {
+        "code": "OCE-043",
+        "message": (
+            "The 'auto_create_at' parameter in a Catalog must be a string, None, "
+            "or a list of strings or Nones, got a list with elements that are neither "
+            "instead."
+        ),
+    }
+    OCE44 = {
+        "code": "OCE-044",
+        "message": (
+            "The 'auto_create_at' parameter in a Catalog must be a string, None, or a "
+            "list of strings or Nones, got an object of type '{}' instead."
+        ),
+    }
     RE1 = {
         "code": "RE-001",
         "message": (

@@ -10,21 +10,23 @@ import os
 import re
 import subprocess
 import time
-from typing import List
+from typing import List, Tuple
 
 import cloudpickle
 import polars as pl
-
-# from pyiceberg.catalog import load_catalog
+import pyarrow
 import sqlalchemy
+from pyiceberg.catalog import load_catalog
+from pyiceberg.exceptions import NoSuchTableError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import tabsdata as td
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata.format import CSVFormat, FileFormat, NDJSONFormat, ParquetFormat
-from tabsdata.io.output import (  # Catalog,
+from tabsdata.io.output import (
     FRAGMENT_INDEX_PLACEHOLDER,
+    AWSGlue,
     AzureDestination,
     LocalFileDestination,
     MariaDBDestination,
@@ -32,14 +34,14 @@ from tabsdata.io.output import (  # Catalog,
     OracleDestination,
     PostgresDestination,
     S3Destination,
+    SchemaStrategy,
     TableOutput,
     build_output,
 )
 from tabsdata.io.plugin import DestinationPlugin
+from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.results_collection import Result, ResultsCollection
-
-# from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.utils.bundle_utils import PLUGINS_FOLDER
 from tabsdata.utils.sql_utils import add_driver_to_uri, obtain_uri
 
@@ -75,7 +77,9 @@ from .yaml_parsing import (
 )
 
 logger = logging.getLogger(__name__)
+logging.getLogger("botocore").setLevel(logging.ERROR)
 logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
+logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 FORMAT_TO_POLARS_WRITE_FUNCTION = {
     CSV_EXTENSION: pl.LazyFrame.sink_csv,
@@ -452,54 +456,25 @@ def store_results_in_files(
         logger.debug(
             f"Storing result {number} in destination file '{destination_file}'"
         )
-        result = result.value
-        if result is None:
-            logger.error(
-                "Result is None. However, any None result should have been "
-                "converted to an empty TableFrame."
-            )
-            raise ValueError(
-                "Result is None. However, any None result should have been "
-                "converted to an empty TableFrame."
-            )
-        elif isinstance(result, td.TableFrame):
-            intermediate_files = [os.path.join(output_folder, str(number))]
-            result = [result]
-            destination_files = [destination_file]
-        elif isinstance(result, list):
-            verify_fragment_destination(destination, destination_file)
-            intermediate_files = []
-            destination_files = []
-            for fragment_number in range(len(result)):
-                intermediate_file = os.path.join(
-                    output_folder, f"{number}_with_fragment_{fragment_number}"
-                )
-                intermediate_files.append(intermediate_file)
-                individual_destination_file = destination_file.replace(
-                    FRAGMENT_INDEX_PLACEHOLDER, str(fragment_number)
-                )
-                destination_files.append(individual_destination_file)
-        else:
-            logger.error(
-                "The result of a registered function must be a TableFrame,"
-                f" None or a list of TableFrames, got '{type(result)}' instead"
-            )
-            raise TypeError(
-                "The result of a registered function must be a TableFrame,"
-                f" None or a list of TableFrames, got '{type(result)}' instead"
-            )
+        destination_files, intermediate_files, result = pair_result_with_destination(
+            destination, destination_file, number, output_folder, result
+        )
 
         # At this point, we should always have a list called result with all the
         # results (either a single one for a single TableFrame or a list of
         # TableFrames for a fragmented destination). The same should happen for
         # intermediate_files and destination_files
 
+        # Destination files might be modified, for example if there are placeholders
+        # to be replaced. This list will store the final name of each destination file
+        resolved_destination_files = []
+        resolved_results = []
         for (
             individual_result,
             individual_intermediate_file,
             individual_destination_file,
         ) in zip(result, intermediate_files, destination_files):
-            store_result_using_transporter(
+            resolved_destination_file, resolved_result = store_result_using_transporter(
                 individual_result,
                 individual_destination_file,
                 individual_intermediate_file,
@@ -507,13 +482,65 @@ def store_results_in_files(
                 output_folder,
                 execution_context,
             )
-        # if destination.catalog:
-        #     logger.info("Storing file in catalog")
-        #     catalog = destination.catalog
-        #     store_file_in_catalog(
-        #         catalog, destination_file, catalog.tables[number], result
-        #     )
-    logger.info("Results stored in LocalFile destination")
+            resolved_destination_files.append(resolved_destination_file)
+            resolved_results.append(resolved_result)
+        if hasattr(destination, "catalog") and destination.catalog is not None:
+            logger.info("Storing file(s) in catalog")
+            catalog = destination.catalog
+            store_file_in_catalog(
+                catalog,
+                resolved_destination_files,
+                catalog.tables[number],
+                resolved_results,
+                number,
+            )
+    logger.info("Results stored in destination")
+
+
+def pair_result_with_destination(
+    destination: LocalFileDestination | AzureDestination | S3Destination,
+    destination_file: str,
+    number: int,
+    output_folder: str,
+    result: Result,
+):
+    result = result.value
+    if result is None:
+        logger.error(
+            "Result is None. However, any None result should have been "
+            "converted to an empty TableFrame."
+        )
+        raise ValueError(
+            "Result is None. However, any None result should have been "
+            "converted to an empty TableFrame."
+        )
+    elif isinstance(result, td.TableFrame):
+        intermediate_files = [os.path.join(output_folder, str(number))]
+        result = [result]
+        destination_files = [destination_file]
+    elif isinstance(result, list):
+        verify_fragment_destination(destination, destination_file)
+        intermediate_files = []
+        destination_files = []
+        for fragment_number in range(len(result)):
+            intermediate_file = os.path.join(
+                output_folder, f"{number}_with_fragment_{fragment_number}"
+            )
+            intermediate_files.append(intermediate_file)
+            individual_destination_file = destination_file.replace(
+                FRAGMENT_INDEX_PLACEHOLDER, str(fragment_number)
+            )
+            destination_files.append(individual_destination_file)
+    else:
+        logger.error(
+            "The result of a registered function must be a TableFrame,"
+            f" None or a list of TableFrames, got '{type(result)}' instead"
+        )
+        raise TypeError(
+            "The result of a registered function must be a TableFrame,"
+            f" None or a list of TableFrames, got '{type(result)}' instead"
+        )
+    return destination_files, intermediate_files, result
 
 
 def verify_fragment_destination(
@@ -563,44 +590,86 @@ INPUT_FORMAT_CLASS_TO_EXTENSION = {
 }
 
 
-# def store_file_in_catalog(
-#     catalog: Catalog, path_to_table_file: str, destination_table: str, df:
-#       td.TableFrame
-# ):
-#     logger.debug(f"Storing file in catalog '{catalog}'")
-#     definition = catalog.definition
-#     logger.debug(f"Catalog definition: {definition}")
-#     definition = _recursively_evaluate_secret(definition)
-#     iceberg_catalog = load_catalog(**definition)
-#     logger.debug(f"Catalog loaded: {iceberg_catalog}")
-#     logger.debug(f"Obtaining or creating table '{destination_table}' in catalog")
-#     schema = df.schema
-#     data = {name: [] for name in schema.keys()}
-#     pyarrow_empty_df = pl.DataFrame(data, schema=schema).to_arrow()
-#     pyarrow_schema = pyarrow_empty_df.schema
-#     logger.debug(f"Converted schema '{schema} to pyarrow schema '{pyarrow_schema}'")
-#     table = iceberg_catalog.create_table_if_not_exists(
-#         identifier=destination_table,
-#         schema=pyarrow_schema,
-#     )
-#     logger.debug(f"Table obtained or created: {table}")
-#
-#     with table.update_schema(
-#         allow_incompatible_changes=catalog.allow_incompatible_changes
-#     ) as update_schema:
-#         logger.debug(
-#             f"Unioning schema by name with schema {pyarrow_schema} and "
-#             "allow_incompatible_changes "
-#             f"set to '{catalog.allow_incompatible_changes}'"
-#         )
-#         update_schema.union_by_name(pyarrow_schema)
-#
-#     if catalog.if_table_exists == "replace":
-#         logger.debug(f"Replacing table '{destination_table}'")
-#         table.overwrite(pyarrow_empty_df)
-#     logger.debug(f"Adding file '{path_to_table_file}' to table '{destination_table}'")
-#     table.add_files([path_to_table_file], check_duplicate_files=True)
-#     logger.debug(f"File '{path_to_table_file}' added to table '{destination_table}'")
+def store_file_in_catalog(
+    catalog: AWSGlue,
+    path_to_table_files: List[str],
+    destination_table: str,
+    lf_list: List[pl.LazyFrame],
+    index: int,
+):
+    logger.debug(f"Storing file in catalog '{catalog}'")
+    definition = catalog.definition
+    logger.debug(f"Catalog definition: {definition}")
+    definition = _recursively_evaluate_secret(definition)
+    iceberg_catalog = load_catalog(**definition)
+    logger.debug(f"Catalog loaded: {iceberg_catalog}")
+    schemas = []
+    for lf in lf_list:
+        empty_df = lf.limit(0).collect()
+        schema = empty_df.schema
+        pyarrow_individual_empty_df = empty_df.to_arrow()
+        pyarrow_individual_schema = pyarrow_individual_empty_df.schema
+        schemas.append(pyarrow_individual_schema)
+        logger.debug(
+            f"Converted schema '{schema} to pyarrow schema '"
+            f"{pyarrow_individual_schema}'"
+        )
+    pyarrow_schema = pyarrow.unify_schemas(schemas)
+    logger.debug(f"Obtained pyarrow schema '{pyarrow_schema}'")
+    logger.debug(f"Obtaining table '{destination_table}'")
+    try:
+        table = iceberg_catalog.load_table(destination_table)
+        logger.debug("Table obtained successfully")
+    except NoSuchTableError:
+        if (location := catalog.auto_create_at[index]) is not None:
+            logger.debug(
+                f"Table '{destination_table}' not found, but auto_create_at is set to "
+                f"'{location}'"
+            )
+            table = iceberg_catalog.create_table(
+                identifier=destination_table, schema=pyarrow_schema, location=location
+            )
+            logger.debug("Table created successfully")
+        else:
+            logger.error(
+                f"Table '{destination_table}' not found and auto_create_at is None"
+            )
+            raise
+
+    # At this point, we know for sure that the table exists, and all DDL operations
+    # are done (which are not guaranteed to be atomic). Now we can add the files to
+    # the table inside a transaction.
+    with table.transaction() as trx:
+        if catalog.schema_strategy == SchemaStrategy.UPDATE.value:
+            logger.debug("Updating schema")
+            with trx.update_schema(
+                allow_incompatible_changes=catalog.allow_incompatible_changes
+            ) as update_schema:
+                logger.debug(
+                    f"Unioning schema by name with schema {pyarrow_schema} and "
+                    "allow_incompatible_changes "
+                    f"set to '{catalog.allow_incompatible_changes}'"
+                )
+                update_schema.union_by_name(pyarrow_schema)
+        else:
+            logger.debug(
+                f"Schema strategy is set to '{catalog.schema_strategy}', not updating"
+                " schema"
+            )
+
+        if catalog.if_table_exists == "replace":
+            logger.debug(
+                f"Replacing table '{destination_table}' since "
+                "if_table_exists is set to 'replace'"
+            )
+            trx.delete("True")
+        logger.debug(
+            f"Adding file(s) '{path_to_table_files}' to table '{destination_table}'"
+        )
+        trx.add_files(path_to_table_files)
+        logger.debug(
+            f"File '{path_to_table_files}' added to table '{destination_table}'"
+        )
 
 
 def store_result_using_transporter(
@@ -610,7 +679,7 @@ def store_result_using_transporter(
     destination: LocalFileDestination | AzureDestination | S3Destination,
     output_folder: str,
     execution_context: InputYaml,
-):
+) -> Tuple[str, pl.LazyFrame]:
     intermediate_file = (
         intermediate_file
         + "."
@@ -669,7 +738,8 @@ def store_result_using_transporter(
     if subprocess_result.returncode != 0:
         logger.error(f"Error exporting file: {subprocess_result.stderr}")
         raise Exception(f"Error exporting file: {subprocess_result.stderr}")
-    # TODO: add a call to the transporter here
+
+    return destination_path, result
 
 
 def store_result_in_sql_table(

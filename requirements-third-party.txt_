@@ -20,7 +20,7 @@ platformdirs==4.3.6
 polars==1.25.2
 PyYAML==6.0.2
 pyarrow==19.0.1
-pyiceberg==0.9.0
+pyiceberg[glue]==0.9.0
 pywin32==308; platform_system == "Windows"
 requests==2.32.3
 rich==13.9.4

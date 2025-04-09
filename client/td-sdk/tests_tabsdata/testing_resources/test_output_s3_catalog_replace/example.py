@@ -20,20 +20,25 @@ ROOT_PROJECT_DIR = os.path.dirname(
 )
 DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 
-warehouse_path = os.path.join(DEFAULT_SAVE_LOCATION, "output_file_catalog_warehouse")
-
 catalog_definition = {
     "name": "default",
-    "uri": f"sqlite:///{warehouse_path}/pyiceberg_catalog.db",
-    "warehouse": f"file://{warehouse_path}",
+    "type": "glue",
+    "client.access-key-id": td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"),
+    "client.secret-access-key": td.EnvironmentSecret(
+        "TRANSPORTER_AWS_SECRET_ACCESS_KEY"
+    ),
+    "client.region": "us-east-1",
 }
 
-catalog = td.Catalog(
+catalog = td.AWSGlue(
     definition=catalog_definition,
-    tables=[
-        "testing_namespace.output_file_parquet",
-        "testing_namespace.second_output_file",
-    ],
+    tables="testing_namespace.test_output_s3_catalog_replace",
+    if_table_exists="replace",
+)
+
+s3_credentials = td.S3AccessKeyCredentials(
+    td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"),
+    td.EnvironmentSecret("TRANSPORTER_AWS_SECRET_ACCESS_KEY"),
 )
 
 
@@ -44,25 +49,24 @@ catalog = td.Catalog(
 # The URI provided is just a Mock, what will happen is we will inject the URI of
 # data.parquet into the input.yaml sent to the tabsserver.
 @td.subscriber(
-    name="output_file_catalog",
+    name="output_s3_catalog_replace",
     tables="collection/table",
-    destination=td.LocalFileDestination(
-        [
-            os.path.join(DEFAULT_SAVE_LOCATION, "output_file_parquet.parquet"),
-            os.path.join(DEFAULT_SAVE_LOCATION, "second_output_file.parquet"),
-        ],
+    destination=td.S3Destination(
+        "s3://tabsdata-testing-bucket/testing_output/output_s3_catalog_replace.parquet",
+        s3_credentials,
         catalog=catalog,
+        region="us-east-1",
     ),
 )
-def output_file_catalog(df: td.TableFrame):
+def output_s3_catalog_replace(df: td.TableFrame):
     new_df = df.drop_nulls()
-    return new_df, new_df
+    return new_df
 
 
 if __name__ == "__main__":
     os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
     create_bundle_archive(
-        output_file_catalog,
+        output_s3_catalog_replace,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=DEFAULT_SAVE_LOCATION,
     )
