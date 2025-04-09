@@ -33,6 +33,9 @@ from tests_tabsdata.testing_resources.test_output_s3_catalog_append.example impo
 from tests_tabsdata.testing_resources.test_output_s3_catalog_partition.example import (
     output_s3_catalog_partition,
 )
+from tests_tabsdata.testing_resources.test_output_s3_catalog_region_creds.example import (
+    output_s3_catalog_region_creds,
+)
 from tests_tabsdata.testing_resources.test_output_s3_catalog_replace.example import (
     output_s3_catalog_replace,
 )
@@ -755,5 +758,123 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
                 s3_client.delete_object(
                     Bucket=bucket_name, Key=file_name.replace("$FRAGMENT_IDX", str(i))
                 )
+            except:
+                pass
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_catalog_region_creds(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_file_0 = (
+        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_region_creds_"
+        f"{int(datetime.datetime.now().timestamp())}_0.parquet"
+    )
+    output_file_1 = (
+        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_region_creds_"
+        f"{int(datetime.datetime.now().timestamp())}_1.parquet"
+    )
+    output_s3_catalog_region_creds.output.uri = [
+        output_file_0,
+        output_file_1,
+    ]
+    catalog_definition = _recursively_evaluate_secret(
+        output_s3_catalog_region_creds.output.catalog.definition
+    )
+    catalog = load_catalog(**catalog_definition)
+    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    catalog.create_namespace(namespace)
+    table_0 = f"{namespace}.s3_catalog_region_creds_0"
+    table_1 = f"{namespace}.s3_catalog_region_creds_1"
+
+    output_s3_catalog_region_creds.output.catalog.tables = [table_0, table_1]
+    output_s3_catalog_region_creds.output.catalog.auto_create_at = [
+        (
+            "s3://tabsdata-us-east-1-catalog-metadata/"
+            f"{namespace}/s3_catalog_region_creds_0"
+        ),
+        (
+            "s3://tabsdata-us-east-1-catalog-metadata/"
+            f"{namespace}/s3_catalog_region_creds_1"
+        ),
+    ]
+
+    context_archive = create_bundle_archive(
+        output_s3_catalog_region_creds,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_s3_catalog_region_creds",
+        "mock_table.parquet",
+    )
+    write_v1_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+
+    bucket_name = output_file_0.split("/")[2]
+    file_name_0 = "/".join(output_file_0.split("/")[3:])
+    file_name_1 = "/".join(output_file_1.split("/")[3:])
+    try:
+        environment_name, result = tabsserver_main(
+            tmp_path,
+            response_folder,
+            tabsserver_output_folder,
+            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+            logs_folder=logs_folder,
+        )
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        copy_destination = os.path.join(tmp_path, "output.parquet")
+        s3_client.download_file(bucket_name, file_name_0, copy_destination)
+        output = pl.read_parquet(copy_destination)
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3_catalog_region_creds",
+            "expected_result.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+
+        copy_destination = os.path.join(tmp_path, "output.parquet")
+        s3_client.download_file(bucket_name, file_name_1, copy_destination)
+        output = pl.read_parquet(copy_destination)
+        output = clean_polars_df(output)
+        assert output.equals(expected_output)
+
+        # Verify the catalog has the proper data
+        table = catalog.load_table(table_0)
+        output = pl.DataFrame(table.scan().to_arrow())
+        output = clean_polars_df(output)
+        assert output.equals(expected_output)
+
+        table = catalog.load_table(table_1)
+        output = pl.DataFrame(table.scan().to_arrow())
+        output = clean_polars_df(output)
+        assert output.equals(expected_output)
+
+    finally:
+        operations = [
+            lambda: catalog.drop_table(table_0),
+            lambda: catalog.drop_table(table_1),
+            lambda: catalog.drop_namespace(namespace),
+            lambda: s3_client.delete_object(Bucket=bucket_name, Key=file_name_0),
+            lambda: s3_client.delete_object(Bucket=bucket_name, Key=file_name_1),
+        ]
+
+        for operation in operations:
+            try:
+                operation()
             except:
                 pass

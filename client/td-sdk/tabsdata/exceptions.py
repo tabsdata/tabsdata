@@ -691,7 +691,7 @@ class ErrorCode(Enum):
     OCE39 = {
         "code": "OCE-039",
         "message": (
-            "Partitioned tables with replace data is not currently supported. Please "
+            "Partitioned tables with replace data are not currently supported. Please "
             "set either 'if_table_exists' to 'append' or 'partitioned_table' "
             "to 'False'."
         ),
@@ -730,6 +730,35 @@ class ErrorCode(Enum):
         "message": (
             "The 'auto_create_at' parameter in a Catalog must be a string, None, or a "
             "list of strings or Nones, got an object of type '{}' instead."
+        ),
+    }
+    OCE45 = {
+        "code": "OCE-045",
+        "message": (
+            "The AWSGlue catalog has received two credential declarations, "
+            "one in the definition and one in the s3_credentials parameter. Please "
+            "provide only one."
+        ),
+    }
+    OCE46 = {
+        "code": "OCE-046",
+        "message": (
+            "The AWSGlue catalog has received two region declarations, "
+            "one in the definition and one in the s3_region parameter. Please "
+            "provide only one."
+        ),
+    }
+    OCE47 = {
+        "code": "OCE-047",
+        "message": (
+            "The 's3_credentials' parameter in an AWSGlue must be None, a 'dict' or a "
+            "'S3Credentials' object, got '{}' instead"
+        ),
+    }
+    OCE48 = {
+        "code": "OCE-048",
+        "message": (
+            "The 'region' parameter in an AWSGlue must be a 'str', got '{}' instead"
         ),
     }
     RE1 = {

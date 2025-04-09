@@ -4,7 +4,12 @@
 
 import pytest
 
-from tabsdata.exceptions import ErrorCode, OutputConfigurationError
+import tabsdata as td
+from tabsdata.exceptions import (
+    CredentialsConfigurationError,
+    ErrorCode,
+    OutputConfigurationError,
+)
 from tabsdata.io.output import AWSGlue, build_catalog
 from tabsdata.secret import DirectSecret, EnvironmentSecret
 
@@ -377,3 +382,322 @@ def test_catalog_wrong_auto_create_at():
     with pytest.raises(OutputConfigurationError) as e:
         AWSGlue(definition=definition, tables=tables, auto_create_at=[42])
     assert e.value.error_code == ErrorCode.OCE43
+
+
+def test_catalog_class_s3_credentials():
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+    }
+    tables = ["output1", "output2"]
+    catalog = AWSGlue(
+        definition=definition,
+        tables=tables,
+        s3_credentials=td.S3AccessKeyCredentials(
+            td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"), "access_token"
+        ),
+    )
+    definition["client.access-key-id"] = td.EnvironmentSecret(
+        "TRANSPORTER_AWS_ACCESS_KEY_ID"
+    )
+    definition["client.secret-access-key"] = DirectSecret("access_token")
+    assert catalog.definition == definition
+    assert catalog.tables == tables
+    assert catalog.to_dict() == {
+        AWSGlue.IDENTIFIER: {
+            "allow_incompatible_changes": False,
+            "auto_create_at": [None, None],
+            "definition": definition,
+            "if_table_exists": "append",
+            "partitioned_table": False,
+            "schema_strategy": "update",
+            "tables": tables,
+        }
+    }
+    assert build_catalog(catalog.to_dict()) == catalog
+
+
+def test_catalog_class_duplicate_access_key_id():
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.access-key-id": "fake_id",
+    }
+    tables = ["output1", "output2"]
+    with pytest.raises(OutputConfigurationError) as e:
+        AWSGlue(
+            definition=definition,
+            tables=tables,
+            s3_credentials=td.S3AccessKeyCredentials(
+                td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"), "access_token"
+            ),
+        )
+    assert e.value.error_code == ErrorCode.OCE45
+
+    definition = {}
+    catalog = AWSGlue(
+        definition=definition,
+        tables=tables,
+        s3_credentials=td.S3AccessKeyCredentials(
+            td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"), "access_token"
+        ),
+    )
+    with pytest.raises(OutputConfigurationError) as e:
+        catalog.definition = {
+            "name": "default",
+            "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+            "warehouse": "file:///tmp/path",
+            "client.access-key-id": "fake_id",
+        }
+    assert e.value.error_code == ErrorCode.OCE45
+
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.access-key-id": "fake_id",
+    }
+    catalog = AWSGlue(definition=definition, tables=tables)
+    with pytest.raises(OutputConfigurationError) as e:
+        catalog.s3_credentials = td.S3AccessKeyCredentials(
+            td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"), "access_token"
+        )
+    assert e.value.error_code == ErrorCode.OCE45
+
+    definition = {}
+    catalog = AWSGlue(
+        definition=definition,
+        tables=tables,
+        s3_credentials=td.S3AccessKeyCredentials(
+            td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"), "access_token"
+        ),
+    )
+    catalog.s3_credentials = td.S3AccessKeyCredentials("new_id", "new_token")
+    assert catalog.s3_credentials == td.S3AccessKeyCredentials("new_id", "new_token")
+
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.access-key-id": "fake_id",
+    }
+    catalog = AWSGlue(definition=definition, tables=tables)
+    catalog.definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.access-key-id": "new_fake_id",
+    }
+    assert catalog.definition == {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.access-key-id": "new_fake_id",
+    }
+
+
+def test_catalog_class_duplicate_secret_access_key():
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.secret-access-key": "fake_id",
+    }
+    tables = ["output1", "output2"]
+    with pytest.raises(OutputConfigurationError) as e:
+        AWSGlue(
+            definition=definition,
+            tables=tables,
+            s3_credentials=td.S3AccessKeyCredentials(
+                td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"), "access_token"
+            ),
+        )
+    assert e.value.error_code == ErrorCode.OCE45
+
+    definition = {}
+    catalog = AWSGlue(
+        definition=definition,
+        tables=tables,
+        s3_credentials=td.S3AccessKeyCredentials(
+            td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"), "access_token"
+        ),
+    )
+    with pytest.raises(OutputConfigurationError) as e:
+        catalog.definition = {
+            "name": "default",
+            "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+            "warehouse": "file:///tmp/path",
+            "client.secret-access-key": "fake_id",
+        }
+    assert e.value.error_code == ErrorCode.OCE45
+
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.secret-access-key": "fake_id",
+    }
+    catalog = AWSGlue(definition=definition, tables=tables)
+    with pytest.raises(OutputConfigurationError) as e:
+        catalog.s3_credentials = td.S3AccessKeyCredentials(
+            td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"), "access_token"
+        )
+    assert e.value.error_code == ErrorCode.OCE45
+
+    definition = {}
+    catalog = AWSGlue(
+        definition=definition,
+        tables=tables,
+        s3_credentials=td.S3AccessKeyCredentials(
+            td.EnvironmentSecret("TRANSPORTER_AWS_ACCESS_KEY_ID"), "access_token"
+        ),
+    )
+    catalog.s3_credentials = td.S3AccessKeyCredentials("new_id", "new_token")
+    assert catalog.s3_credentials == td.S3AccessKeyCredentials("new_id", "new_token")
+
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.secret-access-key": "fake_id",
+    }
+    catalog = AWSGlue(definition=definition, tables=tables)
+    catalog.definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.secret-access-key": "new_fake_id",
+    }
+    assert catalog.definition == {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.secret-access-key": "new_fake_id",
+    }
+
+
+def test_s3_credentials_wrong_type():
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+    }
+    tables = ["output1", "output2"]
+    with pytest.raises(CredentialsConfigurationError) as e:
+        AWSGlue(definition=definition, tables=tables, s3_credentials="wrong")
+    assert e.value.error_code == ErrorCode.CCE3
+
+    with pytest.raises(OutputConfigurationError) as e:
+        AWSGlue(
+            definition=definition,
+            tables=tables,
+            s3_credentials=td.UserPasswordCredentials("hi", "hello"),
+        )
+    assert e.value.error_code == ErrorCode.OCE47
+
+
+def test_catalog_class_s3_region():
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+    }
+    tables = ["output1", "output2"]
+    catalog = AWSGlue(definition=definition, tables=tables, s3_region="us-east-1")
+    definition["client.region"] = "us-east-1"
+    assert catalog.definition == definition
+    assert catalog.tables == tables
+    assert catalog.to_dict() == {
+        AWSGlue.IDENTIFIER: {
+            "allow_incompatible_changes": False,
+            "auto_create_at": [None, None],
+            "definition": definition,
+            "if_table_exists": "append",
+            "partitioned_table": False,
+            "schema_strategy": "update",
+            "tables": tables,
+        }
+    }
+    assert build_catalog(catalog.to_dict()) == catalog
+
+
+def test_catalog_class_duplicate_region():
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.region": "us-east-1",
+    }
+    tables = ["output1", "output2"]
+    with pytest.raises(OutputConfigurationError) as e:
+        AWSGlue(
+            definition=definition,
+            tables=tables,
+            s3_region="eu-west-1",
+        )
+    assert e.value.error_code == ErrorCode.OCE46
+
+    definition = {}
+    catalog = AWSGlue(
+        definition=definition,
+        tables=tables,
+        s3_region="eu-west-1",
+    )
+    with pytest.raises(OutputConfigurationError) as e:
+        catalog.definition = {
+            "name": "default",
+            "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+            "warehouse": "file:///tmp/path",
+            "client.region": "us-east-1",
+        }
+    assert e.value.error_code == ErrorCode.OCE46
+
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.region": "us-east-1",
+    }
+    catalog = AWSGlue(definition=definition, tables=tables)
+    with pytest.raises(OutputConfigurationError) as e:
+        catalog.s3_region = "eu-west-1"
+    assert e.value.error_code == ErrorCode.OCE46
+
+    definition = {}
+    catalog = AWSGlue(definition=definition, tables=tables, s3_region="us-east-1")
+    catalog.s3_region = "eu-west-1"
+    assert catalog.s3_region == "eu-west-1"
+
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.region": "us-east-1",
+    }
+    catalog = AWSGlue(definition=definition, tables=tables)
+    catalog.definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.region": "eu-west-1",
+    }
+    assert catalog.definition == {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+        "client.region": "eu-west-1",
+    }
+
+
+def test_catalog_class_s3_region_wrong_type():
+    definition = {
+        "name": "default",
+        "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
+        "warehouse": "file:///tmp/path",
+    }
+    tables = ["output1", "output2"]
+    with pytest.raises(OutputConfigurationError) as e:
+        AWSGlue(definition=definition, tables=tables, s3_region=42)
+    assert e.value.error_code == ErrorCode.OCE48

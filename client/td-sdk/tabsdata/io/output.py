@@ -10,6 +10,7 @@ from urllib.parse import urlparse, urlunparse
 
 from tabsdata.credentials import (
     AzureCredentials,
+    S3AccessKeyCredentials,
     S3Credentials,
     UserPasswordCredentials,
     build_credentials,
@@ -93,6 +94,10 @@ class AWSGlue(Catalog):
     SCHEMA_STRATEGY_KEY = "schema_strategy"
     TABLES_KEY = "tables"
 
+    AWS_GLUE_ACCESS_KEY_ID = "client.access-key-id"
+    AWS_GLUE_REGION = "client.region"
+    AWS_GLUE_SECRET_ACCESS_KEY = "client.secret-access-key"
+
     def __init__(
         self,
         definition: dict,
@@ -101,6 +106,8 @@ class AWSGlue(Catalog):
         if_table_exists: Literal["append", "replace"] = "append",
         partitioned_table: bool = False,
         schema_strategy: Literal["update", "strict"] = "update",
+        s3_credentials: dict | S3Credentials = None,
+        s3_region: str = None,
         **kwargs,
     ):
         self.definition = definition
@@ -112,6 +119,8 @@ class AWSGlue(Catalog):
         )
         self.auto_create_at = auto_create_at
         self.schema_strategy = schema_strategy
+        self.s3_credentials = s3_credentials
+        self.s3_region = s3_region
 
     @property
     def partitioned_table(self) -> bool:
@@ -204,13 +213,76 @@ class AWSGlue(Catalog):
 
     @property
     def definition(self) -> dict:
-        return self._definition
+        definition = self._user_definition
+        if hasattr(self, "s3_credentials"):
+            if isinstance(self.s3_credentials, S3AccessKeyCredentials):
+                credentials: S3AccessKeyCredentials = self.s3_credentials
+                definition[self.AWS_GLUE_ACCESS_KEY_ID] = credentials.aws_access_key_id
+                definition[self.AWS_GLUE_SECRET_ACCESS_KEY] = (
+                    credentials.aws_secret_access_key
+                )
+        if hasattr(self, "s3_region"):
+            if self.s3_region is not None:
+                definition[self.AWS_GLUE_REGION] = self.s3_region
+        return definition
 
     @definition.setter
     def definition(self, definition: dict):
         if not isinstance(definition, dict):
             raise OutputConfigurationError(ErrorCode.OCE30, type(definition))
-        self._definition = _recursively_load_secret(definition)
+        self._user_definition = _recursively_load_secret(definition)
+        self._verify_duplicate_s3_credentials()
+        self._verify_duplicate_s3_region()
+
+    @property
+    def s3_credentials(self) -> S3Credentials | None:
+        return self._s3_credentials
+
+    @s3_credentials.setter
+    def s3_credentials(self, s3_credentials: dict | S3Credentials | None):
+        if s3_credentials is None:
+            self._s3_credentials = None
+        else:
+            credentials = build_credentials(s3_credentials)
+            if not (isinstance(credentials, S3Credentials)):
+                raise OutputConfigurationError(ErrorCode.OCE47, type(credentials))
+            self._s3_credentials = credentials
+        self._verify_duplicate_s3_credentials()
+
+    @property
+    def s3_region(self) -> str | None:
+        """
+        str: The region where the S3 bucket is located.
+        """
+        return self._s3_region
+
+    @s3_region.setter
+    def s3_region(self, region: str | None):
+        """
+        Sets the region where the S3 bucket is located.
+
+        Args:
+            region (str): The region where the S3 bucket is located.
+        """
+        if region:
+            if not isinstance(region, str):
+                raise OutputConfigurationError(ErrorCode.OCE48, type(region))
+            supported_regions = [element.value for element in SupportedAWSS3Regions]
+            if region not in supported_regions:
+                logger.warning(
+                    "The 'region' parameter for the AWSGlue object has value "
+                    f"'{region}', which is not recognized in our current list of AWS "
+                    f"regions: {supported_regions}. This could indicate a typo in the "
+                    "region provided, but it could also occur because you are "
+                    "using a recently created AWS region or a private AWS region. "
+                    "You can continue using this region if you are sure it is available"
+                    " for your AWS account, but if it isn't it will cause an error "
+                    "during runtime."
+                )
+            self._s3_region = region
+        else:
+            self._s3_region = None
+        self._verify_duplicate_s3_region()
 
     @property
     def tables(self) -> List[str]:
@@ -275,6 +347,21 @@ class AWSGlue(Catalog):
         if not isinstance(other, AWSGlue):
             return False
         return self.to_dict() == other.to_dict()
+
+    def _verify_duplicate_s3_credentials(self):
+        if hasattr(self, "_user_definition") and hasattr(self, "_s3_credentials"):
+            if self._s3_credentials is not None and (
+                self._user_definition.get(self.AWS_GLUE_ACCESS_KEY_ID)
+                or self._user_definition.get(self.AWS_GLUE_SECRET_ACCESS_KEY)
+            ):
+                raise OutputConfigurationError(ErrorCode.OCE45)
+
+    def _verify_duplicate_s3_region(self):
+        if hasattr(self, "_user_definition") and hasattr(self, "_s3_region"):
+            if self._s3_region is not None and self._user_definition.get(
+                self.AWS_GLUE_REGION
+            ):
+                raise OutputConfigurationError(ErrorCode.OCE46)
 
 
 def build_catalog(catalog) -> AWSGlue:
