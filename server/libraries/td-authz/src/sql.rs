@@ -5,6 +5,8 @@
 use crate::Provider;
 use async_trait::async_trait;
 use itertools::Itertools;
+use sqlx::pool::PoolConnection;
+use sqlx::{Sqlite, SqliteConnection};
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_database::sql::DbPool;
@@ -16,17 +18,7 @@ use td_objects::types::basic::{CollectionId, PermissionType, RoleId};
 use td_objects::types::permission::PermissionDB;
 
 /// Provider that gets role-permissions mapping from the database on every `get` call.
-pub struct SqlRolePermissionsProvider {
-    db_pool: DbPool,
-}
-
-impl SqlRolePermissionsProvider {
-    pub fn new(db_pool: impl Into<DbPool>) -> Self {
-        Self {
-            db_pool: db_pool.into(),
-        }
-    }
-}
+pub struct SqlRolePermissionsProvider;
 
 //TODO: This try_to_permission should be converted into a `TryFrom<&PermissionDB> for Permission`
 fn try_to_permission(perm_db: &PermissionDB) -> Result<Permission, TdError> {
@@ -52,12 +44,17 @@ fn try_to_permission(perm_db: &PermissionDB) -> Result<Permission, TdError> {
 }
 
 #[async_trait]
-impl Provider<HashMap<RoleId, Arc<Vec<Permission>>>> for SqlRolePermissionsProvider {
-    async fn get(&self) -> Result<Arc<HashMap<RoleId, Arc<Vec<Permission>>>>, TdError> {
+impl<'a> Provider<'a, HashMap<RoleId, Arc<Vec<Permission>>>, &'a mut SqliteConnection>
+    for SqlRolePermissionsProvider
+{
+    async fn get(
+        &'a self,
+        conn: &'a mut SqliteConnection,
+    ) -> Result<Arc<HashMap<RoleId, Arc<Vec<Permission>>>>, TdError> {
         let permissions: Vec<PermissionDB> = DaoQueries::default()
             .list_by::<PermissionDB>(&ListParams::all(), &())?
             .build_query_as()
-            .fetch_all(&self.db_pool)
+            .fetch_all(conn)
             .await
             .map_err(handle_sql_err)?;
         let role_permissions_map = permissions
@@ -82,8 +79,8 @@ mod tests {
 
     #[td_test::test(sqlx(migrator = td_schema::schema()))]
     async fn test_sql_role_permissions_provider(db: DbPool) -> Result<(), TdError> {
-        let provider = SqlRolePermissionsProvider::new(db);
-        let permissions = provider.get().await.unwrap();
+        let provider = SqlRolePermissionsProvider;
+        let permissions = provider.get(&db.acquire().await.unwrap()).await.unwrap();
         assert_eq!(permissions.len(), 3);
         assert_eq!(
             permissions

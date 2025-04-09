@@ -63,6 +63,7 @@
 use crate::crudl::RequestContext;
 use crate::types::basic::{CollectionId, RoleId, UserId};
 use async_trait::async_trait;
+use sqlx::SqliteConnection;
 use std::any::type_name;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
@@ -70,16 +71,17 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::Arc;
 use td_error::TdError;
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[async_trait]
 pub trait AuthzContext {
     async fn role_permissions(
         &self,
+        conn: &mut SqliteConnection,
         role: &RoleId,
     ) -> Result<Option<Arc<Vec<Permission>>>, TdError>;
 
-    async fn refresh(&self) -> Result<(), TdError> {
+    async fn refresh(&self, _conn: &mut SqliteConnection) -> Result<(), TdError> {
         Ok(())
     }
 }
@@ -465,6 +467,7 @@ impl<
     /// The role permissions are from the [`AuthzContext`] in the service context.
     pub async fn check(
         SrvCtx(authz_context): SrvCtx<AC>,
+        Connection(conn): Connection,
         Input(request_context): Input<RequestContext>,
         Input(scope): Input<AuthzScope>,
     ) -> Result<(), TdError> {
@@ -499,8 +502,10 @@ impl<
         if required_permissions.is_empty() {
             Ok(())
         } else {
+            let mut conn = conn.lock().await;
+            let conn = conn.get_mut_connection()?;
             if let Some(role_permissions) = authz_context
-                .role_permissions(request_context.role_id())
+                .role_permissions(conn, request_context.role_id())
                 .await?
             {
                 for perm in role_permissions.deref() {
@@ -528,12 +533,13 @@ mod test {
     use crate::types::basic::{CollectionId, RoleId, UserId};
     use async_trait::async_trait;
     use lazy_static::lazy_static;
+    use sqlx::SqliteConnection;
     use std::collections::HashMap;
     use std::marker::PhantomData;
     use std::sync::Arc;
     use td_common::id;
     use td_error::TdError;
-    use td_tower::extractors::{Input, SrvCtx};
+    use td_tower::extractors::{Connection, ConnectionType, Input, SrvCtx};
 
     fn sys_admin_role() -> &'static RoleId {
         lazy_static! {
@@ -616,6 +622,7 @@ mod test {
     impl AuthzContext for AuthzContextForTest {
         async fn role_permissions(
             &self,
+            _conn: &mut SqliteConnection,
             role: &RoleId,
         ) -> Result<Option<Arc<Vec<Permission>>>, TdError> {
             Ok(self.role_permissions_map.get(role).map(Arc::clone))
@@ -671,8 +678,13 @@ mod test {
         scope: &Arc<AuthzScope>,
         _authz: Authz<C1, C2, C3, C4, C5, C6, C7>,
     ) {
+        let db = td_database::test_utils::db().await.unwrap();
+        let conn = db.acquire().await.unwrap();
+        let conn = ConnectionType::PoolConnection(conn).into();
+        let conn = Connection::new(conn);
         let res = Authz::<C1, C2, C3, C4, C5, C6, C7>::check(
             SrvCtx(authz_context.clone()),
+            conn,
             Input(request_context.clone()),
             Input(scope.clone()),
         )
@@ -700,8 +712,13 @@ mod test {
         _authz: Authz<C1, C2, C3, C4, C5, C6, C7>,
         expected_err: AuthzError,
     ) {
+        let db = td_database::test_utils::db().await.unwrap();
+        let conn = db.acquire().await.unwrap();
+        let conn = ConnectionType::PoolConnection(conn).into();
+        let conn = Connection::new(conn);
         let res = Authz::<C1, C2, C3, C4, C5, C6, C7>::check(
             SrvCtx(authz_context.clone()),
+            conn,
             Input(request_context.clone()),
             Input(scope.clone()),
         )

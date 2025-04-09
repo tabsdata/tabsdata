@@ -4,6 +4,7 @@
 
 use crate::sql::SqlRolePermissionsProvider;
 use async_trait::async_trait;
+use sqlx::SqliteConnection;
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_common::provider::{CachedProvider, Provider};
@@ -14,34 +15,39 @@ use td_objects::types::basic::RoleId;
 
 mod sql;
 
-pub struct AuthzContextImplWithCache {
-    provider: CachedProvider<SqlRolePermissionsProvider, HashMap<RoleId, Arc<Vec<Permission>>>>,
+pub struct AuthzContextImplWithCache<'a> {
+    provider: CachedProvider<
+        'a,
+        HashMap<RoleId, Arc<Vec<Permission>>>,
+        &'a mut SqliteConnection,
+        SqlRolePermissionsProvider,
+    >,
 }
 
-impl AuthzContextImplWithCache {
-    pub fn new(db_pool: DbPool) -> Self {
-        let provider = SqlRolePermissionsProvider::new(db_pool);
+impl AuthzContextImplWithCache<'_> {
+    pub fn new() -> Self {
+        let provider = SqlRolePermissionsProvider;
         let provider = CachedProvider::new(provider);
         Self { provider }
     }
 }
 #[async_trait]
-impl AuthzContext for AuthzContextImplWithCache {
+impl AuthzContext for AuthzContextImplWithCache<'_> {
     async fn role_permissions(
         &self,
+        conn: &mut SqliteConnection,
         role: &RoleId,
     ) -> Result<Option<Arc<Vec<Permission>>>, TdError> {
         Ok(self
             .provider
-            .get()
+            .get(conn)
             .await?
             .get(&role)
             .map(|permissions| permissions.clone()))
     }
 
-    async fn refresh(&self) -> Result<(), TdError> {
-        self.provider.refresh().await;
-        Ok(())
+    async fn refresh(&self, conn: &mut SqliteConnection) -> Result<(), TdError> {
+        self.provider.refresh(conn).await
     }
 }
 
@@ -49,6 +55,7 @@ impl AuthzContext for AuthzContextImplWithCache {
 ///
 /// It expects a [`AuthzContextImplWithCache`] in the service context.
 pub type Authz<
+    'a,
     C1,
     C2 = NoPermissions,
     C3 = NoPermissions,
@@ -56,4 +63,13 @@ pub type Authz<
     C5 = NoPermissions,
     C6 = NoPermissions,
     C7 = NoPermissions,
-> = td_objects::tower_service::authz::Authz<AuthzContextImplWithCache, C1, C2, C3, C4, C5, C6, C7>;
+> = td_objects::tower_service::authz::Authz<
+    AuthzContextImplWithCache<'a>,
+    C1,
+    C2,
+    C3,
+    C4,
+    C5,
+    C6,
+    C7,
+>;
