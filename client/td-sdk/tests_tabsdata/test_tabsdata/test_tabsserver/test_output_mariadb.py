@@ -343,8 +343,9 @@ def test_output_mariadb_transaction(tmp_path, testing_mariadb):
     output = clean_polars_df(output)
     assert output.is_empty()
 
-    with pytest.raises(Exception):
-        pl.read_database_uri(
-            uri=MARIADB_URI,
-            query="SELECT * FROM second_output_mariadb_transaction",
-        )
+    output = pl.read_database_uri(
+        uri=MARIADB_URI,
+        query="SELECT * FROM second_output_mariadb_transaction",
+    )
+    output = clean_polars_df(output)
+    assert output.is_empty()

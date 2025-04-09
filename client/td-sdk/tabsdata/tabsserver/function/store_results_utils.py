@@ -10,11 +10,13 @@ import os
 import re
 import subprocess
 import time
+import uuid
 from typing import List, Tuple
 
 import cloudpickle
 import polars as pl
 import pyarrow
+import pyarrow.parquet as pq
 import sqlalchemy
 from pyiceberg.catalog import load_catalog
 from pyiceberg.exceptions import NoSuchTableError
@@ -764,32 +766,25 @@ def store_result_in_sql_table(
     # Output class, so we can safely ignore this warning.
     logger.debug(f"Using strategy in case table exists: {if_table_exists}")
     result: pl.LazyFrame = remove_system_columns_and_convert(result)
-    current_timestamp = str(round(time.time() * 1000))
-    intermediate_file = f"intermediate_{destination_table}_{current_timestamp}.csv"
+    intermediate_file = f"intermediate_{destination_table}_{uuid.uuid4()}.parquet"
     intermediate_file_path = os.path.join(output_folder, intermediate_file)
-    result.sink_csv(
+    chunk_size = 10000
+    logger.debug(f"Writing intermediate file '{intermediate_file_path}'")
+    result.sink_parquet(
         intermediate_file_path,
         maintain_order=True,
     )
-    # Note: Currently polars ignores batch_size provided in read_csv_batched
-    #    so we leave it with the default value.
-    #    See: https://github.com/pola-rs/polars/issues/19978
-    reader = pl.read_csv_batched(intermediate_file_path)
-    cores = os.cpu_count()
-    logger.debug(f"Using {cores} cores to read the file")
-    # Note: next_batches recommends using a number of batches equal or
-    # greater to the amount of threads in the system. We use
-    # os.cpu_count() to get the number cores as an approximation.
-    while batches := reader.next_batches(2 * cores):
-        for batch in batches:
-            logger.debug(
-                f"Writing batch of shape {batch.shape} to table {destination_table}"
-            )
-            batch.write_database(
-                table_name=destination_table,
-                connection=session,
-                if_table_exists=if_table_exists,
-            )
+    parquet_file = pq.ParquetFile(intermediate_file_path)
+    for batch in parquet_file.iter_batches(batch_size=chunk_size):
+        chunk_table = pyarrow.Table.from_batches(batches=[batch])
+        df = pl.from_arrow(chunk_table)
+        logger.debug(f"Writing batch of shape {df.shape} to table {destination_table}")
+        df.write_database(
+            table_name=destination_table,
+            connection=session,
+            if_table_exists=if_table_exists,
+        )
+        if_table_exists = "append"
     logger.info(f"Result stored in SQL table: {destination_table}")
 
 

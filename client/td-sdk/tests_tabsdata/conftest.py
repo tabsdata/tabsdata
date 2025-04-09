@@ -321,6 +321,14 @@ def create_docker_postgres_database():
             ("Splinter",),
         ]
         mycursor.executemany(sql, val)
+        mycursor.execute(
+            "CREATE TABLE output_postgres_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
+        mycursor.execute(
+            "CREATE TABLE second_output_postgres_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
         mydb.commit()
         logger.info("Postgres container created successfully")
         return
@@ -443,6 +451,14 @@ def create_docker_mysql_database():
             ("Splinter",),
         ]
         mycursor.executemany(sql, val)
+        mycursor.execute(
+            "CREATE TABLE output_sql_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
+        mycursor.execute(
+            "CREATE TABLE second_output_sql_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
         mydb.commit()
         logger.info("MySQL container created successfully")
         return
@@ -599,6 +615,14 @@ def create_docker_mariadb_database():
             ("Splinter",),
         ]
         mycursor.executemany(sql, val)
+        mycursor.execute(
+            "CREATE TABLE output_mariadb_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
+        mycursor.execute(
+            "CREATE TABLE second_output_mariadb_transaction (Duration INT, "
+            "Pulse INT, Maxpulse INT, Calories FLOAT)"
+        )
         mydb.commit()
         logger.info("MariaDB container created successfully")
         return

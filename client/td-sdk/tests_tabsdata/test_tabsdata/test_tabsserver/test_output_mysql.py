@@ -371,8 +371,9 @@ def test_output_sql_transaction(tmp_path, testing_mysql):
     output = clean_polars_df(output)
     assert output.is_empty()
 
-    with pytest.raises(Exception):
-        pl.read_database_uri(
-            uri=MYSQL_URI,
-            query="SELECT * FROM second_output_sql_transaction",
-        )
+    output = pl.read_database_uri(
+        uri=MYSQL_URI,
+        query="SELECT * FROM second_output_sql_transaction",
+    )
+    output = clean_polars_df(output)
+    assert output.is_empty()
