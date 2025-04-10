@@ -2,6 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+pub mod display_vec;
+
 pub use tm_error::td_error;
 
 use std::error::Error;
