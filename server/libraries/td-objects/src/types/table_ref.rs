@@ -2,19 +2,18 @@
 // Copyright 202∞ Tabs Data Inc.
 //
 
-use crate::types::basic::{CollectionName, TableName};
+use crate::types::basic::{CollectionName, TableDataVersionId, TableName};
 use crate::types::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};
 use crate::types::ComposedString;
 use derive_new::new;
 use std::fmt::{Display, Formatter};
-use td_common::id::Id;
 use td_error::TdError;
 
 /// It represents a version.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Version {
     /// A fixed version.
-    Fixed(Id),
+    Fixed(TableDataVersionId),
     /// A head relative version, it is always zero or negative.
     Head(isize),
 }
@@ -34,6 +33,14 @@ impl Display for Version {
     }
 }
 
+impl Version {
+    pub fn shift_mut(&mut self, pos: isize) {
+        if let Version::Head(head) = self {
+            *head += pos
+        }
+    }
+}
+
 /// It represents a set of versions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Versions {
@@ -43,8 +50,33 @@ pub enum Versions {
     Single(Version),
     /// A list of versions.
     List(Vec<Version>),
-    /// A range of versions.
+    /// A range of versions. Always older to newer.
     Range(Version, Version),
+}
+
+impl Versions {
+    pub fn shift(&self, pos: isize) -> Self {
+        match self {
+            Versions::None => Versions::Single(Version::Head(pos)),
+            Versions::Single(version) => {
+                let mut version = version.clone();
+                version.shift_mut(pos);
+                Versions::Single(version)
+            }
+            Versions::List(versions) => {
+                let mut versions = versions.clone();
+                versions.iter_mut().for_each(|v| v.shift_mut(pos));
+                Versions::List(versions)
+            }
+            Versions::Range(from, to) => {
+                let mut from = from.clone();
+                from.shift_mut(pos);
+                let mut to = to.clone();
+                to.shift_mut(pos);
+                Versions::Range(from, to)
+            }
+        }
+    }
 }
 
 impl ComposedString for Versions {

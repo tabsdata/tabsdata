@@ -6,6 +6,7 @@ pub mod basic;
 
 pub mod collection;
 pub mod dependency;
+pub mod execution;
 pub mod function;
 pub mod permission;
 pub mod role;
@@ -20,6 +21,9 @@ pub mod auth;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
 
 pub trait SqlEntity: Send + Sync + 'static {
     type Type: for<'a> sqlx::Encode<'a, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + std::fmt::Display;
@@ -66,11 +70,22 @@ pub trait ComposedString {
 }
 
 pub trait PartitionBy {
+    type PartitionBy: SqlEntity;
     fn partition_by() -> &'static str;
 }
 
-pub trait Recursive<E: SqlEntity> {
-    type Type: SqlEntity;
+pub trait NaturalOrder {
+    type NaturalOrder: SqlEntity;
+    fn natural_order_by() -> &'static str;
+}
+
+pub trait Status {
+    type Status: SqlEntity;
+    fn status_by() -> &'static str;
+}
+
+pub trait Recursive {
+    type Recursive: SqlEntity;
     fn recurse_up() -> &'static str;
     fn recurse_down() -> &'static str;
 }

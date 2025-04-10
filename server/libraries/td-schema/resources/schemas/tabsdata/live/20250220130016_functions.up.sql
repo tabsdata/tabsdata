@@ -257,5 +257,105 @@ FROM trigger_versions tv
          LEFT JOIN users u ON tv.defined_by_id = u.id
          LEFT JOIN collections tc ON tv.trigger_by_collection_id = tc.id
          LEFT JOIN function_versions tfv ON tv.trigger_by_function_version_id = tfv.id
-         LEFT JOIN tables t ON tv.trigger_by_table_id = t.id
-;
+         LEFT JOIN tables t ON tv.trigger_by_table_id = t.id;
+
+-- Executions  (table)
+
+CREATE TABLE executions
+(
+    id                  TEXT PRIMARY KEY,
+    name                TEXT      NULL,
+    collection_id       TEXT      NOT NULL,
+    function_version_id TEXT      NOT NULL,
+
+    triggered_on        TIMESTAMP NOT NULL,
+    triggered_by_id     TEXT      NOT NULL,
+    started_on          TIMESTAMP NULL,
+    ended_on            TIMESTAMP NULL,
+    status              TEXT      NOT NULL, -- Scheduled/Running/Done/Incomplete
+
+    FOREIGN KEY (collection_id) REFERENCES collections (id),
+    FOREIGN KEY (function_version_id) REFERENCES function_versions (id)
+);
+
+-- Transactions  (table)
+
+CREATE TABLE transactions
+(
+    id              TEXT PRIMARY KEY,
+
+    execution_id    TEXT      NOT NULL,
+
+    transaction_by  TEXT      NOT NULL,
+    transaction_key TEXT      NOT NULL,
+
+    triggered_on    TIMESTAMP NOT NULL,
+    triggered_by_id TEXT      NOT NULL,
+    started_on      TIMESTAMP NULL,
+    ended_on        TIMESTAMP NULL,
+    status          TEXT      NOT NULL, -- Scheduled/Running/Done/Error/Failed/Hold/Canceled/Publish
+
+    FOREIGN KEY (execution_id) REFERENCES executions (id)
+);
+
+-- Data Versions  (table)
+
+CREATE TABLE function_runs
+(
+    id                  TEXT PRIMARY KEY,
+    collection_id       TEXT      NOT NULL,
+    function_version_id TEXT      NOT NULL,
+
+    execution_id        TEXT      NOT NULL,
+    transaction_id      TEXT      NOT NULL,
+
+    triggered_on        TIMESTAMP NOT NULL,
+    trigger             TEXT      NOT NULL, -- M (manual), D (dependency)
+    started_on          TIMESTAMP NULL,
+    ended_on            TIMESTAMP NULL,
+    status              TEXT      NOT NULL, -- Scheduled/Running/Done/Error/Failed/Hold/Canceled/Publish
+
+    FOREIGN KEY (collection_id) REFERENCES collections (id),
+    FOREIGN KEY (execution_id) REFERENCES executions (id),
+    FOREIGN KEY (function_version_id) REFERENCES function_versions (id)
+);
+
+CREATE TABLE table_data_versions
+(
+    id                  TEXT PRIMARY KEY,
+    collection_id       TEXT      NOT NULL,
+    table_id            TEXT      NOT NULL,
+    table_version_id    TEXT      NOT NULL,
+    function_version_id TEXT      NOT NULL,
+
+    has_data            BOOLEAN   NULL,     -- only true/false when published
+
+    execution_id        TEXT      NOT NULL,
+    transaction_id      TEXT      NOT NULL,
+    function_run_id     TEXT      NOT NULL,
+
+    triggered_on        TIMESTAMP NOT NULL,
+    triggered_by_id     TEXT      NOT NULL,
+    status              TEXT      NOT NULL, -- Done/Incomplete/Canceled
+
+    FOREIGN KEY (collection_id) REFERENCES collections (id),
+    FOREIGN KEY (execution_id) REFERENCES executions (id),
+    FOREIGN KEY (function_version_id) REFERENCES function_versions (id),
+    FOREIGN KEY (function_run_id) REFERENCES function_runs (id)
+);
+
+-- Execution Steps  (table)
+
+CREATE TABLE function_requirements
+(
+    id                           TEXT PRIMARY KEY,
+    collection_id                TEXT NOT NULL,
+    execution_id                 TEXT NOT NULL,
+    transaction_id               TEXT NOT NULL,
+
+    function_run_id              TEXT NOT NULL,
+    condition_function_run_id    TEXT NOT NULL,
+    condition_table_data_version TEXT NOT NULL,
+
+    status                       TEXT NOT NULL -- Done/Incomplete/Canceled
+);

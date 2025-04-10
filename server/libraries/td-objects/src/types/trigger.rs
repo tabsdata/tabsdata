@@ -41,7 +41,8 @@ pub struct TriggerDBWithNames {
 #[td_type::Dao(
     sql_table = "trigger_versions",
     partition_by = "trigger_id",
-    recursive(on = FunctionVersionId, up = "function_version_id", down = "trigger_by_function_version_id"),
+    natural_order_by = "defined_on",
+    recursive(up = "function_version_id", down = "trigger_by_function_version_id")
 )]
 #[td_type(builder(try_from = FunctionVersionDB, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
@@ -71,7 +72,8 @@ pub struct TriggerVersionDB {
 #[td_type::Dao(
     sql_table = "trigger_versions__with_names",
     partition_by = "trigger_id",
-    recursive(on = FunctionVersionId, up = "function_version_id", down = "trigger_by_function_version_id"),
+    natural_order_by = "defined_on",
+    recursive(up = "function_version_id", down = "trigger_by_function_version_id")
 )]
 pub struct TriggerVersionDBWithNames {
     id: TriggerVersionId,

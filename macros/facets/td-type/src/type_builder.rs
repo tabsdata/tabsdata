@@ -16,12 +16,13 @@ struct DaoArguments {
     sql_table: Option<String>,
     order_by: Option<String>,
     partition_by: Option<String>,
+    natural_order_by: Option<String>,
+    status_by: Option<String>,
     recursive: Option<DaoRecursiveArguments>,
 }
 
 #[derive(FromMeta)]
 struct DaoRecursiveArguments {
-    on: Ident,
     up: String,
     down: String,
 }
@@ -62,8 +63,10 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
     let partition_by = match parsed_args.partition_by {
         Some(partition_by) => {
             let partition_by = partition_by.as_str();
+            let partition_by_type = type_for_field(fields, partition_by);
             quote! {
                 impl<#ty_generics> crate::types::PartitionBy for #ident #ty_generics #where_clause {
+                    type PartitionBy = #partition_by_type;
                     fn partition_by() -> &'static str {
                         #partition_by
                     }
@@ -74,14 +77,65 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
             quote! {}
         }
     };
+    let natural_order_by = match parsed_args.natural_order_by {
+        Some(natural_order_by) => {
+            let natural_order_by = natural_order_by.as_str();
+            let natural_order_type = type_for_field(fields, natural_order_by);
+            quote! {
+                impl<#ty_generics> crate::types::NaturalOrder for #ident #ty_generics #where_clause {
+                    type NaturalOrder = #natural_order_type;
+                    fn natural_order_by() -> &'static str {
+                        #natural_order_by
+                    }
+                }
+            }
+        }
+        None => {
+            quote! {}
+        }
+    };
+    let status_by = if let Some(status_by) = parsed_args.status_by {
+        let status_by = status_by.as_str();
+        let status_type = type_for_field(fields, status_by);
+        quote! {
+            impl<#ty_generics> crate::types::Status for #ident #ty_generics #where_clause {
+                type Status = #status_type;
+                fn status_by() -> &'static str {
+                    #status_by
+                }
+            }
+        }
+    } else if fields
+        .iter()
+        .any(|f| f.ident.as_ref().is_some_and(|ident| ident == "status"))
+    {
+        // if status field is present, we can impl this by default
+        let status_type = type_for_field(fields, "status");
+        quote! {
+            impl<#ty_generics> crate::types::Status for #ident #ty_generics #where_clause {
+                type Status = #status_type;
+                fn status_by() -> &'static str {
+                    "status"
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
     let recursive = match parsed_args.recursive {
         Some(recursive) => {
-            let on = recursive.on;
             let up = recursive.up;
             let down = recursive.down;
+            let up_type = type_for_field(fields, &up);
+            let down_type = type_for_field(fields, &down);
+
+            if up_type != down_type {
+                panic!("Recursive types must be the same");
+            }
+
             quote! {
-                impl<#ty_generics> crate::types::Recursive<#on> for #ident #ty_generics #where_clause {
-                    type Type = #on;
+                impl<#ty_generics> crate::types::Recursive for #ident #ty_generics #where_clause {
+                    type Recursive = #up_type;
 
                     fn recurse_up() -> &'static str {
                         #up
@@ -100,7 +154,7 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
 
     // Expansion
     let expanded = quote! {
-        #[derive(Debug, Clone, Eq, PartialEq, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+        #[derive(Debug, Clone, Eq, PartialEq, Hash, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
@@ -161,10 +215,25 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         #partition_by
+        #natural_order_by
+        #status_by
         #recursive
     };
 
     expanded.into()
+}
+
+fn type_for_field<'a>(fields: &'a Fields, field_name: &str) -> &'a Type {
+    fields
+        .iter()
+        .find_map(|f| {
+            if f.ident.as_ref().is_some_and(|ident| ident == field_name) {
+                Some(&f.ty)
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| panic!("Field {} not found in struct", field_name))
 }
 
 pub fn dlo(_args: TokenStream, item: TokenStream) -> TokenStream {
@@ -175,7 +244,7 @@ pub fn dlo(_args: TokenStream, item: TokenStream) -> TokenStream {
     let where_clause = &input.generics.where_clause;
 
     let expanded = quote! {
-        #[derive(Debug, Clone, Eq, PartialEq, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+        #[derive(Debug, Clone, Eq, PartialEq, Hash, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input

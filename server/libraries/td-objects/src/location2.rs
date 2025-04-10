@@ -521,7 +521,7 @@ mod tests {
             ))?
         );
 
-        let partition = Partition::default();
+        let partition = Partition::try_from("p")?;
         builder.partition(&table, &table_version, &partition);
         assert_eq!(
             builder.build().0,
@@ -540,7 +540,7 @@ mod tests {
 
         let table = TableId::default();
         let table_version = TableVersionId::default();
-        let partition = Partition::default();
+        let partition = Partition::try_from("p")?;
         builder.partition(&table, &table_version, &partition);
         assert_eq!(
             builder.build().0,

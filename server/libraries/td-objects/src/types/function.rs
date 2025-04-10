@@ -79,7 +79,11 @@ pub struct FunctionCreate {
 
 pub type FunctionUpdate = FunctionCreate;
 
-#[td_type::Dao(sql_table = "function_versions", partition_by = "function_id")]
+#[td_type::Dao(
+    sql_table = "function_versions",
+    partition_by = "function_id",
+    natural_order_by = "defined_on"
+)]
 #[td_type(builder(try_from = FunctionCreate, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct FunctionVersionDB {
@@ -115,7 +119,8 @@ pub struct FunctionVersionDB {
 
 #[td_type::Dao(
     sql_table = "function_versions__with_names",
-    partition_by = "function_id"
+    partition_by = "function_id",
+    natural_order_by = "defined_on"
 )]
 pub struct FunctionVersionDBWithNames {
     #[td_type(extractor)]

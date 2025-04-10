@@ -15,11 +15,11 @@ mod tests {
             paste::paste! {
                 #[test]
                 fn [< test_ $type_:lower >]() -> Result<(), td_error::TdError> {
-                    #[td_type::typed([< $type_:lower >])]
+                    #[td_type::typed([< $type_:lower >](default = $value))]
                     struct TypedType;
 
                     let typed = TypedType::default();
-                    assert_eq!(*typed, $type_::default());
+                    assert_eq!(*typed, $value);
 
                     let typed = TypedType::parse($value)?;
                     assert_eq!(*typed, $value);
@@ -212,11 +212,11 @@ mod tests {
     }
 
     macro_rules! try_from_typed_test {
-        ($type_:ty) => {
+        ($type_:ty, $default:tt) => {
             paste::paste! {
                 #[test]
                 fn [< test_ $type_:lower _try_from >]() -> Result<(), td_error::TdError> {
-                    #[td_type::typed([< $type_:lower >])]
+                    #[td_type::typed([< $type_:lower >](default = $default))]
                     struct TypedType;
 
                     #[td_type::typed([< $type_:lower >], try_from = TypedType)]
@@ -232,13 +232,13 @@ mod tests {
     }
 
     // Testing try_from implementations between same types.
-    try_from_typed_test!(String);
-    try_from_typed_test!(i16);
-    try_from_typed_test!(i32);
-    try_from_typed_test!(i64);
-    try_from_typed_test!(f32);
-    try_from_typed_test!(f64);
-    try_from_typed_test!(bool);
+    try_from_typed_test!(String, "typed string");
+    try_from_typed_test!(i16, 15i16);
+    try_from_typed_test!(i32, 15i32);
+    try_from_typed_test!(i64, 15i64);
+    try_from_typed_test!(f32, 15f32);
+    try_from_typed_test!(f64, 15f64);
+    try_from_typed_test!(bool, false);
 
     // Testing try_from implementations between different types (impl TryFrom inner types
     // must be implemented so this works).

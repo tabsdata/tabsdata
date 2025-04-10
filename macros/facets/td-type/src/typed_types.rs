@@ -177,10 +177,14 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
 
     let default = if let Some(default) = default {
         quote! {
-            #default
+            impl Default for #name {
+                fn default() -> Self {
+                    Self(#default.into())
+                }
+            }
         }
     } else {
-        quote! { String::default() }
+        quote! {}
     };
     let len = some_or_none(len);
     let min_len = some_or_none(min_len);
@@ -221,11 +225,7 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
             Parse(#[from] td_error::TdError),
         }
 
-        impl Default for #name {
-            fn default() -> Self {
-                Self(#default.into())
-            }
-        }
+        #default
 
         impl #name {
             fn len() -> Option<usize> {

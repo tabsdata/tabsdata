@@ -145,7 +145,7 @@ pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
                         let id = Id::try_from(version).map_err(|_| {
                             ParserError::CouldNotParse(s.clone(), "a valid version ID".to_string())
                         })?;
-                        Version::Fixed(id)
+                        Version::Fixed(id.into())
                     }
                 },
             };
@@ -239,6 +239,10 @@ pub fn parse_entity(s: impl Into<String>) -> Result<String, TdError> {
 
 pub fn parse_function(s: impl Into<String>) -> Result<String, TdError> {
     parse_name(s, "Function name")
+}
+
+pub fn parse_execution(s: impl Into<String>) -> Result<String, TdError> {
+    parse_name(s, "Execution name")
 }
 
 pub fn parse_table(s: impl Into<String>) -> Result<String, TdError> {
@@ -373,11 +377,11 @@ mod tests {
 
         let id = id::id();
         let versions = parse_versions(format!("{}", id)).unwrap();
-        assert_eq!(versions, Versions::Single(Version::Fixed(id)));
+        assert_eq!(versions, Versions::Single(Version::Fixed(id.into())));
         let versions = parse_versions(format!("{},HEAD~2", id)).unwrap();
         assert_eq!(
             versions,
-            Versions::List(vec![Version::Fixed(id), Version::Head(-2)])
+            Versions::List(vec![Version::Fixed(id.into()), Version::Head(-2)])
         );
 
         assert!(parse_versions("HEAD~a").is_err());

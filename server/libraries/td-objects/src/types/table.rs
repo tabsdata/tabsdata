@@ -57,7 +57,11 @@ pub struct TableDBWithNames {
     created_by: UserName,
 }
 
-#[td_type::Dao(sql_table = "table_versions", partition_by = "table_id")]
+#[td_type::Dao(
+    sql_table = "table_versions",
+    partition_by = "table_id",
+    natural_order_by = "defined_on"
+)]
 #[td_type(builder(try_from = FunctionVersionDB, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct TableVersionDB {
@@ -83,7 +87,8 @@ pub struct TableVersionDB {
 #[td_type::Dao(
     sql_table = "table_versions__with_names",
     order_by = "function_param_pos",
-    partition_by = "table_id"
+    partition_by = "table_id",
+    natural_order_by = "defined_on"
 )]
 pub struct TableVersionDBWithNames {
     id: TableVersionId,

@@ -4,8 +4,8 @@
 
 use crate::types::dependency::DependencyVersionDBWithNames;
 use crate::types::parse::{
-    parse_collection, parse_email, parse_entity, parse_function, parse_role, parse_table,
-    parse_user, DATA_LOCATION_REGEX,
+    parse_collection, parse_email, parse_entity, parse_execution, parse_function, parse_role,
+    parse_table, parse_user, DATA_LOCATION_REGEX,
 };
 use crate::types::table::TableVersionDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
@@ -30,7 +30,7 @@ pub struct AtTime;
 #[td_type::typed(id)]
 pub struct BundleId;
 
-#[td_type::typed(id, try_from=EntityId)]
+#[td_type::typed(id, try_from = EntityId)]
 pub struct CollectionId;
 
 #[td_type::typed(string(parser = parse_collection))]
@@ -39,14 +39,17 @@ pub struct CollectionName;
 #[td_type::typed(id_name(id = CollectionId, name = CollectionName))]
 pub struct CollectionIdName;
 
-#[td_type::typed(string(regex = DATA_LOCATION_REGEX))]
+#[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = ""))]
 pub struct DataLocation;
 
-#[td_type::typed(string(min_len = 0, max_len = 200))]
+#[td_type::typed(string(min_len = 0, max_len = 200, default = ""))]
 pub struct Description;
 
 #[td_type::typed(id)]
 pub struct DependencyId;
+
+#[td_type::typed(bool)]
+pub struct SelfDependency;
 
 #[td_type::typed(i16(min = 0, max = 200))]
 pub struct DependencyPos;
@@ -79,7 +82,36 @@ pub struct EntityId;
 pub struct EntityName;
 
 #[td_type::typed(id)]
-pub struct ExecutionPlanId;
+pub struct ExecutionId;
+
+#[td_type::typed(string(parser = parse_execution))]
+pub struct ExecutionName;
+
+#[td_type::typed(string(regex = ExecutionStatus::REGEX))]
+pub struct ExecutionStatus;
+
+impl ExecutionStatus {
+    const REGEX: &'static str = "^[SRDI]$";
+
+    pub fn scheduled() -> Self {
+        Self("S".to_string())
+    }
+
+    pub fn running() -> Self {
+        Self("R".to_string())
+    }
+
+    pub fn done() -> Self {
+        Self("D".to_string())
+    }
+
+    pub fn incomplete() -> Self {
+        Self("I".to_string())
+    }
+}
+
+#[td_type::typed(bool(default = false))]
+pub struct HasData;
 
 #[td_type::typed(bool(default = false))]
 pub struct Fixed;
@@ -348,7 +380,7 @@ impl SessionStatus {
 #[td_type::typed(string(min_len = 0, max_len = 4096))]
 pub struct Snippet;
 
-#[td_type::typed(string(min_len = 1, max_len = 10))]
+#[td_type::typed(string(min_len = 1, max_len = 10, default = "V1"))]
 pub struct StorageVersion;
 
 #[td_type::typed(composed(inner = VersionedTableRef))]
@@ -371,10 +403,10 @@ impl TryFrom<&DependencyVersionDBWithNames> for TableDependency {
 #[td_type::typed(id)]
 pub struct TableDataId;
 
-#[td_type::typed(string(regex = TableDataVersionStatus::REGEX))]
-pub struct TableDataVersionStatus;
+#[td_type::typed(string(regex = TransactionStatus::REGEX))]
+pub struct TransactionStatus;
 
-impl TableDataVersionStatus {
+impl TransactionStatus {
     const REGEX: &'static str = "^[SRDEFHCP]$";
 
     pub fn scheduled() -> Self {
@@ -410,8 +442,40 @@ impl TableDataVersionStatus {
     }
 }
 
+pub type FunctionRunStatus = TransactionStatus;
+
+#[td_type::typed(id)]
+pub struct FunctionRunId;
+
+#[td_type::typed(id)]
+pub struct ConditionId;
+
+#[td_type::typed(string(regex = ConditionStatus::REGEX))]
+pub struct ConditionStatus;
+
+impl ConditionStatus {
+    const REGEX: &'static str = "^[DIC]$";
+
+    pub fn done() -> Self {
+        Self("D".to_string())
+    }
+
+    pub fn incomplete() -> Self {
+        Self("I".to_string())
+    }
+
+    pub fn canceled() -> Self {
+        Self("C".to_string())
+    }
+}
+
+pub type TableDataVersionStatus = ConditionStatus;
+
 #[td_type::typed(id)]
 pub struct TableDataVersionId;
+
+#[td_type::typed(string)]
+pub struct Dot;
 
 #[td_type::typed(id)]
 pub struct TableId;
@@ -480,13 +544,37 @@ pub struct TokenType;
 #[td_type::typed(id)]
 pub struct TransactionId;
 
+#[td_type::typed(string(default = "F"))]
+pub struct TransactionByStr;
+
+#[td_type::typed(string)]
+pub struct TransactionKey;
+
+#[td_type::typed(string(regex = Trigger::REGEX))]
+pub struct Trigger;
+
+impl Trigger {
+    const REGEX: &'static str = "^[MD]$";
+
+    pub fn manual() -> Self {
+        Self("M".to_string())
+    }
+
+    pub fn dependency() -> Self {
+        Self("D".to_string())
+    }
+}
+
 #[td_type::typed(timestamp)]
 pub struct TriggeredOn;
 
 #[td_type::typed(id)]
+pub struct TriggeredById;
+
+#[td_type::typed(id)]
 pub struct TriggerId;
 
-#[td_type::typed(string(regex = TriggerStatus::REGEX))]
+#[td_type::typed(string(regex = TriggerStatus::REGEX, default = "A"))]
 pub struct TriggerStatus;
 
 impl TriggerStatus {
