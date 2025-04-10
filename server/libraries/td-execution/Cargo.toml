@@ -46,33 +46,36 @@ ignored = ["openssl", "strum_macros", "td-build", "td-execution", "td-schema", "
 
 ## Libraries
 
-td-common = { workspace = true }
+ta-execution = { workspace = true }
+td-database = { workspace = true }
+te-execution = { workspace = true }
 td-error = { workspace = true }
-td-transaction = { workspace = true }
+td-objects = { workspace = true }
+td-test = { workspace = true }
 
 # External dependencies
 
 async-trait = { workspace = true }
-chrono = { workspace = true, features = ["serde"] }
 derive_builder = { workspace = true }
 futures = { workspace = true }
 getset = { workspace = true }
 itertools = { workspace = true }
+lazy_static = { workspace = true }
 petgraph = { workspace = true }
-regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 sqlx = { workspace = true }
+strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 url = { workspace = true, features = ["serde"] }
 
+# Development dependencies
+
 [dev-dependencies]
-td-database = { workspace = true, features = ["td-test"] }
-td-execution = { workspace = true, features = ["td-test"] }
+ta-execution = { workspace = true, features = ["td-test"] }
 td-objects = { workspace = true, features = ["td-test"] }
-td-schema = { workspace = true, features = ["td-test"] }
+td-security = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

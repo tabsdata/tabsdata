@@ -64,10 +64,11 @@ mod tests {
     use super::*;
     use td_common::id;
     use td_common::uri::{Version, Versions};
-    use td_execution::dataset::{
-        AbsoluteVersion, AbsoluteVersions, Dataset, RelativeVersions, ResolvedVersion, TdVersions,
-    };
     use td_execution::execution_planner::{ExecutionPlan, ExecutionTemplate};
+    use td_execution::function::{
+        AbsoluteVersion, AbsoluteVersions, FunctionNode, GraphEdge, RelativeVersions,
+        ResolvedVersion,
+    };
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_dataset::seed_dataset;
@@ -147,31 +148,31 @@ mod tests {
         .await;
 
         // Create and serialize plan.
-        let dataset_0 = Dataset::new(&collection_id.to_string(), &d0.to_string());
-        let dataset_1 = Dataset::new(&collection_id.to_string(), &d1.to_string());
-        let dataset_2 = Dataset::new(&collection_id.to_string(), &d2.to_string());
-        let version_0_1 = RelativeVersions::Plan(TdVersions::from_table(
+        let dataset_0 = FunctionNode::new(&collection_id.to_string(), &d0.to_string());
+        let dataset_1 = FunctionNode::new(&collection_id.to_string(), &d1.to_string());
+        let dataset_2 = FunctionNode::new(&collection_id.to_string(), &d2.to_string());
+        let version_0_1 = RelativeVersions::Plan(GraphEdge::from_table(
             Versions::Single(Version::Head(0)),
             "t01".to_string(),
             0,
         ));
-        let version_0_2 = RelativeVersions::Plan(TdVersions::from_table(
+        let version_0_2 = RelativeVersions::Plan(GraphEdge::from_table(
             Versions::Single(Version::Head(0)),
             "t02".to_string(),
             0,
         ));
-        let version_1 = RelativeVersions::Plan(TdVersions::from_table(
+        let version_1 = RelativeVersions::Plan(GraphEdge::from_table(
             Versions::Single(Version::Head(0)),
             "t1".to_string(),
             0,
         ));
 
         let mut template = ExecutionTemplate::with_trigger(&dataset_0);
-        template.add_dependency_trigger(&dataset_1);
-        template.add_dependency_trigger(&dataset_2);
-        template.add_data_requirement(&dataset_1, &dataset_0, version_0_1.clone());
-        template.add_data_requirement(&dataset_1, &dataset_0, version_0_2.clone());
-        template.add_data_requirement(&dataset_2, &dataset_1, version_1.clone());
+        template.add_trigger(&dataset_1);
+        template.add_trigger(&dataset_2);
+        template.add_dependency(&dataset_1, &dataset_0, version_0_1.clone());
+        template.add_dependency(&dataset_1, &dataset_0, version_0_2.clone());
+        template.add_dependency(&dataset_2, &dataset_1, version_1.clone());
         template.add_trigger_requirement(&dataset_1, &dataset_0);
         template.add_trigger_requirement(&dataset_2, &dataset_1);
 
@@ -180,7 +181,7 @@ mod tests {
                 let resolved = ResolvedVersion::new(
                     AbsoluteVersions::new(vec![AbsoluteVersion::new(
                         id::id(),
-                        TdVersions::Table {
+                        GraphEdge::Table {
                             versions: Some(id::id()),
                             table: id::id(),
                             pos: 0,

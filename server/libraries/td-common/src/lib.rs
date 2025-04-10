@@ -5,12 +5,10 @@
 pub mod absolute_path;
 pub mod cli;
 pub mod config;
-pub mod dataset;
 pub mod env;
 pub mod execution_status;
 pub mod files;
 pub mod id;
-pub mod index_map;
 pub mod logging;
 pub mod manifest;
 pub mod monitor;

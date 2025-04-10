@@ -125,7 +125,10 @@ td-security = { workspace = true }
 td-services = { workspace = true }
 td-storage = { workspace = true }
 td-tower = { workspace = true }
-td-transaction = { workspace = true }
+
+## Extensions
+
+te-execution = { workspace = true }
 
 # External dependencies
 

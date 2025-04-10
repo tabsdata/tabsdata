@@ -37,6 +37,7 @@ members = [
     "server/libraries/td-database",
     "server/libraries/td-error",
     "server/libraries/td-execution",
+    "server/libraries/ta-execution",
     "server/libraries/ta-tableframe",
     "server/libraries/td-objects",
     "server/libraries/td-python",
@@ -46,8 +47,7 @@ members = [
     "server/libraries/td-storage",
     "server/libraries/td-test",
     "server/libraries/td-tower",
-    "server/libraries/td-transaction",
-    "extensions/rust/te-transaction",
+    "extensions/rust/te-execution",
     "extensions/rust/te-tableframe",
     "server/binaries/td-server",
 ]
@@ -174,6 +174,9 @@ path = "server/libraries/td-execution"
 [workspace.dependencies.te-tableframe]
 path = "extensions/rust/te-tableframe"
 
+[workspace.dependencies.ta-execution]
+path = "server/libraries/ta-execution"
+
 [workspace.dependencies.ta-tableframe]
 path = "server/libraries/ta-tableframe"
 
@@ -204,11 +207,8 @@ path = "server/libraries/td-test"
 [workspace.dependencies.td-tower]
 path = "server/libraries/td-tower"
 
-[workspace.dependencies.td-transaction]
-path = "server/libraries/td-transaction"
-
-[workspace.dependencies.te-transaction]
-path = "extensions/rust/te-transaction"
+[workspace.dependencies.te-execution]
+path = "extensions/rust/te-execution"
 
 # External dependencies
 
