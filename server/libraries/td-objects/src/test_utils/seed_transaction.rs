@@ -3,12 +3,12 @@
 //
 
 use crate::datasets::dao::DsTransactionBuilder;
+use crate::types::basic::TransactionByStr;
 use td_common::execution_status::TransactionStatus;
 use td_common::id;
 use td_common::id::Id;
 use td_common::time::UniqueUtc;
 use td_database::sql::DbPool;
-use td_transaction::TransactionBy;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn seed_transaction(
@@ -32,7 +32,7 @@ pub async fn seed_transaction(
     let transaction = DsTransactionBuilder::default()
         .id(transaction_id.to_string())
         .execution_plan_id(execution_plan_id.to_string())
-        .transaction_by(TransactionBy::default())
+        .transaction_by(TransactionByStr::try_from("F").unwrap()) // TODO
         .transaction_key(execution_plan_id.to_string())
         .triggered_by_id(triggered_by_id)
         .triggered_on(now)
@@ -89,9 +89,9 @@ mod tests {
     use crate::test_utils::seed_dataset::seed_dataset;
     use crate::test_utils::seed_execution_plan::seed_execution_plan;
     use crate::test_utils::seed_transaction::seed_transaction;
+    use crate::types::basic::TransactionByStr;
     use td_common::execution_status::TransactionStatus;
     use td_common::time::UniqueUtc;
-    use td_transaction::TransactionBy;
 
     #[tokio::test]
     async fn test_seed_transaction() {
@@ -137,7 +137,7 @@ mod tests {
             transaction.execution_plan_id(),
             &execution_plan_id.to_string()
         );
-        assert_eq!(transaction.transaction_by(), &TransactionBy::default());
+        assert_eq!(transaction.transaction_by(), &TransactionByStr::default());
         assert_eq!(
             transaction.triggered_by_id(),
             td_database::test_utils::user_role_ids(&db, td_security::ADMIN_USER)

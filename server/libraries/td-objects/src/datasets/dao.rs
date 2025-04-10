@@ -7,6 +7,7 @@
 use crate::tower_service::extractor::{
     DataVersionIdProvider, ExecutionPlanIdProvider, FunctionIdProvider, TransactionIdProvider,
 };
+use crate::types::basic::TransactionByStr;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use getset::Getters;
@@ -14,7 +15,6 @@ use sqlx::FromRow;
 use td_common::execution_status::{DataVersionStatus, ExecutionPlanStatus, TransactionStatus};
 use td_database::sql::DbData;
 use td_storage::location::StorageLocation;
-use td_transaction::TransactionBy;
 
 #[derive(Debug, Clone, PartialEq, Getters, Builder, FromRow)]
 #[builder(setter(into))]
@@ -362,7 +362,7 @@ pub struct DsTransaction {
     id: String,
     execution_plan_id: String,
     #[sqlx(try_from = "String")]
-    transaction_by: TransactionBy,
+    transaction_by: TransactionByStr,
     transaction_key: String,
     triggered_by_id: String,
     triggered_on: DateTime<Utc>,

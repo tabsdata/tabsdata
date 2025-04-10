@@ -57,7 +57,6 @@ td-security = { workspace = true }
 td-storage = { workspace = true }
 td-test = { workspace = true }
 td-tower = { workspace = true }
-td-transaction = { workspace = true }
 
 # External dependencies
 
