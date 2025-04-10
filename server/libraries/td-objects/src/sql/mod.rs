@@ -10,7 +10,7 @@
 // *  the `Queries` classes of function/dependency/table/trigger modules could be
 //    refactored into a Generic component providing that SQL building for the
 //    'current' and 'at_time' methods.
-mod cte;
+pub mod cte;
 pub mod recursive;
 
 use crate::crudl::ListParams;

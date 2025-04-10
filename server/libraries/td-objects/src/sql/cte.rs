@@ -4,8 +4,8 @@
 
 use crate::gen_where_clause;
 use crate::sql::{Queries, QueryError};
-use crate::types::basic::AtTime;
-use crate::types::{DataAccessObject, PartitionBy, SqlEntity};
+use crate::types::table_ref::{Version, Versions};
+use crate::types::{DataAccessObject, NaturalOrder, PartitionBy, SqlEntity, Status};
 use std::ops::Deref;
 
 #[cfg(feature = "td-test")]
@@ -17,17 +17,26 @@ const LATEST_VERSIONS_CTE: &str = "latest_versions";
 
 /// Common table expressions (CTEs) used in queries to select versioned views of objects.
 pub trait CteQueries<'a, E> {
-    #[allow(dead_code)]
-    fn select_active_versions_at<D>(
+    fn select_versions_at<D>(
         &self,
-        defined_on: Option<&'a AtTime>,
+        natural_order_by: Option<&'a D::NaturalOrder>,
+        status: Option<&'a [&'a D::Status]>,
         e: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
-        D: DataAccessObject + PartitionBy;
+        D: DataAccessObject + PartitionBy + NaturalOrder + Status;
+
+    fn find_versions_at<D>(
+        &self,
+        natural_order_by: Option<&'a D::NaturalOrder>,
+        status: Option<&'a [&'a D::Status]>,
+        e: &'a [E],
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+    where
+        D: DataAccessObject + PartitionBy + NaturalOrder + Status;
 }
 
-macro_rules! impl_select_active_versions_at {
+macro_rules! impl_select_versions_at {
     (
         [$($E:ident),*]
     ) => {
@@ -37,19 +46,21 @@ macro_rules! impl_select_active_versions_at {
             Q: Deref<Target = dyn Queries>,
             $($E: SqlEntity),*
         {
-            fn select_active_versions_at<D>(
+            fn select_versions_at<D>(
                 &self,
-                defined_on: Option<&'a AtTime>,
+                natural_order_by: Option<&'a D::NaturalOrder>,
+                status: Option<&'a [&'a D::Status]>,
                 ($($E),*): &'a ($(&'a $E),*),
             ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
             where
-                D: DataAccessObject + PartitionBy,
+                D: DataAccessObject + PartitionBy + NaturalOrder + Status,
             {
                 let mut query_builder = sqlx::QueryBuilder::default();
 
                 // Build CTEs to find needed data
                 query_builder.push("WITH ");
-                versions_defined_on::<D>(LATEST_VERSIONS_CTE, &mut query_builder, defined_on);
+                ranked_versions_at::<D>(LATEST_VERSIONS_CTE, &mut query_builder, natural_order_by);
+                select_ranked_versions_at::<D>(LATEST_VERSIONS_CTE, &mut query_builder, status);
 
                 // Build query to select the data from the generated CTEs
                 let columns = D::fields();
@@ -65,31 +76,68 @@ macro_rules! impl_select_active_versions_at {
                 query_builder.push(" ");
                 query_builder.push(D::order_by());
 
-                trace!("select_active_versions: sql: {}", query_builder.sql());
+                trace!("select_versions: sql: {}", query_builder.sql());
+                Ok(query_builder)
+            }
+
+            fn find_versions_at<D>(
+                &self,
+                natural_order_by: Option<&'a D::NaturalOrder>,
+                status: Option<&'a [&'a D::Status]>,
+                e: &'a [ ($(&'a $E),*) ],
+            ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+            where
+                D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+            {
+                let mut query_builder = sqlx::QueryBuilder::default();
+
+                // Build CTEs to find needed data
+                query_builder.push("WITH ");
+                ranked_versions_at::<D>(LATEST_VERSIONS_CTE, &mut query_builder, natural_order_by);
+                select_ranked_versions_at::<D>(LATEST_VERSIONS_CTE, &mut query_builder, status);
+
+                // Build query to select the data from the generated CTEs
+                let columns = D::fields();
+                let select = format!("SELECT {} FROM {}", columns.join(", "), LATEST_VERSIONS_CTE);
+
+                // And add it to the builder
+                query_builder.push(select);
+
+                // Where clause
+                if !e.is_empty() {
+                    gen_where_clause!(query_builder, D, e: [ $($E),* ]);
+                }
+
+                // And last, order by
+                query_builder.push(" ");
+                query_builder.push(D::order_by());
+
+                trace!("find_active_versions: sql: {}", query_builder.sql());
                 Ok(query_builder)
             }
         }
     };
 }
 
-all_the_tuples!(impl_select_active_versions_at);
+all_the_tuples!(impl_select_versions_at);
 
-/// CTE to find the latest versions of objects at a given time.
+/// CTEs to find the latest versions of objects at a given time.
 ///
 /// It has to be a Versions table with:
 /// - Partitioned by a field P, to find the latest versions of each P at the given time.
 ///   With this, we can group by the versions of the same object.
-/// - defined_on (TODO: make it configurable)
-/// - status (A being active, which are the versions want to find) (TODO: make it configurable)
-pub(crate) fn versions_defined_on<'a, D>(
+/// - Natural order by a field O, to sort the results by that order.
+/// - Status field S, to filter the results by that status.
+pub(crate) fn ranked_versions_at<'a, D>(
     cte_table_prefix: &str,
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    defined_on: Option<&'a AtTime>,
+    natural_order_by: Option<&'a D::NaturalOrder>,
 ) where
-    D: DataAccessObject + PartitionBy,
+    D: DataAccessObject + PartitionBy + NaturalOrder + Status,
 {
     let table = D::sql_table();
     let partition_field = D::partition_by();
+    let natural_order_field = D::natural_order_by();
 
     // Build CTEs containing ranked versions ordered by defined_on DESC
     query_builder.push(format!("{cte_table_prefix}_ranked AS ("));
@@ -97,18 +145,26 @@ pub(crate) fn versions_defined_on<'a, D>(
         r#"
             SELECT
                 v.*,
-                ROW_NUMBER() OVER (PARTITION BY v.{partition_field} ORDER BY v.defined_on DESC) AS rn
+                ROW_NUMBER() OVER (PARTITION BY v.{partition_field} ORDER BY v.{natural_order_field} DESC) AS rn
             FROM
                 {table} v
         "#
     ));
-    if let Some(defined_on) = defined_on {
-        query_builder.push("WHERE v.defined_on <= ");
-        query_builder.push_bind(defined_on);
+    if let Some(natural_order_by) = natural_order_by {
+        query_builder.push(format!("WHERE v.{natural_order_field} <= "));
+        query_builder.push_bind(natural_order_by.value());
     }
     query_builder.push(" ),");
+}
 
-    // Build CTEs containing only the latest versions, which are the ones with rn = 1, and status = 'A'
+pub(crate) fn select_ranked_versions_at<'a, D>(
+    cte_table_prefix: &str,
+    query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    status: Option<&'a [&'a D::Status]>,
+) where
+    D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+{
+    // Build CTEs containing only the latest versions, which are the ones with rn = 1
     query_builder.push(format!("{cte_table_prefix} AS ("));
     query_builder.push(format!(
         r#"
@@ -117,10 +173,219 @@ pub(crate) fn versions_defined_on<'a, D>(
             FROM
                 {cte_table_prefix}_ranked rv
             WHERE
-                rv.rn = 1 AND rv.status = 'A'
+                rv.rn = 1
         "#
     ));
+
+    // With the given statuses needed
+    status_where::<D>(query_builder, status);
+
     query_builder.push(")");
+}
+
+/// Common table expressions (CTEs) used in queries to select versioned views of objects.
+pub trait TableQueries<'a, E> {
+    fn select_table_data_versions_at<D>(
+        &self,
+        natural_order_by: Option<&'a D::NaturalOrder>,
+        status: Option<&'a [&'a D::Status]>,
+        table_id: &'a D::PartitionBy,
+        versions: &'a Versions,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+    where
+        D: DataAccessObject + PartitionBy + NaturalOrder + Status;
+
+    fn find_relative_table_data_version<D>(
+        &self,
+        natural_order_by: Option<&'a D::NaturalOrder>,
+        status: Option<&'a [&'a D::Status]>,
+        table_id: &'a D::PartitionBy,
+        versions: &'a Versions,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+    where
+        D: DataAccessObject + PartitionBy + NaturalOrder + Status;
+}
+
+impl<'a, Q> TableQueries<'a, ()> for Q
+where
+    Q: Deref<Target = dyn Queries>,
+{
+    fn select_table_data_versions_at<D>(
+        &self,
+        natural_order_by: Option<&'a D::NaturalOrder>,
+        status: Option<&'a [&'a D::Status]>,
+        table_id: &'a D::PartitionBy,
+        versions: &'a Versions,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+    where
+        D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+    {
+        let mut query_builder = sqlx::QueryBuilder::default();
+
+        query_builder.push("WITH ");
+        ranked_versions_at::<D>(LATEST_VERSIONS_CTE, &mut query_builder, natural_order_by);
+        select_table_data_versions_at::<D>(
+            LATEST_VERSIONS_CTE,
+            &mut query_builder,
+            status,
+            table_id,
+            versions,
+        );
+
+        let columns = D::fields();
+        let select = format!("SELECT {} FROM {}", columns.join(", "), LATEST_VERSIONS_CTE);
+        query_builder.push(select);
+
+        trace!(
+            "select_table_data_versions_at: sql: {}",
+            query_builder.sql()
+        );
+        Ok(query_builder)
+    }
+
+    fn find_relative_table_data_version<D>(
+        &self,
+        natural_order_by: Option<&'a D::NaturalOrder>,
+        status: Option<&'a [&'a D::Status]>,
+        table_id: &'a D::PartitionBy,
+        versions: &'a Versions,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+    where
+        D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+    {
+        let mut query_builder = sqlx::QueryBuilder::default();
+
+        query_builder.push("WITH ");
+        ranked_versions_at::<D>(LATEST_VERSIONS_CTE, &mut query_builder, natural_order_by);
+        select_table_data_versions_at::<D>(
+            LATEST_VERSIONS_CTE,
+            &mut query_builder,
+            status,
+            table_id,
+            versions,
+        );
+
+        let select = format!("SELECT rn FROM {}", LATEST_VERSIONS_CTE);
+        query_builder.push(select);
+
+        trace!(
+            "find_relative_table_data_version: sql: {}",
+            query_builder.sql()
+        );
+        Ok(query_builder)
+    }
+}
+
+/// CTE to find the latest versions of table data versions at a given time.
+///
+/// CARE: Only allowed D is TableDataVersionDB (or its variants, WithNames, etc.).
+fn select_table_data_versions_at<'a, D>(
+    cte_table_prefix: &str,
+    query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    status: Option<&'a [&'a D::Status]>,
+    table_id: &'a D::PartitionBy,
+    versions: &'a Versions,
+) where
+    D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+{
+    let table_id_field = D::partition_by();
+
+    query_builder.push(format!("{cte_table_prefix} AS ("));
+    query_builder.push(format!(
+        r#"
+            SELECT
+                rv.*
+            FROM
+                {cte_table_prefix}_ranked rv
+        "#
+    ));
+
+    query_builder.push(" WHERE ");
+    query_builder.push(format!("rv.{table_id_field} = "));
+    query_builder.push_bind(table_id.value());
+
+    // Build the where clause for the versions
+    match versions {
+        Versions::None => {
+            query_builder.push(" AND rv.rn = 1 ");
+        }
+        Versions::Single(version) => match version {
+            Version::Fixed(id) => {
+                query_builder.push(" AND rv.id = ");
+                query_builder.push_bind(id);
+            }
+            Version::Head(back) => {
+                query_builder.push(" AND rv.rn = ");
+                query_builder.push_bind((-back + 1) as i64);
+            }
+        },
+        Versions::List(versions) => {
+            query_builder.push(" AND ");
+            let mut separated = query_builder.separated(" OR ");
+            versions.iter().for_each(|version| match version {
+                Version::Fixed(id) => {
+                    separated.push(" rv.id = ");
+                    separated.push_bind_unseparated(id);
+                }
+                Version::Head(back) => {
+                    // We are not really using this, as we do not know which of these is
+                    // present or not and we actually need it.
+                    separated.push(" rv.rn = ");
+                    separated.push_bind_unseparated((-back + 1) as i64);
+                }
+            });
+        }
+        Versions::Range(from, to) => {
+            // Ranges are always older to newer, otherwise vec will just be empty
+            match from {
+                Version::Fixed(id) => {
+                    query_builder.push(" AND rv.rn >= ");
+                    query_builder.push(format!(
+                        "(SELECT rn FROM {cte_table_prefix}_ranked WHERE id = "
+                    ));
+                    query_builder.push_bind(id);
+                    query_builder.push(" ) ");
+                }
+                Version::Head(back) => {
+                    query_builder.push(" AND rv.rn >= ");
+                    query_builder.push_bind((-back + 1) as i64);
+                }
+            }
+            match to {
+                Version::Fixed(id) => {
+                    query_builder.push(" AND rv.rn <= ");
+                    query_builder.push(format!(
+                        "(SELECT rn FROM {cte_table_prefix}_ranked WHERE id = "
+                    ));
+                    query_builder.push_bind(id);
+                    query_builder.push(" ) ");
+                }
+                Version::Head(back) => {
+                    query_builder.push(" AND rv.rn <= ");
+                    query_builder.push_bind((-back + 1) as i64);
+                }
+            }
+        }
+    }
+
+    status_where::<D>(query_builder, status);
+    query_builder.push(")");
+}
+
+fn status_where<'a, D: DataAccessObject + Status>(
+    query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    status: Option<&'a [&'a D::Status]>,
+) {
+    let status_field = D::status_by();
+    if let Some(status) = status {
+        query_builder.push(" AND (");
+        let mut separated = query_builder.separated(" OR ");
+        for status in status {
+            separated.push(format!("rv.{status_field} = "));
+            separated.push_bind_unseparated(status.value());
+        }
+        query_builder.push(")");
+    }
 }
 
 #[cfg(test)]
@@ -128,6 +393,9 @@ mod tests {
     use super::*;
     use crate::sql::cte::CteQueries;
     use crate::sql::{DaoQueries, Insert};
+    use crate::types::basic::{
+        AtTime, DependencyStatus, FunctionStatus, TableStatus, TriggerStatus,
+    };
     use crate::types::dependency::{DependencyVersionDB, DependencyVersionDBWithNames};
     use crate::types::function::{FunctionVersionDB, FunctionVersionDBWithNames};
     use crate::types::table::{TableVersionDB, TableVersionDBWithNames};
@@ -149,7 +417,11 @@ mod tests {
     #[td_type::typed(string)]
     struct TestStatus;
 
-    #[Dao(sql_table = "test_table", partition_by = "partition_id")]
+    #[Dao(
+        sql_table = "test_table",
+        partition_by = "partition_id",
+        natural_order_by = "defined_on"
+    )]
     struct TestDao {
         id: TestId,
         partition_id: TestPartition,
@@ -205,7 +477,9 @@ mod tests {
     #[test]
     fn test_versions_defined_on_none() {
         let mut query_builder = sqlx::QueryBuilder::default();
-        versions_defined_on::<TestDao>("test", &mut query_builder, None);
+        ranked_versions_at::<TestDao>("test", &mut query_builder, None);
+        let status = [&TestStatus::try_from("A").unwrap()];
+        select_ranked_versions_at::<TestDao>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
 
         let expected = "test_ranked AS (\
@@ -220,8 +494,8 @@ mod tests {
         \n            FROM\
         \n                test_ranked rv\
         \n            WHERE\
-        \n                rv.rn = 1 AND rv.status = 'A'\
-        \n        )";
+        \n                rv.rn = 1\
+        \n         AND (rv.status = ?))";
         assert_eq!(query.sql(), expected);
     }
 
@@ -229,10 +503,12 @@ mod tests {
     async fn test_versions_defined_on_some() {
         let mut query_builder = sqlx::QueryBuilder::default();
         let defined_on = &AtTime::now().await;
-        versions_defined_on::<TestDao>("test", &mut query_builder, Some(defined_on));
+        ranked_versions_at::<TestDao>("test", &mut query_builder, Some(defined_on));
+        let status = [&TestStatus::try_from("A").unwrap()];
+        select_ranked_versions_at::<TestDao>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
 
-        let expected =   "test_ranked AS (\
+        let expected = "test_ranked AS (\
         \n            SELECT\
         \n                v.*,\
         \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC) AS rn\
@@ -244,21 +520,29 @@ mod tests {
         \n            FROM\
         \n                test_ranked rv\
         \n            WHERE\
-        \n                rv.rn = 1 AND rv.status = 'A'\
-        \n        )";
+        \n                rv.rn = 1\
+        \n         AND (rv.status = ?))";
         assert_eq!(query.sql(), expected);
     }
 
     #[test]
     fn test_versions_defined_on_dao_partition_by() {
         let mut query_builder = sqlx::QueryBuilder::default();
-        versions_defined_on::<FunctionVersionDB>("test", &mut query_builder, None);
+        ranked_versions_at::<FunctionVersionDB>("test", &mut query_builder, None);
+        let status = [&FunctionStatus::active()];
+        select_ranked_versions_at::<FunctionVersionDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
         assert!(query.sql().contains(FunctionVersionDB::sql_table()));
         assert!(query.sql().contains(FunctionVersionDB::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        versions_defined_on::<FunctionVersionDBWithNames>("test", &mut query_builder, None);
+        ranked_versions_at::<FunctionVersionDBWithNames>("test", &mut query_builder, None);
+        let status = [&FunctionStatus::active()];
+        select_ranked_versions_at::<FunctionVersionDBWithNames>(
+            "test",
+            &mut query_builder,
+            Some(&status),
+        );
         let query = query_builder.build();
         assert!(query
             .sql()
@@ -268,13 +552,21 @@ mod tests {
             .contains(FunctionVersionDBWithNames::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        versions_defined_on::<TableVersionDB>("test", &mut query_builder, None);
+        ranked_versions_at::<TableVersionDB>("test", &mut query_builder, None);
+        let status = [&TableStatus::active()];
+        select_ranked_versions_at::<TableVersionDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
         assert!(query.sql().contains(TableVersionDB::sql_table()));
         assert!(query.sql().contains(TableVersionDB::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        versions_defined_on::<TableVersionDBWithNames>("test", &mut query_builder, None);
+        ranked_versions_at::<TableVersionDBWithNames>("test", &mut query_builder, None);
+        let status = [&TableStatus::active()];
+        select_ranked_versions_at::<TableVersionDBWithNames>(
+            "test",
+            &mut query_builder,
+            Some(&status),
+        );
         let query = query_builder.build();
         assert!(query.sql().contains(TableVersionDBWithNames::sql_table()));
         assert!(query
@@ -282,13 +574,21 @@ mod tests {
             .contains(TableVersionDBWithNames::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        versions_defined_on::<DependencyVersionDB>("test", &mut query_builder, None);
+        ranked_versions_at::<DependencyVersionDB>("test", &mut query_builder, None);
+        let status = [&DependencyStatus::active()];
+        select_ranked_versions_at::<DependencyVersionDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
         assert!(query.sql().contains(DependencyVersionDB::sql_table()));
         assert!(query.sql().contains(DependencyVersionDB::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        versions_defined_on::<DependencyVersionDBWithNames>("test", &mut query_builder, None);
+        ranked_versions_at::<DependencyVersionDBWithNames>("test", &mut query_builder, None);
+        let status = [&DependencyStatus::active()];
+        select_ranked_versions_at::<DependencyVersionDBWithNames>(
+            "test",
+            &mut query_builder,
+            Some(&status),
+        );
         let query = query_builder.build();
         assert!(query
             .sql()
@@ -298,13 +598,21 @@ mod tests {
             .contains(DependencyVersionDBWithNames::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        versions_defined_on::<TriggerVersionDB>("test", &mut query_builder, None);
+        ranked_versions_at::<TriggerVersionDB>("test", &mut query_builder, None);
+        let status = [&TriggerStatus::active()];
+        select_ranked_versions_at::<TriggerVersionDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
         assert!(query.sql().contains(TriggerVersionDB::sql_table()));
         assert!(query.sql().contains(TriggerVersionDB::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        versions_defined_on::<TriggerVersionDBWithNames>("test", &mut query_builder, None);
+        ranked_versions_at::<TriggerVersionDBWithNames>("test", &mut query_builder, None);
+        let status = [&TriggerStatus::active()];
+        select_ranked_versions_at::<TriggerVersionDBWithNames>(
+            "test",
+            &mut query_builder,
+            Some(&status),
+        );
         let query = query_builder.build();
         assert!(query.sql().contains(TriggerVersionDBWithNames::sql_table()));
         assert!(query
@@ -313,9 +621,9 @@ mod tests {
     }
 
     #[test]
-    fn test_select_active_versions_at_none_sql() {
+    fn test_select_versions_at_none_sql() {
         let mut query_builder = TEST_QUERIES
-            .select_active_versions_at::<TestDao>(None, &())
+            .select_versions_at::<TestDao>(None, None, &())
             .unwrap();
         let query = query_builder.build();
 
@@ -331,17 +639,16 @@ mod tests {
         \n            FROM\
         \n                latest_versions_ranked rv\
         \n            WHERE\
-        \n                rv.rn = 1 AND rv.status = 'A'\
-        \n        )\
-        SELECT id, partition_id, status, defined_on FROM latest_versions ORDER BY 1 DESC";
+        \n                rv.rn = 1\
+        \n        )SELECT id, partition_id, status, defined_on FROM latest_versions ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
 
     #[tokio::test]
-    async fn test_select_active_versions_at_defined_on_sql() {
+    async fn test_select_versions_at_defined_on_sql() {
         let defined_on = &AtTime::now().await;
         let mut query_builder = TEST_QUERIES
-            .select_active_versions_at::<TestDao>(Some(defined_on), &())
+            .select_versions_at::<TestDao>(Some(defined_on), None, &())
             .unwrap();
         let query = query_builder.build();
 
@@ -357,18 +664,17 @@ mod tests {
         \n            FROM\
         \n                latest_versions_ranked rv\
         \n            WHERE\
-        \n                rv.rn = 1 AND rv.status = 'A'\
-        \n        )\
-        SELECT id, partition_id, status, defined_on FROM latest_versions ORDER BY 1 DESC";
+        \n                rv.rn = 1\
+        \n        )SELECT id, partition_id, status, defined_on FROM latest_versions ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
 
     #[tokio::test]
-    async fn test_select_active_versions_at_defined_on_where_sql() {
+    async fn test_select_versions_at_defined_on_where_sql() {
         let defined_on = &AtTime::now().await;
         let by = &TestId::try_from("00000000000000000000000000").unwrap();
         let mut query_builder = TEST_QUERIES
-            .select_active_versions_at::<TestDao>(Some(defined_on), &(by))
+            .select_versions_at::<TestDao>(Some(defined_on), None, &(by))
             .unwrap();
         let query = query_builder.build();
 
@@ -384,16 +690,16 @@ mod tests {
         \n            FROM\
         \n                latest_versions_ranked rv\
         \n            WHERE\
-        \n                rv.rn = 1 AND rv.status = 'A'\
-        \n        )\
-        SELECT id, partition_id, status, defined_on FROM latest_versions WHERE id = ? ORDER BY 1 DESC";
+        \n                rv.rn = 1\
+        \n        )SELECT id, partition_id, status, defined_on FROM latest_versions WHERE id = ? ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
-    async fn test_select_active_versions_none_fetch_all(db: DbPool) {
+    async fn test_select_versions_none_fetch_all(db: DbPool) {
+        let status = &TestStatus::try_from("A").unwrap();
         let mut query_builder = TEST_QUERIES
-            .select_active_versions_at::<TestDao>(None, &())
+            .select_versions_at::<TestDao>(None, None, &(status))
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), 1);
@@ -401,29 +707,29 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
-    async fn test_select_active_versions_at_none_where_fetch_all(db: DbPool) {
+    async fn test_select_versions_at_none_where_fetch_all(db: DbPool) {
         // 00, no matches
         let by = &TestId::try_from("00000000000000000000000000").unwrap();
         let mut query_builder = TEST_QUERIES
-            .select_active_versions_at::<TestDao>(None, &(by))
+            .select_versions_at::<TestDao>(None, None, &(by))
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), 0);
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
-    async fn test_select_active_versions_at_defined_on_before_fetch_all(db: DbPool) {
+    async fn test_select_versions_at_defined_on_before_fetch_all(db: DbPool) {
         let mut query_builder = TEST_QUERIES
-            .select_active_versions_at::<TestDao>(Some(AT_BEFORE.deref()), &())
+            .select_versions_at::<TestDao>(Some(AT_BEFORE.deref()), None, &())
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), 0);
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
-    async fn test_select_active_versions_at_defined_on_04_08_fetch_all(db: DbPool) {
+    async fn test_select_versions_at_defined_on_04_08_fetch_all(db: DbPool) {
         let mut query_builder = TEST_QUERIES
-            .select_active_versions_at::<TestDao>(Some(AT_04_08.deref()), &())
+            .select_versions_at::<TestDao>(Some(AT_04_08.deref()), None, &())
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), 2);
@@ -433,7 +739,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
-    async fn test_select_active_versions_at_new_active(db: DbPool) -> Result<(), TdError> {
+    async fn test_select_versions_at_new_active(db: DbPool) -> Result<(), TdError> {
         let new = TestDaoBuilder::default()
             .id(TestId::try_from("0000000000000000000000000S")?)
             // Same partition ID as 04
@@ -453,7 +759,9 @@ mod tests {
             .unwrap();
 
         // At now, we get only the new one
-        let mut query_builder = TEST_QUERIES.select_active_versions_at::<TestDao>(None, &())?;
+        let status = &TestStatus::try_from("A")?;
+        let mut query_builder =
+            TEST_QUERIES.select_versions_at::<TestDao>(None, None, &(status))?;
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], new);
@@ -464,7 +772,8 @@ mod tests {
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
         )?;
-        let mut query_builder = TEST_QUERIES.select_active_versions_at::<TestDao>(Some(at), &())?;
+        let mut query_builder =
+            TEST_QUERIES.select_versions_at::<TestDao>(Some(at), None, &(status))?;
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], FIXTURE_DAOS[0]);
@@ -472,10 +781,10 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
-    async fn test_select_active_versions_at_defined_on_04_08_fetch_one(db: DbPool) {
+    async fn test_select_versions_at_defined_on_04_08_fetch_one(db: DbPool) {
         let by = &TestId::try_from("00000000000000000000000004").unwrap();
         let mut query_builder = TEST_QUERIES
-            .select_active_versions_at::<TestDao>(Some(AT_04_08.deref()), &(by))
+            .select_versions_at::<TestDao>(Some(AT_04_08.deref()), None, &(by))
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
         assert_eq!(result.len(), 1);
@@ -483,12 +792,12 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
-    async fn test_select_active_versions_at_types(db: DbPool) -> Result<(), TdError> {
+    async fn test_select_versions_at_types(db: DbPool) -> Result<(), TdError> {
         async fn test_query<D>(db: &DbPool) -> Result<(), TdError>
         where
-            D: DataAccessObject + PartitionBy,
+            D: DataAccessObject + PartitionBy + NaturalOrder + Status,
         {
-            let mut query_builder = TEST_QUERIES.select_active_versions_at::<D>(None, &())?;
+            let mut query_builder = TEST_QUERIES.select_versions_at::<D>(None, None, &())?;
             let _result: Vec<D> = query_builder.build_query_as().fetch_all(db).await.unwrap();
             Ok(())
         }
