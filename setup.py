@@ -3,6 +3,7 @@
 #
 
 import io
+import logging
 import os
 import platform
 import shutil
@@ -15,6 +16,9 @@ from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
 from setuptools.command.build import build as _build
 from setuptools.command.sdist import sdist as _sdist
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
+
+logger = logging.getLogger()
+logger.setLevel(logging.ERROR)
 
 
 # noinspection DuplicatedCode

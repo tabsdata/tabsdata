@@ -20,7 +20,7 @@ import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.utils.tableframe._common as td_common
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 def _new_col(

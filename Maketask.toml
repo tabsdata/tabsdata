@@ -1023,8 +1023,8 @@ cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
-    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
+    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
+    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
     ''']
 
 [tasks.package_py_tabsdata_salesforce]
@@ -1032,8 +1032,8 @@ cwd = "${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
-    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
+    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
+    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
     ''']
 
 [tasks.package_py_tabsdata_mongodb]
@@ -1041,8 +1041,8 @@ cwd = "${PROJECT_PY_TABSDATA_MONGODB_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
-    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
+    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
+    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
     ''']
 
 [tasks.assembly]
