@@ -8,6 +8,7 @@ description = "Task 'test' for Python projects"
 dependencies = ["set_mode_test_py"]
 run_task = [
     { name = [
+        "setup-test_py",
         "pre-test_py",
         "test_py_ta_features",
         "test_py_ta_tableframe",
@@ -15,9 +16,30 @@ run_task = [
         "test_py_tabsdata",
         "test_py_tabsdata_salesforce",
         "test_py_tabsdata_mongodb",
-        "post-test_py"
+        "post-test_py",
+        "cleanup-test_py",
     ] }
 ]
+
+[tasks.setup-test_py]
+category = "02 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--fail-fast-py"
+            info "⌛️ Fail-Fast enabled. Groups of Python tests will execute until some group has failures."
+            set_env TD_FAIL_FAST_PY true
+        else
+            set_env TD_FAIL_FAST_PY false
+        end
+    end
+    set_env TD_TESTS_CODE_PY 0
+    ''']
 
 [tasks.test_py_ta_features]
 category = "02 - Test"
@@ -40,8 +62,21 @@ script = [
         debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
-    if not eq ${exit_code} "5"
-        code = exit ${exit_code}
+
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+        if not ${TD_FAIL_FAST_PY}
+            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+            set_env TD_TESTS_CODE_PY ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
     end
     ''']
 
@@ -66,8 +101,20 @@ script = [
         debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
-    if not eq ${exit_code} "5"
-        code = exit ${exit_code}
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+        if not ${TD_FAIL_FAST_PY}
+            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+            set_env TD_TESTS_CODE_PY ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
     end
     ''']
 
@@ -92,8 +139,20 @@ script = [
         debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
-    if not eq ${exit_code} "5"
-        code = exit ${exit_code}
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+        if not ${TD_FAIL_FAST_PY}
+            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+            set_env TD_TESTS_CODE_PY ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
     end
     ''']
 
@@ -118,8 +177,20 @@ script = [
         debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
-    if not eq ${exit_code} "5"
-        code = exit ${exit_code}
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+        if not ${TD_FAIL_FAST_PY}
+            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+            set_env TD_TESTS_CODE_PY ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
     end
     ''']
 
@@ -144,8 +215,20 @@ script = [
         debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
-    if not eq ${exit_code} "5"
-        code = exit ${exit_code}
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+        if not ${TD_FAIL_FAST_PY}
+            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+            set_env TD_TESTS_CODE_PY ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
     end
     ''']
 
@@ -170,8 +253,20 @@ script = [
         debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
     end
-    if not eq ${exit_code} "5"
-        code = exit ${exit_code}
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+        if not ${TD_FAIL_FAST_PY}
+            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+            set_env TD_TESTS_CODE_PY ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
     end
     ''']
 
@@ -435,4 +530,22 @@ script = [
     !include_files ./make/libraries/log.ds
 
     cm_run_task stop_pytest_tabsdata
+    ''']
+
+[tasks.cleanup-test_py]
+category = "02 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    exit_code = get_env TD_TESTS_CODE_PY
+    if not eq ${exit_code} "0"
+        info "⌛️ Marking py tests run as failed: '${exit_code}'"
+        code = exit ${exit_code}
+    else
+        info "⌛️ Marking py tests run as successful: '${exit_code}'"
+        exit 0
+    end
     ''']

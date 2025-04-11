@@ -58,9 +58,70 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    info "🦆"
-    ''']
+    env_keys = array
+    array_push ${env_keys} CARGO_MAKE
+    array_push ${env_keys} CARGO_MAKE_TASK
+    array_push ${env_keys} CARGO_MAKE_TASK_ARGS
+    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_NAME
+    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE
+    array_push ${env_keys} CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_COMMAND
+    array_push ${env_keys} CARGO_MAKE_WORKING_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_PROFILE
+    array_push ${env_keys} CARGO_MAKE_ADDITIONAL_PROFILES
+    array_push ${env_keys} CARGO_MAKE_PROJECT_NAME
+    array_push ${env_keys} CARGO_MAKE_PROJECT_VERSION
+    array_push ${env_keys} CARGO_MAKE_CARGO_HOME
+    array_push ${env_keys} CARGO_MAKE_CARGO_PROFILE
+    array_push ${env_keys} CARGO_MAKE_RUST_VERSION
+    array_push ${env_keys} CARGO_MAKE_RUST_CHANNEL
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_ARCH
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_ENV
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_OS
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_POINTER_WIDTH
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_VENDOR
+    array_push ${env_keys} CARGO_MAKE_RUST_TARGET_TRIPLE
+    array_push ${env_keys} CARGO_MAKE_CRATE_TARGET_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY
+    array_push ${env_keys} CARGO_MAKE_CRATE_HAS_DEPENDENCIES
+    array_push ${env_keys} CARGO_MAKE_CRATE_IS_WORKSPACE
+    array_push ${env_keys} CARGO_MAKE_CRATE_WORKSPACE_MEMBERS
+    array_push ${env_keys} CARGO_MAKE_CRATE_CURRENT_WORKSPACE_MEMBER
+    array_push ${env_keys} CARGO_MAKE_CRATE_LOCK_FILE_EXISTS
+    array_push ${env_keys} CARGO_MAKE_CRATE_TARGET_TRIPLE
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_NAME
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_VERSION
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_DESCRIPTION
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_LICENSE
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_DOCUMENTATION
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_HOMEPAGE
+    array_push ${env_keys} CARGO_MAKE_WORKSPACE_PACKAGE_REPOSITORY
+    array_push ${env_keys} CARGO_MAKE_CI
+    array_push ${env_keys} CARGO_MAKE_PR
+    array_push ${env_keys} CARGO_MAKE_CI_BRANCH_NAME
+    array_push ${env_keys} CARGO_MAKE_CI_VENDOR
+    array_push ${env_keys} CARGO_MAKE_DUCKSCRIPT_VERSION
+    array_push ${env_keys} CARGO_MAKE_DUCKSCRIPT_SDK_VERSION
+    array_push ${env_keys} CARGO_MAKE_CRATE_NAME
+    array_push ${env_keys} CARGO_MAKE_CRATE_FS_NAME
+    array_push ${env_keys} CARGO_MAKE_CRATE_VERSION
+    array_push ${env_keys} CARGO_MAKE_CRATE_DESCRIPTION
+    array_push ${env_keys} CARGO_MAKE_CRATE_LICENSE
+    array_push ${env_keys} CARGO_MAKE_CRATE_DOCUMENTATION
+    array_push ${env_keys} CARGO_MAKE_CRATE_HOMEPAGE
+    array_push ${env_keys} CARGO_MAKE_CRATE_REPOSITORY
+    array_push ${env_keys} CARGO_MAKE_GIT_BRANCH
+    array_push ${env_keys} CARGO_MAKE_GIT_USER_NAME
+    array_push ${env_keys} CARGO_MAKE_GIT_USER_EMAIL
+    array_push ${env_keys} CARGO_MAKE_GIT_HEAD_LAST_COMMIT_HASH
+    array_push ${env_keys} CARGO_MAKE_GIT_HEAD_LAST_COMMIT_HASH_PREFIX
 
+    for env_key in ${env_keys}
+        env_value = get_env ${env_key}
+        debug "☘️ ${env_key} :: ${env_value}"
+    end
+    ''']
 
 [tasks.make]
 run_task = [

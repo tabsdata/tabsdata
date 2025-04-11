@@ -10,6 +10,32 @@ script = [
 
     cm_run_task splash
 
+    user_home = get_env HOME
+    info "🏠 User HOME: ${HOME}"
+    echo ""
+
+    no_user_home = eq ${user_home} ""
+    if ${no_user_home}
+        error "🚷 Environment variable HOME is not defined. Please set it before running this script."
+        error "🚷 The USERPROFILE Windows environment variable will not work. Use HOME instead."
+        echo ""
+        exit 1
+    end
+
+    user_home_exists = is_path_exists ${user_home}
+    if not ${user_home_exists}
+        error "🚷 Environment variable HOME points to a non-existing path: ${user_home}"
+        echo ""
+        exit 1
+    end
+
+    user_home_is_dir = is_dir ${user_home}
+    if not ${user_home_is_dir}
+        error "🚷 Environment variable HOME points to a non-folder path: ${user_home}"
+        echo ""
+        exit 1
+    end
+
     PATH = get_env PATH
     debug "✅ Real PATH: ${PATH}"
     ''']
