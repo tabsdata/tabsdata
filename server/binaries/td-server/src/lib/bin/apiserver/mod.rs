@@ -74,7 +74,6 @@ use td_services::permission::services::PermissionServices;
 use td_services::role::services::RoleServices;
 use td_services::user_role::services::UserRoleServices;
 use td_storage::Storage;
-use tracing::debug;
 
 pub struct ApiServerInstance {
     config: Config,
@@ -173,7 +172,6 @@ impl ApiServerInstance {
     }
 
     pub async fn build(&self) -> ApiServer {
-        debug!("APISERVER Config: {}", self.config);
         apiserver! {
             apiserver {
                 // Server Addresses

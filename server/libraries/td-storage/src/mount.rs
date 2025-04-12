@@ -19,7 +19,7 @@ use tracing::debug;
 use url::Url;
 
 /// Definition of a mount.
-#[derive(Debug, Serialize, Deserialize, Builder, Getters)]
+#[derive(Debug, Clone, Serialize, Deserialize, Builder, Getters)]
 #[builder(
     setter(into, strip_option),
     build_fn(validate = "Self::validate", error = "StorageError")
@@ -414,13 +414,15 @@ impl Mount {
 
 #[cfg(test)]
 mod tests {
-    use crate::mount::{Mount, PathMapper, PathMapperPrefixer, PathMapperTrimmer};
+    use crate::mount::{Mount, MountDefBuilder, PathMapper, PathMapperPrefixer, PathMapperTrimmer};
     use crate::{MountDef, SPath, StorageError};
     use bytes::Bytes;
     use futures_util::StreamExt;
     use object_store::path::Path;
+    use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     use td_common::absolute_path::AbsolutePath;
+    use td_common::config::Config;
     use td_test::reqs::{
         AzureStorageWithAccountKeyReqs, S3WithAccessKeySecretKeyReqs, TestRequirements,
     };
@@ -807,5 +809,24 @@ mod tests {
     #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
     async fn test_azure_non_root_mount(reqs: AzureStorageWithAccountKeyReqs) {
         test_azure_mount("/foo", &reqs).await;
+    }
+
+    #[test]
+    fn test_x() {
+        #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+        struct C {
+            mounts: Vec<MountDef>,
+        }
+        impl Config for C {}
+
+        let mut c = C::default();
+        c.mounts = vec![MountDef::builder()
+            .id("id")
+            .mount_path("/foo")
+            .uri(bar_file())
+            .configs(HashMap::from([("key".to_string(), "value".to_string())]))
+            .build()
+            .unwrap()];
+        println!("{}", C::default().as_yaml());
     }
 }

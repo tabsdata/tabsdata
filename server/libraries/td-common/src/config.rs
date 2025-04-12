@@ -131,13 +131,11 @@ pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>,
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use getset::Getters;
-    use serde::{Deserialize, Serialize};
-
     use crate::config::{load_config, Config};
     use crate::env::{create_tabsdata_home_dir, get_current_dir, get_home_dir};
+    use getset::Getters;
+    use serde::{Deserialize, Serialize};
+    use std::path::PathBuf;
 
     #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
     #[getset(get = "pub")]

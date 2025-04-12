@@ -321,16 +321,15 @@ pub fn parse_extra_arguments(
 #[cfg(test)]
 mod tests {
     use crate::cli::parse_extra_arguments;
+    use crate::cli::{Cli, CliParser, NoConfig, NoParams, Params};
+    use crate::config::Config;
+    use crate::status::ExitStatus;
     use clap::error::Error;
     use clap::Parser;
     use clap_derive::Args;
     use getset::Getters;
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
-
-    use crate::cli::{Cli, CliParser, NoConfig, NoParams, Params};
-    use crate::config::Config;
-    use crate::status::ExitStatus;
 
     fn simulate_cli<P: Params>(args: Vec<&str>) -> Result<CliParser<P>, Error> {
         CliParser::<P>::try_parse_from(std::iter::once("program").chain(args))

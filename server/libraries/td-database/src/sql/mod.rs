@@ -18,7 +18,6 @@ use sqlx::{
 };
 use std::future::Future;
 use std::time::Duration;
-use td_common::config::Config;
 use td_error::td_error;
 use tracing::log::LevelFilter;
 
@@ -112,8 +111,6 @@ impl SqliteConfig {
             .test_before_acquire(self.test_before_acquire)
     }
 }
-
-impl Config for SqliteConfig {}
 
 pub fn create_bindings_literal(offset: usize, bindings: usize) -> String {
     let mut s = String::with_capacity(bindings * 5);

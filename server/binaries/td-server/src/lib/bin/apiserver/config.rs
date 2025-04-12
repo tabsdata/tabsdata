@@ -12,32 +12,57 @@ use std::fmt::Display;
 use std::net::{AddrParseError, SocketAddr};
 use strum::ParseError;
 use td_database::sql::SqliteConfig;
+use td_error::td_error;
 use td_services::auth::services::{JwtConfig, PasswordHashConfig};
+use td_storage::MountDef;
 use td_transaction::TransactionBy;
 
 #[derive(Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct Config {
-    storage_url: Option<String>,
     #[serde(default)]
     addresses: Vec<SocketAddr>,
     password: PasswordHashConfig,
     jwt: JwtConfig,
     request_timeout: i64, // in seconds
     database: SqliteConfig,
+    storage_url: Option<String>,
+    #[getset(skip)]
+    storage_mounts: Option<Vec<MountDef>>,
     #[serde(default)]
     transaction_by: TransactionBy,
+}
+
+impl Config {
+    pub fn storage_mounts(&self) -> Result<Vec<MountDef>, ConfigError> {
+        if self.storage_url.is_some() && self.storage_mounts.is_some() {
+            Err(ConfigError::DoubleStorageConfig)
+        } else if self.storage_url.is_none() && self.storage_mounts.is_none() {
+            Err(ConfigError::MissingStorageConfig)
+        } else if self.storage_url.is_some() {
+            let mount_def = MountDef::builder()
+                .id("TDS_MOUNT_ROOT")
+                .mount_path("/")
+                .uri(self.storage_url.as_ref().unwrap())
+                .build()
+                .unwrap();
+            Ok(vec![mount_def])
+        } else {
+            Ok(self.storage_mounts.as_ref().unwrap().clone())
+        }
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            storage_url: None,
             addresses: addresses_default(),
             password: PasswordHashConfig::default(),
             jwt: JwtConfig::default(),
             request_timeout: 60,
             database: SqliteConfig::default(),
+            storage_url: None,
+            storage_mounts: None,
             transaction_by: TransactionBy::default(),
         }
     }
@@ -53,8 +78,6 @@ impl Display for Config {
         )
     }
 }
-
-impl td_common::config::Config for Config {}
 
 impl Into<JwtConfig> for &Config {
     fn into(self) -> JwtConfig {
@@ -110,7 +133,8 @@ impl Params {
                 .storage_url
                 .as_ref()
                 .map(|url| url.to_string())
-                .or(config.storage_url().clone()),
+                .or(self.storage_url().clone()),
+            storage_mounts: config.storage_mounts.clone(),
             addresses: self
                 .address
                 .clone()
@@ -136,29 +160,23 @@ impl Params {
         };
 
         if config.addresses().is_empty() {
-            return Err(ConfigError::MissingAddress);
+            Err(ConfigError::MissingAddress)?;
         }
 
         if config.jwt().secret().is_none() {
-            return Err(ConfigError::MissingJWTSecret);
+            Err(ConfigError::MissingJWTSecret)?
         }
 
-        match config.database.url() {
-            None => return Err(ConfigError::MissingDatabaseUrl),
+        match config.database().url() {
+            None => Err(ConfigError::MissingDatabaseUrl)?,
             Some(url) if !url.starts_with("file://") => {
-                return Err(ConfigError::InvalidDatabaseUrl(url.to_string()));
+                Err(ConfigError::InvalidDatabaseUrl(url.to_string()))?;
             }
             _ => {}
         }
-
-        match config.storage_url {
-            None => return Err(ConfigError::MissingStorageUrl),
-            Some(url) if !url.starts_with("file://") => {
-                return Err(ConfigError::InvalidStorageUrl(url.to_string()));
-            }
-            _ => {}
+        if config.storage_mounts()?.len() == 0 {
+            Err(ConfigError::MissingStorageUrl)?;
         }
-
         Ok(config)
     }
 }
@@ -171,20 +189,24 @@ fn parse_transaction_by(transaction_by: &str) -> Result<TransactionBy, ParseErro
     TransactionBy::try_from(transaction_by)
 }
 
-#[derive(Debug, thiserror::Error)]
+impl td_common::config::Config for Config {}
+
+#[td_error]
 pub enum ConfigError {
     #[error("No address was specified for the API Server to bind to.")]
-    MissingAddress,
+    MissingAddress = 0,
     #[error("No JWT Secret was specified.")]
-    MissingJWTSecret,
+    MissingJWTSecret = 1,
     #[error("No database URL (must be a file:// URL) was provided.")]
-    MissingDatabaseUrl,
+    MissingDatabaseUrl = 2,
     #[error("The database URL '{0}' must be a file:// URL.")]
-    InvalidDatabaseUrl(String),
+    InvalidDatabaseUrl(String) = 3,
     #[error("No storage URL (must be a file:// URL) was provided.")]
-    MissingStorageUrl,
-    #[error("The storage URL '{0}' must be a file:// URL.")]
-    InvalidStorageUrl(String),
+    MissingStorageUrl = 4,
+    #[error("Cannot define both storage-url and storage-mounts in the configuration")]
+    DoubleStorageConfig = 5,
+    #[error("No storage URL no mounts configuration")]
+    MissingStorageConfig = 6,
 }
 
 #[cfg(test)]

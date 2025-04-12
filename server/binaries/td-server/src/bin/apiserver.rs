@@ -12,7 +12,7 @@ use td_common::cli::Cli;
 use td_common::logging;
 use td_common::server::FileWorkerMessageQueue;
 use td_common::status::ExitStatus;
-use td_storage::{MountDef, Storage};
+use td_storage::Storage;
 use tracing::{error, info, Level};
 
 const CONFIG_NAME: &str = "apiserver";
@@ -49,21 +49,14 @@ fn main() {
                 }
             };
 
-            // Create storage, for now we use a single mount and in local filesystem
-            let mount_def = match MountDef::builder()
-                .id("id")
-                .mount_path("/")
-                .uri(config.storage_url().as_ref().unwrap()) // at this point we know it's Some
-                .build()
-            {
+            let mount_defs = match config.storage_mounts() {
                 Ok(mount_def) => mount_def,
                 Err(e) => {
-                    error!("Error creating storage mount definition: {}", e);
+                    error!("Error creating storage: {}", e);
                     return ExitStatus::GeneralError;
                 }
             };
-
-            let storage = match Storage::from(vec![mount_def]).await {
+            let storage = match Storage::from(mount_defs).await {
                 Ok(storage) => storage,
                 Err(e) => {
                     error!("Error creating storage: {}", e);

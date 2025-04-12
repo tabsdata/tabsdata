@@ -5,15 +5,29 @@
 # storage_url: null # by default given by supervisor
 addresses:
   - 127.0.0.1:2457
-jwt_secret: "4eit1if2NZ6r7YXorh3YqVNlSZFXZuDO0BWKhOI9xtnLVYxA3U"
-access_jwt_expiration: 36288000
-refresh_jwt_expiration: 36288000
+password:
+  algorithm: argon2id
+  version: 19
+  memory_cost_mib: 20
+  time_cost: 2
+  parallelism_cost: 1
+jwt:
+  #secret: null # by default an UUID is generated
+  access_token_expiration: 3600
 request_timeout: 60
 database:
-  #  url: null # by default given by supervisor
+  #  url: null # by default is given as parameter by supervisor
   min_connections: 1
   max_connections: 10
   acquire_timeout: 30
   max_lifetime: 3600
   idle_timeout: 60
   test_before_acquire: true
+#storage_url: null    # by default as parameter is given by supervisor
+#storage_mounts: []   # by default a mount is inferred from the provided storage_url
+#- id: TDS_ROOT_MOUNT
+#  mount_path: /
+#  uri: file:///tmp/storage
+#  configs:
+#    key1: value1
+#    key2: value2
