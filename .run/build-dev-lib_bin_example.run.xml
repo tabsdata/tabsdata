@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Build [test] (lib)" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Build">
+  <configuration default="false" name="build-dev-lib_bin_example" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Build">
     <option name="buildProfileId" value="dev" />
-    <option name="command" value="build --workspace --profile test --lib" />
+    <option name="command" value="build --workspace --lib --bins --examples" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="true" />
