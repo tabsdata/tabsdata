@@ -15,7 +15,7 @@ class ImporterWithInitialValues(td.SourcePlugin):
         self.file_name_pattern = "source_"
         self.initial_values = {"number": file_number}
 
-    def trigger_input(self, working_dir: str) -> str:
+    def chunk(self, working_dir: str) -> str:
         destination_file = "data.parquet"
         destination_path = os.path.join(working_dir, destination_file)
         origin_file = os.path.join(

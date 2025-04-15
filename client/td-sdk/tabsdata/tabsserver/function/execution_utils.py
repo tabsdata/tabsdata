@@ -2,6 +2,8 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import ast
 import json
 import logging
@@ -9,17 +11,14 @@ import os
 import pathlib
 import subprocess
 import tempfile
-from collections.abc import Callable
 from datetime import datetime
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 from urllib.parse import unquote
 
 import base32hex
-import cloudpickle
 import polars as pl
 from uuid_v7.base import uuid7
 
-import tabsdata as td
 from tabsdata.format import (
     CSVFormat,
     FileFormat,
@@ -29,7 +28,6 @@ from tabsdata.format import (
 )
 from tabsdata.io.input import (
     AzureSource,
-    Input,
     LocalFileSource,
     MariaDBSource,
     MySQLSource,
@@ -37,19 +35,11 @@ from tabsdata.io.input import (
     PostgresSource,
     S3Source,
     TableInput,
-    build_input,
 )
-from tabsdata.io.plugin import SourcePlugin
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import build_table_uri_object
 from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
-from tabsdata.utils.bundle_utils import (
-    CODE_FOLDER,
-    CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY,
-    CONFIG_ENTRY_POINT_KEY,
-    CONFIG_INPUTS_KEY,
-    PLUGINS_FOLDER,
-)
 from tabsdata.utils.sql_utils import obtain_uri
 
 from . import environment_import_utils
@@ -64,55 +54,46 @@ from .global_utils import (
     convert_path_to_uri,
 )
 from .initial_values_utils import (
-    INITIAL_VALUES,
     INITIAL_VALUES_LAST_MODIFIED_VARIABLE_NAME,
 )
 from .yaml_parsing import InputYaml, Table, TableVersions
 
+if TYPE_CHECKING:
+    from tabsdata.io.input import Input
+    from tabsdata.tabsserver.function.execution_context import ExecutionContext
+    from tabsdata.tabsserver.function.initial_values_utils import InitialValues
+
 logger = logging.getLogger(__name__)
 
-INPUT_PLUGIN_FOLDER = "plugin_files"
 SOURCES_FOLDER = "sources"
 
 
 def execute_function_from_config(
-    config: dict, working_dir: str, execution_context: InputYaml
+    execution_context: ExecutionContext,
 ) -> ResultsCollection:
-    function_file = config[CONFIG_ENTRY_POINT_KEY][CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY]
-    code_folder = os.path.join(working_dir, CODE_FOLDER)
-    environment_import_utils.update_syspath(code_folder)
+    environment_import_utils.update_syspath(execution_context.paths.code_folder)
     # Decided to keep this logic with the code_folder to make it OS-agnostic. If we
     # stored the function_file with the code_folder prefix, we would have to handle
     # the path differently for different OSs.
-    with open(os.path.join(code_folder, function_file), "rb") as f:
-        met = cloudpickle.load(f)
-    return execute_function_with_config(config, met, working_dir, execution_context)
-
-
-def execute_function_with_config(
-    config: dict, met: Callable, working_dir: str, execution_context: InputYaml
-) -> ResultsCollection:
     logger.info(pad_string("[Obtaining function parameters]"))
-    importer_plugin, input_config, parameters = obtain_met_parameters(
-        config, execution_context, working_dir
-    )
+    parameters = obtain_user_provided_function_parameters(execution_context)
     logger.info("Function parameters obtained")
     logger.info(pad_string("[Executing function]"))
     logger.info("Starting execution of function provided by the user")
-    result = met(*parameters)
+    result = execution_context.user_provided_function(*parameters)
     logger.info("Finished executing function provided by the user")
-    if INITIAL_VALUES.returns_values:
-        result = update_initial_values(importer_plugin, input_config, result)
+    if execution_context.initial_values.returns_values:
+        result = update_initial_values(execution_context, result)
     result = ResultsCollection(result)
     result.check_collection_integrity()
     return result
 
 
-def update_initial_values(importer_plugin, input_config, result):
+def update_initial_values(execution_context: ExecutionContext, result):
     logger.info("New initial values generated")
-    if SourcePlugin.IDENTIFIER in input_config:
+    if source_plugin := execution_context.source_plugin:
         # If working with a plugin, the new initial values are stored in the plugin
-        new_initial_values = importer_plugin.initial_values
+        new_initial_values = source_plugin.initial_values
     else:
         # If working with a source, the new initial values are part of the result
         if isinstance(result, tuple):
@@ -130,141 +111,82 @@ def update_initial_values(importer_plugin, input_config, result):
             f"Invalid type for new initial values: {type(new_initial_values)}."
             " No initial values stored."
         )
-    INITIAL_VALUES.update_new_values(new_initial_values)
+    execution_context.initial_values.update_new_values(new_initial_values)
     return result
 
 
-def obtain_met_parameters(config, execution_context, working_dir):
-    input_config = config.get(CONFIG_INPUTS_KEY)
-    importer_plugin = None
-    if SourcePlugin.IDENTIFIER in input_config:
-        importer_plugin_file = input_config.get(SourcePlugin.IDENTIFIER)
-        plugins_folder = os.path.join(working_dir, PLUGINS_FOLDER)
-        with open(os.path.join(plugins_folder, importer_plugin_file), "rb") as f:
-            importer_plugin = cloudpickle.load(f)
-        destination_dir = os.path.join(working_dir, INPUT_PLUGIN_FOLDER)
-        os.makedirs(destination_dir, exist_ok=True)
-        logger.info(
-            f"Importing files with plugin '{importer_plugin}' to '{destination_dir}'"
-        )
-        # Add new value of initial values to plugin if provided
-        if INITIAL_VALUES.current_initial_values:
-            importer_plugin.initial_values = INITIAL_VALUES.current_initial_values
-            logger.debug(
-                f"Updated plugin initial values: {importer_plugin.initial_values}"
-            )
-        logger.info("Starting plugin import")
-        resulting_files = importer_plugin.trigger_input(destination_dir)
-        logger.info(
-            f"Imported files with plugin '{importer_plugin}' to "
-            f"'{destination_dir}'. Resulting files: '{resulting_files}'"
-        )
-        if importer_plugin.initial_values:
-            INITIAL_VALUES.returns_values = True
-
-        if isinstance(resulting_files, str) or resulting_files is None:
-            parameters = [
-                import_plugin_file_from_single_element(
-                    destination_dir, resulting_files, working_dir
-                )
-            ]
-        elif isinstance(resulting_files, (list, tuple)):
-            parameters = []
-            for element in resulting_files:
-                if isinstance(element, (list, tuple)):
-                    parameters.append(
-                        [
-                            import_plugin_file_from_single_element(
-                                destination_dir, single_element, working_dir
-                            )
-                            for single_element in element
-                        ]
-                    )
-                elif isinstance(element, str) or element is None:
-                    parameters.append(
-                        import_plugin_file_from_single_element(
-                            destination_dir, element, working_dir
-                        )
-                    )
-                else:
-                    logger.error(
-                        f"Invalid type for resulting files: {type(element)}. No data"
-                        " imported."
-                    )
-                    raise TypeError(
-                        f"Invalid type for resulting files: {type(element)}. No data"
-                        " imported."
-                    )
-            logger.debug(
-                f"List of parameters obtained after plugin import: {parameters}"
-            )
-        else:
-            logger.error(
-                f"Invalid type for resulting files: {type(resulting_files)}. No data"
-                " imported."
-            )
-            raise TypeError(
-                f"Invalid type for resulting files: {type(resulting_files)}. No data"
-                " imported."
-            )
+def obtain_user_provided_function_parameters(
+    execution_context: ExecutionContext,
+) -> List[TableFrame | None | List[TableFrame | None]]:
+    if source_plugin := execution_context.source_plugin:
+        logger.debug("Running the source plugin")
+        parameters = source_plugin._run(execution_context)
     else:
-        source_config = build_input(config.get(CONFIG_INPUTS_KEY))
-        parameters = trigger_source(source_config, working_dir, execution_context)
-    return importer_plugin, input_config, parameters
-
-
-def import_plugin_file_from_single_element(
-    destination_dir, resulting_files: str | None, working_dir
-):
-    if resulting_files is None:
-        return None
-    resulting_files_paths = os.path.join(destination_dir, resulting_files)
-    source_config = LocalFileSource(path=resulting_files_paths)
-    return trigger_source(source_config, working_dir)[0]
+        # TODO: Remake this to also use execution_context, trying to finish only the
+        #  plugin section for now
+        non_plugin_source = execution_context.non_plugin_source
+        working_dir = execution_context.paths.output_folder
+        old_execution_context = execution_context.request
+        parameters = trigger_non_plugin_source(
+            non_plugin_source,
+            working_dir,
+            old_execution_context,
+            execution_context.initial_values,
+        )
+    return parameters
 
 
 def convert_tuple_to_list(
-    result: td.TableFrame | Tuple[td.TableFrame],
-) -> List[td.TableFrame] | td.TableFrame:
+    result: TableFrame | Tuple[TableFrame],
+) -> List[TableFrame] | TableFrame:
     if isinstance(result, tuple):
         return list(result)
     else:
         return result
 
 
-def trigger_source(
-    source: Input, working_dir: str, execution_context: InputYaml = None
-):
+def trigger_non_plugin_source(
+    source: Input,
+    working_dir: str,
+    request: InputYaml = None,
+    initial_values: InitialValues = None,
+) -> List[TableFrame | None | List[TableFrame | None]]:
     # Call binary to import files
     destination_folder = os.path.join(working_dir, SOURCES_FOLDER)
     os.makedirs(destination_folder, exist_ok=True)
     if isinstance(source, LocalFileSource):
         logger.debug("Triggering LocalFileSource")
-        local_sources = execute_file_importer(source, destination_folder)
+        local_sources = execute_file_importer(
+            source, destination_folder, initial_values
+        )
     elif isinstance(source, S3Source):
         logger.debug("Triggering S3Source")
         obtain_and_set_s3_credentials(source.credentials)
         set_s3_region(source.region)
-        local_sources = execute_file_importer(source, destination_folder)
+        local_sources = execute_file_importer(
+            source, destination_folder, initial_values
+        )
     elif isinstance(source, AzureSource):
         logger.debug("Triggering AzureSource")
         obtain_and_set_azure_credentials(source.credentials)
-        local_sources = execute_file_importer(source, destination_folder)
+        local_sources = execute_file_importer(
+            source, destination_folder, initial_values
+        )
     elif isinstance(source, MySQLSource):
         logger.debug("Triggering MySQLSource")
-        local_sources = execute_sql_importer(source, destination_folder)
+        local_sources = execute_sql_importer(source, destination_folder, initial_values)
     elif isinstance(source, PostgresSource):
         logger.debug("Triggering PostgresSource")
-        local_sources = execute_sql_importer(source, destination_folder)
+        local_sources = execute_sql_importer(source, destination_folder, initial_values)
     elif isinstance(source, MariaDBSource):
         logger.debug("Triggering MariaDBSource")
-        local_sources = execute_sql_importer(source, destination_folder)
+        local_sources = execute_sql_importer(source, destination_folder, initial_values)
     elif isinstance(source, OracleSource):
         logger.debug("Triggering OracleSource")
-        local_sources = execute_sql_importer(source, destination_folder)
+        local_sources = execute_sql_importer(source, destination_folder, initial_values)
     elif isinstance(source, TableInput):
         logger.debug("Triggering TableInput")
-        local_sources = execute_table_importer(source, execution_context)
+        local_sources = execute_table_importer(source, request)
     else:
         logger.error(f"Invalid source type: {type(source)}. No data imported.")
         raise TypeError(f"Invalid source type: {type(source)}. No data imported.")
@@ -360,13 +282,18 @@ def obtain_table_uri_and_verify(
 def execute_sql_importer(
     source: MariaDBSource | MySQLSource | OracleSource | PostgresSource,
     destination: str,
+    initial_values: InitialValues,
 ) -> list | dict:
     if isinstance(source.query, str):
-        source_list = [execute_sql_query(source, destination, source.query)]
+        source_list = [
+            execute_sql_query(source, destination, source.query, initial_values)
+        ]
     elif isinstance(source.query, list):
         source_list = []
         for query in source.query:
-            source_list.append(execute_sql_query(source, destination, query))
+            source_list.append(
+                execute_sql_query(source, destination, query, initial_values)
+            )
     else:
         logger.error(
             f"Invalid source data, expected 'str' or 'list' but got: {source.query}"
@@ -391,11 +318,12 @@ def execute_sql_query(
     source: MariaDBSource | MySQLSource | OracleSource | PostgresSource,
     destination: str,
     query: str,
+    initial_values: InitialValues,
 ) -> str:
     logger.info(f"Importing SQL query: {query}")
     if source.initial_values:
-        INITIAL_VALUES.returns_values = True
-        initial_values = INITIAL_VALUES.current_initial_values or source.initial_values
+        initial_values.returns_values = True
+        initial_values = initial_values.current_initial_values or source.initial_values
         query = replace_initial_values(query, initial_values)
     if isinstance(source, MySQLSource):
         logger.info("Importing SQL query from MySQL")
@@ -451,6 +379,7 @@ def td_id_column(size: int):
 def execute_file_importer(
     source: AzureSource | LocalFileSource | S3Source,
     destination: str,
+    initial_values: InitialValues = None,
 ) -> list:
     """
     Import files from a source to a destination. The source can be either a local file
@@ -471,7 +400,7 @@ def execute_file_importer(
     destination = pathlib.Path(destination).as_uri()
     last_modified = None
     if source.initial_last_modified:
-        last_modified = INITIAL_VALUES.current_initial_values.get(
+        last_modified = initial_values.current_initial_values.get(
             INITIAL_VALUES_LAST_MODIFIED_VARIABLE_NAME, source.initial_last_modified
         )
     logger.debug(f"Last modified: {last_modified}")
@@ -487,7 +416,7 @@ def execute_file_importer(
         )
     if source.initial_last_modified:
         new_last_modified = datetime.now().isoformat()
-        INITIAL_VALUES.add_new_value(
+        initial_values.add_new_value(
             INITIAL_VALUES_LAST_MODIFIED_VARIABLE_NAME, new_last_modified
         )
     return source_list
@@ -643,9 +572,9 @@ def convert_characters_to_ascii(dictionary: dict) -> dict:
 
 def load_sources(
     local_sources: list,
-) -> list:
+) -> List[TableFrame | None | List[TableFrame | None]]:
     """
-    Given a list of sources, load them into polars DataFrames.
+    Given a list of sources, load them into tabsdata TableFrames.
     :param local_sources: A list of lists of paths to parquet files. Each element is
         either a string to a single file or a list of strings to multiple files.
     :return: A list were each element is either a DataFrame or a list of DataFrames.
@@ -661,16 +590,16 @@ def load_sources(
     return sources
 
 
-def load_sources_from_list(source_list: list) -> List[td.TableFrame]:
+def load_sources_from_list(source_list: list) -> List[TableFrame]:
     return [load_source(path) for path in source_list]
 
 
-def load_source(path_to_source: str | os.PathLike) -> td.TableFrame | None:
+def load_source(path_to_source: str | os.PathLike) -> TableFrame | None:
     if path_to_source is None:
         logger.warning("Path to source is None. No data loaded.")
         return None
     logger.debug(f"Loading parquet file from path: {path_to_source}")
     result = pl.scan_parquet(path_to_source) if path_to_source else None
-    result = td.TableFrame.__build__(result)
+    result = TableFrame.__build__(result)
     logger.debug("Loaded parquet file successfully.")
     return result

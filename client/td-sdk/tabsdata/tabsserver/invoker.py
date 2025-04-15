@@ -25,14 +25,14 @@ from tabsdata.tabsserver.pyenv_creation import (
 from tabsdata.tabsserver.utils import (
     ABSOLUTE_LOCATION,
     TimeBlock,
-    extract_context_folder,
+    extract_bundle_folder,
 )
 from tabsdata.utils.bundle_utils import REQUIREMENTS_FILE_NAME
 
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()
 
-EXECUTION_CONTEXT_FILE_NAME = "request.yaml"
+REQUEST_FILE_NAME = "request.yaml"
 _ = execute_function_from_bundle_path
 
 
@@ -62,7 +62,7 @@ def invoke(
     locks_folder: str = DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
     logs_folder: str = None,
 ):
-    execution_context_file = os.path.join(request_folder, EXECUTION_CONTEXT_FILE_NAME)
+    request_file_path = os.path.join(request_folder, REQUEST_FILE_NAME)
     setup_logging(os.path.join(ABSOLUTE_LOCATION, "logging.yaml"))
     if locks_folder == DEFAULT_DEVELOPMENT_LOCKS_LOCATION:
         logger.warning(
@@ -71,18 +71,23 @@ def invoke(
             "--locks-folder parameter to specify the folder where the locks for "
             "the instance environments creation are stored."
         )
-    execution_context_content = parse_request_yaml(execution_context_file)
-    logger.debug(f"Request YAML content: {execution_context_content}")
-    compressed_context_folder = execution_context_content.function_bundle_uri
+    request_content = parse_request_yaml(request_file_path)
+    logger.debug(f"Request YAML content: {request_content}")
+    compressed_bundle_uri = request_content.function_bundle_uri
 
-    context_folder = extract_context_folder(bin_folder, compressed_context_folder)
+    uncompressed_bundle_folder = extract_bundle_folder(
+        bin_folder, compressed_bundle_uri
+    )
 
-    logger.info(f"Creating the virtual environment for the context {context_folder}")
+    logger.info(
+        "Creating the virtual environment for the function in"
+        f" {uncompressed_bundle_folder}"
+    )
     with time_block:
         python_environment = create_virtual_environment(
             requirements_description_file=str(
                 os.path.join(
-                    context_folder,
+                    uncompressed_bundle_folder,
                     REQUIREMENTS_FILE_NAME,
                 )
             ),
@@ -93,22 +98,23 @@ def invoke(
         )
     if not python_environment:
         logger.error(
-            f"Failed to create the virtual environment for the context {context_folder}"
+            "Failed to create the virtual environment for the function in"
+            f" {uncompressed_bundle_folder}"
         )
         return None, 1
     else:
         logger.info(
-            f"Created the virtual environment {python_environment} for the context"
-            f" {context_folder}. Time taken: {time_block.time_taken():.2f}s"
+            f"Created the virtual environment {python_environment} for the function in"
+            f" {uncompressed_bundle_folder}. Time taken: {time_block.time_taken():.2f}s"
         )
     command_to_execute = [
         get_path_to_environment_bin(python_environment),
         "-m",
         tabsdata.tabsserver.function.execute_function_from_bundle_path.__name__,
         "--bundle-path",
-        context_folder,
-        "--execution-context-file",
-        execution_context_file,
+        uncompressed_bundle_folder,
+        "--request-file",
+        request_file_path,
         "--response-folder",
         response_folder,
         "--output-folder",

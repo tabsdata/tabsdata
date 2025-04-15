@@ -19,6 +19,9 @@ from tabsdata.tabsserver.function.yaml_parsing import (
     parse_request_yaml,
 )
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_parse_input_yaml():
     input_yaml = os.path.join(

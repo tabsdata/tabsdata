@@ -27,7 +27,7 @@ from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_initial_v
 import tabsdata as td
 from tabsdata.secret import DirectSecret
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.invoker import EXECUTION_CONTEXT_FILE_NAME
+from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
 
@@ -52,7 +52,7 @@ def test_input_salesforce(tmp_path):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
@@ -99,7 +99,7 @@ def test_input_salesforce_initial_values(tmp_path):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
@@ -400,7 +400,7 @@ def test_maximum_date():
 @pytest.mark.salesforce
 @pytest.mark.requires_internet
 @pytest.mark.slow
-def test_trigger_input(tmp_path):
+def test_chunk(tmp_path):
     date1 = "2098-02-05T11:27:47.000000+0000"
     date5 = "1934-04-16T14:10:02.000000+0000"
     source = td.SalesforceSource(
@@ -412,7 +412,7 @@ def test_trigger_input(tmp_path):
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date1}"
         ),
     )
-    [result] = source.trigger_input(tmp_path)
+    [result] = source.chunk(tmp_path)
     assert result is None
 
     source = td.SalesforceSource(
@@ -424,7 +424,7 @@ def test_trigger_input(tmp_path):
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date5}"
         ),
     )
-    [result] = source.trigger_input(tmp_path)
+    [result] = source.chunk(tmp_path)
     result = os.path.join(tmp_path, result)
     assert os.path.isfile(result)
     output = pl.read_parquet(result)

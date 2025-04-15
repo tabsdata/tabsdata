@@ -182,7 +182,7 @@ class SalesforceSource(SourcePlugin):
                 f"tabsdata secret object, got '{type(security_token)}' instead"
             )
 
-    def trigger_input(self, working_dir: str) -> List[str]:
+    def chunk(self, working_dir: str) -> List[str]:
         sf = self._log_into_salesforce()
         resulting_files = []
         using_initial_values = bool(self.initial_values)

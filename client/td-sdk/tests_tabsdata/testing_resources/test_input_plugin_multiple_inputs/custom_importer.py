@@ -15,7 +15,7 @@ class Importer(td.SourcePlugin):
         self.folder = folder
         self.file = file
 
-    def trigger_input(self, working_dir: str) -> Tuple[str, str]:
+    def chunk(self, working_dir: str) -> Tuple[str, str]:
         destination_file = "data.parquet"
         destination_path = os.path.join(working_dir, destination_file)
         pl.scan_csv(f"{self.folder}/{self.file}").sink_parquet(destination_path)

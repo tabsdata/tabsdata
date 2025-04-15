@@ -30,6 +30,9 @@ from tabsdata.utils.bundle_utils import (
     TABSDATA_MODULE_NAME,
 )
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 @pytest.mark.requires_internet
 @pytest.mark.slow

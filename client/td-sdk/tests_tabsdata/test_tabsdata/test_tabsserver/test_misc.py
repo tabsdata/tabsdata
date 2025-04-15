@@ -45,7 +45,7 @@ from tests_tabsdata.testing_resources.test_relative_import.example import (
 
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata.tabsserver.invoker import (
-    EXECUTION_CONTEXT_FILE_NAME,
+    REQUEST_FILE_NAME,
 )
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.tabsserver.utils import UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
@@ -57,6 +57,9 @@ from tabsdata.utils.bundle_utils import (
     PYTHON_VERSION_KEY,
     create_bundle_archive,
 )
+
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -79,7 +82,7 @@ def test_input_output_dataframe(tmp_path):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
@@ -119,7 +122,7 @@ def test_multiple_inputs_multiple_outputs(tmp_path):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
@@ -177,7 +180,7 @@ def test_path_to_code(tmp_path):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
@@ -230,7 +233,7 @@ def test_custom_requirements(tmp_path):
         requirements=correct_custom_requirements_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output1_path = os.path.join(tmp_path, "output1.parquet")
@@ -297,7 +300,7 @@ def test_custom_requirements_no_package_version(tmp_path):
         requirements=correct_custom_requirements_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
@@ -365,7 +368,7 @@ def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
         requirements=correct_custom_requirements_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     write_v1_yaml_file(input_yaml_file, context_archive)
@@ -391,7 +394,7 @@ def test_failed_execution_returns_error_code(tmp_path):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     write_v1_yaml_file(input_yaml_file, context_archive)
@@ -417,7 +420,7 @@ def test_custom_logs_folder(tmp_path):
     )
     custom_logs_folder = os.path.join(tmp_path, "custom_logs_folder")
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
@@ -474,7 +477,7 @@ def test_sequential_runs_no_error(tmp_path):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
@@ -531,7 +534,7 @@ def test_sequential_registers_no_error(tmp_path):
             save_location=tmp_path,
         )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
@@ -586,7 +589,7 @@ def test_custom_bin_folder(tmp_path):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
@@ -646,7 +649,7 @@ def test_relative_import(tmp_path):
         relative_import, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
@@ -685,7 +688,7 @@ def test_failing_file_in_folder(tmp_path):
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")

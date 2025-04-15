@@ -47,9 +47,12 @@ from tests_tabsdata.testing_resources.test_output_sql_wrong_driver_fails.example
 )
 
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.invoker import EXECUTION_CONTEXT_FILE_NAME
+from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
+
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -77,7 +80,7 @@ def test_output_sql_list(tmp_path, testing_mysql):
         output_sql_list, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -129,7 +132,7 @@ def test_output_sql_modified_params(tmp_path, testing_mysql):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -183,7 +186,7 @@ def test_output_sql_wrong_driver_fails(tmp_path, testing_mysql):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -217,7 +220,7 @@ def test_output_sql_driver_provided(tmp_path, testing_mysql):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -262,7 +265,7 @@ def test_output_sql_list_none(tmp_path, testing_mysql):
         output_sql_list_none, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -305,7 +308,7 @@ def test_output_sql_none(tmp_path, testing_mysql):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -345,7 +348,7 @@ def test_output_sql_transaction(tmp_path, testing_mysql):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(

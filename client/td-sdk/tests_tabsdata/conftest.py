@@ -2,7 +2,8 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
-"""The place for fixtures and shared testing configuration."""
+from __future__ import annotations
+
 import logging
 import os
 import pathlib

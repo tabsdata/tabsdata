@@ -15,6 +15,9 @@ from tests_tabsdata.conftest import (
 
 from tabsdata.tabsserver.tools.config_resolver import ConfigResolver
 
+# noinspection PyUnresolvedReferences
+from .. import pytestmark  # noqa: F401
+
 BASE_RESOLVER = ConfigResolver()
 HASHICORP_RESOLVER = ConfigResolver(
     hashicorp_url=HASHICORP_TESTING_URL, hashicorp_token=HASHICORP_TESTING_TOKEN

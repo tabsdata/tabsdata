@@ -34,7 +34,7 @@ from tests_tabsdata_mongodb.testing_resources.test_output_mongodb.example import
 
 import tabsdata as td
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.invoker import EXECUTION_CONTEXT_FILE_NAME
+from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
 
@@ -128,14 +128,10 @@ def test_invalid_class_types():
     "maintain_order,update_existing",
     [(True, True), (True, False), (False, True), (False, False)],
 )
-def test_trigger_output(
-    tmp_path, testing_mongodb, maintain_order, update_existing, size
-):
+def test_stream(tmp_path, testing_mongodb, maintain_order, update_existing, size):
     lf = get_lf(size)
-    database_name = f"test_trigger_output_{maintain_order}_{update_existing}_database"
-    collection_name = (
-        f"test_trigger_output_{maintain_order}_{update_existing}_collection"
-    )
+    database_name = f"test_stream_{maintain_order}_{update_existing}_database"
+    collection_name = f"test_stream_{maintain_order}_{update_existing}_collection"
     mongo_destination = td.MongoDBDestination(
         MONGODB_URI_WITHOUT_CREDENTIALS,
         (f"{database_name}.{collection_name}", "id"),
@@ -144,7 +140,7 @@ def test_trigger_output(
         maintain_order=maintain_order,
         update_existing=update_existing,
     )
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -159,15 +155,16 @@ def test_trigger_output(
     "maintain_order,update_existing",
     [(True, True), (True, False), (False, True), (False, False)],
 )
-def test_trigger_output_with_replica_set(
+def test_stream_with_replica_set(
     tmp_path, testing_mongodb_with_replica_set, maintain_order, update_existing, size
 ):
     lf = get_lf(size)
     database_name = (
-        f"test_trigger_output_with_replica_set_{maintain_order}"
-        f"_{update_existing}_database"
+        f"test_stream_with_replica_set_{maintain_order}_{update_existing}_database"
     )
-    collection_name = f"test_trigger_output_with_replica_set_{maintain_order}_{update_existing}_collection"
+    collection_name = (
+        f"test_stream_with_replica_set_{maintain_order}_{update_existing}_collection"
+    )
     mongo_destination = td.MongoDBDestination(
         MONGODB_WITH_REPLICA_SET_URI,
         (f"{database_name}.{collection_name}", "id"),
@@ -176,7 +173,7 @@ def test_trigger_output_with_replica_set(
         maintain_order=maintain_order,
         update_existing=update_existing,
     )
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_WITH_REPLICA_SET_URI)
     collection = client[database_name][collection_name]
@@ -186,18 +183,18 @@ def test_trigger_output_with_replica_set(
 @pytest.mark.mongodb
 @pytest.mark.slow
 @pytest.mark.requires_internet
-def test_trigger_output_with_id_none(tmp_path, testing_mongodb):
+def test_stream_with_id_none(tmp_path, testing_mongodb):
     size = 25000
     lf = get_lf(size)
-    database_name = "test_trigger_output_with_id_none_database"
-    collection_name = "test_trigger_output_with_id_none_collection"
+    database_name = "test_stream_with_id_none_database"
+    collection_name = "test_stream_with_id_none_collection"
     mongo_destination = td.MongoDBDestination(
         MONGODB_URI_WITHOUT_CREDENTIALS,
         (f"{database_name}.{collection_name}", None),
         credentials=td.UserPasswordCredentials(DB_USER, DB_PASSWORD),
         if_collection_exists="replace",
     )
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -207,11 +204,11 @@ def test_trigger_output_with_id_none(tmp_path, testing_mongodb):
 @pytest.mark.mongodb
 @pytest.mark.slow
 @pytest.mark.requires_internet
-def test_trigger_output_multiple_lf(tmp_path, testing_mongodb):
+def test_stream_multiple_lf(tmp_path, testing_mongodb):
     size = 25000
     lf = get_lf(size)
-    database_name = "test_trigger_output_multiple_lf_database"
-    collection_name = "test_trigger_output_multiple_lf_collection"
+    database_name = "test_stream_multiple_lf_database"
+    collection_name = "test_stream_multiple_lf_collection"
     mongo_destination = td.MongoDBDestination(
         MONGODB_URI_WITHOUT_CREDENTIALS,
         [
@@ -221,7 +218,7 @@ def test_trigger_output_multiple_lf(tmp_path, testing_mongodb):
         credentials=td.UserPasswordCredentials(DB_USER, DB_PASSWORD),
         if_collection_exists="replace",
     )
-    mongo_destination.trigger_output(str(tmp_path), lf, lf)
+    mongo_destination.stream(str(tmp_path), lf, lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name + "_1"][collection_name + "_1"]
@@ -233,11 +230,11 @@ def test_trigger_output_multiple_lf(tmp_path, testing_mongodb):
 @pytest.mark.mongodb
 @pytest.mark.slow
 @pytest.mark.requires_internet
-def test_trigger_output_different_len_raises_error(tmp_path, testing_mongodb):
+def test_stream_different_len_raises_error(tmp_path, testing_mongodb):
     size = 25000
     lf = get_lf(size)
-    database_name = "test_trigger_output_different_len_raises_error_database"
-    collection_name = "test_trigger_output_different_len_raises_error_collection"
+    database_name = "test_stream_different_len_raises_error_database"
+    collection_name = "test_stream_different_len_raises_error_collection"
     mongo_destination = td.MongoDBDestination(
         MONGODB_URI_WITHOUT_CREDENTIALS,
         [
@@ -248,10 +245,10 @@ def test_trigger_output_different_len_raises_error(tmp_path, testing_mongodb):
         if_collection_exists="replace",
     )
     with pytest.raises(ValueError):
-        mongo_destination.trigger_output(str(tmp_path), lf)
+        mongo_destination.stream(str(tmp_path), lf)
 
     with pytest.raises(ValueError):
-        mongo_destination.trigger_output(str(tmp_path), lf, lf, lf)
+        mongo_destination.stream(str(tmp_path), lf, lf, lf)
 
 
 @pytest.mark.mongodb
@@ -268,7 +265,7 @@ def test_single_element_collection_list(tmp_path, testing_mongodb):
         credentials=td.UserPasswordCredentials(DB_USER, DB_PASSWORD),
         if_collection_exists="replace",
     )
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -290,7 +287,7 @@ def test_if_collection_exists_replace(tmp_path, testing_mongodb):
         if_collection_exists="replace",
     )
     for _ in range(3):
-        mongo_destination.trigger_output(str(tmp_path), lf)
+        mongo_destination.stream(str(tmp_path), lf)
 
         client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
         collection = client[database_name][collection_name]
@@ -312,7 +309,7 @@ def test_if_collection_exists_append(tmp_path, testing_mongodb):
         if_collection_exists="append",
     )
     for i in range(3):
-        mongo_destination.trigger_output(str(tmp_path), lf)
+        mongo_destination.stream(str(tmp_path), lf)
 
         client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
         collection = client[database_name][collection_name]
@@ -342,7 +339,7 @@ def test_use_trxs_true(tmp_path, testing_mongodb_with_replica_set):
         use_trxs=True,
     )
     with pytest.raises(Exception):
-        mongo_destination.trigger_output(str(tmp_path), lf)
+        mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_WITH_REPLICA_SET_URI)
     collection = client[database_name][collection_name]
@@ -373,7 +370,7 @@ def test_use_trxs_false(tmp_path, testing_mongodb):
         use_trxs=False,
     )
     with pytest.raises(Exception):
-        mongo_destination.trigger_output(str(tmp_path), lf)
+        mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -405,7 +402,7 @@ def test_fail_on_duplicate_key_false_with_trx(
         update_existing=False,
         use_trxs=True,
     )
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_WITH_REPLICA_SET_URI)
     collection = client[database_name][collection_name]
@@ -436,7 +433,7 @@ def test_fail_on_duplicate_key_false(tmp_path, testing_mongodb):
         update_existing=False,
         fail_on_duplicate_key=False,
     )
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -466,7 +463,7 @@ def test_fail_on_duplicate_key_false(tmp_path, testing_mongodb):
         use_trxs=False,
         fail_on_duplicate_key=False,
     )
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -496,7 +493,7 @@ def test_update_existing_true(tmp_path, testing_mongodb):
         update_existing=True,
     )
 
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -519,14 +516,14 @@ def test_lf_is_none(tmp_path, testing_mongodb):
         if_collection_exists="replace",
     )
 
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
     assert collection.count_documents({}) == size
 
     lf = None
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -557,7 +554,7 @@ def test_update_existing_false(tmp_path, testing_mongodb):
     )
 
     with pytest.raises(Exception):
-        mongo_destination.trigger_output(str(tmp_path), lf)
+        mongo_destination.stream(str(tmp_path), lf)
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
     collection = client[database_name][collection_name]
@@ -580,7 +577,7 @@ def test_docs_per_trx(tmp_path, testing_mongodb):
         docs_per_trx=100,
     )
 
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
 
     from tabsdata_mongodb.connector import _get_matching_files
 
@@ -591,7 +588,7 @@ def test_docs_per_trx(tmp_path, testing_mongodb):
     assert collection.count_documents({}) == 200
 
     mongo_destination.docs_per_trx = 50
-    mongo_destination.trigger_output(str(tmp_path), lf)
+    mongo_destination.stream(str(tmp_path), lf)
     assert len(_get_matching_files(str(tmp_path / "*.jsonl"))) == 4
 
     assert collection.count_documents({}) == 200
@@ -618,7 +615,7 @@ def test_output_mongodb(tmp_path, testing_mongodb):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -672,7 +669,7 @@ def test_multiple_outputs_mongodb(tmp_path, testing_mongodb):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(

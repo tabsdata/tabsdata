@@ -3,7 +3,8 @@
 #
 
 
-import tabsdata as td
+import polars as pl
+
 from tabsdata import DestinationPlugin
 
 
@@ -13,8 +14,8 @@ class CustomDestinationPlugin(DestinationPlugin):
         self.destination_ndjson_file = destination_json_file
         self.second_destination_ndjson_file = second_destination_json_file
 
-    def trigger_output(self, _: str, df: td.TableFrame, df2: td.TableFrame):
-        if df is not None:
+    def stream(self, _: str, lf: pl.LazyFrame, lf2: pl.LazyFrame):
+        if lf is not None:
             raise ValueError("df should be None")
-        if df2 is not None:
+        if lf2 is not None:
             raise ValueError("df2 should be None")

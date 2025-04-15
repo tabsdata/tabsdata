@@ -8,6 +8,9 @@ from tests_tabsdata.conftest import clean_polars_df
 import tabsdata as td
 from tabsdata.tabsserver.function.results_collection import Result, ResultsCollection
 
+# noinspection PyUnresolvedReferences
+from .. import pytestmark  # noqa: F401
+
 CORRECT_TF = td.TableFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
 
 

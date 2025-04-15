@@ -2,6 +2,8 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import logging
 from typing import List, ParamSpec, TypeVar
 

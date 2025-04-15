@@ -47,7 +47,7 @@ def extract_tarfile_to_folder(tarfile_uri, destination_folder):
         raise e
 
 
-def extract_context_folder(bin_folder, compressed_context_folder):
+def extract_bundle_folder(bin_folder, compressed_context_folder):
     time_block = TimeBlock()
     if bin_folder:
         context_folder = os.path.join(bin_folder, UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER)

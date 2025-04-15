@@ -1,17 +1,18 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
+
 from __future__ import annotations
 
 import logging
 from typing import List, Tuple, Union
 
-import tabsdata as td
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.utils.tableframe._reflection import check_required_columns
 
 logger = logging.getLogger(__name__)
 
-VALID_SINGLE_RESULT = Union[td.TableFrame | None | List[td.TableFrame | None]]
+VALID_SINGLE_RESULT = Union[TableFrame | None | List[TableFrame | None]]
 
 
 class ResultsCollection:
@@ -62,14 +63,14 @@ class Result:
     def check_integrity(self):
         if self.value is None:
             pass
-        elif isinstance(self.value, td.TableFrame):
+        elif isinstance(self.value, TableFrame):
             # noinspection PyProtectedMember
             check_required_columns(self.value._to_lazy())
         elif isinstance(self.value, list):
             for table in self.value:
                 if table is None:
                     pass
-                elif isinstance(table, td.TableFrame):
+                elif isinstance(table, TableFrame):
                     # noinspection PyProtectedMember
                     check_required_columns(table._to_lazy())
                 else:
@@ -84,11 +85,11 @@ class Result:
 
 def _convert_none_to_empty_frame(
     results: VALID_SINGLE_RESULT,
-) -> td.TableFrame | List[td.TableFrame]:
+) -> TableFrame | List[TableFrame]:
     if results is None:
         logger.debug("Result is None. Returning empty frame.")
-        return td.TableFrame({})
-    elif isinstance(results, td.TableFrame):
+        return TableFrame({})
+    elif isinstance(results, TableFrame):
         return results
     elif isinstance(results, list):
         return [_convert_none_to_empty_frame(table) for table in results]

@@ -2,6 +2,7 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+from __future__ import annotations
 
 import datetime
 import glob
@@ -11,9 +12,8 @@ import re
 import subprocess
 import time
 import uuid
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
-import cloudpickle
 import polars as pl
 import pyarrow
 import pyarrow.parquet as pq
@@ -23,7 +23,6 @@ from pyiceberg.exceptions import NoSuchTableError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-import tabsdata as td
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata.format import CSVFormat, FileFormat, NDJSONFormat, ParquetFormat
 from tabsdata.io.output import (
@@ -38,13 +37,10 @@ from tabsdata.io.output import (
     S3Destination,
     SchemaStrategy,
     TableOutput,
-    build_output,
 )
-from tabsdata.io.plugin import DestinationPlugin
 from tabsdata.secret import _recursively_evaluate_secret
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tabsserver.function.logging_utils import pad_string
-from tabsdata.tabsserver.function.results_collection import Result, ResultsCollection
-from tabsdata.utils.bundle_utils import PLUGINS_FOLDER
 from tabsdata.utils.sql_utils import add_driver_to_uri, obtain_uri
 
 from . import sql_utils
@@ -77,6 +73,13 @@ from .yaml_parsing import (
     V1CopyFormat,
     store_copy_as_yaml,
 )
+
+if TYPE_CHECKING:
+    from tabsdata.tabsserver.function.execution_context import ExecutionContext
+    from tabsdata.tabsserver.function.results_collection import (
+        Result,
+        ResultsCollection,
+    )
 
 logger = logging.getLogger(__name__)
 logging.getLogger("botocore").setLevel(logging.ERROR)
@@ -127,22 +130,21 @@ def replace_placeholders_in_path(path: str, execution_context: InputYaml) -> str
 
 
 def store_results(
+    execution_context: ExecutionContext,
     results: ResultsCollection,
-    output_configuration: dict,
-    working_dir: str | os.PathLike,
-    execution_context: InputYaml,
-    output_folder: str,
 ) -> List[str]:
     logger.info(pad_string("[Storing results]"))
     logger.info(
-        f"Storing results in destination '{output_configuration}', "
-        f"with working_dir '{working_dir}'"
+        f"Storing results in destination '{execution_context.function_config.output}'"
     )
     modified_tables = []
-    if DestinationPlugin.IDENTIFIER in output_configuration:
-        export_using_plugin(output_configuration, output_folder, results, working_dir)
+    if destination_plugin := execution_context.destination_plugin:
+        logger.debug("Running the destination plugin")
+        destination_plugin._run(execution_context, results)
     else:
-        destination = build_output(output_configuration)
+        destination = execution_context.non_plugin_destination
+        output_folder = execution_context.paths.output_folder
+        request = execution_context.request
 
         if isinstance(
             destination,
@@ -155,24 +157,16 @@ def store_results(
         ):
             store_results_in_sql(results, destination, output_folder)
         elif isinstance(destination, TableOutput):
-            modified_tables = store_results_in_table(
-                results, destination, execution_context
-            )
+            modified_tables = store_results_in_table(results, destination, request)
         elif isinstance(destination, LocalFileDestination):
-            store_results_in_files(
-                results, destination, output_folder, execution_context
-            )
+            store_results_in_files(results, destination, output_folder, request)
         elif isinstance(destination, AzureDestination):
             obtain_and_set_azure_credentials(destination.credentials)
-            store_results_in_files(
-                results, destination, output_folder, execution_context
-            )
+            store_results_in_files(results, destination, output_folder, request)
         elif isinstance(destination, S3Destination):
             obtain_and_set_s3_credentials(destination.credentials),
             set_s3_region(destination.region),
-            store_results_in_files(
-                results, destination, output_folder, execution_context
-            )
+            store_results_in_files(results, destination, output_folder, request)
         else:
             logger.error(
                 f"Storing results in destination of type '{type(destination)}' "
@@ -183,50 +177,6 @@ def store_results(
                 " supported"
             )
     return modified_tables
-
-
-def export_using_plugin(
-    output_configuration: dict,
-    output_folder: str,
-    results: ResultsCollection,
-    working_dir: str | os.PathLike,
-):
-    exporter_plugin_file = output_configuration.get(DestinationPlugin.IDENTIFIER)
-    plugins_folder = os.path.join(working_dir, PLUGINS_FOLDER)
-    with open(os.path.join(plugins_folder, exporter_plugin_file), "rb") as f:
-        exporter_plugin = cloudpickle.load(f)
-    logger.info(f"Exporting files with plugin '{exporter_plugin}'")
-    logger.info("Starting plugin export")
-    results_to_provide = []
-    for result in results:
-        result_value = result.value
-        if isinstance(result_value, td.TableFrame):
-            intermediate_result = remove_system_columns_and_convert(result_value)
-        elif result_value is None:
-            intermediate_result = None
-        elif isinstance(result_value, list):
-            intermediate_result = [
-                (
-                    remove_system_columns_and_convert(single_result)
-                    if isinstance(single_result, td.TableFrame)
-                    else result
-                )
-                for single_result in result_value
-            ]
-        else:
-            logger.error(
-                "The result of a registered function must be a TableFrame,"
-                f" None or a list of TableFrames, got '{type(result_value)}'"
-                " instead"
-            )
-            raise TypeError(
-                "The result of a registered function must be a TableFrame,"
-                f" None or a list of TableFrames, got '{type(result_value)}'"
-                " instead"
-            )
-        results_to_provide.append(intermediate_result)
-    exporter_plugin.trigger_output(output_folder, *results_to_provide)
-    logger.info(f"Exported files with plugin '{exporter_plugin}'")
 
 
 def store_results_in_table(
@@ -298,8 +248,8 @@ def store_results_in_table(
         logger.info(f"Storing result in table '{table}'")
         table_path = convert_uri_to_path(table.get("uri"))
         logger.debug(f"URI converted to path {table_path}")
-        if isinstance(result.value, td.TableFrame):
-            result_value: td.TableFrame = result.value
+        if isinstance(result.value, TableFrame):
+            result_value: TableFrame = result.value
             store_polars_lf_in_file(result_value._lf, table_path)
         else:
             logger.error(
@@ -516,7 +466,7 @@ def pair_result_with_destination(
             "Result is None. However, any None result should have been "
             "converted to an empty TableFrame."
         )
-    elif isinstance(result, td.TableFrame):
+    elif isinstance(result, TableFrame):
         intermediate_files = [os.path.join(output_folder, str(number))]
         result = [result]
         destination_files = [destination_file]
@@ -675,7 +625,7 @@ def store_file_in_catalog(
 
 
 def store_result_using_transporter(
-    result: td.TableFrame,
+    result: TableFrame,
     destination_path: str,
     intermediate_file: str,
     destination: LocalFileDestination | AzureDestination | S3Destination,
@@ -756,7 +706,7 @@ def store_result_in_sql_table(
     if result is None:
         logger.info("Result is None. No data stored.")
         return
-    elif isinstance(result, td.TableFrame):
+    elif isinstance(result, TableFrame):
         pass
     else:
         logger.error(f"Incorrect result type: '{type(result)}'. No data stored.")
@@ -834,7 +784,7 @@ def store_polars_lf_in_file(
         )
 
 
-def remove_system_columns_and_convert(result: td.TableFrame) -> pl.LazyFrame:
+def remove_system_columns_and_convert(result: TableFrame) -> pl.LazyFrame:
     try:
         # Note: this converts result from a TableFrame to a LazyFrame
         return result._lf.drop(td_helpers.SYSTEM_COLUMNS)

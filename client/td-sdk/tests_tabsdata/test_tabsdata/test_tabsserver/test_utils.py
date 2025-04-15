@@ -11,6 +11,9 @@ from tabsdata.tabsserver.function.store_results_utils import (
 )
 from tabsdata.tabsserver.utils import convert_uri_to_path
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_convert_uri_to_path():
     # We use current directory instead of a hardcoded value so that it properly

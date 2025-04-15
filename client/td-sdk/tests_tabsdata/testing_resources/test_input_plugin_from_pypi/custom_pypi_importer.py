@@ -14,7 +14,7 @@ class PyPIPkgStatsSource(td.SourcePlugin):
     def __init__(self, package_name: str):
         self.package_name = package_name
 
-    def trigger_input(self, working_dir: str) -> str:
+    def chunk(self, working_dir: str) -> str:
         # Endpoint with the downloads information of the package
         base_endpoint = f"https://pypistats.org/api/packages/{self.package_name}"
         # Get the downloads by system

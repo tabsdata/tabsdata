@@ -45,9 +45,12 @@ from tests_tabsdata.testing_resources.test_output_s3_catalog_schema_strategy.exa
 
 from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.invoker import EXECUTION_CONTEXT_FILE_NAME
+from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
+
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -102,7 +105,7 @@ def test_output_s3_catalog(tmp_path, s3_client):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -207,7 +210,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
                 save_location=tmp_path,
             )
 
-            input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+            input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
             response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
             os.makedirs(response_folder, exist_ok=True)
             mock_parquet_table = os.path.join(
@@ -309,7 +312,7 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
                 save_location=tmp_path,
             )
 
-            input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+            input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
             response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
             os.makedirs(response_folder, exist_ok=True)
             mock_parquet_table = os.path.join(
@@ -415,7 +418,7 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -497,7 +500,7 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client):
         schema=pyarrow_table.schema,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -602,7 +605,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
         schema=pyarrow_table.schema,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -697,7 +700,7 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
     with iceberg_table.update_spec() as update:
         update.add_field("timestamp", YearTransform())
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
@@ -806,7 +809,7 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client):
         save_location=tmp_path,
     )
 
-    input_yaml_file = os.path.join(tmp_path, EXECUTION_CONTEXT_FILE_NAME)
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(

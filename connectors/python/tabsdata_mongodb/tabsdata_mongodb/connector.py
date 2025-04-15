@@ -134,6 +134,9 @@ class MongoDBDestination(DestinationPlugin):
         self._support_insert_one = self.kwargs.get("support_insert_one", {})
         self._support_bulk_write = self.kwargs.get("support_bulk_write", {})
         self._support_update_one = self.kwargs.get("support_update_one", {})
+        self._support_pymongo_logging_level = self.kwargs.get(
+            "support_pymongo_logging_level", logging.ERROR
+        )
 
     @property
     def collections_with_ids(self) -> List[tuple[str, str | None]]:
@@ -206,16 +209,13 @@ class MongoDBDestination(DestinationPlugin):
             )
         self._if_collection_exists = if_collection_exists
 
-    def trigger_output(self, working_dir: str, *args):
-        results = args
-        if len(results) != len(self.collections_with_ids):
-            raise ValueError(
-                f"The number of results ({len(results)}) does not match the number of "
-                f"collections provided ({len(self.collections_with_ids)}. Please make "
-                "sure that the number of results matches the number of collections."
-            )
+    def write(self, files):
+        """
+        This method is used to write the files to the database. It is called
+        from the stream method, and it is not intended to be called directly.
+        """
+
         uri = self.uri
-        self.working_dir = working_dir
         if self.credentials:
             logger.debug("Using credentials to connect to the database")
             user = quote_plus(self.credentials.user.secret_value)
@@ -240,17 +240,20 @@ class MongoDBDestination(DestinationPlugin):
         with self.client.start_session(**self._suport_start_session) as session:
             if not self.use_trxs:
                 session = None
-            for index, (result, (collection, id_field)) in enumerate(
-                zip(results, self.collections_with_ids)
+            for file_list, (collection, id_field) in zip(
+                files, self.collections_with_ids
             ):
-                if result is None:
+                if file_list is None:
                     logger.warning(
                         f"Result for collection '{collection}' is None. Skipping"
                     )
                 else:
+                    logger.info(
+                        f"Storing files {file_list} in collection '{collection}'"
+                    )
                     start = timer()
-                    self._store_result_in_collection(
-                        result, collection, id_field, session, index
+                    self._store_file_list_in_collection(
+                        file_list, collection, id_field, session
                     )
                     end = timer()
                     time_taken = end - start
@@ -260,47 +263,78 @@ class MongoDBDestination(DestinationPlugin):
                     )
             logger.info("All results stored")
 
-    def _store_result_in_collection(
-        self, result: pl.LazyFrame, collection, id_field, session, index
-    ):
+    def stream(self, working_dir: str, *results: List[pl.LazyFrame | None] | None):
+        if len(results) != len(self.collections_with_ids):
+            raise ValueError(
+                f"The number of results ({len(results)}) does not match the number of "
+                f"collections provided ({len(self.collections_with_ids)}. Please make "
+                "sure that the number of results matches the number of collections."
+            )
+        logging.getLogger("pymongo").setLevel(self._support_pymongo_logging_level)
+        # Chunk the results
+        files = self.chunk(working_dir, *results)
+        self.write(files)
+
+    def _store_file_list_in_collection(self, file_list, collection, id_field, session):
         database_name, collection_name = collection.split(".")
         logger.info(
-            f"Storing results in collection '{collection_name}' in database "
-            f"'{database_name}'"
+            f"Storing files in collection '{collection_name}' in "
+            f"database '{database_name}'"
         )
         database = self.client[database_name]
         collection = database.get_collection(
             collection_name, **self._suport_get_collection
         )
         if self.if_collection_exists == "replace":
+            logger.debug("Using 'replace' option for the collection")
             _drop_collection(collection)
-        file_name = f"intermediate_{index}"
-        file_name += "_{part}.jsonl"
-        intermediate_destination_file_pattern = os.path.join(
-            self.working_dir, file_name
-        )
-        logger.debug(f"Sinking the data to {intermediate_destination_file_pattern}")
-        result.sink_ndjson(
-            pl.PartitionMaxSize(
-                intermediate_destination_file_pattern,
-                max_size=self.docs_per_trx,
-            ),
-            maintain_order=True,
-        )
-        logger.debug(
-            f"Loading the data from {intermediate_destination_file_pattern} in "
-            f"streaming mode and storing it in the collection '{collection.name}'"
-        )
+        else:
+            logger.debug("Using 'append' option for the collection")
+        logger.debug(f"Loading the data from the chunks {file_list} in streaming mode")
         # Given the pattern that we gave polars.sink_ndjson, we need to get the
         # list of files that match the pattern. In this case, we match the {part}
         # section to a wildcard that can take any value.
-        for file in _get_matching_files(
-            intermediate_destination_file_pattern.replace("{part}", "*")
-        ):
+        for file in file_list:
             self._store_and_control_errors_single_file(
                 session, file, collection, id_field
             )
         logger.info(f"Results stored in collection '{collection.name}'")
+
+    def chunk(
+        self, working_dir: str, *results: List[pl.LazyFrame | None]
+    ) -> List[None | List[str]]:
+        # This method will split the results and generate files for each one of them
+        list_of_files = []
+        logger.info("Chunking the results")
+        for index, result in enumerate(results):
+            logger.debug(f"Chunking result in position {index}")
+            if result is None:
+                logger.warning(f"Result in position '{index}' is None.")
+                list_of_files.append(None)
+            else:
+                file_name = f"intermediate_{index}"
+                file_name += "_{part}.jsonl"
+                intermediate_destination_file_pattern = os.path.join(
+                    working_dir, file_name
+                )
+                logger.debug(
+                    f"Sinking the data to {intermediate_destination_file_pattern}"
+                )
+                result.sink_ndjson(
+                    pl.PartitionMaxSize(
+                        intermediate_destination_file_pattern,
+                        max_size=self.docs_per_trx,
+                    ),
+                    maintain_order=True,
+                )
+                files_generated = _get_matching_files(
+                    intermediate_destination_file_pattern.replace("{part}", "*")
+                )
+                logger.debug(f"Files generated: {files_generated}")
+                list_of_files.append(files_generated)
+            logger.debug(f"Chunked result in position {index} successfully")
+        logger.info("All results chunked successfully")
+        return list_of_files
 
     def _store_and_control_errors_single_file(
         self, session, file, collection, id_field

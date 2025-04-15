@@ -2,63 +2,42 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import argparse
 import logging
 import os
 import traceback
 
-from tabsdata.tabsserver.function.logging_utils import pad_string
-from tabsdata.tabsserver.function.results_collection import ResultsCollection
-from tabsdata.utils.bundle_utils import CONFIG_OUTPUT_KEY
-
-from . import (
-    configuration_utils,
-    execution_utils,
-    initial_values_utils,
-    response_utils,
-    store_results_utils,
-    yaml_parsing,
+from tabsdata.tabsserver.function.execution_context import (
+    ExecutionContext,
+    ExecutionPaths,
 )
-from .global_utils import ABSOLUTE_LOCATION, setup_logging
-from .initial_values_utils import INITIAL_VALUES
+from tabsdata.tabsserver.function.execution_utils import execute_function_from_config
+from tabsdata.tabsserver.function.global_utils import ABSOLUTE_LOCATION, setup_logging
+from tabsdata.tabsserver.function.logging_utils import pad_string
+from tabsdata.tabsserver.function.response_utils import create_response
+from tabsdata.tabsserver.function.results_collection import ResultsCollection
+from tabsdata.tabsserver.function.store_results_utils import store_results
 
 logger = logging.getLogger(__name__)
 
 
 def execute_bundled_function(
-    bundle_folder: str,
-    execution_context_file: str,
-    response_folder: str,
-    output_folder: str,
+    execution_context: ExecutionContext,
 ) -> ResultsCollection:
-    create_outwards_folders(response_folder, output_folder)
-    configuration = configuration_utils.load_configuration(bundle_folder)
-    execution_context = yaml_parsing.parse_request_yaml(execution_context_file)
-    INITIAL_VALUES.load_current_initial_values(execution_context)
-    results = execution_utils.execute_function_from_config(
-        config=configuration,
-        working_dir=bundle_folder,
-        execution_context=execution_context,
+    # Execute the function and obtain a ResultsCollection
+    results = execute_function_from_config(execution_context)
+    modified_tables = store_results(
+        execution_context,
+        results,
     )
-    modified_tables = []
-    if configuration.get(CONFIG_OUTPUT_KEY):
-        modified_tables = store_results_utils.store_results(
-            results=results,
-            output_configuration=configuration.get(CONFIG_OUTPUT_KEY),
-            working_dir=bundle_folder,
-            execution_context=execution_context,
-            output_folder=output_folder,
-        )
-    new_initial_values = initial_values_utils.store_initial_values(execution_context)
-    response_utils.create_response(
-        modified_tables, response_folder, execution_context, new_initial_values
+    execution_context.store_initial_values()
+    create_response(
+        execution_context,
+        modified_tables,
     )
     return results
-
-
-def create_outwards_folders(response_folder: str, output_folder: str):
-    os.makedirs(response_folder, exist_ok=True)
-    os.makedirs(output_folder, exist_ok=True)
 
 
 if __name__ == "__main__":
@@ -67,7 +46,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--bundle-path", type=str, help="Path of the function bundle")
     parser.add_argument(
-        "--execution-context-file",
+        "--request-file",
         type=str,
         help="Path of the file with the backend context for the execution.",
         required=True,
@@ -95,18 +74,20 @@ if __name__ == "__main__":
         ),
         default=None,
     )
-    args = parser.parse_args()
+    arguments = parser.parse_args()
     setup_logging(
         default_path=os.path.join(ABSOLUTE_LOCATION, "function_logging.yaml"),
-        logs_folder=args.logs_folder,
+        logs_folder=arguments.logs_folder,
     )
     try:
-        execute_bundled_function(
-            args.bundle_path,
-            args.execution_context_file,
-            response_folder=args.response_folder,
-            output_folder=args.output_folder,
+        execution_fs = ExecutionPaths(
+            bundle_folder=arguments.bundle_path,
+            request_file=arguments.request_file,
+            response_folder=arguments.response_folder,
+            output_folder=arguments.output_folder,
         )
+        execution_context = ExecutionContext(paths=execution_fs)
+        execute_bundled_function(execution_context)
         logger.info(pad_string("[Exiting function execution]"))
         logger.info("Function executed successfully. Exiting.")
     except Exception as e:

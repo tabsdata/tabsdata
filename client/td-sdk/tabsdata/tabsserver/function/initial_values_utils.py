@@ -57,22 +57,22 @@ class InitialValues:
 
     @returns_values.setter
     def returns_values(self, returns_values: bool):
-        logger.debug(f"Setting returns_values to {returns_values}")
+        logger.debug(f"Setting initial values 'returns_values' to {returns_values}")
         self._returns_values = returns_values
 
     def __str__(self):
         return str(self.new_initial_values)
 
-    def load_current_initial_values(self, execution_context: InputYaml):
+    def load_current_initial_values(self, request: InputYaml):
         """
         Load the current initial values from the execution context.
 
         Args:
-            execution_context: The execution context.
+            request: The request information.
         """
         logger.debug("Loading current initial values")
-        if execution_context:
-            system_input = execution_context.system_input
+        if request:
+            system_input = request.system_input
             logger.debug(f"System input: {system_input}")
             td_initial_values_table = None
             if system_input:
@@ -100,58 +100,54 @@ class InitialValues:
                 )
         logger.debug(f"Current initial values: {self.current_initial_values}")
 
+    def store(self, execution_context: InputYaml) -> bool:
+        """
+        Store the initial values in the global variable.
 
-INITIAL_VALUES = InitialValues()
+        Args:
+            execution_context: The execution context.
 
-
-def store_initial_values(execution_context: InputYaml) -> bool:
-    """
-    Store the initial values in the global variable.
-
-    Args:
-        execution_context: The execution context.
-
-    Returns:
-        True if the initial values were stored successfully, False otherwise.
-    """
-    logger.info(pad_string("[Storing execution information]"))
-    logger.info(f"Storing initial values {INITIAL_VALUES}")
-    if not INITIAL_VALUES.new_initial_values:
-        logger.warning("No initial values to store")
-        return False
-    system_output = execution_context.system_output
-    destination_table_uri = None
-    if system_output:
-        for table in system_output:
-            if table.name == INITIAL_VALUES_TABLE_NAME:
-                destination_table_uri = table.uri
-                logger.info(
-                    f"Found the table '{INITIAL_VALUES_TABLE_NAME}' with "
-                    f"URI '{destination_table_uri}'"
-                )
-                break
-    if destination_table_uri:
-        variables_column = []
-        values_column = []
-        for variable_name, value in INITIAL_VALUES.new_initial_values.items():
-            variables_column.append(variable_name)
-            values_column.append(value)
-        df = pl.DataFrame(
-            {
-                INITIAL_VALUES_VARIABLE_COLUMN: variables_column,
-                INITIAL_VALUES_VALUE_COLUMN: values_column,
-            }
-        )
-        logger.info(
-            f"Storing the initial values {df} in the table "
-            f"'{INITIAL_VALUES_TABLE_NAME}' with URI '{destination_table_uri}'"
-        )
-        df.write_parquet(convert_uri_to_path(destination_table_uri))
-        logger.debug("Initial values stored successfully.")
-        return True
-    else:
-        logger.warning(
-            f"The URI of the table '{INITIAL_VALUES_TABLE_NAME}' was None. No "
-            "values were stored"
-        )
-        return False
+        Returns:
+            True if the initial values were stored successfully, False otherwise.
+        """
+        logger.info(pad_string("[Storing execution information]"))
+        logger.info(f"Storing initial values {str(self)}")
+        if not self.new_initial_values:
+            logger.warning("No initial values to store")
+            return False
+        system_output = execution_context.system_output
+        destination_table_uri = None
+        if system_output:
+            for table in system_output:
+                if table.name == INITIAL_VALUES_TABLE_NAME:
+                    destination_table_uri = table.uri
+                    logger.info(
+                        f"Found the table '{INITIAL_VALUES_TABLE_NAME}' with "
+                        f"URI '{destination_table_uri}'"
+                    )
+                    break
+        if destination_table_uri:
+            variables_column = []
+            values_column = []
+            for variable_name, value in self.new_initial_values.items():
+                variables_column.append(variable_name)
+                values_column.append(value)
+            df = pl.DataFrame(
+                {
+                    INITIAL_VALUES_VARIABLE_COLUMN: variables_column,
+                    INITIAL_VALUES_VALUE_COLUMN: values_column,
+                }
+            )
+            logger.info(
+                f"Storing the initial values {df} in the table "
+                f"'{INITIAL_VALUES_TABLE_NAME}' with URI '{destination_table_uri}'"
+            )
+            df.write_parquet(convert_uri_to_path(destination_table_uri))
+            logger.debug("Initial values stored successfully.")
+            return True
+        else:
+            logger.warning(
+                f"The URI of the table '{INITIAL_VALUES_TABLE_NAME}' was None. No "
+                "values were stored"
+            )
+            return False
