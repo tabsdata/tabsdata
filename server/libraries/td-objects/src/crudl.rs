@@ -22,23 +22,50 @@ use utoipa::IntoParams;
 #[td_type::typed(bool)]
 pub struct SysAdmin;
 
+pub trait ServerContext: Debug {}
+
 /// Request context for the logic layer.
-#[td_type::Dto]
+#[derive(Debug, Clone, Getters)]
+#[getset(get = "pub")]
 pub struct RequestContext {
-    /// The ID of the access token in the requeset.
-    #[td_type(extractor)]
+    /// The ID of the access token in the request.
     access_token_id: AccessTokenId,
     /// The ID of the user making the request.
-    #[td_type(extractor)]
     user_id: UserId,
     /// The role of the user making the request.
-    #[td_type(extractor)]
     role_id: RoleId,
     /// if the role has system admin privileges.
     sys_admin: SysAdmin,
     /// The time the request was made.
-    #[td_type(extractor)]
     time: AtTime,
+}
+
+// So it works with the extractors
+impl From<&RequestContext> for AccessTokenId {
+    fn from(from: &RequestContext) -> Self {
+        from.access_token_id.clone()
+    }
+}
+
+// So it works with the extractors
+impl From<&RequestContext> for UserId {
+    fn from(from: &RequestContext) -> Self {
+        from.user_id.clone()
+    }
+}
+
+// So it works with the extractors
+impl From<&RequestContext> for RoleId {
+    fn from(from: &RequestContext) -> Self {
+        from.role_id.clone()
+    }
+}
+
+// So it works with the extractors
+impl From<&RequestContext> for AtTime {
+    fn from(from: &RequestContext) -> Self {
+        from.time.clone()
+    }
 }
 
 impl RequestContext {
