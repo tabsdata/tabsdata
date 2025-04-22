@@ -5,6 +5,7 @@
 use crate::logic::users::error::UserError;
 use crate::logic::users::service::update_user::UpdateUserService;
 use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::test_utils::seed_user::seed_user;
@@ -19,15 +20,19 @@ async fn test_cannot_force_password_change_to_self() {
 
     seed_user(&db, None, "u0", false).await;
 
-    let service = UpdateUserService::new(db.clone(), password_hashing_config)
-        .service()
-        .await;
+    let service = UpdateUserService::new(
+        db.clone(),
+        password_hashing_config,
+        Arc::new(AuthzContext::default()),
+    )
+    .service()
+    .await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-        true,
+        false,
     );
 
     let update = UserUpdate {
@@ -41,11 +46,8 @@ async fn test_cannot_force_password_change_to_self() {
     let request = ctx.update("admin", update);
 
     assert_service_error(service, request, |err| match err {
-        UserError::CannotForcePasswordChangeToSelf => {}
-        other => panic!(
-            "Expected 'CannotForcePasswordChangeToSelf', got {:?}",
-            other
-        ),
+        UserError::CannotForcePasswordChange => {}
+        other => panic!("Expected 'CannotForcePasswordChange', got {:?}", other),
     })
     .await;
 }

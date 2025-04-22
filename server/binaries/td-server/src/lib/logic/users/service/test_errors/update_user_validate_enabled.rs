@@ -5,6 +5,7 @@
 use crate::logic::users::error::UserError;
 use crate::logic::users::service::update_user::UpdateUserService;
 use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
@@ -16,9 +17,13 @@ async fn test_user_cannot_enable_disable_themselves() {
     let db = td_database::test_utils::db().await.unwrap();
     let password_hashing_config = Arc::new(PasswordHashingConfig::default());
 
-    let service = UpdateUserService::new(db.clone(), password_hashing_config)
-        .service()
-        .await;
+    let service = UpdateUserService::new(
+        db.clone(),
+        password_hashing_config,
+        Arc::new(AuthzContext::default()),
+    )
+    .service()
+    .await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),

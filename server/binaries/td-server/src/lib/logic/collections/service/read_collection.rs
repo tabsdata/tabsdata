@@ -2,7 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::collections::layers::read_collection_authorize;
+use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::collections::dao::CollectionWithNames;
@@ -10,10 +11,13 @@ use td_objects::collections::dto::CollectionRead;
 use td_objects::crudl::ReadRequest;
 use td_objects::dlo::CollectionName;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::tower_service::extractor::extract_name;
+use td_objects::tower_service::authz::{AuthzOn, NoPermissions, System};
+use td_objects::tower_service::extractor::{extract_name, extract_req_context};
 use td_objects::tower_service::finder::find_by_name;
 use td_objects::tower_service::mapper::map;
-use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
+use td_tower::default_services::{
+    ConnectionProvider, ServiceEntry, ServiceReturn, Share, SrvCtxProvider,
+};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
@@ -23,21 +27,27 @@ pub struct ReadCollectionService {
 }
 
 impl ReadCollectionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         ReadCollectionService {
-            provider: Self::provider(db),
+            provider: Self::provider(db, authz_context),
         }
     }
 
-    fn provider<Req: Share, Res: Share>(db: DbPool) -> ServiceProvider<Req, Res, TdError> {
+    fn provider<Req: Share, Res: Share>(
+        db: DbPool,
+        authz_context: Arc<AuthzContext>,
+    ) -> ServiceProvider<Req, Res, TdError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(ConnectionProvider::new(db))
+            .layer(SrvCtxProvider::new(authz_context))
+            .layer(from_fn(extract_req_context::<ReadRequest<CollectionParam>>))
+            .layer(from_fn(AuthzOn::<System>::set))
+            .layer(from_fn(Authz::<NoPermissions>::check)) // no permission required
             .layer(from_fn(
                 extract_name::<ReadRequest<CollectionParam>, CollectionParam, CollectionName>,
             ))
             .layer(from_fn(find_by_name::<CollectionName, CollectionWithNames>))
-            .layer(from_fn(read_collection_authorize))
             .layer(from_fn(map::<CollectionWithNames, CollectionRead>))
             .service(ServiceReturn)
             .into_service_provider()
@@ -53,6 +63,8 @@ impl ReadCollectionService {
 #[cfg(test)]
 pub mod tests {
     use crate::logic::collections::service::read_collection::ReadCollectionService;
+    use std::sync::Arc;
+    use td_authz::AuthzContext;
     use td_common::id::Id;
     use td_common::time::UniqueUtc;
     use td_objects::crudl::RequestContext;
@@ -65,28 +77,32 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_read_provider() {
-        use crate::logic::collections::layers::read_collection_authorize;
         use crate::logic::collections::service::read_collection::ReadCollectionService;
+        use td_authz::{Authz, AuthzContext};
         use td_objects::collections::dao::CollectionWithNames;
         use td_objects::collections::dto::CollectionRead;
         use td_objects::crudl::ReadRequest;
         use td_objects::dlo::CollectionName;
+        use td_objects::tower_service::authz::{AuthzOn, NoPermissions, System};
         use td_objects::tower_service::extractor::extract_name;
+        use td_objects::tower_service::extractor::extract_req_context;
         use td_objects::tower_service::finder::find_by_name;
         use td_objects::tower_service::mapper::map;
         use td_tower::metadata::*;
 
         let db = td_database::test_utils::db().await.unwrap();
-        let provider = ReadCollectionService::provider(db);
+        let provider = ReadCollectionService::provider(db, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ReadRequest<CollectionParam>, CollectionRead>(&[
+            type_of_val(&extract_req_context::<ReadRequest<CollectionParam>>),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<NoPermissions>::check),
             type_of_val(
                 &extract_name::<ReadRequest<CollectionParam>, CollectionParam, CollectionName>,
             ),
             type_of_val(&find_by_name::<CollectionName, CollectionWithNames>),
-            type_of_val(&read_collection_authorize),
             type_of_val(&map::<CollectionWithNames, CollectionRead>),
         ]);
     }
@@ -101,7 +117,9 @@ pub mod tests {
         let admin_id = admin_user(&db).await;
         seed_collection(&db, None, "ds0").await;
 
-        let service = ReadCollectionService::new(db).service().await;
+        let service = ReadCollectionService::new(db, Arc::new(AuthzContext::default()))
+            .service()
+            .await;
 
         let request = RequestContext::with(
             AccessTokenId::default(),

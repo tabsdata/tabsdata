@@ -3,9 +3,9 @@
 #
 
 [package]
-description = "Tabsdata API Services"
+description = "Tabsdata REST API Types"
 edition = { workspace = true }
-name = "td-services"
+name = "td-rest"
 publish = false
 rust-version = { workspace = true }
 version = { workspace = true }
@@ -21,11 +21,10 @@ dummy = []
 mock-env = []
 sqlx_log = []
 test_logging = []
-test_tower_metadata = ["td-tower/test_tower_metadata"]
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum_macros", "thiserror", "tower"]
+ignored = ["openssl"]
 
 # Build dependencies
 
@@ -47,32 +46,23 @@ td-error = { workspace = true }
 
 td-authz = { workspace = true }
 td-common = { workspace = true }
-td-database = { workspace = true }
 td-objects = { workspace = true }
 td-security = { workspace = true }
-td-tower = { workspace = true }
 
 # External dependencies
 
-argon2 = { workspace = true }
 async-trait = { workspace = true }
-axum = { workspace = true, features = ["macros"] }
-chrono = { workspace = true }
-getset = { workspace = true }
-jsonwebtoken = { workspace = true }
-lazy_static = { workspace = true }
-serde = { workspace = true}
-sqlx = { workspace = true }
-strum_macros = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
-tower = { workspace = true }
-tracing = { workspace = true }
-
 
 [dev-dependencies]
 td-objects = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true }
+derive_builder = { workspace = true }
+getset = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_valid = { workspace = true }
+strum_macros = { workspace = true }
+thiserror = { workspace = true }
+utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

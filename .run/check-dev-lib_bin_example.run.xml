@@ -7,7 +7,7 @@
     <option name="emulateTerminal" value="true" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="true" />
-    <option name="allFeatures" value="false" />
+    <option name="allFeatures" value="true" />
     <option name="withSudo" value="false" />
     <option name="buildTarget" value="REMOTE" />
     <option name="backtrace" value="SHORT" />

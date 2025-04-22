@@ -75,7 +75,7 @@ mod tests {
             AccessTokenId::default(),
             UserId::try_from(users[0].id().as_str()).unwrap(),
             RoleId::sys_admin(),
-            true,
+            false,
         )
         .create(
             CollectionName::new(collection[0].name()),

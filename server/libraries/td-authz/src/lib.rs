@@ -9,11 +9,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use td_common::provider::{CachedProvider, Provider};
 use td_error::TdError;
-use td_objects::tower_service::authz::{AuthzContext, NoPermissions, Permission};
+use td_objects::tower_service::authz::{AuthzContextT, NoPermissions, Permission};
 use td_objects::types::basic::RoleId;
 
 mod sql;
 
+pub type AuthzContext = AuthzContextImplWithCache<'static>;
 pub struct AuthzContextImplWithCache<'a> {
     provider: CachedProvider<
         'a,
@@ -32,7 +33,7 @@ impl Default for AuthzContextImplWithCache<'_> {
 }
 
 #[async_trait]
-impl AuthzContext for AuthzContextImplWithCache<'_> {
+impl AuthzContextT for AuthzContextImplWithCache<'_> {
     async fn role_permissions(
         &self,
         conn: &mut SqliteConnection,
@@ -51,7 +52,7 @@ impl AuthzContext for AuthzContextImplWithCache<'_> {
     }
 }
 
-/// [`td_objects::tower_service::authz::Authz`]  with a fixed [`AuthzContext`] context.
+/// [`td_objects::tower_service::authz::Authz`]  with a fixed [`AuthzContextT`] context.
 ///
 /// It expects a [`AuthzContextImplWithCache`] in the service context.
 pub type Authz<
@@ -63,13 +64,4 @@ pub type Authz<
     C5 = NoPermissions,
     C6 = NoPermissions,
     C7 = NoPermissions,
-> = td_objects::tower_service::authz::Authz<
-    AuthzContextImplWithCache<'a>,
-    C1,
-    C2,
-    C3,
-    C4,
-    C5,
-    C6,
-    C7,
->;
+> = td_objects::tower_service::authz::Authz<AuthzContext, C1, C2, C3, C4, C5, C6, C7>;

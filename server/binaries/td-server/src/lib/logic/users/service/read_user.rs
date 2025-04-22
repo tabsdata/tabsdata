@@ -2,19 +2,23 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::users::layers::read_user_authorize;
+use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
+use td_common::id::Id;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::ReadRequest;
-use td_objects::dlo::UserName;
-use td_objects::tower_service::extractor::{
-    extract_name, extract_req_is_admin, extract_req_user_id, extract_user_id,
-};
+use td_objects::dlo::{UserId, UserName, Value};
+use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
+use td_objects::tower_service::extractor::{extract_name, extract_req_context, extract_user_id};
 use td_objects::tower_service::finder::find_by_name;
 use td_objects::tower_service::mapper::map;
 use td_objects::users::dao::UserWithNames;
 use td_objects::users::dto::UserRead;
-use td_tower::default_services::{ConnectionProvider, ServiceEntry, ServiceReturn, Share};
+use td_tower::default_services::{
+    ConnectionProvider, ServiceEntry, ServiceReturn, Share, SrvCtxProvider,
+};
+use td_tower::extractors::Input;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
@@ -24,24 +28,29 @@ pub struct ReadUserService {
 }
 
 impl ReadUserService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         ReadUserService {
-            provider: Self::provider(db),
+            provider: Self::provider(db, authz_context),
         }
     }
 
-    fn provider<Req: Share, Res: Share>(db: DbPool) -> ServiceProvider<Req, Res, TdError> {
+    fn provider<Req: Share, Res: Share>(
+        db: DbPool,
+        authz_context: Arc<AuthzContext>,
+    ) -> ServiceProvider<Req, Res, TdError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(ConnectionProvider::new(db))
+            .layer(SrvCtxProvider::new(authz_context))
+            .layer(from_fn(extract_req_context::<ReadRequest<String>>))
             .layer(from_fn(
                 extract_name::<ReadRequest<String>, String, UserName>,
             ))
             .layer(from_fn(find_by_name::<UserName, UserWithNames>))
             .layer(from_fn(extract_user_id::<UserWithNames>))
-            .layer(from_fn(extract_req_is_admin::<ReadRequest<String>>))
-            .layer(from_fn(extract_req_user_id::<ReadRequest<String>>))
-            .layer(from_fn(read_user_authorize))
+            .layer(from_fn(user_id_to_user_id))
+            .layer(from_fn(AuthzOn::<SystemOrUserId>::set))
+            .layer(from_fn(Authz::<SecAdmin, Requester>::check))
             .layer(from_fn(map::<UserWithNames, UserRead>))
             .service(ServiceReturn)
             .into_service_provider()
@@ -52,9 +61,18 @@ impl ReadUserService {
     }
 }
 
+// TEMPORARY
+pub async fn user_id_to_user_id(
+    Input(user_id): Input<UserId>,
+) -> Result<td_objects::types::basic::UserId, TdError> {
+    Ok(Id::try_from(user_id.value())?.into())
+}
+
 #[cfg(test)]
 pub mod tests {
     use crate::logic::users::service::read_user::ReadUserService;
+    use std::sync::Arc;
+    use td_authz::AuthzContext;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::types::basic::{AccessTokenId, RoleId};
@@ -63,30 +81,34 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_read_provider() {
-        use crate::logic::users::layers::read_user_authorize;
+        use td_objects::tower_service::extractor::extract_user_id;
+        use crate::logic::users::service::read_user::user_id_to_user_id;
         use crate::logic::users::service::read_user::ReadUserService;
+        use td_authz::Authz;
         use td_objects::crudl::ReadRequest;
         use td_objects::dlo::UserName;
+        use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
         use td_objects::tower_service::extractor::extract_name;
-        use td_objects::tower_service::extractor::extract_user_id;
-        use td_objects::tower_service::extractor::{extract_req_is_admin, extract_req_user_id};
+        use td_objects::tower_service::extractor::extract_req_context;
         use td_objects::tower_service::finder::find_by_name;
         use td_objects::tower_service::mapper::map;
         use td_objects::users::dao::UserWithNames;
         use td_objects::users::dto::UserRead;
         use td_tower::metadata::*;
+
         let db = td_database::test_utils::db().await.unwrap();
-        let provider = ReadUserService::provider(db);
+        let provider = ReadUserService::provider(db, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<ReadRequest<String>, UserRead>(&[
+            type_of_val(&extract_req_context::<ReadRequest<String>>),
             type_of_val(&extract_name::<ReadRequest<String>, String, UserName>),
             type_of_val(&find_by_name::<UserName, UserWithNames>),
             type_of_val(&extract_user_id::<UserWithNames>),
-            type_of_val(&extract_req_is_admin::<ReadRequest<String>>),
-            type_of_val(&extract_req_user_id::<ReadRequest<String>>),
-            type_of_val(&read_user_authorize),
+            type_of_val(&user_id_to_user_id),
+            type_of_val(&AuthzOn::<SystemOrUserId>::set),
+            type_of_val(&Authz::<SecAdmin, Requester>::check),
             type_of_val(&map::<UserWithNames, UserRead>),
         ]);
     }
@@ -96,7 +118,9 @@ pub mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         let user_id = seed_user(&db, None, "u0", true).await;
 
-        let service = ReadUserService::new(db.clone()).service().await;
+        let service = ReadUserService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
 
         let request =
             RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)

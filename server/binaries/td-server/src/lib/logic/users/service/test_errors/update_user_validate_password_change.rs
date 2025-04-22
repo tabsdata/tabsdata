@@ -9,10 +9,12 @@
 use crate::logic::users::error::UserError;
 use crate::logic::users::service::update_user::UpdateUserService;
 use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::test_utils::seed_user::admin_user;
 use td_objects::test_utils::seed_user::seed_user;
+use td_objects::tower_service::authz::AuthzError;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 use td_objects::users::dto::{PasswordUpdate, UserUpdate};
 use td_security::config::PasswordHashingConfig;
@@ -22,9 +24,13 @@ async fn test_incorrect_old_password() {
     let db = td_database::test_utils::db().await.unwrap();
     let password_hashing_config = Arc::new(PasswordHashingConfig::default());
 
-    let service = UpdateUserService::new(db.clone(), password_hashing_config)
-        .service()
-        .await;
+    let service = UpdateUserService::new(
+        db.clone(),
+        password_hashing_config,
+        Arc::new(AuthzContext::default()),
+    )
+    .service()
+    .await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),
@@ -65,9 +71,13 @@ async fn test_incorrect_password_hash() {
         .await
         .unwrap();
 
-    let service = UpdateUserService::new(db.clone(), password_hashing_config)
-        .service()
-        .await;
+    let service = UpdateUserService::new(
+        db.clone(),
+        password_hashing_config,
+        Arc::new(AuthzContext::default()),
+    )
+    .service()
+    .await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),
@@ -101,9 +111,13 @@ async fn test_cannot_change_other_user_password() {
 
     seed_user(&db, None, "u0", false).await;
 
-    let service = UpdateUserService::new(db.clone(), password_hashing_config)
-        .service()
-        .await;
+    let service = UpdateUserService::new(
+        db.clone(),
+        password_hashing_config,
+        Arc::new(AuthzContext::default()),
+    )
+    .service()
+    .await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),
@@ -124,8 +138,8 @@ async fn test_cannot_change_other_user_password() {
     let request = ctx.update("u0", update);
 
     assert_service_error(service, request, |err| match err {
-        UserError::CannotChangeOtherUserPassword => {}
-        other => panic!("Expected 'CannotChangeOtherUserPassword', got {:?}", other),
+        AuthzError::UnAuthorized(_) => {}
+        other => panic!("Expected 'UnAuthorized', got {:?}", other),
     })
     .await;
 }

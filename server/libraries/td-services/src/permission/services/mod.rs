@@ -5,6 +5,8 @@
 use crate::permission::services::create::CreatePermissionService;
 use crate::permission::services::delete::DeletePermissionService;
 use crate::permission::services::list::ListPermissionService;
+use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, DeleteRequest, ListRequest, ListResponse};
@@ -23,11 +25,11 @@ pub struct PermissionServices {
 }
 
 impl PermissionServices {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         Self {
-            create: CreatePermissionService::new(db.clone()),
-            delete: DeletePermissionService::new(db.clone()),
-            list: ListPermissionService::new(db.clone()),
+            create: CreatePermissionService::new(db.clone(), authz_context.clone()),
+            delete: DeletePermissionService::new(db.clone(), authz_context.clone()),
+            list: ListPermissionService::new(db.clone(), authz_context.clone()),
         }
     }
 

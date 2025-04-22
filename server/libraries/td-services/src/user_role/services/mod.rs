@@ -6,6 +6,8 @@ use crate::user_role::services::create::CreateUserRoleService;
 use crate::user_role::services::delete::DeleteUserRoleService;
 use crate::user_role::services::list::ListUserRoleService;
 use crate::user_role::services::read::ReadUserRoleService;
+use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest};
@@ -26,12 +28,12 @@ pub struct UserRoleServices {
 }
 
 impl UserRoleServices {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         Self {
-            create: CreateUserRoleService::new(db.clone()),
-            read: ReadUserRoleService::new(db.clone()),
-            delete: DeleteUserRoleService::new(db.clone()),
-            list: ListUserRoleService::new(db.clone()),
+            create: CreateUserRoleService::new(db.clone(), authz_context.clone()),
+            read: ReadUserRoleService::new(db.clone(), authz_context.clone()),
+            delete: DeleteUserRoleService::new(db.clone(), authz_context.clone()),
+            list: ListUserRoleService::new(db.clone(), authz_context.clone()),
         }
     }
 

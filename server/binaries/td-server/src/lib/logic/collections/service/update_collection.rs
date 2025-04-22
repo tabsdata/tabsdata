@@ -3,9 +3,10 @@
 //
 
 use crate::logic::collections::layers::{
-    update_collection_authorize, update_collection_build_dao, update_collection_sql_update,
-    update_collection_validate,
+    update_collection_build_dao, update_collection_sql_update, update_collection_validate,
 };
+use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::collections::dao::{Collection, CollectionWithNames};
@@ -13,13 +14,16 @@ use td_objects::collections::dto::{CollectionRead, CollectionUpdate};
 use td_objects::crudl::UpdateRequest;
 use td_objects::dlo::{CollectionId, CollectionName};
 use td_objects::rest_urls::CollectionParam;
+use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
 use td_objects::tower_service::extractor::{
-    extract_collection_id, extract_name, extract_req_dto, extract_req_is_admin, extract_req_time,
+    extract_collection_id, extract_name, extract_req_context, extract_req_dto, extract_req_time,
     extract_req_user_id,
 };
 use td_objects::tower_service::finder::{find_by_id, find_by_name};
 use td_objects::tower_service::mapper::map;
-use td_tower::default_services::{ServiceEntry, ServiceReturn, Share, TransactionProvider};
+use td_tower::default_services::{
+    ServiceEntry, ServiceReturn, Share, SrvCtxProvider, TransactionProvider,
+};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::TdBoxService;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
@@ -31,20 +35,25 @@ pub struct UpdateCollectionService {
 }
 
 impl UpdateCollectionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         UpdateCollectionService {
-            provider: Self::provider(db),
+            provider: Self::provider(db, authz_context),
         }
     }
 
-    fn provider<Req: Share, Res: Share>(db: DbPool) -> ServiceProvider<Req, Res, TdError> {
+    fn provider<Req: Share, Res: Share>(
+        db: DbPool,
+        authz_context: Arc<AuthzContext>,
+    ) -> ServiceProvider<Req, Res, TdError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
+            .layer(SrvCtxProvider::new(authz_context))
             .layer(from_fn(
-                extract_req_is_admin::<UpdateRequest<CollectionParam, CollectionUpdate>>,
+                extract_req_context::<UpdateRequest<CollectionParam, CollectionUpdate>>,
             ))
-            .layer(from_fn(update_collection_authorize))
+            .layer(from_fn(AuthzOn::<System>::set))
+            .layer(from_fn(Authz::<SysAdmin>::check))
             .layer(from_fn(
                 extract_name::<
                     UpdateRequest<CollectionParam, CollectionUpdate>,
@@ -87,6 +96,8 @@ impl UpdateCollectionService {
 #[cfg(test)]
 pub mod tests {
     use crate::logic::collections::service::update_collection::UpdateCollectionService;
+    use std::sync::Arc;
+    use td_authz::AuthzContext;
     use td_common::id::Id;
     use td_common::time::UniqueUtc;
     use td_objects::collections::dto::CollectionUpdateBuilder;
@@ -100,21 +111,23 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_update_provider() {
-        use crate::logic::collections::layers::update_collection_authorize;
         use crate::logic::collections::layers::update_collection_validate;
         use crate::logic::collections::layers::{
             update_collection_build_dao, update_collection_sql_update,
         };
         use crate::logic::collections::service::update_collection::UpdateCollectionService;
+        use td_authz::Authz;
         use td_objects::collections::dao::{Collection, CollectionWithNames};
         use td_objects::collections::dto::CollectionRead;
         use td_objects::collections::dto::CollectionUpdate;
         use td_objects::crudl::UpdateRequest;
         use td_objects::dlo::CollectionId;
         use td_objects::dlo::CollectionName;
+        use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
+        use td_objects::tower_service::extractor::extract_req_context;
         use td_objects::tower_service::extractor::{extract_collection_id, extract_req_dto};
         use td_objects::tower_service::extractor::{
-            extract_name, extract_req_is_admin, extract_req_time, extract_req_user_id,
+            extract_name, extract_req_time, extract_req_user_id,
         };
         use td_objects::tower_service::finder::find_by_id;
         use td_objects::tower_service::finder::find_by_name;
@@ -123,16 +136,17 @@ pub mod tests {
         use td_tower::metadata::*;
 
         let db = td_database::test_utils::db().await.unwrap();
-        let provider = UpdateCollectionService::provider(db);
+        let provider = UpdateCollectionService::provider(db, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata
             .assert_service::<UpdateRequest<CollectionParam, CollectionUpdate>, CollectionRead>(&[
                 type_of_val(
-                    &extract_req_is_admin::<UpdateRequest<CollectionParam, CollectionUpdate>>,
+                    &extract_req_context::<UpdateRequest<CollectionParam, CollectionUpdate>>,
                 ),
-                type_of_val(&update_collection_authorize),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SysAdmin>::check),
                 type_of_val(
                     &extract_name::<
                         UpdateRequest<CollectionParam, CollectionUpdate>,
@@ -172,7 +186,9 @@ pub mod tests {
             .and_utc()
             .timestamp_millis();
 
-        let service = UpdateCollectionService::new(db).service().await;
+        let service = UpdateCollectionService::new(db, Arc::new(AuthzContext::default()))
+            .service()
+            .await;
 
         let update = CollectionUpdateBuilder::default()
             .name("ds1")
@@ -183,8 +199,8 @@ pub mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
-            true,
+            RoleId::sys_admin(),
+            false,
         )
         .update(CollectionParam::new("ds0"), update);
 

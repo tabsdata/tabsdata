@@ -3,12 +3,14 @@
 //
 
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_name;
+use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
+use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{RoleId, RoleIdName};
@@ -25,22 +27,27 @@ pub struct DeleteRoleService {
 }
 
 impl DeleteRoleService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
+                TransactionProvider::new(db),
+                SrvCtxProvider::new(authz_context),
+                from_fn(extract_req_context::<DeleteRequest<RoleParam>>),
+                from_fn(AuthzOn::<System>::set),
+                from_fn(Authz::<SecAdmin>::check),
+
                 from_fn(extract_req_name::<DeleteRequest<RoleParam>, _>),
 
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
-                TransactionProvider::new(db),
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
 
@@ -63,6 +70,7 @@ impl DeleteRoleService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_authz::AuthzContext;
     use td_objects::crudl::RequestContext;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_permission::seed_permission;
@@ -78,17 +86,22 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_delete_role() {
+        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
+        use td_objects::tower_service::extractor::extract_req_context;
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
-        let provider = DeleteRoleService::provider(db, queries);
+        let provider = DeleteRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
         metadata.assert_service::<DeleteRequest<RoleParam>, ()>(&[
+            type_of_val(&extract_req_context::<DeleteRequest<RoleParam>>),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<SecAdmin>::check),
             type_of_val(&extract_req_name::<DeleteRequest<RoleParam>, _>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
@@ -162,7 +175,9 @@ mod tests {
             true,
         )
         .delete(RoleParam::builder().role(role_id_name.clone()).build()?);
-        let service = DeleteRoleService::new(db.clone()).service().await;
+        let service = DeleteRoleService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         if let Some(role_id) = role_id_name.id() {

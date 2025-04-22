@@ -5,11 +5,13 @@
 use crate::common::layers::extractor::extract_req_dto;
 use crate::permission::layers::PermissionBuildService;
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
     BuildService, ExtractService, TryIntoService, UpdateService, With,
@@ -33,22 +35,26 @@ pub struct CreatePermissionService {
 }
 
 impl CreatePermissionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
+                TransactionProvider::new(db),
+                SrvCtxProvider::new(authz_context),
                 from_fn(extract_req_context::<CreateRequest<RoleParam, PermissionCreate>>),
+                from_fn(AuthzOn::<System>::set),
+                from_fn(Authz::<SecAdmin>::check),
+
                 from_fn(extract_req_dto::<CreateRequest<RoleParam, PermissionCreate>, _>),
                 from_fn(extract_req_name::<CreateRequest<RoleParam, PermissionCreate>, _>),
 
-                TransactionProvider::new(db),
                 from_fn(With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
                 from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
 
@@ -85,11 +91,15 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_create_permission() {
+        use td_authz::Authz;
+        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
+        use td_objects::tower_service::extractor::extract_req_context;
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
-        let provider = CreatePermissionService::provider(db, queries);
+        let provider =
+            CreatePermissionService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -97,6 +107,8 @@ mod tests {
 
         metadata.assert_service::<CreateRequest<RoleParam, PermissionCreate>, Permission>(&[
             type_of_val(&extract_req_context::<CreateRequest<RoleParam, PermissionCreate>>),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<SecAdmin>::check),
             type_of_val(&extract_req_dto::<CreateRequest<RoleParam, PermissionCreate>, _>),
             type_of_val(&extract_req_name::<CreateRequest<RoleParam, PermissionCreate>, _>),
             type_of_val(&With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
@@ -136,7 +148,9 @@ mod tests {
             create,
         );
 
-        let service = CreatePermissionService::new(db.clone()).service().await;
+        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 

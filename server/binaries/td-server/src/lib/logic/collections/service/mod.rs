@@ -7,6 +7,8 @@ use crate::logic::collections::service::delete_collection::DeleteCollectionServi
 use crate::logic::collections::service::list_collections::ListCollectionsService;
 use crate::logic::collections::service::read_collection::ReadCollectionService;
 use crate::logic::collections::service::update_collection::UpdateCollectionService;
+use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::collections::dto::{
@@ -36,13 +38,22 @@ pub struct CollectionServices {
 }
 
 impl CollectionServices {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         Self {
-            create_service_provider: CreateCollectionService::new(db.clone()),
-            read_service_provider: ReadCollectionService::new(db.clone()),
-            update_service_provider: UpdateCollectionService::new(db.clone()),
-            delete_service_provider: DeleteCollectionService::new(db.clone()),
-            list_service_provider: ListCollectionsService::new(db.clone()),
+            create_service_provider: CreateCollectionService::new(
+                db.clone(),
+                authz_context.clone(),
+            ),
+            read_service_provider: ReadCollectionService::new(db.clone(), authz_context.clone()),
+            update_service_provider: UpdateCollectionService::new(
+                db.clone(),
+                authz_context.clone(),
+            ),
+            delete_service_provider: DeleteCollectionService::new(
+                db.clone(),
+                authz_context.clone(),
+            ),
+            list_service_provider: ListCollectionsService::new(db.clone(), authz_context),
         }
     }
 
@@ -81,6 +92,8 @@ impl CollectionServices {
 #[cfg(test)]
 pub mod tests {
     use crate::logic::collections::service::CollectionServices;
+    use std::sync::Arc;
+    use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::collections::dto::{CollectionCreate, CollectionRead};
     use td_objects::crudl::RequestContext;
@@ -103,7 +116,7 @@ pub mod tests {
         let admin_user = creator_id
             .map(|id| UserId::try_from(id).unwrap())
             .unwrap_or(UserId::admin());
-        let logic = CollectionServices::new(db.clone());
+        let logic = CollectionServices::new(db.clone(), Arc::new(AuthzContext::default()));
         let mut collections = Vec::new();
         for i in 0..count {
             let name = format!("{}{}", name_prefix, i);

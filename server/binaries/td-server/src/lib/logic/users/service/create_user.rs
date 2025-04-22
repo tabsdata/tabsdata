@@ -3,17 +3,18 @@
 //
 
 use crate::logic::users::layers::{
-    create_user_authorize, create_user_build_dao, create_user_sql_insert, user_extract_password,
-    user_validate_password,
+    create_user_build_dao, create_user_sql_insert, user_extract_password, user_validate_password,
 };
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::CreateRequest;
 use td_objects::dlo::UserId;
+use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::creator::new_id;
 use td_objects::tower_service::extractor::{
-    extract_req_dto, extract_req_is_admin, extract_req_time, extract_req_user_id,
+    extract_req_context, extract_req_dto, extract_req_time, extract_req_user_id,
 };
 use td_objects::tower_service::finder::find_by_id;
 use td_objects::tower_service::mapper::map;
@@ -33,24 +34,31 @@ pub struct CreateUserService {
 }
 
 impl CreateUserService {
-    pub fn new(db: DbPool, password_hashing_config: Arc<PasswordHashingConfig>) -> Self {
+    pub fn new(
+        db: DbPool,
+        password_hashing_config: Arc<PasswordHashingConfig>,
+        authz_context: Arc<AuthzContext>,
+    ) -> Self {
         CreateUserService {
-            provider: Self::provider(db, password_hashing_config.clone()),
+            provider: Self::provider(db, password_hashing_config.clone(), authz_context),
         }
     }
 
     fn provider<Req: Share, Res: Share>(
         db: DbPool,
         password_hashing_config: Arc<PasswordHashingConfig>,
+        authz_context: Arc<AuthzContext>,
     ) -> ServiceProvider<Req, Res, TdError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
-            .layer(SrvCtxProvider::new(password_hashing_config))
+            .layer(SrvCtxProvider::new(authz_context))
             .layer(from_fn(
-                extract_req_is_admin::<CreateRequest<(), UserCreate>>,
+                extract_req_context::<CreateRequest<(), UserCreate>>,
             ))
-            .layer(from_fn(create_user_authorize))
+            .layer(from_fn(AuthzOn::<System>::set))
+            .layer(from_fn(Authz::<SecAdmin>::check))
+            .layer(SrvCtxProvider::new(password_hashing_config))
             .layer(from_fn(extract_req_time::<CreateRequest<(), UserCreate>>))
             .layer(from_fn(
                 extract_req_user_id::<CreateRequest<(), UserCreate>>,
@@ -81,6 +89,7 @@ pub mod tests {
     use crate::logic::users::service::UserServices;
     use chrono::Duration;
     use std::sync::Arc;
+    use td_authz::AuthzContext;
     use td_common::id::Id;
     use td_common::time::UniqueUtc;
     use td_database::sql::DbPool;
@@ -95,15 +104,17 @@ pub mod tests {
     #[tokio::test]
     async fn test_tower_metadata_create_provider() {
         use crate::logic::users::layers::{
-            create_user_authorize, create_user_build_dao, create_user_sql_insert,
-            user_extract_password, user_validate_password,
+            create_user_build_dao, create_user_sql_insert, user_extract_password,
+            user_validate_password,
         };
         use crate::logic::users::service::create_user::CreateUserService;
+        use td_authz::Authz;
         use td_objects::crudl::CreateRequest;
         use td_objects::dlo::UserId;
+        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
         use td_objects::tower_service::creator::new_id;
+        use td_objects::tower_service::extractor::extract_req_context;
         use td_objects::tower_service::extractor::extract_req_dto;
-        use td_objects::tower_service::extractor::extract_req_is_admin;
         use td_objects::tower_service::extractor::{extract_req_time, extract_req_user_id};
         use td_objects::tower_service::finder::find_by_id;
         use td_objects::tower_service::mapper::map;
@@ -112,13 +123,15 @@ pub mod tests {
 
         let password_config = Arc::new(PasswordHashingConfig::default());
         let db = td_database::test_utils::db().await.unwrap();
-        let provider = CreateUserService::provider(db, password_config);
+        let provider =
+            CreateUserService::provider(db, password_config, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<CreateRequest<(), UserCreate>, UserRead>(&[
-            type_of_val(&extract_req_is_admin::<CreateRequest<(), UserCreate>>),
-            type_of_val(&create_user_authorize),
+            type_of_val(&extract_req_context::<CreateRequest<(), UserCreate>>),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<SecAdmin>::check),
             type_of_val(&extract_req_time::<CreateRequest<(), UserCreate>>),
             type_of_val(&extract_req_user_id::<CreateRequest<(), UserCreate>>),
             type_of_val(&extract_req_dto::<CreateRequest<(), UserCreate>, (), UserCreate>),
@@ -137,9 +150,13 @@ pub mod tests {
         let password_hashing_config = Arc::new(PasswordHashingConfig::default());
         let admin_id = admin_user(&db).await;
 
-        let service = CreateUserService::new(db.clone(), password_hashing_config)
-            .service()
-            .await;
+        let service = CreateUserService::new(
+            db.clone(),
+            password_hashing_config,
+            Arc::new(AuthzContext::default()),
+        )
+        .service()
+        .await;
 
         let create = UserCreate {
             name: "u1".to_string(),
@@ -160,11 +177,12 @@ pub mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sys_admin(),
-            true,
+            RoleId::sec_admin(),
+            false,
         )
         .create((), create);
         let response = service.raw_oneshot(request).await;
+        println!("{:#?}", response);
         assert!(response.is_ok());
         let created = response.unwrap();
 
@@ -226,6 +244,7 @@ pub mod tests {
             db.clone(),
             Arc::new(PasswordHashingConfig::default()),
             jwt_logic,
+            Arc::new(AuthzContext::default()),
         );
         let mut users = Vec::new();
         for i in 0..count {
@@ -241,8 +260,8 @@ pub mod tests {
             let request = RequestContext::with(
                 AccessTokenId::default(),
                 &admin_user,
-                RoleId::sys_admin(),
-                true,
+                RoleId::sec_admin(),
+                false,
             )
             .create((), user);
             let service = logic.create_user().await;

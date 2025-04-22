@@ -5,6 +5,7 @@
 use crate::logic::users::error::UserError;
 use crate::logic::users::service::create_user::CreateUserService;
 use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::test_utils::seed_user::seed_user;
@@ -18,9 +19,13 @@ async fn test_create_already_existing() {
     let password_hashing_config = Arc::new(PasswordHashingConfig::default());
     seed_user(&db, None, "u0", false).await;
 
-    let service = CreateUserService::new(db.clone(), password_hashing_config)
-        .service()
-        .await;
+    let service = CreateUserService::new(
+        db.clone(),
+        password_hashing_config,
+        Arc::new(AuthzContext::default()),
+    )
+    .service()
+    .await;
 
     let create = UserCreate {
         name: "u0".to_string(),
@@ -34,7 +39,7 @@ async fn test_create_already_existing() {
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-        true,
+        false,
     )
     .create((), create);
 

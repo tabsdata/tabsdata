@@ -2,13 +2,16 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dlo::{RequestIsAdmin, Value};
+use crate::crudl::RequestContext;
+use crate::dlo::UserId;
 use td_error::TdError;
 use td_tower::default_services::Condition;
 use td_tower::extractors::Input;
 
-pub async fn is_req_by_admin(
-    Input(req_is_admin): Input<RequestIsAdmin>,
+pub async fn is_req_by_user(
+    Input(request_context): Input<RequestContext>,
+    Input(user_id): Input<UserId>,
 ) -> Result<Condition, TdError> {
-    Ok(Condition(*req_is_admin.value()))
+    let request_by_user = request_context.user_id().to_string() == user_id.to_string();
+    Ok(Condition(request_by_user))
 }

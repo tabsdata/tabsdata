@@ -140,13 +140,14 @@ mod tests {
     use http::method::Method;
     use serde_json::json;
     use std::sync::Arc;
+    use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use tower::ServiceExt;
 
     async fn collections_state() -> CollectionsState {
         let db: &'static DbPool = Box::leak(Box::new(td_database::test_utils::db().await.unwrap()));
-        let logic = CollectionServices::new(db.clone());
+        let logic = CollectionServices::new(db.clone(), Arc::new(AuthzContext::default()));
         Arc::new(logic)
     }
 
@@ -154,8 +155,8 @@ mod tests {
         let context = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
-            true,
+            RoleId::sys_admin(),
+            false,
         );
         let router = router.clone().into();
         router.layer(Extension(context.clone()))

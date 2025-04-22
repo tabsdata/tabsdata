@@ -3,12 +3,14 @@
 //
 
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::ReadRequest;
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_name;
+use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
+use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{BuildService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService};
 use td_objects::types::basic::RoleIdName;
@@ -24,21 +26,26 @@ pub struct ReadRoleService {
 }
 
 impl ReadRoleService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
+                ConnectionProvider::new(db),
+                SrvCtxProvider::new(authz_context),
+                from_fn(extract_req_context::<ReadRequest<RoleParam>>),
+                from_fn(AuthzOn::<System>::set),
+                from_fn(Authz::<SecAdmin>::check),
+
                 from_fn(extract_req_name::<ReadRequest<RoleParam>, _>),
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
-                ConnectionProvider::new(db),
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDBWithNames>),
 
                 from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
@@ -65,17 +72,21 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_read_role() {
+        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
-        let provider = ReadRoleService::provider(db, queries);
+        let provider = ReadRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
         metadata.assert_service::<ReadRequest<RoleParam>, Role>(&[
+            type_of_val(&extract_req_context::<ReadRequest<RoleParam>>),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<SecAdmin>::check),
             type_of_val(&extract_req_name::<ReadRequest<RoleParam>, _>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDBWithNames>),
@@ -98,8 +109,8 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
-            true,
+            RoleId::sec_admin(),
+            false,
         )
         .read(
             RoleParam::builder()
@@ -107,7 +118,9 @@ mod tests {
                 .build()?,
         );
 
-        let service = ReadRoleService::new(db.clone()).service().await;
+        let service = ReadRoleService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let found = get_role(&db, &RoleName::try_from("joaquin").unwrap()).await?;
@@ -136,8 +149,8 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
-            true,
+            RoleId::sec_admin(),
+            false,
         )
         .read(
             RoleParam::builder()
@@ -145,7 +158,9 @@ mod tests {
                 .build()?,
         );
 
-        let service = ReadRoleService::new(db.clone()).service().await;
+        let service = ReadRoleService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let found = get_role(&db, &RoleName::try_from("joaquin").unwrap()).await?;

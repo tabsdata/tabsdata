@@ -5,7 +5,7 @@
 //! Services Authorization layers.
 //!
 //!
-//! Assuming `PermissionsStore` implements [`AuthzContext`].
+//! Assuming `PermissionsStore` implements [`AuthzContextT`].
 //!
 //! ```ignore
 //!     type Authz<
@@ -74,7 +74,7 @@ use td_error::TdError;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[async_trait]
-pub trait AuthzContext {
+pub trait AuthzContextT {
     async fn role_permissions(
         &self,
         conn: &mut SqliteConnection,
@@ -426,7 +426,7 @@ fn augment_with_wildcards(required_permissions: HashSet<Permission>) -> HashSet<
 
 /// Service Authorization enforcer.
 pub struct Authz<
-    AC: AuthzContext,
+    AC: AuthzContextT,
     C1: AuthzRequirements,
     C2: AuthzRequirements = NoPermissions,
     C3: AuthzRequirements = NoPermissions,
@@ -446,7 +446,7 @@ pub struct Authz<
 }
 
 impl<
-        AC: AuthzContext,
+        AC: AuthzContextT,
         C1: AuthzRequirements,
         C2: AuthzRequirements,
         C3: AuthzRequirements,
@@ -464,7 +464,7 @@ impl<
     ///
     /// The user role is obtained from the [`RequestContext`] in the service context.
     ///
-    /// The role permissions are from the [`AuthzContext`] in the service context.
+    /// The role permissions are from the [`AuthzContextT`] in the service context.
     pub async fn check(
         SrvCtx(authz_context): SrvCtx<AC>,
         Connection(conn): Connection,
@@ -527,7 +527,7 @@ impl<
 mod test {
     use crate::crudl::RequestContext;
     use crate::tower_service::authz::{
-        AuthzContext, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,
+        AuthzContextT, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,
         CollExec, CollRead, CollReadAll, NoPermissions, Permission, Requester, SecAdmin, SysAdmin,
     };
     use crate::types::basic::{AccessTokenId, CollectionId, RoleId, UserId};
@@ -597,7 +597,7 @@ mod test {
     }
 
     #[async_trait]
-    impl AuthzContext for AuthzContextForTest {
+    impl AuthzContextT for AuthzContextForTest {
         async fn role_permissions(
             &self,
             _conn: &mut SqliteConnection,

@@ -3,20 +3,23 @@
 //
 
 use crate::logic::users::layers::{
-    update_user_authorize, update_user_build_dao, update_user_sql_update, update_user_validate,
+    update_user_build_dao, update_user_sql_update, update_user_validate,
     update_user_validate_enabled, update_user_validate_password_change,
     update_user_validate_password_force_change_as_admin,
     update_user_validate_password_force_change_as_non_admin, user_extract_password,
     user_validate_password,
 };
+use crate::logic::users::service::read_user::user_id_to_user_id;
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::UpdateRequest;
 use td_objects::dlo::{UserId, UserName};
-use td_objects::tower_service::condition::is_req_by_admin;
+use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
+use td_objects::tower_service::condition::is_req_by_user;
 use td_objects::tower_service::extractor::{
-    extract_name, extract_req_dto, extract_req_is_admin, extract_req_time, extract_req_user_id,
+    extract_name, extract_req_context, extract_req_dto, extract_req_time, extract_req_user_id,
     extract_user_id,
 };
 use td_objects::tower_service::finder::{find_by_id, find_by_name};
@@ -39,20 +42,29 @@ pub struct UpdateUserService {
 }
 
 impl UpdateUserService {
-    pub fn new(db: DbPool, password_hashing_config: Arc<PasswordHashingConfig>) -> Self {
+    pub fn new(
+        db: DbPool,
+        password_hashing_config: Arc<PasswordHashingConfig>,
+        authz_context: Arc<AuthzContext>,
+    ) -> Self {
         UpdateUserService {
-            provider: Self::provider(db, password_hashing_config),
+            provider: Self::provider(db, password_hashing_config, authz_context.clone()),
         }
     }
 
     fn provider<Req: Share, Res: Share>(
         db: DbPool,
         password_hashing_config: Arc<PasswordHashingConfig>,
+        authz_context: Arc<AuthzContext>,
     ) -> ServiceProvider<Req, Res, TdError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
+            .layer(SrvCtxProvider::new(authz_context))
             .layer(SrvCtxProvider::new(password_hashing_config))
+            .layer(from_fn(
+                extract_req_context::<UpdateRequest<String, UserUpdate>>,
+            ))
             .layer(from_fn(
                 extract_req_time::<UpdateRequest<String, UserUpdate>>,
             ))
@@ -60,30 +72,29 @@ impl UpdateUserService {
                 extract_req_user_id::<UpdateRequest<String, UserUpdate>>,
             ))
             .layer(from_fn(
-                extract_req_is_admin::<UpdateRequest<String, UserUpdate>>,
-            ))
-            .layer(from_fn(
                 extract_name::<UpdateRequest<String, UserUpdate>, String, UserName>,
             ))
             .layer(from_fn(find_by_name::<UserName, User>))
             .layer(from_fn(extract_user_id::<User>))
-            .layer(from_fn(update_user_authorize))
+            .layer(from_fn(user_id_to_user_id))
+            .layer(from_fn(AuthzOn::<SystemOrUserId>::set))
+            .layer(from_fn(Authz::<SecAdmin, Requester>::check))
             .layer(from_fn(
                 extract_req_dto::<UpdateRequest<String, UserUpdate>, String, UserUpdate>,
             ))
             .layer(from_fn(update_user_validate))
             .layer(conditional(
                 If(ServiceBuilder::new()
-                    .layer(from_fn(is_req_by_admin))
+                    .layer(from_fn(is_req_by_user))
                     .service(ServiceReturn)),
                 Do(ServiceBuilder::new()
-                    .layer(from_fn(update_user_validate_password_force_change_as_admin))
+                    .layer(from_fn(
+                        update_user_validate_password_force_change_as_non_admin,
+                    ))
                     .service(ServiceReturn)),
                 Else(
                     ServiceBuilder::new()
-                        .layer(from_fn(
-                            update_user_validate_password_force_change_as_non_admin,
-                        ))
+                        .layer(from_fn(update_user_validate_password_force_change_as_admin))
                         .service(ServiceReturn),
                 ),
             ))
@@ -110,6 +121,7 @@ impl UpdateUserService {
 pub mod tests {
     use crate::logic::users::service::update_user::UpdateUserService;
     use std::sync::Arc;
+    use td_authz::AuthzContext;
     use td_common::id::Id;
     use td_common::time::UniqueUtc;
     use td_objects::crudl::RequestContext;
@@ -123,25 +135,29 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_update_provider() {
+        use td_authz::{Authz, AuthzContext};
+        use crate::logic::users::layers::{update_user_build_dao, update_user_sql_update};
         use crate::logic::users::layers::{
-            update_user_authorize, update_user_validate, update_user_validate_enabled,
+            update_user_validate, update_user_validate_enabled,
             update_user_validate_password_change,
         };
-        use crate::logic::users::layers::{update_user_build_dao, update_user_sql_update};
         use crate::logic::users::layers::{
             update_user_validate_password_force_change_as_admin,
             update_user_validate_password_force_change_as_non_admin,
         };
+        use crate::logic::users::service::read_user::user_id_to_user_id;
         use crate::logic::users::service::update_user::UpdateUserService;
         use std::sync::Arc;
         use td_objects::crudl::UpdateRequest;
         use td_objects::dlo::UserId;
         use td_objects::dlo::UserName;
-        use td_objects::tower_service::condition::is_req_by_admin;
+        use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
+        use td_objects::tower_service::condition::is_req_by_user;
+        use td_objects::tower_service::extractor::extract_req_context;
+        use td_objects::tower_service::extractor::extract_user_id;
         use td_objects::tower_service::extractor::{
             extract_name, extract_req_dto, extract_req_time, extract_req_user_id,
         };
-        use td_objects::tower_service::extractor::{extract_req_is_admin, extract_user_id};
         use td_objects::tower_service::finder::find_by_id;
         use td_objects::tower_service::finder::find_by_name;
         use td_objects::tower_service::mapper::map;
@@ -153,26 +169,29 @@ pub mod tests {
 
         let db = td_database::test_utils::db().await.unwrap();
         let password_config = Arc::new(PasswordHashingConfig::default());
-        let provider = UpdateUserService::provider(db, password_config);
+        let provider =
+            UpdateUserService::provider(db, password_config, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
         use crate::logic::users::layers::{user_extract_password, user_validate_password};
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<UpdateRequest<String, UserUpdate>, UserRead>(&[
+            type_of_val(&extract_req_context::<UpdateRequest<String, UserUpdate>>),
             type_of_val(&extract_req_time::<UpdateRequest<String, UserUpdate>>),
             type_of_val(&extract_req_user_id::<UpdateRequest<String, UserUpdate>>),
-            type_of_val(&extract_req_is_admin::<UpdateRequest<String, UserUpdate>>),
             type_of_val(&extract_name::<UpdateRequest<String, UserUpdate>, String, UserName>),
             type_of_val(&find_by_name::<UserName, User>), //*
             type_of_val(&extract_user_id::<User>),
-            type_of_val(&update_user_authorize),
+            type_of_val(&user_id_to_user_id),
+            type_of_val(&AuthzOn::<SystemOrUserId>::set),
+            type_of_val(&Authz::<SecAdmin, Requester>::check),
             type_of_val(&extract_req_dto::<UpdateRequest<String, UserUpdate>, String, UserUpdate>),
             type_of_val(&update_user_validate), //*
-            type_of_val(&is_req_by_admin),
-            type_of_val(&update_user_validate_password_force_change_as_admin), //*
+            type_of_val(&is_req_by_user),
             type_of_val(&update_user_validate_password_force_change_as_non_admin), //*
-            type_of_val(&update_user_validate_enabled),                        //*
-            type_of_val(&update_user_validate_password_change),                //*
+            type_of_val(&update_user_validate_password_force_change_as_admin),     //*
+            type_of_val(&update_user_validate_enabled),                            //*
+            type_of_val(&update_user_validate_password_change),                    //*
             type_of_val(&user_extract_password::<UserUpdate>),
             type_of_val(&user_validate_password), //*
             type_of_val(&update_user_build_dao),  //*
@@ -193,9 +212,13 @@ pub mod tests {
 
         seed_user(&db, None, "u0", true).await;
 
-        let service = UpdateUserService::new(db.clone(), password_config)
-            .service()
-            .await;
+        let service = UpdateUserService::new(
+            db.clone(),
+            password_config,
+            Arc::new(AuthzContext::default()),
+        )
+        .service()
+        .await;
 
         let user_update = UserUpdate {
             full_name: Some("U0 Update".to_string()),
@@ -251,9 +274,13 @@ pub mod tests {
 
         let user_id = seed_user(&db, None, "u0", true).await;
 
-        let service = UpdateUserService::new(db.clone(), password_config)
-            .service()
-            .await;
+        let service = UpdateUserService::new(
+            db.clone(),
+            password_config,
+            Arc::new(AuthzContext::default()),
+        )
+        .service()
+        .await;
 
         let user_update = UserUpdate {
             full_name: Some("U0 Update".to_string()),

@@ -11,17 +11,8 @@ use td_objects::crudl::{
     assert_one, handle_create_unique_err, handle_sql_err, list_result, list_select, ListRequest,
     ListResult,
 };
-use td_objects::dlo::{CollectionId, RequestIsAdmin, RequestTime, RequestUserId, Value};
+use td_objects::dlo::{CollectionId, RequestTime, RequestUserId, Value};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection};
-
-pub async fn create_collection_authorize(
-    Input(req_is_admin): Input<RequestIsAdmin>,
-) -> Result<(), TdError> {
-    if !req_is_admin.value() {
-        return Err(CollectionError::NotAllowedToCreateCollections)?;
-    }
-    Ok(())
-}
 
 pub async fn create_collection_build_dao(
     Input(request_time): Input<RequestTime>,
@@ -77,32 +68,6 @@ pub async fn create_collection_sql_insert(
             CollectionError::AlreadyExists,
             DbError::SqlError,
         ))?;
-    Ok(())
-}
-
-pub async fn read_collection_authorize() -> Result<(), TdError> {
-    Ok(())
-}
-
-pub async fn list_collections_authorize() -> Result<(), TdError> {
-    Ok(())
-}
-
-pub async fn update_collection_authorize(
-    Input(req_is_admin): Input<RequestIsAdmin>,
-) -> Result<(), TdError> {
-    if !req_is_admin.value() {
-        return Err(CollectionError::NotAllowedToUpdateCollections)?;
-    }
-    Ok(())
-}
-
-pub async fn delete_collection_authorize(
-    Input(req_is_admin): Input<RequestIsAdmin>,
-) -> Result<(), TdError> {
-    if !req_is_admin.value() {
-        return Err(CollectionError::NotAllowedToDeleteCollections)?;
-    }
     Ok(())
 }
 

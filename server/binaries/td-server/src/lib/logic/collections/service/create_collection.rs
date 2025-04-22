@@ -3,21 +3,26 @@
 //
 
 use crate::logic::collections::layers::{
-    create_collection_authorize, create_collection_build_dao, create_collection_sql_insert,
+    create_collection_build_dao, create_collection_sql_insert,
 };
+use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::collections::dao::CollectionWithNames;
 use td_objects::collections::dto::{CollectionCreate, CollectionRead};
 use td_objects::crudl::CreateRequest;
 use td_objects::dlo::CollectionId;
+use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
 use td_objects::tower_service::creator::new_id;
 use td_objects::tower_service::extractor::{
-    extract_req_dto, extract_req_is_admin, extract_req_time, extract_req_user_id,
+    extract_req_context, extract_req_dto, extract_req_time, extract_req_user_id,
 };
 use td_objects::tower_service::finder::find_by_id;
 use td_objects::tower_service::mapper::map;
-use td_tower::default_services::{ServiceEntry, ServiceReturn, Share, TransactionProvider};
+use td_tower::default_services::{
+    ServiceEntry, ServiceReturn, Share, SrvCtxProvider, TransactionProvider,
+};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
@@ -27,20 +32,25 @@ pub struct CreateCollectionService {
 }
 
 impl CreateCollectionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         CreateCollectionService {
-            provider: Self::provider(db),
+            provider: Self::provider(db, authz_context),
         }
     }
 
-    fn provider<Req: Share, Res: Share>(db: DbPool) -> ServiceProvider<Req, Res, TdError> {
+    fn provider<Req: Share, Res: Share>(
+        db: DbPool,
+        authz_context: Arc<AuthzContext>,
+    ) -> ServiceProvider<Req, Res, TdError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
+            .layer(SrvCtxProvider::new(authz_context))
             .layer(from_fn(
-                extract_req_is_admin::<CreateRequest<(), CollectionCreate>>,
+                extract_req_context::<CreateRequest<(), CollectionCreate>>,
             ))
-            .layer(from_fn(create_collection_authorize))
+            .layer(from_fn(AuthzOn::<System>::set))
+            .layer(from_fn(Authz::<SysAdmin>::check))
             .layer(from_fn(
                 extract_req_time::<CreateRequest<(), CollectionCreate>>,
             ))
@@ -69,6 +79,8 @@ impl CreateCollectionService {
 #[cfg(test)]
 mod tests {
     use crate::logic::collections::service::create_collection::CreateCollectionService;
+    use std::sync::Arc;
+    use td_authz::AuthzContext;
     use td_common::id::Id;
     use td_common::time::UniqueUtc;
     use td_objects::collections::dto::CollectionCreateBuilder;
@@ -79,32 +91,37 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
-    async fn test_tower_metadata_create_service() {
+    async fn atest_tower_metadata_create_service() {
         use crate::logic::collections::layers::{
-            create_collection_authorize, create_collection_build_dao, create_collection_sql_insert,
+            create_collection_build_dao, create_collection_sql_insert,
         };
         use crate::logic::collections::service::create_collection::CreateCollectionService;
+        use td_authz::Authz;
         use td_objects::collections::dao::CollectionWithNames;
         use td_objects::collections::dto::{CollectionCreate, CollectionRead};
         use td_objects::crudl::CreateRequest;
         use td_objects::dlo::CollectionId;
+        use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
         use td_objects::tower_service::creator::new_id;
+        use td_objects::tower_service::extractor::extract_req_context;
         use td_objects::tower_service::extractor::{
-            extract_req_dto, extract_req_is_admin, extract_req_time, extract_req_user_id,
+            extract_req_dto, extract_req_time, extract_req_user_id,
         };
         use td_objects::tower_service::finder::find_by_id;
         use td_objects::tower_service::mapper::map;
         use td_tower::metadata::{type_of_val, Metadata};
+
         let db = td_database::test_utils::db().await.unwrap();
-        let provider = CreateCollectionService::provider(db);
+        let provider = CreateCollectionService::provider(db, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
         metadata.assert_service::<CreateRequest<(), CollectionCreate>, CollectionRead>(&[
-            type_of_val(&extract_req_is_admin::<CreateRequest<(), CollectionCreate>>),
-            type_of_val(&create_collection_authorize),
+            type_of_val(&extract_req_context::<CreateRequest<(), CollectionCreate>>),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<SysAdmin>::check),
             type_of_val(&extract_req_time::<CreateRequest<(), CollectionCreate>>),
             type_of_val(&extract_req_user_id::<CreateRequest<(), CollectionCreate>>),
             type_of_val(
@@ -119,11 +136,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_dataset() {
+    async fn test_create_collection() {
         let db = td_database::test_utils::db().await.unwrap();
         let admin_id = admin_user(&db).await;
 
-        let service = CreateCollectionService::new(db.clone()).service().await;
+        let service = CreateCollectionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
 
         let create = CollectionCreateBuilder::default()
             .name("ds0")
@@ -139,8 +158,8 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
-            true,
+            RoleId::sys_admin(),
+            false,
         )
         .create((), create);
 

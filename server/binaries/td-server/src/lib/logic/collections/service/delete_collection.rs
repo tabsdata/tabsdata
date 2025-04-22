@@ -2,20 +2,23 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::collections::layers::{
-    delete_collection_authorize, delete_collection_contents, delete_collection_sql_delete,
-};
+use crate::logic::collections::layers::{delete_collection_contents, delete_collection_sql_delete};
+use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::collections::dao::Collection;
 use td_objects::crudl::DeleteRequest;
 use td_objects::dlo::CollectionName;
 use td_objects::rest_urls::CollectionParam;
+use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
 use td_objects::tower_service::extractor::{
-    extract_collection_id, extract_name, extract_req_is_admin,
+    extract_collection_id, extract_name, extract_req_context,
 };
 use td_objects::tower_service::finder::find_by_name;
-use td_tower::default_services::{ServiceEntry, ServiceReturn, Share, TransactionProvider};
+use td_tower::default_services::{
+    ServiceEntry, ServiceReturn, Share, SrvCtxProvider, TransactionProvider,
+};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use tower::ServiceBuilder;
@@ -25,20 +28,25 @@ pub struct DeleteCollectionService {
 }
 
 impl DeleteCollectionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         DeleteCollectionService {
-            provider: Self::provider(db),
+            provider: Self::provider(db, authz_context),
         }
     }
 
-    fn provider<Req: Share, Res: Share>(db: DbPool) -> ServiceProvider<Req, Res, TdError> {
+    fn provider<Req: Share, Res: Share>(
+        db: DbPool,
+        authz_context: Arc<AuthzContext>,
+    ) -> ServiceProvider<Req, Res, TdError> {
         ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
+            .layer(SrvCtxProvider::new(authz_context))
             .layer(from_fn(
-                extract_req_is_admin::<DeleteRequest<CollectionParam>>,
+                extract_req_context::<DeleteRequest<CollectionParam>>,
             ))
-            .layer(from_fn(delete_collection_authorize))
+            .layer(from_fn(AuthzOn::<System>::set))
+            .layer(from_fn(Authz::<SysAdmin>::check))
             .layer(from_fn(
                 extract_name::<DeleteRequest<CollectionParam>, CollectionParam, CollectionName>,
             ))
@@ -59,6 +67,8 @@ impl DeleteCollectionService {
 #[cfg(test)]
 mod tests {
     use crate::logic::collections::service::delete_collection::DeleteCollectionService;
+    use std::sync::Arc;
+    use td_authz::AuthzContext;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -68,29 +78,30 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_delete_service() {
-        use crate::logic::collections::layers::delete_collection_authorize;
         use crate::logic::collections::layers::{
             delete_collection_contents, delete_collection_sql_delete,
         };
         use crate::logic::collections::service::delete_collection::DeleteCollectionService;
+        use td_authz::Authz;
         use td_objects::collections::dao::Collection;
         use td_objects::crudl::DeleteRequest;
         use td_objects::dlo::CollectionName;
-        use td_objects::tower_service::extractor::{
-            extract_collection_id, extract_name, extract_req_is_admin,
-        };
+        use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
+        use td_objects::tower_service::extractor::extract_req_context;
+        use td_objects::tower_service::extractor::{extract_collection_id, extract_name};
         use td_objects::tower_service::finder::find_by_name;
         use td_tower::metadata::{type_of_val, Metadata};
         let db = td_database::test_utils::db().await.unwrap();
-        let provider = DeleteCollectionService::provider(db);
+        let provider = DeleteCollectionService::provider(db, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
         metadata.assert_service::<DeleteRequest<CollectionParam>, ()>(&[
-            type_of_val(&extract_req_is_admin::<DeleteRequest<CollectionParam>>),
-            type_of_val(&delete_collection_authorize),
+            type_of_val(&extract_req_context::<DeleteRequest<CollectionParam>>),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<SysAdmin>::check),
             type_of_val(
                 &extract_name::<DeleteRequest<CollectionParam>, CollectionParam, CollectionName>,
             ),
@@ -106,13 +117,15 @@ mod tests {
         let db = td_database::test_utils::db().await.unwrap();
         seed_collection(&db, None, "ds0").await;
 
-        let service = DeleteCollectionService::new(db.clone()).service().await;
+        let service = DeleteCollectionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
-            true,
+            RoleId::sys_admin(),
+            false,
         )
         .delete(CollectionParam::new("ds0"));
 

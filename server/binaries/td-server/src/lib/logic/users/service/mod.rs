@@ -10,6 +10,7 @@ use crate::logic::users::service::list_users::ListUsersService;
 use crate::logic::users::service::read_user::ReadUserService;
 use crate::logic::users::service::update_user::UpdateUserService;
 use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{
@@ -43,19 +44,22 @@ impl UserServices {
         db: DbPool,
         password_hashing_config: Arc<PasswordHashingConfig>,
         jwt_logic: Arc<JwtLogic>,
+        authz_context: Arc<AuthzContext>,
     ) -> Self {
         Self {
             create_service_provider: CreateUserService::new(
                 db.clone(),
                 password_hashing_config.clone(),
+                authz_context.clone(),
             ),
-            read_service_provider: ReadUserService::new(db.clone()),
+            read_service_provider: ReadUserService::new(db.clone(), authz_context.clone()),
             update_service_provider: UpdateUserService::new(
                 db.clone(),
                 password_hashing_config.clone(),
+                authz_context.clone(),
             ),
-            delete_service_provider: DeleteUserService::new(db.clone()),
-            list_service_provider: ListUsersService::new(db.clone()),
+            delete_service_provider: DeleteUserService::new(db.clone(), authz_context.clone()),
+            list_service_provider: ListUsersService::new(db.clone(), authz_context.clone()),
             authenticate_service_provider: AuthenticateUserService::new(db.clone(), jwt_logic),
         }
     }

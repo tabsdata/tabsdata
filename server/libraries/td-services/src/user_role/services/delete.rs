@@ -3,12 +3,14 @@
 //
 
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
 use td_objects::rest_urls::UserRoleParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_name;
+use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
+use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{combine, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserIdName};
@@ -25,20 +27,24 @@ pub struct DeleteUserRoleService {
 }
 
 impl DeleteUserRoleService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_name::<DeleteRequest<UserRoleParam>, _>),
-
                 TransactionProvider::new(db),
+                SrvCtxProvider::new(authz_context),
+                from_fn(extract_req_context::<DeleteRequest<UserRoleParam>>),
+                from_fn(AuthzOn::<System>::set),
+                from_fn(Authz::<SecAdmin>::check),
+
+                from_fn(extract_req_name::<DeleteRequest<UserRoleParam>, _>),
 
                 from_fn(With::<UserRoleParam>::extract::<RoleIdName>),
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
@@ -72,17 +78,22 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_delete_user_role() {
+        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
-        let provider = DeleteUserRoleService::provider(db, queries);
+        let provider =
+            DeleteUserRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
         metadata.assert_service::<DeleteRequest<UserRoleParam>, ()>(&[
+            type_of_val(&extract_req_context::<DeleteRequest<UserRoleParam>>),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<SecAdmin>::check),
             type_of_val(&extract_req_name::<DeleteRequest<UserRoleParam>, _>),
             type_of_val(&With::<UserRoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
@@ -111,8 +122,8 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
-            true,
+            RoleId::sec_admin(),
+            false,
         )
         .delete(
             UserRoleParam::builder()
@@ -121,7 +132,9 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteUserRoleService::new(db.clone()).service().await;
+        let service = DeleteUserRoleService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         let not_found = get_user_role(&db, user_role.id()).await;

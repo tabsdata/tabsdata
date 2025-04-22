@@ -65,6 +65,7 @@ use crate::logic::users::service::UserServices;
 use axum::middleware::{from_fn, from_fn_with_state};
 use chrono::Duration;
 use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_security::config::PasswordHashingConfig;
 use td_services::auth::services::{AuthServices, PasswordHashConfig};
@@ -78,6 +79,7 @@ use td_storage::Storage;
 pub struct ApiServerInstance {
     config: Config,
     db: DbPool,
+    authz_context: Arc<AuthzContext>,
     auth_services: Arc<AuthServices>,
     jwt_logic: Arc<JwtLogic>,
     storage: Arc<Storage>,
@@ -103,6 +105,8 @@ impl ApiServerInstance {
         let password_hash_config: PasswordHashConfig = (&config).into();
         password_hash_config.hasher();
 
+        let authz_context = Arc::new(AuthzContext::default());
+
         let auth_services: Arc<AuthServices> = Arc::new(AuthServices::new(
             &db,
             sessions.clone(),
@@ -117,6 +121,7 @@ impl ApiServerInstance {
         Self {
             config,
             db,
+            authz_context,
             auth_services,
             jwt_logic,
             storage,
@@ -140,11 +145,15 @@ impl ApiServerInstance {
             self.db.clone(),
             Arc::new(PasswordHashingConfig::default()),
             self.jwt_logic.clone(),
+            self.authz_context.clone(),
         ))
     }
 
     fn collection_state(&self) -> CollectionsState {
-        Arc::new(CollectionServices::new(self.db.clone()))
+        Arc::new(CollectionServices::new(
+            self.db.clone(),
+            self.authz_context.clone(),
+        ))
     }
 
     fn dataset_state(&self) -> DatasetsState {
@@ -156,15 +165,24 @@ impl ApiServerInstance {
     }
 
     fn roles_state(&self) -> RolesState {
-        Arc::new(RoleServices::new(self.db.clone()))
+        Arc::new(RoleServices::new(
+            self.db.clone(),
+            self.authz_context.clone(),
+        ))
     }
 
     fn permissions_state(&self) -> PermissionsState {
-        Arc::new(PermissionServices::new(self.db.clone()))
+        Arc::new(PermissionServices::new(
+            self.db.clone(),
+            self.authz_context.clone(),
+        ))
     }
 
     fn user_roles_state(&self) -> UserRolesState {
-        Arc::new(UserRoleServices::new(self.db.clone()))
+        Arc::new(UserRoleServices::new(
+            self.db.clone(),
+            self.authz_context.clone(),
+        ))
     }
 
     fn timeout_service(&self) -> TimeoutService {

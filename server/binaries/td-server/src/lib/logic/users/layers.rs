@@ -139,15 +139,6 @@ pub async fn read_user_authorize(
     Ok(())
 }
 
-pub async fn delete_user_authorize(
-    Input(req_is_admin): Input<RequestIsAdmin>,
-) -> Result<(), TdError> {
-    if !req_is_admin.value() {
-        return Err(UserError::NotAllowedToDeleteUsers)?;
-    }
-    Ok(())
-}
-
 pub async fn delete_user_validate(
     Input(req_user_id): Input<RequestUserId>,
     Input(user_id): Input<UserId>,
@@ -217,17 +208,6 @@ pub async fn list_users_sql_select(
             .await
             .map_err(handle_sql_err)?;
     Ok(list_result(request.list_params().clone(), db_data))
-}
-
-pub async fn update_user_authorize(
-    Input(request_user_id): Input<RequestUserId>,
-    Input(user_id): Input<UserId>,
-    Input(is_admin): Input<RequestIsAdmin>,
-) -> Result<(), TdError> {
-    if !is_admin.value() && request_user_id.value() != user_id.value() {
-        return Err(UserError::NotAllowedToUpdateOtherUsers)?;
-    }
-    Ok(())
 }
 
 pub async fn update_user_validate(Input(dto): Input<UserUpdate>) -> Result<(), TdError> {
