@@ -311,14 +311,26 @@ script = [
     debug "🔷 _____ Generating python binaries..."
     cm_run_task setup_pytest_tabsdata
 
-    debug "🔷 _____ Starting tabsdata server (pytest) first..."
-    cm_run_task stop_pytest_tabsdata
-    sleep 10000
-    cm_run_task remove_pytest_tabsdata
-    sleep 5000
-    cm_run_task start_pytest_tabsdata
-    sleep 30000
-    cm_run_task status_pytest_tabsdata
+    no-server = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--no-server"
+            no-server = set true
+        end
+    end
+
+    if ${no-server}
+        info "🚜 Starting and stopping the pytest Tabsdata server skipped as requested."
+    else
+        debug "🔷 _____ Starting tabsdata server (pytest) first..."
+        cm_run_task stop_pytest_tabsdata
+        sleep 10000
+        cm_run_task remove_pytest_tabsdata
+        sleep 5000
+        cm_run_task start_pytest_tabsdata
+        sleep 30000
+        cm_run_task status_pytest_tabsdata
+    end
     ''']
 
 [tasks.copy_assets]
@@ -529,7 +541,19 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    cm_run_task stop_pytest_tabsdata
+    no-server = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--no-server"
+            no-server = set true
+        end
+    end
+
+    if ${no-server}
+        info "🚜 Starting and stopping the pytest Tabsdata server skipped as requested."
+    else
+        cm_run_task stop_pytest_tabsdata
+    end
     ''']
 
 [tasks.cleanup-test_py]
