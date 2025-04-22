@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::bin::bootloader::BootloaderError::*;
+use crate::bin::platform::bootloader::BootloaderError::*;
 use crate::logic::platform::component::describer::DescriberError;
 use crate::logic::platform::resource::instance::{
     create_instance_tree, get_instance_path_for_instance, get_repository_path_for_instance,

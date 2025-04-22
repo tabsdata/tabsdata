@@ -65,6 +65,11 @@ struct CliParser<P: Params> {
     config: Option<ConfigArg>,
     #[command(flatten)]
     params: P,
+    #[arg(
+        long = "stdin-config",
+        help = "Whether to ingest additional config from stdin"
+    )]
+    stdin_config: Option<bool>,
 }
 
 /// Entry point for all CLI commands.
@@ -97,18 +102,19 @@ impl<C: Config, P: Params> Cli<C, P> {
         app: impl FnOnce(C, P) -> ExitStatus,
         config_dir: Option<PathBuf>,
     ) -> ExitStatus {
+        let stdin_config = parser.stdin_config.unwrap_or(false);
         match parser.config {
             Some(ConfigArg::Default) => {
                 Self::print_config(config_name, "Default", &C::default());
                 ExitStatus::Success
             }
             Some(ConfigArg::Current) => {
-                let config: C = config::load_config(config_name, config_dir);
+                let config: C = config::load_config(config_name, config_dir, stdin_config);
                 Self::print_config(config_name, "Current", &config);
                 ExitStatus::Success
             }
             _ => {
-                let config: C = config::load_config(config_name, config_dir);
+                let config: C = config::load_config(config_name, config_dir, stdin_config);
                 app(config, parser.params)
             }
         }
@@ -338,7 +344,7 @@ mod tests {
                 "config",
                 cli,
                 |_, _| { ExitStatus::Success },
-                None
+                None,
             ),
             ExitStatus::Success
         ));
@@ -371,7 +377,7 @@ mod tests {
                     assert_eq!(config.c1(), "default");
                     ExitStatus::Success
                 },
-                None
+                None,
             ),
             ExitStatus::Success
         ));
@@ -389,7 +395,7 @@ mod tests {
                     c1 = Some(config.c1().to_string());
                     ExitStatus::Success
                 },
-                None
+                None,
             ),
             ExitStatus::Success
         ));
@@ -408,7 +414,7 @@ mod tests {
                     c1 = Some(config.c1().to_string());
                     ExitStatus::Success
                 },
-                None
+                None,
             ),
             ExitStatus::Success
         ));
@@ -427,7 +433,7 @@ mod tests {
                     c1 = Some(config.c1().to_string());
                     ExitStatus::Success
                 },
-                None
+                None,
             ),
             ExitStatus::Success
         ));
@@ -454,7 +460,7 @@ mod tests {
                     option = params.option;
                     ExitStatus::Success
                 },
-                None
+                None,
             ),
             ExitStatus::Success
         ));
@@ -502,7 +508,7 @@ mod tests {
                 "config",
                 cli,
                 |_, _| { ExitStatus::GeneralError },
-                None
+                None,
             ),
             ExitStatus::GeneralError
         ));

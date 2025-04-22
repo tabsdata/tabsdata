@@ -229,6 +229,9 @@ version = "0.8.1"
 [workspace.dependencies.axum-extra]
 version = "0.10.0"
 
+[workspace.dependencies.base64]
+version = "0.22.1"
+
 [workspace.dependencies.bimap]
 version = "0.6.3"
 features = ["serde"]

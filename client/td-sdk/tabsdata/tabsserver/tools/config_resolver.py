@@ -10,6 +10,9 @@ import yaml
 ENV_VAR_PATTERN = r"\${env:(\w+)}"
 HASHICORP_PATTERN = r"\${hashicorp:([^;]+;[^}]+)}"
 
+START_TAG = "<state><i>"
+END_TAG = "<state><f>"
+
 
 class ConfigResolver:
 
@@ -104,7 +107,7 @@ def main():
         required=True,
     )
     parser.add_argument(
-        "--resolve",
+        "--strategies",
         type=str,
         help=(
             "Strategies to use when resolving the config file. If more than one is "
@@ -194,8 +197,10 @@ def main():
         hashicorp_token=hashicorp_token,
         hashicorp_namespace=hashicorp_namespace,
     )
-    resolved_data = config_resolver.resolve_yaml(args.input, args.resolve.split(","))
+    resolved_data = config_resolver.resolve_yaml(args.input, args.strategies.split(","))
+    sys.stdout.write(START_TAG)
     yaml.dump(resolved_data, sys.stdout)
+    sys.stdout.write(END_TAG)
 
 
 if __name__ == "__main__":

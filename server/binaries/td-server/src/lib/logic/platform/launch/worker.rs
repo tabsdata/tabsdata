@@ -12,6 +12,7 @@ use crate::logic::platform::component::supplier::{TabsDataWorkerSupplier, Worker
 use crate::logic::platform::component::tracker::WorkerTracker;
 use getset::Getters;
 use std::fmt::Debug;
+use std::path::PathBuf;
 use std::sync::RwLock;
 use td_common::execution_status::ExecutionUpdateStatus;
 use td_common::server::SupervisorMessage;
@@ -36,7 +37,10 @@ pub trait Worker: Debug {
     fn tracker(&self) -> &RwLock<WorkerTracker>;
 
     /// Runs the worker as a supervised task.
-    fn work(&self) -> Result<Child, RunnerError>;
+    fn work(
+        &self,
+        state: Option<String>,
+    ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError>;
 }
 
 /// Default implementation of the Worker trait.
@@ -84,20 +88,22 @@ impl Worker for TabsDataWorker {
         &self.tracker
     }
 
-    fn work(&self) -> Result<Child, RunnerError> {
-        let worker = self.runner.run(self);
-        if let Ok(ref p) = worker {
-            match p.id() {
-                Some(id) => {
+    fn work(
+        &self,
+        state: Option<String>,
+    ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError> {
+        match self.runner.run(self, state) {
+            Ok((worker, out, err)) => {
+                if let Some(id) = worker.id() {
                     let mut tracker = self.tracker().write().unwrap();
                     tracker.write_worker_pid_file(id as i32)?;
-                }
-                None => {
-                    return Err(MissingProcessId);
+                    Ok((worker, out, err))
+                } else {
+                    Err(MissingProcessId)
                 }
             }
+            Err(e) => Err(e),
         }
-        worker
     }
 }
 
@@ -145,11 +151,12 @@ pub enum WorkerError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bin::supervisor::WorkerLocation::RELATIVE;
+    use crate::bin::platform::supervisor::WorkerLocation::RELATIVE;
     use crate::logic::platform::component::describer::TabsDataWorkerDescriberBuilder;
     use crate::logic::platform::resource::instance::{CONFIG_FOLDER, MSG_FOLDER, WORK_FOLDER};
     use std::fs::create_dir_all;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
+    use td_common::server::WorkerClass::REGULAR;
     use tempfile::tempdir;
 
     #[test]
@@ -160,9 +167,12 @@ mod tests {
         let work_folder = workspace_folder.path().to_path_buf().join(WORK_FOLDER);
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .class(REGULAR)
             .name(get_current_exe_name().unwrap())
             .location(RELATIVE)
             .program(get_current_exe_path().expect("Error getting current running program"))
+            .set_state(None)
+            .get_states(vec![])
             .arguments(Vec::new())
             .config(config_folder)
             .work(work_folder.clone())
@@ -187,9 +197,12 @@ mod tests {
         let work_folder = workspace_folder.path().to_path_buf().join(WORK_FOLDER);
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .class(REGULAR)
             .name(get_current_exe_name().unwrap())
             .location(RELATIVE)
             .program(get_current_exe_path().expect("Error getting current running program"))
+            .set_state(None)
+            .get_states(vec![])
             .arguments(Vec::new())
             .config(config_folder)
             .work(work_folder.clone())

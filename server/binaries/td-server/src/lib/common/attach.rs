@@ -9,7 +9,7 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use config::{Config, File, FileFormat};
-use td_common::env::{check_flag_env, TABSDATA_HOME_DIR};
+use td_common::env::{check_flag_env, TABSDATA_DEV_HOME_DIR};
 use td_common::files::ROOT;
 
 // This function is called by the macro generated code. Therefor, identifying it as dead code is fine.
@@ -57,7 +57,7 @@ fn check_attach_config(filename: &str) -> bool {
     const ONE: &str = "1";
 
     let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from(ROOT));
-    path.push(TABSDATA_HOME_DIR);
+    path.push(TABSDATA_DEV_HOME_DIR);
     path.push(ATTACH_FOLDER);
     path.push(filename);
     if !path.exists() {

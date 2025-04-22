@@ -4,7 +4,7 @@
 
 //! Module that provides all the properties that describe a worker run under the Tabsdata system.
 
-use crate::bin::supervisor::WorkerLocation;
+use crate::bin::platform::supervisor::{GetState, SetState, WorkerLocation};
 use crate::logic::platform::component::describer::DescriberError::*;
 use crate::logic::platform::resource::instance::{get_program_path, InstanceError};
 use derive_builder::{Builder, UninitializedFieldError};
@@ -12,15 +12,18 @@ use getset::{Getters, Setters};
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
 use td_common::env::{to_absolute, EnvironmentError};
-use td_common::server::SupervisorMessage;
+use td_common::server::{SupervisorMessage, WorkerClass};
 use thiserror::Error;
 
 /// Describes a worker that can be run under the Tabsdata system.
 pub trait WorkerDescriber: Display + Debug {
+    fn class(&self) -> &WorkerClass;
     fn name(&self) -> &String;
     fn location(&self) -> &WorkerLocation;
     fn program(&self) -> &PathBuf;
     fn arguments(&self) -> &Vec<String>;
+    fn set_state(&self) -> &Option<SetState>;
+    fn get_states(&self) -> &Vec<GetState>;
     fn config(&self) -> &PathBuf;
     fn message(&self) -> &Option<SupervisorMessage>;
     fn work(&self) -> &PathBuf;
@@ -40,6 +43,9 @@ pub trait WorkerDescriber: Display + Debug {
 )]
 #[getset(get = "pub")]
 pub struct TabsDataWorkerDescriber {
+    /// Class of the worker to run.
+    class: WorkerClass,
+
     /// Name of the worker to run.
     name: String,
 
@@ -51,6 +57,12 @@ pub struct TabsDataWorkerDescriber {
 
     /// Arguments to pass to the program to run.
     arguments: Vec<String>,
+
+    /// Emitted state in stdout.
+    set_state: Option<SetState>,
+
+    /// Ingested states in stdin.
+    get_states: Vec<GetState>,
 
     /// Configuration folder of the worker to run.
     config: PathBuf,
@@ -112,6 +124,10 @@ impl TabsDataWorkerDescriberBuilder {
         Ok(())
     }
 
+    pub fn get_class(&self) -> Option<&WorkerClass> {
+        self.class.as_ref()
+    }
+
     pub fn get_name(&self) -> Option<&String> {
         self.name.as_ref()
     }
@@ -122,6 +138,14 @@ impl TabsDataWorkerDescriberBuilder {
 
     pub fn get_program(&self) -> Option<&PathBuf> {
         self.program.as_ref()
+    }
+
+    pub fn get_set_state(&self) -> Option<&Option<SetState>> {
+        self.set_state.as_ref()
+    }
+
+    pub fn get_get_states(&self) -> Option<&Vec<GetState>> {
+        self.get_states.as_ref()
     }
 
     pub fn get_config(&self) -> Option<&PathBuf> {
@@ -157,6 +181,10 @@ impl TabsDataWorkerDescriberBuilder {
 }
 
 impl WorkerDescriber for TabsDataWorkerDescriber {
+    fn class(&self) -> &WorkerClass {
+        &self.class
+    }
+
     fn name(&self) -> &String {
         &self.name
     }
@@ -167,6 +195,14 @@ impl WorkerDescriber for TabsDataWorkerDescriber {
 
     fn program(&self) -> &PathBuf {
         &self.program
+    }
+
+    fn set_state(&self) -> &Option<SetState> {
+        &self.set_state
+    }
+
+    fn get_states(&self) -> &Vec<GetState> {
+        &self.get_states
     }
 
     fn arguments(&self) -> &Vec<String> {
@@ -194,17 +230,23 @@ impl Display for TabsDataWorkerDescriber {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Name: {}\n\
+            "Class: {:?}\n\
+             Name: {}\n\
              Location: {:?}\n\
              Program: {:?}\n\
+             SetState: {:?}\n\
+             GetStates: {:?}\n\
              Arguments: {:?}\n\
              Config: {:?}\n\
              Message:\n{}\n\
              Work: {:?}\n\
              Queue: {:?}",
+            &self.class,
             &self.name,
             &self.location,
             &self.program,
+            &self.set_state,
+            &self.get_states,
             &self.arguments,
             &self.config,
             match &self.message {
@@ -257,11 +299,12 @@ pub enum DescriberError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bin::supervisor::WorkerLocation::RELATIVE;
+    use crate::bin::platform::supervisor::WorkerLocation::RELATIVE;
     use crate::logic::platform::resource::instance::{CONFIG_FOLDER, MSG_FOLDER, WORK_FOLDER};
     use std::fs::create_dir_all;
     use std::path::PathBuf;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
+    use td_common::server::WorkerClass::REGULAR;
     use tempfile::tempdir;
 
     #[test]
@@ -272,9 +315,12 @@ mod tests {
         let work_folder = workspace_folder.path().to_path_buf().join(WORK_FOLDER);
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .class(REGULAR)
             .name(get_current_exe_name().unwrap())
             .location(RELATIVE)
             .program(get_current_exe_path().expect("Error getting current running program"))
+            .set_state(None)
+            .get_states(vec![])
             .arguments(vec!["--arg1".to_string(), "--arg2".to_string()])
             .config(config_folder)
             .work(work_folder.clone())
@@ -286,9 +332,12 @@ mod tests {
     #[test]
     fn test_missing_name() {
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .class(REGULAR)
             .name(" ".to_string())
             .location(RELATIVE)
             .program(get_current_exe_path().expect("Error getting current running program"))
+            .set_state(None)
+            .get_states(vec![])
             .arguments(vec!["--arg1".to_string(), "--arg2".to_string()])
             .config("".to_string())
             .work("".to_string())
@@ -300,9 +349,12 @@ mod tests {
     #[test]
     fn test_non_existing_program() {
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .class(REGULAR)
             .name("non_existing_program".to_string())
             .location(RELATIVE)
             .program(PathBuf::from("/non/existing/program"))
+            .set_state(None)
+            .get_states(vec![])
             .arguments(vec!["--arg1".to_string(), "--arg2".to_string()])
             .config("".to_string())
             .work("".to_string())
@@ -319,9 +371,12 @@ mod tests {
         let work_folder = workspace_folder.path().to_path_buf().join(WORK_FOLDER);
         create_dir_all(&work_folder).expect("Error creating work folder");
         let describer = TabsDataWorkerDescriberBuilder::default()
+            .class(REGULAR)
             .name(get_current_exe_name().unwrap())
             .location(RELATIVE)
             .program(get_current_exe_path().expect("Error getting current running program"))
+            .set_state(None)
+            .get_states(vec![])
             .arguments(Vec::new())
             .config(config_folder)
             .work(work_folder.clone())

@@ -5,7 +5,7 @@
 use colored::*;
 use std::fs;
 use std::io::Write;
-use tabsdatalib::bin::tdserver;
+use tabsdatalib::bin::platform::tdserver;
 use td_attach::attach;
 use td_build::version::TABSDATA_VERSION;
 use td_common::env::{get_home_dir, TABSDATA_HOME_DIR};

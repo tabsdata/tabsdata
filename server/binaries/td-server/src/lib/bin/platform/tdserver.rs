@@ -1,8 +1,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::bin::supervisor::WorkerLocation::RELATIVE;
-use crate::bin::supervisor::TD_ARGUMENT_KEY;
+use crate::bin::platform::supervisor::WorkerLocation::RELATIVE;
+use crate::bin::platform::supervisor::TD_ARGUMENT_KEY;
 use crate::logic::platform::component::argument::InheritedArgumentKey;
 use crate::logic::platform::component::argument::InheritedArgumentKey::*;
 use crate::logic::platform::component::describer::TabsDataWorkerDescriberBuilder;
@@ -41,6 +41,7 @@ use td_common::cli::{parse_extra_arguments, ARGUMENT_PREFIX, TRAILING_ARGUMENTS_
 use td_common::env::to_absolute;
 use td_common::files::ROOT;
 use td_common::os::{get_process_tree, terminate_process};
+use td_common::server::WorkerClass::REGULAR;
 use td_common::status::ExitStatus::{GeneralError, Success};
 use td_python::upgrade::{get_source_version, get_target_version, upgrade};
 use td_python::venv::prepare;
@@ -551,9 +552,12 @@ fn command_start(arguments: StartArguments) {
                 }
             }
             let describer = TabsDataWorkerDescriberBuilder::default()
+                .class(REGULAR)
                 .name(SUPERVISOR.to_string())
                 .location(RELATIVE)
                 .program(PathBuf::from(SUPERVISOR))
+                .set_state(None)
+                .get_states(vec![])
                 .arguments(forwarded_parameters)
                 .config(supervisor_config_absolute.clone())
                 .work(supervisor_work_absolute.clone())
@@ -570,8 +574,8 @@ fn command_start(arguments: StartArguments) {
 
             prepare(&supervisor_instance);
 
-            match TabsDataWorker::new(describer.clone()).work() {
-                Ok(worker) => {
+            match TabsDataWorker::new(describer.clone()).work(None) {
+                Ok((worker, _out, _err)) => {
                     info!(
                         "Tabsdata instance '{}' started with pid '{:?}'",
                         supervisor_workspace.clone().display(),

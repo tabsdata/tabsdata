@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::bin::tdserver::TD_KEEP;
+use crate::bin::platform::tdserver::TD_KEEP;
 use crate::logic::platform::resource::instance::{
     CONFIG_FILE, CONFIG_FOLDER, INSTANCES_FOLDER, WORKSPACE_FOLDER,
 };

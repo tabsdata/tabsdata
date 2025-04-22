@@ -4,9 +4,11 @@
 
 use crate::cli::{move_to_dir, obtain_config_dir, obtain_current_dir};
 use crate::env::{get_current_dir, get_home_dir, get_user_name, TABSDATA_HOME_DIR};
+use config::{File, FileFormat};
 use serde::{Deserialize, Serialize};
+use std::io::Read;
 use std::path::PathBuf;
-use tracing::error;
+use tracing::{error, info};
 
 /// Marker trait to define a configuration.
 pub trait Config: Sized + Default + Serialize + for<'a> Deserialize<'a> {
@@ -49,7 +51,7 @@ const EXTENSION: &str = "yaml";
 ///
 /// For environment variables lookups, names are fully uppercased and hyphens '-' are
 /// replaced with underscores '_'.
-pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>) -> T {
+pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>, stdin: bool) -> T {
     let current_folder = obtain_current_dir();
     let _ = (match config_folder {
         None => move_to_dir(obtain_config_dir()),
@@ -84,12 +86,24 @@ pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>)
     // environment variables prefix, replacing '-' hyphens from config name with '_' underscores.
     let app_env_prefix = config_name.replace('-', "_");
 
-    let config_builder = config::Config::builder()
+    let mut config_builder = config::Config::builder()
         .add_source(config::Config::try_from(&default_config).unwrap())
         .add_source(config::File::with_name(app_config_file.to_str().unwrap()).required(false))
         .add_source(config::File::with_name(app_user_config_file.to_str().unwrap()).required(false))
         .add_source(config::File::with_name(home_dir_config_file.to_str().unwrap()).required(false))
         .add_source(config::Environment::with_prefix(&app_env_prefix));
+
+    // stdin if flagged to use it
+    if stdin {
+        info!("Reading from stdin as an additional source of configuration");
+        let mut stdin_config = String::new();
+        if let Err(err) = std::io::stdin().read_to_string(&mut stdin_config) {
+            error!("Failed to read stdin config: {:?}", err);
+            panic!("Exiting due to configuration ingestion failure.");
+        }
+        let stdin_config_stream = File::from_str(&stdin_config, FileFormat::Yaml);
+        config_builder = config_builder.add_source(stdin_config_stream);
+    }
 
     let config = match config_builder.build() {
         Ok(built_config) => match built_config.try_deserialize() {
@@ -161,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_load_config_no_files() {
-        let config = crate::config::load_config::<MyConfig>("my-config", None);
+        let config = crate::config::load_config::<MyConfig>("my-config", None, false);
         assert_eq!(config.name(), "default_name");
         assert_eq!(config.port(), &1u16);
     }
@@ -180,7 +194,7 @@ mod tests {
             },
         );
 
-        let config = load_config::<MyConfig>("my-config", None);
+        let config = load_config::<MyConfig>("my-config", None, false);
         assert_eq!(config.name(), "app_config_name");
         assert_eq!(config.port(), &2u16);
     }
@@ -204,7 +218,7 @@ mod tests {
             },
         );
 
-        let config = load_config::<MyConfig>("my-config", None);
+        let config = load_config::<MyConfig>("my-config", None, false);
         assert_eq!(config.name(), "user_config_name");
         assert_eq!(config.port(), &3u16);
     }
@@ -240,7 +254,7 @@ mod tests {
             },
         );
 
-        let config = load_config::<MyConfig>("my-config", None);
+        let config = load_config::<MyConfig>("my-config", None, false);
 
         assert_eq!(config.name(), "user_home_dir_config_name");
         assert_eq!(config.port(), &4u16);
@@ -280,7 +294,7 @@ mod tests {
         std::env::set_var("MY_CONFIG_ENV_NAME", "env_config_name");
         std::env::set_var("MY_CONFIG_ENV_PORT", "5");
 
-        let config = load_config::<MyConfig>("my-config-env", None);
+        let config = load_config::<MyConfig>("my-config-env", None, false);
 
         assert_eq!(config.name(), "env_config_name");
         assert_eq!(config.port(), &5u16);

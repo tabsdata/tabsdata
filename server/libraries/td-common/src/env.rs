@@ -12,6 +12,7 @@ use std::{fs, io};
 use thiserror::Error;
 
 pub const TABSDATA_HOME_DIR: &str = ".tabsdata";
+pub const TABSDATA_DEV_HOME_DIR: &str = ".tabsdata-dev";
 
 #[derive(Debug, Error)]
 pub enum EnvironmentError {

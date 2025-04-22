@@ -2,8 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::bin::supervisor::ControllerState::{KO, NA, OK};
-use crate::bin::supervisor::WorkerKind::SUPERVISOR;
+use crate::bin::platform::supervisor::ControllerState::{KO, NA, OK};
+use crate::bin::platform::supervisor::WorkerKind::SUPERVISOR;
 use crate::common::signal::terminate;
 use crate::logic::platform::component::argument::InheritedArgumentKey::*;
 use crate::logic::platform::component::argument::{ArgumentKey, InheritedArgumentKey};
@@ -12,8 +12,8 @@ use crate::logic::platform::component::notifier::execution;
 use crate::logic::platform::component::parameters::render;
 use crate::logic::platform::component::runner::RunnerError;
 use crate::logic::platform::component::runner::RunnerError::{
-    DescriberFailure, IOError, InvalidMessageType, MissingStartDate, StartNotificationError,
-    VoidEphemeralMessage, WorkerExited,
+    DescriberFailure, IOError, InvalidMessageType, MissingStartDate, MissingStdOutError,
+    ReadStdOutError, StartNotificationError, VoidEphemeralMessage, WorkerExited,
 };
 use crate::logic::platform::component::tracker::{check_status, get_pid_path, WorkerStatus};
 use crate::logic::platform::launch::worker::{notify, TabsDataWorker, Worker};
@@ -25,6 +25,10 @@ use crate::logic::platform::resource::instance::{
 use crate::logic::platform::resource::messaging::SupervisorMessageQueue;
 use crate::logic::platform::resource::scripting::{ArgumentPrefix, CommandBuilder, ScriptBuilder};
 use crate::logic::platform::resource::settings::extract_profile_config;
+use crate::logic::platform::resource::state::{
+    extract_state_data_from_string, EncodedMap, State, StateDataKind, StateDataValue, StateError,
+    SupervisorState,
+};
 use crate::logic::platform::runtime::error::RuntimeError;
 use atomic_enum::atomic_enum;
 use chrono::Utc;
@@ -68,6 +72,7 @@ use td_common::status::ExitStatus::{GeneralError, Success, TabsDataStatus};
 use td_python::venv::prepare;
 use tempfile::tempdir;
 use thiserror::Error;
+use tokio::io::AsyncReadExt;
 use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -146,6 +151,24 @@ struct ControllerConfig {
     workers: IndexMap<String, WorkerConfig>,
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Getters)]
+pub struct SetState {
+    #[serde(rename = "state-type")]
+    state_type: StateDataKind,
+    #[serde(rename = "state-key")]
+    state_key: String,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Getters)]
+pub struct GetState {
+    #[serde(rename = "state-type")]
+    state_type: StateDataKind,
+    #[serde(rename = "state-key")]
+    state_key: String,
+    #[serde(rename = "state-prefixes", default)]
+    state_prefixes: Vec<String>,
+}
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct WorkerConfig {
@@ -161,6 +184,10 @@ pub struct WorkerConfig {
     inherit: Vec<String>,
     #[serde(default)]
     arguments: Vec<String>,
+    #[serde(rename = "set-state")]
+    set_state: Option<SetState>,
+    #[serde(default, rename = "get-states")]
+    get_states: Vec<GetState>,
     #[serde(default = "default_concurrency")]
     concurrency: u16,
     #[serde(default = "default_retries")]
@@ -178,6 +205,8 @@ impl Display for WorkerConfig {
                              parameters: {:?}, \
                              inherit: {:?}, \
                              arguments: {:?}, \
+                             set_state: {:?}, \
+                             get_states: {:?}, \
                              concurrency: {} }}",
             self.name,
             self.kind,
@@ -186,6 +215,8 @@ impl Display for WorkerConfig {
             self.parameters,
             self.inherit,
             self.arguments,
+            self.set_state,
+            self.get_states,
             self.concurrency
         )
     }
@@ -367,6 +398,7 @@ pub struct Supervisor {
     ephemeral_mark: Arc<AtomicControllerState>,
     mutex: Arc<std::sync::Mutex<()>>,
     dropping: Arc<AtomicBool>,
+    state: SupervisorState,
 }
 
 impl Drop for Supervisor {
@@ -440,6 +472,7 @@ impl Supervisor {
             ephemeral_mark: Arc::new(AtomicControllerState::new(NA)),
             mutex: Arc::new(std::sync::Mutex::new(())),
             dropping: Arc::new(AtomicBool::new(false)),
+            state: State::new(),
         }
     }
 
@@ -1239,9 +1272,12 @@ impl Supervisor {
         };
 
         let describer = match TabsDataWorkerDescriberBuilder::default()
+            .class(class.clone())
             .name(worker.name())
             .location(worker.location().clone())
             .program(program)
+            .set_state(worker.set_state().clone())
+            .get_states(worker.get_states().clone())
             .arguments(arguments)
             .config(config_folder)
             .work(work_folder)
@@ -1264,9 +1300,66 @@ impl Supervisor {
             Err(err) => return (None, Err(err)),
         };
 
+        let mut work_get_state = None;
+
+        if !worker.get_states.is_empty() {
+            debug!(
+                "Class {} worker '{}' requested get-states: {:?}",
+                class.as_ref().to_string(),
+                worker.name(),
+                worker.get_states
+            );
+            if worker.get_states.len() > 1 {
+                warn!(
+                    "Class {} worker '{}' requested more than 1 get-states. This is not currently supported: {:?}",
+                    class.as_ref().to_string(),
+                    worker.name(),
+                    worker.get_states
+                );
+            }
+            // We are sure there is at least 1 element...
+            let get_state = worker.get_states.first().unwrap().clone();
+            let set_state = SetState {
+                state_type: get_state.state_type,
+                state_key: get_state.state_key,
+            };
+            let state = match self.state.read().await.data().get(&set_state).cloned() {
+                Some(value) => value,
+                None => {
+                    return (
+                        None,
+                        Err(StateError::MissingStateKey { key: set_state }.into()),
+                    )
+                }
+            };
+
+            let settings = match state {
+                StateDataValue::Blob(encoded_blob) => match encoded_blob.decode() {
+                    Ok(blob) => blob,
+                    Err(error) => return (None, Err(error.into())),
+                },
+                StateDataValue::Map(encoded_map) => {
+                    let map = match encoded_map.decode() {
+                        Ok(mapping) => mapping,
+                        Err(error) => return (None, Err(error.into())),
+                    };
+                    let prefixes = get_state.state_prefixes;
+                    let mapping: HashMap<String, String> = map
+                        .into_iter()
+                        .filter(|(k, _)| prefixes.iter().any(|p| k.starts_with(p)))
+                        .collect();
+                    match EncodedMap::serialize(&mapping) {
+                        Ok(yaml) => yaml,
+                        Err(error) => return (None, Err(error.into())),
+                    }
+                }
+            };
+            work_get_state = Some(settings)
+        }
+
         let td_worker = TabsDataWorker::new(describer.clone());
-        match td_worker.work() {
-            Ok(mut child) => {
+        match td_worker.work(work_get_state) {
+            Ok((mut child, _out, _err)) => {
                 if let Some(message) = message {
                     let start = match start {
                         None => return (Some(td_worker), Err(MissingStartDate)),
@@ -1296,6 +1389,23 @@ impl Supervisor {
                                 class.as_ref(),
                                 &describer.name()
                             );
+                            if let Some(set_state) = worker.set_state().as_ref().cloned() {
+                                let mut output = String::new();
+                                if let Some(mut stdout) = child.stdout.take() {
+                                    if let Err(e) = stdout.read_to_string(&mut output).await {
+                                        return (Some(td_worker), Err(ReadStdOutError(e)));
+                                    }
+                                } else {
+                                    return (Some(td_worker), Err(MissingStdOutError));
+                                }
+                                let state =
+                                    extract_state_data_from_string(output, set_state.state_type);
+                                self.state
+                                    .write()
+                                    .await
+                                    .data_mut()
+                                    .insert(set_state, state.unwrap());
+                            }
                         } else {
                             return if let Some(code) = exit_status.code() {
                                 let message = format!(
@@ -1834,7 +1944,7 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
     create_dir_all(work_dir_absolute.clone()).expect("Failed to create work folder '{}'");
 
     // These environment variable are meant to be used as URI locations. Therefore, in Windows they will have a
-    // leading slash (/), resulting if, for example, '/c:\folder\file' instead of 'c:\folder\file
+    // leading slash (/), resulting if, for example, '/c:\folder\file' instead of 'c:\folder\file'
     set_var(INSTANCE_ENV, prepend_slash(instance_dir_absolute.clone()));
     set_var(REPOSITORY_ENV, prepend_slash(repository_dir_absolute));
     set_var(WORKSPACE_ENV, prepend_slash(workspace_dir_absolute));

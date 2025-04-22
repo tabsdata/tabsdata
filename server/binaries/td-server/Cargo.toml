@@ -133,6 +133,7 @@ async-trait = { workspace = true }
 atomic_enum = { workspace = true }
 axum = { workspace = true, features = ["macros"] }
 axum-extra = { workspace = true }
+base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }

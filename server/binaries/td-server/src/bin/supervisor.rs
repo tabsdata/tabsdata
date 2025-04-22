@@ -3,7 +3,7 @@
 //
 
 use std::env;
-use tabsdatalib::bin::supervisor;
+use tabsdatalib::bin::platform::supervisor;
 use td_attach::attach;
 use td_common::logging;
 use tracing::{info, Level};

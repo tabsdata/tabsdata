@@ -10,11 +10,14 @@ use crate::logic::platform::component::supplier::SupplierError;
 use crate::logic::platform::component::tracker::{TrackerError, UNKNOWN_WORKER_PID};
 use crate::logic::platform::launch::worker::Worker;
 use crate::logic::platform::resource::instance::{InstanceError, WORKER_ERR_FILE, WORKER_OUT_FILE};
+use crate::logic::platform::resource::state::StateError;
 use http::header::{InvalidHeaderName, InvalidHeaderValue};
 use http::StatusCode;
 use reqwest::Error;
 use std::fmt::{Debug, Formatter};
 use std::fs::OpenOptions;
+use std::path::PathBuf;
+use std::process::Stdio;
 use std::{env, fmt};
 use td_common::env::get_current_dir;
 use td_common::logging::LOG_LOCATION;
@@ -26,12 +29,17 @@ use td_python::venv::{
     ENV_VIRTUAL_ENV, ENV_VIRTUAL_ENV_PROMPT,
 };
 use thiserror::Error;
+use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tracing::{debug, error, info};
 
 /// Runs a worker under the Tabsdata system.
 pub trait WorkerRunner: Debug {
-    fn run(&self, worker: &dyn Worker) -> Result<Child, RunnerError>;
+    fn run(
+        &self,
+        worker: &dyn Worker,
+        state: Option<String>,
+    ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError>;
 }
 
 // Default runner.
@@ -51,7 +59,11 @@ impl Debug for TabsDataWorkerRunner {
 }
 
 impl WorkerRunner for TabsDataWorkerRunner {
-    fn run(&self, worker: &dyn Worker) -> Result<Child, RunnerError> {
+    fn run(
+        &self,
+        worker: &dyn Worker,
+        state: Option<String>,
+    ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError> {
         let current_dir = get_current_dir();
         debug!(
             "Starting new worker from current directory: '{:?}'",
@@ -69,27 +81,43 @@ impl WorkerRunner for TabsDataWorkerRunner {
 
         worker.supplier().supply(worker)?;
 
-        let out = OpenOptions::new().create(true).append(true).open(
-            worker
-                .describer()
-                .work()
-                .join(LOG_LOCATION)
-                .join(WORKER_OUT_FILE),
-        )?;
-        let err = OpenOptions::new().create(true).append(true).open(
-            worker
-                .describer()
-                .work()
-                .join(LOG_LOCATION)
-                .join(WORKER_ERR_FILE),
-        )?;
+        let mut option_out_path: Option<PathBuf> = None;
+
+        let err_path = worker
+            .describer()
+            .work()
+            .join(LOG_LOCATION)
+            .join(WORKER_ERR_FILE);
+        let option_err_path = Some(err_path.clone());
+        let err = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&err_path)?;
+
         let mut command = Command::new(worker.describer().program());
         command
             .current_dir(worker.describer().work())
             .envs(obtain_env_vars(worker.describer().name()))
-            .stdout(out)
-            .stderr(err)
-            .args(worker.describer().arguments());
+            .args(worker.describer().arguments())
+            .stdin(Stdio::piped())
+            .stderr(err);
+
+        if worker.describer().set_state().is_some() {
+            command.stdout(Stdio::piped());
+        } else {
+            let out_path = worker
+                .describer()
+                .work()
+                .join(LOG_LOCATION)
+                .join(WORKER_OUT_FILE);
+            option_out_path = Some(out_path.clone());
+            let out = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&out_path)?;
+
+            command.stdout(out);
+        }
 
         debug!(
             "Starting worker with command: '{:?}' and arguments '{:?}'",
@@ -97,7 +125,7 @@ impl WorkerRunner for TabsDataWorkerRunner {
             worker.describer().arguments()
         );
 
-        let child = match command.spawn() {
+        let mut child = match command.spawn() {
             Ok(child) => child,
             Err(e) => {
                 return Err(LaunchError {
@@ -106,12 +134,33 @@ impl WorkerRunner for TabsDataWorkerRunner {
                 })
             }
         };
+
         info!(
             "Worker '{}' started with pid '{}'",
             &worker.describer().name(),
             &child.id().unwrap_or(UNKNOWN_WORKER_PID)
         );
-        Ok(child)
+
+        if state.is_some() {
+            info!(
+                "Feeding stdin of worker '{}' with pid '{}'",
+                &worker.describer().name(),
+                &child.id().unwrap_or(UNKNOWN_WORKER_PID)
+            );
+
+            let mut stdin = match child.stdin.take() {
+                None => Err(MissingStdIn)?,
+                Some(stdin) => stdin,
+            };
+
+            tokio::spawn(async move {
+                // Here we are sure Option has some content...
+                let _ = stdin.write_all(state.unwrap().as_bytes()).await;
+                let _ = stdin.shutdown().await;
+            });
+        }
+
+        Ok((child, option_out_path, option_err_path))
     }
 }
 
@@ -174,7 +223,11 @@ impl Debug for FunctionWorkerRunner {
 
 // ToDo: Dimas: Pending implementation. It will need to add dedicated logic to this kind of workers.
 impl WorkerRunner for FunctionWorkerRunner {
-    fn run(&self, _worker: &dyn Worker) -> Result<Child, RunnerError> {
+    fn run(
+        &self,
+        _worker: &dyn Worker,
+        _state: Option<String>,
+    ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError> {
         unimplemented!()
     }
 }
@@ -233,4 +286,12 @@ pub enum RunnerError {
     MissingStartDate,
     #[error("worker start notification error")]
     StartNotificationError,
+    #[error("Process has no standard output")]
+    MissingStdOutError,
+    #[error("An error occurred reading process standard output: {0}")]
+    ReadStdOutError(std::io::Error),
+    #[error("Missing required stdin")]
+    MissingStdIn,
+    #[error("Unexpected error processing supervisor states: {0}")]
+    GetSetStateError(#[from] StateError),
 }

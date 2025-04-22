@@ -16,6 +16,22 @@ controllers:
           - repository
           - workspace
           - profile
+      - name: apiserver-cfgrsv
+        kind: processor
+        location: system
+        program: _tdcfgrsv
+        parameters:
+          - input: ${TD_CONFIG}/proc/regular/apiserver/config/config.yaml
+          - strategies: env,hashicorp
+          - hashicorp-url: ""
+          - hashicorp-token: ""
+          - hashicorp-namespace: ""
+          - env-hashicorp-url: ""
+          - env-hashicorp-token: ""
+          - env-hashicorp-namespace: ""
+        set-state:
+          state-type: blob
+          state-key: apiserver
   regular:
     concurrency: 0
     workers:
@@ -24,8 +40,12 @@ controllers:
         location: relative
         program: apiserver
         parameters:
+          - stdin-config: true
           - database-url: file://${TD_REPOSITORY}/database/tabsdata.db
           - storage-url: file://${TD_REPOSITORY}/storage
+        get-states:
+          - state-type: blob
+            state-key: apiserver
   ephemeral:
     concurrency: 8
     workers:
