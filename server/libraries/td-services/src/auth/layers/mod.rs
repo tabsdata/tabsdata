@@ -9,3 +9,4 @@ pub mod create_password_hash;
 pub mod decode_refresh_token;
 pub mod refresh_sessions;
 pub mod set_session_expiration;
+pub mod assert_no_password_change_required;

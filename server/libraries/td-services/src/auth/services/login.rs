@@ -31,6 +31,7 @@ use td_tower::{layers, p, service_provider};
 
 use crate::auth::session::Sessions;
 use td_objects::tower_service::from::DefaultService;
+use crate::auth::layers::assert_no_password_change_required::assert_no_password_change_required;
 
 pub struct LoginService {
     provider: ServiceProvider<Login, TokenResponseX, TdError>,
@@ -62,6 +63,7 @@ impl LoginService {
                 from_fn(With::<UserDB>::extract::<PasswordHash>),
                 from_fn(assert_password::<Password>),
                 from_fn(assert_user_enabled),
+                from_fn(assert_no_password_change_required),
                 from_fn(With::<UserDB>::extract::<UserId>),
 
                 from_fn(combine::<UserId, RoleName>),

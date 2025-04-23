@@ -31,6 +31,8 @@ pub enum AuthError {
     UserDisabled = 4003,
     #[error("Invalid refresh token")]
     InvalidRefreshToken = 4004,
+    #[error("User must change password")]
+    UserMustChangePassword = 4005,
 
     #[error("Internal error: {0}")]
     InternalError(String) = 5000,
