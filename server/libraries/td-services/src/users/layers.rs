@@ -3,41 +3,34 @@
 //
 
 use crate::users::error::UserError;
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
-use std::ops::Deref;
 use td_database::sql::DbError;
 use td_error::TdError;
 use td_objects::crudl::{
     assert_one, handle_create_unique_err, handle_sql_err, list_result, list_select, ListRequest,
     ListResult,
 };
-use td_objects::dlo::{RequestIsAdmin, RequestTime, RequestUserId, UserId, Value};
+use td_objects::dlo::{RequestTime, RequestUserId, UserId, Value};
 use td_objects::jwt::jwt_logic::{JwtLogic, TokenResponse};
 use td_objects::users::dao::{User, UserBuilder, UserWithNames};
-use td_objects::users::dlo::{Password, PasswordProvider, UserPassword, UserPasswordHash};
-use td_objects::users::dto::{AuthenticateRequest, PasswordUpdate, UserCreate, UserUpdate};
+use td_objects::users::dlo::{UserPassword, UserPasswordHash};
+use td_objects::users::dto::{AuthenticateRequest, UserCreate, UserUpdate};
 use td_security::config::PasswordHashingConfig;
 use td_security::password;
 use td_security::password::{assert_password_policy, create_password_hash};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
-pub async fn create_user_authorize(
-    Input(req_is_admin): Input<RequestIsAdmin>,
+pub async fn create_user_validate_password(
+    Input(user_create): Input<UserCreate>,
 ) -> Result<(), TdError> {
-    if !req_is_admin.value() {
-        return Err(UserError::NotAllowedToCreateUsers)?;
-    }
+    let password = user_create.password();
+    assert_password_policy(password)?;
     Ok(())
 }
 
-pub async fn user_extract_password<P: PasswordProvider>(
-    Input(provider): Input<P>,
-) -> Result<Password, TdError> {
-    Ok(Password::new(provider.password()))
-}
-
-pub async fn user_validate_password(Input(password): Input<Password>) -> Result<(), TdError> {
-    let password: &Option<String> = password.deref();
+pub async fn update_user_validate_password(
+    Input(user_update): Input<UserUpdate>,
+) -> Result<(), TdError> {
+    let password = user_update.password();
     if let Some(password) = password {
         assert_password_policy(password)?;
     }
@@ -49,19 +42,8 @@ pub async fn create_user_build_dao(
     Input(request_time): Input<RequestTime>,
     Input(request_user_id): Input<RequestUserId>,
     Input(user_id): Input<UserId>,
-    Input(password): Input<Password>,
     Input(dto): Input<UserCreate>,
 ) -> Result<User, TdError> {
-    let password: &Option<String> = &password;
-    let password = match password {
-        Some(password) => password,
-        None => {
-            return Err(UserError::ShouldNotHappen(
-                "Password is missing".to_string(),
-            ))?
-        }
-    };
-
     let user = UserBuilder::default()
         .id(&*user_id)
         .name(dto.name())
@@ -71,7 +53,10 @@ pub async fn create_user_build_dao(
         .created_by_id(&*request_user_id)
         .modified_on(&*request_time)
         .modified_by_id(&*request_user_id)
-        .password_hash(create_password_hash(&password_hashing_config, password))
+        .password_hash(create_password_hash(
+            &password_hashing_config,
+            dto.password(),
+        ))
         .password_set_on(&*request_time)
         .password_must_change(true)
         .enabled(dto.enabled().unwrap_or(true))
@@ -128,17 +113,6 @@ pub async fn create_user_sql_insert(
     Ok(())
 }
 
-pub async fn read_user_authorize(
-    Input(req_is_admin): Input<RequestIsAdmin>,
-    Input(req_user_id): Input<RequestUserId>,
-    Input(user_id): Input<UserId>,
-) -> Result<(), TdError> {
-    if !req_is_admin.value() && req_user_id.value() != user_id.value() {
-        return Err(UserError::NotAllowedToReadUsers)?;
-    }
-    Ok(())
-}
-
 pub async fn delete_user_validate(
     Input(req_user_id): Input<RequestUserId>,
     Input(user_id): Input<UserId>,
@@ -164,15 +138,6 @@ pub async fn delete_user_sql_delete(
         .await
         .map_err(handle_sql_err)?;
     assert_one(res)?;
-    Ok(())
-}
-
-pub async fn list_users_authorize(
-    Input(req_is_admin): Input<RequestIsAdmin>,
-) -> Result<(), TdError> {
-    if !req_is_admin.value() {
-        return Err(UserError::NotAllowedToListUsers)?;
-    }
     Ok(())
 }
 
@@ -221,64 +186,17 @@ pub async fn update_user_validate(Input(dto): Input<UserUpdate>) -> Result<(), T
     Ok(())
 }
 
-pub async fn update_user_validate_password_force_change_as_admin(
-    Input(request_user_id): Input<RequestUserId>,
-    Input(user_id): Input<UserId>,
-    Input(dto): Input<UserUpdate>,
-) -> Result<(), TdError> {
-    match dto.password() {
-        Some(PasswordUpdate::ForceChange { .. }) if request_user_id.value() == user_id.value() => {
-            return Err(UserError::CannotForcePasswordChangeToSelf)?;
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-pub async fn update_user_validate_password_force_change_as_non_admin(
-    Input(dto): Input<UserUpdate>,
-) -> Result<(), TdError> {
-    match dto.password() {
-        Some(PasswordUpdate::ForceChange { .. }) => {
-            return Err(UserError::CannotForcePasswordChange)?;
-        }
-        Some(PasswordUpdate::Change { .. }) => {}
-        None => {}
-    }
-    Ok(())
-}
-
 pub async fn update_user_validate_password_change(
     Input(request_user_id): Input<RequestUserId>,
-    Input(user_id): Input<UserId>,
     Input(dto): Input<UserUpdate>,
     Input(dao): Input<User>,
 ) -> Result<(), TdError> {
-    match dto.password() {
-        Some(PasswordUpdate::Change {
-            old_password,
-            new_password: _,
-        }) if request_user_id.value() == user_id.value() => {
-            match PasswordHash::new(dao.password_hash()) {
-                // the values encode in the PHC string are used to configure the verifier
-                Ok(parsed_hash) => {
-                    if Argon2::default()
-                        .verify_password(old_password.as_bytes(), &parsed_hash)
-                        .is_err()
-                    {
-                        return Err(UserError::IncorrectOldPassword)?;
-                    }
-                }
-                Err(err) => {
-                    return Err(UserError::IncorrectPasswordHash(err.to_string()))?;
-                }
-            };
-        } // user is modifying their own password
-        Some(PasswordUpdate::Change { .. }) => {
-            return Err(UserError::CannotChangeOtherUserPassword)?;
+    if let Some(_) = dto.password() {
+        if request_user_id.value() == dao.id() {
+            // a self password change must be done via de password_change endpoint
+            return Err(UserError::MustUsePasswordChangeEndpointForSelf)?;
         }
-        Some(PasswordUpdate::ForceChange { .. }) => {}
-        None => {}
+        // only a sec_admin can make it here without being the requester
     }
     Ok(())
 }
@@ -299,7 +217,6 @@ pub async fn update_user_build_dao(
     Input(request_user_id): Input<RequestUserId>,
     Input(request_time): Input<RequestTime>,
     Input(dto): Input<UserUpdate>,
-    Input(password): Input<Password>,
     Input(dao): Input<User>,
 ) -> Result<User, TdError> {
     let mut builder = dao.builder();
@@ -310,7 +227,7 @@ pub async fn update_user_build_dao(
         .as_ref()
         .map(|value| builder.email(value.clone()));
 
-    if let Some(password) = password.value() {
+    if let Some(password) = &dto.password {
         builder.password_hash(create_password_hash(
             &password_hashing_config,
             password.trim(),
@@ -318,7 +235,7 @@ pub async fn update_user_build_dao(
         builder.password_set_on(&*request_time);
     };
 
-    if let Some(PasswordUpdate::ForceChange { .. }) = dto.password() {
+    if let Some(_) = dto.password() {
         builder.password_must_change(true);
     }
 

@@ -4,10 +4,8 @@
 
 use crate::users::layers::{
     update_user_build_dao, update_user_sql_update, update_user_validate,
-    update_user_validate_enabled, update_user_validate_password_change,
-    update_user_validate_password_force_change_as_admin,
-    update_user_validate_password_force_change_as_non_admin, user_extract_password,
-    user_validate_password,
+    update_user_validate_enabled, update_user_validate_password,
+    update_user_validate_password_change,
 };
 use crate::users::service::read_user::user_id_to_user_id;
 use std::sync::Arc;
@@ -17,7 +15,6 @@ use td_error::TdError;
 use td_objects::crudl::UpdateRequest;
 use td_objects::dlo::{UserId, UserName};
 use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
-use td_objects::tower_service::condition::is_req_by_user;
 use td_objects::tower_service::extractor::{
     extract_name, extract_req_context, extract_req_dto, extract_req_time, extract_req_user_id,
     extract_user_id,
@@ -29,8 +26,7 @@ use td_objects::users::dao::UserWithNames;
 use td_objects::users::dto::{UserRead, UserUpdate};
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::{
-    conditional, Do, Else, If, ServiceEntry, ServiceReturn, Share, SrvCtxProvider,
-    TransactionProvider,
+    ServiceEntry, ServiceReturn, Share, SrvCtxProvider, TransactionProvider,
 };
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::TdBoxService;
@@ -83,25 +79,9 @@ impl UpdateUserService {
                 extract_req_dto::<UpdateRequest<String, UserUpdate>, String, UserUpdate>,
             ))
             .layer(from_fn(update_user_validate))
-            .layer(conditional(
-                If(ServiceBuilder::new()
-                    .layer(from_fn(is_req_by_user))
-                    .service(ServiceReturn)),
-                Do(ServiceBuilder::new()
-                    .layer(from_fn(
-                        update_user_validate_password_force_change_as_non_admin,
-                    ))
-                    .service(ServiceReturn)),
-                Else(
-                    ServiceBuilder::new()
-                        .layer(from_fn(update_user_validate_password_force_change_as_admin))
-                        .service(ServiceReturn),
-                ),
-            ))
-            .layer(from_fn(update_user_validate_enabled))
             .layer(from_fn(update_user_validate_password_change))
-            .layer(from_fn(user_extract_password::<UserUpdate>))
-            .layer(from_fn(user_validate_password))
+            .layer(from_fn(update_user_validate_enabled))
+            .layer(from_fn(update_user_validate_password))
             .layer(from_fn(update_user_build_dao))
             .layer(from_fn(update_user_sql_update))
             .layer(from_fn(find_by_id::<UserId, UserWithNames>))
@@ -128,22 +108,16 @@ pub mod tests {
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_objects::users::dao::User;
-    use td_objects::users::dto::{PasswordUpdate, UserUpdate};
+    use td_objects::users::dto::UserUpdate;
     use td_security::config::PasswordHashingConfig;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_update_provider() {
+        use crate::users::layers::update_user_validate_password_change;
         use crate::users::layers::{update_user_build_dao, update_user_sql_update};
-        use crate::users::layers::{
-            update_user_validate, update_user_validate_enabled,
-            update_user_validate_password_change,
-        };
-        use crate::users::layers::{
-            update_user_validate_password_force_change_as_admin,
-            update_user_validate_password_force_change_as_non_admin,
-        };
+        use crate::users::layers::{update_user_validate, update_user_validate_enabled};
         use crate::users::service::read_user::user_id_to_user_id;
         use crate::users::service::update_user::UpdateUserService;
         use std::sync::Arc;
@@ -152,7 +126,6 @@ pub mod tests {
         use td_objects::dlo::UserId;
         use td_objects::dlo::UserName;
         use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
-        use td_objects::tower_service::condition::is_req_by_user;
         use td_objects::tower_service::extractor::extract_req_context;
         use td_objects::tower_service::extractor::extract_user_id;
         use td_objects::tower_service::extractor::{
@@ -172,7 +145,7 @@ pub mod tests {
         let provider =
             UpdateUserService::provider(db, password_config, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
-        use crate::users::layers::{user_extract_password, user_validate_password};
+        use crate::users::layers::update_user_validate_password;
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<UpdateRequest<String, UserUpdate>, UserRead>(&[
@@ -186,16 +159,12 @@ pub mod tests {
             type_of_val(&AuthzOn::<SystemOrUserId>::set),
             type_of_val(&Authz::<SecAdmin, Requester>::check),
             type_of_val(&extract_req_dto::<UpdateRequest<String, UserUpdate>, String, UserUpdate>),
-            type_of_val(&update_user_validate), //*
-            type_of_val(&is_req_by_user),
-            type_of_val(&update_user_validate_password_force_change_as_non_admin), //*
-            type_of_val(&update_user_validate_password_force_change_as_admin),     //*
-            type_of_val(&update_user_validate_enabled),                            //*
-            type_of_val(&update_user_validate_password_change),                    //*
-            type_of_val(&user_extract_password::<UserUpdate>),
-            type_of_val(&user_validate_password), //*
-            type_of_val(&update_user_build_dao),  //*
-            type_of_val(&update_user_sql_update), //*
+            type_of_val(&update_user_validate),                 //*
+            type_of_val(&update_user_validate_password_change), //*
+            type_of_val(&update_user_validate_enabled),         //*
+            type_of_val(&update_user_validate_password),        //*
+            type_of_val(&update_user_build_dao),                //*
+            type_of_val(&update_user_sql_update),               //*
             type_of_val(&find_by_id::<UserId, UserWithNames>),
             type_of_val(&map::<UserWithNames, UserRead>),
         ]);
@@ -223,9 +192,7 @@ pub mod tests {
         let user_update = UserUpdate {
             full_name: Some("U0 Update".to_string()),
             email: Some("u0update@foo.com".to_string()),
-            password: Some(PasswordUpdate::ForceChange {
-                temporary_password: None,
-            }),
+            password: Some("new_password".to_string()),
             enabled: Some(false),
         };
 
@@ -285,10 +252,7 @@ pub mod tests {
         let user_update = UserUpdate {
             full_name: Some("U0 Update".to_string()),
             email: Some("u0update@foo.com".to_string()),
-            password: Some(PasswordUpdate::Change {
-                old_password: "password".to_string(),
-                new_password: "password_update".to_string(),
-            }),
+            password: None,
             enabled: None,
         };
 

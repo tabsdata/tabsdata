@@ -3,7 +3,7 @@
 //
 
 use crate::users::layers::{
-    create_user_build_dao, create_user_sql_insert, user_extract_password, user_validate_password,
+    create_user_build_dao, create_user_sql_insert, create_user_validate_password,
 };
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
@@ -66,8 +66,7 @@ impl CreateUserService {
             .layer(from_fn(
                 extract_req_dto::<CreateRequest<(), UserCreate>, (), UserCreate>,
             ))
-            .layer(from_fn(user_extract_password::<UserCreate>))
-            .layer(from_fn(user_validate_password))
+            .layer(from_fn(create_user_validate_password))
             .layer(from_fn(new_id::<UserId>))
             .layer(from_fn(create_user_build_dao))
             .layer(from_fn(create_user_sql_insert))
@@ -104,8 +103,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_tower_metadata_create_provider() {
         use crate::users::layers::{
-            create_user_build_dao, create_user_sql_insert, user_extract_password,
-            user_validate_password,
+            create_user_build_dao, create_user_sql_insert, create_user_validate_password,
         };
         use crate::users::service::create_user::CreateUserService;
         use td_authz::Authz;
@@ -135,8 +133,7 @@ pub mod tests {
             type_of_val(&extract_req_time::<CreateRequest<(), UserCreate>>),
             type_of_val(&extract_req_user_id::<CreateRequest<(), UserCreate>>),
             type_of_val(&extract_req_dto::<CreateRequest<(), UserCreate>, (), UserCreate>),
-            type_of_val(&user_extract_password::<UserCreate>),
-            type_of_val(&user_validate_password), //*
+            type_of_val(&create_user_validate_password), //*
             type_of_val(&new_id::<UserId>),
             type_of_val(&create_user_build_dao),  //*
             type_of_val(&create_user_sql_insert), //*

@@ -1668,8 +1668,6 @@ mod test {
         )
         .await;
 
-
-
         let authz_context = AuthzContextForTest::default().add(
             &role,
             [Permission::CollectionDev(AuthzEntity::On(
@@ -1702,6 +1700,9 @@ mod test {
 
     #[tokio::test]
     async fn test_admin_collection_permission_on_system_user_scope() {
-        test_admin_collection_permission_on_scope(AuthzScope::SystemUser(AuthzEntity::On(UserId::default()))).await;
+        test_admin_collection_permission_on_scope(AuthzScope::SystemUser(AuthzEntity::On(
+            UserId::default(),
+        )))
+        .await;
     }
 }

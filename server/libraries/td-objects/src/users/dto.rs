@@ -27,17 +27,6 @@ impl UserCreate {
         UserCreateBuilder::default()
     }
 }
-#[apiserver_schema]
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub enum PasswordUpdate {
-    ForceChange {
-        temporary_password: Option<String>,
-    },
-    Change {
-        old_password: String,
-        new_password: String,
-    },
-}
 
 /// API: Payload for user update.
 #[apiserver_schema]
@@ -47,11 +36,7 @@ pub enum PasswordUpdate {
 pub struct UserUpdate {
     pub full_name: Option<String>,
     pub email: Option<String>,
-    /// If set by an admin, for another user, the old password is not provided and
-    /// the user must change their password after login.
-    ///
-    /// The password must be at least 8 characters long.
-    pub password: Option<PasswordUpdate>,
+    pub password: Option<String>,
     pub enabled: Option<bool>,
 }
 

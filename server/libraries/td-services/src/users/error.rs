@@ -8,22 +8,16 @@ use td_error::td_error;
 pub enum UserError {
     #[error("Password must be at least {0} characters long")]
     InvalidPasswordLength(usize) = 0,
-    #[error(
-        "An admin cannot force a password change to themselves, but they can change their own password"
-    )]
-    CannotForcePasswordChangeToSelf = 1,
-    #[error("A non admin cannot force a password change")]
-    CannotForcePasswordChange = 2,
-    #[error("An admin cannot permanently change other user password, but they can force a password change.")]
-    CannotChangeOtherUserPassword = 3,
     #[error("Old password is not correct")]
-    IncorrectOldPassword = 4,
+    MustUsePasswordChangeEndpointForSelf = 1,
+    #[error("Old password is not correct")]
+    IncorrectOldPassword = 2,
     #[error("A user cannot enable or disable themselves")]
-    UserCannotEnableDisableThemselves = 5,
+    UserCannotEnableDisableThemselves = 3,
     #[error("The user update request has nothing to update")]
-    UpdateRequestHasNothingToUpdate = 6,
+    UpdateRequestHasNothingToUpdate = 4,
     #[error("User already exists")]
-    AlreadyExists = 7,
+    AlreadyExists = 5,
 
     #[error("A non admin user cannot update other users")]
     NotAllowedToUpdateOtherUsers = 2000,
