@@ -3,7 +3,6 @@
 //
 
 use itertools::{Either, Itertools};
-use lazy_static::lazy_static;
 use sqlx::SqliteConnection;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -12,16 +11,9 @@ use td_error::{display_vec, td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::TableQueries;
 use td_objects::sql::DerefQueries;
-use td_objects::types::basic::{TableDataVersionId, TableDataVersionStatus, TableId, TriggeredOn};
-use td_objects::types::execution::TableDataVersionDB;
+use td_objects::types::basic::{TableDataVersionId, TableId, TriggeredOn};
+use td_objects::types::execution::{ActiveTableDataVersionDB, TableDataVersionDB};
 use td_objects::types::table_ref::{Version, Versions};
-
-lazy_static! {
-    static ref DONE: TableDataVersionStatus = TableDataVersionStatus::done();
-    static ref INCOMPLETE: TableDataVersionStatus = TableDataVersionStatus::incomplete();
-    static ref VALID_TABLE_DATA_VERSION_STATUS: [&'static TableDataVersionStatus; 2] =
-        [DONE.deref(), INCOMPLETE.deref()];
-}
 
 #[td_error]
 enum VersionResolverError {
@@ -64,9 +56,9 @@ impl<'a> VersionResolver<'a> {
         let versions = match versions {
             Versions::None => {
                 let v = queries
-                    .select_table_data_versions_at::<TableDataVersionDB>(
+                    .select_table_data_versions_at::<ActiveTableDataVersionDB>(
                         Some(triggered_on),
-                        Some(&*VALID_TABLE_DATA_VERSION_STATUS),
+                        None,
                         table_id,
                         versions,
                     )?
@@ -80,9 +72,9 @@ impl<'a> VersionResolver<'a> {
                 Version::Fixed(version) => {
                     // We fail if fixed not found.
                     let v = queries
-                        .select_table_data_versions_at::<TableDataVersionDB>(
+                        .select_table_data_versions_at::<ActiveTableDataVersionDB>(
                             Some(triggered_on),
-                            Some(&*VALID_TABLE_DATA_VERSION_STATUS),
+                            None,
                             table_id,
                             versions,
                         )?
@@ -98,9 +90,9 @@ impl<'a> VersionResolver<'a> {
                 }
                 Version::Head(_) => {
                     let v = queries
-                        .select_table_data_versions_at::<TableDataVersionDB>(
+                        .select_table_data_versions_at::<ActiveTableDataVersionDB>(
                             Some(triggered_on),
-                            Some(&*VALID_TABLE_DATA_VERSION_STATUS),
+                            None,
                             table_id,
                             versions,
                         )?
@@ -128,9 +120,9 @@ impl<'a> VersionResolver<'a> {
                 let fixed_versions = if !fixed_versions.is_empty() {
                     let version_list = fixed_versions.values().cloned().collect();
                     let found: Vec<TableDataVersionDB> = queries
-                        .select_table_data_versions_at::<TableDataVersionDB>(
+                        .select_table_data_versions_at::<ActiveTableDataVersionDB>(
                             Some(triggered_on),
-                            Some(&*VALID_TABLE_DATA_VERSION_STATUS),
+                            None,
                             table_id,
                             &Versions::List(version_list),
                         )?
@@ -171,9 +163,9 @@ impl<'a> VersionResolver<'a> {
                     .map(|(min, max)| (min.clone(), max.clone()));
                 let head_versions = if let Some((min, max)) = minmax {
                     let found: Vec<TableDataVersionDB> = queries
-                        .select_table_data_versions_at::<TableDataVersionDB>(
+                        .select_table_data_versions_at::<ActiveTableDataVersionDB>(
                             Some(triggered_on),
-                            Some(&*VALID_TABLE_DATA_VERSION_STATUS),
+                            None,
                             table_id,
                             &Versions::Range(max, min), // range always newer to older
                         )?
@@ -220,9 +212,9 @@ impl<'a> VersionResolver<'a> {
                     Version::Head(back) => Some(*back as i32),
                     Version::Fixed(id) => {
                         let relative: Option<i32> = queries
-                            .find_relative_table_data_version::<TableDataVersionDB>(
+                            .find_relative_offset::<ActiveTableDataVersionDB>(
                                 Some(triggered_on),
-                                Some(&*VALID_TABLE_DATA_VERSION_STATUS),
+                                None,
                                 table_id,
                                 &Versions::Single(from.clone()),
                             )?
@@ -244,9 +236,9 @@ impl<'a> VersionResolver<'a> {
                     Version::Head(back) => Some(*back as i32),
                     Version::Fixed(id) => {
                         let relative: Option<i32> = queries
-                            .find_relative_table_data_version::<TableDataVersionDB>(
+                            .find_relative_offset::<ActiveTableDataVersionDB>(
                                 Some(triggered_on),
-                                Some(&*VALID_TABLE_DATA_VERSION_STATUS),
+                                None,
                                 table_id,
                                 &Versions::Single(to.clone()),
                             )?
@@ -287,9 +279,9 @@ impl<'a> VersionResolver<'a> {
 
                 // And fetch the versions.
                 let mut found: Vec<_> = queries
-                    .select_table_data_versions_at::<TableDataVersionDB>(
+                    .select_table_data_versions_at::<ActiveTableDataVersionDB>(
                         Some(triggered_on),
-                        Some(&*VALID_TABLE_DATA_VERSION_STATUS),
+                        None,
                         table_id,
                         versions,
                     )?
@@ -330,7 +322,7 @@ mod tests {
         BundleId, CollectionName, ExecutionStatus, FunctionRunStatus, TableDataVersionId,
         TableName, TransactionKey, TransactionStatus, UserId,
     };
-    use td_objects::types::function::FunctionCreate;
+    use td_objects::types::function::FunctionRegister;
     use td_objects::types::table::TableVersionDB;
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -355,7 +347,7 @@ mod tests {
         let dependencies = None;
         let triggers = None;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin")
             .unwrap()
             .try_description("function_foo description")
@@ -378,7 +370,7 @@ mod tests {
             db,
             &collection,
             &function_version,
-            &ExecutionStatus::scheduled(),
+            &ExecutionStatus::Scheduled,
         )
         .await;
 

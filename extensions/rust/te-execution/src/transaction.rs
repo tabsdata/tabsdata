@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use ta_execution::transaction::TransactionMapper;
 use td_error::TdError;
@@ -10,7 +11,7 @@ use td_objects::types::execution::FunctionVersionNode;
 
 /// `TransactionBy` is an enum that defines how to map a transaction to a key.
 /// It only supports mapping by function version ID.
-#[derive(Debug, Default, Clone, EnumString, Display)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, EnumString, Display)]
 pub enum TransactionBy {
     #[default]
     #[strum(serialize = "F")]

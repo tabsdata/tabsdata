@@ -2,6 +2,5 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-pub mod parameters;
 pub mod planner;
 pub mod version_resolver;

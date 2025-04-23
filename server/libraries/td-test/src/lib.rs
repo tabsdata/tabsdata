@@ -7,6 +7,9 @@ pub use tm_test::*;
 pub mod reqs;
 pub mod sqlx;
 
+#[cfg(feature = "test-utils")]
+pub mod file;
+
 use async_trait::async_trait;
 
 pub enum TestSetupExecution<T> {

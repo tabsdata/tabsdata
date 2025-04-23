@@ -6,7 +6,7 @@
 //! supervisor.
 
 use crate::env::get_current_dir;
-use crate::execution_status::ExecutionUpdateStatus;
+use crate::execution_status::FunctionRunUpdateStatus;
 use crate::files::{get_files_in_folder_sorted_by_name, LOCK_EXTENSION, YAML_EXTENSION};
 use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::server::QueueError::{
@@ -67,8 +67,8 @@ pub const COMPLETE_FOLDER: &str = "complete";
 pub const ERROR_FOLDER: &str = "error";
 pub const FAIL_FOLDER: &str = "fail";
 
-pub const UNKNOWN_RUN: u16 = 0;
-pub const INITIAL_RUN: u16 = 1;
+pub const UNKNOWN_RUN: i16 = 0;
+pub const INITIAL_RUN: i16 = 1;
 
 pub const RETRIES_DELIMITER: &str = "_";
 pub const INITIAL_CALL: &str = concatcp!(RETRIES_DELIMITER, INITIAL_RUN);
@@ -172,6 +172,7 @@ where
     }
 }
 
+#[apiserver_schema]
 #[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
 #[getset(get = "pub", set = "pub")]
 pub struct ResponseMessagePayload<T = Value>
@@ -190,10 +191,10 @@ where
     start: i64,
     end: Option<i64>,
     #[serde(default = "default_status")]
-    status: ExecutionUpdateStatus,
+    status: FunctionRunUpdateStatus,
     #[serde(default = "default_execution")]
-    execution: u16,
-    limit: Option<u16>,
+    execution: i16,
+    limit: Option<i16>,
     error: Option<String>,
     context: Option<T>,
 }
@@ -218,11 +219,11 @@ fn default_start() -> i64 {
     Utc::now().timestamp()
 }
 
-fn default_status() -> ExecutionUpdateStatus {
-    ExecutionUpdateStatus::Done
+fn default_status() -> FunctionRunUpdateStatus {
+    FunctionRunUpdateStatus::Done
 }
 
-fn default_execution() -> u16 {
+fn default_execution() -> i16 {
     INITIAL_RUN
 }
 
@@ -308,7 +309,8 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Getters)]
+#[getset(get = "pub")]
 pub struct FileWorkerMessageQueue {
     location: PathBuf,
 }
@@ -461,10 +463,10 @@ pub trait WorkerMessageQueue: Send + Sync + Sized + 'static {
     ) -> Result<SupervisorMessage<T>, QueueError>;
 
     /// Commits a message in the queue.
-    async fn commit(&self, id: String) -> Result<(), QueueError>;
+    async fn commit(&self, id: &str) -> Result<(), QueueError>;
 
     /// Rollbacks a message in the queue.
-    async fn rollback(&self, id: String) -> Result<(), QueueError>;
+    async fn rollback(&self, id: &str) -> Result<(), QueueError>;
 
     async fn locked_messages<T: DeserializeOwned + Clone + Send + Sync>(
         &self,
@@ -496,9 +498,9 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
         Ok(message)
     }
 
-    async fn commit(&self, id: String) -> Result<(), QueueError> {
+    async fn commit(&self, id: &str) -> Result<(), QueueError> {
         if !self.check(&id) {
-            return Err(MessageNonExisting { id });
+            return Err(MessageNonExisting { id: id.to_string() });
         };
         let lock_message_path = self
             .location
@@ -510,9 +512,9 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
         Ok(())
     }
 
-    async fn rollback(&self, id: String) -> Result<(), QueueError> {
+    async fn rollback(&self, id: &str) -> Result<(), QueueError> {
         if !self.check(&id) {
-            return Err(MessageNonExisting { id });
+            return Err(MessageNonExisting { id: id.to_string() });
         };
         let lock_message_path = self
             .location

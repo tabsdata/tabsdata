@@ -55,6 +55,7 @@ td-security = { workspace = true }
 ## Macros
 
 td-apiforge = { workspace = true }
+td-attach = { workspace = true }
 td-concrete = { workspace = true }
 
 # External dependencies
@@ -71,6 +72,7 @@ const_format = { workspace = true }
 data-encoding = { workspace = true }
 derive_builder = { workspace = true }
 derive-new = { workspace = true }
+dirs = { workspace = true }
 getset = { workspace = true }
 homedir = { workspace = true }
 http = { workspace = true }

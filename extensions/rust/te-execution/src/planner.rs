@@ -27,7 +27,7 @@ mod tests {
     use petgraph::graph::{DiGraph, Graph};
     use ta_execution::graphs::ExecutionGraph;
     use td_error::TdError;
-    use td_objects::types::execution::{GraphDependency, GraphEdge, GraphNode};
+    use td_objects::types::execution::{GraphDependency, GraphEdge, GraphNode, GraphOutput};
     use td_objects::types::test_utils::execution::{function_node, table_node};
 
     #[test]
@@ -35,15 +35,27 @@ mod tests {
         let mut graph: Graph<GraphNode, GraphEdge<u64>> = DiGraph::new();
         let fn_1 = graph.add_node(GraphNode::Function(function_node("fn_1")));
         let table_1 = graph.add_node(GraphNode::Table(table_node("table_1")));
-        graph.add_edge(fn_1, table_1, GraphEdge::output(0));
+        graph.add_edge(
+            fn_1,
+            table_1,
+            GraphEdge::output(0, GraphOutput::builder().output_pos(None).build()?),
+        );
 
         let fn_2 = graph.add_node(GraphNode::Function(function_node("fn_2")));
         let table_2 = graph.add_node(GraphNode::Table(table_node("table_2")));
-        graph.add_edge(fn_2, table_2, GraphEdge::output(0));
+        graph.add_edge(
+            fn_2,
+            table_2,
+            GraphEdge::output(0, GraphOutput::builder().output_pos(None).build()?),
+        );
 
         let fn_3 = graph.add_node(GraphNode::Function(function_node("fn_2")));
         let table_3 = graph.add_node(GraphNode::Table(table_node("table_3")));
-        graph.add_edge(fn_3, table_3, GraphEdge::output(0));
+        graph.add_edge(
+            fn_3,
+            table_3,
+            GraphEdge::output(0, GraphOutput::builder().output_pos(None).build()?),
+        );
 
         graph.add_edge(table_1, fn_2, GraphEdge::trigger(0));
         graph.add_edge(

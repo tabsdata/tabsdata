@@ -1,0 +1,446 @@
+//
+// Copyright 2025 Tabs Data Inc.
+//
+
+use crate::types::basic::{
+    CollectionId, CollectionName, DependencyPos, ExecutionId, ExecutionName, FunctionName,
+    FunctionRunId, FunctionVersionId, TableDataVersionId, TableFunctionParamPos, TableId,
+    TableName, TableVersionId, TransactionId, VersionPos,
+};
+use crate::types::worker::{Location, Locations};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use td_apiforge::apiserver_schema;
+
+#[td_type::typed(string)]
+pub struct PartitionName;
+
+#[td_type::typed(string)]
+pub struct PartitionFileName;
+
+#[td_type::typed(i64)]
+pub struct TriggeredOnMillis;
+
+#[td_type::Dlo]
+pub struct FunctionInputV2 {
+    info: FunctionInfoV2,
+    system_input: Vec<InputTable>,
+    input: Vec<InputTable>,
+    system_output: Vec<OutputTable>,
+    output: Vec<OutputTable>,
+}
+
+impl Locations for FunctionInputV2 {
+    fn locations(&self) -> Vec<&Location> {
+        let mut locations = self.system_input.locations();
+        locations.extend(self.input.locations());
+        locations.extend(self.system_output.locations());
+        locations.extend(self.output.locations());
+        locations
+    }
+}
+
+#[td_type::Dlo]
+pub struct FunctionInfoV2 {
+    collection_id: CollectionId,
+    collection: CollectionName,
+    function_version_id: FunctionVersionId,
+    function: FunctionName,
+    function_run_id: FunctionRunId,
+    function_bundle: Location,
+    triggered_on: TriggeredOnMillis,
+    transaction_id: TransactionId,
+    execution_id: ExecutionId,
+    execution_name: Option<ExecutionName>,
+}
+
+#[td_type::Dlo]
+pub struct InputTableVersion {
+    name: TableName,
+    collection_id: CollectionId,
+    collection: CollectionName,
+    table_id: TableId,
+    table_version_id: TableVersionId,
+    #[builder(default)]
+    table_data_version_id: Option<TableDataVersionId>,
+    #[builder(default)]
+    location: Option<Location>,
+    table_pos: DependencyPos,
+    version_pos: VersionPos,
+}
+
+impl Locations for InputTableVersion {
+    fn locations(&self) -> Vec<&Location> {
+        if let Some(location) = &self.location {
+            vec![location]
+        } else {
+            vec![]
+        }
+    }
+}
+
+#[td_type::Dlo]
+pub struct InputPartitionTableVersion {
+    name: TableName,
+    collection_id: CollectionId,
+    collection: CollectionName,
+    table_id: TableId,
+    table_version_id: TableVersionId,
+    table_data_version_id: Option<TableDataVersionId>,
+    partitions: HashMap<PartitionName, Location>,
+    table_pos: DependencyPos,
+    version_pos: VersionPos,
+}
+
+impl Locations for InputPartitionTableVersion {
+    fn locations(&self) -> Vec<&Location> {
+        self.partitions.values().collect()
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum InputTable {
+    Table(InputTableVersion),
+    TableVersions(Vec<InputTableVersion>),
+    PartitionedTable(InputPartitionTableVersion),
+    PartitionedTableVersions(Vec<InputPartitionTableVersion>),
+}
+
+impl InputTable {
+    pub fn new(version: Vec<InputTableVersion>) -> InputTable {
+        if version.len() == 1 {
+            InputTable::Table(version.into_iter().next().unwrap())
+        } else {
+            InputTable::TableVersions(version)
+        }
+    }
+}
+
+impl Locations for InputTable {
+    fn locations(&self) -> Vec<&Location> {
+        match self {
+            InputTable::Table(table) => table.locations(),
+            InputTable::TableVersions(tables) => {
+                tables.iter().flat_map(|t| t.locations()).collect()
+            }
+            InputTable::PartitionedTable(table) => table.locations(),
+            InputTable::PartitionedTableVersions(tables) => {
+                tables.iter().flat_map(|t| t.locations()).collect()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum OutputTable {
+    Table(OutputTableVersion),
+    PartitionedTable(OutputPartitionTableVersion),
+}
+
+impl Locations for OutputTable {
+    fn locations(&self) -> Vec<&Location> {
+        match self {
+            OutputTable::Table(t) => vec![t.location()],
+            OutputTable::PartitionedTable(t) => vec![t.base_location()],
+        }
+    }
+}
+
+#[td_type::Dlo]
+pub struct OutputTableVersion {
+    name: TableName,
+    collection_id: CollectionId,
+    collection: CollectionName,
+    table_id: TableId,
+    table_version_id: TableVersionId,
+    table_data_version_id: TableDataVersionId,
+    location: Location,
+    table_pos: TableFunctionParamPos,
+}
+
+#[td_type::Dlo]
+pub struct OutputPartitionTableVersion {
+    name: TableName,
+    collection_id: CollectionId,
+    collection: CollectionName,
+    table_id: TableId,
+    table_version_id: TableVersionId,
+    table_data_version_id: TableDataVersionId,
+    base_location: Location,
+    table_pos: TableFunctionParamPos,
+}
+
+#[td_type::Dto]
+pub struct FunctionOutputV2 {
+    output: Vec<WrittenTableV2>,
+}
+
+#[apiserver_schema]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum WrittenTableV2 {
+    NoData {
+        table: TableName,
+    },
+    Data {
+        table: TableName,
+    },
+    Partitions {
+        table: TableName,
+        partitions: HashMap<PartitionName, PartitionFileName>,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::worker::{EnvPrefix, FunctionInput};
+    use std::collections::HashSet;
+    use td_error::TdError;
+    use url::Url;
+
+    #[test]
+    fn test_input_table_version_locations() -> Result<(), TdError> {
+        let itv = InputTableVersion::builder()
+            .try_name("n")?
+            .collection_id(CollectionId::default())
+            .try_collection("cn")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .try_table_pos(1)?
+            .try_version_pos(1)?
+            .build()?;
+        assert_eq!(itv.locations().len(), 0);
+
+        let location = Location::builder()
+            .uri(Url::parse("file:///foo").unwrap())
+            .build()?;
+        let itv = InputTableVersion::builder()
+            .try_name("n")?
+            .collection_id(CollectionId::default())
+            .try_collection("cn")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .table_data_version_id(TableDataVersionId::default())
+            .location(location.clone())
+            .try_table_pos(1)?
+            .try_version_pos(1)?
+            .build()?;
+        assert_eq!(itv.locations(), vec![&location]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_input_partition_table_version_locations() -> Result<(), TdError> {
+        let itv = InputPartitionTableVersion::builder()
+            .try_name("n")?
+            .collection_id(CollectionId::default())
+            .try_collection("cn")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .table_data_version_id(TableDataVersionId::default())
+            .try_table_pos(1)?
+            .try_version_pos(1)?
+            .partitions(HashMap::new())
+            .build()?;
+        assert_eq!(itv.locations().len(), 0);
+
+        let location = Location::builder()
+            .uri(Url::parse("file:///foo").unwrap())
+            .build()?;
+        let partitions = HashMap::from([(PartitionName::try_from("p")?, location.clone())]);
+        let itv = InputPartitionTableVersion::builder()
+            .try_name("n")?
+            .collection_id(CollectionId::default())
+            .try_collection("cn")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .table_data_version_id(TableDataVersionId::default())
+            .try_table_pos(1)?
+            .try_version_pos(1)?
+            .partitions(partitions)
+            .build()?;
+        assert_eq!(itv.locations(), vec![&location]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_input_table_locations() -> Result<(), TdError> {
+        let location = Location::builder()
+            .uri(Url::parse("file:///foo").unwrap())
+            .build()?;
+        let itv = InputTableVersion::builder()
+            .try_name("n")?
+            .collection_id(CollectionId::default())
+            .try_collection("cn")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .table_data_version_id(TableDataVersionId::default())
+            .location(location.clone())
+            .try_table_pos(1)?
+            .try_version_pos(1)?
+            .build()?;
+        assert_eq!(InputTable::Table(itv.clone()).locations(), vec![&location]);
+        assert_eq!(
+            InputTable::TableVersions(vec![itv]).locations(),
+            vec![&location]
+        );
+
+        let itv = InputPartitionTableVersion::builder()
+            .try_name("n")?
+            .collection_id(CollectionId::default())
+            .try_collection("cn")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .table_data_version_id(TableDataVersionId::default())
+            .try_table_pos(1)?
+            .try_version_pos(1)?
+            .partitions(HashMap::from([(
+                PartitionName::try_from("p")?,
+                location.clone(),
+            )]))
+            .build()?;
+        assert_eq!(
+            InputTable::PartitionedTable(itv.clone()).locations(),
+            vec![&location]
+        );
+        assert_eq!(
+            InputTable::PartitionedTableVersions(vec![itv]).locations(),
+            vec![&location]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_output_table_locations() -> Result<(), TdError> {
+        let location = Location::builder()
+            .uri(Url::parse("file:///foo").unwrap())
+            .build()?;
+        let ot = OutputTable::Table(
+            OutputTableVersion::builder()
+                .try_name("n")?
+                .collection_id(CollectionId::default())
+                .try_collection("cn")?
+                .table_id(TableId::default())
+                .table_version_id(TableVersionId::default())
+                .table_data_version_id(TableDataVersionId::default())
+                .location(location.clone())
+                .try_table_pos(1)?
+                .build()?,
+        );
+
+        assert_eq!(ot.locations(), vec![&location]);
+
+        let ot = OutputTable::PartitionedTable(
+            OutputPartitionTableVersion::builder()
+                .try_name("n")?
+                .collection_id(CollectionId::default())
+                .try_collection("cn")?
+                .table_id(TableId::default())
+                .table_version_id(TableVersionId::default())
+                .table_data_version_id(TableDataVersionId::default())
+                .base_location(location.clone())
+                .try_table_pos(1)?
+                .build()?,
+        );
+        assert_eq!(ot.locations(), vec![&location]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_function_input_v1_locations() -> Result<(), TdError> {
+        let location1 = Location::builder()
+            .uri(Url::parse("file:///foo1").unwrap())
+            .build()?;
+        let location2 = Location::builder()
+            .uri(Url::parse("file:///foo2").unwrap())
+            .env_prefix(Some(EnvPrefix::try_from("PA_")?))
+            .build()?;
+        let location3 = Location::builder()
+            .uri(Url::parse("file:///foo3").unwrap())
+            .env_prefix(Some(EnvPrefix::try_from("PA_")?))
+            .build()?;
+        let location4 = Location::builder()
+            .uri(Url::parse("file:///foo4").unwrap())
+            .env_prefix(Some(EnvPrefix::try_from("PB_")?))
+            .build()?;
+        let itv1 = InputTableVersion::builder()
+            .try_name("n")?
+            .collection_id(CollectionId::default())
+            .try_collection("cn")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .table_data_version_id(TableDataVersionId::default())
+            .location(location1.clone())
+            .try_table_pos(1)?
+            .try_version_pos(1)?
+            .build()?;
+        let itv2 = InputTableVersion::builder()
+            .try_name("n")?
+            .collection_id(CollectionId::default())
+            .try_collection("cn")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .table_data_version_id(TableDataVersionId::default())
+            .location(location2.clone())
+            .try_table_pos(1)?
+            .try_version_pos(1)?
+            .build()?;
+        let ot3 = OutputTable::Table(
+            OutputTableVersion::builder()
+                .try_name("n")?
+                .collection_id(CollectionId::default())
+                .try_collection("cn")?
+                .table_id(TableId::default())
+                .table_version_id(TableVersionId::default())
+                .table_data_version_id(TableDataVersionId::default())
+                .location(location3.clone())
+                .try_table_pos(1)?
+                .build()?,
+        );
+        let ot4 = OutputTable::Table(
+            OutputTableVersion::builder()
+                .try_name("n")?
+                .collection_id(CollectionId::default())
+                .try_collection("cn")?
+                .table_id(TableId::default())
+                .table_version_id(TableVersionId::default())
+                .table_data_version_id(TableDataVersionId::default())
+                .location(location4.clone())
+                .try_table_pos(1)?
+                .build()?,
+        );
+
+        let info = FunctionInfoV2::builder()
+            .collection_id(CollectionId::default())
+            .collection(CollectionName::try_from("cn")?)
+            .function_version_id(FunctionVersionId::default())
+            .function(FunctionName::try_from("fn")?)
+            .function_run_id(FunctionRunId::default())
+            .function_bundle(location1.clone())
+            .triggered_on(TriggeredOnMillis::default())
+            .transaction_id(TransactionId::default())
+            .execution_id(ExecutionId::default())
+            .execution_name(Some(ExecutionName::try_from("en")?))
+            .build()?;
+        let function_input = FunctionInputV2::builder()
+            .info(info)
+            .system_input(vec![InputTable::Table(itv1)])
+            .input(vec![InputTable::Table(itv2)])
+            .system_output(vec![ot3])
+            .output(vec![ot4])
+            .build()?;
+        let function_input = FunctionInput::V2(function_input.clone());
+        assert_eq!(
+            function_input.locations(),
+            vec![&location1, &location2, &location3, &location4]
+        );
+        assert_eq!(
+            function_input.env_prefixes(),
+            HashSet::from([
+                &EnvPrefix::try_from("PA_").unwrap(),
+                &EnvPrefix::try_from("PB_").unwrap()
+            ])
+        );
+        Ok(())
+    }
+}

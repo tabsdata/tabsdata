@@ -2,34 +2,19 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use crate::types::worker::{Location, Locations};
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use url::Url;
+use std::collections::HashMap;
+use td_apiforge::apiserver_schema;
 
 // Aliases used for yaml serde of the different entities (for example, serialize TdUri as a string)
 mod yaml_repr {
     pub type TdUri = String;
     pub type PartitionName = String;
-    pub type EnvPrefix = String;
     pub type TableName = String;
     pub type PartitionFileName = String;
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Builder, Getters, Serialize, Deserialize)]
-#[getset(get = "pub")]
-#[builder(setter(into))]
-pub struct Location {
-    uri: Url,
-    #[builder(setter(strip_option), default)]
-    env_prefix: Option<yaml_repr::EnvPrefix>,
-}
-
-impl Location {
-    pub fn builder() -> LocationBuilder {
-        LocationBuilder::default()
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Builder, Getters, Serialize, Deserialize)]
@@ -53,10 +38,6 @@ impl Info {
     pub fn builder() -> InfoBuilder {
         InfoBuilder::default()
     }
-}
-
-pub trait Locations {
-    fn locations(&self) -> Vec<&Location>;
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Builder, Getters, Serialize, Deserialize)]
@@ -211,11 +192,6 @@ impl FunctionInputV1 {
     }
 }
 
-impl<T: Locations> Locations for Vec<T> {
-    fn locations(&self) -> Vec<&Location> {
-        self.iter().flat_map(|t| t.locations()).collect()
-    }
-}
 impl Locations for FunctionInputV1 {
     fn locations(&self) -> Vec<&Location> {
         let mut locations = self.system_input.locations();
@@ -226,34 +202,9 @@ impl Locations for FunctionInputV1 {
     }
 }
 
+#[apiserver_schema]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum FunctionInput {
-    V0(String), // used in testing
-    V1(Box<FunctionInputV1>),
-}
-
-impl Locations for FunctionInput {
-    fn locations(&self) -> Vec<&Location> {
-        match self {
-            FunctionInput::V0(_) => vec![],
-            FunctionInput::V1(input) => input.locations(),
-        }
-    }
-}
-
-impl FunctionInput {
-    pub fn env_prefixes(&self) -> HashSet<&str> {
-        self.locations()
-            .into_iter()
-            .map(|location| location.env_prefix())
-            .filter(|prefix| prefix.is_some())
-            .map(|prefix| prefix.as_ref().unwrap().as_str())
-            .collect::<HashSet<_>>()
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum WrittenTable {
+pub enum WrittenTableV1 {
     NoData {
         name: yaml_repr::TableName,
     },
@@ -266,12 +217,13 @@ pub enum WrittenTable {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[apiserver_schema]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct FunctionOutputV1 {
-    output: Vec<WrittenTable>,
+    output: Vec<WrittenTableV1>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FunctionOutput {
     V1(FunctionOutputV1),
 }
@@ -309,6 +261,8 @@ impl TablePosition for OutputTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::worker::{EnvPrefix, FunctionInput};
+    use std::collections::HashSet;
     use url::Url;
 
     #[test]
@@ -430,17 +384,17 @@ mod tests {
             .unwrap();
         let location2 = Location::builder()
             .uri(Url::parse("file:///foo2").unwrap())
-            .env_prefix("PA_")
+            .env_prefix(EnvPrefix::try_from("PA_").unwrap())
             .build()
             .unwrap();
         let location3 = Location::builder()
             .uri(Url::parse("file:///foo3").unwrap())
-            .env_prefix("PA_")
+            .env_prefix(Some(EnvPrefix::try_from("PA_").unwrap()))
             .build()
             .unwrap();
         let location4 = Location::builder()
             .uri(Url::parse("file:///foo4").unwrap())
-            .env_prefix("PB_")
+            .env_prefix(EnvPrefix::try_from("PB_").unwrap())
             .build()
             .unwrap();
         let itv1 = InputTableVersion::builder()
@@ -486,11 +440,17 @@ mod tests {
             .output(vec![ot4])
             .build()
             .unwrap();
-        let function_input = FunctionInput::V1(Box::from(function_input.clone()));
+        let function_input = FunctionInput::V1(function_input.clone());
         assert_eq!(
             function_input.locations(),
             vec![&location1, &location2, &location3, &location4]
         );
-        assert_eq!(function_input.env_prefixes(), HashSet::from(["PA_", "PB_"]));
+        assert_eq!(
+            function_input.env_prefixes(),
+            HashSet::from([
+                &EnvPrefix::try_from("PA_").unwrap(),
+                &EnvPrefix::try_from("PB_").unwrap()
+            ])
+        );
     }
 }

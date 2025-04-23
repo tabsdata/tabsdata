@@ -17,7 +17,7 @@ use serde_yaml::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::str::FromStr;
-use td_common::execution_status::ExecutionUpdateStatus;
+use td_common::execution_status::FunctionRunUpdateStatus;
 use td_common::server::MessageAction::Notify;
 use td_common::server::SupervisorMessagePayload::{
     SupervisorRequestMessagePayload, SupervisorResponseMessagePayload,
@@ -38,9 +38,9 @@ pub trait WorkerNotifier: Debug {
         request_message: SupervisorMessage,
         start: i64,
         end: Option<i64>,
-        status: ExecutionUpdateStatus,
-        execution: u16,
-        limit: Option<u16>,
+        status: FunctionRunUpdateStatus,
+        execution: i16,
+        limit: Option<i16>,
         error: Option<String>,
     ) -> Result<(), RunnerError>;
 }
@@ -53,9 +53,9 @@ impl WorkerNotifier for Callback {
         request_message: SupervisorMessage,
         start: i64,
         end: Option<i64>,
-        status: ExecutionUpdateStatus,
-        execution: u16,
-        limit: Option<u16>,
+        status: FunctionRunUpdateStatus,
+        execution: i16,
+        limit: Option<i16>,
         error: Option<String>,
     ) -> Result<(), RunnerError> {
         fn hashmap_to_headers(input: HashMap<String, String>) -> Result<HeaderMap, RunnerError> {
@@ -70,9 +70,9 @@ impl WorkerNotifier for Callback {
 
         // ToDo: temporarily, we omit sending notifications for errors, and we wait either for final failure (Fail) or
         //       eventual success (Done). Thus, we currently do not notify to the API Server error statuses (Error) .
-        if matches!(status, ExecutionUpdateStatus::Error) {
+        if matches!(status, FunctionRunUpdateStatus::Error) {
             info!("Omitting notification of finalization for state {:?} of worker:: name: '{}' - id: '{}'",
-                ExecutionUpdateStatus::Error,
+                FunctionRunUpdateStatus::Error,
                 match &worker {
                     Some(worker) => worker.describer().name().to_string(),
                     None => "No worker...".to_string(),
@@ -115,7 +115,7 @@ impl WorkerNotifier for Callback {
                 let mut response_payload = match worker {
                     None => ResponseMessagePayload::default(),
                     Some(worker) => {
-                        if matches!(status, ExecutionUpdateStatus::Running) {
+                        if matches!(status, FunctionRunUpdateStatus::Running) {
                             ResponseMessagePayload::default()
                         } else {
                             let response_file = worker
@@ -199,7 +199,7 @@ impl WorkerNotifier for Callback {
     }
 }
 
-pub fn execution(message: &SupervisorMessage) -> u16 {
+pub fn execution(message: &SupervisorMessage) -> i16 {
     let regex = match Regex::new(REQUEST_MESSAGE_FILE_PATTERN) {
         Ok(re) => re,
         Err(_) => return UNKNOWN_RUN,
@@ -207,7 +207,7 @@ pub fn execution(message: &SupervisorMessage) -> u16 {
     if let Some(file_name) = message.file().file_name().and_then(|f| f.to_str()) {
         if let Some(captures) = regex.captures(file_name) {
             if let Some(run_str) = captures.get(2).map(|m| m.as_str()) {
-                if let Ok(run) = run_str.parse::<u16>() {
+                if let Ok(run) = run_str.parse::<i16>() {
                     return run;
                 }
             }

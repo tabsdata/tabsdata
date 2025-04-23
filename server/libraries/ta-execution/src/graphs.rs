@@ -15,7 +15,9 @@ use std::ops::Deref;
 use td_error::{td_error, TdError};
 use td_objects::types::basic::{FunctionName, TransactionByStr, TransactionKey};
 use td_objects::types::dependency::DependencyVersionDBWithNames;
-use td_objects::types::execution::{FunctionVersionNode, GraphDependency, GraphEdge, GraphNode};
+use td_objects::types::execution::{
+    FunctionVersionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput,
+};
 use td_objects::types::table::TableVersionDBWithNames;
 use td_objects::types::table_ref::Versions;
 use td_objects::types::trigger::TriggerVersionDBWithNames;
@@ -92,10 +94,13 @@ impl<'a> GraphBuilder<'a> {
             let source_index = add_if_absent(&mut graph, &mut node_map, source);
             let target_index = add_if_absent(&mut graph, &mut node_map, target);
 
+            let graph_output = GraphOutput::builder()
+                .output_pos(table.function_param_pos().clone())
+                .build()?;
             graph.add_edge(
                 source_index,
                 target_index,
-                GraphEdge::output(Versions::None),
+                GraphEdge::output(Versions::None, graph_output),
             );
         }
 

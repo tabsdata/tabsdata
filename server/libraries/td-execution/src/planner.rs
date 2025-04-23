@@ -39,7 +39,7 @@ pub trait ExecutionPlanner<V: Eq + Hash>: TriggerPlanner<V> {
     /// Returns the output tables that are output of triggered functions. Output tables are tables
     /// with a `GraphEdge::Output` edge. Not all tables are output tables, as some of them are
     /// not getting created (if the function is not triggered).
-    fn output_tables(&self) -> HashSet<(&FunctionVersionNode, &TableVersionNode)>;
+    fn output_tables(&self) -> HashSet<(&FunctionVersionNode, &TableVersionNode, &GraphEdge<V>)>;
 
     /// Returns the manual trigger function. This is the main function that triggers the execution.
     fn manual_trigger_function(&self) -> &FunctionVersionNode;
@@ -50,7 +50,9 @@ pub trait ExecutionPlanner<V: Eq + Hash>: TriggerPlanner<V> {
     /// Returns the functions that are triggered with the versions required before being able to
     /// execute them (it includes the main function, if it had any dependency). Requirements
     /// are the edges with `GraphEdge::Dependency` or `GraphEdge::Trigger`.
-    fn function_version_requirements(&self) -> HashSet<(&FunctionVersionNode, &V)>;
+    fn function_version_requirements(
+        &self,
+    ) -> HashSet<(&FunctionVersionNode, &TableVersionNode, &GraphEdge<V>)>;
 }
 
 #[async_trait]
@@ -72,7 +74,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
             .edge_references()
             .map(|edge| {
                 let (node, self_dependency, versions) = match edge.weight() {
-                    GraphEdge::Output { versions } => {
+                    GraphEdge::Output { versions, .. } => {
                         (&self.inner()[edge.target()], false, versions)
                     }
                     GraphEdge::Trigger { versions } => {
@@ -141,7 +143,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
             .collect()
     }
 
-    fn output_tables(&self) -> HashSet<(&FunctionVersionNode, &TableVersionNode)> {
+    fn output_tables(&self) -> HashSet<(&FunctionVersionNode, &TableVersionNode, &GraphEdge<V>)> {
         self.triggered_functions_index()
             .iter()
             .chain(std::iter::once(self.trigger_index()))
@@ -153,7 +155,7 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
                         let target = &self.inner()[edge.target()];
                         match (source, target) {
                             (GraphNode::Function(function), GraphNode::Table(table)) => {
-                                Some((function, table))
+                                Some((function, table, edge.weight()))
                             }
                             _ => None,
                         }
@@ -184,9 +186,12 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
             .collect()
     }
 
-    fn function_version_requirements(&self) -> HashSet<(&FunctionVersionNode, &V)> {
+    fn function_version_requirements(
+        &self,
+    ) -> HashSet<(&FunctionVersionNode, &TableVersionNode, &GraphEdge<V>)> {
         self.triggered_functions_index()
             .iter()
+            .chain(std::iter::once(self.trigger_index()))
             .flat_map(|index| {
                 self.inner()
                     .edges_directed(*index, petgraph::Direction::Incoming)
@@ -194,8 +199,8 @@ impl<V: Eq + Hash> ExecutionPlanner<V> for ExecutionGraph<V> {
                         let source = &self.inner()[edge.source()];
                         let target = &self.inner()[edge.target()];
                         match (source, target) {
-                            (GraphNode::Table(_), GraphNode::Function(function)) => {
-                                Some((function, edge.weight().versions()))
+                            (GraphNode::Table(table), GraphNode::Function(function)) => {
+                                Some((function, table, edge.weight()))
                             }
                             _ => None,
                         }
@@ -256,7 +261,7 @@ mod tests {
 
         let mut expected = HashSet::from([(function_node("function_1"), table_node("table_1"))]);
 
-        for (function, table) in output_tables {
+        for (function, table, _) in output_tables {
             assert!(expected.remove(&(function.clone(), table.clone())));
         }
         assert_eq!(expected.len(), 0);

@@ -4,7 +4,6 @@
 
 use crate::bin::platform::supervisor::ControllerState::{KO, NA, OK};
 use crate::bin::platform::supervisor::WorkerKind::SUPERVISOR;
-use crate::common::signal::terminate;
 use crate::logic::platform::component::argument::InheritedArgumentKey::*;
 use crate::logic::platform::component::argument::{ArgumentKey, InheritedArgumentKey};
 use crate::logic::platform::component::describer::TabsDataWorkerDescriberBuilder;
@@ -60,7 +59,7 @@ use sysinfo::{Pid, Signal};
 use td_common::cli::{parse_extra_arguments, Cli, TRAILING_ARGUMENTS_PREFIX};
 use td_common::config::Config;
 use td_common::env::to_absolute;
-use td_common::execution_status::ExecutionUpdateStatus;
+use td_common::execution_status::FunctionRunUpdateStatus;
 use td_common::os::terminate_process;
 use td_common::server::SupervisorMessagePayload::{
     SupervisorRequestMessagePayload, SupervisorResponseMessagePayload,
@@ -71,6 +70,7 @@ use td_common::server::{
     INSTANCE_URI_ENV, REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN,
     RETRIES_DELIMITER, WORKSPACE_PATH_ENV, WORKSPACE_URI_ENV, WORK_PATH_ENV, WORK_URI_ENV,
 };
+use td_common::signal::terminate;
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataStatus};
 use td_python::venv::prepare;
 use tempfile::tempdir;
@@ -192,9 +192,9 @@ pub struct WorkerConfig {
     #[serde(default, rename = "get-states")]
     get_states: Vec<GetState>,
     #[serde(default = "default_concurrency")]
-    concurrency: u16,
+    concurrency: i16,
     #[serde(default = "default_retries")]
-    retries: u16,
+    retries: i16,
 }
 
 impl Display for WorkerConfig {
@@ -227,11 +227,11 @@ impl Display for WorkerConfig {
 
 impl Config for Configuration {}
 
-fn default_concurrency() -> u16 {
+fn default_concurrency() -> i16 {
     0
 }
 
-fn default_retries() -> u16 {
+fn default_retries() -> i16 {
     2
 }
 
@@ -593,7 +593,7 @@ impl Supervisor {
                 let id = captures.get(1).map(|m| m.as_str()).unwrap();
                 let run = captures.get(2).map(|m| m.as_str()).unwrap();
                 let ext = captures.get(3).map(|m| m.as_str()).unwrap();
-                if let Ok(retry) = run.parse::<u16>() {
+                if let Ok(retry) = run.parse::<i16>() {
                     let payload = match message.payload() {
                         SupervisorRequestMessagePayload(payload) => payload,
                         SupervisorResponseMessagePayload(_) => {
@@ -1169,7 +1169,7 @@ impl Supervisor {
         worker_run: Option<&TabsDataWorker>,
     ) -> Result<(), RunnerError> {
         let execution = execution(&message);
-        let status = ExecutionUpdateStatus::Running;
+        let status = FunctionRunUpdateStatus::Running;
         match notify(
             worker_run,
             message.clone(),
@@ -1212,12 +1212,12 @@ impl Supervisor {
         let execution = execution(&message);
         let limit = worker.retries;
         let (status, error) = match &result {
-            Ok(_) => (ExecutionUpdateStatus::Done, None),
+            Ok(_) => (FunctionRunUpdateStatus::Done, None),
             Err(e) => {
                 if execution <= limit {
-                    (ExecutionUpdateStatus::Error, Some(format!("{:?}", e)))
+                    (FunctionRunUpdateStatus::Error, Some(format!("{:?}", e)))
                 } else {
-                    (ExecutionUpdateStatus::Failed, Some(format!("{:?}", e)))
+                    (FunctionRunUpdateStatus::Failed, Some(format!("{:?}", e)))
                 }
             }
         };
