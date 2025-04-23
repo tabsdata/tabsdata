@@ -9,7 +9,7 @@ use sqlx::error::BoxDynError;
 use sqlx::sqlite::{SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef};
 use sqlx::{Decode, Encode, Sqlite, Type};
 use std::borrow::Cow;
-use std::fmt::Display;
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::Add;
 use std::time::{Duration, SystemTime};
 use td_error::td_error;
@@ -29,13 +29,19 @@ pub enum IdError {
 /// It is a UUID v7 as a '[u8; 16]'.
 ///
 /// The string representation is a 26 character base32hex string as it does not require URL encoding.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Id([u8; 16]);
 
 impl Id {
     /// For td_objects::types::basic::UserId/RoleI duse ONLY.
     pub fn _new(bytes: [u8; 16]) -> Self {
         Id(bytes)
+    }
+}
+
+impl Debug for Id {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Id({})", self)
     }
 }
 
@@ -144,6 +150,8 @@ mod tests {
 
         let time = id_time(&id);
         assert!(now.duration_since(time).unwrap().as_secs() < 1);
+
+        assert_eq!(format!("{:#?}", id), format!("Id({})", id.to_string()));
     }
 
     #[test]

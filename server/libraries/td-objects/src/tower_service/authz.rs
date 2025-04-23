@@ -38,7 +38,7 @@
 //!   ...
 //! ```
 //!
-//! System or User permission check:
+//! System permission or User ID check against requester.
 //!
 //! ```ignore
 //!   ...
@@ -76,7 +76,6 @@ use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[async_trait]
 pub trait AuthzContextT {
-
     /// Return the permissions for a the given role.
     ///
     /// If the role has no permissions it returns [`None`].
@@ -95,16 +94,22 @@ pub trait AuthzContextT {
         conn: &mut SqliteConnection,
         role: &RoleId,
     ) -> Result<Option<Vec<Permission>>, TdError> {
-        let perms = self.role_permissions(conn, role)
-            .await?
-            .map(|permissions|
-                   permissions.iter()
-                       .filter(|p| p.is_on_collection())
-                       .map(Permission::clone)
-                       .collect::<Vec<_>>());
+        let perms = self.role_permissions(conn, role).await?.map(|permissions| {
+            permissions
+                .iter()
+                .filter(|p| p.is_on_collection())
+                .map(Permission::clone)
+                .collect::<Vec<_>>()
+        });
         let perms = if let Some(ref perms) = perms {
-            let on_all_collections = perms.iter().filter(|p| (*p).is_on_all_collections()).collect::<Vec<_>>();
-            let mut simplified_perms = on_all_collections.iter().map(|p| (*p).clone()).collect::<Vec<_>>();
+            let on_all_collections = perms
+                .iter()
+                .filter(|p| (*p).is_on_all_collections())
+                .collect::<Vec<_>>();
+            let mut simplified_perms = on_all_collections
+                .iter()
+                .map(|p| (*p).clone())
+                .collect::<Vec<_>>();
 
             for perm in perms {
                 for on_all in on_all_collections.iter() {
@@ -120,7 +125,7 @@ pub trait AuthzContextT {
         };
         Ok(perms)
     }
-    
+
     async fn refresh(&self, _conn: &mut SqliteConnection) -> Result<(), TdError> {
         Ok(())
     }
@@ -251,7 +256,6 @@ pub enum Permission {
 }
 
 impl Permission {
-
     /// Return if the permission is a collection permission.
     pub fn is_on_collection(&self) -> bool {
         matches!(
@@ -391,9 +395,18 @@ pub struct CollAdmin {
 
 impl AuthzRequirements for CollAdmin {
     fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
-        collection_any_of::<Self>(scope, |collection_id| {
-            HashSet::from([Permission::CollectionAdmin(AuthzEntity::On(*collection_id))])
-        })
+        match scope {
+            AuthzScope::System | AuthzScope::SystemUser(_) => {
+                Ok(Some(HashSet::from([Permission::CollectionAdmin(
+                    AuthzEntity::All,
+                )])))
+            }
+            other => collection_any_of::<Self>(other, |collection_id| {
+                HashSet::from([Permission::CollectionAdmin(AuthzEntity::On(
+                    collection_id.clone(),
+                ))])
+            }),
+        }
     }
 }
 
@@ -575,8 +588,27 @@ impl<
                         return Ok(());
                     }
                 }
+
+                // scope: System or SystemUser, CollectionAdmin required permission
+                if matches!(
+                    scope.deref(),
+                    &AuthzScope::System | &AuthzScope::SystemUser(_)
+                ) {
+                    if required_permissions.contains(&Permission::CollectionAdmin(AuthzEntity::All))
+                    {
+                        if role_permissions
+                            .iter()
+                            .find(|perm| matches!(*perm, Permission::CollectionAdmin(_)))
+                            .is_some()
+                        {
+                            return Ok(());
+                        }
+                    }
+                }
             }
-            let user_id: UserId = *request_context.user_id();
+
+            // scope: SystemOrUserId, Requester required permission
+            let user_id: UserId = request_context.user_id().clone();
             if required_permissions.contains(&Permission::User(AuthzEntity::On(user_id))) {
                 return Ok(());
             }
@@ -604,11 +636,23 @@ mod test {
 
     #[test]
     fn test_is_on_collection() {
-        assert!(Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default())).is_on_collection());
-        assert!(Permission::CollectionDev(AuthzEntity::On(CollectionId::default())).is_on_collection());
-        assert!(Permission::CollectionExec(AuthzEntity::On(CollectionId::default())).is_on_collection());
-        assert!(Permission::CollectionRead(AuthzEntity::On(CollectionId::default())).is_on_collection());
-        assert!(Permission::CollectionReadAll(AuthzEntity::On(CollectionId::default())).is_on_collection());
+        assert!(
+            Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default()))
+                .is_on_collection()
+        );
+        assert!(
+            Permission::CollectionDev(AuthzEntity::On(CollectionId::default())).is_on_collection()
+        );
+        assert!(
+            Permission::CollectionExec(AuthzEntity::On(CollectionId::default())).is_on_collection()
+        );
+        assert!(
+            Permission::CollectionRead(AuthzEntity::On(CollectionId::default())).is_on_collection()
+        );
+        assert!(
+            Permission::CollectionReadAll(AuthzEntity::On(CollectionId::default()))
+                .is_on_collection()
+        );
 
         assert!(Permission::CollectionAdmin(AuthzEntity::All).is_on_collection());
         assert!(Permission::CollectionDev(AuthzEntity::All).is_on_collection());
@@ -623,11 +667,26 @@ mod test {
 
     #[test]
     fn test_is_on_all_collections() {
-        assert!(!Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default())).is_on_all_collections());
-        assert!(!Permission::CollectionDev(AuthzEntity::On(CollectionId::default())).is_on_all_collections());
-        assert!(!Permission::CollectionExec(AuthzEntity::On(CollectionId::default())).is_on_all_collections());
-        assert!(!Permission::CollectionRead(AuthzEntity::On(CollectionId::default())).is_on_all_collections());
-        assert!(!Permission::CollectionReadAll(AuthzEntity::On(CollectionId::default())).is_on_all_collections());
+        assert!(
+            !Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default()))
+                .is_on_all_collections()
+        );
+        assert!(
+            !Permission::CollectionDev(AuthzEntity::On(CollectionId::default()))
+                .is_on_all_collections()
+        );
+        assert!(
+            !Permission::CollectionExec(AuthzEntity::On(CollectionId::default()))
+                .is_on_all_collections()
+        );
+        assert!(
+            !Permission::CollectionRead(AuthzEntity::On(CollectionId::default()))
+                .is_on_all_collections()
+        );
+        assert!(
+            !Permission::CollectionReadAll(AuthzEntity::On(CollectionId::default()))
+                .is_on_all_collections()
+        );
 
         assert!(Permission::CollectionAdmin(AuthzEntity::All).is_on_all_collections());
         assert!(Permission::CollectionDev(AuthzEntity::All).is_on_all_collections());
@@ -642,13 +701,28 @@ mod test {
 
     #[test]
     fn test_is_same_type() {
-        assert!(Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default())).is_same_type(&Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default()))));
-        assert!(Permission::CollectionAdmin(AuthzEntity::All).is_same_type(&Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default()))));
+        assert!(
+            Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default())).is_same_type(
+                &Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default()))
+            )
+        );
+        assert!(Permission::CollectionAdmin(AuthzEntity::All).is_same_type(
+            &Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default()))
+        ));
         assert!(Permission::SysAdmin.is_same_type(&Permission::SysAdmin));
 
-        assert!(!Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default())).is_same_type(&Permission::CollectionDev(AuthzEntity::On(CollectionId::default()))));
-        assert!(!Permission::CollectionAdmin(AuthzEntity::All).is_same_type(&Permission::CollectionDev(AuthzEntity::On(CollectionId::default()))));
-        assert!(!Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default())).is_same_type(&Permission::SysAdmin));
+        assert!(
+            !Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default())).is_same_type(
+                &Permission::CollectionDev(AuthzEntity::On(CollectionId::default()))
+            )
+        );
+        assert!(!Permission::CollectionAdmin(AuthzEntity::All).is_same_type(
+            &Permission::CollectionDev(AuthzEntity::On(CollectionId::default()))
+        ));
+        assert!(
+            !Permission::CollectionAdmin(AuthzEntity::On(CollectionId::default()))
+                .is_same_type(&Permission::SysAdmin)
+        );
         assert!(!Permission::SysAdmin.is_same_type(&Permission::SecAdmin));
     }
 
@@ -1541,16 +1615,93 @@ mod test {
 
         let role = RoleId::default();
         let sys_perm = Permission::SecAdmin;
-        let perm_on_collection = Permission::CollectionRead(AuthzEntity::On(CollectionId::default()));
-        let perm_on_collection_shadowed = Permission::CollectionDev(AuthzEntity::On(CollectionId::default()));
+        let perm_on_collection =
+            Permission::CollectionRead(AuthzEntity::On(CollectionId::default()));
+        let perm_on_collection_shadowed =
+            Permission::CollectionDev(AuthzEntity::On(CollectionId::default()));
         let perm_on_all = Permission::CollectionDev(AuthzEntity::All);
 
-        let authz_context = AuthzContextForTest::default().add(&role, [sys_perm.clone(), perm_on_collection.clone(), perm_on_collection_shadowed, perm_on_all.clone()]);
+        let authz_context = AuthzContextForTest::default().add(
+            &role,
+            [
+                sys_perm.clone(),
+                perm_on_collection.clone(),
+                perm_on_collection_shadowed,
+                perm_on_all.clone(),
+            ],
+        );
 
-        let perms = authz_context.role_collections_permissions(&mut conn, &role).await.unwrap();
+        let perms = authz_context
+            .role_collections_permissions(&mut conn, &role)
+            .await
+            .unwrap();
         let perms = perms.unwrap();
         assert_eq!(perms.len(), 2);
         assert!(perms.contains(&perm_on_collection));
         assert!(perms.contains(&perm_on_all));
+    }
+
+    async fn test_admin_collection_permission_on_scope(scope: AuthzScope) {
+        let collection = CollectionId::default();
+        let role = RoleId::default();
+
+        let authz_context = AuthzContextForTest::default().add(
+            &role,
+            [Permission::CollectionAdmin(AuthzEntity::On(
+                collection.clone(),
+            ))],
+        );
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role,
+            false,
+        ));
+        let scope = Arc::new(scope);
+        assert_ok(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<CollAdmin>::new(),
+        )
+        .await;
+
+
+
+        let authz_context = AuthzContextForTest::default().add(
+            &role,
+            [Permission::CollectionDev(AuthzEntity::On(
+                collection.clone(),
+            ))],
+        );
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role,
+            false,
+        ));
+        let scope = Arc::new(scope);
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<CollAdmin>::new(),
+            AuthzError::UnAuthorized("".to_string()),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_admin_collection_permission_on_system_scope() {
+        test_admin_collection_permission_on_scope(AuthzScope::System).await;
+    }
+
+    #[tokio::test]
+    async fn test_admin_collection_permission_on_system_user_scope() {
+        test_admin_collection_permission_on_scope(AuthzScope::SystemUser(AuthzEntity::On(UserId::default()))).await;
     }
 }
