@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::users::service::read_user::ReadUserService;
+use crate::users::service::read_user::ReadUserService;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_error::assert_service_error;

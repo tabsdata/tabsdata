@@ -2,10 +2,8 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use tabsdatalib::apiserver;
-use tabsdatalib::logic::apiserver::{localhost_address, ApiServer};
-
 use crate::counter::Counter;
+use td_apiserver::{apiserver, localhost_address, ApiServer};
 
 /// This example just demonstrate how to create a simple server with a thread safe counter
 /// incremented on each request to the `/count` endpoint.
@@ -34,8 +32,8 @@ async fn init_server() -> ApiServer {
 mod endpoint {
     use crate::counter::CounterState;
     use axum::extract::State;
-    use tabsdatalib::router;
     use td_apiforge::status;
+    use td_apiserver::router;
 
     router! {
         state => { CounterState },

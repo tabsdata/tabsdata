@@ -2,8 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::collections::error::CollectionError;
-use crate::logic::collections::service::create_collection::CreateCollectionService;
+use crate::collections::error::CollectionError;
+use crate::collections::service::create_collection::CreateCollectionService;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_error::assert_service_error;

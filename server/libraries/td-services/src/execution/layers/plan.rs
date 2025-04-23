@@ -197,8 +197,8 @@ pub async fn build_function_requirements(
 
             let condition = if let Some(version) = version {
                 builder
-                    .requirement_function_run_id(version.function_run_id().clone())
-                    .requirement_table_data_version_id(version.id().clone())
+                    .requirement_function_run_id(*version.function_run_id())
+                    .requirement_table_data_version_id(*version.id())
                     .build()?
             } else {
                 builder.build()?

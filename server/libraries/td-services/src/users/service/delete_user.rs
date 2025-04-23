@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::users::layers::{delete_user_sql_delete, delete_user_validate};
+use crate::users::layers::{delete_user_sql_delete, delete_user_validate};
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -64,7 +64,7 @@ impl DeleteUserService {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::logic::users::service::delete_user::DeleteUserService;
+    use crate::users::service::delete_user::DeleteUserService;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_objects::crudl::RequestContext;
@@ -76,9 +76,9 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_delete_provider() {
-        use crate::logic::users::layers::delete_user_sql_delete;
-        use crate::logic::users::layers::delete_user_validate;
-        use crate::logic::users::service::delete_user::DeleteUserService;
+        use crate::users::layers::delete_user_sql_delete;
+        use crate::users::layers::delete_user_validate;
+        use crate::users::service::delete_user::DeleteUserService;
         use td_authz::Authz;
         use td_objects::crudl::DeleteRequest;
         use td_objects::dlo::UserName;

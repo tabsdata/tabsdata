@@ -2,9 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::collections::layers::{
-    create_collection_build_dao, create_collection_sql_insert,
-};
+use crate::collections::layers::{create_collection_build_dao, create_collection_sql_insert};
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -78,7 +76,7 @@ impl CreateCollectionService {
 
 #[cfg(test)]
 mod tests {
-    use crate::logic::collections::service::create_collection::CreateCollectionService;
+    use crate::collections::service::create_collection::CreateCollectionService;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_common::id::Id;
@@ -92,10 +90,10 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn atest_tower_metadata_create_service() {
-        use crate::logic::collections::layers::{
+        use crate::collections::layers::{
             create_collection_build_dao, create_collection_sql_insert,
         };
-        use crate::logic::collections::service::create_collection::CreateCollectionService;
+        use crate::collections::service::create_collection::CreateCollectionService;
         use td_authz::Authz;
         use td_objects::collections::dao::CollectionWithNames;
         use td_objects::collections::dto::{CollectionCreate, CollectionRead};

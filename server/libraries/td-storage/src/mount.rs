@@ -414,7 +414,7 @@ impl Mount {
 
 #[cfg(test)]
 mod tests {
-    use crate::mount::{Mount, MountDefBuilder, PathMapper, PathMapperPrefixer, PathMapperTrimmer};
+    use crate::mount::{Mount, PathMapper, PathMapperPrefixer, PathMapperTrimmer};
     use crate::{MountDef, SPath, StorageError};
     use bytes::Bytes;
     use futures_util::StreamExt;
@@ -819,14 +819,15 @@ mod tests {
         }
         impl Config for C {}
 
-        let mut c = C::default();
-        c.mounts = vec![MountDef::builder()
-            .id("id")
-            .mount_path("/foo")
-            .uri(bar_file())
-            .configs(HashMap::from([("key".to_string(), "value".to_string())]))
-            .build()
-            .unwrap()];
+        let _c = C {
+            mounts: vec![MountDef::builder()
+                .id("id")
+                .mount_path("/foo")
+                .uri(bar_file())
+                .configs(HashMap::from([("key".to_string(), "value".to_string())]))
+                .build()
+                .unwrap()],
+        };
         println!("{}", C::default().as_yaml());
     }
 }

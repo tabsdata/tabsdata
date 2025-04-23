@@ -266,7 +266,7 @@ mod tests {
         struct NewTypedType;
 
         let typed = TypedType::default();
-        let _new_typed: NewTypedType = typed.clone().try_into()?;
+        let _new_typed: NewTypedType = typed.try_into()?;
         // We just care that the into is possible as Id is a mock type.
         Ok(())
     }

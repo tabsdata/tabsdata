@@ -31,7 +31,7 @@ test-utils = []
 tokio_console = ["console-subscriber"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "td-common", "toml", "td-apiforge", "utoipa"]
+ignored = ["openssl", "strum", "td-build", "toml", "utoipa"]
 
 # Build dependencies
 
@@ -56,13 +56,10 @@ td-security = { workspace = true }
 
 td-apiforge = { workspace = true }
 td-attach = { workspace = true }
-td-concrete = { workspace = true }
 
 # External dependencies
 
-aquamarine = { workspace = true }
 async-trait = { workspace = true }
-bimap = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 config = { workspace = true, features = ["yaml"] }
@@ -88,7 +85,6 @@ pico-args = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "macros"] }
 strum = { workspace = true }
@@ -101,7 +97,7 @@ tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-utoipa = { workspace = true, features = ["uuid"] }
+utoipa = { workspace = true }
 uuid = { workspace = true }
 whoami = { workspace = true }
 windows = { workspace = true, features = ["Win32", "Win32_System_Threading"] }

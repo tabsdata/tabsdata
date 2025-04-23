@@ -28,7 +28,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl"]
+ignored = ["openssl", "thiserror"]
 
 # Build dependencies
 
@@ -61,8 +61,6 @@ tokio = { workspace = true, features = ["full"] }
 # Development dependencies
 
 [dev-dependencies]
-ta-execution = { workspace = true, features = ["td-test"] }
-td-objects = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

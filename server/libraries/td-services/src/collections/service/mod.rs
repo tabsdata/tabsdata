@@ -2,11 +2,11 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::collections::service::create_collection::CreateCollectionService;
-use crate::logic::collections::service::delete_collection::DeleteCollectionService;
-use crate::logic::collections::service::list_collections::ListCollectionsService;
-use crate::logic::collections::service::read_collection::ReadCollectionService;
-use crate::logic::collections::service::update_collection::UpdateCollectionService;
+use crate::collections::service::create_collection::CreateCollectionService;
+use crate::collections::service::delete_collection::DeleteCollectionService;
+use crate::collections::service::list_collections::ListCollectionsService;
+use crate::collections::service::read_collection::ReadCollectionService;
+use crate::collections::service::update_collection::UpdateCollectionService;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_database::sql::DbPool;
@@ -91,7 +91,7 @@ impl CollectionServices {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::logic::collections::service::CollectionServices;
+    use crate::collections::service::CollectionServices;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_database::sql::DbPool;
@@ -122,7 +122,7 @@ pub mod tests {
             let name = format!("{}{}", name_prefix, i);
             let request = RequestContext::with(
                 AccessTokenId::default(),
-                &admin_user,
+                admin_user,
                 RoleId::sys_admin(),
                 true,
             )

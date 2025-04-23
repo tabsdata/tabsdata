@@ -11,13 +11,13 @@ pub mod collections;
 pub mod crudl;
 pub mod dlo;
 pub mod entity_finder;
+pub mod jwt;
 pub mod rest_urls;
 pub mod security;
 pub mod sql;
 pub mod tower_service;
 pub mod types;
 pub mod users;
-pub mod jwt;
 
 pub mod location2;
 #[cfg(feature = "test-utils")]

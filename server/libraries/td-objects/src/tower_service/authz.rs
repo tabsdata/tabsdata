@@ -173,9 +173,7 @@ impl AuthzOn<System> {
 impl AuthzOn<CollectionId> {
     /// Set the Authorization scope to [`AuthzScope::Collection`] for a [`CollectionId`] in the service context.
     pub async fn set(Input(collection_id): Input<CollectionId>) -> Result<AuthzScope, TdError> {
-        Ok(AuthzScope::Collection(AuthzEntity::On(
-            collection_id.deref().clone(),
-        )))
+        Ok(AuthzScope::Collection(AuthzEntity::On(*collection_id)))
     }
 }
 
@@ -187,7 +185,7 @@ pub struct SystemOrUserId {
 impl AuthzOn<SystemOrUserId> {
     /// Set the Authorization scope to [`AuthzScope::User`] for a [`UserId`] in the service context.
     pub async fn set(Input(user_id): Input<UserId>) -> Result<AuthzScope, TdError> {
-        Ok(AuthzScope::User(AuthzEntity::On(user_id.deref().clone())))
+        Ok(AuthzScope::User(AuthzEntity::On(*user_id)))
     }
 }
 
@@ -322,9 +320,7 @@ pub struct CollAdmin {
 impl AuthzRequirements for CollAdmin {
     fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
         collection_any_of::<Self>(scope, |collection_id| {
-            HashSet::from([Permission::CollectionAdmin(AuthzEntity::On(
-                collection_id.clone(),
-            ))])
+            HashSet::from([Permission::CollectionAdmin(AuthzEntity::On(*collection_id))])
         })
     }
 }
@@ -339,9 +335,7 @@ pub struct CollDev {
 impl AuthzRequirements for CollDev {
     fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
         collection_any_of::<Self>(scope, |collection_id| {
-            HashSet::from([Permission::CollectionDev(AuthzEntity::On(
-                collection_id.clone(),
-            ))])
+            HashSet::from([Permission::CollectionDev(AuthzEntity::On(*collection_id))])
         })
     }
 }
@@ -356,9 +350,7 @@ pub struct CollExec {
 impl AuthzRequirements for CollExec {
     fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
         collection_any_of::<Self>(scope, |collection_id| {
-            HashSet::from([Permission::CollectionExec(AuthzEntity::On(
-                collection_id.clone(),
-            ))])
+            HashSet::from([Permission::CollectionExec(AuthzEntity::On(*collection_id))])
         })
     }
 }
@@ -373,9 +365,7 @@ pub struct CollRead {
 impl AuthzRequirements for CollRead {
     fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
         collection_any_of::<Self>(scope, |collection_id| {
-            HashSet::from([Permission::CollectionRead(AuthzEntity::On(
-                collection_id.clone(),
-            ))])
+            HashSet::from([Permission::CollectionRead(AuthzEntity::On(*collection_id))])
         })
     }
 }
@@ -391,7 +381,7 @@ impl AuthzRequirements for CollReadAll {
     fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
         collection_any_of::<Self>(scope, |collection_id| {
             HashSet::from([Permission::CollectionReadAll(AuthzEntity::On(
-                collection_id.clone(),
+                *collection_id,
             ))])
         })
     }
@@ -514,7 +504,7 @@ impl<
                     }
                 }
             }
-            let user_id: UserId = request_context.user_id().clone();
+            let user_id: UserId = *request_context.user_id();
             if required_permissions.contains(&Permission::User(AuthzEntity::On(user_id))) {
                 return Ok(());
             }
@@ -1007,14 +997,12 @@ mod test {
         let authz_context = AuthzContextForTest::default()
             .remove(&RoleId::user())
             .add(
-                &all_collections,
+                all_collections,
                 [Permission::CollectionRead(AuthzEntity::All)],
             )
             .add(
-                &one_collection,
-                [Permission::CollectionRead(AuthzEntity::On(
-                    collection0.clone(),
-                ))],
+                one_collection,
+                [Permission::CollectionRead(AuthzEntity::On(collection0))],
             );
         let authz_context = Arc::new(authz_context);
 
@@ -1025,7 +1013,7 @@ mod test {
             all_collections,
             false,
         ));
-        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0.clone())));
+        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0)));
         assert_ok(
             &authz_context,
             &request_context,
@@ -1033,7 +1021,7 @@ mod test {
             Authz::<CollRead>::new(),
         )
         .await;
-        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection1.clone())));
+        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection1)));
         assert_ok(
             &authz_context,
             &request_context,
@@ -1049,7 +1037,7 @@ mod test {
             one_collection,
             false,
         ));
-        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0.clone())));
+        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0)));
         assert_ok(
             &authz_context,
             &request_context,
@@ -1057,7 +1045,7 @@ mod test {
             Authz::<CollRead>::new(),
         )
         .await;
-        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection1.clone())));
+        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection1)));
         assert_error(
             &authz_context,
             &request_context,
@@ -1075,17 +1063,17 @@ mod test {
 
         let authz_context = AuthzContextForTest::default()
             .remove(&RoleId::user())
-            .add(&role, [Permission::CollectionRead(AuthzEntity::All)]);
+            .add(role, [Permission::CollectionRead(AuthzEntity::All)]);
         let authz_context = Arc::new(authz_context);
 
         // positive
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role,
+            role,
             true,
         ));
-        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection.clone())));
+        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection)));
         assert_ok(
             &authz_context,
             &request_context,
@@ -1156,10 +1144,10 @@ mod test {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role,
+            role,
             true,
         ));
-        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection.clone())));
+        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection)));
         assert_error(
             &authz_context,
             &request_context,
@@ -1239,7 +1227,7 @@ mod test {
         let role = RoleId::default();
 
         let authz_context = AuthzContextForTest::default().add(
-            &role,
+            role,
             [
                 Permission::SecAdmin,
                 Permission::CollectionRead(AuthzEntity::All),
@@ -1253,7 +1241,7 @@ mod test {
             role,
             false,
         ));
-        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection.clone())));
+        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection)));
         assert_ok(
             &authz_context,
             &request_context,
@@ -1267,7 +1255,7 @@ mod test {
     async fn test_collection_system_permission_on_system_scope() {
         let role = RoleId::default();
         let authz_context = AuthzContextForTest::default().add(
-            &role,
+            role,
             [
                 Permission::SecAdmin,
                 Permission::CollectionRead(AuthzEntity::All),
@@ -1296,7 +1284,7 @@ mod test {
     async fn test_collection_all_in_scope_error() {
         let role = RoleId::default();
         let authz_context = AuthzContextForTest::default().add(
-            &role,
+            role,
             [
                 Permission::SecAdmin,
                 Permission::CollectionRead(AuthzEntity::All),
@@ -1326,17 +1314,17 @@ mod test {
         let user = UserId::default();
         let role = RoleId::default();
 
-        let authz_context = AuthzContextForTest::default().add(&role, []);
+        let authz_context = AuthzContextForTest::default().add(role, []);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
-            &user,
+            user,
             role,
             false,
         ));
 
-        let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user.clone())));
+        let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user)));
 
         assert_ok(
             &authz_context,
@@ -1352,18 +1340,18 @@ mod test {
         let user = UserId::default();
         let role = RoleId::default();
 
-        let authz_context = AuthzContextForTest::default().add(&role, []);
+        let authz_context = AuthzContextForTest::default().add(role, []);
         let authz_context = Arc::new(authz_context);
 
         // different user
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role,
+            role,
             false,
         ));
 
-        let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user.clone())));
+        let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user)));
 
         assert_error(
             &authz_context,
@@ -1375,18 +1363,18 @@ mod test {
         .await;
 
         let authz_context =
-            AuthzContextForTest::default().add(&role, [Permission::SecAdmin, Permission::SysAdmin]);
+            AuthzContextForTest::default().add(role, [Permission::SecAdmin, Permission::SysAdmin]);
         let authz_context = Arc::new(authz_context);
 
         // different user
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role,
+            role,
             false,
         ));
 
-        let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user.clone())));
+        let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user)));
 
         assert_error(
             &authz_context,
@@ -1403,7 +1391,7 @@ mod test {
         let user = UserId::default();
         let role = RoleId::default();
 
-        let authz_context = AuthzContextForTest::default().add(&role, [Permission::SecAdmin]);
+        let authz_context = AuthzContextForTest::default().add(role, [Permission::SecAdmin]);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
@@ -1413,7 +1401,7 @@ mod test {
             true,
         ));
 
-        let scope = Arc::new(AuthzScope::SystemUser(AuthzEntity::On(user.clone())));
+        let scope = Arc::new(AuthzScope::SystemUser(AuthzEntity::On(user)));
 
         assert_ok(
             &authz_context,

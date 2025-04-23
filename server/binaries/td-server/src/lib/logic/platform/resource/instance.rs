@@ -2,7 +2,11 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::platform::resource::instance::InstanceError::*;
+use crate::logic::platform::resource::instance::InstanceError::{
+    NonExecutableProgramPath, NonExistingProgramPath, NonFileProgramPath,
+    OverlappingSourceAndTargetFolders, SourceCopyFolderDoesNotExist, UnresolvedProgramFolder,
+    UnspecifiedInstance, UnspecifiedProgram,
+};
 use crate::logic::platform::resource::settings::extract_profile;
 use std::fs::{canonicalize, copy, create_dir_all};
 use std::io;

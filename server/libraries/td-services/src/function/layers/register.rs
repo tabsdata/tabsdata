@@ -17,7 +17,6 @@ use td_objects::types::dependency::{
     DependencyDB, DependencyDBBuilder, DependencyDBWithNames, DependencyVersionDB,
     DependencyVersionDBBuilder,
 };
-use td_objects::types::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::types::table::{
     TableDB, TableDBBuilder, TableDBWithNames, TableVersionDB, TableVersionDBBuilder,
 };
@@ -44,7 +43,7 @@ pub enum RegisterFunctionError {
 
 pub async fn data_location(
     Input(_collection): Input<CollectionDB>,
-    Input(_function): Input<FunctionDBWithNames>,
+    // Input(_function): Input<FunctionDBWithNames>,
 ) -> Result<DataLocation, TdError> {
     Ok(DataLocation::default())
 }
@@ -150,7 +149,7 @@ pub async fn insert_and_update_tables<Q: DerefQueries>(
     for table_version in &*table_versions {
         let frozen = !matches!(table_version.status(), TableStatus::Active);
         let new_table_db = TableDBBuilder::try_from(table_version)?
-            .function_id(&*function_id)
+            .function_id(*function_id)
             .frozen(frozen)
             .build()?;
 

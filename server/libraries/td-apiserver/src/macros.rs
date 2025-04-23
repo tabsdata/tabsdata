@@ -135,6 +135,7 @@ mod tests {
     use crate::tests::wait_for_server;
     use axum::body::{to_bytes, Body};
     use axum::Router;
+    use http::{request, StatusCode};
     use reqwest::Client;
     use tower::ServiceExt;
 
@@ -173,7 +174,7 @@ mod tests {
 
         let response = router
             .oneshot(
-                hyper::Request::builder()
+                request::Request::builder()
                     .uri("/test")
                     .body(Body::empty())
                     .unwrap(),
@@ -181,7 +182,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), hyper::StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::OK);
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(body, "test");

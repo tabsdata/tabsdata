@@ -13,7 +13,7 @@ use getset::Getters;
 use serde::Serialize;
 use td_apiforge::{apiserver_path, apiserver_schema, create_status};
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{CollectionParam, FunctionParam, FUNCTION_UPLOAD};
+use td_objects::rest_urls::{FunctionParam, FUNCTION_UPLOAD};
 use td_objects::types::function::{Bundle, FunctionUpload};
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;

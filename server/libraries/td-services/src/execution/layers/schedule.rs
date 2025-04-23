@@ -68,7 +68,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                 // Build callback
                 // This is loopback address, because this endpoint is only available to the server.
                 let function_run_id = f.id().to_string();
-                let endpoint = UPDATE_FUNCTION_RUN.replace("{function_run_id}", &*function_run_id);
+                let endpoint = UPDATE_FUNCTION_RUN.replace("{function_run_id}", &function_run_id);
                 let callback_url = format!(
                     "http://127.0.0.1:{}{}{}",
                     server_url.port(),
@@ -157,9 +157,10 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                                                 .await
                                                 .map_err(handle_sql_err)?;
 
-                                        data_version.unwrap_or(
-                                            unreachable!("At least one version of the table should have data"), // TODO error
-                                        )
+                                        if data_version.is_none() {
+                                            unreachable!("At least one version of the table should have data"); // TODO error
+                                        }
+                                        data_version.unwrap()
                                     }
                                 };
 
@@ -186,7 +187,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                             .collection(req.collection())
                             .table_id(req.requirement_table_id())
                             .table_version_id(req.requirement_table_version_id())
-                            .table_data_version_id(req.requirement_table_data_version_id().clone())
+                            .table_data_version_id(*req.requirement_table_data_version_id())
                             .location(location)
                             .table_pos(dependency_pos)
                             .version_pos(req.requirement_version_pos())
@@ -263,7 +264,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                     InputTable::new(tables)
                 });
                 let (system_output, output) =
-                    partition_and_sort(output_tables_map, |table| OutputTable::Table(table));
+                    partition_and_sort(output_tables_map, OutputTable::Table);
 
                 // Build message context
                 let function_input_v2 = FunctionInputV2::builder()
@@ -365,7 +366,7 @@ pub async fn unlock_worker_messages<Q: DerefQueries, T: WorkerMessageQueue>(
         let conn = conn.get_mut_connection()?;
 
         // TODO this should be chunked
-        let lookup: Vec<_> = function_run_ids.iter().map(|(id, _)| *id).collect();
+        let lookup: Vec<_> = function_run_ids.keys().copied().collect();
         queries
             .find_by::<FunctionRunDB>(&lookup)?
             .build_query_as()

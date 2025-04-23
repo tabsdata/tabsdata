@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::collections::service::delete_collection::DeleteCollectionService;
+use crate::collections::service::delete_collection::DeleteCollectionService;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_error::assert_service_error;

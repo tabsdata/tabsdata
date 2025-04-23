@@ -114,8 +114,8 @@ pub async fn notify(
     start: i64,
     end: Option<i64>,
     status: FunctionRunUpdateStatus,
-    execution: i16,
-    limit: Option<i16>,
+    execution: u16,
+    limit: Option<u16>,
     error: Option<String>,
 ) -> Result<(), RunnerError> {
     let payload = match request_message.payload() {

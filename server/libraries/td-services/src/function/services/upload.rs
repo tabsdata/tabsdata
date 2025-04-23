@@ -18,13 +18,11 @@ use td_objects::tower_service::from::{
 };
 use td_objects::tower_service::sql::{insert, By, SqlSelectIdOrNameService};
 use td_objects::types::basic::{
-    BundleHash, BundleId, CollectionId, CollectionIdName, FunctionId, FunctionIdName,
-    StorageVersion,
+    BundleHash, BundleId, CollectionId, CollectionIdName, FunctionIdName, StorageVersion,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::function::{
-    Bundle, BundleBuilder, BundleDB, BundleDBBuilder, FunctionDB, FunctionDBWithNames,
-    FunctionUpload,
+    Bundle, BundleBuilder, BundleDB, BundleDBBuilder, FunctionDBWithNames, FunctionUpload,
 };
 use td_storage::Storage;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
@@ -100,7 +98,6 @@ impl UploadFunctionService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::function::services::tests::assert_update;
     use crate::function::services::FunctionUpdate;
     use axum::body::Body;
     use axum::extract::Request;
@@ -139,8 +136,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let _ = seed_function(&db, &collection, &create).await;
 
         let test_dir = testdir!();
         let mount_def = MountDef::builder()
@@ -189,7 +185,7 @@ mod tests {
         let bundle = &bundle_db[0];
         assert_eq!(bundle.id(), response.id());
         assert_eq!(bundle.collection_id(), collection.id());
-        let hash = hex::encode(&Sha256::digest(&payload)[..]);
+        let hash = hex::encode(&Sha256::digest(payload)[..]);
         assert_eq!(bundle.hash().to_string(), hash);
         assert_eq!(*bundle.created_by_id(), admin_id);
 

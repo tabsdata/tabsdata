@@ -39,8 +39,8 @@ pub trait WorkerNotifier: Debug {
         start: i64,
         end: Option<i64>,
         status: FunctionRunUpdateStatus,
-        execution: i16,
-        limit: Option<i16>,
+        execution: u16,
+        limit: Option<u16>,
         error: Option<String>,
     ) -> Result<(), RunnerError>;
 }
@@ -54,8 +54,8 @@ impl WorkerNotifier for Callback {
         start: i64,
         end: Option<i64>,
         status: FunctionRunUpdateStatus,
-        execution: i16,
-        limit: Option<i16>,
+        execution: u16,
+        limit: Option<u16>,
         error: Option<String>,
     ) -> Result<(), RunnerError> {
         fn hashmap_to_headers(input: HashMap<String, String>) -> Result<HeaderMap, RunnerError> {
@@ -150,8 +150,8 @@ impl WorkerNotifier for Callback {
                     .set_start(start)
                     .set_end(end)
                     .set_status(status)
-                    .set_execution(execution)
-                    .set_limit(limit)
+                    .set_execution(execution as i16)
+                    .set_limit(limit.map(|x| x as i16))
                     .set_error(error);
                 debug!(
                     "Sending message payload:\n{}",
@@ -199,7 +199,7 @@ impl WorkerNotifier for Callback {
     }
 }
 
-pub fn execution(message: &SupervisorMessage) -> i16 {
+pub fn execution(message: &SupervisorMessage) -> u16 {
     let regex = match Regex::new(REQUEST_MESSAGE_FILE_PATTERN) {
         Ok(re) => re,
         Err(_) => return UNKNOWN_RUN,
@@ -207,7 +207,7 @@ pub fn execution(message: &SupervisorMessage) -> i16 {
     if let Some(file_name) = message.file().file_name().and_then(|f| f.to_str()) {
         if let Some(captures) = regex.captures(file_name) {
             if let Some(run_str) = captures.get(2).map(|m| m.as_str()) {
-                if let Ok(run) = run_str.parse::<i16>() {
+                if let Ok(run) = run_str.parse::<u16>() {
                     return run;
                 }
             }

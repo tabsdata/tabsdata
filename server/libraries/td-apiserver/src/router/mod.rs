@@ -74,6 +74,7 @@ use td_services::role::services::RoleServices;
 use td_services::user_role::services::UserRoleServices;
 use td_services::users::service::UserServices;
 use td_storage::Storage;
+use te_apiserver::{ExtendedRouter, RouterExtension};
 
 pub struct ApiServerInstance {
     config: Config,
@@ -140,9 +141,9 @@ impl ApiServerInstance {
         Arc::new(StatusLogic::new(self.db.clone()))
     }
 
-    fn storage_state(&self) -> state::StorageRef {
-        self.storage.clone()
-    }
+    // fn storage_state(&self) -> state::StorageRef {
+    //     self.storage.clone()
+    // }
 
     fn users_state(&self) -> state::Users {
         Arc::new(UserServices::new(
@@ -153,32 +154,36 @@ impl ApiServerInstance {
         ))
     }
 
-    fn collection_state(&self) -> CollectionsState {
+    fn collection_state(&self) -> state::Collections {
         Arc::new(CollectionServices::new(
             self.db.clone(),
             self.authz_context.clone(),
         ))
     }
 
+    fn execution_state(&self) -> state::Execution {
+        Arc::new(ExecutionServices::new(self.db.clone()))
+    }
+
     fn function_state(&self) -> state::Functions {
         Arc::new(FunctionServices::new(self.db.clone(), self.storage.clone()))
     }
 
-    fn roles_state(&self) -> RolesState {
+    fn roles_state(&self) -> state::Roles {
         Arc::new(RoleServices::new(
             self.db.clone(),
             self.authz_context.clone(),
         ))
     }
 
-    fn permissions_state(&self) -> PermissionsState {
+    fn permissions_state(&self) -> state::Permissions {
         Arc::new(PermissionServices::new(
             self.db.clone(),
             self.authz_context.clone(),
         ))
     }
 
-    fn user_roles_state(&self) -> UserRolesState {
+    fn user_roles_state(&self) -> state::UserRoles {
         Arc::new(UserRoleServices::new(
             self.db.clone(),
             self.authz_context.clone(),

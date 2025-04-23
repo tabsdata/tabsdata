@@ -82,7 +82,7 @@ test_tower_metadata = ["td-tower/test_tower_metadata"]
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "td-build", "td-schema", "toml"]
+ignored = ["openssl", "paste", "strum", "toml", "utoipa-axum"]
 
 # Build dependencies
 
@@ -106,60 +106,44 @@ toml = { workspace = true }
 
 td-apiforge = { workspace = true }
 td-build = { workspace = true }
-td-concrete = { workspace = true }
 tm-workspace = { workspace = true }
 
 ## Libraries
 
 td-apiserver = { workspace = true }
-td-authz = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }
 td-error = { workspace = true }
-td-execution = { workspace = true }
 te-tableframe = { workspace = true }
 ta-tableframe = { workspace = true }
-td-objects = { workspace = true }
 td-python = { workspace = true }
-td-security = { workspace = true }
-td-services = { workspace = true }
 td-storage = { workspace = true }
 td-tower = { workspace = true }
 
 ## Extensions
 
-te-execution = { workspace = true }
-
 # External dependencies
 
-argon2 = { workspace = true }
 async-trait = { workspace = true }
 atomic_enum = { workspace = true }
 axum = { workspace = true, features = ["macros"] }
-axum-extra = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 colored = { workspace = true }
-config = { workspace = true, features = ["yaml"] }
 derive_builder = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 getset = { workspace = true }
-glob = { workspace = true }
-hex = { workspace = true }
 http = { workspace = true }
-hyper = { workspace = true, features = ["full"] }
 indicatif = { workspace = true }
 ignore = { workspace = true }
 include_dir = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
-jsonwebtoken = { workspace = true }
-lazy_static = { workspace = true }
 linemux = { workspace = true }
 num-format = { workspace = true }
 object_store = { workspace = true, features = ["aws", "azure", "gcp", "http"] }
@@ -168,11 +152,9 @@ path-slash = { workspace = true }
 polars = { workspace = true, features = ["lazy", "parquet", "csv", "json", "polars-lazy", "streaming", "cloud", "aws", "azure", "gcp", "cloud_write"] }
 regex = { workspace = true }
 reqwest = { workspace = true }
-sha2 = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-sqlx = { workspace = true, features = ["sqlite", "runtime-tokio", "macros", "chrono"] }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 supports-color = { workspace = true }
@@ -184,26 +166,19 @@ textwrap = { workspace = true }
 terminal_size = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-tokio-util = { workspace = true }
 tower = { workspace = true, features = ["buffer", "limit", "make", "timeout", "util"] }
-tower-http = { workspace = true, features = ["cors", "timeout", "trace"] }
-tower-service = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
-utoipa-axum = { version = "0.2.0" }
-utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
+utoipa-axum = { workspace = true }
 walkdir = { workspace = true }
 wildmatch = { workspace = true }
-windows = { workspace = true, features = ["Win32", "Win32_System_Threading"] }
 
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }
-td-schema = { workspace = true, features = ["td-test"] }
 td-database = { workspace = true, features = ["td-test"] }
 te-tableframe = { workspace = true, features = ["td-test"] }
 ta-tableframe = { workspace = true, features = ["td-test"] }
-td-objects = { workspace = true, features = ["td-test"] }
 td-server = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

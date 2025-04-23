@@ -9,10 +9,10 @@ use std::env::set_var;
 use std::ffi::OsString;
 use tabsdatalib::bin::platform::supervisor;
 use tabsdatalib::bin::platform::supervisor::{prepend_slash, Arguments};
-use td_attach::attach;
 use td_common::logging;
 use td_common::server::{INSTANCE_PATH_ENV, INSTANCE_URI_ENV};
 use tracing::{info, Level};
+use td_common::attach::attach;
 
 #[attach(signal = "supervisor")]
 pub fn main() {

@@ -43,21 +43,21 @@ pub struct RequestContext {
 // So it works with the extractors
 impl From<&RequestContext> for AccessTokenId {
     fn from(from: &RequestContext) -> Self {
-        from.access_token_id.clone()
+        from.access_token_id
     }
 }
 
 // So it works with the extractors
 impl From<&RequestContext> for UserId {
     fn from(from: &RequestContext) -> Self {
-        from.user_id.clone()
+        from.user_id
     }
 }
 
 // So it works with the extractors
 impl From<&RequestContext> for RoleId {
     fn from(from: &RequestContext) -> Self {
-        from.role_id.clone()
+        from.role_id
     }
 }
 

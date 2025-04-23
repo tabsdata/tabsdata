@@ -156,7 +156,7 @@ mod tests {
         let storage = Arc::new(Storage::from(vec![mount_def]).await?);
         let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir)?);
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 8080)));
-        let _ = ScheduleRequestService::new(
+        ScheduleRequestService::new(
             db.clone(),
             storage.clone(),
             message_queue.clone(),
@@ -172,7 +172,7 @@ mod tests {
         let created_message = &created_messages[0];
 
         // Actual test
-        let _ = ScheduleCommitService::new(db.clone(), message_queue.clone())
+        ScheduleCommitService::new(db.clone(), message_queue.clone())
             .service()
             .await
             .oneshot(())

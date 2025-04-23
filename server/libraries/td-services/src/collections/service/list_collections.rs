@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::collections::layers::list_collections_sql_select;
+use crate::collections::layers::list_collections_sql_select;
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -57,7 +57,7 @@ impl ListCollectionsService {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::logic::collections::service::list_collections::ListCollectionsService;
+    use crate::collections::service::list_collections::ListCollectionsService;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_objects::crudl::{ListParams, RequestContext};
@@ -68,8 +68,8 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_list_provider() {
-        use crate::logic::collections::layers::list_collections_sql_select;
-        use crate::logic::collections::service::list_collections::ListCollectionsService;
+        use crate::collections::layers::list_collections_sql_select;
+        use crate::collections::service::list_collections::ListCollectionsService;
         use td_authz::Authz;
         use td_objects::collections::dao::CollectionWithNames;
         use td_objects::collections::dto::CollectionList;

@@ -40,7 +40,8 @@ async fn status(State(status_state): State<Status>) -> Result<GetStatus, ServerE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::router::server_status::{ApiStatus, HealthStatus, StatusLogic};
+    use crate::router::server_status::ApiStatus;
+    use crate::router::status::{HealthStatus, StatusLogic};
     use axum::body::{to_bytes, Body};
     use axum::extract::Request;
     use axum::{Extension, Router};

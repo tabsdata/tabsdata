@@ -54,7 +54,7 @@ pub async fn authorization_layer(
     let token = auth_header[1];
 
     // Check if the token is valid
-    let token = decode_token(&auth_services.jwt_settings(), token)
+    let token = decode_token(auth_services.jwt_settings(), token)
         //        .log_err_warn(|e| e.to_string())
         .map_err(|_| TdError::from(AuthError::AuthenticationFailed))?;
     let access_token_id: AccessTokenId = token.jti().into();

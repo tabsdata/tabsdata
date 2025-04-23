@@ -52,13 +52,11 @@ mod tests {
     use crate::test_utils::seed_function2::seed_function;
     use crate::test_utils::seed_function_run::seed_function_run;
     use crate::test_utils::seed_transaction2::seed_transaction;
-    use crate::types::basic::{
-        BundleId, CollectionName, ExecutionStatus, FunctionRunStatus, TableName, TransactionKey,
-        TransactionStatus, UserId,
-    };
+    use crate::types::basic::{BundleId, CollectionName, TableName, TransactionKey, UserId};
+    use crate::types::execution::FunctionRunStatus;
     use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
-    use td_security::{ENCODED_ID_SYSTEM, ENCODED_ID_USER_ADMIN};
+    use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(sqlx)]
     async fn test_seed_table_data_version(db: DbPool) {
@@ -94,22 +92,10 @@ mod tests {
 
         let (_, function_version) = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(
-            &db,
-            &collection,
-            &function_version,
-            &ExecutionStatus::Scheduled,
-        )
-        .await;
+        let execution = seed_execution(&db, &collection, &function_version).await;
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
-        let transaction = seed_transaction(
-            &db,
-            &execution,
-            &transaction_key,
-            &TransactionStatus::scheduled(),
-        )
-        .await;
+        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
 
         let function_run = seed_function_run(
             &db,
@@ -117,7 +103,7 @@ mod tests {
             &function_version,
             &execution,
             &transaction,
-            &FunctionRunStatus::scheduled(),
+            &FunctionRunStatus::Scheduled,
         )
         .await;
 
@@ -136,7 +122,6 @@ mod tests {
             &transaction,
             &function_run,
             &table_version,
-            &TableDataVersionStatus::incomplete(),
         )
         .await;
 
@@ -151,14 +136,5 @@ mod tests {
         assert_eq!(table_data_version.execution_id(), execution.id());
         assert_eq!(table_data_version.transaction_id(), transaction.id());
         assert_eq!(table_data_version.function_run_id(), function_run.id());
-        assert!(*table_data_version.triggered_on() < TriggeredOn::now().await);
-        assert_eq!(
-            *table_data_version.triggered_by_id(),
-            UserId::try_from(ENCODED_ID_USER_ADMIN).unwrap()
-        );
-        assert_eq!(
-            *table_data_version.status(),
-            TableDataVersionStatus::incomplete()
-        );
     }
 }

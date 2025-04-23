@@ -192,9 +192,9 @@ pub struct WorkerConfig {
     #[serde(default, rename = "get-states")]
     get_states: Vec<GetState>,
     #[serde(default = "default_concurrency")]
-    concurrency: i16,
+    concurrency: u16,
     #[serde(default = "default_retries")]
-    retries: i16,
+    retries: u16,
 }
 
 impl Display for WorkerConfig {
@@ -227,11 +227,11 @@ impl Display for WorkerConfig {
 
 impl Config for Configuration {}
 
-fn default_concurrency() -> i16 {
+fn default_concurrency() -> u16 {
     0
 }
 
-fn default_retries() -> i16 {
+fn default_retries() -> u16 {
     2
 }
 
@@ -593,7 +593,7 @@ impl Supervisor {
                 let id = captures.get(1).map(|m| m.as_str()).unwrap();
                 let run = captures.get(2).map(|m| m.as_str()).unwrap();
                 let ext = captures.get(3).map(|m| m.as_str()).unwrap();
-                if let Ok(retry) = run.parse::<i16>() {
+                if let Ok(retry) = run.parse::<u16>() {
                     let payload = match message.payload() {
                         SupervisorRequestMessagePayload(payload) => payload,
                         SupervisorResponseMessagePayload(_) => {

@@ -3,6 +3,8 @@
 //
 
 use crate::execution::services::callback::ExecutionCallbackService;
+use crate::execution::services::cancel_execution::ExecutionCancelService;
+use crate::execution::services::cancel_transaction::TransactionCancelService;
 use crate::execution::services::execute::ExecuteFunctionService;
 use crate::execution::services::schedule_commit::ScheduleCommitService;
 use crate::execution::services::schedule_request::ScheduleRequestService;
@@ -12,28 +14,33 @@ use td_common::server::WorkerMessageQueue;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, UpdateRequest};
-use td_objects::rest_urls::{FunctionParam, FunctionRunParam};
+use td_objects::rest_urls::{ExecutionParam, FunctionParam, FunctionRunParam, TransactionParam};
 use td_objects::types::execution::{CallbackRequest, ExecutionRequest, ExecutionResponse};
 use td_storage::Storage;
 use td_tower::service_provider::TdBoxService;
 
 mod callback;
+mod cancel_execution;
+mod cancel_transaction;
 mod execute;
 mod schedule_commit;
 mod schedule_request;
-mod cancel_transaction;
-mod cancel_execution;
 
 pub struct ExecutionServices {
     execute: ExecuteFunctionService,
     callback: ExecutionCallbackService,
+    cancel_transaction: TransactionCancelService,
+    cancel_execution: ExecutionCancelService,
 }
 
+#[allow(dead_code)] // TODO remove
 impl ExecutionServices {
     pub fn new(db: DbPool) -> Self {
         Self {
             execute: ExecuteFunctionService::new(db.clone()),
             callback: ExecutionCallbackService::new(db.clone()),
+            cancel_transaction: TransactionCancelService::new(db.clone()),
+            cancel_execution: ExecutionCancelService::new(db.clone()),
         }
     }
 
@@ -48,6 +55,18 @@ impl ExecutionServices {
         &self,
     ) -> TdBoxService<UpdateRequest<FunctionRunParam, CallbackRequest>, (), TdError> {
         self.callback.service().await
+    }
+
+    pub async fn cancel_transaction(
+        &self,
+    ) -> TdBoxService<UpdateRequest<TransactionParam, ()>, (), TdError> {
+        self.cancel_transaction.service().await
+    }
+
+    pub async fn cancel_execution(
+        &self,
+    ) -> TdBoxService<UpdateRequest<ExecutionParam, ()>, (), TdError> {
+        self.cancel_execution.service().await
     }
 }
 

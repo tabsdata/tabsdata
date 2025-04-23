@@ -34,8 +34,8 @@ use td_objects::types::dependency::{
     DependencyDBWithNames, DependencyVersionDB, DependencyVersionDBBuilder,
 };
 use td_objects::types::function::{
-    BundleDB, FunctionDB, FunctionDBBuilder, FunctionRegister, FunctionVersion,
-    FunctionVersionBuilder, FunctionVersionDB, FunctionVersionDBBuilder,
+    BundleDB, FunctionDB, FunctionDBBuilder, FunctionDBWithNames, FunctionRegister,
+    FunctionVersion, FunctionVersionBuilder, FunctionVersionDB, FunctionVersionDBBuilder,
     FunctionVersionDBWithNames,
 };
 use td_objects::types::table::{TableDBWithNames, TableVersionDB, TableVersionDBBuilder};
@@ -84,7 +84,7 @@ impl RegisterFunctionService {
 
                 // Check function name does not exist in collection.
                 from_fn(combine::<CollectionId, FunctionName>),
-                from_fn(By::<(CollectionId, FunctionName)>::assert_not_exists::<DaoQueries, FunctionDB>),
+                from_fn(By::<(CollectionId, FunctionName)>::assert_not_exists::<DaoQueries, FunctionDBWithNames>),
 
                 // Get location and storage version.
                 from_fn(With::<StorageVersion>::default),
@@ -230,16 +230,21 @@ mod tests {
                 type_of_val(&With::<FunctionRegister>::extract::<FunctionName>),
                 // Check function name does not exist in collection.
                 type_of_val(&combine::<CollectionId, FunctionName>),
-                type_of_val(&
-                    By::<(CollectionId, FunctionName)>::assert_not_exists::<DaoQueries, FunctionDB>,
-                ),
+                type_of_val(&By::<(CollectionId, FunctionName)>::assert_not_exists::<DaoQueries, FunctionDBWithNames>),
+                // Get location and storage version.
+                type_of_val(&With::<StorageVersion>::default),
+                type_of_val(&data_location),
                 // Insert into function_versions(sql) status=Active.
                 type_of_val(&With::<FunctionRegister>::convert_to::<FunctionVersionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<FunctionVersionDBBuilder, _>),
                 type_of_val(&With::<CollectionId>::set::<FunctionVersionDBBuilder>),
-                // TODO missing data_location and storage_version
+                type_of_val(&With::<StorageVersion>::set::<FunctionVersionDBBuilder>),
+                type_of_val(&With::<DataLocation>::set::<FunctionVersionDBBuilder>),
                 type_of_val(&With::<FunctionVersionDBBuilder>::build::<FunctionVersionDB, _>),
                 type_of_val(&insert::<DaoQueries, FunctionVersionDB>),
+                // Remove from bundles
+                type_of_val(&With::<FunctionVersionDB>::extract::<BundleId>),
+                type_of_val(&By::<BundleId>::delete::<DaoQueries, BundleDB>),
                 // Insert into functions(sql) function info.
                 type_of_val(&With::<FunctionVersionDB>::convert_to::<FunctionDBBuilder, _>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB, _>),
@@ -286,7 +291,7 @@ mod tests {
                 // Response
                 type_of_val(&By::<FunctionId>::select::<DaoQueries, FunctionVersionDBWithNames>),
                 type_of_val(&
-                    With::<FunctionVersionDBWithNames>::convert_to::<FunctionVersionBuilder, _>,
+                                With::<FunctionVersionDBWithNames>::convert_to::<FunctionVersionBuilder, _>,
                 ),
                 type_of_val(&With::<FunctionVersionBuilder>::build::<FunctionVersion, _>),
             ],
@@ -307,7 +312,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_foo")?
             .try_description("function_foo description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
@@ -350,7 +355,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_foo")?
             .try_description("function_foo description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
@@ -393,7 +398,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_foo")?
             .try_description("function_foo description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
@@ -436,7 +441,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_foo")?
             .try_description("function_foo description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
@@ -479,7 +484,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("function_1 description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_1 snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
@@ -513,7 +518,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_2")?
             .try_description("function_2 description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
@@ -559,7 +564,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("function_1 description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_1 snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
@@ -602,7 +607,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_2")?
             .try_description("function_2 description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
@@ -650,7 +655,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("function_1 description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_1 snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
@@ -698,7 +703,7 @@ mod tests {
         let create = FunctionRegister::builder()
             .try_name("function_2")?
             .try_description("function_2 description")?
-            .bundle_id(&bundle_id)
+            .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())

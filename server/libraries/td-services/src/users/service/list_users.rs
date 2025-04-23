@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::users::layers::list_users_sql_select;
+use crate::users::layers::list_users_sql_select;
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -55,7 +55,7 @@ impl ListUsersService {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::logic::users::service::list_users::ListUsersService;
+    use crate::users::service::list_users::ListUsersService;
     use std::collections::HashSet;
     use std::sync::Arc;
     use td_authz::AuthzContext;
@@ -68,8 +68,8 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_list_provider() {
-        use crate::logic::users::layers::list_users_sql_select;
-        use crate::logic::users::service::list_users::ListUsersService;
+        use crate::users::layers::list_users_sql_select;
+        use crate::users::service::list_users::ListUsersService;
         use td_authz::Authz;
         use td_objects::crudl::{ListRequest, ListResponse};
         use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};

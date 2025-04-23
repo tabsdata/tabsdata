@@ -70,7 +70,7 @@ pub async fn user_id_to_user_id(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::logic::users::service::read_user::ReadUserService;
+    use crate::users::service::read_user::ReadUserService;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_objects::crudl::RequestContext;
@@ -81,15 +81,15 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_read_provider() {
-        use td_objects::tower_service::extractor::extract_user_id;
-        use crate::logic::users::service::read_user::user_id_to_user_id;
-        use crate::logic::users::service::read_user::ReadUserService;
+        use crate::users::service::read_user::user_id_to_user_id;
+        use crate::users::service::read_user::ReadUserService;
         use td_authz::Authz;
         use td_objects::crudl::ReadRequest;
         use td_objects::dlo::UserName;
         use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
         use td_objects::tower_service::extractor::extract_name;
         use td_objects::tower_service::extractor::extract_req_context;
+        use td_objects::tower_service::extractor::extract_user_id;
         use td_objects::tower_service::finder::find_by_name;
         use td_objects::tower_service::mapper::map;
         use td_objects::users::dao::UserWithNames;

@@ -11,7 +11,6 @@ pub mod password_change;
 pub mod role_change;
 pub mod user_info;
 
-pub mod admin_only_layer;
 pub mod auth_secure;
 pub mod auth_unsecure;
 pub mod authorization_layer;

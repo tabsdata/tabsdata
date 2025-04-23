@@ -4,7 +4,7 @@
 
 use std::env;
 use tabsdatalib::bin::platform::bootloader;
-use td_attach::attach;
+use td_common::attach::attach;
 use td_common::logging;
 use tracing::{info, Level};
 

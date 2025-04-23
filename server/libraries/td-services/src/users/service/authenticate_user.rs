@@ -60,8 +60,7 @@ impl AuthenticateUserService {
 }
 
 #[cfg(test)]
-pub mod tests {
-    use td_objects::jwt::jwt_logic::{JwtLogic, TokenResponse};
+mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
@@ -74,6 +73,7 @@ pub mod tests {
         use chrono::Duration;
         use std::sync::Arc;
         use td_objects::dlo::UserName;
+        use td_objects::jwt::jwt_logic::{JwtLogic, TokenResponse};
         use td_objects::tower_service::extractor::extract_user_id;
         use td_objects::tower_service::extractor::extract_user_name;
         use td_objects::tower_service::finder::find_by_name;

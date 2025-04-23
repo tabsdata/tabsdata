@@ -43,7 +43,6 @@ mod tests {
     use crate::test_utils::seed_function2::seed_function;
     use crate::types::basic::BundleId;
     use crate::types::basic::CollectionName;
-    use crate::types::basic::ExecutionStatus;
     use crate::types::basic::UserId;
     use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
@@ -81,29 +80,14 @@ mod tests {
 
         let (_, function_version) = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(
-            &db,
-            &collection,
-            &function_version,
-            &ExecutionStatus::Scheduled,
-        )
-        .await;
+        let execution = seed_execution(&db, &collection, &function_version).await;
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
-        let transaction = seed_transaction(
-            &db,
-            &execution,
-            &transaction_key,
-            &TransactionStatus::scheduled(),
-        )
-        .await;
+        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
 
         assert_eq!(transaction.execution_id(), execution.id());
         assert_eq!(*transaction.transaction_key(), transaction_key);
         assert_eq!(transaction.triggered_on(), transaction.triggered_on());
         assert_eq!(transaction.triggered_by_id(), execution.triggered_by_id());
-        assert_eq!(transaction.started_on(), execution.started_on());
-        assert_eq!(transaction.ended_on(), execution.ended_on());
-        assert_eq!(*transaction.status(), TransactionStatus::scheduled());
     }
 }

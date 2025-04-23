@@ -41,7 +41,7 @@ pub trait SessionProvider<'a>:
             .await?
             .get(access_token_id)
             .cloned()
-            .ok_or_else(|| SessionError::NotFound(access_token_id.clone()).into())
+            .ok_or_else(|| SessionError::NotFound(*access_token_id).into())
     }
 }
 
@@ -104,7 +104,7 @@ impl<'a> Provider<'a, HashMap<AccessTokenId, Arc<Session>>, Option<&'a mut Sqlit
         Ok(Arc::new(
             sessions
                 .into_iter()
-                .map(|s| (s.access_token_id().clone(), Arc::new(s)))
+                .map(|s| (*s.access_token_id(), Arc::new(s)))
                 .collect(),
         ))
     }
@@ -160,7 +160,7 @@ impl<'a> SessionProvider<'a>
         self.get(conn)
             .await?
             .get(access_token_id)
-            .ok_or_else(|| SessionError::NotFound(access_token_id.clone()).into())
+            .ok_or_else(|| SessionError::NotFound(*access_token_id).into())
             .cloned()
     }
 }

@@ -54,7 +54,6 @@ toml = { workspace = true }
 ## Libraries
 
 td-common = { workspace = true }
-td-execution = { workspace = true }
 
 # External dependencies
 

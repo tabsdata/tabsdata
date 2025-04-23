@@ -83,13 +83,7 @@ mod tests {
 
         let (_, function_version) = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(
-            &db,
-            &collection,
-            &function_version,
-            &ExecutionStatus::Scheduled,
-        )
-        .await;
+        let execution = seed_execution(&db, &collection, &function_version).await;
         assert_eq!(
             *execution.name(),
             Some(ExecutionName::try_from("test_execution").unwrap())
@@ -101,8 +95,5 @@ mod tests {
             **function_version.defined_by_id()
         );
         assert!(*execution.triggered_on() < TriggeredOn::now().await);
-        assert_eq!(*execution.started_on(), None);
-        assert_eq!(*execution.ended_on(), None);
-        assert_eq!(*execution.status(), ExecutionStatus::Scheduled);
     }
 }

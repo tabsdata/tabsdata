@@ -52,9 +52,9 @@ pub async fn upload_function_write_to_storage(
     let storage_location =
         StorageLocation::try_from(&*storage_version).map_err(UploadError::InvalidStorageVersion)?;
     let (location, _) = storage_location
-        .builder(&*data_location)
-        .collection(&*collection_id)
-        .function(&*bundle_id)
+        .builder(&data_location)
+        .collection(&collection_id)
+        .function(&bundle_id)
         .build();
 
     storage

@@ -144,11 +144,7 @@ where
         for<'a> T: Send + Sync + 'a,
         for<'a> F: From<&'a T>,
     {
-        let output = input
-            .iter()
-            .map(|item| F::from(item))
-            .collect::<Vec<F>>()
-            .into();
+        let output = input.iter().map(|item| F::from(item)).collect::<Vec<F>>();
         Ok(output)
     }
 }

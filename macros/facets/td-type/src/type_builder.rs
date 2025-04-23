@@ -239,7 +239,7 @@ fn type_for_field<'a>(fields: &'a Fields, field_name: &str) -> &'a Type {
     let field_type = fields
         .iter()
         .find_map(|f| {
-            if f.ident.as_ref().map_or(false, |ident| ident == field_name) {
+            if f.ident.as_ref().is_some_and(|ident| ident == field_name) {
                 Some(&f.ty)
             } else {
                 None

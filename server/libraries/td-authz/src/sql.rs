@@ -57,7 +57,7 @@ impl<'a> Provider<'a, HashMap<RoleId, Arc<Vec<Permission>>>, &'a mut SqliteConne
             .map_err(handle_sql_err)?;
         let role_permissions_map = permissions
             .iter()
-            .map(|p| (p.role_id().clone(), try_to_permission(p).unwrap())) //TODO change the try_to_permission
+            .map(|p| (*p.role_id(), try_to_permission(p).unwrap())) //TODO change the try_to_permission
             .into_group_map()
             .into_iter()
             .map(|(role, perms)| (role, Arc::new(perms)))

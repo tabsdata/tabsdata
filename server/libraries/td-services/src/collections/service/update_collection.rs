@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::collections::layers::{
+use crate::collections::layers::{
     update_collection_build_dao, update_collection_sql_update, update_collection_validate,
 };
 use std::sync::Arc;
@@ -95,7 +95,7 @@ impl UpdateCollectionService {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::logic::collections::service::update_collection::UpdateCollectionService;
+    use crate::collections::service::update_collection::UpdateCollectionService;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_common::id::Id;
@@ -111,11 +111,11 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_update_provider() {
-        use crate::logic::collections::layers::update_collection_validate;
-        use crate::logic::collections::layers::{
+        use crate::collections::layers::update_collection_validate;
+        use crate::collections::layers::{
             update_collection_build_dao, update_collection_sql_update,
         };
-        use crate::logic::collections::service::update_collection::UpdateCollectionService;
+        use crate::collections::service::update_collection::UpdateCollectionService;
         use td_authz::Authz;
         use td_objects::collections::dao::{Collection, CollectionWithNames};
         use td_objects::collections::dto::CollectionRead;

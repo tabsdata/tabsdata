@@ -169,6 +169,7 @@ mod tests {
                     type_of_val(
                         &extract_req_name::<CreateRequest<FunctionParam, ExecutionRequest>, _>,
                     ),
+                    type_of_val(&With::<RequestContext>::extract::<AtTime>),
                     type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
                     type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
                     type_of_val(&combine::<CollectionIdName, FunctionIdName>),

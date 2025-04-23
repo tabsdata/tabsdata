@@ -142,9 +142,10 @@ mod tests {
     use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_services::collections::service::CollectionServices;
     use tower::ServiceExt;
 
-    async fn collections_state() -> CollectionsState {
+    async fn collections_state() -> Collections {
         let db: &'static DbPool = Box::leak(Box::new(td_database::test_utils::db().await.unwrap()));
         let logic = CollectionServices::new(db.clone(), Arc::new(AuthzContext::default()));
         Arc::new(logic)

@@ -15,7 +15,7 @@ use td_database::sql::SqliteConfig;
 use td_error::td_error;
 use td_services::auth::services::{JwtConfig, PasswordHashConfig};
 use td_storage::MountDef;
-use td_transaction::TransactionBy;
+use te_execution::transaction::TransactionBy;
 
 #[derive(Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
@@ -79,15 +79,17 @@ impl Display for Config {
     }
 }
 
-impl Into<JwtConfig> for &Config {
-    fn into(self) -> JwtConfig {
-        self.jwt.clone()
+impl td_common::config::Config for Config {}
+
+impl From<&Config> for JwtConfig {
+    fn from(config: &Config) -> Self {
+        config.jwt.clone()
     }
 }
 
-impl Into<PasswordHashConfig> for &Config {
-    fn into(self) -> PasswordHashConfig {
-        self.password.clone()
+impl From<&Config> for PasswordHashConfig {
+    fn from(config: &Config) -> Self {
+        config.password.clone()
     }
 }
 
@@ -174,7 +176,7 @@ impl Params {
             }
             _ => {}
         }
-        if config.storage_mounts()?.len() == 0 {
+        if config.storage_mounts()?.is_empty() {
             Err(ConfigError::MissingStorageUrl)?;
         }
         Ok(config)
@@ -188,8 +190,6 @@ fn parse_socket_addr(addr: &str) -> Result<SocketAddr, AddrParseError> {
 fn parse_transaction_by(transaction_by: &str) -> Result<TransactionBy, ParseError> {
     TransactionBy::try_from(transaction_by)
 }
-
-impl td_common::config::Config for Config {}
 
 #[td_error]
 pub enum ConfigError {

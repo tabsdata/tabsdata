@@ -39,12 +39,7 @@ impl AuthzContextT for AuthzContextImplWithCache<'_> {
         conn: &mut SqliteConnection,
         role: &RoleId,
     ) -> Result<Option<Arc<Vec<Permission>>>, TdError> {
-        Ok(self
-            .provider
-            .get(conn)
-            .await?
-            .get(role)
-            .map(|permissions| permissions.clone()))
+        Ok(self.provider.get(conn).await?.get(role).cloned())
     }
 
     async fn refresh(&self, conn: &mut SqliteConnection) -> Result<(), TdError> {

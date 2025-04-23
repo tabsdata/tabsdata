@@ -62,7 +62,7 @@ impl ReadCollectionService {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::logic::collections::service::read_collection::ReadCollectionService;
+    use crate::collections::service::read_collection::ReadCollectionService;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_common::id::Id;
@@ -77,7 +77,7 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_read_provider() {
-        use crate::logic::collections::service::read_collection::ReadCollectionService;
+        use crate::collections::service::read_collection::ReadCollectionService;
         use td_authz::{Authz, AuthzContext};
         use td_objects::collections::dao::CollectionWithNames;
         use td_objects::collections::dto::CollectionRead;

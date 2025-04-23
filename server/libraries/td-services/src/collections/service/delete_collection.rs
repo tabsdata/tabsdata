@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::collections::layers::{delete_collection_contents, delete_collection_sql_delete};
+use crate::collections::layers::{delete_collection_contents, delete_collection_sql_delete};
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -66,7 +66,7 @@ impl DeleteCollectionService {
 
 #[cfg(test)]
 mod tests {
-    use crate::logic::collections::service::delete_collection::DeleteCollectionService;
+    use crate::collections::service::delete_collection::DeleteCollectionService;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_objects::crudl::RequestContext;
@@ -78,10 +78,10 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_delete_service() {
-        use crate::logic::collections::layers::{
+        use crate::collections::layers::{
             delete_collection_contents, delete_collection_sql_delete,
         };
-        use crate::logic::collections::service::delete_collection::DeleteCollectionService;
+        use crate::collections::service::delete_collection::DeleteCollectionService;
         use td_authz::Authz;
         use td_objects::collections::dao::Collection;
         use td_objects::crudl::DeleteRequest;

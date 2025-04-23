@@ -2,14 +2,14 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::users::layers::{
+use crate::users::layers::{
     update_user_build_dao, update_user_sql_update, update_user_validate,
     update_user_validate_enabled, update_user_validate_password_change,
     update_user_validate_password_force_change_as_admin,
     update_user_validate_password_force_change_as_non_admin, user_extract_password,
     user_validate_password,
 };
-use crate::logic::users::service::read_user::user_id_to_user_id;
+use crate::users::service::read_user::user_id_to_user_id;
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -119,7 +119,7 @@ impl UpdateUserService {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::logic::users::service::update_user::UpdateUserService;
+    use crate::users::service::update_user::UpdateUserService;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_common::id::Id;
@@ -135,19 +135,19 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_update_provider() {
-        use td_authz::{Authz, AuthzContext};
-        use crate::logic::users::layers::{update_user_build_dao, update_user_sql_update};
-        use crate::logic::users::layers::{
+        use crate::users::layers::{update_user_build_dao, update_user_sql_update};
+        use crate::users::layers::{
             update_user_validate, update_user_validate_enabled,
             update_user_validate_password_change,
         };
-        use crate::logic::users::layers::{
+        use crate::users::layers::{
             update_user_validate_password_force_change_as_admin,
             update_user_validate_password_force_change_as_non_admin,
         };
-        use crate::logic::users::service::read_user::user_id_to_user_id;
-        use crate::logic::users::service::update_user::UpdateUserService;
+        use crate::users::service::read_user::user_id_to_user_id;
+        use crate::users::service::update_user::UpdateUserService;
         use std::sync::Arc;
+        use td_authz::{Authz, AuthzContext};
         use td_objects::crudl::UpdateRequest;
         use td_objects::dlo::UserId;
         use td_objects::dlo::UserName;
@@ -172,7 +172,7 @@ pub mod tests {
         let provider =
             UpdateUserService::provider(db, password_config, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
-        use crate::logic::users::layers::{user_extract_password, user_validate_password};
+        use crate::users::layers::{user_extract_password, user_validate_password};
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<UpdateRequest<String, UserUpdate>, UserRead>(&[

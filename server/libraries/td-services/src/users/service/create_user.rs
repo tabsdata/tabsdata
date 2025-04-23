@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::logic::users::layers::{
+use crate::users::layers::{
     create_user_build_dao, create_user_sql_insert, user_extract_password, user_validate_password,
 };
 use std::sync::Arc;
@@ -103,11 +103,11 @@ pub mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_create_provider() {
-        use crate::logic::users::layers::{
+        use crate::users::layers::{
             create_user_build_dao, create_user_sql_insert, user_extract_password,
             user_validate_password,
         };
-        use crate::logic::users::service::create_user::CreateUserService;
+        use crate::users::service::create_user::CreateUserService;
         use td_authz::Authz;
         use td_objects::crudl::CreateRequest;
         use td_objects::dlo::UserId;
@@ -259,7 +259,7 @@ pub mod tests {
                 .unwrap();
             let request = RequestContext::with(
                 AccessTokenId::default(),
-                &admin_user,
+                admin_user,
                 RoleId::sec_admin(),
                 false,
             )

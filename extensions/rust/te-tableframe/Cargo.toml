@@ -40,13 +40,10 @@ ignored = ["openssl", "td-common"]
 
 # Internal dependencies
 
-td-common = { workspace = true }
-td-execution = { workspace = true }
 ta-tableframe = { workspace = true }
+td-common = { workspace = true }
 
 # External dependencies
-
-petgraph = { workspace = true }
 
 [dev-dependencies]
 ta-tableframe = { workspace = true, features = ["td-test"] }

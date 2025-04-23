@@ -209,15 +209,22 @@ mod tests {
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
                 // If function has a new name, check new name does not exist in collection.
                 type_of_val(&assert_function_name_not_exists::<DaoQueries>),
+                // Get location and storage version.
+                type_of_val(&With::<StorageVersion>::default),
+                type_of_val(&data_location),
                 // Insert into function_versions(sql) status=Active.
                 type_of_val(&With::<FunctionUpdate>::convert_to::<FunctionVersionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<FunctionVersionDBBuilder, _>),
                 type_of_val(&With::<CollectionId>::set::<FunctionVersionDBBuilder>),
                 // We maintain the same function id
                 type_of_val(&With::<FunctionId>::set::<FunctionVersionDBBuilder>),
-                // TODO missing data_location and storage_version
+                type_of_val(&With::<StorageVersion>::set::<FunctionVersionDBBuilder>),
+                type_of_val(&With::<DataLocation>::set::<FunctionVersionDBBuilder>),
                 type_of_val(&With::<FunctionVersionDBBuilder>::build::<FunctionVersionDB, _>),
                 type_of_val(&insert::<DaoQueries, FunctionVersionDB>),
+                // Remove from bundles
+                type_of_val(&With::<FunctionVersionDB>::extract::<BundleId>),
+                type_of_val(&By::<BundleId>::delete::<DaoQueries, BundleDB>),
                 // Update functions(sql) table.
                 type_of_val(&With::<FunctionVersionDB>::convert_to::<FunctionDBBuilder, _>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB, _>),

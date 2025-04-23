@@ -67,8 +67,8 @@ pub const COMPLETE_FOLDER: &str = "complete";
 pub const ERROR_FOLDER: &str = "error";
 pub const FAIL_FOLDER: &str = "fail";
 
-pub const UNKNOWN_RUN: i16 = 0;
-pub const INITIAL_RUN: i16 = 1;
+pub const UNKNOWN_RUN: u16 = 0;
+pub const INITIAL_RUN: u16 = 1;
 
 pub const RETRIES_DELIMITER: &str = "_";
 pub const INITIAL_CALL: &str = concatcp!(RETRIES_DELIMITER, INITIAL_RUN);
@@ -224,7 +224,7 @@ fn default_status() -> FunctionRunUpdateStatus {
 }
 
 fn default_execution() -> i16 {
-    INITIAL_RUN
+    INITIAL_RUN as i16
 }
 
 impl ResponseMessagePayload {
@@ -499,7 +499,7 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
     }
 
     async fn commit(&self, id: &str) -> Result<(), QueueError> {
-        if !self.check(&id) {
+        if !self.check(id) {
             return Err(MessageNonExisting { id: id.to_string() });
         };
         let lock_message_path = self
@@ -513,7 +513,7 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
     }
 
     async fn rollback(&self, id: &str) -> Result<(), QueueError> {
-        if !self.check(&id) {
+        if !self.check(id) {
             return Err(MessageNonExisting { id: id.to_string() });
         };
         let lock_message_path = self
@@ -594,7 +594,7 @@ mod tests {
             "File '.yaml' exists and it shouldn't"
         );
 
-        queue.commit(message.id().to_string()).await.unwrap();
+        queue.commit(message.id()).await.unwrap();
 
         assert!(
             !lock_message_path.exists(),
@@ -647,7 +647,7 @@ mod tests {
             "File '.yaml' exists and it shouldn't"
         );
 
-        queue.rollback(message.id().to_string()).await.unwrap();
+        queue.rollback(message.id()).await.unwrap();
 
         assert!(
             !lock_message_path.exists(),
@@ -684,7 +684,7 @@ mod tests {
     async fn test_commit_non_existing_message() {
         let queue = FileWorkerMessageQueue::new().await.unwrap();
         let message = "test_message4";
-        let result = queue.commit(message.to_string()).await;
+        let result = queue.commit(message).await;
         assert!(matches!(result, Err(MessageNonExisting { .. })));
     }
 
@@ -692,7 +692,7 @@ mod tests {
     async fn test_rollback_non_existing_message() {
         let queue = FileWorkerMessageQueue::new().await.unwrap();
         let message = "test_message5";
-        let result = queue.commit(message.to_string()).await;
+        let result = queue.commit(message).await;
         assert!(matches!(result, Err(MessageNonExisting { .. })));
     }
 }

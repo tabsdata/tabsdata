@@ -9,7 +9,6 @@ use td_error::TdError;
 use td_objects::crudl::{assert_one, handle_sql_err};
 use td_objects::sql::recursive::RecursiveQueries;
 use td_objects::sql::{DerefQueries, UpdateBy};
-use td_objects::tower_service::from::BuildService;
 use td_objects::types::basic::FunctionRunId;
 use td_objects::types::execution::FunctionRunStatus;
 use td_objects::types::execution::{
@@ -210,7 +209,7 @@ pub async fn update_table_data_version_status<Q: DerefQueries>(
     SrvCtx(queries): SrvCtx<Q>,
     Connection(connection): Connection,
     Input(function_run_id): Input<FunctionRunId>,
-    Input(callback): Input<CallbackRequest>,
+    Input(_callback): Input<CallbackRequest>,
 ) -> Result<(), TdError> {
     // let context = callback.context().as_ref().unwrap(); // TODO this unwrap
     // let output = match context {

@@ -714,7 +714,7 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
 
         impl From<&#name> for #name {
             fn from(val: &#name) -> Self {
-                val.clone()
+                *val
             }
         }
 

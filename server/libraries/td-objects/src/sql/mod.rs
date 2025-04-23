@@ -522,10 +522,13 @@ mod tests {
         let query = query_builder.build_query_as();
 
         let query_str = query.sql();
-        assert_eq!(query_str, "SELECT id, name, modified_on FROM test_table");
+        assert_eq!(
+            query_str,
+            "SELECT id, name, modified_on FROM test_table WHERE 1 = 0"
+        );
 
         let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result, *FIXTURE_DAOS);
+        assert_eq!(result.len(), 0);
         Ok(())
     }
 

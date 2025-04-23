@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 use std::{process, thread};
-use td_attach::attach;
+use td_common::attach::attach;
 use td_common::logging;
 use tracing::{info, Level};
 

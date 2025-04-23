@@ -59,6 +59,8 @@ pub async fn table(
         .name(table.try_into().map_err(Into::into).unwrap())
         .function_version_id(FUNCTION_VERSION_ID.deref())
         .function_param_pos(None)
+        .private(false)
+        .partitioned(false)
         .defined_on(AtTime::now().await)
         .defined_by_id(UserId::default())
         .status(TableStatus::Active)

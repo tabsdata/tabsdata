@@ -46,7 +46,7 @@ mod tests {
         let function = FunctionVersionNode::builder()
             .collection_id(CollectionId::default())
             .collection(CollectionName::try_from("test")?)
-            .function_version_id(&key)
+            .function_version_id(key)
             .name(FunctionName::try_from("name")?)
             .build()?;
 

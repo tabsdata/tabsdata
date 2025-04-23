@@ -121,26 +121,25 @@ pub async fn delete_user(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
-    use crate::jwt::jwt_logic::JwtLogic;
-    use crate::router::users::service::UserServices;
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
     use axum::Router;
     use chrono::Duration;
     use http::method::Method;
     use serde_json::json;
+    use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_database::sql::DbPool;
+    use td_objects::jwt::jwt_logic::JwtLogic;
     use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::RoleId;
     use td_objects::types::basic::UserId;
     use td_security::config::PasswordHashingConfig;
+    use td_services::users::service::UserServices;
     use tower::ServiceExt;
 
-    async fn users_state() -> UsersState {
+    async fn users_state() -> Users {
         let db: &'static DbPool = Box::leak(Box::new(td_database::test_utils::db().await.unwrap()));
         let jwt_logic = Arc::new(JwtLogic::new(
             "SECRET",

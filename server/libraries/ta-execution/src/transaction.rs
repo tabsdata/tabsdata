@@ -76,7 +76,7 @@ mod tests {
         let mut transaction_map = TransactionMap::new(transaction_by);
         let function = function_node("test_function");
 
-        let id = transaction_map.add(&function)?.clone();
+        let id = *transaction_map.add(&function)?;
         let key = TransactionKey::try_from("test_function")?;
         assert_eq!(id, *transaction_map.get(&key)?);
         Ok(())

@@ -23,6 +23,7 @@ pub async fn seed_function_run(
         .execution_id(execution.id())
         .transaction_id(transaction.id())
         .triggered_on(transaction.triggered_on())
+        .triggered_by_id(transaction.triggered_by_id())
         .trigger(Trigger::manual())
         .status(status)
         .build()
@@ -47,9 +48,7 @@ mod tests {
     use crate::test_utils::seed_execution::seed_execution;
     use crate::test_utils::seed_function2::seed_function;
     use crate::test_utils::seed_transaction2::seed_transaction;
-    use crate::types::basic::{
-        BundleId, CollectionName, ExecutionStatus, TransactionKey, TransactionStatus, UserId,
-    };
+    use crate::types::basic::{BundleId, CollectionName, TransactionKey, UserId};
     use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
@@ -86,22 +85,10 @@ mod tests {
 
         let (_, function_version) = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(
-            &db,
-            &collection,
-            &function_version,
-            &ExecutionStatus::Scheduled,
-        )
-        .await;
+        let execution = seed_execution(&db, &collection, &function_version).await;
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
-        let transaction = seed_transaction(
-            &db,
-            &execution,
-            &transaction_key,
-            &TransactionStatus::scheduled(),
-        )
-        .await;
+        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
 
         let function_run = seed_function_run(
             &db,
@@ -109,7 +96,7 @@ mod tests {
             &function_version,
             &execution,
             &transaction,
-            &FunctionRunStatus::scheduled(),
+            &FunctionRunStatus::Scheduled,
         )
         .await;
 
@@ -119,8 +106,6 @@ mod tests {
         assert_eq!(function_run.transaction_id(), transaction.id());
         assert_eq!(function_run.triggered_on(), transaction.triggered_on());
         assert_eq!(*function_run.trigger(), Trigger::manual());
-        assert_eq!(function_run.started_on(), transaction.started_on());
-        assert_eq!(function_run.ended_on(), transaction.ended_on());
-        assert_eq!(*function_run.status(), FunctionRunStatus::scheduled());
+        assert_eq!(*function_run.status(), FunctionRunStatus::Scheduled);
     }
 }
