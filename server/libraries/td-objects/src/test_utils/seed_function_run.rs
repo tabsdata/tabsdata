@@ -3,9 +3,9 @@
 //
 
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{FunctionRunStatus, Trigger};
+use crate::types::basic::Trigger;
 use crate::types::collection::CollectionDB;
-use crate::types::execution::{ExecutionDB, FunctionRunDB, TransactionDB};
+use crate::types::execution::{ExecutionDB, FunctionRunDB, FunctionRunStatus, TransactionDB};
 use crate::types::function::FunctionVersionDB;
 use td_database::sql::DbPool;
 
@@ -24,8 +24,6 @@ pub async fn seed_function_run(
         .transaction_id(transaction.id())
         .triggered_on(transaction.triggered_on())
         .trigger(Trigger::manual())
-        .started_on(transaction.started_on().clone())
-        .ended_on(transaction.ended_on().clone())
         .status(status)
         .build()
         .unwrap();
@@ -52,7 +50,7 @@ mod tests {
     use crate::types::basic::{
         BundleId, CollectionName, ExecutionStatus, TransactionKey, TransactionStatus, UserId,
     };
-    use crate::types::function::FunctionCreate;
+    use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -69,7 +67,7 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin")
             .unwrap()
             .try_description("function_foo description")
@@ -92,7 +90,7 @@ mod tests {
             &db,
             &collection,
             &function_version,
-            &ExecutionStatus::scheduled(),
+            &ExecutionStatus::Scheduled,
         )
         .await;
 

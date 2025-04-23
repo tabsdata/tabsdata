@@ -4,7 +4,7 @@
 
 use crate::sql::{DaoQueries, Insert};
 use crate::test_utils::seed_user::admin_user;
-use crate::types::basic::{ExecutionName, ExecutionStatus, TriggeredById, TriggeredOn};
+use crate::types::basic::{ExecutionName, TriggeredOn, UserId};
 use crate::types::collection::CollectionDB;
 use crate::types::execution::ExecutionDB;
 use crate::types::function::FunctionVersionDB;
@@ -14,10 +14,9 @@ pub async fn seed_execution(
     db: &DbPool,
     collection: &CollectionDB,
     function_version: &FunctionVersionDB,
-    status: &ExecutionStatus,
 ) -> ExecutionDB {
     let admin_id = admin_user(db).await;
-    let admin_id = TriggeredById::try_from(admin_id).unwrap();
+    let admin_id = UserId::try_from(admin_id).unwrap();
 
     let execution_db = ExecutionDB::builder()
         .name(ExecutionName::try_from("test_execution").unwrap())
@@ -25,9 +24,6 @@ pub async fn seed_execution(
         .function_version_id(function_version.id())
         .triggered_on(TriggeredOn::now().await)
         .triggered_by_id(admin_id)
-        .started_on(None)
-        .ended_on(None)
-        .status(status)
         .build()
         .unwrap();
 
@@ -51,7 +47,7 @@ mod tests {
     use crate::types::basic::BundleId;
     use crate::types::basic::CollectionName;
     use crate::types::basic::UserId;
-    use crate::types::function::FunctionCreate;
+    use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -68,7 +64,7 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin")
             .unwrap()
             .try_description("function_foo description")
@@ -91,7 +87,7 @@ mod tests {
             &db,
             &collection,
             &function_version,
-            &ExecutionStatus::scheduled(),
+            &ExecutionStatus::Scheduled,
         )
         .await;
         assert_eq!(
@@ -107,6 +103,6 @@ mod tests {
         assert!(*execution.triggered_on() < TriggeredOn::now().await);
         assert_eq!(*execution.started_on(), None);
         assert_eq!(*execution.ended_on(), None);
-        assert_eq!(*execution.status(), ExecutionStatus::scheduled());
+        assert_eq!(*execution.status(), ExecutionStatus::Scheduled);
     }
 }

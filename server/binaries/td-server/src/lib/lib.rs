@@ -3,5 +3,4 @@
 //
 
 pub mod bin;
-pub mod common;
 pub mod logic;

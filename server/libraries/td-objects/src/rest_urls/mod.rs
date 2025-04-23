@@ -6,8 +6,8 @@ use crate::dlo::{
     CollectionName, Creator, DatasetName, ExecutionPlanId, TableName, WorkerMessageId,
 };
 use crate::types::basic::{
-    CollectionIdName, FunctionIdName, FunctionVersionIdName, PermissionIdName, RoleIdName,
-    TableIdName, UserIdName,
+    CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId, FunctionVersionIdName,
+    PermissionIdName, RoleIdName, TableIdName, TransactionIdName, UserIdName,
 };
 use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
 use constcat::concat;
@@ -159,12 +159,6 @@ impl Creator<ExecutionPlanIdParam> for ExecutionPlanId {
         ExecutionPlanId::new(value.into().execution_plan_id())
     }
 }
-
-pub const TRANSACTIONS: &str = "/transactions";
-pub const TRANSACTION: &str = concat!(TRANSACTIONS, "/{transaction_id}");
-pub const TRANSACTION_CANCEL: &str = concat!(TRANSACTION, "/cancel");
-pub const TRANSACTION_RECOVER: &str = concat!(TRANSACTION, "/recover");
-pub const TRANSACTIONS_LIST: &str = TRANSACTIONS;
 
 pub const COMMITS: &str = "/commits";
 pub const COMMITS_LIST: &str = COMMITS;
@@ -509,7 +503,13 @@ pub const OPENAPI_JSON_URL: &str = url!(BASE_API_URL, "/api-docs/openapi.json");
 
 // Private URLs
 pub const INTERNAL_PREFIX: &str = url!("/internal");
-pub const UPDATE_DATA_VERSION: &str = url!(INTERNAL_PREFIX, "/data_version/{data_version_id}");
+pub const UPDATE_FUNCTION_RUN: &str = url!(INTERNAL_PREFIX, "/function_run/{function_run_id}");
+
+#[td_type::UrlParam]
+pub struct FunctionRunParam {
+    #[td_type(extractor)]
+    function_run_id: FunctionRunId,
+}
 
 // Endpoints URLs
 
@@ -594,7 +594,7 @@ pub const FUNCTION_GET: &str = url!(FUNCTION);
 pub const FUNCTION_DELETE: &str = url!(FUNCTION);
 pub const FUNCTION_LIST: &str = url!(FUNCTIONS);
 pub const FUNCTION_UPDATE: &str = url!(FUNCTION);
-pub const FUNCTION_UPLOAD: &str = url!(FUNCTION, "/upload/{function_id}");
+pub const FUNCTION_UPLOAD: &str = url!(FUNCTION, "/upload");
 pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
 pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
 
@@ -629,3 +629,30 @@ pub const TABLE_DELETE: &str = TABLE;
 pub const TABLE_SCHEMA: &str = concat!(TABLE, "/schema");
 pub const TABLE_SAMPLE: &str = concat!(TABLE, "/sample");
 pub const TABLE_DATA: &str = concat!(TABLE, "/data");
+
+// Executions
+pub const EXECUTIONS: &str = url!(COLLECTION, "/executions");
+pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
+
+#[td_type::UrlParam]
+pub struct ExecutionParam {
+    #[td_type(extractor)]
+    transaction: ExecutionIdName,
+}
+
+pub const EXECUTION_CANCEL: &str = concat!(EXECUTION, "/cancel");
+pub const EXECUTION_RECOVER: &str = concat!(EXECUTION, "/recover");
+
+// Transactions
+pub const TRANSACTIONS: &str = url!(COLLECTION, "/transactions");
+pub const TRANSACTION: &str = url!(TRANSACTIONS, "/{transaction}");
+
+#[td_type::UrlParam]
+pub struct TransactionParam {
+    #[td_type(extractor)]
+    transaction: TransactionIdName,
+}
+
+pub const TRANSACTION_CANCEL: &str = concat!(TRANSACTION, "/cancel");
+pub const TRANSACTION_RECOVER: &str = concat!(TRANSACTION, "/recover");
+pub const TRANSACTIONS_LIST: &str = TRANSACTIONS;

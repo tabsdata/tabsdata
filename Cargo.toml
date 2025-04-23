@@ -32,13 +32,15 @@ version = "0.9.6"
 members = [
     "devutils/automation/tasks/cargo/td-build",
     "devutils/automation/tasks/makers/td-xtask",
+    "server/libraries/ta-apiserver",
+    "server/libraries/ta-execution",
+    "server/libraries/ta-tableframe",
+    "server/libraries/td-apiserver",
     "server/libraries/td-authz",
     "server/libraries/td-common",
     "server/libraries/td-database",
     "server/libraries/td-error",
     "server/libraries/td-execution",
-    "server/libraries/ta-execution",
-    "server/libraries/ta-tableframe",
     "server/libraries/td-objects",
     "server/libraries/td-python",
     "server/libraries/td-schema",
@@ -47,6 +49,7 @@ members = [
     "server/libraries/td-storage",
     "server/libraries/td-test",
     "server/libraries/td-tower",
+    "extensions/rust/te-apiserver",
     "extensions/rust/te-execution",
     "extensions/rust/te-tableframe",
     "server/binaries/td-server",
@@ -156,6 +159,18 @@ path = "macros/facets/tm-workspace"
 
 ## Libraries
 
+[workspace.dependencies.ta-apiserver]
+path = "server/libraries/ta-apiserver"
+
+[workspace.dependencies.ta-execution]
+path = "server/libraries/ta-execution"
+
+[workspace.dependencies.ta-tableframe]
+path = "server/libraries/ta-tableframe"
+
+[workspace.dependencies.td-apiserver]
+path = "server/libraries/td-apiserver"
+
 [workspace.dependencies.td-authz]
 path = "server/libraries/td-authz"
 
@@ -173,12 +188,6 @@ path = "server/libraries/td-execution"
 
 [workspace.dependencies.te-tableframe]
 path = "extensions/rust/te-tableframe"
-
-[workspace.dependencies.ta-execution]
-path = "server/libraries/ta-execution"
-
-[workspace.dependencies.ta-tableframe]
-path = "server/libraries/ta-tableframe"
 
 [workspace.dependencies.td-objects]
 path = "server/libraries/td-objects"
@@ -207,6 +216,9 @@ path = "server/libraries/td-test"
 [workspace.dependencies.td-tower]
 path = "server/libraries/td-tower"
 
+[workspace.dependencies.te-apiserver]
+path = "extensions/rust/te-apiserver"
+
 [workspace.dependencies.te-execution]
 path = "extensions/rust/te-execution"
 
@@ -229,6 +241,9 @@ version = "0.3.0"
 
 [workspace.dependencies.axum]
 version = "0.8.1"
+
+[workspace.dependencies.axum-embed]
+version = "0.1.0"
 
 [workspace.dependencies.axum-extra]
 version = "0.10.0"
@@ -400,6 +415,9 @@ version = "1.11.1"
 
 [workspace.dependencies.reqwest]
 version = "0.12.15"
+
+[workspace.dependencies.rust-embed]
+version = "8.7.0"
 
 [workspace.dependencies.semver]
 version = "1.0.26"

@@ -3,8 +3,10 @@
 //
 
 pub mod absolute_path;
+pub mod attach;
 pub mod cli;
 pub mod config;
+pub mod datetime;
 pub mod env;
 pub mod execution_status;
 pub mod files;
@@ -17,6 +19,7 @@ pub mod os;
 pub mod provider;
 pub mod server;
 pub mod settings;
+pub mod signal;
 pub mod status;
 pub mod str;
 pub mod system_tables;

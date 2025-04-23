@@ -111,11 +111,15 @@ impl UtoipaDocsArguments {
         vec![
             CrateDir {
                 name: "crate".to_string(),
-                dir: format!("{}/server/binaries/td-server/src/lib", base_root_dir),
+                dir: format!("{}/server/libraries/td-apiserver/src", base_root_dir),
             },
             CrateDir {
                 name: "td_objects".to_string(),
                 dir: format!("{}/server/libraries/td-objects/src", base_root_dir),
+            },
+            CrateDir {
+                name: "td_services".to_string(),
+                dir: format!("{}/server/libraries/td-services/src", base_root_dir),
             },
         ]
     }

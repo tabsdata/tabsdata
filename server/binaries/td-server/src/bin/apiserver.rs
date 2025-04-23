@@ -4,10 +4,10 @@
 
 use std::env;
 use std::sync::Arc;
-use tabsdatalib::bin::apiserver::config::{Config, Params};
-use tabsdatalib::bin::apiserver::scheduler_server::SchedulerBuilder;
-use tabsdatalib::bin::apiserver::ApiServerInstance;
-use td_attach::attach;
+use td_apiserver::config::{Config, Params};
+use td_apiserver::router::scheduler_server::SchedulerBuilder;
+use td_apiserver::router::ApiServerInstance;
+use td_common::attach::attach;
 use td_common::cli::Cli;
 use td_common::logging;
 use td_common::server::FileWorkerMessageQueue;
@@ -81,7 +81,8 @@ fn main() {
                 worker_message_queue.clone(),
                 Arc::new(*config.addresses().first().unwrap()),
             )
-            .build();
+            .build()
+            .await;
 
             // Create and run the API server
             let apiserver = ApiServerInstance::new(config, db, storage).build().await;

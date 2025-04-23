@@ -1,0 +1,98 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Apiserver"
+edition = { workspace = true }
+name = "td-apiserver"
+publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+
+[lib]
+
+[features]
+api-docs = []
+enterprise = []
+td-test = ["dummy", "mock-env", "test-utils"]
+dummy = []
+mock-env = []
+sqlx_log = []
+test_logging = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+# External dependencies
+
+[dependencies]
+
+# Internal dependencies
+
+## Macros
+
+td-concrete = { workspace = true }
+td-error = { workspace = true }
+
+## Libraries
+
+td-apiforge = { workspace = true }
+td-build = { workspace = true }
+td-common = { workspace = true }
+td-database = { workspace = true }
+td-objects = { workspace = true }
+td-schema = { workspace = true }
+td-security = { workspace = true }
+td-services = { workspace = true }
+td-storage = { workspace = true }
+td-tower = { workspace = true }
+te-apiserver = { workspace = true }
+te-execution = { workspace = true }
+
+# External dependencies
+
+async-trait = { workspace = true }
+axum = { workspace = true }
+axum-extra = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+clap_derive = { workspace = true }
+derive_builder = { workspace = true }
+getset = { workspace = true }
+http = { workspace = true }
+itertools = "0.10.5"
+log = "0.4.26"
+paste = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true }
+tower = { workspace = true, features = ["buffer", "limit", "make", "timeout", "util"] }
+tower-http = { workspace = true, features = ["cors", "timeout", "trace"] }
+url = { workspace = true, features = ["serde"] }
+utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
+utoipa-axum = { version = "0.2.0" }
+utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
+
+[dev-dependencies]
+td-objects = { workspace = true, features = ["td-test"] }
+td-test = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }

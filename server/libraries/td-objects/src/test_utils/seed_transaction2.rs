@@ -3,7 +3,7 @@
 //
 
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::{TransactionId, TransactionKey, TransactionStatus};
+use crate::types::basic::{TransactionId, TransactionKey};
 use crate::types::execution::{ExecutionDB, TransactionDB};
 use td_database::sql::DbPool;
 
@@ -11,7 +11,6 @@ pub async fn seed_transaction(
     db: &DbPool,
     execution: &ExecutionDB,
     transaction_key: &TransactionKey,
-    status: &TransactionStatus,
 ) -> TransactionDB {
     let transaction_db = TransactionDB::builder()
         .id(TransactionId::default())
@@ -21,9 +20,6 @@ pub async fn seed_transaction(
         .transaction_key(transaction_key)
         .triggered_on(execution.triggered_on())
         .triggered_by_id(execution.triggered_by_id())
-        .started_on(execution.started_on().clone())
-        .ended_on(execution.ended_on().clone())
-        .status(status)
         .build()
         .unwrap();
 
@@ -49,7 +45,7 @@ mod tests {
     use crate::types::basic::CollectionName;
     use crate::types::basic::ExecutionStatus;
     use crate::types::basic::UserId;
-    use crate::types::function::FunctionCreate;
+    use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -66,7 +62,7 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin")
             .unwrap()
             .try_description("function_foo description")
@@ -89,7 +85,7 @@ mod tests {
             &db,
             &collection,
             &function_version,
-            &ExecutionStatus::scheduled(),
+            &ExecutionStatus::Scheduled,
         )
         .await;
 

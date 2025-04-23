@@ -3,8 +3,7 @@
 //
 
 use crate::sql::{DaoQueries, Insert};
-use crate::test_utils::seed_user::admin_user;
-use crate::types::basic::{TableDataVersionStatus, TriggeredById, TriggeredOn};
+use crate::types::basic::TableFunctionParamPos;
 use crate::types::collection::CollectionDB;
 use crate::types::execution::{ExecutionDB, FunctionRunDB, TableDataVersionDB, TransactionDB};
 use crate::types::table::TableVersionDB;
@@ -17,11 +16,7 @@ pub async fn seed_table_data_version(
     transaction: &TransactionDB,
     function_run: &FunctionRunDB,
     table: &TableVersionDB,
-    status: &TableDataVersionStatus,
 ) -> TableDataVersionDB {
-    let admin_id = admin_user(db).await;
-    let admin_id = TriggeredById::try_from(admin_id).unwrap();
-
     let queries = DaoQueries::default();
 
     let table_data_version_db = TableDataVersionDB::builder()
@@ -33,9 +28,7 @@ pub async fn seed_table_data_version(
         .execution_id(execution.id())
         .transaction_id(transaction.id())
         .function_run_id(function_run.id())
-        .triggered_on(TriggeredOn::now().await)
-        .triggered_by_id(admin_id)
-        .status(status)
+        .function_param_pos(TableFunctionParamPos::try_from(0).unwrap())
         .build()
         .unwrap();
 
@@ -63,7 +56,7 @@ mod tests {
         BundleId, CollectionName, ExecutionStatus, FunctionRunStatus, TableName, TransactionKey,
         TransactionStatus, UserId,
     };
-    use crate::types::function::FunctionCreate;
+    use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
     use td_security::{ENCODED_ID_SYSTEM, ENCODED_ID_USER_ADMIN};
 
@@ -82,7 +75,7 @@ mod tests {
         let triggers = None;
         let tables = vec![table_name.clone()];
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin")
             .unwrap()
             .try_description("function_foo description")
@@ -105,7 +98,7 @@ mod tests {
             &db,
             &collection,
             &function_version,
-            &ExecutionStatus::scheduled(),
+            &ExecutionStatus::Scheduled,
         )
         .await;
 
@@ -161,7 +154,7 @@ mod tests {
         assert!(*table_data_version.triggered_on() < TriggeredOn::now().await);
         assert_eq!(
             *table_data_version.triggered_by_id(),
-            TriggeredById::try_from(ENCODED_ID_USER_ADMIN).unwrap()
+            UserId::try_from(ENCODED_ID_USER_ADMIN).unwrap()
         );
         assert_eq!(
             *table_data_version.status(),

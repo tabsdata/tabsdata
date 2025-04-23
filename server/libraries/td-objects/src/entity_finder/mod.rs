@@ -3,7 +3,6 @@
 //
 
 pub mod collections;
-pub mod datasets;
 pub mod users;
 
 use sqlx::sqlite::SqliteRow;

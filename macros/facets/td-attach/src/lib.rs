@@ -42,12 +42,12 @@ pub fn attach(args: TokenStream, item: TokenStream) -> TokenStream {
     let func_sig = &input.sig;
     let signal = args.signal.to_string();
     let attach_path = match crate_name(TABSDATALIB) {
-        Ok(FoundCrate::Itself) => quote!(crate::common::attach::wait_for_attach),
+        Ok(FoundCrate::Itself) => quote!(crate::attach::wait_for_attach),
         Ok(FoundCrate::Name(external_name)) => {
             let external_name = syn::Ident::new(&external_name, proc_macro2::Span::call_site());
-            quote!(#external_name::common::attach::wait_for_attach)
+            quote!(#external_name::attach::wait_for_attach)
         }
-        Err(_) => quote!(tabsdatalib::common::attach::wait_for_attach),
+        Err(_) => quote!(td_common::attach::wait_for_attach),
     };
 
     let expanded = quote! {

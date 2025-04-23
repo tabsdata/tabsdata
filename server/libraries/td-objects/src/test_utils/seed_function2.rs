@@ -5,13 +5,13 @@
 use crate::crudl::{ReadRequest, RequestContext};
 use crate::sql::{DaoQueries, Insert, SelectBy, UpdateBy};
 use crate::types::basic::{
-    AccessTokenId, DependencyPos, DependencyStatus, RoleId, TableFunctionParamPos, TableId,
-    TableStatus, TriggerStatus, UserId,
+    AccessTokenId, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
+    TableFunctionParamPos, TableId, TableStatus, TriggerStatus, UserId,
 };
 use crate::types::collection::CollectionDB;
 use crate::types::dependency::{DependencyDBBuilder, DependencyVersionDBBuilder};
 use crate::types::function::{
-    FunctionCreate, FunctionDB, FunctionDBBuilder, FunctionVersionDB, FunctionVersionDBBuilder,
+    FunctionDB, FunctionDBBuilder, FunctionRegister, FunctionVersionDB, FunctionVersionDBBuilder,
 };
 use crate::types::table::{TableDB, TableDBBuilder, TableDBWithNames, TableVersionDBBuilder};
 use crate::types::trigger::{TriggerDBBuilder, TriggerVersionDBBuilder};
@@ -20,7 +20,7 @@ use td_database::sql::DbPool;
 pub async fn seed_function(
     db: &DbPool,
     collection: &CollectionDB,
-    function_create: &FunctionCreate,
+    function_create: &FunctionRegister,
 ) -> (FunctionDB, FunctionVersionDB) {
     let request_context: ReadRequest<String> = RequestContext::with(
         AccessTokenId::default(),
@@ -36,8 +36,12 @@ pub async fn seed_function(
     // Function version builder
     let builder = FunctionVersionDBBuilder::try_from(function_create).unwrap();
     let builder = FunctionVersionDBBuilder::try_from((request_context, builder)).unwrap();
-    let builder = FunctionVersionDBBuilder::from((collection.id(), builder));
-    let function_db_version = builder.build().unwrap();
+    let mut builder = FunctionVersionDBBuilder::from((collection.id(), builder));
+    let function_db_version = builder
+        .data_location(DataLocation::default())
+        .storage_version(StorageVersion::default())
+        .build()
+        .unwrap();
 
     // Create function if non-existent, and update if existent.
     let builder = FunctionDBBuilder::try_from(&function_db_version).unwrap();
@@ -105,7 +109,7 @@ pub async fn seed_function(
                 .table_id(TableId::default())
                 .name(table_name)
                 .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i16).unwrap()))
-                .status(TableStatus::active())
+                .status(TableStatus::Active)
                 .build()
                 .unwrap();
 
@@ -183,7 +187,7 @@ pub async fn seed_function(
                 .table_name(table_db.name())
                 .table_versions(dependency_table.versions())
                 .dep_pos(DependencyPos::try_from(pos as i16).unwrap())
-                .status(DependencyStatus::active())
+                .status(DependencyStatus::Active)
                 .build()
                 .unwrap();
 
@@ -237,7 +241,7 @@ pub async fn seed_function(
                 .trigger_by_function_version_id(table_db.function_version_id())
                 .trigger_by_table_id(table_db.id())
                 .trigger_by_table_version_id(table_db.table_version_id())
-                .status(TriggerStatus::active())
+                .status(TriggerStatus::Active)
                 .build()
                 .unwrap();
 
@@ -287,7 +291,7 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin")
             .unwrap()
             .try_description("function_foo description")

@@ -71,7 +71,7 @@ path = "src/lib/lib.rs"
 
 [features]
 
-api-docs = []
+api-docs = ["td-apiserver/api-docs"]
 enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
@@ -105,13 +105,13 @@ toml = { workspace = true }
 ## Macros
 
 td-apiforge = { workspace = true }
-td-attach = { workspace = true }
 td-build = { workspace = true }
 td-concrete = { workspace = true }
 tm-workspace = { workspace = true }
 
 ## Libraries
 
+td-apiserver = { workspace = true }
 td-authz = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }
