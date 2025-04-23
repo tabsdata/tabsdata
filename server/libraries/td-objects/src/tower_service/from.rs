@@ -127,6 +127,33 @@ where
 }
 
 #[async_trait]
+pub trait ExtractVecService<T> {
+    async fn extract_vec<F>(input: Input<Vec<T>>) -> Result<Vec<F>, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        for<'a> F: From<&'a T>;
+}
+
+#[async_trait]
+impl<T> ExtractVecService<T> for With<T>
+where
+    T: Send + Sync,
+{
+    async fn extract_vec<F>(Input(input): Input<Vec<T>>) -> Result<Vec<F>, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        for<'a> F: From<&'a T>,
+    {
+        let output = input
+            .iter()
+            .map(|item| F::from(item))
+            .collect::<Vec<F>>()
+            .into();
+        Ok(output)
+    }
+}
+
+#[async_trait]
 pub trait UpdateService<T> {
     async fn update<F, E>(try_from: Input<T>, updater: Input<F>) -> Result<F, TdError>
     where

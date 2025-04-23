@@ -30,6 +30,9 @@ pub struct AtTime;
 #[td_type::typed(id)]
 pub struct BundleId;
 
+#[td_type::typed(string)]
+pub struct BundleHash;
+
 #[td_type::typed(id, try_from = EntityId)]
 pub struct CollectionId;
 
@@ -39,7 +42,7 @@ pub struct CollectionName;
 #[td_type::typed(id_name(id = CollectionId, name = CollectionName))]
 pub struct CollectionIdName;
 
-#[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = ""))]
+#[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
 pub struct DataLocation;
 
 #[td_type::typed(string(min_len = 0, max_len = 200, default = ""))]
@@ -51,22 +54,18 @@ pub struct DependencyId;
 #[td_type::typed(bool)]
 pub struct SelfDependency;
 
-#[td_type::typed(i16(min = 0, max = 200))]
+#[td_type::typed(i16(min = 0, max = 200, default = 0))]
 pub struct DependencyPos;
 
-#[td_type::typed(string(regex = DependencyStatus::REGEX))]
-pub struct DependencyStatus;
+#[td_type::typed(i16(min = 0, max = 200, default = 0))]
+pub struct VersionPos;
 
-impl DependencyStatus {
-    const REGEX: &'static str = "^[AD]$";
-
-    pub fn active() -> Self {
-        Self("A".to_string())
-    }
-
-    pub fn deleted() -> Self {
-        Self("D".to_string())
-    }
+#[td_type::typed_enum]
+pub enum DependencyStatus {
+    #[strum(to_string = "A")]
+    Active,
+    #[strum(to_string = "D")]
+    Deleted,
 }
 
 #[td_type::typed(id)]
@@ -87,28 +86,18 @@ pub struct ExecutionId;
 #[td_type::typed(string(parser = parse_execution))]
 pub struct ExecutionName;
 
-#[td_type::typed(string(regex = ExecutionStatus::REGEX))]
-pub struct ExecutionStatus;
+// ExecutionName is not UNIQUE nor NOT NULL. We cannot use it as a primary key to lookup.
+#[td_type::typed(id_name(id = ExecutionId))]
+pub struct ExecutionIdName;
 
-impl ExecutionStatus {
-    const REGEX: &'static str = "^[SRDI]$";
+#[td_type::typed(i16)]
+pub struct ExecutionTry;
 
-    pub fn scheduled() -> Self {
-        Self("S".to_string())
-    }
+#[td_type::typed(i16)]
+pub struct ExecutionLimit;
 
-    pub fn running() -> Self {
-        Self("R".to_string())
-    }
-
-    pub fn done() -> Self {
-        Self("D".to_string())
-    }
-
-    pub fn incomplete() -> Self {
-        Self("I".to_string())
-    }
-}
+#[td_type::typed(string)]
+pub struct ExecutionError;
 
 #[td_type::typed(bool(default = false))]
 pub struct HasData;
@@ -128,6 +117,9 @@ pub struct ReuseFrozen;
 #[td_type::typed(bool)]
 pub struct Private;
 
+#[td_type::typed(bool)]
+pub struct Partitioned;
+
 #[td_type::typed(id)]
 pub struct FunctionId;
 
@@ -142,23 +134,14 @@ pub struct FunctionIdName;
 #[td_type::typed(string(max_len = 4096, default = "{}"))]
 pub struct FunctionRuntimeValues;
 
-#[td_type::typed(string(regex = FunctionStatus::REGEX, default = "A"))]
-pub struct FunctionStatus;
-
-impl FunctionStatus {
-    const REGEX: &'static str = "^[AFD]$";
-
-    pub fn active() -> Self {
-        Self("A".to_string())
-    }
-
-    pub fn frozen() -> Self {
-        Self("F".to_string())
-    }
-
-    pub fn deleted() -> Self {
-        Self("D".to_string())
-    }
+#[td_type::typed_enum]
+pub enum FunctionStatus {
+    #[strum(to_string = "A")]
+    Active,
+    #[strum(to_string = "F")]
+    Frozen,
+    #[strum(to_string = "D")]
+    Deleted,
 }
 
 #[td_type::typed(id)]
@@ -403,73 +386,14 @@ impl TryFrom<&DependencyVersionDBWithNames> for TableDependency {
 #[td_type::typed(id)]
 pub struct TableDataId;
 
-#[td_type::typed(string(regex = TransactionStatus::REGEX))]
-pub struct TransactionStatus;
-
-impl TransactionStatus {
-    const REGEX: &'static str = "^[SRDEFHCP]$";
-
-    pub fn scheduled() -> Self {
-        Self("S".to_string())
-    }
-
-    pub fn running() -> Self {
-        Self("R".to_string())
-    }
-
-    pub fn done() -> Self {
-        Self("D".to_string())
-    }
-
-    pub fn error() -> Self {
-        Self("E".to_string())
-    }
-
-    pub fn failed() -> Self {
-        Self("F".to_string())
-    }
-
-    pub fn hold() -> Self {
-        Self("H".to_string())
-    }
-
-    pub fn canceled() -> Self {
-        Self("C".to_string())
-    }
-
-    pub fn publish() -> Self {
-        Self("P".to_string())
-    }
-}
-
-pub type FunctionRunStatus = TransactionStatus;
-
 #[td_type::typed(id)]
 pub struct FunctionRunId;
 
 #[td_type::typed(id)]
-pub struct ConditionId;
+pub struct RequirementId;
 
-#[td_type::typed(string(regex = ConditionStatus::REGEX))]
-pub struct ConditionStatus;
-
-impl ConditionStatus {
-    const REGEX: &'static str = "^[DIC]$";
-
-    pub fn done() -> Self {
-        Self("D".to_string())
-    }
-
-    pub fn incomplete() -> Self {
-        Self("I".to_string())
-    }
-
-    pub fn canceled() -> Self {
-        Self("C".to_string())
-    }
-}
-
-pub type TableDataVersionStatus = ConditionStatus;
+#[td_type::typed(id)]
+pub struct WorkerMessageId;
 
 #[td_type::typed(id)]
 pub struct TableDataVersionId;
@@ -498,23 +422,14 @@ pub struct TableIdName;
 #[td_type::typed(i16)]
 pub struct TableFunctionParamPos;
 
-#[td_type::typed(string(regex = TableStatus::REGEX))]
-pub struct TableStatus;
-
-impl TableStatus {
-    const REGEX: &'static str = "^[AFD]$";
-
-    pub fn active() -> Self {
-        Self("A".to_string())
-    }
-
-    pub fn frozen() -> Self {
-        Self("F".to_string())
-    }
-
-    pub fn deleted() -> Self {
-        Self("D".to_string())
-    }
+#[td_type::typed_enum]
+pub enum TableStatus {
+    #[strum(to_string = "A")]
+    Active,
+    #[strum(to_string = "F")]
+    Frozen,
+    #[strum(to_string = "D")]
+    Deleted,
 }
 
 #[td_type::typed(composed(inner = TableRef))]
@@ -544,6 +459,9 @@ pub struct TokenType;
 #[td_type::typed(id)]
 pub struct TransactionId;
 
+#[td_type::typed(id_name(id = TransactionId))]
+pub struct TransactionIdName;
+
 #[td_type::typed(string(default = "F"))]
 pub struct TransactionByStr;
 
@@ -565,28 +483,20 @@ impl Trigger {
     }
 }
 
-#[td_type::typed(timestamp)]
+#[td_type::typed(timestamp, try_from = AtTime)]
 pub struct TriggeredOn;
-
-#[td_type::typed(id)]
-pub struct TriggeredById;
 
 #[td_type::typed(id)]
 pub struct TriggerId;
 
-#[td_type::typed(string(regex = TriggerStatus::REGEX, default = "A"))]
-pub struct TriggerStatus;
-
-impl TriggerStatus {
-    const REGEX: &'static str = "^[AD]$";
-
-    pub fn active() -> Self {
-        Self("A".to_string())
-    }
-
-    pub fn deleted() -> Self {
-        Self("D".to_string())
-    }
+#[td_type::typed_enum]
+#[derive(Default)]
+pub enum TriggerStatus {
+    #[default]
+    #[strum(to_string = "A")]
+    Active,
+    #[strum(to_string = "D")]
+    Deleted,
 }
 
 #[td_type::typed(id)]

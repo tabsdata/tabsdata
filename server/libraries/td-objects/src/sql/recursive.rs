@@ -25,7 +25,6 @@ pub trait RecursiveQueries {
     /// Generics:
     /// - `D`: The DataAccessObject to find the recursive versions of.
     /// - `R`: The DataAccessObject to find the latest versions of the recursive objects.
-    /// - `I`: The SqlEntity type to find the versions of the recursive objects.
     /// - `E`: The type of the Initial WHERE to find the recursive versions of.
     ///
     /// CTEs:
@@ -105,8 +104,6 @@ pub trait RecursiveQueries {
     /// FROM
     ///     recursive_versions rd;
     /// ```
-    ///
-    /// TODO: E could be generalized and implemented by a declarative macro, so more types can be added
     fn select_recursive_versions_at<'a, D, R, E>(
         &self,
         d_defined_on: Option<&'a D::NaturalOrder>,

@@ -92,7 +92,7 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, FunctionRuntimeValues, RoleId, TableName, UserId,
         UserName,
     };
-    use td_objects::types::function::FunctionCreate;
+    use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -185,7 +185,7 @@ mod tests {
         let triggers = None;
         let tables = None;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -260,7 +260,7 @@ mod tests {
         let triggers = None;
         let tables = Some(vec![TableName::try_from("table1")?]);
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())

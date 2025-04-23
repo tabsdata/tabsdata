@@ -184,7 +184,7 @@ pub(crate) fn select_ranked_versions_at<'a, D>(
 }
 
 /// Common table expressions (CTEs) used in queries to select versioned views of objects.
-pub trait TableQueries<'a, E> {
+pub trait TableQueries<'a> {
     fn select_table_data_versions_at<D>(
         &self,
         natural_order_by: Option<&'a D::NaturalOrder>,
@@ -195,7 +195,7 @@ pub trait TableQueries<'a, E> {
     where
         D: DataAccessObject + PartitionBy + NaturalOrder + Status;
 
-    fn find_relative_table_data_version<D>(
+    fn find_relative_offset<D>(
         &self,
         natural_order_by: Option<&'a D::NaturalOrder>,
         status: Option<&'a [&'a D::Status]>,
@@ -206,7 +206,7 @@ pub trait TableQueries<'a, E> {
         D: DataAccessObject + PartitionBy + NaturalOrder + Status;
 }
 
-impl<'a, Q> TableQueries<'a, ()> for Q
+impl<'a, Q> TableQueries<'a> for Q
 where
     Q: Deref<Target = dyn Queries>,
 {
@@ -243,7 +243,7 @@ where
         Ok(query_builder)
     }
 
-    fn find_relative_table_data_version<D>(
+    fn find_relative_offset<D>(
         &self,
         natural_order_by: Option<&'a D::NaturalOrder>,
         status: Option<&'a [&'a D::Status]>,
@@ -268,10 +268,7 @@ where
         let select = format!("SELECT rn FROM {}", LATEST_VERSIONS_CTE);
         query_builder.push(select);
 
-        trace!(
-            "find_relative_table_data_version: sql: {}",
-            query_builder.sql()
-        );
+        trace!("find_relative_offset: sql: {}", query_builder.sql());
         Ok(query_builder)
     }
 }
@@ -529,7 +526,7 @@ mod tests {
     fn test_versions_defined_on_dao_partition_by() {
         let mut query_builder = sqlx::QueryBuilder::default();
         ranked_versions_at::<FunctionVersionDB>("test", &mut query_builder, None);
-        let status = [&FunctionStatus::active()];
+        let status = [&FunctionStatus::Active];
         select_ranked_versions_at::<FunctionVersionDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
         assert!(query.sql().contains(FunctionVersionDB::sql_table()));
@@ -537,7 +534,7 @@ mod tests {
 
         let mut query_builder = sqlx::QueryBuilder::default();
         ranked_versions_at::<FunctionVersionDBWithNames>("test", &mut query_builder, None);
-        let status = [&FunctionStatus::active()];
+        let status = [&FunctionStatus::Active];
         select_ranked_versions_at::<FunctionVersionDBWithNames>(
             "test",
             &mut query_builder,
@@ -553,7 +550,7 @@ mod tests {
 
         let mut query_builder = sqlx::QueryBuilder::default();
         ranked_versions_at::<TableVersionDB>("test", &mut query_builder, None);
-        let status = [&TableStatus::active()];
+        let status = [&TableStatus::Active];
         select_ranked_versions_at::<TableVersionDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
         assert!(query.sql().contains(TableVersionDB::sql_table()));
@@ -561,7 +558,7 @@ mod tests {
 
         let mut query_builder = sqlx::QueryBuilder::default();
         ranked_versions_at::<TableVersionDBWithNames>("test", &mut query_builder, None);
-        let status = [&TableStatus::active()];
+        let status = [&TableStatus::Active];
         select_ranked_versions_at::<TableVersionDBWithNames>(
             "test",
             &mut query_builder,
@@ -575,7 +572,7 @@ mod tests {
 
         let mut query_builder = sqlx::QueryBuilder::default();
         ranked_versions_at::<DependencyVersionDB>("test", &mut query_builder, None);
-        let status = [&DependencyStatus::active()];
+        let status = [&DependencyStatus::Active];
         select_ranked_versions_at::<DependencyVersionDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
         assert!(query.sql().contains(DependencyVersionDB::sql_table()));
@@ -583,7 +580,7 @@ mod tests {
 
         let mut query_builder = sqlx::QueryBuilder::default();
         ranked_versions_at::<DependencyVersionDBWithNames>("test", &mut query_builder, None);
-        let status = [&DependencyStatus::active()];
+        let status = [&DependencyStatus::Active];
         select_ranked_versions_at::<DependencyVersionDBWithNames>(
             "test",
             &mut query_builder,
@@ -599,7 +596,7 @@ mod tests {
 
         let mut query_builder = sqlx::QueryBuilder::default();
         ranked_versions_at::<TriggerVersionDB>("test", &mut query_builder, None);
-        let status = [&TriggerStatus::active()];
+        let status = [&TriggerStatus::Active];
         select_ranked_versions_at::<TriggerVersionDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
         assert!(query.sql().contains(TriggerVersionDB::sql_table()));
@@ -607,7 +604,7 @@ mod tests {
 
         let mut query_builder = sqlx::QueryBuilder::default();
         ranked_versions_at::<TriggerVersionDBWithNames>("test", &mut query_builder, None);
-        let status = [&TriggerStatus::active()];
+        let status = [&TriggerStatus::Active];
         select_ranked_versions_at::<TriggerVersionDBWithNames>(
             "test",
             &mut query_builder,

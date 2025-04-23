@@ -11,6 +11,5 @@ macro_rules! all_the_tuples {
         $name!([E1, E2]);
         $name!([E1, E2, E3]);
         $name!([E1, E2, E3, E4]);
-        $name!([E1, E2, E3, E4, E5]);
     };
 }

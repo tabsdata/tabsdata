@@ -5,8 +5,8 @@
 use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, Frozen, FunctionId, FunctionName, FunctionVersionId,
-    Private, TableFunctionParamPos, TableId, TableName, TableStatus, TableVersionId, UserId,
-    UserName,
+    Partitioned, Private, TableFunctionParamPos, TableId, TableName, TableStatus, TableVersionId,
+    UserId, UserName,
 };
 use crate::types::function::{FunctionDB, FunctionVersionDB};
 
@@ -30,6 +30,8 @@ pub struct TableDB {
     frozen: Frozen,
     #[td_type(builder(include))]
     private: Private,
+    #[td_type(builder(include))]
+    partitioned: Partitioned,
     #[td_type(builder(include, field = "defined_on"))]
     created_on: AtTime,
     #[td_type(builder(include, field = "defined_by_id"))]
@@ -50,11 +52,12 @@ pub struct TableDBWithNames {
     table_version_id: TableVersionId,
     frozen: Frozen,
     private: Private,
+    partitioned: Partitioned,
     created_on: AtTime,
     created_by_id: UserId,
 
-    collection: CollectionName,
     created_by: UserName,
+    collection: CollectionName,
 }
 
 #[td_type::Dao(
@@ -77,6 +80,8 @@ pub struct TableVersionDB {
     function_param_pos: Option<TableFunctionParamPos>,
     #[builder(default = "Private::from(false)")]
     private: Private,
+    #[builder(default = "Partitioned::from(false)")]
+    partitioned: Partitioned,
     #[td_type(updater(include, field = "time"))]
     defined_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
@@ -97,28 +102,13 @@ pub struct TableVersionDBWithNames {
     name: TableName,
     function_version_id: FunctionVersionId,
     function_param_pos: Option<TableFunctionParamPos>,
+    private: Private,
+    partitioned: Partitioned,
     defined_on: AtTime,
     defined_by_id: UserId,
     status: TableStatus,
 
+    defined_by: UserName,
     collection: CollectionName,
     function: FunctionName,
-    defined_by: UserName,
-}
-
-#[td_type::Dto]
-#[td_type(builder(try_from = TableVersionDBWithNames))]
-pub struct TableVersion {
-    id: TableVersionId,
-    collection_id: CollectionId,
-    table_id: TableId,
-    name: TableName,
-    function_version_id: FunctionVersionId,
-    function_param_pos: Option<TableFunctionParamPos>,
-    defined_on: AtTime,
-    defined_by_id: UserId,
-    status: TableStatus,
-
-    collection: CollectionName,
-    defined_by: UserName,
 }

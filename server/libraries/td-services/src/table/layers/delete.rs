@@ -23,10 +23,10 @@ pub enum DeleteTableError {
 }
 
 lazy_static! {
-    static ref ACTIVE_TABLE_STATUS: TableStatus = TableStatus::active();
-    static ref FROZEN_TABLE_STATUS: TableStatus = TableStatus::frozen();
-    static ref ACTIVE_FUNCTION_STATUS: FunctionStatus = FunctionStatus::active();
-    static ref ACTIVE_DEPENDENCY_STATUS: DependencyStatus = DependencyStatus::active();
+    static ref ACTIVE_TABLE_STATUS: TableStatus = TableStatus::Active;
+    static ref FROZEN_TABLE_STATUS: TableStatus = TableStatus::Frozen;
+    static ref ACTIVE_FUNCTION_STATUS: FunctionStatus = FunctionStatus::Active;
+    static ref ACTIVE_DEPENDENCY_STATUS: DependencyStatus = DependencyStatus::Active;
 }
 
 pub async fn build_frozen_function_version_table(
@@ -35,7 +35,7 @@ pub async fn build_frozen_function_version_table(
     let frozen = function_version
         .to_builder()
         .id(FunctionVersionId::default())
-        .status(FunctionStatus::frozen())
+        .status(FunctionStatus::Frozen)
         .build()?;
     Ok(frozen)
 }
@@ -73,7 +73,7 @@ pub async fn build_frozen_function_versions_dependencies<Q: DerefQueries>(
         .map(|v| {
             v.to_builder()
                 .id(FunctionVersionId::default())
-                .status(FunctionStatus::frozen())
+                .status(FunctionStatus::Frozen)
                 .build()
         })
         .collect::<Result<_, _>>()?;
@@ -126,7 +126,7 @@ pub async fn build_deleted_table_version(
         // We use the function version id of the function that was generated when deleting the table
         // for all deleted tables.
         .function_version_id(function_version.id())
-        .status(TableStatus::deleted())
+        .status(TableStatus::Deleted)
         .build()?;
     Ok(deleted_version)
 }

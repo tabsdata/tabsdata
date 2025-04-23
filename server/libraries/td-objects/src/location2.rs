@@ -3,7 +3,8 @@
 //
 
 use crate::types::basic::{
-    BundleId, CollectionId, DataLocation, Partition, TableDataVersionId, TableId, TableVersionId,
+    BundleId, CollectionId, DataLocation, Partition, StorageVersion, TableDataVersionId, TableId,
+    TableVersionId,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -71,6 +72,13 @@ impl From<StorageLocation> for String {
 impl TryFrom<String> for StorageLocation {
     type Error = String;
     fn try_from(value: String) -> Result<Self, String> {
+        StorageLocation::parse(value.as_str())
+    }
+}
+
+impl TryFrom<&StorageVersion> for StorageLocation {
+    type Error = String;
+    fn try_from(value: &StorageVersion) -> Result<Self, String> {
         StorageLocation::parse(value.as_str())
     }
 }

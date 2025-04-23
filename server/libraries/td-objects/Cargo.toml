@@ -46,6 +46,7 @@ ignored = ["openssl", "td-build", "td-objects", "td-schema", "thiserror", "toml"
 ## Macros
 
 td-apiforge = { workspace = true }
+td-concrete = { workspace = true }
 td-type = { workspace = true }
 
 ## Libraries
@@ -70,6 +71,7 @@ derive-new = { workspace = true }
 futures-util = { workspace = true }
 getset = { workspace = true }
 itertools = { workspace = true }
+jsonwebtoken = { workspace = true }
 lazy_static = { workspace = true }
 paste = { workspace = true }
 polars = { workspace = true }
@@ -77,10 +79,13 @@ regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_valid = { workspace = true }
+serde_yaml = { workspace = true }
 sqlx = { workspace = true }
+strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+url = { workspace = true }
 utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
 tracing = { workspace = true }
 

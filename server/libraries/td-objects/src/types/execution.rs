@@ -4,20 +4,25 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, ConditionId, ConditionStatus, DependencyPos, Dot,
-    ExecutionId, ExecutionName, ExecutionStatus, FunctionName, FunctionRunId, FunctionRunStatus,
-    FunctionVersionId, HasData, SelfDependency, TableDataVersionId, TableDataVersionStatus,
+    AtTime, BundleId, CollectionId, CollectionName, DataLocation, DependencyPos, Dot, ExecutionId,
+    ExecutionName, FunctionName, FunctionRunId, FunctionVersionId, HasData, Partitioned,
+    RequirementId, SelfDependency, StorageVersion, TableDataVersionId, TableFunctionParamPos,
     TableId, TableName, TableVersionId, TableVersions, TransactionByStr, TransactionId,
-    TransactionKey, TransactionStatus, Trigger, TriggeredById, TriggeredOn,
+    TransactionKey, Trigger, TriggeredOn, UserId, UserName, VersionPos, WorkerMessageId,
 };
 use crate::types::dependency::DependencyVersionDBWithNames;
 use crate::types::function::FunctionVersionDBWithNames;
 use crate::types::table::TableVersionDBWithNames;
 use crate::types::trigger::TriggerVersionDBWithNames;
+use crate::types::worker::FunctionOutput;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
+use td_common::datetime::IntoDateTimeUtc;
+use td_common::execution_status::FunctionRunUpdateStatus;
+use td_common::server::ResponseMessagePayload;
 use td_error::TdError;
+// Daos
 
 #[td_type::Dao(sql_table = "executions")]
 #[td_type(builder(try_from = FunctionVersionDBWithNames, skip_all))]
@@ -25,6 +30,7 @@ use td_error::TdError;
 #[td_type(updater(try_from = ExecutionRequest, skip_all))]
 pub struct ExecutionDB {
     #[builder(default)]
+    #[td_type(extractor)]
     id: ExecutionId,
     #[td_type(updater(try_from = ExecutionRequest, include))]
     name: Option<ExecutionName>,
@@ -35,18 +41,19 @@ pub struct ExecutionDB {
     #[td_type(updater(try_from = RequestContext, include, field = "time"))]
     triggered_on: TriggeredOn,
     #[td_type(updater(try_from = RequestContext, field = "user_id"))]
-    triggered_by_id: TriggeredById,
-    #[builder(default)]
-    started_on: Option<AtTime>,
-    #[builder(default)]
-    ended_on: Option<AtTime>,
-    #[builder(default = "ExecutionStatus::scheduled()")]
-    status: ExecutionStatus,
+    triggered_by_id: UserId,
+    // #[builder(default)]
+    // started_on: Option<AtTime>,
+    // #[builder(default)]
+    // ended_on: Option<AtTime>,
+    // #[builder(default = ExecutionStatus::Scheduled)]
+    // status: ExecutionStatus,
 }
 
 #[td_type::Dao(sql_table = "transactions")]
 #[td_type(builder(try_from = ExecutionDB, skip_all))]
 pub struct TransactionDB {
+    #[td_type(extractor)]
     id: TransactionId, // no default as it has to be calculated depending on the execution
     #[td_type(builder(field = "id"))]
     execution_id: ExecutionId,
@@ -55,41 +62,69 @@ pub struct TransactionDB {
     #[td_type(builder(include))]
     triggered_on: TriggeredOn,
     #[td_type(builder(include))]
-    triggered_by_id: TriggeredById,
-    #[builder(default)]
-    started_on: Option<AtTime>,
-    #[builder(default)]
-    ended_on: Option<AtTime>,
-    #[builder(default = "TransactionStatus::scheduled()")]
-    status: TransactionStatus,
+    triggered_by_id: UserId,
+    // #[builder(default)]
+    // started_on: Option<AtTime>,
+    // #[builder(default)]
+    // ended_on: Option<AtTime>,
+    // #[builder(default = TransactionStatus::Scheduled)]
+    // status: TransactionStatus,
 }
 
-#[td_type::Dao(sql_table = "function_runs")]
+#[td_type::Dao(
+    sql_table = "function_runs",
+    partition_by = "id",
+    natural_order_by = "triggered_on"
+)]
 #[td_type(builder(try_from = ExecutionDB, skip_all))]
 pub struct FunctionRunDB {
     #[builder(default)]
     id: FunctionRunId,
     collection_id: CollectionId, // this is not the ExecutionDB function_version_id, as that's the trigger
     function_version_id: FunctionVersionId, // this is not the ExecutionDB function_version_id, as that's the trigger
-    #[td_type(builder(field = "id"))]
+    #[td_type(extractor, builder(field = "id"))]
     execution_id: ExecutionId,
+    #[td_type(extractor)]
     transaction_id: TransactionId,
     #[td_type(builder(include))]
     triggered_on: TriggeredOn,
+    #[td_type(builder(include))]
+    triggered_by_id: UserId,
     trigger: Trigger,
     #[builder(default)]
     started_on: Option<AtTime>,
     #[builder(default)]
     ended_on: Option<AtTime>,
-    #[builder(default = "FunctionRunStatus::scheduled()")]
+    #[builder(default = FunctionRunStatus::Scheduled)]
     status: FunctionRunStatus,
 }
 
-#[td_type::Dao(
-    sql_table = "table_data_versions",
-    partition_by = "table_id",
-    natural_order_by = "triggered_on"
-)]
+#[td_type::Dao(sql_table = "executable_function_runs")]
+pub struct ExecutableFunctionRunDB {
+    #[td_type(extractor)]
+    id: FunctionRunId,
+    collection_id: CollectionId,
+    function_version_id: FunctionVersionId,
+    #[td_type(extractor)]
+    execution_id: ExecutionId,
+    #[td_type(extractor)]
+    transaction_id: TransactionId,
+    triggered_on: TriggeredOn,
+    trigger: Trigger,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: FunctionRunStatus,
+
+    data_location: DataLocation,
+    storage_version: StorageVersion,
+    bundle_id: BundleId,
+    name: FunctionName,
+    collection: CollectionName,
+    execution: Option<ExecutionName>,
+}
+
+#[td_type::Dao(sql_table = "table_data_versions")]
+#[derive(Hash)]
 pub struct TableDataVersionDB {
     #[builder(default)]
     id: TableDataVersionId,
@@ -102,26 +137,413 @@ pub struct TableDataVersionDB {
     execution_id: ExecutionId,
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
-    triggered_on: TriggeredOn,
-    triggered_by_id: TriggeredById,
-    #[builder(default = "TableDataVersionStatus::incomplete()")]
-    status: TableDataVersionStatus,
+    // triggered_on: TriggeredOn,
+    // triggered_by_id: UserId,
+    function_param_pos: Option<TableFunctionParamPos>,
+    // #[builder(default = TableDataVersionStatus::Incomplete)]
+    // status: TableDataVersionStatus,
 }
 
-// TODO we could have several requirement tables adding more conditions between functions
+#[td_type::Dao(
+    sql_table = "table_data_versions__with_names",
+    partition_by = "table_version_id",
+    natural_order_by = "triggered_on",
+    status_by = "has_data"
+)]
+pub struct TableDataVersionDBWithNames {
+    id: TableDataVersionId,
+    collection_id: CollectionId,
+    table_id: TableId,
+    table_version_id: TableVersionId,
+    function_version_id: FunctionVersionId,
+    has_data: Option<HasData>,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    function_run_id: FunctionRunId,
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+    function_param_pos: TableFunctionParamPos,
+    // status: TableDataVersionStatus,
+    partitioned: Partitioned,
+    collection: CollectionName,
+    function: FunctionName,
+    name: TableName,
+    triggered_by: UserName,
+}
+
+#[td_type::Dao(
+    sql_table = "table_data_versions__active",
+    partition_by = "table_id",
+    natural_order_by = "triggered_on"
+)]
+pub struct ActiveTableDataVersionDB {
+    id: TableDataVersionId,
+    collection_id: CollectionId,
+    table_id: TableId,
+    table_version_id: TableVersionId,
+    function_version_id: FunctionVersionId,
+    has_data: Option<HasData>,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    function_run_id: FunctionRunId,
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+    function_param_pos: TableFunctionParamPos,
+    status: FunctionRunStatus,
+}
+
 #[td_type::Dao(sql_table = "function_requirements")]
 pub struct FunctionRequirementDB {
     #[builder(default)]
-    id: ConditionId,
+    id: RequirementId,
     collection_id: CollectionId,
     execution_id: ExecutionId,
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
-    condition_function_run_id: FunctionRunId,
-    condition_table_data_version: TableDataVersionId,
-    #[builder(default = "ConditionStatus::incomplete()")]
-    status: ConditionStatus,
+    requirement_table_id: TableId,
+    requirement_table_version_id: TableVersionId,
+    #[builder(default)]
+    requirement_function_run_id: Option<FunctionRunId>,
+    #[builder(default)]
+    requirement_table_data_version_id: Option<TableDataVersionId>,
+    #[builder(default)]
+    requirement_dependency_pos: Option<DependencyPos>,
+    requirement_version_pos: VersionPos,
+    // status: RequirementStatus,
 }
+
+#[td_type::Dao(
+    sql_table = "function_requirements__with_names",
+    partition_by = "id",
+    natural_order_by = "id",
+    recursive(up = "requirement_function_run_id", down = "function_run_id")
+)]
+pub struct FunctionRequirementDBWithNames {
+    id: RequirementId,
+    collection_id: CollectionId,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    function_run_id: FunctionRunId,
+    requirement_table_id: TableId,
+    requirement_table_version_id: TableVersionId,
+    requirement_function_run_id: Option<FunctionRunId>,
+    requirement_table_data_version_id: Option<TableDataVersionId>,
+    requirement_dependency_pos: Option<DependencyPos>,
+    requirement_version_pos: VersionPos,
+    status: FunctionRunStatus,
+    collection: CollectionName,
+    function: FunctionName,
+    requirement_table: TableName,
+}
+
+#[td_type::Dao(sql_table = "worker_messages")]
+pub struct WorkerMessageDB {
+    #[builder(default)]
+    id: WorkerMessageId,
+    collection_id: CollectionId,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    function_run_id: FunctionRunId,
+    function_version_id: FunctionVersionId,
+    status: WorkerMessageStatus,
+}
+
+#[cfg_attr(doc, aquamarine::aquamarine)]
+/// Represents the state of an execution.
+///
+/// ```mermaid
+/// stateDiagram-v2
+///     [*] --> Scheduled
+///     Done --> [*]
+///     Incomplete --> [*]
+///
+///     Scheduled --> Running
+///     Running --> Done
+///     Running --> Incomplete
+/// ```
+#[td_type::typed_enum]
+pub enum ExecutionStatus {
+    #[strum(to_string = "S")]
+    Scheduled,
+    #[strum(to_string = "R")]
+    Running,
+    #[strum(to_string = "D")]
+    Done,
+    #[strum(to_string = "I")]
+    Incomplete,
+}
+
+// impl From<FunctionRunStatus> for ExecutionStatus {
+//     fn from(status: FunctionRunStatus) -> Self {
+//         match status {
+//             FunctionRunStatus::Scheduled => ExecutionStatus::Scheduled,
+//             FunctionRunStatus::RunRequested => ExecutionStatus::Running,
+//             FunctionRunStatus::Running => ExecutionStatus::Running,
+//             FunctionRunStatus::Done => ExecutionStatus::Running,
+//             FunctionRunStatus::Error => ExecutionStatus::Running,
+//             FunctionRunStatus::Failed => ExecutionStatus::Running,
+//             FunctionRunStatus::OnHold => ExecutionStatus::Running,
+//             FunctionRunStatus::Canceled => ExecutionStatus::Incomplete,
+//             FunctionRunStatus::Published => ExecutionStatus::Done,
+//         }
+//     }
+// }
+
+#[cfg_attr(doc, aquamarine::aquamarine)]
+/// Represents the state of a transaction.
+///
+/// ```mermaid
+/// stateDiagram-v2
+///     [*] --> Scheduled
+///     Canceled --> [*]
+///     Published --> [*]
+///
+///     Scheduled --> Running
+///     Scheduled --> OnHold
+///     Scheduled --> Canceled
+///     Running --> Published
+///     Running --> Failed
+///     Running --> Canceled
+///     OnHold --> Canceled
+///     OnHold --> Scheduled
+///     Failed --> Scheduled
+///     Failed --> Canceled
+/// ```
+#[td_type::typed_enum]
+pub enum TransactionStatus {
+    #[strum(serialize = "S")]
+    Scheduled,
+    #[strum(serialize = "R")]
+    Running,
+    #[strum(serialize = "F")]
+    Failed,
+    #[strum(serialize = "H")]
+    OnHold,
+    #[strum(serialize = "C")]
+    Canceled,
+    #[strum(serialize = "P")]
+    Published,
+}
+
+// impl From<FunctionRunStatus> for TransactionStatus {
+//     fn from(status: FunctionRunStatus) -> Self {
+//         match status {
+//             FunctionRunStatus::Scheduled => TransactionStatus::Scheduled,
+//             FunctionRunStatus::RunRequested => TransactionStatus::Running,
+//             FunctionRunStatus::Running => TransactionStatus::Running,
+//             FunctionRunStatus::Done => TransactionStatus::Running,
+//             FunctionRunStatus::Error => TransactionStatus::Running,
+//             FunctionRunStatus::Failed => TransactionStatus::Failed,
+//             FunctionRunStatus::OnHold => TransactionStatus::OnHold,
+//             FunctionRunStatus::Canceled => TransactionStatus::Canceled,
+//             FunctionRunStatus::Published => TransactionStatus::Published,
+//         }
+//     }
+// }
+
+#[cfg_attr(doc, aquamarine::aquamarine)]
+/// Represents the state of a function run.
+///
+/// ```mermaid
+/// stateDiagram-v2
+///     [*] --> Scheduled
+///     Canceled --> [*]
+///     Published --> [*]
+///
+///     Scheduled --> RunRequested
+///     RunRequested --> Scheduled
+///     RunRequested --> Running
+///     Scheduled --> OnHold
+///     Scheduled --> Canceled
+///     Running --> Done
+///     Running --> Error
+///     Running --> Failed
+///     Running --> Canceled
+///     OnHold --> Canceled
+///     OnHold --> Scheduled
+///     Error --> Running
+///     Error --> Canceled
+///     Failed --> Scheduled
+///     Failed --> Canceled
+///     Done --> Published
+///     Done --> Canceled
+/// ```
+#[td_type::typed_enum]
+pub enum FunctionRunStatus {
+    #[strum(to_string = "S")]
+    Scheduled,
+    #[strum(to_string = "RR")]
+    RunRequested,
+    #[strum(to_string = "RS")]
+    ReScheduled,
+    #[strum(to_string = "R")]
+    Running,
+    #[strum(to_string = "D")]
+    Done,
+    #[strum(to_string = "E")]
+    Error,
+    #[strum(to_string = "F")]
+    Failed,
+    #[strum(to_string = "H")]
+    OnHold,
+    #[strum(to_string = "C")]
+    Canceled,
+}
+
+impl From<FunctionRunUpdateStatus> for FunctionRunStatus {
+    fn from(value: FunctionRunUpdateStatus) -> Self {
+        match value {
+            FunctionRunUpdateStatus::Running => FunctionRunStatus::Running,
+            FunctionRunUpdateStatus::Done => FunctionRunStatus::Done,
+            FunctionRunUpdateStatus::Error => FunctionRunStatus::Error,
+            FunctionRunUpdateStatus::Failed => FunctionRunStatus::Failed,
+        }
+    }
+}
+
+#[td_type::typed_enum]
+pub enum WorkerMessageStatus {
+    #[strum(to_string = "L")]
+    Locked,
+    #[strum(to_string = "U")]
+    Unlocked,
+}
+
+// Update Daos and Dlos
+
+#[td_type::Dlo]
+pub struct UpdateFunctionRun {
+    status: FunctionRunStatus,
+    started_on: AtTime,
+    ended_on: Option<AtTime>,
+}
+
+impl TryFrom<&CallbackRequest> for UpdateFunctionRun {
+    type Error = TdError;
+
+    fn try_from(value: &CallbackRequest) -> Result<Self, Self::Error> {
+        Ok(UpdateFunctionRun::builder()
+            .status(value.status().clone())
+            .try_started_on(value.start().datetime_utc()?)?
+            .ended_on(
+                value
+                    .end()
+                    .map(|v| Ok::<_, TdError>(AtTime::try_from(v.datetime_utc()?)?))
+                    .transpose()?,
+            )
+            .build()?)
+    }
+}
+
+// #[td_type::Dao(sql_table = "executions")]
+// #[td_type(builder(try_from = UpdateFunctionRun))]
+// pub struct UpdateExecutionDB {
+//     #[dao(immutable)]
+//     #[builder(default)]
+//     started_on: Option<AtTime>,
+//     #[dao(immutable)]
+//     #[builder(default)]
+//     ended_on: Option<AtTime>,
+//     status: ExecutionStatus,
+// }
+//
+// impl UpdateExecutionDB {
+//     pub async fn running() -> Result<Self, TdError> {
+//         Ok(Self::builder()
+//             .started_on(AtTime::default())
+//             .status(ExecutionStatus::Running)
+//             .build()?)
+//     }
+//
+//     pub fn done() -> Result<Self, TdError> {
+//         Ok(Self::builder()
+//             .ended_on(AtTime::default())
+//             .status(ExecutionStatus::Done)
+//             .build()?)
+//     }
+// }
+
+// #[td_type::Dao(sql_table = "transactions")]
+// #[td_type(builder(try_from = UpdateFunctionRun))]
+// pub struct UpdateTransactionDB {
+//     #[dao(immutable)]
+//     #[builder(default)]
+//     started_on: Option<AtTime>,
+//     #[dao(immutable)]
+//     #[builder(default)]
+//     ended_on: Option<AtTime>,
+//     status: TransactionStatus,
+// }
+//
+// impl UpdateTransactionDB {
+//     pub async fn running() -> Result<Self, TdError> {
+//         Ok(Self::builder()
+//             .started_on(AtTime::default())
+//             .status(TransactionStatus::Running)
+//             .build()?)
+//     }
+// }
+
+#[td_type::Dao(sql_table = "function_runs")]
+#[td_type(builder(try_from = UpdateFunctionRun))]
+pub struct UpdateFunctionRunDB {
+    #[dao(immutable)]
+    #[builder(default)]
+    started_on: Option<AtTime>,
+    #[dao(immutable)]
+    #[builder(default)]
+    ended_on: Option<AtTime>,
+    status: FunctionRunStatus,
+}
+
+impl UpdateFunctionRunDB {
+    pub fn scheduled() -> Result<Self, TdError> {
+        Ok(Self::builder()
+            .status(FunctionRunStatus::Scheduled)
+            .build()?)
+    }
+
+    pub async fn run_requested() -> Result<Self, TdError> {
+        Ok(Self::builder()
+            .status(FunctionRunStatus::RunRequested)
+            .build()?)
+    }
+
+    pub async fn cancel() -> Result<Self, TdError> {
+        Ok(Self::builder()
+            .ended_on(AtTime::now().await)
+            .status(FunctionRunStatus::Canceled)
+            .build()?)
+    }
+}
+
+#[td_type::Dao(sql_table = "table_data_versions")]
+pub struct UpdateTableDataVersionDB {
+    #[dao(immutable)]
+    #[builder(default)]
+    has_data: Option<HasData>,
+}
+
+// #[td_type::Dao(sql_table = "function_requirements")]
+// #[td_type(builder(try_from = UpdateFunctionRun))]
+// pub struct UpdateFunctionRequirementDB {
+//     status: RequirementStatus,
+// }
+
+#[td_type::Dao(sql_table = "worker_messages")]
+pub struct UpdateWorkerMessageDB {
+    status: WorkerMessageStatus,
+}
+
+impl UpdateWorkerMessageDB {
+    pub fn unlocked() -> Result<Self, TdError> {
+        Ok(Self::builder()
+            .status(WorkerMessageStatus::Unlocked)
+            .build()?)
+    }
+}
+
+// Dtos
 
 #[td_type::Dto]
 pub struct ExecutionRequest {
@@ -161,8 +583,14 @@ pub struct TableVersionResponse {
     name: TableName,
 }
 
+// TODO: Value is a placeholder, we need to define the actual type
+pub type CallbackRequest = ResponseMessagePayload<FunctionOutput>;
+
+// Dlos
+
 /// Represents a function version to perform graph resolution.
 #[td_type::Dlo]
+#[derive(Hash)]
 #[td_type(builder(try_from = FunctionVersionDBWithNames))]
 pub struct FunctionVersionNode {
     collection_id: CollectionId,
@@ -174,6 +602,7 @@ pub struct FunctionVersionNode {
 
 /// Represents a table version to perform graph resolution.
 #[td_type::Dlo]
+#[derive(Hash)]
 #[td_type(builder(try_from = TableVersionDBWithNames))]
 pub struct TableVersionNode {
     collection_id: CollectionId,
@@ -187,9 +616,17 @@ pub struct TableVersionNode {
 
 /// Adds contextual information to dependency graph edges.
 #[td_type::Dlo]
+#[derive(Hash)]
 pub struct GraphDependency {
     dep_pos: DependencyPos,
     self_dependency: SelfDependency,
+}
+
+/// Adds contextual information to dependency graph edges.
+#[td_type::Dlo]
+#[derive(Hash)]
+pub struct GraphOutput {
+    output_pos: Option<TableFunctionParamPos>,
 }
 
 /// Graph versions, which will always hold the versions of the table, either input or output.
@@ -198,6 +635,7 @@ pub enum GraphEdge<V> {
     // Table create
     Output {
         versions: V,
+        output: GraphOutput,
     },
     // Function trigger
     Trigger {
@@ -223,8 +661,8 @@ impl<V: Display> Display for GraphEdge<V> {
 }
 
 impl<V> GraphEdge<V> {
-    pub fn output(versions: V) -> Self {
-        Self::Output { versions }
+    pub fn output(versions: V, output: GraphOutput) -> Self {
+        Self::Output { versions, output }
     }
 
     pub fn trigger(versions: V) -> Self {
@@ -240,8 +678,9 @@ impl<V> GraphEdge<V> {
 
     pub fn versioned<VV>(&self, new_version: VV) -> GraphEdge<VV> {
         match self {
-            GraphEdge::Output { .. } => GraphEdge::Output {
+            GraphEdge::Output { output, .. } => GraphEdge::Output {
                 versions: new_version,
+                output: output.clone(),
             },
             GraphEdge::Trigger { .. } => GraphEdge::Trigger {
                 versions: new_version,
@@ -260,11 +699,28 @@ impl<V> GraphEdge<V> {
             GraphEdge::Dependency { versions, .. } => versions,
         }
     }
+
+    pub fn dependency_pos(&self) -> Option<&DependencyPos> {
+        match self {
+            GraphEdge::Output { .. } => None,
+            GraphEdge::Trigger { .. } => None,
+            GraphEdge::Dependency { dependency, .. } => Some(dependency.dep_pos()),
+        }
+    }
+
+    pub fn output_pos(&self) -> Option<&TableFunctionParamPos> {
+        match self {
+            GraphEdge::Output { output, .. } => output.output_pos().as_ref(),
+            GraphEdge::Trigger { .. } => None,
+            GraphEdge::Dependency { .. } => None,
+        }
+    }
 }
 
 /// Represents the versions of a table. It has a list of optional tables because resolved `Versions`
 /// can exist or not, and that is not necessarily an error.
 #[td_type::Dlo]
+#[derive(Hash)]
 pub struct ResolvedVersion {
     inner: Vec<Option<TableDataVersionDB>>,
     original: TableVersions,

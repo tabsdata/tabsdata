@@ -2,11 +2,87 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-pub mod delete;
-pub mod read;
-pub mod read_version;
-pub mod register;
-pub mod update;
+use crate::function::services::delete::DeleteFunctionService;
+use crate::function::services::read::ReadFunctionService;
+use crate::function::services::read_version::ReadFunctionVersionService;
+use crate::function::services::register::RegisterFunctionService;
+use crate::function::services::update::UpdateFunctionService;
+use crate::function::services::upload::UploadFunctionService;
+use std::sync::Arc;
+use td_database::sql::DbPool;
+use td_error::TdError;
+use td_objects::crudl::{CreateRequest, DeleteRequest, ReadRequest, UpdateRequest};
+use td_objects::rest_urls::{CollectionParam, FunctionParam, FunctionVersionParam};
+use td_objects::types::function::{
+    Bundle, FunctionRegister, FunctionUpdate, FunctionUpload, FunctionVersion,
+    FunctionVersionWithAllVersions, FunctionVersionWithTables,
+};
+use td_storage::Storage;
+use td_tower::service_provider::TdBoxService;
+
+pub(crate) mod delete;
+pub(crate) mod read;
+pub(crate) mod read_version;
+pub(crate) mod register;
+pub(crate) mod update;
+pub(crate) mod upload;
+
+pub struct FunctionServices {
+    register: RegisterFunctionService,
+    upload: UploadFunctionService,
+    read: ReadFunctionService,
+    read_version: ReadFunctionVersionService,
+    update: UpdateFunctionService,
+    delete: DeleteFunctionService,
+}
+
+impl FunctionServices {
+    pub fn new(db: DbPool, storage: Arc<Storage>) -> Self {
+        Self {
+            register: RegisterFunctionService::new(db.clone()),
+            upload: UploadFunctionService::new(db.clone(), storage.clone()),
+            read: ReadFunctionService::new(db.clone()),
+            read_version: ReadFunctionVersionService::new(db.clone()),
+            update: UpdateFunctionService::new(db.clone()),
+            delete: DeleteFunctionService::new(db.clone()),
+        }
+    }
+
+    pub async fn register(
+        &self,
+    ) -> TdBoxService<CreateRequest<CollectionParam, FunctionRegister>, FunctionVersion, TdError>
+    {
+        self.register.service().await
+    }
+
+    pub async fn upload(
+        &self,
+    ) -> TdBoxService<CreateRequest<FunctionParam, FunctionUpload>, Bundle, TdError> {
+        self.upload.service().await
+    }
+
+    pub async fn read(
+        &self,
+    ) -> TdBoxService<ReadRequest<FunctionParam>, FunctionVersionWithAllVersions, TdError> {
+        self.read.service().await
+    }
+
+    pub async fn read_version(
+        &self,
+    ) -> TdBoxService<ReadRequest<FunctionVersionParam>, FunctionVersionWithTables, TdError> {
+        self.read_version.service().await
+    }
+
+    pub async fn update(
+        &self,
+    ) -> TdBoxService<UpdateRequest<FunctionParam, FunctionUpdate>, FunctionVersion, TdError> {
+        self.update.service().await
+    }
+
+    pub async fn delete(&self) -> TdBoxService<DeleteRequest<FunctionParam>, (), TdError> {
+        self.delete.service().await
+    }
+}
 
 #[cfg(test)]
 pub(crate) mod tests {
@@ -20,7 +96,7 @@ pub(crate) mod tests {
     use td_objects::types::collection::CollectionDB;
     use td_objects::types::dependency::{DependencyDBWithNames, DependencyVersionDBWithNames};
     use td_objects::types::function::{
-        FunctionCreate, FunctionDB, FunctionUpdate, FunctionVersion, FunctionVersionDB,
+        FunctionDB, FunctionRegister, FunctionUpdate, FunctionVersion, FunctionVersionDB,
     };
     use td_objects::types::table::{TableDB, TableVersionDB};
     use td_objects::types::trigger::{TriggerDBWithNames, TriggerVersionDBWithNames};
@@ -29,7 +105,7 @@ pub(crate) mod tests {
         db: &DbPool,
         user_id: &UserId,
         collection: &CollectionDB,
-        create: &FunctionCreate,
+        create: &FunctionRegister,
         response: &FunctionVersion,
     ) -> Result<(), TdError> {
         // Assertions
@@ -41,7 +117,7 @@ pub(crate) mod tests {
         assert_eq!(response.collection_id(), collection.id());
         assert_eq!(response.name(), create.name());
         assert_eq!(response.description(), create.description());
-        assert_eq!(*response.status(), FunctionStatus::active());
+        assert_eq!(*response.status(), FunctionStatus::Active);
         assert_eq!(response.bundle_id(), create.bundle_id());
         assert_eq!(response.snippet(), create.snippet());
         assert_eq!(response.defined_by_id(), user_id);
@@ -83,11 +159,11 @@ pub(crate) mod tests {
         assert_eq!(function_version.snippet(), create.snippet());
         assert_eq!(function_version.defined_on(), function.created_on());
         assert_eq!(function_version.defined_by_id(), function.created_by_id());
-        assert_eq!(*function_version.status(), FunctionStatus::active());
+        assert_eq!(*function_version.status(), FunctionStatus::Active);
 
         // Assert table versions were created (query by active to filter deleted tables in updates)
         let table_versions: Vec<TableVersionDB> = queries
-            .select_by::<TableVersionDB>(&(function_version_id, &TableStatus::active()))?
+            .select_by::<TableVersionDB>(&(function_version_id, &TableStatus::Active))?
             .build_query_as()
             .fetch_all(db)
             .await
@@ -131,7 +207,7 @@ pub(crate) mod tests {
         let dependency_versions: Vec<DependencyVersionDBWithNames> = queries
             .select_by::<DependencyVersionDBWithNames>(&(
                 function_version_id,
-                &DependencyStatus::active(),
+                &DependencyStatus::Active,
             ))?
             .build_query_as()
             .fetch_all(db)
@@ -157,7 +233,7 @@ pub(crate) mod tests {
             assert_eq!(*found.table_versions(), dependency.versions().into());
             assert_eq!(found.defined_on(), function.created_on());
             assert_eq!(found.defined_by_id(), function.created_by_id());
-            assert_eq!(*found.status(), DependencyStatus::active());
+            assert_eq!(*found.status(), DependencyStatus::Active);
         }
 
         // Assert dependencies were created
@@ -188,10 +264,7 @@ pub(crate) mod tests {
 
         // Assert trigger versions were created (query by active to filter deleted triggers in updates)
         let trigger_versions: Vec<TriggerVersionDBWithNames> = queries
-            .select_by::<TriggerVersionDBWithNames>(&(
-                function_version_id,
-                &TriggerStatus::active(),
-            ))?
+            .select_by::<TriggerVersionDBWithNames>(&(function_version_id, &TriggerStatus::Active))?
             .build_query_as()
             .fetch_all(db)
             .await
@@ -210,7 +283,7 @@ pub(crate) mod tests {
                 trigger.collection().as_ref().unwrap_or(collection.name())
             );
             assert_eq!(found.trigger_by_table_name(), trigger.table());
-            assert_eq!(*found.status(), TriggerStatus::active());
+            assert_eq!(*found.status(), TriggerStatus::Active);
         }
 
         // Assert triggers were created
@@ -243,7 +316,7 @@ pub(crate) mod tests {
         db: &DbPool,
         user_id: &UserId,
         collection: &CollectionDB,
-        create: &FunctionCreate,
+        create: &FunctionRegister,
         created_function: &FunctionDB,
         created_function_version: &FunctionVersionDB,
         update: &FunctionUpdate,
@@ -294,7 +367,7 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(*old_version[0].status(), TableStatus::active());
+            assert_eq!(*old_version[0].status(), TableStatus::Active);
 
             // And a new one, which will be active if still present, or else frozen
             let new_version: Vec<TableVersionDB> = queries
@@ -305,9 +378,9 @@ pub(crate) mod tests {
                 .map_err(handle_sql_err)?;
             assert_eq!(new_version.len(), 1);
             let new_status = if update.tables().as_deref().unwrap_or(&[]).contains(table) {
-                TableStatus::active()
+                TableStatus::Active
             } else {
-                TableStatus::frozen()
+                TableStatus::Frozen
             };
             assert_eq!(*new_version[0].status(), new_status);
 
@@ -332,7 +405,7 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(*old_version[0].status(), DependencyStatus::active());
+            assert_eq!(*old_version[0].status(), DependencyStatus::Active);
 
             // And a new one, which will be active if still present, or else deleted
             let new_version: Vec<DependencyVersionDBWithNames> = queries
@@ -356,9 +429,9 @@ pub(crate) mod tests {
                 .unwrap_or(&[])
                 .contains(dependency)
             {
-                DependencyStatus::active()
+                DependencyStatus::Active
             } else {
-                DependencyStatus::deleted()
+                DependencyStatus::Deleted
             };
             assert_eq!(*new_version[0].status(), new_status);
 
@@ -383,7 +456,7 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(*old_version[0].status(), TriggerStatus::active());
+            assert_eq!(*old_version[0].status(), TriggerStatus::Active);
 
             // And a new one, which will be active if still present, or else deleted
             let new_version: Vec<TriggerVersionDBWithNames> = queries
@@ -404,9 +477,9 @@ pub(crate) mod tests {
                 .unwrap_or(&[])
                 .contains(trigger)
             {
-                TriggerStatus::active()
+                TriggerStatus::Active
             } else {
-                TriggerStatus::deleted()
+                TriggerStatus::Deleted
             };
             assert_eq!(*new_version[0].status(), new_status);
 
@@ -423,7 +496,7 @@ pub(crate) mod tests {
         db: &DbPool,
         _user_id: &UserId,
         collection: &CollectionDB,
-        create: &FunctionCreate,
+        create: &FunctionRegister,
         created_function: &FunctionDB,
         created_function_version: &FunctionVersionDB,
     ) -> Result<(), TdError> {
@@ -472,7 +545,7 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(*old_version[0].status(), TableStatus::active());
+            assert_eq!(*old_version[0].status(), TableStatus::Active);
         }
 
         // Assert dependencies
@@ -492,7 +565,7 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(*old_version[0].status(), DependencyStatus::active());
+            assert_eq!(*old_version[0].status(), DependencyStatus::Active);
         }
 
         // Assert triggers
@@ -509,7 +582,7 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(*old_version[0].status(), TriggerStatus::active());
+            assert_eq!(*old_version[0].status(), TriggerStatus::Active);
         }
 
         Ok(())

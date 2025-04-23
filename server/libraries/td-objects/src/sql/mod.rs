@@ -211,10 +211,13 @@ macro_rules! impl_find_by {
                 let fields = D::fields();
                 let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
-                if !e.is_empty() {
+                if e.is_empty() {
+                    // Safeguard so empty lookups don't find all rows
+                    query_builder.push(" WHERE 1 = 0");
+                } else {
                     gen_where_clause!(query_builder, D, e: [ $($E),* ]);
                 }
-                trace!("select_{}: sql: {}", table, query_builder.sql());
+                trace!("find_by_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }
         }
@@ -275,6 +278,12 @@ pub trait UpdateBy<'a, E> {
         dao: &'a U,
         e: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+
+    fn update_all_by<U: DataAccessObject, D: DataAccessObject>(
+        &self,
+        dao: &'a U,
+        e: &'a [E],
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
 }
 
 macro_rules! impl_update_by {
@@ -294,6 +303,21 @@ macro_rules! impl_update_by {
                 let mut query_builder = dao.tuples_query_builder(sql, fields);
                 gen_where_clause!(query_builder, D, $($E),*);
                 trace!("update_{}: sql: {}", table, query_builder.sql());
+                Ok(query_builder)
+            }
+
+            fn update_all_by<U: DataAccessObject, D: DataAccessObject>(&self, dao: &'a U, e: &'a [ ($(&'a $E),*) ]) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
+                let table = D::sql_table();
+                let fields = U::fields();
+                let sql = format!("UPDATE {} SET ", table);
+                let mut query_builder = dao.tuples_query_builder(sql, fields);
+                if e.is_empty() {
+                    // Safeguard so empty lookups don't update all rows
+                    query_builder.push(" WHERE 1 = 0");
+                } else {
+                    gen_where_clause!(query_builder, D, e: [ $($E),* ]);
+                }
+                trace!("update_all_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }
         }

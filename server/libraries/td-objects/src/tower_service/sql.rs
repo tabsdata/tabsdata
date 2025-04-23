@@ -28,6 +28,8 @@ pub enum SqlError {
     DeleteError(String, String, String, #[source] sqlx::Error) = 5,
     #[error("Could not find entity in '{0}': {1}")]
     FindError(String, #[source] sqlx::Error) = 6,
+    #[error("Could not update entity in '{0}': {1}")]
+    UpdateAllError(String, #[source] sqlx::Error) = 7,
 }
 
 macro_rules! formatted_entity {
@@ -216,62 +218,45 @@ macro_rules! impl_select_all {
 all_the_tuples!(impl_select_all);
 
 #[async_trait]
-pub trait SqlFindService<D, E> {
-    async fn find<Q, F>(
+pub trait SqlFindService<E> {
+    async fn find<Q, D>(
         connection: Connection,
         queries: SrvCtx<Q>,
-        by: Input<Vec<D>>,
-    ) -> Result<Vec<F>, TdError>
+        by: Input<Vec<E>>,
+    ) -> Result<Vec<D>, TdError>
     where
         Q: DerefQueries,
-        F: DataAccessObject;
+        D: DataAccessObject;
 }
 
-macro_rules! impl_find {
-    (
-        [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens, unused_variables)]
-        #[async_trait]
-        impl<D, $($E),*> SqlFindService<D, ($($E),*)> for By<(D, ($($E),*))>
-        where
-            D: DataAccessObject + 'static,
-            $($E: SqlEntity + for<'a> From<&'a D>),*
-        {
-            async fn find<Q, F>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
-                Input(by): Input<Vec<D>>,
-            ) -> Result<Vec<F>, TdError>
-            where
-                Q: DerefQueries,
-                F: DataAccessObject,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+#[async_trait]
+impl<E> SqlFindService<E> for By<E>
+where
+    E: SqlEntity,
+{
+    async fn find<Q, D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<Q>,
+        Input(by): Input<Vec<E>>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        Q: DerefQueries,
+        D: DataAccessObject,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
 
-                // TODO this is not getting chunked. If there are too many we can have issues.
-                // TODO care, if lookup is empty it gets everything
-                let lookup: Vec<_> = by.iter().map(|d| ($($E::from(d)),*)).collect();
-                let lookup: Vec<_> = lookup.iter().map(|($($E),*)| ($($E),*)).collect();
-                let result = queries
-                    .find_by::<F>(&lookup)?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(|e| {
-                        formatted_entity!(F;)
-                            .map(|(_, _, table)| TdError::from(SqlError::FindError(table, e)))
-                    })
-                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+        let by: Vec<_> = by.iter().collect();
+        let result = queries
+            .find_by::<D>(&(by))?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| TdError::from(SqlError::FindError(D::sql_table().to_string(), e)))?;
 
-                Ok(result)
-            }
-        }
-    };
+        Ok(result)
+    }
 }
-
-all_the_tuples!(impl_find);
 
 #[async_trait]
 pub trait SqlSelectIdOrNameService<T> {
@@ -480,6 +465,17 @@ pub trait SqlUpdateService<E> {
         Q: DerefQueries,
         U: DataAccessObject,
         D: DataAccessObject;
+
+    async fn update_all<Q, U, D>(
+        connection: Connection,
+        queries: SrvCtx<Q>,
+        update: Input<U>,
+        by: Input<Vec<E>>,
+    ) -> Result<(), TdError>
+    where
+        Q: DerefQueries,
+        U: DataAccessObject,
+        D: DataAccessObject;
 }
 
 macro_rules! impl_update {
@@ -516,6 +512,36 @@ macro_rules! impl_update {
                         formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
                             TdError::from(SqlError::UpdateError(columns, values, table, e))
                         })
+                    })
+                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+                Ok(())
+            }
+
+            async fn update_all<Q, U, D>(
+                Connection(connection): Connection,
+                SrvCtx(queries): SrvCtx<Q>,
+                Input(update): Input<U>,
+                Input(by): Input<Vec<($($E),*)>>,
+            ) -> Result<(), TdError>
+            where
+                Q: DerefQueries,
+                U: DataAccessObject,
+                D: DataAccessObject,
+            {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
+
+                // TODO this is not getting chunked. If there are too many we can have issues.
+                // TODO care, if lookup is empty it gets everything
+                let lookup: Vec<_> = by.iter().map(|($($E),*)| ($($E),*)).collect();
+                queries
+                    .update_all_by::<U, D>(update.deref(), &lookup)?
+                    .build()
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(|e| {
+                        formatted_entity!(D;)
+                            .map(|(_, _, table)| TdError::from(SqlError::UpdateAllError(table, e)))
                     })
                     .map_err(|e| e.unwrap_or_else(|e| e))?;
                 Ok(())

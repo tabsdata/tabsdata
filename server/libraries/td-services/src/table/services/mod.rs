@@ -46,9 +46,9 @@ pub(crate) mod tests {
             assert_eq!(table_version.collection_id(), collection.id());
             assert_eq!(table_version.defined_by_id(), user_id);
         }
-        assert_eq!(*table_versions[0].status(), TableStatus::deleted());
-        assert_eq!(*table_versions[1].status(), TableStatus::frozen());
-        assert_eq!(*table_versions[2].status(), TableStatus::active());
+        assert_eq!(*table_versions[0].status(), TableStatus::Deleted);
+        assert_eq!(*table_versions[1].status(), TableStatus::Frozen);
+        assert_eq!(*table_versions[2].status(), TableStatus::Active);
 
         // And all have the same table_id
         assert_eq!(table_versions[0].table_id(), table_versions[1].table_id());
@@ -66,7 +66,7 @@ pub(crate) mod tests {
             .map_err(handle_sql_err)?;
         assert_eq!(
             *deleted_table_function_version.status(),
-            FunctionStatus::frozen()
+            FunctionStatus::Frozen
         );
 
         // And that the function is also frozen
@@ -103,7 +103,7 @@ pub(crate) mod tests {
                 .fetch_one(db)
                 .await
                 .map_err(handle_sql_err)?;
-            assert_eq!(*function_version.status(), FunctionStatus::frozen());
+            assert_eq!(*function_version.status(), FunctionStatus::Frozen);
         }
 
         Ok(())
@@ -138,7 +138,7 @@ pub(crate) mod tests {
             assert_eq!(table_version.name(), table_name);
             assert_eq!(table_version.collection_id(), collection.id());
             assert_eq!(table_version.defined_by_id(), user_id);
-            assert_eq!(*table_version.status(), TableStatus::active());
+            assert_eq!(*table_version.status(), TableStatus::Active);
         }
 
         // Function can still be frozen if another table got deleted

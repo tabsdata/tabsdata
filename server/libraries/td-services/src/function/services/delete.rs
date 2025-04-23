@@ -113,7 +113,7 @@ mod tests {
         AccessTokenId, BundleId, FunctionRuntimeValues, RoleId, UserId,
     };
     use td_objects::types::function::{
-        FunctionCreate, FunctionVersionBuilder, FunctionVersionDBWithNames,
+        FunctionRegister, FunctionVersionBuilder, FunctionVersionDBWithNames,
     };
     use td_tower::ctx_service::RawOneshot;
 
@@ -209,7 +209,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &admin_id).await;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -257,7 +257,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &admin_id).await;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -308,7 +308,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &admin_id).await;
 
-        let trigger_create = FunctionCreate::builder()
+        let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
             .try_description("wanted")?
             .bundle_id(BundleId::default())
@@ -322,7 +322,7 @@ mod tests {
 
         let _ = seed_function(&db, &collection, &trigger_create).await;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -370,7 +370,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &admin_id).await;
 
-        let trigger_create = FunctionCreate::builder()
+        let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
             .try_description("wanted")?
             .bundle_id(BundleId::default())
@@ -384,7 +384,7 @@ mod tests {
 
         let _ = seed_function(&db, &collection, &trigger_create).await;
 
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -432,7 +432,7 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &admin_id).await;
 
-        let trigger_create = FunctionCreate::builder()
+        let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
             .try_description("wanted")?
             .bundle_id(BundleId::default())
@@ -446,7 +446,7 @@ mod tests {
 
         let _ = seed_function(&db, &collection, &trigger_create).await;
 
-        let create_1 = FunctionCreate::builder()
+        let create_1 = FunctionRegister::builder()
             .try_name("joaquin_workout_1")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -460,7 +460,7 @@ mod tests {
 
         let (_, created_function_version_1) = seed_function(&db, &collection, &create_1).await;
 
-        let create_2 = FunctionCreate::builder()
+        let create_2 = FunctionRegister::builder()
             .try_name("joaquin_workout_2")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())

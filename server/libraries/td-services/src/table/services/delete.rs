@@ -112,7 +112,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, FunctionRuntimeValues, RoleId, TableDependency, TableName, UserId,
     };
-    use td_objects::types::function::{FunctionCreate, FunctionUpdate};
+    use td_objects::types::function::{FunctionRegister, FunctionUpdate};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -172,7 +172,7 @@ mod tests {
         let collection = seed_collection(&db, &collection_name, &admin_id).await;
 
         // Create a function with some tables.
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -253,7 +253,7 @@ mod tests {
         let collection = seed_collection(&db, &collection_name, &admin_id).await;
 
         // Create a function with some tables.
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
@@ -271,7 +271,7 @@ mod tests {
         let _ = seed_function(&db, &collection, &create).await;
 
         // Create a function depending on it.
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("joaquin_dependant_function")?
             .try_description("joaquin_dependant_function description")?
             .bundle_id(BundleId::default())
