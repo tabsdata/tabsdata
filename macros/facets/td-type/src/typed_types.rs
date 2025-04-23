@@ -9,7 +9,7 @@ use quote::{format_ident, quote, ToTokens};
 use std::any::type_name;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use syn::{parse_macro_input, ItemStruct};
+use syn::{parse_macro_input, ItemEnum, ItemStruct};
 use td_shared::meta_parser::{some_or_none, OptionWrapper, SynMetaOrLit};
 use td_shared::{downcast_option, parse_meta};
 
@@ -664,7 +664,7 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
 
     let expanded = quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         pub struct #name(td_common::id::Id);
 
         impl Default for #name {
@@ -1204,4 +1204,110 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
     };
 
     expanded
+}
+
+pub fn typed_enum(_args: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemEnum);
+
+    let name = &input.ident;
+    let error_name = format_ident!("{}Error", name);
+
+    let expanded = quote! {
+        #[td_apiforge::apiserver_schema]
+        #[derive(
+            Debug, Clone,
+            PartialEq, Eq, Hash, PartialOrd, Ord,
+            strum_macros::EnumString, strum_macros::Display
+        )]
+        #input
+
+        #[td_error::td_error]
+        pub enum #error_name {
+            #[error("Cannot parse value as enum variant: '{0}'")]
+            Parse(String),
+        }
+
+        impl TryFrom<String> for #name {
+            type Error = #error_name;
+
+            fn try_from(s: String) -> Result<Self, #error_name> {
+                use std::str::FromStr;
+                #name::from_str(s.as_str()).map_err(|_| #error_name::Parse(s))
+            }
+        }
+
+        impl From<&#name> for #name {
+            fn from(val: &#name) -> Self {
+                val.clone()
+            }
+        }
+
+        impl<'de> serde::Deserialize<'de> for #name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let s = String::deserialize(deserializer)?;
+                Self::try_from(s).map_err(serde::de::Error::custom)
+            }
+        }
+
+        impl serde::Serialize for #name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                self.to_string().serialize(serializer)
+            }
+        }
+
+        impl sqlx::Type<sqlx::Sqlite> for #name {
+            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+                <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+            }
+
+            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
+                <String as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
+            }
+        }
+
+        impl<'q, DB: sqlx::Database> sqlx::Encode<'q, DB> for #name
+        where
+            String: sqlx::Encode<'q, DB>,
+        {
+            fn encode_by_ref(
+                &self,
+                buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'q>,
+            ) -> Result<::sqlx::encode::IsNull, ::sqlx::error::BoxDynError> {
+                <String as sqlx::Encode<'q, DB>>::encode_by_ref(&self.to_string(), buf)
+            }
+            fn produces(&self) -> Option<DB::TypeInfo> {
+                <String as sqlx::Encode<'q, DB>>::produces(&self.to_string())
+            }
+            fn size_hint(&self) -> usize {
+                <String as sqlx::Encode<'q, DB>>::size_hint(&self.to_string())
+            }
+        }
+
+        impl<'r, DB: sqlx::Database> sqlx::Decode<'r, DB> for #name
+        where
+            String: sqlx::Decode<'r, DB>,
+        {
+            fn decode(
+                value: <DB as sqlx::Database>::ValueRef<'r>,
+            ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+                let decoded = <String as sqlx::Decode<'r, DB>>::decode(value)?;
+                Ok(Self::try_from(decoded).map_err(Box::new)?)
+            }
+        }
+
+        impl crate::types::SqlEntity for #name {
+            type Type = #name;
+            fn value(&self) -> &Self::Type {
+                &self
+            }
+        }
+    };
+
+    expanded.into()
 }

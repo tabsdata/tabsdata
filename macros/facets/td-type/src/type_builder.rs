@@ -34,11 +34,11 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
     // Typed generic
     let ident = &input.ident;
     let fields = &input.fields;
-    let ty_generics = &input.generics;
-    let where_clause = &input.generics.where_clause;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let field_names = gen_fields_as_list(fields);
     let field_types = gen_field_types_as_list(fields);
+    let immutable_field_names = gen_immutable_fields_as_list(fields);
 
     // Dao specifics
     let sql_table = match parsed_args.sql_table {
@@ -65,7 +65,7 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
             let partition_by = partition_by.as_str();
             let partition_by_type = type_for_field(fields, partition_by);
             quote! {
-                impl<#ty_generics> crate::types::PartitionBy for #ident #ty_generics #where_clause {
+                impl #impl_generics crate::types::PartitionBy for #ident #ty_generics #where_clause {
                     type PartitionBy = #partition_by_type;
                     fn partition_by() -> &'static str {
                         #partition_by
@@ -82,7 +82,7 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
             let natural_order_by = natural_order_by.as_str();
             let natural_order_type = type_for_field(fields, natural_order_by);
             quote! {
-                impl<#ty_generics> crate::types::NaturalOrder for #ident #ty_generics #where_clause {
+                impl #impl_generics crate::types::NaturalOrder for #ident #ty_generics #where_clause {
                     type NaturalOrder = #natural_order_type;
                     fn natural_order_by() -> &'static str {
                         #natural_order_by
@@ -98,7 +98,7 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
         let status_by = status_by.as_str();
         let status_type = type_for_field(fields, status_by);
         quote! {
-            impl<#ty_generics> crate::types::Status for #ident #ty_generics #where_clause {
+            impl #impl_generics crate::types::Status for #ident #ty_generics #where_clause {
                 type Status = #status_type;
                 fn status_by() -> &'static str {
                     #status_by
@@ -112,7 +112,7 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
         // if status field is present, we can impl this by default
         let status_type = type_for_field(fields, "status");
         quote! {
-            impl<#ty_generics> crate::types::Status for #ident #ty_generics #where_clause {
+            impl #impl_generics crate::types::Status for #ident #ty_generics #where_clause {
                 type Status = #status_type;
                 fn status_by() -> &'static str {
                     "status"
@@ -134,7 +134,7 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             quote! {
-                impl<#ty_generics> crate::types::Recursive for #ident #ty_generics #where_clause {
+                impl #impl_generics crate::types::Recursive for #ident #ty_generics #where_clause {
                     type Recursive = #up_type;
 
                     fn recurse_up() -> &'static str {
@@ -154,12 +154,12 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
 
     // Expansion
     let expanded = quote! {
-        #[derive(Debug, Clone, Eq, PartialEq, Hash, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+        #[derive(Debug, Clone, Eq, PartialEq, td_type::DaoType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
 
-        impl<#ty_generics> crate::types::DataAccessObject for #ident #ty_generics #where_clause {
+        impl #impl_generics crate::types::DataAccessObject for #ident #ty_generics #where_clause {
             fn sql_table() -> &'static str {
                 #sql_table
             }
@@ -170,6 +170,10 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
 
             fn fields() -> &'static [&'static str] {
                 &[#(stringify!(#field_names)),*]
+            }
+
+            fn immutable_fields() -> &'static [&'static str] {
+                &[#(stringify!(#immutable_field_names)),*]
             }
 
             fn sql_field_for_type<E: crate::types::SqlEntity>() -> Option<&'static str> {
@@ -205,9 +209,16 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
                 let mut separated = query_builder.separated(", ");
                 #(
-                    if bindings.contains(&stringify!(#field_names)) {
-                        separated.push(format!("{} = ", stringify!(#field_names)));
-                        separated.push_bind_unseparated(&self.#field_names);
+                    let field_name = stringify!(#field_names);
+                    if bindings.contains(&field_name) {
+                        if Self::immutable_fields().contains(&field_name) {
+                            separated.push(format!(r"{v} = CASE WHEN {v} IS NULL THEN ", v = field_name));
+                            separated.push_bind_unseparated(&self.#field_names);
+                            separated.push_unseparated(format!(r" ELSE {v} END", v = field_name));
+                        } else {
+                            separated.push(format!("{v} = ", v = field_name));
+                            separated.push_bind_unseparated(&self.#field_names);
+                        }
                     }
                 )*
                 query_builder
@@ -223,56 +234,81 @@ pub fn dao(args: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+// Option<T> and T is the same, as NULL comparisons are always False in Sql
 fn type_for_field<'a>(fields: &'a Fields, field_name: &str) -> &'a Type {
-    fields
+    let field_type = fields
         .iter()
         .find_map(|f| {
-            if f.ident.as_ref().is_some_and(|ident| ident == field_name) {
+            if f.ident.as_ref().map_or(false, |ident| ident == field_name) {
                 Some(&f.ty)
             } else {
                 None
             }
         })
-        .unwrap_or_else(|| panic!("Field {} not found in struct", field_name))
+        .unwrap_or_else(|| panic!("Field {} not found in struct", field_name));
+
+    if let Type::Path(type_path) = field_type {
+        if let Some(segment) = type_path.path.segments.last() {
+            if segment.ident == "Option" {
+                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                    if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+                        return inner_type;
+                    }
+                }
+            }
+        }
+    }
+
+    field_type
+}
+
+pub fn dao_type(input: TokenStream) -> TokenStream {
+    td_type(input)
 }
 
 pub fn dlo(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
 
     let ident = &input.ident;
-    let ty_generics = &input.generics;
-    let where_clause = &input.generics.where_clause;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let expanded = quote! {
-        #[derive(Debug, Clone, Eq, PartialEq, Hash, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+        #[derive(Debug, Clone, Eq, PartialEq, td_type::DloType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
 
-        impl<#ty_generics> crate::types::DataLogicObject for #ident #ty_generics #where_clause {}
+        impl #impl_generics crate::types::DataLogicObject for #ident #ty_generics #where_clause {}
     };
 
     expanded.into()
+}
+
+pub fn dlo_type(input: TokenStream) -> TokenStream {
+    td_type(input)
 }
 
 pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
 
     let ident = &input.ident;
-    let ty_generics = &input.generics;
-    let where_clause = &input.generics.where_clause;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let expanded = quote! {
-        #[derive(Debug, Clone, Eq, PartialEq, td_type::TdType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
+        #[derive(Debug, Clone, Eq, PartialEq, td_type::DtoType, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
         #[td_apiforge::apiserver_schema]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #input
 
-        impl<#ty_generics> crate::types::DataTransferObject for #ident #ty_generics #where_clause {}
+        impl #impl_generics crate::types::DataTransferObject for #ident #ty_generics #where_clause {}
     };
 
     expanded.into()
+}
+
+pub fn dto_type(input: TokenStream) -> TokenStream {
+    td_type(input)
 }
 
 pub fn url_param(_args: TokenStream, item: TokenStream) -> TokenStream {
@@ -283,7 +319,7 @@ pub fn url_param(_args: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let expanded = quote! {
-        #[derive(Debug, Clone, td_type::TdType, utoipa::IntoParams, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
+        #[derive(Debug, Clone, td_type::DtoType, utoipa::IntoParams, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #[td_apiforge::apiserver_schema]
@@ -310,6 +346,7 @@ struct TdTypeArg {
     skip_all: bool,
 }
 
+#[allow(dead_code)]
 #[derive(FromField)]
 #[darling(attributes(td_type))]
 struct TdTypeFields {
@@ -321,6 +358,8 @@ struct TdTypeFields {
     setter: bool,
     #[darling(default)]
     extractor: bool,
+    #[darling(default)]
+    immutable: bool,
 }
 
 #[derive(FromMeta)]
@@ -380,14 +419,14 @@ pub fn td_type(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl TryFrom<&#builder_type #ty_generics> for #type_ #ty_generics {
+        impl #impl_generics TryFrom<&#builder_type #ty_generics> for #type_ #ty_generics {
             type Error = #builder_error_type;
             fn try_from(from: &#builder_type #ty_generics) -> Result<Self, Self::Error> {
                 from.build()
             }
         }
 
-        impl From<()> for #builder_type #ty_generics {
+        impl #impl_generics From<()> for #builder_type #ty_generics {
             fn from(from: ()) -> Self {
                 #type_::builder()
             }
@@ -650,6 +689,20 @@ fn gen_fields_as_list(fields: &Fields) -> Vec<&Ident> {
             // Check if the field does NOT have the `#[sqlx(skip)]` attribute
             !f.attrs.iter().any(|attr| {
                 attr.path().is_ident("sqlx") && attr.to_token_stream().to_string().contains("skip")
+            })
+        })
+        .filter_map(|f| f.ident.as_ref())
+        .collect()
+}
+
+fn gen_immutable_fields_as_list(fields: &Fields) -> Vec<&Ident> {
+    fields
+        .iter()
+        .filter(|f| {
+            // Check if the field does have the `#[dao(immutable)]` attribute
+            f.attrs.iter().any(|attr| {
+                attr.path().is_ident("dao")
+                    && attr.to_token_stream().to_string().contains("immutable")
             })
         })
         .filter_map(|f| f.ident.as_ref())

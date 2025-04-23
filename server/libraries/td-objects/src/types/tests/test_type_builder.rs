@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests {
     use crate::types::DataAccessObject;
-    use td_type::{Dao, Dlo, Dto, TdType};
+    use td_type::{Dao, Dlo, DloType, Dto};
 
     #[Dao]
     struct FooDao {
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_builder_try_from() {
-        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, DloType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
         #[td_type(builder(try_from = FooDao))]
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_builder_from_skip() {
-        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, DloType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
         #[td_type(builder(try_from = FooDao))]
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_builder_from_skip_all_and_include() {
-        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, DloType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
         #[td_type(builder(try_from = FooDao, skip_all))]
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_builder_from_combined() {
-        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, DloType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
         #[td_type(builder(try_from = FooDao, skip_all))]
@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_builder_from_default() {
-        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, DloType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
         #[td_type(builder(try_from = FooDao))]
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_builder_from_rename() {
-        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, DloType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
         #[td_type(builder(try_from = FooDao))]
@@ -344,7 +344,7 @@ mod tests {
 
     #[test]
     fn test_builder_from_combined_all() {
-        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, DloType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
         #[td_type(builder(try_from = FooDao, skip_all))]
@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn test_from_error() -> Result<(), td_error::TdError> {
-        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, DloType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
         #[td_type(builder(try_from = FooDao))]
@@ -592,7 +592,7 @@ mod tests {
 
     #[test]
     fn test_td_type_extractor() -> Result<(), td_error::TdError> {
-        #[derive(Debug, Default, TdType, derive_builder::Builder, getset::Getters)]
+        #[derive(Debug, Default, DloType, derive_builder::Builder, getset::Getters)]
         #[builder(setter(into))]
         #[getset(get = "pub")]
         struct TestDxo {
