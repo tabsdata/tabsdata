@@ -2,6 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use crate::environment::set_environment_variables;
 use crate::feature::set_cargo_features;
 
 pub struct Customization;
@@ -13,5 +14,6 @@ pub trait Customizer {
 impl Customizer for Customization {
     fn customize() {
         set_cargo_features().unwrap();
+        set_environment_variables().unwrap();
     }
 }
