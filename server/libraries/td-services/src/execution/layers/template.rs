@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::ops::Deref;
 use ta_execution::graphs::{ExecutionGraph, GraphBuilder};
 use td_error::TdError;
-use td_objects::crudl::{handle_sql_err, RequestContext};
+use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::recursive::RecursiveQueries;
 use td_objects::sql::DerefQueries;
@@ -24,7 +24,7 @@ use te_execution::transaction::TransactionBy;
 pub async fn version_graph<Q, V>(
     SrvCtx(queries): SrvCtx<Q>,
     Connection(connection): Connection,
-    Input(request_context): Input<RequestContext>, // TODO use extractor to get time and make this cleaner
+    Input(at_time): Input<AtTime>,
     Input(function): Input<FunctionId>,
 ) -> Result<Vec<V>, TdError>
 where
@@ -36,15 +36,14 @@ where
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
-    let at_time = AtTime::try_from(*request_context.time())?;
-    let v_at_time = V::NaturalOrder::from(at_time.clone());
+    let v_at_time = V::NaturalOrder::from(at_time.deref().clone());
 
     let result: Vec<V> = queries
         .select_recursive_versions_at::<V, FunctionVersionDB, _>(
             Some(&v_at_time),
             Some(&[&V::Status::default()]),
             Some(&at_time),
-            Some(&[&FunctionStatus::active()]),
+            Some(&[&FunctionStatus::Active]),
             function.deref(),
         )?
         .build_query_as()
@@ -59,7 +58,7 @@ pub async fn build_execution_template<Q: DerefQueries>(
     SrvCtx(queries): SrvCtx<Q>,
     SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Connection(connection): Connection,
-    Input(request_context): Input<RequestContext>, // TODO use extractor to get time
+    Input(at_time): Input<AtTime>,
     Input(trigger_function_version): Input<FunctionVersionDBWithNames>,
     Input(trigger_graph): Input<Vec<TriggerVersionDBWithNames>>,
 ) -> Result<ExecutionGraph<Versions>, TdError> {
@@ -79,10 +78,8 @@ pub async fn build_execution_template<Q: DerefQueries>(
         .collect();
 
     // So we can find output and input tables for them
-    let at_time = AtTime::try_from(*request_context.time())?;
-
     // TODO this should be chunked
-    let status = [&DependencyStatus::active()];
+    let status = [&DependencyStatus::Active];
     let input_tables: Vec<DependencyVersionDBWithNames> = queries
         .find_versions_at::<DependencyVersionDBWithNames>(
             Some(&at_time),
@@ -95,7 +92,7 @@ pub async fn build_execution_template<Q: DerefQueries>(
         .map_err(handle_sql_err)?;
 
     // TODO this should be chunked
-    let status = [&TableStatus::active(), &TableStatus::frozen()];
+    let status = [&TableStatus::Active, &TableStatus::Frozen];
     let output_tables: Vec<TableVersionDBWithNames> = queries
         .find_versions_at::<TableVersionDBWithNames>(
             Some(&at_time),

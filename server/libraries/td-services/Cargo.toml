@@ -52,6 +52,7 @@ td-error = { workspace = true }
 td-execution = { workspace = true }
 td-objects = { workspace = true }
 td-security = { workspace = true }
+td-storage = { workspace = true }
 td-tower = { workspace = true }
 
 ## Extensions
@@ -62,23 +63,31 @@ te-execution = { workspace = true }
 
 argon2 = { workspace = true }
 async-trait = { workspace = true }
-axum = { workspace = true, features = ["macros"] }
+axum = { workspace = true }
 chrono = { workspace = true }
+futures = { workspace = true }
 getset = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+itertools = { workspace = true }
 jsonwebtoken = { workspace = true }
 lazy_static = { workspace = true }
-serde = { workspace = true}
+serde = { workspace = true }
+sha2 = { workspace = true }
 sqlx = { workspace = true }
 strum_macros = { workspace = true }
+testdir = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
-
+url = { workspace = true }
 
 [dev-dependencies]
+td-common = { workspace = true, features = ["td-test"] }
 td-objects = { workspace = true, features = ["td-test"] }
-td-test = { workspace = true }
+td-test = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

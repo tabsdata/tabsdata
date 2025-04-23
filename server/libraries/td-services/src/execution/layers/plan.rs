@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_execution::planner::ExecutionPlanner;
 use td_execution::version_resolver::VersionResolver;
 use td_objects::sql::DerefQueries;
-use td_objects::types::basic::{Dot, Trigger};
+use td_objects::types::basic::{Dot, Trigger, VersionPos};
 use td_objects::types::execution::{
     ExecutionDB, ExecutionResponse, FunctionRequirementDB, FunctionRunDB, FunctionRunDBBuilder,
     FunctionVersionResponseBuilder, ResolvedVersion, TableDataVersionDB,
@@ -100,10 +100,15 @@ pub async fn build_table_data_versions(
     Input(function_runs): Input<Vec<FunctionRunDB>>,
     Input(template): Input<ExecutionGraph<Versions>>,
 ) -> Result<Vec<TableDataVersionDB>, TdError> {
+    let function_runs_map: HashMap<_, _> = function_runs
+        .iter()
+        .map(|f| (f.function_version_id(), f))
+        .collect();
+
     let new_table_data_versions = template
         .output_tables()
         .iter()
-        .map(|(f, t)| {
+        .map(|(f, t, edge)| {
             TableDataVersionDB::builder()
                 .collection_id(f.collection_id())
                 .table_id(t.table_id())
@@ -111,16 +116,8 @@ pub async fn build_table_data_versions(
                 .function_version_id(t.function_version_id())
                 .execution_id(execution.id())
                 .transaction_id(transaction_map.get(&transaction_by.key(f)?)?)
-                .function_run_id(
-                    // TODO better way to get the run?? note there is only one run per function per trigger
-                    function_runs
-                        .iter()
-                        .find(|f| f.function_version_id() == t.function_version_id())
-                        .map(|f| f.id())
-                        .unwrap(),
-                )
-                .triggered_on(execution.triggered_on())
-                .triggered_by_id(execution.triggered_by_id())
+                .function_run_id(function_runs_map[f.function_version_id()].id())
+                .function_param_pos(edge.output_pos().cloned())
                 .build()
                 .map_err(TdError::from)
         })
@@ -183,21 +180,30 @@ pub async fn build_function_requirements(
         .map(|f| (f.function_version_id(), f))
         .collect();
 
-    for (function, version) in plan.function_version_requirements() {
-        for version in version.inner().iter().flatten() {
-            let condition = FunctionRequirementDB::builder()
+    for (function, table, edge) in plan.function_version_requirements() {
+        for (version_pos, version) in edge.versions().inner().iter().enumerate() {
+            let mut builder = FunctionRequirementDB::builder();
+            builder
                 // current
                 .collection_id(function.collection_id())
                 .execution_id(execution.id())
                 .transaction_id(transaction_map.get(&transaction_by.key(function)?)?)
-                .function_run_id(
-                    // TODO better way to get the run?? note there is only one execution per function per trigger
-                    function_runs_map[function.function_version_id()].id(),
-                )
+                .function_run_id(function_runs_map[function.function_version_id()].id())
                 // condition
-                .condition_function_run_id(version.function_run_id())
-                .condition_table_data_version(version.id())
-                .build()?;
+                .requirement_table_id(table.table_id())
+                .requirement_table_version_id(table.table_version_id())
+                .requirement_dependency_pos(edge.dependency_pos().cloned())
+                .requirement_version_pos(VersionPos::try_from(version_pos as i16)?);
+
+            let condition = if let Some(version) = version {
+                builder
+                    .requirement_function_run_id(version.function_run_id().clone())
+                    .requirement_table_data_version_id(version.id().clone())
+                    .build()?
+            } else {
+                builder.build()?
+            };
+
             conditions.push(condition);
         }
     }
@@ -229,7 +235,7 @@ pub async fn build_response(
     let created_tables: Result<Vec<_>, TdError> = plan
         .output_tables()
         .iter()
-        .map(|(_, t)| Ok(TableVersionResponseBuilder::try_from(*t)?.build()?))
+        .map(|(_, t, _)| Ok(TableVersionResponseBuilder::try_from(*t)?.build()?))
         .collect();
     let triggered_on = execution.triggered_on();
     let dot = Dot::try_from(plan.dot().to_string())?;
