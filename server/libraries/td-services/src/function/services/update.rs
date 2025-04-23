@@ -3,6 +3,7 @@
 //
 
 use crate::common::layers::extractor::extract_req_dto;
+use crate::function::layers::register::data_location;
 use crate::function::layers::update::assert_function_name_not_exists;
 use std::sync::Arc;
 use td_database::sql::DbPool;
@@ -12,19 +13,22 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    combine, BuildService, ExtractService, SetService, TryIntoService, UpdateService, With,
+    combine, BuildService, DefaultService, ExtractService, SetService, TryIntoService,
+    UpdateService, With,
 };
 use td_objects::tower_service::sql::{
-    insert, By, SqlSelectAllService, SqlSelectIdOrNameService, SqlSelectService, SqlUpdateService,
+    insert, By, SqlDeleteService, SqlSelectAllService, SqlSelectIdOrNameService, SqlSelectService,
+    SqlUpdateService,
 };
 use td_objects::types::basic::{
-    CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName, FunctionVersionId,
-    ReuseFrozen, TableDependency, TableName, TableTrigger,
+    BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
+    FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableDependency, TableName,
+    TableTrigger,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::DependencyVersionDB;
 use td_objects::types::function::{
-    FunctionDB, FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate, FunctionVersion,
+    BundleDB, FunctionDB, FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate, FunctionVersion,
     FunctionVersionBuilder, FunctionVersionDB, FunctionVersionDBBuilder,
     FunctionVersionDBWithNames,
 };
@@ -81,15 +85,24 @@ impl UpdateFunctionService {
                 // If function has a new name, check new name does not exist in collection.
                 from_fn(assert_function_name_not_exists::<DaoQueries>),
 
+                // Get location and storage version.
+                from_fn(With::<StorageVersion>::default),
+                from_fn(data_location),
+
                 // Insert into function_versions(sql) status=Active.
                 from_fn(With::<FunctionUpdate>::convert_to::<FunctionVersionDBBuilder, _>),
                 from_fn(With::<RequestContext>::update::<FunctionVersionDBBuilder, _>),
                 from_fn(With::<CollectionId>::set::<FunctionVersionDBBuilder>),
                 // We maintain the same function id
                 from_fn(With::<FunctionId>::set::<FunctionVersionDBBuilder>),
-                // TODO missing data_location and storage_version
+                from_fn(With::<StorageVersion>::set::<FunctionVersionDBBuilder>),
+                from_fn(With::<DataLocation>::set::<FunctionVersionDBBuilder>),
                 from_fn(With::<FunctionVersionDBBuilder>::build::<FunctionVersionDB, _>),
                 from_fn(insert::<DaoQueries, FunctionVersionDB>),
+
+                // Remove from bundles
+                from_fn(With::<FunctionVersionDB>::extract::<BundleId>),
+                from_fn(By::<BundleId>::delete::<DaoQueries, BundleDB>),
 
                 // Update functions(sql) table.
                 from_fn(With::<FunctionVersionDB>::convert_to::<FunctionDBBuilder, _>),

@@ -13,6 +13,7 @@ pub mod role;
 pub mod table;
 pub mod trigger;
 pub mod user;
+pub mod worker;
 
 mod parse;
 pub mod table_ref;
@@ -30,6 +31,23 @@ pub trait SqlEntity: Send + Sync + 'static {
     fn value(&self) -> &Self::Type;
 }
 
+impl<E> SqlEntity for Option<E>
+where
+    E: Send
+        + Sync
+        + 'static
+        + for<'a> sqlx::Encode<'a, sqlx::Sqlite>
+        + sqlx::Type<sqlx::Sqlite>
+        + std::fmt::Display,
+{
+    type Type = E;
+
+    // Useful to query values that are Optional, by passing Some(value)
+    fn value(&self) -> &Self::Type {
+        self.as_ref().expect("Expected Some value to be present")
+    }
+}
+
 pub trait IdOrName: Send + Sync {
     type Id: SqlEntity;
     fn id(&self) -> Option<&Self::Id>;
@@ -44,6 +62,7 @@ pub trait DataAccessObject:
     fn sql_table() -> &'static str;
     fn order_by() -> &'static str;
     fn fields() -> &'static [&'static str];
+    fn immutable_fields() -> &'static [&'static str];
     fn sql_field_for_type<E: SqlEntity>() -> Option<&'static str>;
     fn values_query_builder(
         &self,

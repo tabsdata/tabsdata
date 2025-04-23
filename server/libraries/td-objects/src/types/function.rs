@@ -4,10 +4,15 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionName, DataLocation, Description, Frozen, FunctionId,
-    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, ReuseFrozen, Snippet,
-    StorageVersion, TableDependency, TableName, TableTrigger, UserId, UserName,
+    AtTime, BundleHash, BundleId, CollectionId, CollectionName, DataLocation, Description, Frozen,
+    FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId,
+    ReuseFrozen, Snippet, StorageVersion, TableDependency, TableName, TableTrigger, UserId,
+    UserName,
 };
+use axum::body::BodyDataStream;
+use axum::extract::Request;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[td_type::Dao(sql_table = "functions")]
 #[td_type(builder(try_from = FunctionVersionDB, skip_all))]
@@ -60,7 +65,7 @@ pub struct Function {
 }
 
 #[td_type::Dto]
-pub struct FunctionCreate {
+pub struct FunctionRegister {
     #[td_type(extractor)]
     name: FunctionName,
     description: Description,
@@ -77,14 +82,57 @@ pub struct FunctionCreate {
     reuse_frozen_tables: ReuseFrozen,
 }
 
-pub type FunctionUpdate = FunctionCreate;
+pub type FunctionUpdate = FunctionRegister;
+
+// This behaves like a dto, for request the whole body.
+#[derive(Debug, Clone)]
+pub struct FunctionUpload {
+    request: Arc<Mutex<Option<Request>>>,
+}
+
+impl FunctionUpload {
+    pub fn new(request: Request) -> Self {
+        Self {
+            request: Arc::new(Mutex::new(Some(request))),
+        }
+    }
+
+    pub async fn stream(&self) -> Option<BodyDataStream> {
+        self.request
+            .lock()
+            .await
+            .take()
+            .map(|request| request.into_body().into_data_stream())
+    }
+}
+
+#[td_type::Dao(sql_table = "bundles")]
+#[td_type(builder(try_from = RequestContext, skip_all))]
+pub struct BundleDB {
+    #[td_type(setter)]
+    id: BundleId,
+    #[td_type(setter)]
+    collection_id: CollectionId,
+    #[td_type(setter)]
+    hash: BundleHash,
+    #[td_type(builder(include, field = "time"))]
+    created_on: AtTime,
+    #[td_type(builder(include, field = "user_id"))]
+    created_by_id: UserId,
+}
+
+#[td_type::Dto]
+#[td_type(builder(try_from = BundleDB))]
+pub struct Bundle {
+    id: BundleId,
+}
 
 #[td_type::Dao(
     sql_table = "function_versions",
     partition_by = "function_id",
     natural_order_by = "defined_on"
 )]
-#[td_type(builder(try_from = FunctionCreate, skip_all))]
+#[td_type(builder(try_from = FunctionRegister, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct FunctionVersionDB {
     #[builder(default)]
@@ -101,11 +149,11 @@ pub struct FunctionVersionDB {
     #[builder(default)]
     #[td_type(setter)]
     function_id: FunctionId,
-    #[builder(default)] // TODO: remove this
+    #[td_type(setter)]
     data_location: DataLocation,
-    #[builder(default)] // TODO: remove this
+    #[td_type(setter)]
     storage_version: StorageVersion,
-    #[td_type(builder(include))]
+    #[td_type(builder(include), extractor)]
     bundle_id: BundleId,
     #[td_type(builder(include))]
     snippet: Snippet,
@@ -113,7 +161,7 @@ pub struct FunctionVersionDB {
     defined_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
     defined_by_id: UserId,
-    #[builder(default)]
+    #[builder(default = FunctionStatus::Active)]
     status: FunctionStatus,
 }
 

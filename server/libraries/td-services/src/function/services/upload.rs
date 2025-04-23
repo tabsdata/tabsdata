@@ -1,0 +1,209 @@
+//
+// Copyright 2025 Tabs Data Inc.
+//
+
+use crate::common::layers::extractor::extract_req_dto;
+use crate::function::layers::register::data_location;
+use crate::function::layers::upload::upload_function_write_to_storage;
+use std::sync::Arc;
+use td_database::sql::DbPool;
+use td_error::TdError;
+use td_objects::crudl::CreateRequest;
+use td_objects::crudl::RequestContext;
+use td_objects::rest_urls::FunctionParam;
+use td_objects::sql::DaoQueries;
+use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
+use td_objects::tower_service::from::{
+    combine, BuildService, DefaultService, ExtractService, SetService, TryIntoService, With,
+};
+use td_objects::tower_service::sql::{insert, By, SqlSelectIdOrNameService};
+use td_objects::types::basic::{
+    BundleHash, BundleId, CollectionId, CollectionIdName, FunctionId, FunctionIdName,
+    StorageVersion,
+};
+use td_objects::types::collection::CollectionDB;
+use td_objects::types::function::{
+    Bundle, BundleBuilder, BundleDB, BundleDBBuilder, FunctionDB, FunctionDBWithNames,
+    FunctionUpload,
+};
+use td_storage::Storage;
+use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
+use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::from_fn::from_fn;
+use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
+use td_tower::{layers, p, service_provider};
+
+pub struct UploadFunctionService {
+    provider: ServiceProvider<CreateRequest<FunctionParam, FunctionUpload>, Bundle, TdError>,
+}
+
+impl UploadFunctionService {
+    pub fn new(db: DbPool, storage: Arc<Storage>) -> Self {
+        let queries = Arc::new(DaoQueries::default());
+        Self {
+            provider: Self::provider(db, queries, storage),
+        }
+    }
+
+    p! {
+        provider(db: DbPool, queries: Arc<DaoQueries>, storage: Arc<Storage>) -> TdError {
+            service_provider!(layers!(
+                SrvCtxProvider::new(queries),
+                SrvCtxProvider::new(storage),
+                from_fn(extract_req_context::<CreateRequest<FunctionParam, FunctionUpload >>),
+                from_fn(extract_req_dto::<CreateRequest<FunctionParam, FunctionUpload>, _>),
+                from_fn(extract_req_name::<CreateRequest<FunctionParam, FunctionUpload>, _>),
+
+                from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
+                from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
+
+                TransactionProvider::new(db),
+
+                // Extract collection
+                from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+                from_fn(With::<CollectionDB>::extract::<CollectionId>),
+
+                // Extract function
+                from_fn(combine::<CollectionIdName, FunctionIdName>),
+                from_fn(By::<(CollectionIdName, FunctionIdName)>::select::<DaoQueries, FunctionDBWithNames>),
+
+                // Get location and storage version.
+                from_fn(With::<StorageVersion>::default),
+                from_fn(data_location),
+
+                // Write to storage with new bundle id.
+                from_fn(With::<BundleId>::default),
+                from_fn(upload_function_write_to_storage),
+
+                // Build BundleDB
+                from_fn(With::<RequestContext>::convert_to::<BundleDBBuilder, _>),
+                from_fn(With::<BundleId>::set::<BundleDBBuilder>),
+                from_fn(With::<CollectionId>::set::<BundleDBBuilder>),
+                from_fn(With::<BundleHash>::set::<BundleDBBuilder>),
+                from_fn(With::<BundleDBBuilder>::build::<BundleDB, _>),
+                from_fn(insert::<DaoQueries, BundleDB>),
+
+                // Build response
+                from_fn(With::<BundleDB>::convert_to::<BundleBuilder, _>),
+                from_fn(With::<BundleBuilder>::build::<Bundle, _>),
+            ))
+        }
+    }
+
+    pub async fn service(
+        &self,
+    ) -> TdBoxService<CreateRequest<FunctionParam, FunctionUpload>, Bundle, TdError> {
+        self.provider.make().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::function::services::tests::assert_update;
+    use crate::function::services::FunctionUpdate;
+    use axum::body::Body;
+    use axum::extract::Request;
+    use sha2::{Digest, Sha256};
+    use td_common::id::Id;
+    use td_objects::crudl::handle_sql_err;
+    use td_objects::location2::StorageLocation;
+    use td_objects::sql::SelectBy;
+    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_function2::seed_function;
+    use td_objects::test_utils::seed_user::admin_user;
+    use td_objects::types::basic::{
+        AccessTokenId, BundleId, CollectionName, DataLocation, FunctionRuntimeValues, RoleId,
+        UserId,
+    };
+    use td_storage::MountDef;
+    use td_test::file::mount_uri;
+    use td_tower::ctx_service::RawOneshot;
+    use testdir::testdir;
+
+    #[td_test::test(sqlx)]
+    async fn test_upload(db: DbPool) -> Result<(), TdError> {
+        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+
+        let create = FunctionUpdate::builder()
+            .try_name("function_foo")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let (created_function, created_function_version) =
+            seed_function(&db, &collection, &create).await;
+
+        let test_dir = testdir!();
+        let mount_def = MountDef::builder()
+            .id("id")
+            .mount_path("/")
+            .uri(mount_uri(&test_dir))
+            .build()?;
+        let storage = Arc::new(Storage::from(vec![mount_def]).await?);
+
+        let payload = "TEXT";
+        let request = Request::builder()
+            .body(Body::new(payload.to_string()))
+            .unwrap();
+        let function_upload = FunctionUpload::new(request);
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            FunctionParam::builder()
+                .try_collection(format!("{}", collection.name()))?
+                .try_function("function_foo")?
+                .build()?,
+            function_upload,
+        );
+
+        let service = UploadFunctionService::new(db.clone(), storage.clone())
+            .service()
+            .await;
+        let response = service.raw_oneshot(request).await;
+        let response = response?;
+
+        // Assert db
+        let queries = DaoQueries::default();
+        let bundle_db: Vec<BundleDB> = queries
+            .select_by::<BundleDB>(&())?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+
+        assert_eq!(bundle_db.len(), 1);
+        let bundle = &bundle_db[0];
+        assert_eq!(bundle.id(), response.id());
+        assert_eq!(bundle.collection_id(), collection.id());
+        let hash = hex::encode(&Sha256::digest(&payload)[..]);
+        assert_eq!(bundle.hash().to_string(), hash);
+        assert_eq!(*bundle.created_by_id(), admin_id);
+
+        // Assert storage
+        let data_location = DataLocation::default();
+        let (bundle_location, _) = StorageLocation::current()
+            .builder(&data_location)
+            .collection(collection.id())
+            .function(bundle.id())
+            .build();
+        let content = storage.read(&bundle_location).await?;
+        let content = String::from_utf8(content).unwrap();
+        assert_eq!(content, payload);
+
+        Ok(())
+    }
+}

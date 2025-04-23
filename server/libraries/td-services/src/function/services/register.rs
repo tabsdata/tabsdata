@@ -7,7 +7,8 @@ use crate::function::layers::register::{
     build_dependency_versions, build_table_versions, insert_and_update_tables,
 };
 use crate::function::layers::register::{
-    build_trigger_versions, insert_and_update_dependencies, insert_and_update_triggers,
+    build_trigger_versions, data_location, insert_and_update_dependencies,
+    insert_and_update_triggers,
 };
 use std::sync::Arc;
 use td_database::sql::DbPool;
@@ -17,24 +18,25 @@ use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    combine, BuildService, EmptyVecService, ExtractService, SetService, TryIntoService,
-    UpdateService, With,
+    combine, BuildService, DefaultService, EmptyVecService, ExtractService, SetService,
+    TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::{
-    insert, insert_vec, By, SqlSelectAllService, SqlSelectService,
+    insert, insert_vec, By, SqlDeleteService, SqlSelectAllService, SqlSelectService,
 };
 use td_objects::tower_service::sql::{SqlAssertNotExistsService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{
-    CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName, ReuseFrozen,
-    TableDependency, TableName, TableTrigger,
+    BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
+    FunctionName, ReuseFrozen, StorageVersion, TableDependency, TableName, TableTrigger,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::{
     DependencyDBWithNames, DependencyVersionDB, DependencyVersionDBBuilder,
 };
 use td_objects::types::function::{
-    FunctionCreate, FunctionDB, FunctionDBBuilder, FunctionVersion, FunctionVersionBuilder,
-    FunctionVersionDB, FunctionVersionDBBuilder, FunctionVersionDBWithNames,
+    BundleDB, FunctionDB, FunctionDBBuilder, FunctionRegister, FunctionVersion,
+    FunctionVersionBuilder, FunctionVersionDB, FunctionVersionDBBuilder,
+    FunctionVersionDBWithNames,
 };
 use td_objects::types::table::{TableDBWithNames, TableVersionDB, TableVersionDBBuilder};
 use td_objects::types::trigger::{
@@ -48,7 +50,7 @@ use td_tower::{l, layers, p, service_provider};
 
 pub struct RegisterFunctionService {
     provider:
-        ServiceProvider<CreateRequest<CollectionParam, FunctionCreate>, FunctionVersion, TdError>,
+        ServiceProvider<CreateRequest<CollectionParam, FunctionRegister>, FunctionVersion, TdError>,
 }
 
 impl RegisterFunctionService {
@@ -63,9 +65,9 @@ impl RegisterFunctionService {
         provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_context::<CreateRequest<CollectionParam, FunctionCreate>>),
-                from_fn(extract_req_dto::<CreateRequest<CollectionParam, FunctionCreate>, _>),
-                from_fn(extract_req_name::<CreateRequest<CollectionParam, FunctionCreate>, _>),
+                from_fn(extract_req_context::<CreateRequest<CollectionParam, FunctionRegister >>),
+                from_fn(extract_req_dto::<CreateRequest<CollectionParam, FunctionRegister>, _>),
+                from_fn(extract_req_name::<CreateRequest<CollectionParam, FunctionRegister>, _>),
 
                 TransactionProvider::new(db),
 
@@ -78,19 +80,28 @@ impl RegisterFunctionService {
                 from_fn(With::<CollectionDB>::extract::<CollectionName>),
 
                 // Get function.
-                from_fn(With::<FunctionCreate>::extract::<FunctionName>),
+                from_fn(With::<FunctionRegister>::extract::<FunctionName>),
 
                 // Check function name does not exist in collection.
                 from_fn(combine::<CollectionId, FunctionName>),
                 from_fn(By::<(CollectionId, FunctionName)>::assert_not_exists::<DaoQueries, FunctionDB>),
 
+                // Get location and storage version.
+                from_fn(With::<StorageVersion>::default),
+                from_fn(data_location),
+
                 // Insert into function_versions(sql) status=Active.
-                from_fn(With::<FunctionCreate>::convert_to::<FunctionVersionDBBuilder, _>),
+                from_fn(With::<FunctionRegister>::convert_to::<FunctionVersionDBBuilder, _>),
                 from_fn(With::<RequestContext>::update::<FunctionVersionDBBuilder, _>),
                 from_fn(With::<CollectionId>::set::<FunctionVersionDBBuilder>),
-                // TODO missing data_location and storage_version
+                from_fn(With::<StorageVersion>::set::<FunctionVersionDBBuilder>),
+                from_fn(With::<DataLocation>::set::<FunctionVersionDBBuilder>),
                 from_fn(With::<FunctionVersionDBBuilder>::build::<FunctionVersionDB, _>),
                 from_fn(insert::<DaoQueries, FunctionVersionDB>),
+
+                // Remove from bundles
+                from_fn(With::<FunctionVersionDB>::extract::<BundleId>),
+                from_fn(By::<BundleId>::delete::<DaoQueries, BundleDB>),
 
                 // Insert into functions(sql) function info.
                 from_fn(With::<FunctionVersionDB>::convert_to::<FunctionDBBuilder, _>),
@@ -105,11 +116,11 @@ impl RegisterFunctionService {
                 from_fn(With::<DependencyVersionDB>::empty_vec),
                 from_fn(With::<TriggerVersionDBWithNames>::empty_vec),
                 // Extract new associations
-                from_fn(With::<FunctionCreate>::extract::<Option<Vec<TableName>>>),
-                from_fn(With::<FunctionCreate>::extract::<Option<Vec<TableDependency>>>),
-                from_fn(With::<FunctionCreate>::extract::<Option<Vec<TableTrigger>>>),
+                from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableName>>>),
+                from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableDependency>>>),
+                from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableTrigger>>>),
                 // Extract reuse frozen
-                from_fn(With::<FunctionCreate>::extract::<ReuseFrozen>),
+                from_fn(With::<FunctionRegister>::extract::<ReuseFrozen>),
                 // And register new ones
                 RegisterFunctionService::register_tables(),
                 RegisterFunctionService::register_dependencies(),
@@ -174,7 +185,7 @@ impl RegisterFunctionService {
 
     pub async fn service(
         &self,
-    ) -> TdBoxService<CreateRequest<CollectionParam, FunctionCreate>, FunctionVersion, TdError>
+    ) -> TdBoxService<CreateRequest<CollectionParam, FunctionRegister>, FunctionVersion, TdError>
     {
         self.provider.make().await
     }
@@ -204,11 +215,11 @@ mod tests {
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<CreateRequest<CollectionParam, FunctionCreate>, FunctionVersion>(
+        metadata.assert_service::<CreateRequest<CollectionParam, FunctionRegister>, FunctionVersion>(
             &[
-                type_of_val(&extract_req_context::<CreateRequest<CollectionParam, FunctionCreate>>),
-                type_of_val(&extract_req_dto::<CreateRequest<CollectionParam, FunctionCreate>, _>),
-                type_of_val(&extract_req_name::<CreateRequest<CollectionParam, FunctionCreate>, _>),
+                type_of_val(&extract_req_context::<CreateRequest<CollectionParam, FunctionRegister>>),
+                type_of_val(&extract_req_dto::<CreateRequest<CollectionParam, FunctionRegister>, _>),
+                type_of_val(&extract_req_name::<CreateRequest<CollectionParam, FunctionRegister>, _>),
                 // Extract collection from request.
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 // Get collection. Extract collection id and name.
@@ -216,14 +227,14 @@ mod tests {
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
                 // Get function.
-                type_of_val(&With::<FunctionCreate>::extract::<FunctionName>),
+                type_of_val(&With::<FunctionRegister>::extract::<FunctionName>),
                 // Check function name does not exist in collection.
                 type_of_val(&combine::<CollectionId, FunctionName>),
                 type_of_val(&
                     By::<(CollectionId, FunctionName)>::assert_not_exists::<DaoQueries, FunctionDB>,
                 ),
                 // Insert into function_versions(sql) status=Active.
-                type_of_val(&With::<FunctionCreate>::convert_to::<FunctionVersionDBBuilder, _>),
+                type_of_val(&With::<FunctionRegister>::convert_to::<FunctionVersionDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<FunctionVersionDBBuilder, _>),
                 type_of_val(&With::<CollectionId>::set::<FunctionVersionDBBuilder>),
                 // TODO missing data_location and storage_version
@@ -241,11 +252,11 @@ mod tests {
                 type_of_val(&With::<DependencyVersionDB>::empty_vec),
                 type_of_val(&With::<TriggerVersionDBWithNames>::empty_vec),
                 // Extract new associations
-                type_of_val(&With::<FunctionCreate>::extract::<Option<Vec<TableName>>>),
-                type_of_val(&With::<FunctionCreate>::extract::<Option<Vec<TableDependency>>>),
-                type_of_val(&With::<FunctionCreate>::extract::<Option<Vec<TableTrigger>>>),
+                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableName>>>),
+                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableDependency>>>),
+                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableTrigger>>>),
                 // Extract reuse frozen
-                type_of_val(&With::<FunctionCreate>::extract::<ReuseFrozen>),
+                type_of_val(&With::<FunctionRegister>::extract::<ReuseFrozen>),
                 // And register new ones
                 // Insert into table_versions(sql) current function tables status=Active.
                 // Reuse table_id for tables that existed (had status=Frozen)
@@ -293,7 +304,7 @@ mod tests {
         let tables = None;
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_foo")?
             .try_description("function_foo description")?
             .bundle_id(&bundle_id)
@@ -336,7 +347,7 @@ mod tests {
         let tables = Some(vec![]);
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_foo")?
             .try_description("function_foo description")?
             .bundle_id(&bundle_id)
@@ -379,7 +390,7 @@ mod tests {
         let tables = Some(vec![TableName::try_from("table_foo")?]);
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_foo")?
             .try_description("function_foo description")?
             .bundle_id(&bundle_id)
@@ -422,7 +433,7 @@ mod tests {
         let tables = Some(vec![TableName::try_from("table_foo")?]);
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_foo")?
             .try_description("function_foo description")?
             .bundle_id(&bundle_id)
@@ -465,7 +476,7 @@ mod tests {
         let tables = Some(vec![TableName::try_from("foo")?]);
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("function_1 description")?
             .bundle_id(&bundle_id)
@@ -499,7 +510,7 @@ mod tests {
         let tables = None;
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_2")?
             .try_description("function_2 description")?
             .bundle_id(&bundle_id)
@@ -545,7 +556,7 @@ mod tests {
         ]);
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("function_1 description")?
             .bundle_id(&bundle_id)
@@ -588,7 +599,7 @@ mod tests {
         ]);
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_2")?
             .try_description("function_2 description")?
             .bundle_id(&bundle_id)
@@ -636,7 +647,7 @@ mod tests {
         ]);
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("function_1 description")?
             .bundle_id(&bundle_id)
@@ -684,7 +695,7 @@ mod tests {
         ]);
 
         let bundle_id = BundleId::default();
-        let create = FunctionCreate::builder()
+        let create = FunctionRegister::builder()
             .try_name("function_2")?
             .try_description("function_2 description")?
             .bundle_id(&bundle_id)

@@ -2,21 +2,22 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ops::Deref;
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::{DeleteBy, DerefQueries, FindBy, Insert, UpdateBy};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, DependencyId, DependencyPos, DependencyStatus, FunctionId,
-    ReuseFrozen, TableDependency, TableFunctionParamPos, TableId, TableName, TableStatus,
-    TableTrigger, TriggerId, TriggerStatus,
+    CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos, DependencyStatus,
+    FunctionId, ReuseFrozen, TableDependency, TableFunctionParamPos, TableId, TableName,
+    TableStatus, TableTrigger, TriggerId, TriggerStatus,
 };
+use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::{
     DependencyDB, DependencyDBBuilder, DependencyDBWithNames, DependencyVersionDB,
     DependencyVersionDBBuilder,
 };
+use td_objects::types::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::types::table::{
     TableDB, TableDBBuilder, TableDBWithNames, TableVersionDB, TableVersionDBBuilder,
 };
@@ -41,12 +42,11 @@ pub enum RegisterFunctionError {
     FrozenTableAlreadyExists(TableName, CollectionName, String) = 4,
 }
 
-lazy_static! {
-    static ref ACTIVE_TABLE_STATUS: TableStatus = TableStatus::active();
-    static ref FROZEN_TABLE_STATUS: TableStatus = TableStatus::frozen();
-    static ref ACTIVE_DEPENDENCY_STATUS: DependencyStatus = DependencyStatus::active();
-    static ref DELETED_DEPENDENCY_STATUS: DependencyStatus = DependencyStatus::deleted();
-    static ref DELETED_TRIGGER_STATUS: TriggerStatus = TriggerStatus::deleted();
+pub async fn data_location(
+    Input(_collection): Input<CollectionDB>,
+    Input(_function): Input<FunctionDBWithNames>,
+) -> Result<DataLocation, TdError> {
+    Ok(DataLocation::default())
 }
 
 pub async fn build_table_versions(
@@ -72,29 +72,31 @@ pub async fn build_table_versions(
             // Reuse table id if the table is the same
             let existing_version = existing_versions.get(&(&*collection_id, table_name));
             let table_id = if let Some(existing_version) = existing_version {
-                if existing_version.status() == ACTIVE_TABLE_STATUS.deref() {
-                    existing_version.table_id()
-                } else if existing_version.status() == FROZEN_TABLE_STATUS.deref() {
-                    // We can only unfreeze a frozen table if reuse_frozen is enabled
-                    if **reuse_frozen {
-                        ctx.warning(RegisterFunctionError::FrozenTableAlreadyExists(
-                            table_name.clone(),
-                            collection_name.deref().clone(),
-                            "unfreezing with new table definition".to_string(),
-                        ))
-                        .await;
+                match existing_version.status() {
+                    TableStatus::Active => existing_version.table_id(),
+                    TableStatus::Frozen => {
+                        // We can only unfreeze a frozen table if reuse_frozen is enabled
+                        if **reuse_frozen {
+                            ctx.warning(RegisterFunctionError::FrozenTableAlreadyExists(
+                                table_name.clone(),
+                                collection_name.deref().clone(),
+                                "unfreezing with new table definition".to_string(),
+                            ))
+                            .await;
 
-                        existing_version.table_id()
-                    } else {
-                        Err(RegisterFunctionError::FrozenTableAlreadyExists(
-                            table_name.clone(),
-                            collection_name.deref().clone(),
-                            "could not reuse frozen table".to_string(),
-                        ))?
+                            existing_version.table_id()
+                        } else {
+                            Err(RegisterFunctionError::FrozenTableAlreadyExists(
+                                table_name.clone(),
+                                collection_name.deref().clone(),
+                                "could not reuse frozen table".to_string(),
+                            ))?
+                        }
                     }
-                } else {
-                    // Status deleted, table is detached from the created table
-                    &TableId::default()
+                    _ => {
+                        // Status deleted, table is detached from the created table
+                        &TableId::default()
+                    }
                 }
             } else {
                 // Straight up new table
@@ -107,7 +109,7 @@ pub async fn build_table_versions(
                 .table_id(table_id)
                 .name(table_name)
                 .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i16)?))
-                .status(TableStatus::active())
+                .status(TableStatus::Active)
                 .build()?;
 
             new_table_versions.insert((&*collection_id, table_name), table_version);
@@ -123,7 +125,7 @@ pub async fn build_table_versions(
                 .table_id(existing_version.table_id())
                 .name(existing_version.name())
                 .function_param_pos(existing_version.function_param_pos().clone())
-                .status(TableStatus::frozen())
+                .status(TableStatus::Frozen)
                 .build()?;
 
             new_table_versions.insert((&*collection_id, existing_version.name()), table_version);
@@ -146,7 +148,7 @@ pub async fn insert_and_update_tables<Q: DerefQueries>(
 
     let existing_tables: HashMap<_, _> = existing_tables.iter().map(|t| (t.id(), t)).collect();
     for table_version in &*table_versions {
-        let frozen = table_version.status() != ACTIVE_TABLE_STATUS.deref();
+        let frozen = !matches!(table_version.status(), TableStatus::Active);
         let new_table_db = TableDBBuilder::try_from(table_version)?
             .function_id(&*function_id)
             .frozen(frozen)
@@ -270,7 +272,7 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
             .table_name(table_db.name())
             .table_versions(dependency_table.versions())
             .dep_pos(DependencyPos::try_from(pos as i16)?)
-            .status(DependencyStatus::active())
+            .status(DependencyStatus::Active)
             .build()?;
 
         new_dependency_versions.insert(
@@ -297,7 +299,7 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
                 .table_name(existing_version.table_name())
                 .table_versions(existing_version.table_versions().clone())
                 .dep_pos(existing_version.dep_pos())
-                .status(DependencyStatus::deleted())
+                .status(DependencyStatus::Deleted)
                 .build()?;
 
             new_dependency_versions.insert(
@@ -332,7 +334,7 @@ pub async fn insert_and_update_dependencies<Q: DerefQueries>(
         if let Some(existing_dependency) =
             existing_dependencies.get(dependency_version.dependency_id())
         {
-            if dependency_version.status() == DELETED_DEPENDENCY_STATUS.deref() {
+            if matches!(dependency_version.status(), DependencyStatus::Deleted) {
                 queries
                     .delete_by::<DependencyDB>(&(existing_dependency.id()))?
                     .build()
@@ -453,7 +455,7 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
             .trigger_by_function_version_id(table_db.function_version_id())
             .trigger_by_table_id(table_db.id())
             .trigger_by_table_version_id(table_db.table_version_id())
-            .status(TriggerStatus::active())
+            .status(TriggerStatus::Active)
             .build()?;
 
         new_trigger_versions.insert((table_db.collection_id(), table_db.name()), trigger_version);
@@ -471,7 +473,7 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
                 .trigger_by_function_version_id(existing_version.trigger_by_function_version_id())
                 .trigger_by_table_id(existing_version.trigger_by_table_id())
                 .trigger_by_table_version_id(existing_version.trigger_by_table_version_id())
-                .status(TriggerStatus::deleted())
+                .status(TriggerStatus::Deleted)
                 .build()?;
 
             new_trigger_versions.insert(
@@ -502,7 +504,7 @@ pub async fn insert_and_update_triggers<Q: DerefQueries>(
         let new_trigger_db = TriggerDBBuilder::try_from(trigger_version)?.build()?;
 
         if let Some(existing_trigger) = existing_triggers.get(trigger_version.trigger_id()) {
-            if trigger_version.status() == DELETED_TRIGGER_STATUS.deref() {
+            if matches!(trigger_version.status(), TriggerStatus::Deleted) {
                 queries
                     .delete_by::<TriggerDB>(&(existing_trigger.id()))?
                     .build()
