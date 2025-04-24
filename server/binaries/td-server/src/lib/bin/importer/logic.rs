@@ -286,18 +286,22 @@ fn importer_lazy_frame(
     let format = importer_options.format();
 
     let lazy_frame = match format {
+        // Parquet files embed their schema in the file metadata. Therefore, we do not need to tune the number of rows
+        // necessary to properly infer all columns data type.
         Format::Parquet(config) => {
             let mut parquet_config = config.scan_config();
             parquet_config.cloud_options = Some(cloud_config);
             LazyFrame::scan_parquet(&url_str, parquet_config)?
         }
+        // We force reading the whole file the avoid corner cases of columns data type inference.
         Format::Csv(options) => {
-            let reader = LazyCsvReader::new(&url_str);
+            let reader = LazyCsvReader::new(&url_str).with_infer_schema_length(None);
             let reader = options.apply_to(reader);
             reader.with_cloud_options(Some(cloud_config)).finish()?
         }
+        // We force reading the whole file the avoid corner cases of columns data type inference.
         Format::NdJson(options) => {
-            let reader = LazyJsonLineReader::new(&url_str);
+            let reader = LazyJsonLineReader::new(&url_str).with_infer_schema_length(None);
             let reader = options.apply_to(reader);
             // HACK!! NDJSON does not do streaming writes yet https://github.com/pola-rs/polars/issues/10964
             // TODO: we should read from the object store in chunks (get_ranges), write each chunk to a local temp parquet file
@@ -309,6 +313,7 @@ fn importer_lazy_frame(
                 .collect()?
                 .lazy()
         }
+        // As log column is treated as an string, we do not need a full scan to infer data type.
         Format::Log(options) => {
             let file_name = url
                 .path_segments()
