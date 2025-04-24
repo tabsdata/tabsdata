@@ -81,7 +81,7 @@ impl<'a> Provider<'a, HashMap<AccessTokenId, Arc<Session>>, Option<&'a mut Sqlit
         &'a self,
         conn: Option<&'a mut SqliteConnection>,
     ) -> Result<Arc<HashMap<AccessTokenId, Arc<Session>>>, TdError> {
-        let status = &(&SessionStatus::active());
+        let status = &(&SessionStatus::Active);
         let mut query_builder = self.queries.select_by::<SessionDB>(status)?;
 
         // if we get a connection in the call we use it, else we use one from the DbPool

@@ -85,7 +85,7 @@ mod tests {
     use super::*;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_permission::get_permission;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, PermissionType, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -130,7 +130,7 @@ mod tests {
         let db = td_database::test_utils::db().await?;
 
         let create = PermissionCreate::builder()
-            .try_permission_type("sa")?
+            .permission_type(PermissionType::SysAdmin)
             .try_entity_name(None)
             .unwrap()
             .build()?;

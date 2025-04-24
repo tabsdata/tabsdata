@@ -119,7 +119,7 @@ mod tests {
             Description::try_from("super user")?,
         )
         .await;
-        let seeded = seed_permission(&db, PermissionType::try_from("sa")?, None, None, &role).await;
+        let seeded = seed_permission(&db, PermissionType::SysAdmin, None, None, &role).await;
 
         let request = RequestContext::with(
             AccessTokenId::default(),

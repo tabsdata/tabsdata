@@ -71,7 +71,7 @@ pub async fn build_function_runs(
         .collection_id(manual_trigger.collection_id())
         .function_version_id(manual_trigger.function_version_id())
         .transaction_id(transaction_map.get(&transaction_by.key(manual_trigger)?)?)
-        .trigger(Trigger::manual())
+        .trigger(Trigger::Manual)
         .build()?;
 
     let dependency_function_runs = template
@@ -84,7 +84,7 @@ pub async fn build_function_runs(
                 .collection_id(f.collection_id())
                 .function_version_id(f.function_version_id())
                 .transaction_id(transaction_map.get(&transaction_by.key(f)?)?)
-                .trigger(Trigger::dependency())
+                .trigger(Trigger::Dependency)
                 .build()
                 .map_err(TdError::from)
         })

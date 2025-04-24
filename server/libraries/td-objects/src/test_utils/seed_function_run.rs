@@ -24,7 +24,7 @@ pub async fn seed_function_run(
         .transaction_id(transaction.id())
         .triggered_on(transaction.triggered_on())
         .triggered_by_id(transaction.triggered_by_id())
-        .trigger(Trigger::manual())
+        .trigger(Trigger::Manual)
         .status(status)
         .build()
         .unwrap();
@@ -105,7 +105,7 @@ mod tests {
         assert_eq!(function_run.execution_id(), execution.id());
         assert_eq!(function_run.transaction_id(), transaction.id());
         assert_eq!(function_run.triggered_on(), transaction.triggered_on());
-        assert_eq!(*function_run.trigger(), Trigger::manual());
+        assert_eq!(*function_run.trigger(), Trigger::Manual);
         assert_eq!(*function_run.status(), FunctionRunStatus::Scheduled);
     }
 }

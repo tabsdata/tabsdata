@@ -28,15 +28,14 @@ fn try_to_permission(perm_db: &PermissionDB) -> Result<Permission, TdError> {
         }
     }
 
-    let perm = match perm_db.permission_type().as_str() {
-        PermissionType::SA => Permission::SysAdmin,
-        PermissionType::SS => Permission::SecAdmin,
-        PermissionType::CA => Permission::CollectionAdmin(authz_entity(perm_db)),
-        PermissionType::CD => Permission::CollectionDev(authz_entity(perm_db)),
-        PermissionType::CX => Permission::CollectionExec(authz_entity(perm_db)),
-        PermissionType::CR => Permission::CollectionRead(authz_entity(perm_db)),
-        PermissionType::CR_ALL => Permission::CollectionReadAll(authz_entity(perm_db)),
-        argh => panic!("TODO, proper error ARGH - '{}'", argh),
+    let perm = match perm_db.permission_type() {
+        PermissionType::SysAdmin => Permission::SysAdmin,
+        PermissionType::SecAdmin => Permission::SecAdmin,
+        PermissionType::CollectionAdmin => Permission::CollectionAdmin(authz_entity(perm_db)),
+        PermissionType::CollectionDev => Permission::CollectionDev(authz_entity(perm_db)),
+        PermissionType::CollectionExec => Permission::CollectionExec(authz_entity(perm_db)),
+        PermissionType::CollectionRead => Permission::CollectionRead(authz_entity(perm_db)),
+        PermissionType::CollectionReadAll => Permission::CollectionReadAll(authz_entity(perm_db)),
     };
     Ok(perm)
 }

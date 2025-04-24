@@ -72,7 +72,7 @@ pub struct SessionDB {
     expires_on: AtTime,
     #[td_type(updater(include, field = "time"))]
     status_change_on: AtTime,
-    #[builder(default = "SessionStatus::active()")]
+    #[builder(default = "SessionStatus::Active")]
     status: SessionStatus,
 }
 
@@ -80,7 +80,7 @@ pub struct SessionDB {
 pub struct SessionLogoutDB {
     #[td_type(setter)]
     status_change_on: AtTime,
-    #[builder(default = "SessionStatus::invalid_logout()")]
+    #[builder(default = "SessionStatus::InvalidLogout")]
     status: SessionStatus,
 }
 
@@ -88,7 +88,7 @@ pub struct SessionLogoutDB {
 pub struct SessionRoleChangeDB {
     #[td_type(setter)]
     status_change_on: AtTime,
-    #[builder(default = "SessionStatus::invalid_role_change()")]
+    #[builder(default = "SessionStatus::InvalidRoleChange")]
     status: SessionStatus,
 }
 
@@ -96,7 +96,7 @@ pub struct SessionRoleChangeDB {
 pub struct SessionNewTokenDB {
     #[td_type(setter)]
     status_change_on: AtTime,
-    #[builder(default = "SessionStatus::invalid_new_token()")]
+    #[builder(default = "SessionStatus::InvalidNewToken")]
     status: SessionStatus,
 }
 

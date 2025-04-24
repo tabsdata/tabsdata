@@ -4,9 +4,7 @@
 
 use crate::crudl::{handle_sql_err, ReadRequest, RequestContext};
 use crate::sql::{DaoQueries, Insert, SelectBy};
-use crate::types::basic::{
-    AccessTokenId, EntityId, EntityName, PermissionEntityType, PermissionType, RoleId, UserId,
-};
+use crate::types::basic::{AccessTokenId, EntityId, EntityName, PermissionType, RoleId, UserId};
 use crate::types::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
 use crate::types::role::RoleDB;
 use crate::types::SqlEntity;
@@ -39,10 +37,7 @@ pub async fn seed_permission(
     let builder = PermissionDBBuilder::try_from((request_context, builder)).unwrap();
     let mut builder = PermissionDBBuilder::try_from((role_db, builder)).unwrap();
 
-    let permission_entity_type = match permission_type.on_entity_type().starts_with("s") {
-        true => PermissionEntityType::try_from("s").unwrap(),
-        false => PermissionEntityType::try_from("c").unwrap(),
-    };
+    let permission_entity_type = permission_type.on_entity_type();
     builder.entity_type(permission_entity_type);
     builder.entity_id(entity_id);
     let permission_db = builder.build().unwrap();

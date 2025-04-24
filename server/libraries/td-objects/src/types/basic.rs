@@ -10,7 +10,6 @@ use crate::types::parse::{
 use crate::types::table::TableVersionDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::trigger::TriggerVersionDBWithNames;
-use constcat::concat;
 use td_common::id::Id;
 use td_error::TdError;
 use td_security::{ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN, USER_ROLE};
@@ -150,10 +149,11 @@ pub struct FunctionVersionId;
 #[td_type::typed(id_name(id = FunctionVersionId, name = FunctionName))]
 pub struct FunctionVersionIdName;
 
-#[td_type::typed(string(regex = GRANT_TYPE_REGEX))]
-pub struct GrantType;
-
-const GRANT_TYPE_REGEX: &str = "^refresh_token$";
+#[td_type::typed_enum]
+pub enum GrantType {
+    #[strum(to_string = "refresh_token")]
+    RefreshToken,
+}
 
 const MIN_PASSWORD_LEN: usize = 8;
 const MAX_PASSWORD_LEN: usize = 64;
@@ -184,93 +184,38 @@ pub struct PermissionId;
 #[td_type::typed(id_name(id = PermissionId))]
 pub struct PermissionIdName;
 
-#[td_type::typed(string(regex = PERMISSION_ENTITY_TYPE_REGEX))]
-pub struct PermissionEntityType;
-
-const PERMISSION_ENTITY_TYPE_REGEX: &str = concat!(
-    "^(",
-    PermissionEntityType::SYS,
-    "|",
-    PermissionEntityType::COLL,
-    ")$"
-);
-
-impl PermissionEntityType {
-    pub const SYS: &'static str = "s";
-    pub const COLL: &'static str = "c";
-
-    pub fn system() -> Self {
-        Self(Self::SYS.to_string())
-    }
-
-    pub fn collection() -> Self {
-        Self(Self::COLL.to_string())
-    }
+#[td_type::typed_enum]
+pub enum PermissionEntityType {
+    #[strum(to_string = "s")]
+    System,
+    #[strum(to_string = "c")]
+    Collection,
 }
 
-#[td_type::typed(string(regex = PERMISSION_TYPE_REGEX))]
-pub struct PermissionType;
-
-const PERMISSION_TYPE_REGEX: &str = concat!(
-    "^(",
-    PermissionType::SA,
-    "|",
-    PermissionType::SS,
-    "|",
-    PermissionType::CA,
-    "|",
-    PermissionType::CD,
-    "|",
-    PermissionType::CX,
-    "|",
-    PermissionType::CR,
-    "|",
-    PermissionType::CR_ALL,
-    ")$"
-);
+#[td_type::typed_enum]
+pub enum PermissionType {
+    #[strum(to_string = "sa")]
+    SysAdmin,
+    #[strum(to_string = "ss")]
+    SecAdmin,
+    #[strum(to_string = "ca")]
+    CollectionAdmin,
+    #[strum(to_string = "cd")]
+    CollectionDev,
+    #[strum(to_string = "cx")]
+    CollectionExec,
+    #[strum(to_string = "cr")]
+    CollectionRead,
+    #[strum(to_string = "cR")]
+    CollectionReadAll,
+}
 
 impl PermissionType {
-    pub const SA: &'static str = concat!(PermissionEntityType::SYS, "a");
-    pub const SS: &'static str = concat!(PermissionEntityType::SYS, "s");
-    pub const CA: &'static str = concat!(PermissionEntityType::COLL, "a");
-    pub const CD: &'static str = concat!(PermissionEntityType::COLL, "d");
-    pub const CX: &'static str = concat!(PermissionEntityType::COLL, "x");
-    pub const CR: &'static str = concat!(PermissionEntityType::COLL, "r");
-    pub const CR_ALL: &'static str = concat!(PermissionEntityType::COLL, "R");
-
-    pub fn sys_admin() -> Self {
-        Self(Self::SA.to_string())
-    }
-
-    pub fn sec_admin() -> Self {
-        Self(Self::SS.to_string())
-    }
-
-    pub fn collection_admin() -> Self {
-        Self(Self::CA.to_string())
-    }
-
-    pub fn collection_dev() -> Self {
-        Self(Self::CD.to_string())
-    }
-
-    pub fn collection_exec() -> Self {
-        Self(Self::CX.to_string())
-    }
-
-    pub fn collection_read() -> Self {
-        Self(Self::CR.to_string())
-    }
-
-    pub fn collection_read_all() -> Self {
-        Self(Self::CR_ALL.to_string())
-    }
-
     pub fn on_entity_type(&self) -> PermissionEntityType {
-        if self.0.starts_with("s") {
-            PermissionEntityType::system()
+        if matches!(self, &Self::SysAdmin | &Self::SecAdmin) {
+            PermissionEntityType::System
         } else {
-            PermissionEntityType::collection()
+            PermissionEntityType::Collection
         }
     }
 }
@@ -315,49 +260,20 @@ pub struct RoleIdName;
 #[td_type::typed(id)]
 pub struct SessionId;
 
-#[td_type::typed(string(regex = SESSION_INVALIDATION_REASON_REGEX))]
-pub struct SessionStatus;
-
-const SESSION_INVALIDATION_REASON_REGEX: &str = constcat::concat!(
-    "^(",
-    SessionStatus::ACTIVE,
-    "|",
-    SessionStatus::PASSW_RESET,
-    "|",
-    SessionStatus::INVALID_NEW_TOKEN,
-    "|",
-    SessionStatus::INVALID_ROLE_CHANGE,
-    "|",
-    SessionStatus::INVALID_LOGOUT,
-    ")$"
-);
-
-impl SessionStatus {
-    pub const ACTIVE: &'static str = "a";
-    pub const PASSW_RESET: &'static str = "p";
-    pub const INVALID_NEW_TOKEN: &'static str = "it";
-    pub const INVALID_ROLE_CHANGE: &'static str = "ir";
-    pub const INVALID_LOGOUT: &'static str = "il";
-
-    pub fn active() -> Self {
-        Self(Self::ACTIVE.to_string())
-    }
-
-    pub fn password_reset() -> Self {
-        Self(Self::PASSW_RESET.to_string())
-    }
-
-    pub fn invalid_new_token() -> Self {
-        Self(Self::INVALID_NEW_TOKEN.to_string())
-    }
-
-    pub fn invalid_role_change() -> Self {
-        Self(Self::INVALID_ROLE_CHANGE.to_string())
-    }
-
-    pub fn invalid_logout() -> Self {
-        Self(Self::INVALID_LOGOUT.to_string())
-    }
+#[td_type::typed_enum]
+pub enum SessionStatus {
+    #[strum(to_string = "a")]
+    Active,
+    #[strum(to_string = "p")]
+    PasswordChange,
+    #[strum(to_string = "it")]
+    InvalidNewToken,
+    #[strum(to_string = "ir")]
+    InvalidRoleChange,
+    #[strum(to_string = "il")]
+    InvalidLogout,
+    #[strum(to_string = "ud")]
+    UserDisabled,
 }
 
 #[td_type::typed(string(min_len = 0, max_len = 4096))]
@@ -468,19 +384,12 @@ pub struct TransactionByStr;
 #[td_type::typed(string)]
 pub struct TransactionKey;
 
-#[td_type::typed(string(regex = Trigger::REGEX))]
-pub struct Trigger;
-
-impl Trigger {
-    const REGEX: &'static str = "^[MD]$";
-
-    pub fn manual() -> Self {
-        Self("M".to_string())
-    }
-
-    pub fn dependency() -> Self {
-        Self("D".to_string())
-    }
+#[td_type::typed_enum]
+pub enum Trigger {
+    #[strum(to_string = "M")]
+    Manual,
+    #[strum(to_string = "D")]
+    Dependency,
 }
 
 #[td_type::typed(timestamp, try_from = AtTime)]

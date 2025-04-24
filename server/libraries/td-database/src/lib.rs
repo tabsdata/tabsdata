@@ -126,7 +126,7 @@ mod tests {
             WHERE
                 role_id = ?1 AND
                 permission_type = 'sa' AND
-                entity_type = 'S' AND
+                entity_type = 's' AND
                 entity_id IS NULL
             "#,
         )
@@ -142,7 +142,7 @@ mod tests {
             WHERE
                 role_id = ?1 AND
                 permission_type = 'ss' AND
-                entity_type = 'S' AND
+                entity_type = 's' AND
                 entity_id IS NULL
             "#,
         )
@@ -158,7 +158,7 @@ mod tests {
             WHERE
                 role_id = ?1 AND
                 permission_type = 'ca' AND
-                entity_type = 'C' AND
+                entity_type = 'c' AND
                 entity_id IS NULL
             "#,
         )
@@ -174,7 +174,7 @@ mod tests {
             WHERE
                 role_id = ?1 AND
                 permission_type = 'cd' AND
-                entity_type = 'C' AND
+                entity_type = 'c' AND
                 entity_id IS NULL
             "#,
         )
@@ -190,7 +190,7 @@ mod tests {
             WHERE
                 role_id = ?1 AND
                 permission_type = 'cx' AND
-                entity_type = 'C' AND
+                entity_type = 'c' AND
                 entity_id IS NULL
             "#,
         )
@@ -206,7 +206,7 @@ mod tests {
             WHERE
                 role_id = ?1 AND
                 permission_type = 'cR' AND
-                entity_type = 'C' AND
+                entity_type = 'c' AND
                 entity_id IS NULL
             "#,
         )
@@ -222,7 +222,7 @@ mod tests {
             WHERE
                 role_id = ?1 AND
                 permission_type = 'cr' AND
-                entity_type = 'C' AND
+                entity_type = 'c' AND
                 entity_id IS NULL
             "#,
         )
