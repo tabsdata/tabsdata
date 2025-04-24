@@ -70,8 +70,7 @@ name = "tabsdatalib"
 path = "src/lib/lib.rs"
 
 [features]
-
-api-docs = ["td-apiserver/api-docs"]
+api-docs = []
 enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []

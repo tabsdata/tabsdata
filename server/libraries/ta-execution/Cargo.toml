@@ -19,7 +19,7 @@ version = { workspace = true }
 [lib]
 
 [features]
-ente = []
+enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
 mock-env = []

@@ -4,19 +4,22 @@
 
 [package]
 description = "Tabsdata Error Features"
-edition = { workspace = true }
 name = "td-error"
-publish = false
+build = "build.rs"
+
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+readme = { workspace = true }
+repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
-license = { workspace = true }
-authors = { workspace = true }
-build = "build.rs"
 
 [lib]
 
 [features]
-
 enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []

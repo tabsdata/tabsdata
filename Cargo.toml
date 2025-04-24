@@ -72,6 +72,9 @@ path = "auto.rs"
 
 [features]
 
+# This feature enables the generation of API documentation for the server.
+api-docs = []
+
 # This feature enbles enterprise functionalities not available in the standard implementation.
 # It should be normally used only for cross-crates tests.
 enterprise = []
@@ -510,7 +513,7 @@ features = ["axum_extras", "preserve_order"]
 version = "0.2.0"
 
 [workspace.dependencies.utoipa-swagger-ui]
-version = "9.0.0"
+version = "9.0.1"
 features = ["axum", "reqwest"]
 
 [workspace.dependencies.url]
@@ -557,6 +560,3 @@ ta-tableframe = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
-
-[patch.crates-io]
-zip = { git = "https://github.com/zip-rs/zip2", tag = "v2.4.2" }

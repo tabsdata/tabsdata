@@ -3,14 +3,18 @@
 #
 
 [package]
-description = "Tabsdata Apiserver API"
-edition = { workspace = true }
+description = "Tabsdata API Server API"
 name = "ta-apiserver"
-publish = false
+
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+readme = { workspace = true }
+repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
-license = { workspace = true }
-authors = { workspace = true }
 
 [lib]
 

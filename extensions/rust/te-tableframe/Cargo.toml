@@ -24,7 +24,6 @@ path = "examples/te-tableframe.rs"
 [lib]
 
 [features]
-
 enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
