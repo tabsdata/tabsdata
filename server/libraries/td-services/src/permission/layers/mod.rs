@@ -7,8 +7,9 @@ use std::ops::Deref;
 use td_error::TdError;
 use td_objects::entity_finder::collections::CollectionFinder;
 use td_objects::tower_service::from::With;
-use td_objects::types::basic::EntityId;
+use td_objects::types::basic::{EntityId, PermissionEntityType};
 use td_objects::types::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
+use td_tower::default_services::Condition;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection};
 
 #[async_trait]
@@ -53,4 +54,12 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
             .build()?;
         Ok(permission_db)
     }
+}
+
+pub async fn is_permission_on_collection(
+    Input(permission): Input<PermissionDB>,
+) -> Result<Condition, TdError> {
+    Ok(Condition(
+        permission.permission_type().on_entity_type() == PermissionEntityType::Collection,
+    ))
 }

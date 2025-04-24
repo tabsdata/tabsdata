@@ -6,7 +6,7 @@ use crate::crudl::{list_response, ListRequest, ListResponse, ListResult};
 use async_trait::async_trait;
 use std::marker::PhantomData;
 use std::ops::Deref;
-use td_error::TdError;
+use td_error::{td_error, TdError};
 use td_tower::extractors::Input;
 
 pub struct With<T> {
@@ -197,6 +197,30 @@ where
 {
     async fn default() -> Result<T, TdError> {
         Ok(T::default())
+    }
+}
+
+#[async_trait]
+pub trait UnwrapService<T> {
+    async fn unwrap_option(value: Input<Option<T>>) -> Result<T, TdError>;
+}
+
+#[td_error]
+pub enum WithError {
+    #[error("Option has no value")]
+    OptionHasNoValue,
+}
+
+#[async_trait]
+impl<T> UnwrapService<T> for With<T>
+where
+    for<'a> T: Send + Sync + Clone + 'a,
+{
+    async fn unwrap_option(Input(value): Input<Option<T>>) -> Result<T, TdError> {
+        value
+            .deref()
+            .clone()
+            .ok_or(WithError::OptionHasNoValue.into())
     }
 }
 
@@ -433,6 +457,22 @@ mod tests {
         let combined = combine(Input::new(foo), Input::new(var)).await?;
         assert_eq!(combined.0.value, 1);
         assert_eq!(combined.1.value, 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_unwrap() -> Result<(), TdError> {
+        #[td_type::typed(string)]
+        struct MyString;
+
+        let option = Some(MyString::try_from("test")?);
+        let result = With::<MyString>::unwrap_option(Input::new(option)).await?;
+        assert_eq!(result, MyString::try_from("test")?);
+
+        let option = None;
+        let result = With::<MyString>::unwrap_option(Input::new(option)).await;
+        assert!(result.is_err());
+
         Ok(())
     }
 }
