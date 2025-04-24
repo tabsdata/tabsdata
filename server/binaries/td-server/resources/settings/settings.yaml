@@ -2,7 +2,17 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+# Note: values are always treated as strings; therefore, you need to quote values that would be treated as scalars.
+
 # Values marked with * indicate default value if unspecified
+
+# Configure whether logs formatter emits ANSI terminal escape codes for colors and other text formatting.
+# - (*) none: do not use them
+# -     true: use them
+# -     false: do not use them
+# -     <any>: do not use them
+
+log_with_ansi: "false"
 
 # Configure how to log environment variables in ephemeral workers runs:
 # - (*) none: do not log them

@@ -15,9 +15,20 @@ use std::time::SystemTime;
 use std::{env, fs, io};
 use tracing::{debug, info, warn};
 
+pub const TRUE: &str = "true";
+pub const YES: &str = "yes";
+pub const ONE: &str = "1";
+pub const ON: &str = "on";
+
+pub const FALSE: &str = "true";
+pub const NOT: &str = "not";
+pub const ZERO: &str = "0";
+pub const OFF: &str = "off";
+
 pub const SETTINGS_FILE: &str = "settings.yaml";
 
 pub const ENV_LOG_MODE: &str = "env_log_mode";
+pub const LOG_WITH_ANSI: &str = "log_with_ansi";
 
 pub const DEFAULT_SETTINGS: &str =
     include_str!("../../../binaries/td-server/resources/settings/settings.yaml");
@@ -184,9 +195,12 @@ fn dump() {
             if source.exists() {
                 let target = path.join(SETTINGS_FILE);
                 if target.exists() {
+                    return;
+                    /*
                     fs::remove_file(&target).unwrap_or_else(|e| {
                         panic!("Unable to remove default instance settings seed: {}", e)
                     });
+                     */
                 }
                 if let Some(parent) = target.parent() {
                     fs::create_dir_all(parent).unwrap_or_else(|e| {
@@ -237,14 +251,16 @@ mod tests {
         if let (Some(k), Some(v)) = (key, value) {
             settings_data.insert(k.to_string(), v.to_string());
         }
-        let settings_content = to_string(&settings_data).expect("Serialization error");
-        sleep(Duration::from_millis(SLEEP_TIME));
-        let mut settings_file = File::create(&settings_path).expect("File creation error");
-        settings_file
-            .write_all(settings_content.as_bytes())
-            .expect("File write error");
-        settings_file.flush().expect("Failed to flush data to disk");
-        sleep(Duration::from_millis(SLEEP_TIME));
+        if !settings_data.is_empty() {
+            let settings_content = to_string(&settings_data).expect("Serialization error");
+            sleep(Duration::from_millis(SLEEP_TIME));
+            let mut settings_file = File::create(&settings_path).expect("File creation error");
+            settings_file
+                .write_all(settings_content.as_bytes())
+                .expect("File write error");
+            settings_file.flush().expect("Failed to flush data to disk");
+            sleep(Duration::from_millis(SLEEP_TIME));
+        }
 
         instance_folder.into_path()
     }

@@ -6,6 +6,7 @@ use crate::env::{get_current_dir, to_absolute};
 use crate::logging::LogOutput::File;
 use crate::manifest::Inf;
 use crate::manifest::WORKER_INF_FILE;
+use crate::settings::{LOG_WITH_ANSI, MANAGER, TRUE};
 use once_cell::sync::OnceCell;
 use opentelemetry_sdk::logs::LoggerProvider;
 use opentelemetry_stdout::LogExporter;
@@ -22,6 +23,7 @@ use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
+
 // ToDo: Dimas: Accept logging configuration from external file. --> https://tabsdata.atlassian.net/browse/TD-249
 // ToDo: Dimas: Configure logging channel through logging configuration file. --> https://tabsdata.atlassian.net/browse/TD-250
 // ToDo: Dimas: Allow custom configuration of log format. --> https://tabsdata.atlassian.net/browse/TD-251
@@ -67,7 +69,7 @@ impl Drop for LoggerGuard {
     }
 }
 
-// Struc to support the layer event handler for sensitive log entries filtering.
+// Struct to support the layer event handler for sensitive log entries filtering.
 pub struct SensitiveFilterLayer;
 
 // Layer event handler to filter out sensitive log entries.
@@ -95,7 +97,9 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     writer: W,
     with_tokio_console: bool,
 ) -> LoggerGuard {
+    let log_with_ansi = MANAGER.get(LOG_WITH_ANSI).as_deref() == Some(TRUE);
     let tabsdata_layer = tracing_subscriber::fmt::layer()
+        .with_ansi(log_with_ansi)
         .with_writer(writer)
         .with_filter(tracing_subscriber::filter::LevelFilter::from_level(
             max_level,

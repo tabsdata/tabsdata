@@ -385,6 +385,10 @@ impl Arguments {
         )
         .unwrap()
     }
+
+    pub fn instance_path(&self) -> PathBuf {
+        to_absolute(&get_instance_path_for_instance(&Some(self.instance()))).unwrap()
+    }
 }
 
 #[derive(Clone)]
@@ -1944,7 +1948,7 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
     create_dir_all(work_dir_absolute.clone()).expect("Failed to create work folder '{}'");
 
     // These environment variable are meant to be used as URI locations. Therefore, in Windows they will have a
-    // leading slash (/), resulting if, for example, '/c:\folder\file' instead of 'c:\folder\file'
+    // leading slash (/), resulting in, for example, '/c:\folder\file' instead of 'c:\folder\file'
     set_var(INSTANCE_ENV, prepend_slash(instance_dir_absolute.clone()));
     set_var(REPOSITORY_ENV, prepend_slash(repository_dir_absolute));
     set_var(WORKSPACE_ENV, prepend_slash(workspace_dir_absolute));
@@ -1957,7 +1961,7 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
 }
 
 // It is ok to unwrap as the Supervisor can fail abruptly if paths contain invalid characters.
-fn prepend_slash(path: PathBuf) -> String {
+pub fn prepend_slash(path: PathBuf) -> String {
     #[cfg(target_os = "windows")]
     {
         let mut new_path = String::new();
