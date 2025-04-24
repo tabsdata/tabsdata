@@ -15,6 +15,7 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 
 DropColumnsStrategy: TypeAlias = Literal[
     "drop",
+    "batch",
     "select",
 ]
 
@@ -143,7 +144,7 @@ def drop_system_columns(
             return lf
         case "drop":
             return drop_system_columns_drop(lf, ignore_missing)
-        case "drop":
+        case "batch":
             return drop_system_columns_drop_in_batch(lf, ignore_missing)
         case "select":
             return drop_system_columns_select_in_batch(lf, ignore_missing)

@@ -48,7 +48,7 @@ from tabsdata.exceptions import ErrorCode, TableFrameError
 
 # noinspection PyProtectedMember
 from tabsdata.extensions.tableframe.extension import TableFrameExtension
-from tabsdata.utils.annotations import pydoc, unstable
+from tabsdata.utils.annotations import pydoc
 
 # ToDo: SDK-128: Define the logging model for SDK CLI execution
 logger = logging.getLogger(__name__)
@@ -1500,9 +1500,34 @@ class TableFrame:
 
     """ Functions derived from DataFrame"""
 
-    @unstable()
     @pydoc(categories="projection")
     def item(self) -> Any:
+        """
+        Returns a scalar value if the TableFrame contains exactly one user column and
+        one row.
+
+        Raises an exception if there is more than one user column or more than one row.
+
+        Returns `None` if the TableFrame is empty.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌─────┐
+        │ a   │
+        │ --- │
+        │ str │
+        ╞═════╡
+        │ A   │
+        └─────┘
+        >>>
+        >>> tf.item()
+        >>>
+        A
+        """
         # noinspection PyProtectedMember
         return td_frame.DataFrame.item(td_translator._unwrap_table_frame(self))
 

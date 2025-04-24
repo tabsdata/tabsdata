@@ -19,6 +19,8 @@ class DataFrame:
     def item(cls, lf: pl.LazyFrame) -> Any:
         schema = lf.collect_schema()
         if schema.len() == 1:
+            if lf.limit(1).collect().height == 0:
+                return None
             lf = lf.select(
                 pl.first().alias(
                     td_constants.StandardVolatileSystemColumns.TD_ITEM_COLUMN.value

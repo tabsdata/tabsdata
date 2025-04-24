@@ -201,6 +201,18 @@ class TestTableFrame(unittest.TestCase):
             os.path.join(tempfile.gettempdir(), "delete.sink_2.json")
         )
 
+    def test_item_empty(self):
+        lf = pl.LazyFrame(
+            {
+                "letters": [],
+                "numbers": [],
+            }
+        )
+        tf = td.TableFrame.__build__(lf)
+
+        item = tf.select(td.col("numbers").mean()).item()
+        assert item is None
+
     def test_item(self):
         lf = pl.LazyFrame(
             {
