@@ -17,10 +17,6 @@ use crate::crudl::ListParams;
 use crate::types::{DataAccessObject, SqlEntity};
 use std::ops::Deref;
 use td_error::td_error;
-
-#[cfg(feature = "td-test")]
-use std::println as trace;
-#[cfg(not(feature = "td-test"))]
 use tracing::trace;
 
 #[td_error]

@@ -68,16 +68,16 @@ impl<T: TransactionMapper> TransactionMap<T> {
 mod tests {
     use super::*;
     use crate::test_utils::transaction::TestTransactionBy;
-    use td_objects::types::test_utils::execution::function_node;
+    use td_objects::types::test_utils::execution::{function_node, FUNCTION_NAMES};
 
     #[test]
     fn test_add() -> Result<(), TdError> {
         let transaction_by = TestTransactionBy::default();
         let mut transaction_map = TransactionMap::new(transaction_by);
-        let function = function_node("test_function");
+        let function = function_node(&FUNCTION_NAMES[0]);
 
         let id = *transaction_map.add(&function)?;
-        let key = TransactionKey::try_from("test_function")?;
+        let key = TransactionKey::try_from(FUNCTION_NAMES[0].to_string())?;
         assert_eq!(id, *transaction_map.get(&key)?);
         Ok(())
     }
@@ -86,7 +86,7 @@ mod tests {
     fn test_get_missing_key() -> Result<(), TdError> {
         let transaction_by = TestTransactionBy::default();
         let mut transaction_map = TransactionMap::new(transaction_by);
-        let function = function_node("test_function");
+        let function = function_node(&FUNCTION_NAMES[0]);
 
         transaction_map.add(&function)?;
         let key = TransactionKey::try_from("error")?;
@@ -107,12 +107,15 @@ mod tests {
     fn test_iter() -> Result<(), TdError> {
         let transaction_by = TestTransactionBy::default();
         let mut transaction_map = TransactionMap::new(transaction_by);
-        let function = function_node("test_function");
+        let function = function_node(&FUNCTION_NAMES[0]);
 
         transaction_map.add(&function)?;
         let keys: Vec<_> = transaction_map.iter().collect();
         assert_eq!(keys.len(), 1);
-        assert_eq!(keys[0], &TransactionKey::try_from("test_function")?);
+        assert_eq!(
+            keys[0],
+            &TransactionKey::try_from(FUNCTION_NAMES[0].to_string())?
+        );
         Ok(())
     }
 }

@@ -100,7 +100,9 @@ pub struct DependencyVersionDBWithNames {
 
     collection: CollectionName,
     function: FunctionName,
+    trigger_by_collection: CollectionName,
     table_collection: CollectionName,
+    table_function: FunctionName,
     defined_by: UserName,
 }
 

@@ -28,31 +28,32 @@ mod tests {
     use ta_execution::graphs::ExecutionGraph;
     use td_error::TdError;
     use td_objects::types::execution::{GraphDependency, GraphEdge, GraphNode, GraphOutput};
-    use td_objects::types::test_utils::execution::{function_node, table_node};
+    use td_objects::types::test_utils::execution::{
+        function_node, table_node, FUNCTION_NAMES, TABLE_NAMES,
+    };
 
     #[test]
     fn test_triggered_functions_index() -> Result<(), TdError> {
         let mut graph: Graph<GraphNode, GraphEdge<u64>> = DiGraph::new();
-        let fn_1 = graph.add_node(GraphNode::Function(function_node("fn_1")));
-        let table_1 = graph.add_node(GraphNode::Table(table_node("table_1")));
+        let fn_1 = graph.add_node(GraphNode::Function(function_node(&FUNCTION_NAMES[0])));
+        let table_1 = graph.add_node(GraphNode::Table(table_node(&TABLE_NAMES[0])));
         graph.add_edge(
             fn_1,
             table_1,
             GraphEdge::output(0, GraphOutput::builder().output_pos(None).build()?),
         );
 
-        let fn_2 = graph.add_node(GraphNode::Function(function_node("fn_2")));
-        let table_2 = graph.add_node(GraphNode::Table(table_node("table_2")));
+        let fn_2 = graph.add_node(GraphNode::Function(function_node(&FUNCTION_NAMES[1])));
+        let table_2 = graph.add_node(GraphNode::Table(table_node(&TABLE_NAMES[1])));
         graph.add_edge(
             fn_2,
             table_2,
             GraphEdge::output(0, GraphOutput::builder().output_pos(None).build()?),
         );
 
-        let fn_3 = graph.add_node(GraphNode::Function(function_node("fn_2")));
-        let table_3 = graph.add_node(GraphNode::Table(table_node("table_3")));
+        let table_3 = graph.add_node(GraphNode::Table(table_node(&TABLE_NAMES[2])));
         graph.add_edge(
-            fn_3,
+            fn_2,
             table_3,
             GraphEdge::output(0, GraphOutput::builder().output_pos(None).build()?),
         );
@@ -69,7 +70,7 @@ mod tests {
                     .build()?,
             ),
         );
-        graph.add_edge(table_2, fn_3, GraphEdge::trigger(0));
+        graph.add_edge(table_2, fn_2, GraphEdge::trigger(0));
 
         let execution_graph = ExecutionGraph::new(graph.clone(), fn_1);
         let triggered_functions = execution_graph.triggered_functions_index();

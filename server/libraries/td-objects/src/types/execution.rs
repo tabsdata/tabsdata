@@ -45,6 +45,19 @@ pub struct ExecutionDB {
     triggered_by_id: UserId,
 }
 
+#[td_type::Dao(sql_table = "executions__with_status")]
+pub struct ExecutionDBWithStatus {
+    id: ExecutionId,
+    name: Option<ExecutionName>,
+    collection_id: CollectionId,
+    function_version_id: FunctionVersionId,
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: ExecutionStatus,
+}
+
 #[td_type::Dao(sql_table = "transactions")]
 #[td_type(builder(try_from = ExecutionDB, skip_all))]
 pub struct TransactionDB {
@@ -58,6 +71,19 @@ pub struct TransactionDB {
     triggered_on: TriggeredOn,
     #[td_type(builder(include))]
     triggered_by_id: UserId,
+}
+
+#[td_type::Dao(sql_table = "transactions__with_status")]
+pub struct TransactionDBWithStatus {
+    id: TransactionId,
+    execution_id: ExecutionId,
+    transaction_by: TransactionByStr,
+    transaction_key: TransactionKey,
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: TransactionStatus,
 }
 
 #[td_type::Dao(
@@ -128,6 +154,25 @@ pub struct TableDataVersionDB {
     function_param_pos: Option<TableFunctionParamPos>,
 }
 
+#[td_type::Dao(sql_table = "table_data_versions__with_status")]
+pub struct TableDataVersionDBWithStatus {
+    id: TableDataVersionId,
+    collection_id: CollectionId,
+    table_id: TableId,
+    table_version_id: TableVersionId,
+    function_version_id: FunctionVersionId,
+    has_data: Option<HasData>,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    function_run_id: FunctionRunId,
+    function_param_pos: Option<TableFunctionParamPos>,
+
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+    status: FunctionRunStatus,
+    partitioned: Partitioned,
+}
+
 #[td_type::Dao(
     sql_table = "table_data_versions__with_names",
     partition_by = "table_version_id",
@@ -144,10 +189,13 @@ pub struct TableDataVersionDBWithNames {
     execution_id: ExecutionId,
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
+    function_param_pos: TableFunctionParamPos,
+
     triggered_on: TriggeredOn,
     triggered_by_id: UserId,
-    function_param_pos: TableFunctionParamPos,
+    status: FunctionRunStatus,
     partitioned: Partitioned,
+
     collection: CollectionName,
     function: FunctionName,
     name: TableName,
@@ -194,6 +242,22 @@ pub struct FunctionRequirementDB {
     #[builder(default)]
     requirement_dependency_pos: Option<DependencyPos>,
     requirement_version_pos: VersionPos,
+}
+
+#[td_type::Dao(sql_table = "function_requirements__with_status")]
+pub struct FunctionRequirementDBWithStatus {
+    id: RequirementId,
+    collection_id: CollectionId,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    function_run_id: FunctionRunId,
+    requirement_table_id: TableId,
+    requirement_table_version_id: TableVersionId,
+    requirement_function_run_id: Option<FunctionRunId>,
+    requirement_table_data_version_id: Option<TableDataVersionId>,
+    requirement_dependency_pos: Option<DependencyPos>,
+    requirement_version_pos: VersionPos,
+    status: FunctionRunStatus,
 }
 
 #[td_type::Dao(
@@ -719,12 +783,14 @@ impl GraphNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::test_utils::execution::{dependency, table, trigger};
+    use crate::types::test_utils::execution::{
+        dependency, table, trigger, FUNCTION_NAMES, TABLE_NAMES,
+    };
 
     #[tokio::test]
-    async fn test_graph_node_from_table() {
-        let table = table("function_1", "table_1").await;
-        let (function_node, table_node) = GraphNode::from_table(&table).unwrap();
+    async fn test_graph_node_from_table() -> Result<(), TdError> {
+        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await;
+        let (function_node, table_node) = GraphNode::from_table(&table)?;
 
         if let GraphNode::Function(function) = function_node {
             assert_eq!(function.collection_id(), table.collection_id());
@@ -748,12 +814,13 @@ mod tests {
         } else {
             panic!("Expected GraphNode::Table");
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_graph_node_from_dependency() {
-        let dependency = dependency("table_1", "function_2").await;
-        let (table_node, function_node) = GraphNode::from_dependency(&dependency).unwrap();
+    async fn test_graph_node_from_dependency() -> Result<(), TdError> {
+        let dependency = dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
+        let (table_node, function_node) = GraphNode::from_dependency(&dependency)?;
 
         if let GraphNode::Table(table) = table_node {
             assert_eq!(table.collection_id(), dependency.table_collection_id());
@@ -780,12 +847,13 @@ mod tests {
         } else {
             panic!("Expected GraphNode::Function");
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_graph_node_from_trigger() {
-        let trigger = trigger("table_1", "function_2").await;
-        let (table_node, function_node) = GraphNode::from_trigger(&trigger).unwrap();
+    async fn test_graph_node_from_trigger() -> Result<(), TdError> {
+        let trigger = trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await;
+        let (table_node, function_node) = GraphNode::from_trigger(&trigger)?;
 
         if let GraphNode::Table(table) = table_node {
             assert_eq!(table.collection_id(), trigger.trigger_by_collection_id());
@@ -815,5 +883,6 @@ mod tests {
         } else {
             panic!("Expected GraphNode::Function");
         }
+        Ok(())
     }
 }

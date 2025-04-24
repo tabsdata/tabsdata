@@ -637,7 +637,7 @@ pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
 #[td_type::UrlParam]
 pub struct ExecutionParam {
     #[td_type(extractor)]
-    transaction: ExecutionIdName,
+    execution: ExecutionIdName,
 }
 
 pub const EXECUTION_CANCEL: &str = concat!(EXECUTION, "/cancel");

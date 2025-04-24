@@ -76,7 +76,7 @@ mod tests {
     #[tokio::test]
     async fn test_tower_metadata_list_permission() {
         use td_authz::Authz;
-        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, SystemOrRoleId, Requester};
+        use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrRoleId};
         use td_objects::tower_service::extractor::extract_req_context;
         use td_tower::metadata::{type_of_val, Metadata};
 

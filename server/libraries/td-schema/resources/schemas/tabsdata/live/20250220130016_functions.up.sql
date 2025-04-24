@@ -292,18 +292,22 @@ CREATE TABLE executions
 );
 
 CREATE VIEW executions__with_status AS
-SELECT e.*,
-       MIN(t.started_on) AS started_on,
-       MAX(t.ended_on)   AS ended_on,
-       CASE
-           WHEN COUNT(CASE WHEN t.status NOT IN ('S') THEN 1 END) = 0 THEN 'S'
-           WHEN COUNT(CASE WHEN t.status NOT IN ('P') THEN 1 END) = 0 THEN 'D'
-           WHEN COUNT(CASE WHEN t.status NOT IN ('C', 'P') THEN 1 END) = 0 THEN 'I'
-           ELSE 'R'
-           END           AS status
-FROM executions e
+SELECT s.*,
+       MIN(t.started_on)                                         AS started_on,
+       MAX(CASE WHEN s.status IN ('D', 'I') THEN t.ended_on END) AS ended_on
+FROM (SELECT e.*,
+             CASE
+                 WHEN COUNT(CASE WHEN t.status NOT IN ('S', 'RR') THEN 1 END) = 0 THEN 'S'
+                 WHEN COUNT(CASE WHEN t.status NOT IN ('P') THEN 1 END) = 0 THEN 'D'
+                 WHEN COUNT(CASE WHEN t.status NOT IN ('C', 'P') THEN 1 END) = 0 THEN 'I'
+                 ELSE 'R'
+                 END AS status
+      FROM executions e
+               LEFT JOIN transactions__with_status t ON t.execution_id = e.id
+      GROUP BY e.id) s
+         JOIN executions e ON e.id = s.id
          LEFT JOIN transactions__with_status t ON t.execution_id = e.id
-GROUP BY e.id;
+GROUP BY s.id;
 
 -- Transactions  (table & __with_status view)
 
@@ -323,20 +327,24 @@ CREATE TABLE transactions
 );
 
 CREATE VIEW transactions__with_status AS
-SELECT t.*,
-       MIN(fr.started_on) AS started_on,
-       MAX(fr.ended_on)   AS ended_on,
-       CASE
-           WHEN COUNT(CASE WHEN fr.status NOT IN ('S') THEN 1 END) = 0 THEN 'S'
-           WHEN COUNT(CASE WHEN fr.status NOT IN ('D') THEN 1 END) = 0 THEN 'P'
-           WHEN COUNT(CASE WHEN fr.status = 'F' THEN 1 END) > 0 THEN 'F'
-           WHEN COUNT(CASE WHEN fr.status = 'H' THEN 1 END) > 0 THEN 'H'
-           WHEN COUNT(CASE WHEN fr.status = 'C' THEN 1 END) > 0 THEN 'C'
-           ELSE 'R'
-           END            AS status
-FROM transactions t
+SELECT s.*,
+       MIN(fr.started_on)                                         AS started_on,
+       CASE WHEN s.status IN ('C', 'P') THEN MAX(fr.ended_on) END AS ended_on
+FROM (SELECT t.*,
+             CASE
+                 WHEN COUNT(CASE WHEN fr.status NOT IN ('S', 'RR') THEN 1 END) = 0 THEN 'S'
+                 WHEN COUNT(CASE WHEN fr.status NOT IN ('D') THEN 1 END) = 0 THEN 'P'
+                 WHEN COUNT(CASE WHEN fr.status = 'F' THEN 1 END) > 0 THEN 'F'
+                 WHEN COUNT(CASE WHEN fr.status = 'H' THEN 1 END) > 0 THEN 'H'
+                 WHEN COUNT(CASE WHEN fr.status = 'C' THEN 1 END) > 0 THEN 'C'
+                 ELSE 'R'
+                 END AS status
+      FROM transactions t
+               LEFT JOIN function_runs fr ON fr.transaction_id = t.id
+      GROUP BY t.id) s
+         JOIN transactions t ON t.id = s.id
          LEFT JOIN function_runs fr ON fr.transaction_id = t.id
-GROUP BY t.id;
+GROUP BY s.id;
 
 -- Function runs  (table)
 
@@ -470,20 +478,24 @@ CREATE TABLE function_requirements
     requirement_version_pos           INTEGER NOT NULL
 );
 
-CREATE VIEW function_requirements__with_names AS
+CREATE VIEW function_requirements__with_status AS
 SELECT r.*,
-       c.name  as collection,
-       fv.name as function,
-       tv.name as requirement_table,
        CASE
            WHEN r.requirement_table_data_version_id IS NULL THEN 'D'
            ELSE tdv.status
            END AS status
 FROM function_requirements r
+         LEFT JOIN table_data_versions__with_status tdv ON r.requirement_table_data_version_id = tdv.id;
+
+CREATE VIEW function_requirements__with_names AS
+SELECT r.*,
+       c.name  as collection,
+       fv.name as function,
+       tv.name as requirement_table
+FROM function_requirements__with_status r
          LEFT JOIN collections c ON r.collection_id = c.id
          LEFT JOIN table_versions tv ON r.requirement_table_version_id = tv.id
-         LEFT JOIN function_versions fv ON r.requirement_function_run_id = fv.id
-         LEFT JOIN table_data_versions__with_status tdv ON r.requirement_table_data_version_id = tdv.id;
+         LEFT JOIN function_versions fv ON r.requirement_function_run_id = fv.id;
 
 -- Worker Messages  (table)
 

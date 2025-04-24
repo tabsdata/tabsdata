@@ -6,10 +6,6 @@ use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
 use crate::sql::{Queries, QueryError};
 use crate::types::{DataAccessObject, NaturalOrder, PartitionBy, Recursive, SqlEntity, Status};
 use std::ops::Deref;
-
-#[cfg(feature = "td-test")]
-use std::println as trace;
-#[cfg(not(feature = "td-test"))]
 use tracing::trace;
 
 const LATEST_REFERENCE_VERSIONS_CTE: &str = "latest_reference_versions";

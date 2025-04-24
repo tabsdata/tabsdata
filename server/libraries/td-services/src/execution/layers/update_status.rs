@@ -134,8 +134,11 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                     .fetch_all(&mut *conn)
                     .await
                     .map_err(handle_sql_err)?;
-                let function_run_ids: Vec<_> =
-                    function_runs.iter().map(|f| *f.function_run_id()).collect();
+                let function_run_ids: Vec<_> = function_runs
+                    .iter()
+                    .map(|f| *f.function_run_id())
+                    .filter(|id| id != current.id()) // current is already canceled
+                    .collect();
 
                 downstream_function_run_updates
                     .entry(FunctionRunStatus::Canceled)
@@ -155,8 +158,11 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                     .fetch_all(&mut *conn)
                     .await
                     .map_err(handle_sql_err)?;
-                let function_run_ids: Vec<_> =
-                    function_runs.iter().map(|f| *f.function_run_id()).collect();
+                let function_run_ids: Vec<_> = function_runs
+                    .iter()
+                    .map(|f| *f.function_run_id())
+                    .filter(|id| id != current.id()) // current is already rescheduled
+                    .collect();
 
                 downstream_function_run_updates
                     .entry(FunctionRunStatus::ReScheduled)
@@ -176,8 +182,11 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                     .fetch_all(&mut *conn)
                     .await
                     .map_err(handle_sql_err)?;
-                let function_run_ids: Vec<_> =
-                    function_runs.iter().map(|f| *f.function_run_id()).collect();
+                let function_run_ids: Vec<_> = function_runs
+                    .iter()
+                    .map(|f| *f.function_run_id())
+                    .filter(|id| id != current.id()) // current is already failed
+                    .collect();
 
                 downstream_function_run_updates
                     .entry(FunctionRunStatus::OnHold)

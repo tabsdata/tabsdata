@@ -217,17 +217,21 @@ mod tests {
     use std::collections::HashSet;
     use ta_execution::test_utils::graph::test_graph;
     use td_error::TdError;
-    use td_objects::types::test_utils::execution::{function_node, table_node};
+    use td_objects::types::test_utils::execution::{
+        function_node, table_node, FUNCTIONS, FUNCTION_NAMES, TABLE_NAMES,
+    };
 
     #[tokio::test]
     async fn test_functions() -> Result<(), TdError> {
         let (graph, _) = test_graph().await;
 
         let functions = graph.functions();
-        assert_eq!(functions.len(), 2);
+        assert_eq!(functions.len(), FUNCTION_NAMES.len());
 
-        let mut expected =
-            HashSet::from([function_node("function_1"), function_node("function_2")]);
+        let mut expected = HashSet::from([
+            function_node(&FUNCTION_NAMES[0]),
+            function_node(&FUNCTION_NAMES[1]),
+        ]);
 
         for function in functions {
             assert!(expected.remove(function));
@@ -241,9 +245,12 @@ mod tests {
         let (graph, _) = test_graph().await;
 
         let tables = graph.tables();
-        assert_eq!(tables.len(), 2);
+        assert_eq!(tables.len(), TABLE_NAMES.len());
 
-        let mut expected = HashSet::from([table_node("table_1"), table_node("table_2")]);
+        let mut expected = TABLE_NAMES.iter().fold(HashSet::new(), |mut acc, table| {
+            acc.insert(table_node(table));
+            acc
+        });
 
         for table in tables {
             assert!(expected.remove(table));
@@ -255,11 +262,28 @@ mod tests {
     #[tokio::test]
     async fn test_output_tables() -> Result<(), TdError> {
         let (graph, _) = test_graph().await;
+        let triggered_functions_index: HashSet<_> = graph
+            .triggered_functions_index()
+            .into_iter()
+            .chain(std::iter::once(*graph.trigger_index()))
+            .collect();
+
+        let mut expected: HashSet<_> = triggered_functions_index
+            .iter()
+            .flat_map(|index| {
+                let GraphNode::Function(node) = &graph.inner()[*index] else {
+                    unreachable!()
+                };
+                FUNCTIONS
+                    .get(node.name())
+                    .unwrap()
+                    .iter()
+                    .map(|table| (function_node(node.name()), table_node(table)))
+            })
+            .collect();
 
         let output_tables = graph.output_tables();
-        assert_eq!(output_tables.len(), 1);
-
-        let mut expected = HashSet::from([(function_node("function_1"), table_node("table_1"))]);
+        assert_eq!(output_tables.len(), expected.len());
 
         for (function, table, _) in output_tables {
             assert!(expected.remove(&(function.clone(), table.clone())));
@@ -280,18 +304,23 @@ mod tests {
     #[tokio::test]
     async fn test_triggered_functions() -> Result<(), TdError> {
         let (graph, _) = test_graph().await;
+        let downstream_functions_index = graph.triggered_functions_index();
 
         let triggered_functions = graph.triggered_functions();
-        assert_eq!(triggered_functions.len(), 0);
+        assert_eq!(triggered_functions.len(), downstream_functions_index.len());
         Ok(())
     }
 
     #[tokio::test]
     async fn test_function_version_requirements() -> Result<(), TdError> {
         let (graph, _) = test_graph().await;
+        let downstream_functions_index = graph.triggered_functions_index();
 
         let function_version_requirements = graph.function_version_requirements();
-        assert_eq!(function_version_requirements.len(), 0);
+        assert_eq!(
+            function_version_requirements.len(),
+            downstream_functions_index.len() * 2 // This graph has dependency and trigger on each edge.
+        );
         Ok(())
     }
 
@@ -302,8 +331,8 @@ mod tests {
         let new_graph = graph
             .versioned(|_, _, _| async { Ok::<_, TdError>(1) })
             .await?;
-        assert_eq!(new_graph.functions().len(), 2);
-        assert_eq!(new_graph.tables().len(), 2);
+        assert_eq!(new_graph.functions().len(), FUNCTION_NAMES.len());
+        assert_eq!(new_graph.tables().len(), TABLE_NAMES.len());
         Ok(())
     }
 }

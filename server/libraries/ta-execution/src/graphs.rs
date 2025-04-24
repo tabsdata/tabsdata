@@ -313,9 +313,8 @@ mod tests {
     use crate::test_utils::transaction::TestTransactionBy;
     use petgraph::visit::EdgeRef;
     use std::collections::HashSet;
-    use td_objects::types::basic::FunctionName;
     use td_objects::types::test_utils::execution::{
-        dependency, function_node, table, table_node, trigger,
+        dependency, function_node, table, table_node, trigger, FUNCTION_NAMES, TABLE_NAMES,
     };
 
     #[test]
@@ -337,23 +336,29 @@ mod tests {
             GraphNode::Function(trigger_function),
             graph.inner()[graph.trigger_index]
         );
-        assert_eq!(graph.inner.node_count(), 4);
-        assert_eq!(graph.inner.edge_count(), 4);
+        assert_eq!(
+            graph.inner.node_count(),
+            FUNCTION_NAMES.len() + TABLE_NAMES.len()
+        );
+        // There is 1 trigger edge, 1 dependency edge and 3 output edges
+        assert_eq!(graph.inner.edge_count(), 5);
     }
 
     #[tokio::test]
     async fn test_graph_nodes() {
         let (graph, _) = test_graph().await;
 
-        let mut function_nodes = HashSet::from([
-            GraphNode::Function(function_node("function_1")),
-            GraphNode::Function(function_node("function_2")),
-        ]);
+        let mut table_nodes = TABLE_NAMES.iter().fold(HashSet::new(), |mut acc, table| {
+            acc.insert(GraphNode::Table(table_node(table)));
+            acc
+        });
 
-        let mut table_nodes = HashSet::from([
-            GraphNode::Table(table_node("table_1")),
-            GraphNode::Table(table_node("table_2")),
-        ]);
+        let mut function_nodes = FUNCTION_NAMES
+            .iter()
+            .fold(HashSet::new(), |mut acc, function| {
+                acc.insert(GraphNode::Function(function_node(function)));
+                acc
+            });
 
         for node in graph.inner.node_indices() {
             let node = &graph.inner()[node];
@@ -404,28 +409,35 @@ mod tests {
                 let source = &graph.inner[edge.source()];
                 let target = &graph.inner[edge.target()];
                 match (source, target) {
-                    (GraphNode::Function(f), GraphNode::Table(t)) => {
-                        match (f.name().to_string(), t.name().to_string()) {
-                            (function, table) if function == "function_1" && table == "table_1" => {
-                                assert!(matches!(edge.weight(), GraphEdge::Output { .. }));
-                            }
-                            (function, table) if function == "function_2" && table == "table_2" => {
-                                assert!(matches!(edge.weight(), GraphEdge::Output { .. }));
-                            }
-                            _ => unreachable!(),
+                    (GraphNode::Function(f), GraphNode::Table(t)) => match (f.name(), t.name()) {
+                        (function, table)
+                            if function == &FUNCTION_NAMES[0] && table == &TABLE_NAMES[0] =>
+                        {
+                            assert!(matches!(edge.weight(), GraphEdge::Output { .. }));
                         }
-                    }
-                    (GraphNode::Table(t), GraphNode::Function(f)) => {
-                        match (t.name().to_string(), f.name().to_string()) {
-                            (table, function) if table == "table_1" && function == "function_2" => {
-                                assert!(matches!(
-                                    edge.weight(),
-                                    GraphEdge::Dependency { .. } | GraphEdge::Trigger { .. }
-                                ));
-                            }
-                            _ => unreachable!(),
+                        (function, table)
+                            if function == &FUNCTION_NAMES[1] && table == &TABLE_NAMES[1] =>
+                        {
+                            assert!(matches!(edge.weight(), GraphEdge::Output { .. }));
                         }
-                    }
+                        (function, table)
+                            if function == &FUNCTION_NAMES[1] && table == &TABLE_NAMES[2] =>
+                        {
+                            assert!(matches!(edge.weight(), GraphEdge::Output { .. }));
+                        }
+                        _ => unreachable!(),
+                    },
+                    (GraphNode::Table(t), GraphNode::Function(f)) => match (t.name(), f.name()) {
+                        (table, function)
+                            if table == &TABLE_NAMES[0] && function == &FUNCTION_NAMES[1] =>
+                        {
+                            assert!(matches!(
+                                edge.weight(),
+                                GraphEdge::Dependency { .. } | GraphEdge::Trigger { .. }
+                            ));
+                        }
+                        _ => unreachable!(),
+                    },
                     _ => unreachable!(),
                 }
             }
@@ -439,8 +451,10 @@ mod tests {
         assert_eq!(trigger_graph.inner.node_count(), 2);
         assert_eq!(trigger_graph.inner.edge_count(), 1);
 
-        let mut function_nodes =
-            HashSet::from([function_node("function_1"), function_node("function_2")]);
+        let mut function_nodes = HashSet::from([
+            function_node(&FUNCTION_NAMES[0]),
+            function_node(&FUNCTION_NAMES[1]),
+        ]);
 
         for node in trigger_graph.inner.node_indices() {
             let node = &trigger_graph.inner()[node];
@@ -452,15 +466,9 @@ mod tests {
         assert_eq!(edges.len(), 1);
         let edge = edges[0];
         let source = trigger_graph.inner[edge.source()];
-        assert_eq!(
-            *source.name(),
-            FunctionName::try_from("function_1").unwrap()
-        );
+        assert_eq!(*source.name(), FUNCTION_NAMES[0]);
         let target = trigger_graph.inner[edge.target()];
-        assert_eq!(
-            *target.name(),
-            FunctionName::try_from("function_2").unwrap()
-        );
+        assert_eq!(*target.name(), FUNCTION_NAMES[1]);
     }
 
     #[tokio::test]
@@ -469,20 +477,20 @@ mod tests {
         assert!(graph.validate_dag().is_ok());
 
         let output_tables = vec![
-            table("function_1", "table_1").await,
-            table("function_2", "table_2").await,
+            table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
+            table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]).await,
         ];
         let input_tables = vec![
             // this creates cycles dependency wise (which is ok)
-            dependency("table_1", "function_2").await,
-            dependency("table_2", "function_1").await,
-            dependency("table_1", "function_1").await,
-            dependency("table_2", "function_2").await,
+            dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
+            dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[0]).await,
+            dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await,
+            dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[1]).await,
         ];
-        let trigger_graph = vec![trigger("table_1", "function_2").await];
+        let trigger_graph = vec![trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await];
 
         let builder = GraphBuilder::new(&trigger_graph, &output_tables, &input_tables);
-        let trigger_function = function_node("function_1");
+        let trigger_function = function_node(&FUNCTION_NAMES[0]);
         let graph = builder.build(trigger_function.clone()).unwrap();
         assert!(graph.validate_dag().is_ok());
     }
@@ -490,18 +498,18 @@ mod tests {
     #[tokio::test]
     async fn test_graph_validate_dag_err() {
         let output_tables = vec![
-            table("function_1", "table_1").await,
-            table("function_2", "table_2").await,
+            table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
+            table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]).await,
         ];
         let input_tables = vec![];
         let trigger_graph = vec![
             // This creates a cycle trigger wise (which is not ok)
-            trigger("table_1", "function_2").await,
-            trigger("table_2", "function_1").await,
+            trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
+            trigger(&TABLE_NAMES[1], &FUNCTION_NAMES[0]).await,
         ];
 
         let builder = GraphBuilder::new(&trigger_graph, &output_tables, &input_tables);
-        let trigger_function = function_node("function_1");
+        let trigger_function = function_node(&FUNCTION_NAMES[0]);
 
         let graph = builder.build(trigger_function.clone()).unwrap();
         assert!(graph.validate_dag().is_err());
@@ -517,8 +525,8 @@ mod tests {
         assert_eq!(transaction_graph.inner.edge_count(), 1);
 
         let mut function_nodes = HashSet::from([
-            TransactionKey::try_from("function_1").unwrap(),
-            TransactionKey::try_from("function_2").unwrap(),
+            TransactionKey::try_from(FUNCTION_NAMES[0].to_string()).unwrap(),
+            TransactionKey::try_from(FUNCTION_NAMES[1].to_string()).unwrap(),
         ]);
 
         for node in transaction_graph.inner.node_indices() {
@@ -531,9 +539,15 @@ mod tests {
         assert_eq!(edges.len(), 1);
         let edge = edges[0];
         let source = &transaction_graph.inner[edge.source()];
-        assert_eq!(*source, TransactionKey::try_from("function_1").unwrap());
+        assert_eq!(
+            *source,
+            TransactionKey::try_from(FUNCTION_NAMES[0].to_string()).unwrap()
+        );
         let target = &transaction_graph.inner[edge.target()];
-        assert_eq!(*target, TransactionKey::try_from("function_2").unwrap());
+        assert_eq!(
+            *target,
+            TransactionKey::try_from(FUNCTION_NAMES[1].to_string()).unwrap()
+        );
 
         let transaction_by = TestTransactionBy::Single;
         let transaction_graph = PartialGraph::transaction_graph(&graph, &transaction_by).unwrap();
@@ -555,18 +569,18 @@ mod tests {
             .is_ok());
 
         let output_tables = vec![
-            table("function_1", "table_1").await,
-            table("function_2", "table_2").await,
+            table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
+            table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]).await,
         ];
         let input_tables = vec![];
         let trigger_graph = vec![
             // This created a cycle if transaction is at function level, but not at a graph level
-            trigger("table_1", "function_2").await,
-            trigger("table_2", "function_1").await,
+            trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
+            trigger(&TABLE_NAMES[1], &FUNCTION_NAMES[0]).await,
         ];
 
         let builder = GraphBuilder::new(&trigger_graph, &output_tables, &input_tables);
-        let trigger_function = function_node("function_1");
+        let trigger_function = function_node(&FUNCTION_NAMES[0]);
         let graph = builder.build(trigger_function.clone()).unwrap();
         assert!(graph
             .validate_transaction(&TestTransactionBy::Name)

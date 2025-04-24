@@ -10,7 +10,7 @@ use td_error::TdError;
 use td_objects::crudl::UpdateRequest;
 use td_objects::rest_urls::TransactionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
+use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{TransactionId, TransactionIdName};
@@ -41,7 +41,6 @@ impl TransactionCancelService {
                 SrvCtxProvider::new(queries),
 
                 // Extract from request.
-                from_fn(extract_req_context::<UpdateRequest<TransactionParam, ()>>),
                 from_fn(extract_req_dto::<UpdateRequest<TransactionParam, ()>, _>),
                 from_fn(extract_req_name::<UpdateRequest<TransactionParam, ()>, _>),
 
@@ -56,7 +55,7 @@ impl TransactionCancelService {
                 from_fn(With::<TransactionDB>::extract::<TransactionId>),
                 from_fn(By::<TransactionId>::select_all::<DaoQueries, FunctionRunDB>),
 
-                //
+                // Set cancel status
                 from_fn(UpdateFunctionRunDB::cancel),
 
                 // Update function requirements status
@@ -73,57 +72,73 @@ impl TransactionCancelService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::services::schedule_commit::ScheduleCommitService;
-    use crate::execution::services::schedule_request::ScheduleRequestService;
-    use crate::execution::services::ExecuteFunctionService;
-    use std::net::SocketAddr;
-    use td_common::server::FileWorkerMessageQueue;
-    use td_common::server::WorkerMessageQueue;
+    use crate::execution::services::callback::ExecutionCallbackService;
+    use td_common::datetime::IntoDateTimeUtc;
+    use td_common::execution_status::FunctionRunUpdateStatus;
+    use td_common::server::{MessageAction, ResponseMessagePayloadBuilder, WorkerClass};
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{handle_sql_err, RequestContext};
-    use td_objects::rest_urls::FunctionParam;
+    use td_objects::rest_urls::FunctionRunParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_execution::seed_execution;
     use td_objects::test_utils::seed_function2::seed_function;
-    use td_objects::types::basic::RoleId;
-    use td_objects::types::basic::{AccessTokenId, TableTrigger};
+    use td_objects::test_utils::seed_function_run::seed_function_run;
+    use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
+    use td_objects::test_utils::seed_transaction2::seed_transaction;
+    use td_objects::types::basic::{AccessTokenId, AtTime, TableTrigger};
     use td_objects::types::basic::{
-        BundleId, CollectionName, ExecutionName, FunctionRuntimeValues, TableDependency, TableName,
-        UserId,
+        BundleId, CollectionName, FunctionRuntimeValues, TableDependency, TableName, UserId,
     };
-    use td_objects::types::execution::{ExecutionRequest, FunctionRunDB};
+    use td_objects::types::basic::{RoleId, TransactionKey};
+    use td_objects::types::execution::{
+        CallbackRequest, ExecutionDBWithStatus, ExecutionStatus, FunctionRunDB, FunctionRunStatus,
+        TableDataVersionDBWithStatus, TransactionDBWithStatus, TransactionStatus,
+    };
     use td_objects::types::function::FunctionRegister;
-    use td_objects::types::worker::FunctionInput;
-    use td_storage::{MountDef, Storage};
-    use td_test::file::mount_uri;
+    use td_objects::types::table::TableVersionDB;
     use td_tower::ctx_service::RawOneshot;
-    use testdir::testdir;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
-    async fn test_tower_metadata_cancel_transaction(_db: DbPool) {
-        // use td_tower::metadata::{type_of_val, Metadata};
-        //
-        // let queries = Arc::new(DaoQueries::default());
-        // let provider = ExecuteFunctionService::provider(db, queries, transaction_by);
-        // let service = provider.make().await;
-        //
-        // let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        // let metadata = response.get();
-        //
-        // metadata
-        //     .assert_service::<CreateRequest<FunctionParam, ExecutionRequest>, ExecutionResponse>(
-        //         &[],
-        //     );
+    async fn test_tower_metadata_cancel_transaction(db: DbPool) {
+        use td_tower::metadata::{type_of_val, Metadata};
+
+        let queries = Arc::new(DaoQueries::default());
+        let provider = TransactionCancelService::provider(db, queries);
+        let service = provider.make().await;
+
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
+        let metadata = response.get();
+
+        metadata.assert_service::<UpdateRequest<TransactionParam, ()>, ()>(&[
+            // Extract from request.
+            type_of_val(&extract_req_dto::<UpdateRequest<TransactionParam, ()>, _>),
+            type_of_val(&extract_req_name::<UpdateRequest<TransactionParam, ()>, _>),
+            // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+            type_of_val(&With::<TransactionParam>::extract::<TransactionIdName>),
+            // Find function run.
+            type_of_val(&By::<TransactionIdName>::select::<DaoQueries, TransactionDB>),
+            type_of_val(&With::<TransactionDB>::extract::<TransactionId>),
+            type_of_val(&By::<TransactionId>::select_all::<DaoQueries, FunctionRunDB>),
+            // Set cancel status
+            type_of_val(&UpdateFunctionRunDB::cancel),
+            // Update function requirements status
+            type_of_val(&update_function_run_status::<DaoQueries>),
+        ]);
     }
 
     #[td_test::test(sqlx)]
-    async fn test_cancel(db: DbPool) -> Result<(), TdError> {
+    async fn test_cancel_transaction(db: DbPool) -> Result<(), TdError> {
+        let queries = DaoQueries::default();
+
+        // Set collection
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         // Setup
+        // Create function_1
         let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("foo description")?
@@ -139,8 +154,9 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = seed_function(&db, &collection, &create).await;
+        let (_, function_version_1) = seed_function(&db, &collection, &create).await;
 
+        // Create function_10
         let create = FunctionRegister::builder()
             .try_name("function_10")?
             .try_description("foo description")?
@@ -156,8 +172,9 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = seed_function(&db, &collection, &create).await;
+        let (_, function_version_10) = seed_function(&db, &collection, &create).await;
 
+        // Create function_100
         let create = FunctionRegister::builder()
             .try_name("function_100")?
             .try_description("foo description")?
@@ -173,24 +190,70 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = seed_function(&db, &collection, &create).await;
+        let (_, function_version_100) = seed_function(&db, &collection, &create).await;
 
-        let create = FunctionRegister::builder()
-            .try_name("function_1000")?
-            .try_description("foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("foo snippet")?
-            .dependencies(vec![TableDependency::try_from("table_10")?])
-            .triggers(vec![TableTrigger::try_from("table_100")?])
-            .tables(vec![
-                TableName::try_from("table_1000")?,
-                TableName::try_from("table_2000")?,
-            ])
-            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
+        // Create execution
+        let execution = seed_execution(&db, &collection, &function_version_1).await;
+        let transaction = seed_transaction(&db, &execution, &TransactionKey::try_from("S")?).await;
 
-        let _ = seed_function(&db, &collection, &create).await;
+        let function_versions = vec![
+            function_version_1.clone(),
+            function_version_10.clone(),
+            function_version_100.clone(),
+        ];
+
+        let mut function_runs = vec![];
+        for function_version in function_versions.iter() {
+            let function_run = seed_function_run(
+                &db,
+                &collection,
+                function_version,
+                &execution,
+                &transaction,
+                &FunctionRunStatus::RunRequested,
+            )
+            .await;
+            function_runs.push(function_run);
+        }
+
+        let tables: Vec<TableVersionDB> = queries
+            .select_by::<TableVersionDB>(&())?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+
+        for table in tables {
+            let function_run = function_runs
+                .iter()
+                .find(|f| f.function_version_id() == table.function_version_id())
+                .unwrap();
+            let _ = seed_table_data_version(
+                &db,
+                &collection,
+                &execution,
+                &transaction,
+                function_run,
+                &table,
+            )
+            .await;
+        }
+
+        // Update status to failed (so we can assert start/end times)
+        let response: CallbackRequest = ResponseMessagePayloadBuilder::default()
+            .id("".to_string())
+            .class(WorkerClass::EPHEMERAL)
+            .worker("".to_string())
+            .action(MessageAction::Notify)
+            .start(123)
+            .end(Some(456))
+            .status(FunctionRunUpdateStatus::Failed)
+            .execution(0)
+            .limit(None)
+            .error(None)
+            .context(None)
+            .build()
+            .unwrap();
 
         let request = RequestContext::with(
             AccessTokenId::default(),
@@ -198,64 +261,37 @@ mod tests {
             RoleId::user(),
             true,
         )
-        .create(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("function_1")?
+        .update(
+            FunctionRunParam::builder()
+                .function_run_id(function_runs[0].id())
                 .build()?,
-            ExecutionRequest::builder()
-                .name(Some(ExecutionName::try_from("test_execution")?))
-                .build()?,
+            response,
         );
 
-        let service = ExecuteFunctionService::new(db.clone()).service().await;
-        let execution = service.raw_oneshot(request).await?;
+        let service = ExecutionCallbackService::new(db.clone()).service().await;
+        service.raw_oneshot(request).await?;
 
-        let test_dir = testdir!();
-        let mount_def = MountDef::builder()
-            .id("id")
-            .mount_path("/")
-            .uri(mount_uri(&test_dir))
-            .build()?;
-        let storage = Arc::new(Storage::from(vec![mount_def]).await?);
-        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir)?);
-        let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 8080)));
-        ScheduleRequestService::new(
-            db.clone(),
-            storage.clone(),
-            message_queue.clone(),
-            server_url,
-        )
-        .service()
-        .await
-        .raw_oneshot(())
-        .await?;
+        // Create another execution that won't be cancelled
+        let uncancelled_execution = seed_execution(&db, &collection, &function_version_1).await;
+        let uncancelled_transaction =
+            seed_transaction(&db, &uncancelled_execution, &TransactionKey::try_from("S")?).await;
 
-        let created_messages = message_queue.locked_messages::<FunctionInput>().await;
-        assert_eq!(created_messages.len(), 1);
+        let mut uncancelled_function_runs = vec![];
+        for function_version in function_versions.iter() {
+            let function_run = seed_function_run(
+                &db,
+                &collection,
+                function_version,
+                &uncancelled_execution,
+                &uncancelled_transaction,
+                &FunctionRunStatus::RunRequested,
+            )
+            .await;
+            uncancelled_function_runs.push(function_run);
+        }
 
         // Actual test
-        ScheduleCommitService::new(db.clone(), message_queue.clone())
-            .service()
-            .await
-            .raw_oneshot(())
-            .await?;
-
-        let locked_messages = message_queue.locked_messages::<FunctionInput>().await;
-        assert_eq!(locked_messages.len(), 0);
-
-        // Get function run
-        let queries = DaoQueries::default();
-        let function_runs: Vec<FunctionRunDB> = queries
-            .select_by::<FunctionRunDB>(&(execution.manual_trigger().function_version_id()))?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
-        assert_eq!(function_runs.len(), 1);
-        let function_run = &function_runs[0];
-
-        // Actual test
+        let before = Some(AtTime::now().await);
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
@@ -264,13 +300,162 @@ mod tests {
         )
         .update(
             TransactionParam::builder()
-                .try_transaction(function_run.transaction_id().to_string())?
+                .try_transaction(transaction.id().to_string())?
                 .build()?,
             (),
         );
 
         let service = TransactionCancelService::new(db.clone()).service().await;
         service.raw_oneshot(request).await?;
+
+        // Assertions
+        // Assert execution is incomplete
+        let executions: Vec<ExecutionDBWithStatus> = queries
+            .select_by::<ExecutionDBWithStatus>(&(execution.id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(executions.len(), 1);
+        let execution = &executions[0];
+        assert_eq!(
+            *execution.started_on(),
+            Some(123.datetime_utc()?.try_into()?)
+        );
+        assert!(*execution.ended_on() > before);
+        assert_eq!(*execution.status(), ExecutionStatus::Incomplete);
+
+        // Assert transaction is cancelled
+        let transactions: Vec<TransactionDBWithStatus> = queries
+            .select_by::<TransactionDBWithStatus>(&(transaction.id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(transactions.len(), 1);
+        let transaction = &transactions[0];
+        assert_eq!(
+            *transaction.started_on(),
+            Some(123.datetime_utc()?.try_into()?)
+        );
+        assert!(*transaction.ended_on() > before);
+        assert_eq!(*transaction.status(), TransactionStatus::Canceled);
+
+        // First function started and ended
+        let function_version = &function_versions[0];
+        // Assert all function_runs are cancelled
+        let function_runs: Vec<FunctionRunDB> = queries
+            .select_by::<FunctionRunDB>(&(function_version.id(), transaction.id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(function_runs.len(), 1);
+        let function_run = &function_runs[0];
+        assert_eq!(
+            *function_run.started_on(),
+            Some(123.datetime_utc()?.try_into()?)
+        );
+        assert_eq!(
+            *function_run.ended_on(),
+            Some(456.datetime_utc()?.try_into()?)
+        );
+        assert_eq!(*function_run.status(), FunctionRunStatus::Canceled);
+
+        // Assert all table_data_versions are cancelled
+        let table_data_versions: Vec<TableDataVersionDBWithStatus> = queries
+            .select_by::<TableDataVersionDBWithStatus>(&(function_version.id(), transaction.id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        for table_data_version in &table_data_versions {
+            assert_eq!(
+                table_data_version.triggered_on(),
+                function_run.triggered_on()
+            );
+            assert_eq!(
+                table_data_version.triggered_by_id(),
+                function_run.triggered_by_id()
+            );
+            assert_eq!(table_data_version.status(), function_run.status());
+        }
+
+        // The rest didnt get to start
+        for function_version in function_versions[1..].iter() {
+            // Assert all function_runs are cancelled
+            let function_runs: Vec<FunctionRunDB> = queries
+                .select_by::<FunctionRunDB>(&(function_version.id(), transaction.id()))?
+                .build_query_as()
+                .fetch_all(&db)
+                .await
+                .map_err(handle_sql_err)?;
+            assert_eq!(function_runs.len(), 1);
+            let function_run = &function_runs[0];
+            assert_eq!(*function_run.started_on(), None);
+            assert!(*function_run.ended_on() > before);
+            assert_eq!(*function_run.status(), FunctionRunStatus::Canceled);
+
+            // Assert all table_data_versions are cancelled
+            let table_data_versions: Vec<TableDataVersionDBWithStatus> = queries
+                .select_by::<TableDataVersionDBWithStatus>(&(function_version.id()))?
+                .build_query_as()
+                .fetch_all(&db)
+                .await
+                .map_err(handle_sql_err)?;
+            for table_data_version in &table_data_versions {
+                assert_eq!(
+                    table_data_version.triggered_on(),
+                    function_run.triggered_on()
+                );
+                assert_eq!(
+                    table_data_version.triggered_by_id(),
+                    function_run.triggered_by_id()
+                );
+                assert_eq!(table_data_version.status(), function_run.status());
+            }
+        }
+
+        // Assert uncancelled_execution is still scheduled
+        let executions: Vec<ExecutionDBWithStatus> = queries
+            .select_by::<ExecutionDBWithStatus>(&(uncancelled_execution.id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(executions.len(), 1);
+        let execution = &executions[0];
+        assert_eq!(*execution.started_on(), None);
+        assert_eq!(*execution.ended_on(), None);
+        assert_eq!(*execution.status(), ExecutionStatus::Scheduled);
+
+        // Assert uncancelled_transaction is still scheduled
+        let transactions: Vec<TransactionDBWithStatus> = queries
+            .select_by::<TransactionDBWithStatus>(&(uncancelled_transaction.id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(transactions.len(), 1);
+        let transaction = &transactions[0];
+        assert_eq!(*transaction.started_on(), None);
+        assert_eq!(*transaction.ended_on(), None);
+        assert_eq!(*transaction.status(), TransactionStatus::Scheduled);
+
+        // Assert all function_runs are still scheduled
+        let function_runs: Vec<FunctionRunDB> = queries
+            .select_by::<FunctionRunDB>(&(uncancelled_transaction.id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(function_runs.len(), 3);
+
+        for function_run in &function_runs {
+            assert_eq!(*function_run.started_on(), None);
+            assert_eq!(*function_run.ended_on(), None);
+            assert_eq!(*function_run.status(), FunctionRunStatus::RunRequested);
+        }
 
         Ok(())
     }

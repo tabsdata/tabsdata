@@ -14,15 +14,15 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    combine, BuildService, DefaultService, ExtractService, SetService, TryIntoService, With,
+    BuildService, DefaultService, ExtractService, SetService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{insert, By, SqlSelectIdOrNameService};
 use td_objects::types::basic::{
-    BundleHash, BundleId, CollectionId, CollectionIdName, FunctionIdName, StorageVersion,
+    BundleHash, BundleId, CollectionId, CollectionIdName, StorageVersion,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::function::{
-    Bundle, BundleBuilder, BundleDB, BundleDBBuilder, FunctionDBWithNames, FunctionUpload,
+    Bundle, BundleBuilder, BundleDB, BundleDBBuilder, FunctionUpload,
 };
 use td_storage::Storage;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
@@ -52,18 +52,14 @@ impl UploadFunctionService {
                 from_fn(extract_req_dto::<CreateRequest<FunctionParam, FunctionUpload>, _>),
                 from_fn(extract_req_name::<CreateRequest<FunctionParam, FunctionUpload>, _>),
 
+                // Extract function (TODO also use FunctionId to generate data_location)
                 from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
-                from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
 
                 TransactionProvider::new(db),
 
                 // Extract collection
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                 from_fn(With::<CollectionDB>::extract::<CollectionId>),
-
-                // Extract function
-                from_fn(combine::<CollectionIdName, FunctionIdName>),
-                from_fn(By::<(CollectionIdName, FunctionIdName)>::select::<DaoQueries, FunctionDBWithNames>),
 
                 // Get location and storage version.
                 from_fn(With::<StorageVersion>::default),
@@ -117,6 +113,54 @@ mod tests {
     use td_test::file::mount_uri;
     use td_tower::ctx_service::RawOneshot;
     use testdir::testdir;
+
+    #[cfg(feature = "test_tower_metadata")]
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_upload_function(db: DbPool) -> Result<(), TdError> {
+        use td_tower::metadata::{type_of_val, Metadata};
+
+        let queries = Arc::new(DaoQueries::default());
+        let test_dir = testdir!();
+        let mount_def = MountDef::builder()
+            .id("id")
+            .mount_path("/")
+            .uri(mount_uri(&test_dir))
+            .build()?;
+        let storage = Arc::new(Storage::from(vec![mount_def]).await?);
+        let provider = UploadFunctionService::provider(db, queries, storage);
+        let service = provider.make().await;
+
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
+        let metadata = response.get();
+
+        metadata.assert_service::<CreateRequest<FunctionParam, FunctionUpload>, Bundle>(&[
+            type_of_val(&extract_req_context::<CreateRequest<FunctionParam, FunctionUpload>>),
+            type_of_val(&extract_req_dto::<CreateRequest<FunctionParam, FunctionUpload>, _>),
+            type_of_val(&extract_req_name::<CreateRequest<FunctionParam, FunctionUpload>, _>),
+            // Extract function (TODO also use FunctionId to generate data_location)
+            type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
+            // Extract collection
+            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+            // Get location and storage version.
+            type_of_val(&With::<StorageVersion>::default),
+            type_of_val(&data_location),
+            // Write to storage with new bundle id.
+            type_of_val(&With::<BundleId>::default),
+            type_of_val(&upload_function_write_to_storage),
+            // Build BundleDB
+            type_of_val(&With::<RequestContext>::convert_to::<BundleDBBuilder, _>),
+            type_of_val(&With::<BundleId>::set::<BundleDBBuilder>),
+            type_of_val(&With::<CollectionId>::set::<BundleDBBuilder>),
+            type_of_val(&With::<BundleHash>::set::<BundleDBBuilder>),
+            type_of_val(&With::<BundleDBBuilder>::build::<BundleDB, _>),
+            type_of_val(&insert::<DaoQueries, BundleDB>),
+            // Build response
+            type_of_val(&With::<BundleDB>::convert_to::<BundleBuilder, _>),
+            type_of_val(&With::<BundleBuilder>::build::<Bundle, _>),
+        ]);
+        Ok(())
+    }
 
     #[td_test::test(sqlx)]
     async fn test_upload(db: DbPool) -> Result<(), TdError> {

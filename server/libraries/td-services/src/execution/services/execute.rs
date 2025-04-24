@@ -139,7 +139,10 @@ mod tests {
         BundleId, CollectionName, ExecutionName, FunctionName, FunctionRuntimeValues,
         TableDependency, TableName, TableTrigger, TriggeredOn, UserId,
     };
-    use td_objects::types::execution::FunctionRunStatus;
+    use td_objects::types::execution::{
+        ExecutionDBWithStatus, ExecutionStatus, FunctionRequirementDBWithStatus, FunctionRunStatus,
+        TableDataVersionDBWithStatus, TransactionDBWithStatus, TransactionStatus,
+    };
     use td_objects::types::function::{FunctionDBWithNames, FunctionRegister};
     use td_tower::ctx_service::RawOneshot;
 
@@ -330,8 +333,8 @@ mod tests {
         let queries = DaoQueries::default();
 
         // Execution
-        let executions: Vec<ExecutionDB> = queries
-            .select_by::<ExecutionDB>(&())?
+        let executions: Vec<ExecutionDBWithStatus> = queries
+            .select_by::<ExecutionDBWithStatus>(&())?
             .build_query_as()
             .fetch_all(&db)
             .await
@@ -340,11 +343,11 @@ mod tests {
         assert_eq!(executions[0].id(), response.id());
         assert_eq!(executions[0].name(), response.name());
         assert_eq!(executions[0].collection_id(), collection.id());
-        // assert_eq!(*executions[0].status(), ExecutionStatus::Scheduled);
+        assert_eq!(*executions[0].status(), ExecutionStatus::Scheduled);
 
         // Transaction
-        let transactions: Vec<TransactionDB> = queries
-            .select_by::<TransactionDB>(&())?
+        let transactions: Vec<TransactionDBWithStatus> = queries
+            .select_by::<TransactionDBWithStatus>(&())?
             .build_query_as()
             .fetch_all(&db)
             .await
@@ -352,7 +355,7 @@ mod tests {
         assert!(transactions.len() == 1 || transactions.len() == 2);
         for transaction in transactions {
             assert_eq!(transaction.execution_id(), response.id());
-            // assert_eq!(*transaction.status(), TransactionStatus::Scheduled);
+            assert_eq!(*transaction.status(), TransactionStatus::Scheduled);
         }
 
         // FunctionRun
@@ -389,12 +392,12 @@ mod tests {
         for function_run in function_runs {
             assert_eq!(function_run.collection_id(), collection.id());
             assert_eq!(function_run.execution_id(), response.id());
-            // assert_eq!(*function_run.status(), FunctionRunStatus::Scheduled);
+            assert_eq!(*function_run.status(), FunctionRunStatus::Scheduled);
         }
 
         // TableDataVersion
-        let table_data_versions: Vec<TableDataVersionDB> = queries
-            .select_by::<TableDataVersionDB>(&())?
+        let table_data_versions: Vec<TableDataVersionDBWithStatus> = queries
+            .select_by::<TableDataVersionDBWithStatus>(&())?
             .build_query_as()
             .fetch_all(&db)
             .await
@@ -405,15 +408,12 @@ mod tests {
             assert_eq!(table_data_version.collection_id(), collection.id());
             assert_eq!(table_data_version.execution_id(), response.id());
             assert_eq!(*table_data_version.has_data(), None);
-            // assert_eq!(
-            //     *table_data_version.status(),
-            //     TableDataVersionStatus::Incomplete
-            // );
+            assert_eq!(*table_data_version.status(), FunctionRunStatus::Scheduled);
         }
 
         // FunctionCondition
-        let function_requirements: Vec<FunctionRequirementDB> = queries
-            .select_by::<FunctionRequirementDB>(&())?
+        let function_requirements: Vec<FunctionRequirementDBWithStatus> = queries
+            .select_by::<FunctionRequirementDBWithStatus>(&())?
             .build_query_as()
             .fetch_all(&db)
             .await
@@ -423,7 +423,7 @@ mod tests {
         for function_condition in function_requirements {
             assert_eq!(function_condition.collection_id(), collection.id());
             assert_eq!(function_condition.execution_id(), response.id());
-            // assert_eq!(*function_condition.status(), RequirementStatus::Incomplete);
+            assert_eq!(*function_condition.status(), FunctionRunStatus::Scheduled);
         }
 
         Ok(())

@@ -5,18 +5,21 @@
 use crate::graphs::{ExecutionGraph, GraphBuilder};
 use td_objects::types::execution::FunctionVersionNode;
 use td_objects::types::table_ref::Versions;
-use td_objects::types::test_utils::execution::{dependency, function_node, table, trigger};
+use td_objects::types::test_utils::execution::{
+    dependency, function_node, table, trigger, FUNCTION_NAMES, TABLE_NAMES,
+};
 
 pub async fn test_graph() -> (ExecutionGraph<Versions>, FunctionVersionNode) {
     let output_tables = vec![
-        table("function_1", "table_1").await,
-        table("function_2", "table_2").await,
+        table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
+        table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]).await,
+        table(&FUNCTION_NAMES[1], &TABLE_NAMES[2]).await,
     ];
-    let input_tables = vec![dependency("table_1", "function_2").await];
-    let trigger_graph = vec![trigger("table_1", "function_2").await];
+    let input_tables = vec![dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await];
+    let trigger_graph = vec![trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await];
 
     let builder = GraphBuilder::new(&trigger_graph, &output_tables, &input_tables);
-    let trigger_function = function_node("function_1");
+    let trigger_function = function_node(&FUNCTION_NAMES[0]);
 
     let graph = builder.build(trigger_function.clone()).unwrap();
     (graph, trigger_function)
