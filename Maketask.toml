@@ -1094,8 +1094,8 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
 [tasks.assembly_py_tabsdata_salesforce]
@@ -1127,8 +1127,8 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
 [tasks.assembly_py_tabsdata_mongodb]
@@ -1160,8 +1160,8 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-    exec --fail-on-error python setup.py sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
 [tasks.install]
@@ -1322,7 +1322,7 @@ script = [
     exec --fail-on-error pip uninstall tabsdata --yes
     exec uv cache clean
     exec pip cache purge
-    exec python setup.py clean --all
+    exec python setup.py --quiet clean --all
     rm -r ${ROOT_PROJECT_TABSDATA_FOLDER}/target/python/
     ''']
 
@@ -1334,7 +1334,7 @@ script = [
     exec --fail-on-error pip uninstall tabsdata_salesforce --yes
     exec uv cache clean
     exec pip cache purge
-    exec python setup.py clean --all
+    exec python setup.py --quiet clean --all
     rm -r ${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}/target/python/
     ''']
 
@@ -1346,7 +1346,7 @@ script = [
     exec --fail-on-error pip uninstall tabsdata_mongodb --yes
     exec uv cache clean
     exec pip cache purge
-    exec python setup.py clean --all
+    exec python setup.py --quiet clean --all
     rm -r ${PROJECT_PY_TABSDATA_MONGODB_FOLDER}/target/python/
     ''']
 

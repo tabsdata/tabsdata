@@ -3,6 +3,7 @@
 #
 
 import io
+import logging
 import os
 import platform
 import shutil
@@ -16,11 +17,21 @@ from setuptools.command.build import build as _build
 from setuptools.command.sdist import sdist as _sdist
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+try:
+    from setuptools.command.build_py import _IncludePackageDataAbuse
+
+    _IncludePackageDataAbuse._Warning._DETAILS = ""
+except Exception:
+    pass
+
 
 # noinspection DuplicatedCode
 def root_folder() -> str:
     current_folder = Path(os.getenv("PWD", psutil.Process().cwd()))
-    print(f"📁 Current setup folder is: {current_folder}")
+    logger.debug(f"📁 Current setup folder is: {current_folder}")
     while True:
         root_file = Path(
             os.path.join(
@@ -30,12 +41,12 @@ def root_folder() -> str:
         )
         root_file_exists = root_file.exists() and root_file.is_file()
         if root_file_exists:
-            print(f"🗂️ Root project folder for setup is: {current_folder}")
+            logger.debug(f"🗂️ Root project folder for setup is: {current_folder}")
             return current_folder
         else:
             parent_folder = current_folder.parent
             if current_folder == parent_folder:
-                print(
+                logger.error(
                     "☢️️ "
                     "Root folder is unreachable from current setup folder! "
                     "Defaulting to '../../..'"
@@ -50,7 +61,7 @@ def root_folder() -> str:
 
 # noinspection DuplicatedCode
 ROOT = root_folder()
-print(f"ROOT folder for setup is: {ROOT}")
+logger.debug(f"ROOT folder for setup is: {ROOT}")
 
 TABSDATA_PACKAGES_PREFIX = "tabsdata_"
 
@@ -232,9 +243,9 @@ def read_requirements(path, visited=None):
             for requirement in requirements
             if not requirement.startswith(TABSDATA_PACKAGES_PREFIX)
         ]
-    print("📦 List of application requirements in setup.py:")
+    logger.debug("📦 List of application requirements in setup.py:")
     for requirement in requirements:
-        print(f" - 📚 {requirement}")
+        logger.debug(f" - 📚 {requirement}")
     return requirements
 
 
@@ -245,17 +256,17 @@ if platform.python_implementation() != "CPython":
 profile = os.getenv("profile") or os.getenv("PROFILE", "debug")
 if profile in ("", "dev"):
     profile = "debug"
-print(f"Using Rust profile: '{profile}'")
+logger.debug(f"Using Rust profile: '{profile}'")
 
 td_target = os.getenv("td-target", "")
-print(f"Using tabsdata target: '{td_target}'")
+logger.debug(f"Using tabsdata target: '{td_target}'")
 
 target_release_folder = os.path.join(
     "target",
     td_target,
     profile,
 )
-print(f"Using tabsdata target release folder: '{target_release_folder}'")
+logger.debug(f"Using tabsdata target release folder: '{target_release_folder}'")
 
 # noinspection DuplicatedCode
 base_binaries = []
@@ -305,10 +316,10 @@ datafiles = [
         ],
     )
 ]
-print(f"Including tabsdata binaries: {datafiles}")
+logger.debug(f"Including tabsdata binaries: {datafiles}")
 
 # noinspection DuplicatedCode
-print(f"Current path in setup is {ROOT}")
+logger.debug(f"Current path in setup is {ROOT}")
 
 assets_folder = os.path.join(
     ROOT,
@@ -338,22 +349,24 @@ banner_file = os.path.join(
     variant_manifest_folder,
     BANNER,
 )
-print(
+logger.debug(
     f"Copying {banner_file} ({os.path.abspath(banner_file)}) to"
     f" {package_manifest_folder}"
 )
 try:
     shutil.copy(banner_file, package_manifest_folder)
 except Exception as e:
-    print(f"🦠 Warning: Failed to copy {banner_file} to {package_manifest_folder}: {e}")
+    logger.warning(
+        f"🦠 Warning: Failed to copy {banner_file} to {package_manifest_folder}: {e}"
+    )
     if not skip_non_existing_assets:
-        print(
+        logger.error(
             "🦠 Raising error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
             f" {skip_non_existing_assets}"
         )
         raise
     else:
-        print(
+        logger.debug(
             "🦠 Ignoring error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
             f" {skip_non_existing_assets}"
         )
@@ -363,22 +376,22 @@ license_file = os.path.join(
     variant_manifest_folder,
     LICENSE,
 )
-print(f"Copying {license_file} to {package_manifest_folder}")
+logger.debug(f"Copying {license_file} to {package_manifest_folder}")
 try:
     shutil.copy(license_file, package_manifest_folder)
 except Exception as e:
-    print(
+    logger.warning(
         f"🦠 Warning: Failed to copy {license_file} ({os.path.abspath(license_file)})"
         f" to {package_manifest_folder}: {e}"
     )
     if not skip_non_existing_assets:
-        print(
+        logger.error(
             "🦠 Raising error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
             f" {skip_non_existing_assets}"
         )
         raise
     else:
-        print(
+        logger.debug(
             "🦠 Ignoring error as 'TD_SKIP_NON_EXISTING_ASSETS' is set to"
             f" {skip_non_existing_assets}"
         )
