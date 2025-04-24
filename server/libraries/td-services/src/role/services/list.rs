@@ -8,7 +8,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, NoPermissions, System};
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::extractor::extract_req_context;
 use td_objects::tower_service::from::{TryMapListService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
@@ -39,7 +39,7 @@ impl ListRoleService {
                 SrvCtxProvider::new(authz_context),
                 from_fn(extract_req_context::<ListRequest<()>>),
                 from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<NoPermissions>::check),
+                from_fn(Authz::<SecAdmin, CollAdmin>::check),
 
                 from_fn(By::<()>::list::<(), DaoQueries, RoleDBWithNames>),
 
@@ -64,7 +64,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_list_role() {
-        use td_objects::tower_service::authz::{AuthzOn, NoPermissions, System};
+        use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
         use td_tower::metadata::{type_of_val, Metadata};
 
         let db = td_database::test_utils::db().await.unwrap();
@@ -78,7 +78,7 @@ mod tests {
         metadata.assert_service::<ListRequest<()>, ListResponse<Role>>(&[
             type_of_val(&extract_req_context::<ListRequest<()>>),
             type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<NoPermissions>::check),
+            type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
             type_of_val(&By::<()>::list::<(), DaoQueries, RoleDBWithNames>),
             type_of_val(&With::<RoleDBWithNames>::try_map_list::<(), RoleBuilder, Role, _>),
         ]);

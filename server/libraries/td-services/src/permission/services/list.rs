@@ -9,7 +9,7 @@ use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
+use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrRoleId};
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
@@ -41,14 +41,14 @@ impl ListPermissionService {
                 ConnectionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
                 from_fn(extract_req_context::<ListRequest<RoleParam>>),
-                from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<SecAdmin>::check),
 
                 from_fn(extract_req_name::<ListRequest<RoleParam>, _>),
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
+                from_fn(AuthzOn::<SystemOrRoleId>::set),
+                from_fn(Authz::<SecAdmin, Requester>::check),
                 from_fn(By::<RoleId>::list::<RoleParam, DaoQueries, PermissionDBWithNames>),
 
                 from_fn(With::<PermissionDBWithNames>::try_map_list::<RoleParam, PermissionBuilder, Permission, _>),
@@ -76,7 +76,7 @@ mod tests {
     #[tokio::test]
     async fn test_tower_metadata_list_permission() {
         use td_authz::Authz;
-        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
+        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, SystemOrRoleId, Requester};
         use td_objects::tower_service::extractor::extract_req_context;
         use td_tower::metadata::{type_of_val, Metadata};
 
@@ -91,12 +91,12 @@ mod tests {
 
         metadata.assert_service::<ListRequest<RoleParam>, ListResponse<Permission>>(&[
             type_of_val(&extract_req_context::<ListRequest<RoleParam>>),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin>::check),
             type_of_val(&extract_req_name::<ListRequest<RoleParam>, _>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
+            type_of_val(&AuthzOn::<SystemOrRoleId>::set),
+            type_of_val(&Authz::<SecAdmin, Requester>::check),
             type_of_val(&By::<RoleId>::list::<RoleParam, DaoQueries, PermissionDBWithNames>),
             type_of_val(
                 &With::<PermissionDBWithNames>::try_map_list::<
