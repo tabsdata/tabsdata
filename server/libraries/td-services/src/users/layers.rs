@@ -191,7 +191,8 @@ pub async fn update_user_validate_password_change(
     Input(dto): Input<UserUpdate>,
     Input(dao): Input<User>,
 ) -> Result<(), TdError> {
-    if dto.password().is_some() {
+    #[allow(clippy::collapsible_if)]
+    if dto.password().is_none() {
         if request_user_id.value() == dao.id() {
             // a self password change must be done via de password_change endpoint
             return Err(UserError::MustUsePasswordChangeEndpointForSelf)?;
@@ -235,7 +236,7 @@ pub async fn update_user_build_dao(
         builder.password_set_on(&*request_time);
     };
 
-    if let Some(_) = dto.password() {
+    if dto.password().is_some() {
         builder.password_must_change(true);
     }
 

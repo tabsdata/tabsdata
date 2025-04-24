@@ -21,42 +21,99 @@
 //!
 //! System permission check:
 //!
+//! The requester's role must have [`SysAdmin`] or [`SecAdmin`] permissions.
+//!
 //! ```ignore
 //!   ...
-//!   layer(AuthzOn<SystemOrUserId>::set).
-//!   layer(Authz<SysAdmin>::check).
+//!   layer(AuthzOn<System>::set).
+//!   layer(Authz<SysAdmin, SecAdmin>::check).
 //!   ...
 //! ```
 //!
-//! User permission check:
+//! User check:
+//!
+//! The requester's user must match the set [`UserId`].
 //!
 //! ```ignore
 //!   ...
-//!   layer(from_fn(extract_id::<User, UserId>)).
-//!   layer(AuthzOn<SystemOrUserId>::set).
+//!   layer(from_fn(extract_id::<User, UserId>)). // get  the user ID from somewhere
+//!   layer(AuthzOn<UserId>::set).
 //!   layer(Authz<Requester>::check).
 //!   ...
 //! ```
 //!
-//! System permission or User ID check against requester.
+//! Role check:
+//!
+//! The requester's role must match the set [`RoleId`].
 //!
 //! ```ignore
 //!   ...
-//!   layer(from_fn(extract_id::<User, UserId>)).
+//!   layer(from_fn(extract_id::<Role, RoleId>)). // get  the role ID from somewhere
+//!   layer(AuthzOn<RoleId>::set).
+//!   layer(Authz<Requester>::check).
+//!   ...
+//! ```
+//!
+//! System permission or User check.
+//!
+//! The requester's user must match the set [`UserId`]
+//! or the requester's role must have [`SecAdmin`] permission.
+//!
+//! ```ignore
+//!   ...
+//!   layer(from_fn(extract_id::<User, UserId>)). // get  the user ID from somewhere
 //!   layer(AuthzOn<SystemOrUserId>::set).
 //!   layer(Authz<Requester, SecAdmin>::check).
 //!   ...
 //! ```
 //!
-//! Collections permissions check:
+//! System permission or Role check.
+//!
+//! The requester's role must match the set [`RoleId`]
+//! or the requester's role must have [`SecAdmin`] permission.
 //!
 //! ```ignore
 //!   ...
-//!   .layer(from_fn(extract_name::<ListRequest<FunctionParam>, FunctionParam, CollectionName>))
-//!   .layer(from_fn(find_by_name::<CollectionName, Collection>))
-//!   .layer(from_fn(extract_id::<Collection, CollectionId>))
+//!   layer(from_fn(extract_id::<Role, RoleId>)). // get  the role ID from somewhere
+//!   layer(AuthzOn<SystemOrRoleId>::set).
+//!   layer(Authz<Requester, SecAdmin>::check).
+//!   ...
+//! ```
+//!
+//! CollectionAdmin on System scope check.
+//!
+//! The requester's role must have a [`CollectionAdmin`] permission on any collection.
+//!
+//! ```ignore
+//!   ...
+//!   layer(AuthzOn<System>::set).
+//!   layer(Authz<CollectionAdmin>::check).
+//!   ...
+//! ```
+//!
+//! Collections permissions check:
+//!
+//! The requester's role must have a [`CollAdmin`] permission either on the set [`CollectionId`]
+//! or on [`All`] collections
+//!
+//! ```ignore
+//!   ...
+//!   .layer(from_fn(extract_id::<Collection, CollectionId>)) // get the collection ID from somewhere
 //!   .layer(AuthzOn<CollectionId>::set).
-//!   .layer(Authz<SysAdmin, CollAdmin>::check).
+//!   .layer(Authz<CollAdmin>::check).
+//!   ...
+//! ```
+//!
+//! System or Collections permissions check:
+//!
+//! The requester's role must have a system [`SecAdmin`] permission, a [`CollAdmin`] permission
+//! either on the set [`CollectionId`] or on [`All`] collections.
+//!
+//! ```ignore
+//!   ...
+//!   .layer(from_fn(extract_id::<Collection, CollectionId>)) // get the collection ID from somewhere
+//!   .layer(AuthzOn<CollectionId>::set).
+//!   .layer(Authz<SecAdmin, CollAdmin>::check).
 //!   ...
 //! ```
 
@@ -176,8 +233,12 @@ pub enum AuthzScope {
     Collection(AuthzEntity<CollectionId>),
     /// A user permission.
     User(AuthzEntity<UserId>),
+    /// A role permission.
+    Role(AuthzEntity<RoleId>),
     /// A system or user permission.
-    SystemUser(AuthzEntity<UserId>),
+    SystemOrUser(AuthzEntity<UserId>),
+    /// A system or user permission.
+    SystemOrRole(AuthzEntity<RoleId>),
 }
 
 impl AuthzScope {
@@ -192,7 +253,9 @@ impl Display for AuthzScope {
             Self::System => write!(f, "All"),
             Self::Collection(c) => write!(f, "Collection({:?})", c),
             Self::User(u) => write!(f, "User({:?})", u),
-            Self::SystemUser(u) => write!(f, "SystemUser({:?})", u),
+            Self::Role(u) => write!(f, "Role({:?})", u),
+            Self::SystemOrUser(u) => write!(f, "SystemOrUser({:?})", u),
+            Self::SystemOrRole(u) => write!(f, "SystemOrRole({:?})", u),
         }
     }
 }
@@ -222,6 +285,20 @@ impl AuthzOn<CollectionId> {
     }
 }
 
+impl AuthzOn<UserId> {
+    /// Set the Authorization scope to [`AuthzScope::User`] for a [`UserId`] in the service context.
+    pub async fn set(Input(user_id): Input<UserId>) -> Result<AuthzScope, TdError> {
+        Ok(AuthzScope::User(AuthzEntity::On(*user_id)))
+    }
+}
+
+impl AuthzOn<RoleId> {
+    /// Set the Authorization scope to [`AuthzScope::Role`] for a [`RoleId`] in the service context.
+    pub async fn set(Input(role_id): Input<RoleId>) -> Result<AuthzScope, TdError> {
+        Ok(AuthzScope::Role(AuthzEntity::On(*role_id)))
+    }
+}
+
 pub struct SystemOrUserId {
     #[allow(dead_code)]
     instance_blocker: (),
@@ -234,11 +311,25 @@ impl AuthzOn<SystemOrUserId> {
     }
 }
 
+pub struct SystemOrRoleId {
+    #[allow(dead_code)]
+    instance_blocker: (),
+}
+
+impl AuthzOn<SystemOrRoleId> {
+    /// Set the Authorization scope to [`AuthzScope::Role`] for a [`RoleId`] in the service context.
+    pub async fn set(Input(role_id): Input<RoleId>) -> Result<AuthzScope, TdError> {
+        Ok(AuthzScope::Role(AuthzEntity::On(*role_id)))
+    }
+}
+
 /// Enum with all defined permissions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Permission {
     /// Requester permission (this permission does not go into Permissions Table).
     User(AuthzEntity<UserId>),
+    /// Current role permission (this permission does not go into Permissions Table).
+    Role(AuthzEntity<RoleId>),
     /// System wide operations, collections creation and deletion.
     SysAdmin,
     /// User management, role management.
@@ -322,8 +413,14 @@ impl AuthzRequirements for Requester {
             AuthzScope::User(authz_on) => {
                 Ok(Some(HashSet::from([Permission::User(authz_on.clone())])))
             }
-            AuthzScope::SystemUser(authz_on) => {
+            AuthzScope::Role(authz_on) => {
+                Ok(Some(HashSet::from([Permission::Role(authz_on.clone())])))
+            }
+            AuthzScope::SystemOrUser(authz_on) => {
                 Ok(Some(HashSet::from([Permission::User(authz_on.clone())])))
+            }
+            AuthzScope::SystemOrRole(authz_on) => {
+                Ok(Some(HashSet::from([Permission::Role(authz_on.clone())])))
             }
             AuthzScope::Collection(authz_on) => Err(AuthzError::AuthEntityCannotBeAll(
                 authz_on.to_string(),
@@ -372,9 +469,17 @@ fn collection_any_of<R: AuthzRequirements>(
             type_name::<R>().to_owned(),
             AuthzScope::User(authz_on.clone()).to_str().to_string(),
         ))?,
-        AuthzScope::SystemUser(authz_on) => Err(AuthzError::InvalidAuthzScope(
+        AuthzScope::Role(authz_on) => Err(AuthzError::InvalidAuthzScope(
+            type_name::<R>().to_owned(),
+            AuthzScope::Role(authz_on.clone()).to_str().to_string(),
+        ))?,
+        AuthzScope::SystemOrUser(authz_on) => Err(AuthzError::InvalidAuthzScope(
             type_name::<R>().to_owned(),
             AuthzScope::User(authz_on.clone()).to_str().to_string(),
+        ))?,
+        AuthzScope::SystemOrRole(authz_on) => Err(AuthzError::InvalidAuthzScope(
+            type_name::<R>().to_owned(),
+            AuthzScope::Role(authz_on.clone()).to_str().to_string(),
         ))?,
         AuthzScope::Collection(AuthzEntity::On(collection_id)) => {
             Ok(Some(permission_creator(collection_id)))
@@ -396,15 +501,13 @@ pub struct CollAdmin {
 impl AuthzRequirements for CollAdmin {
     fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
         match scope {
-            AuthzScope::System | AuthzScope::SystemUser(_) => {
+            AuthzScope::System | AuthzScope::SystemOrUser(_) => {
                 Ok(Some(HashSet::from([Permission::CollectionAdmin(
                     AuthzEntity::All,
                 )])))
             }
             other => collection_any_of::<Self>(other, |collection_id| {
-                HashSet::from([Permission::CollectionAdmin(AuthzEntity::On(
-                    collection_id.clone(),
-                ))])
+                HashSet::from([Permission::CollectionAdmin(AuthzEntity::On(*collection_id))])
             }),
         }
     }
@@ -590,16 +693,17 @@ impl<
                 }
 
                 // scope: System or SystemUser, CollectionAdmin required permission
+                #[allow(clippy::collapsible_if)]
                 if matches!(
                     scope.deref(),
-                    &AuthzScope::System | &AuthzScope::SystemUser(_)
+                    &AuthzScope::System | &AuthzScope::SystemOrUser(_)
                 ) {
+                    #[allow(clippy::collapsible_if)]
                     if required_permissions.contains(&Permission::CollectionAdmin(AuthzEntity::All))
                     {
                         if role_permissions
                             .iter()
-                            .find(|perm| matches!(*perm, Permission::CollectionAdmin(_)))
-                            .is_some()
+                            .any(|perm| matches!(*perm, Permission::CollectionAdmin(_)))
                         {
                             return Ok(());
                         }
@@ -607,11 +711,18 @@ impl<
                 }
             }
 
-            // scope: SystemOrUserId, Requester required permission
-            let user_id: UserId = request_context.user_id().clone();
+            // scope: User, SystemOrUserId, Requester required permission
+            let user_id: UserId = *request_context.user_id();
             if required_permissions.contains(&Permission::User(AuthzEntity::On(user_id))) {
                 return Ok(());
             }
+
+            // scope: Role, SystemOrRoleId, Requester required permission
+            let role_id: RoleId = *request_context.role_id();
+            if required_permissions.contains(&Permission::Role(AuthzEntity::On(role_id))) {
+                return Ok(());
+            }
+
             Err(AuthzError::UnAuthorized(scope.to_string()))?
         }
     }
@@ -1506,7 +1617,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_user_scope_as_user() {
+    async fn test_user_scope_ok() {
         let user = UserId::default();
         let role = RoleId::default();
 
@@ -1532,7 +1643,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_user_scope_as_user_error() {
+    async fn test_user_scope_error() {
         let user = UserId::default();
         let role = RoleId::default();
 
@@ -1583,9 +1694,88 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_system_user_scope_as_system() {
+    async fn test_role_scope_ok() {
         let user = UserId::default();
         let role = RoleId::default();
+
+        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            user,
+            role,
+            false,
+        ));
+
+        let scope = Arc::new(AuthzScope::Role(AuthzEntity::On(role)));
+
+        assert_ok(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester>::new(),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_role_scope_error() {
+        let user = UserId::default();
+        let role = RoleId::default();
+
+        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = Arc::new(authz_context);
+
+        // different user
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            user,
+            RoleId::default(),
+            false,
+        ));
+
+        let scope = Arc::new(AuthzScope::Role(AuthzEntity::On(role)));
+
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester>::new(),
+            AuthzError::UnAuthorized("".to_string()),
+        )
+        .await;
+
+        let authz_context =
+            AuthzContextForTest::default().add(role, [Permission::SecAdmin, Permission::SysAdmin]);
+        let authz_context = Arc::new(authz_context);
+
+        // different user
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            user,
+            RoleId::default(),
+            false,
+        ));
+
+        let scope = Arc::new(AuthzScope::Role(AuthzEntity::On(role)));
+
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester>::new(),
+            AuthzError::UnAuthorized("".to_string()),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_system_user_scope_ok() {
+        let user = UserId::default();
+        let role = RoleId::default();
+
+        // by role permission only
 
         let authz_context = AuthzContextForTest::default().add(role, [Permission::SecAdmin]);
         let authz_context = Arc::new(authz_context);
@@ -1597,13 +1787,191 @@ mod test {
             true,
         ));
 
-        let scope = Arc::new(AuthzScope::SystemUser(AuthzEntity::On(user)));
+        let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
 
         assert_ok(
             &authz_context,
             &request_context,
             &scope,
             Authz::<Requester, SecAdmin>::new(),
+        )
+        .await;
+
+        // by requester only
+
+        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            user,
+            RoleId::sys_admin(),
+            true,
+        ));
+
+        let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
+
+        assert_ok(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester, SecAdmin>::new(),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_system_user_scope_error() {
+        let user = UserId::default();
+        let role = RoleId::default();
+
+        // by role permission only
+
+        let authz_context = AuthzContextForTest::default().add(role, [Permission::SecAdmin]);
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            role,
+            false,
+        ));
+
+        let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
+
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester, SysAdmin>::new(),
+            AuthzError::UnAuthorized("".to_string()),
+        )
+        .await;
+
+        // by requester only
+
+        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            role,
+            false,
+        ));
+
+        let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
+
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester, SysAdmin>::new(),
+            AuthzError::UnAuthorized("".to_string()),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_system_role_scope_ok() {
+        let role0 = RoleId::default();
+        let role1 = RoleId::default();
+
+        // by role permission only
+
+        let authz_context = AuthzContextForTest::default()
+            .add(role0, [Permission::SysAdmin])
+            .add(role1, []);
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            role0,
+            false,
+        ));
+
+        let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
+
+        assert_ok(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester, SysAdmin>::new(),
+        )
+        .await;
+
+        // by requester only
+
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            role1,
+            true,
+        ));
+
+        let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
+
+        assert_ok(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester, SecAdmin>::new(),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_system_role_scope_error() {
+        let role0 = RoleId::default();
+        let role1 = RoleId::default();
+
+        // by role permission only
+
+        let authz_context = AuthzContextForTest::default()
+            .add(role0, [Permission::SecAdmin])
+            .add(role1, []);
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            role0,
+            false,
+        ));
+
+        let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
+
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester, SysAdmin>::new(),
+            AuthzError::UnAuthorized("".to_string()),
+        )
+        .await;
+
+        // by requester only
+
+        let authz_context = Arc::new(authz_context);
+
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::default(),
+            true,
+        ));
+
+        let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
+
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<Requester, SysAdmin>::new(),
+            AuthzError::UnAuthorized("".to_string()),
         )
         .await;
     }
@@ -1622,7 +1990,7 @@ mod test {
         let perm_on_all = Permission::CollectionDev(AuthzEntity::All);
 
         let authz_context = AuthzContextForTest::default().add(
-            &role,
+            role,
             [
                 sys_perm.clone(),
                 perm_on_collection.clone(),
@@ -1646,17 +2014,15 @@ mod test {
         let role = RoleId::default();
 
         let authz_context = AuthzContextForTest::default().add(
-            &role,
-            [Permission::CollectionAdmin(AuthzEntity::On(
-                collection.clone(),
-            ))],
+            role,
+            [Permission::CollectionAdmin(AuthzEntity::On(collection))],
         );
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role,
+            role,
             false,
         ));
         let scope = Arc::new(scope);
@@ -1669,17 +2035,15 @@ mod test {
         .await;
 
         let authz_context = AuthzContextForTest::default().add(
-            &role,
-            [Permission::CollectionDev(AuthzEntity::On(
-                collection.clone(),
-            ))],
+            role,
+            [Permission::CollectionDev(AuthzEntity::On(collection))],
         );
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role,
+            role,
             false,
         ));
         let scope = Arc::new(scope);
@@ -1700,7 +2064,7 @@ mod test {
 
     #[tokio::test]
     async fn test_admin_collection_permission_on_system_user_scope() {
-        test_admin_collection_permission_on_scope(AuthzScope::SystemUser(AuthzEntity::On(
+        test_admin_collection_permission_on_scope(AuthzScope::SystemOrUser(AuthzEntity::On(
             UserId::default(),
         )))
         .await;
