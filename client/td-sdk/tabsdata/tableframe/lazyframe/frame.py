@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from typing import Any, List, NoReturn, TypeVar
+from typing import Any, List, Literal, NoReturn, TypeVar
 
 import polars as pl
 from accessify import accessify, private
@@ -123,9 +123,20 @@ class TableFrame:
         self._id = td_generators._id()
         self._lf = df
 
-    @property
-    def columns(self) -> list[str]:
-        return self._lf.collect_schema().names()
+    def columns(
+        self, kind: Literal["all", "user", "system"] | None = "user"
+    ) -> list[str]:
+        kind = kind or "user"
+        all_columns = self._lf.collect_schema().names()
+        system_columns = set(td_helpers.SYSTEM_COLUMNS)
+        if kind == "all":
+            return all_columns
+        elif kind == "user":
+            return [col for col in all_columns if col not in system_columns]
+        elif kind == "system":
+            return [col for col in all_columns if col in system_columns]
+        else:
+            raise ValueError(f"Unknown column kind: {kind}")
 
     @pydoc(categories="attributes")
     @property

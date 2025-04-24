@@ -100,32 +100,32 @@ class TestTableFrame(unittest.TestCase):
     def test_select_one(self):
         tf = _wrap_polars_frame(pl.LazyFrame({"letters": ["a", "b"]}))
         tf = tf.select("letters")
-        columns = tf.columns
-        assert len(tf.columns) == len(required_columns()) + 1
+        columns = tf.columns("all")
+        assert len(tf.columns("all")) == len(required_columns()) + 1
         for column in required_columns():
             assert column in columns
 
     def test_select_one_col(self):
         tf = _wrap_polars_frame(pl.LazyFrame({"letters": ["a", "b"]}))
         tf = tf.select(td.col("letters"))
-        columns = tf.columns
-        assert len(tf.columns) == len(required_columns()) + 1
+        columns = tf.columns("all")
+        assert len(tf.columns("all")) == len(required_columns()) + 1
         for column in required_columns():
             assert column in columns
 
     def test_select_all(self):
         tf = _wrap_polars_frame(pl.LazyFrame({"letters": ["a", "b"]}))
         tf = tf.select("*")
-        columns = tf.columns
-        assert len(tf.columns) == len(required_columns()) + 1
+        columns = tf.columns("all")
+        assert len(tf.columns("all")) == len(required_columns()) + 1
         for column in required_columns():
             assert column in columns
 
     def test_select_all_col(self):
         tf = _wrap_polars_frame(pl.LazyFrame({"letters": ["a", "b"]}))
         tf = tf.select(td.col("*"))
-        columns = tf.columns
-        assert len(tf.columns) == len(required_columns()) + 1
+        columns = tf.columns("all")
+        assert len(tf.columns("all")) == len(required_columns()) + 1
         for column in required_columns():
             assert column in columns
 
@@ -134,8 +134,8 @@ class TestTableFrame(unittest.TestCase):
             pl.LazyFrame({"letters": ["a", "b"], "numbers": [1, 2]})
         )
         tf = tf.select("letters").select("*")
-        columns = tf.columns
-        assert len(tf.columns) == len(required_columns()) + 1
+        columns = tf.columns("all")
+        assert len(tf.columns("all")) == len(required_columns()) + 1
         for column in required_columns():
             assert column in columns
 
@@ -144,8 +144,8 @@ class TestTableFrame(unittest.TestCase):
             pl.LazyFrame({"letters": ["a", "b"], "numbers": [1, 2]})
         )
         tf = tf.select(td.col("letters")).select(td.col("*"))
-        columns = tf.columns
-        assert len(tf.columns) == len(required_columns()) + 1
+        columns = tf.columns("all")
+        assert len(tf.columns("all")) == len(required_columns()) + 1
         for column in required_columns():
             assert column in columns
 
@@ -154,8 +154,8 @@ class TestTableFrame(unittest.TestCase):
             pl.LazyFrame({"letters": ["a", "b"], "numbers": [1, 2]})
         )
         tf = tf.select("*").select("letters")
-        columns = tf.columns
-        assert len(tf.columns) == len(required_columns()) + 1
+        columns = tf.columns("all")
+        assert len(tf.columns("all")) == len(required_columns()) + 1
         for column in required_columns():
             assert column in columns
 
@@ -164,8 +164,8 @@ class TestTableFrame(unittest.TestCase):
             pl.LazyFrame({"letters": ["a", "b"], "numbers": [1, 2]})
         )
         tf = tf.select(td.col("*")).select(td.col("letters"))
-        columns = tf.columns
-        assert len(tf.columns) == len(required_columns()) + 1
+        columns = tf.columns("all")
+        assert len(tf.columns("all")) == len(required_columns()) + 1
         for column in required_columns():
             assert column in columns
 
@@ -180,7 +180,7 @@ class TestTableFrame(unittest.TestCase):
         tf = tf.with_columns(
             td.col("letters").str.to_uppercase().alias("letters_uppercase")
         )
-        columns = tf.columns
+        columns = tf.columns("all")
         for column in required_columns():
             assert column in columns
 

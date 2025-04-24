@@ -22,8 +22,39 @@ class TestTableFrame(unittest.TestCase):
     def setUp(self):
         self.data_frame, self.lazy_frame, self.table_frame = load_simple_dataframe()
 
+    def test_columns_default(self):
+        columns = self.table_frame.columns()
+        user_columns = self.table_frame.columns(kind="user")
+        self.assertEqual(columns, user_columns)
+
+    def test_columns_none(self):
+        columns = self.table_frame.columns(kind=None)
+        user_columns = self.table_frame.columns(kind="user")
+        self.assertEqual(columns, user_columns)
+
+    def test_columns_all(self):
+        columns = self.table_frame.columns(kind="all")
+        self.assertIn("intColumn", columns)
+        self.assertIn("stringColumn", columns)
+        for column in SYSTEM_COLUMNS:
+            self.assertIn(column, columns)
+
+    def test_columns_user(self):
+        user_columns = self.table_frame.columns(kind="user")
+        self.assertIn("intColumn", user_columns)
+        self.assertIn("stringColumn", user_columns)
+        for column in SYSTEM_COLUMNS:
+            self.assertNotIn(column, user_columns)
+
+    def test_columns_system(self):
+        system_columns = self.table_frame.columns(kind="system")
+        self.assertNotIn("intColumn", system_columns)
+        self.assertNotIn("stringColumn", system_columns)
+        for column in SYSTEM_COLUMNS:
+            self.assertIn(column, system_columns)
+
     def test_columns(self):
-        columns = self.table_frame.columns
+        columns = self.table_frame.columns("all")
         self.assertTrue("intColumn" in columns)
         self.assertTrue("stringColumn" in columns)
 
@@ -96,7 +127,7 @@ class TestTableFrame(unittest.TestCase):
     def test_getitem_slice(self):
         ttf = self.table_frame.__getitem__(slice(2, 3))
         assert len(ttf._lf.collect().rows()) == 1
-        assert len(ttf.columns) >= 2
+        assert len(ttf.columns("all")) >= 2
 
     def test_getitem_slice_bracket(self):
         ttf = self.table_frame[2:3]
@@ -125,8 +156,8 @@ class TestTableFrame(unittest.TestCase):
     # ToDo
     def test_limit(self):
         limited = self.table_frame.limit(2)
-        assert "intColumn" in limited.columns
-        assert "stringColumn" in limited.columns
+        assert "intColumn" in limited.columns("all")
+        assert "stringColumn" in limited.columns("all")
         assert len(limited._lf.collect().rows()) == 2
 
     # ToDo
