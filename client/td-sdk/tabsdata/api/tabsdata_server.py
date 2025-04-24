@@ -1296,7 +1296,7 @@ class ServerStatus:
         )
 
     def __str__(self) -> str:
-        return f"Status: {self.status!r}, latency_as_nanos: {self.latency_as_nanos!r}"
+        return f"Status: {self.status!r} - Latency (ns): {self.latency_as_nanos!r}"
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, ServerStatus):

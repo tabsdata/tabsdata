@@ -102,7 +102,7 @@ def update_initial_values(execution_context: ExecutionContext, result):
         else:
             new_initial_values = result
             result = (None,)
-    if not isinstance(new_initial_values, dict):
+    if not isinstance(new_initial_values, (dict, type(None))):
         logger.error(
             f"Invalid type for new initial values: {type(new_initial_values)}."
             " No initial values stored."

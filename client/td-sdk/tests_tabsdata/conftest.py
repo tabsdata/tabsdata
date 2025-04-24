@@ -871,7 +871,7 @@ def write_v1_yaml_file(
             "env_prefix": None,
         }
     table_content = {"name": "td-initial-values", "location": location}
-    content["system-input"] = [MockTable(table_content)]
+    content["system_input"] = [MockTable(table_content)]
 
     content["output"] = []
     if mock_table_location:
@@ -886,7 +886,7 @@ def write_v1_yaml_file(
         "name": "td-initial-values",
         "location": location,
     }
-    content["system-output"] = [MockTable(table_content)]
+    content["system_output"] = [MockTable(table_content)]
     v1_execution_context = V1ExecutionContextFormat(content)
     with open(filename, "w") as stream:
         stream.write(yaml.dump(v1_execution_context, Dumper=get_dumper()))

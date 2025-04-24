@@ -49,7 +49,10 @@ class InitialValues:
             new_values: The new values to update.
         """
         logger.debug(f"Updating initial values with {new_values}")
-        self.new_initial_values.update(new_values)
+        if new_values is None:
+            self.new_initial_values = {}
+        else:
+            self.new_initial_values.update(new_values)
 
     @property
     def returns_values(self) -> bool:
@@ -89,15 +92,26 @@ class InitialValues:
                 td_initial_values_uri = td_initial_values_table.uri
             logger.debug(f"TD initial values URI: {td_initial_values_uri}")
             if td_initial_values_uri:
-                td_initial_values_frame = pl.read_parquet(td_initial_values_uri)
-                logger.debug(f"TD initial values: {td_initial_values_frame}")
-                df_dict = td_initial_values_frame.to_dict(as_series=False)
-                self.current_initial_values = dict(
-                    zip(
-                        df_dict[INITIAL_VALUES_VARIABLE_COLUMN],
-                        df_dict[INITIAL_VALUES_VALUE_COLUMN],
+                try:
+                    td_initial_values_frame = pl.read_parquet(td_initial_values_uri)
+                    logger.debug(f"TD initial values: {td_initial_values_frame}")
+                    df_dict = td_initial_values_frame.to_dict(as_series=False)
+                    self.current_initial_values = dict(
+                        zip(
+                            df_dict[INITIAL_VALUES_VARIABLE_COLUMN],
+                            df_dict[INITIAL_VALUES_VALUE_COLUMN],
+                        )
                     )
-                )
+                except Exception as e:
+                    logger.error(
+                        "Error retrieving initial values from"
+                        f" {td_initial_values_uri}: {e}"
+                    )
+                    raise ValueError(
+                        "Error retrieving initial values from"
+                        f" {td_initial_values_uri}: {e}"
+                    )
+
         logger.debug(f"Current initial values: {self.current_initial_values}")
 
     def store(self, execution_context: InputYaml) -> bool:
@@ -112,9 +126,16 @@ class InitialValues:
         """
         logger.info(pad_string("[Storing execution information]"))
         logger.info(f"Storing initial values {str(self)}")
-        if not self.new_initial_values:
-            logger.warning("No initial values to store")
-            return False
+
+        _new_initial_values = self.new_initial_values
+        if self.new_initial_values is None or self.new_initial_values == {}:
+            logger.warning(
+                "No initial values to store. Using old initial values instead."
+            )
+            # When no new initial values are provided, the current initial values are
+            # used instead, as it is assumed no new data was read.
+            _new_initial_values = self.current_initial_values
+
         system_output = execution_context.system_output
         destination_table_uri = None
         if system_output:
@@ -129,7 +150,7 @@ class InitialValues:
         if destination_table_uri:
             variables_column = []
             values_column = []
-            for variable_name, value in self.new_initial_values.items():
+            for variable_name, value in _new_initial_values.items():
                 variables_column.append(variable_name)
                 values_column.append(value)
             df = pl.DataFrame(

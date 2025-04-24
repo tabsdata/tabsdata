@@ -110,7 +110,8 @@ def test_input_s3(tmp_path):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
-    assert not os.path.isfile(path_to_output_initial_values)
+    # Initial are current initial values if new initial values are not provided.
+    assert os.path.isfile(path_to_output_initial_values)
 
 
 @pytest.mark.integration
@@ -156,7 +157,8 @@ def test_input_s3_eu_north_region(tmp_path):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
-    assert not os.path.isfile(path_to_output_initial_values)
+    # Initial are current initial values if new initial values are not provided.
+    assert os.path.isfile(path_to_output_initial_values)
 
 
 @pytest.mark.integration

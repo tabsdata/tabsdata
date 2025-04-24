@@ -148,11 +148,11 @@ class V1(InputYaml):
 
     @property
     def system_input(self) -> list[Table]:
-        return self.content.get("system-input")
+        return self.content.get("system_input")
 
     @property
     def system_output(self) -> list[Table]:
-        return self.content.get("system-output")
+        return self.content.get("system_output")
 
     def __repr__(self):
         return f"V1(content={self.content})"
