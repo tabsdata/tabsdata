@@ -72,7 +72,6 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::types::basic::RoleId;
-    use td_security::{ENCODED_ID_ROLE_SEC_ADMIN, ENCODED_ID_ROLE_SYS_ADMIN, ENCODED_ID_ROLE_USER};
 
     #[td_test::test(sqlx(migrator = td_schema::schema()))]
     async fn test_sql_role_permissions_provider(db: DbPool) -> Result<(), TdError> {
@@ -82,27 +81,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(permissions.len(), 3);
-        assert_eq!(
-            permissions
-                .get(&RoleId::try_from(ENCODED_ID_ROLE_SYS_ADMIN).unwrap())
-                .unwrap()
-                .len(),
-            1
-        );
-        assert_eq!(
-            permissions
-                .get(&RoleId::try_from(ENCODED_ID_ROLE_SEC_ADMIN).unwrap())
-                .unwrap()
-                .len(),
-            2
-        );
-        assert_eq!(
-            permissions
-                .get(&RoleId::try_from(ENCODED_ID_ROLE_USER).unwrap())
-                .unwrap()
-                .len(),
-            4
-        );
+        assert_eq!(permissions.get(&RoleId::sys_admin()).unwrap().len(), 7);
+        assert_eq!(permissions.get(&RoleId::sec_admin()).unwrap().len(), 2);
+        assert_eq!(permissions.get(&RoleId::user()).unwrap().len(), 4);
         Ok(())
     }
 }

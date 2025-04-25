@@ -26,10 +26,12 @@ pub async fn db_with_schema(
 mod tests {
     use crate::sql::SqliteConfigBuilder;
     use td_security::{
-        ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CD_ALL_USER, ENCODED_ID_CRR_ALL_USER,
-        ENCODED_ID_CR_ALL_USER, ENCODED_ID_CX_ALL_USER, ENCODED_ID_ROLE_SEC_ADMIN,
-        ENCODED_ID_ROLE_SYS_ADMIN, ENCODED_ID_ROLE_USER, ENCODED_ID_S_SEC_ADMIN,
-        ENCODED_ID_S_SYS_ADMIN, ENCODED_ID_USER_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN,
+        ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CA_ALL_SYS_ADMIN, ENCODED_ID_CD_ALL_SYS_ADMIN,
+        ENCODED_ID_CD_ALL_USER, ENCODED_ID_CRR_ALL_SYS_ADMIN, ENCODED_ID_CRR_ALL_USER,
+        ENCODED_ID_CR_ALL_SYS_ADMIN, ENCODED_ID_CR_ALL_USER, ENCODED_ID_CX_ALL_SYS_ADMIN,
+        ENCODED_ID_CX_ALL_USER, ENCODED_ID_ROLE_SEC_ADMIN, ENCODED_ID_ROLE_SYS_ADMIN,
+        ENCODED_ID_ROLE_USER, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
+        ENCODED_ID_SS_SYS_ADMIN, ENCODED_ID_USER_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN,
         ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_USER,
     };
     use testdir::testdir;
@@ -134,7 +136,103 @@ mod tests {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-        assert_eq!(row.id, ENCODED_ID_S_SYS_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_SA_SYS_ADMIN);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'ss' AND
+                entity_type = 's' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_SYS_ADMIN)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_SS_SYS_ADMIN);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'ca' AND
+                entity_type = 'c' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_SYS_ADMIN)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CA_ALL_SYS_ADMIN);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'cd' AND
+                entity_type = 'c' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_SYS_ADMIN)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CD_ALL_SYS_ADMIN);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'cx' AND
+                entity_type = 'c' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_SYS_ADMIN)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CX_ALL_SYS_ADMIN);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'cR' AND
+                entity_type = 'c' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_SYS_ADMIN)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CRR_ALL_SYS_ADMIN);
+
+        let row: Value = sqlx::query_as(
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = ?1 AND
+                permission_type = 'cr' AND
+                entity_type = 'c' AND
+                entity_id IS NULL
+            "#,
+        )
+        .bind(ENCODED_ID_ROLE_SYS_ADMIN)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_CR_ALL_SYS_ADMIN);
 
         let row: Value = sqlx::query_as(
             r#"
@@ -150,7 +248,7 @@ mod tests {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-        assert_eq!(row.id, ENCODED_ID_S_SEC_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_SS_SEC_ADMIN);
 
         let row: Value = sqlx::query_as(
             r#"

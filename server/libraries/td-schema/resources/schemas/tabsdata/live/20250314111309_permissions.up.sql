@@ -26,6 +26,7 @@ CREATE INDEX permissions___role_id___idx ON permissions (role_id);
 CREATE UNIQUE INDEX permissions___role_id__permission_type__entity___idx
     ON permissions (role_id, permission_type, entity_type, entity_id);
 
+-- sys_admin user has all permissions by default, but only sa one is fixed
 INSERT INTO permissions
 SELECT '00000000000000000000000010',
        r.id,
@@ -47,9 +48,9 @@ SELECT '00000000000000000000000014',
        NULL,
        '00000000000000000000000000',
        datetime('now'),
-       true
+       false
 FROM roles r
-WHERE r.name = 'sec_admin'
+WHERE r.name = 'sys_admin'
 ;
 
 INSERT INTO permissions
@@ -60,9 +61,9 @@ SELECT '00000000000000000000000100',
        NULL,
        '00000000000000000000000000',
        datetime('now'),
-       true
+       false
 FROM roles r
-WHERE r.name = 'sec_admin'
+WHERE r.name = 'sys_admin'
 ;
 
 INSERT INTO permissions
@@ -75,7 +76,7 @@ SELECT '00000000000000000000000104',
        datetime('now'),
        false
 FROM roles r
-WHERE r.name = 'user'
+WHERE r.name = 'sys_admin'
 ;
 
 INSERT INTO permissions
@@ -88,7 +89,7 @@ SELECT '00000000000000000000000108',
        datetime('now'),
        false
 FROM roles r
-WHERE r.name = 'user'
+WHERE r.name = 'sys_admin'
 ;
 
 INSERT INTO permissions
@@ -101,11 +102,90 @@ SELECT '0000000000000000000000010C',
        datetime('now'),
        false
 FROM roles r
-WHERE r.name = 'user'
+WHERE r.name = 'sys_admin'
 ;
 
 INSERT INTO permissions
 SELECT '0000000000000000000000010G',
+       r.id,
+       'cr',
+       'c',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       false
+FROM roles r
+WHERE r.name = 'sys_admin'
+;
+
+-- other permissions
+INSERT INTO permissions
+SELECT '0000000000000000000000010K',
+       r.id,
+       'ss',
+       's',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       true
+FROM roles r
+WHERE r.name = 'sec_admin'
+;
+
+INSERT INTO permissions
+SELECT '0000000000000000000000010O',
+       r.id,
+       'ca',
+       'c',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       true
+FROM roles r
+WHERE r.name = 'sec_admin'
+;
+
+INSERT INTO permissions
+SELECT '0000000000000000000000010S',
+       r.id,
+       'cd',
+       'c',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       false
+FROM roles r
+WHERE r.name = 'user'
+;
+
+INSERT INTO permissions
+SELECT '00000000000000000000000110',
+       r.id,
+       'cx',
+       'c',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       false
+FROM roles r
+WHERE r.name = 'user'
+;
+
+INSERT INTO permissions
+SELECT '00000000000000000000000114',
+       r.id,
+       'cR',
+       'c',
+       NULL,
+       '00000000000000000000000000',
+       datetime('now'),
+       false
+FROM roles r
+WHERE r.name = 'user'
+;
+
+INSERT INTO permissions
+SELECT '00000000000000000000000200',
        r.id,
        'cr',
        'c',
