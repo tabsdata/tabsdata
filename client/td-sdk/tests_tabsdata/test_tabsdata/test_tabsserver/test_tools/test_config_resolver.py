@@ -316,7 +316,7 @@ def test_resolve_yaml_hashicorp_env(testing_hashicorp_vault, tmp_path):
 @mock.patch.dict(
     os.environ,
     {
-        "TD_REPOSITORY": "td_repository_value",
+        "TD_URI_REPOSITORY": "td_repository_value",
     },
     clear=True,
 )

@@ -38,11 +38,20 @@ use td_error::td_error;
 use tracing::error;
 use url::Url;
 
-pub const INSTANCE_ENV: &str = "TD_INSTANCE";
-pub const REPOSITORY_ENV: &str = "TD_REPOSITORY";
-pub const WORKSPACE_ENV: &str = "TD_WORKSPACE";
-pub const CONFIG_ENV: &str = "TD_CONFIG";
-pub const WORK_ENV: &str = "TD_WORK";
+// These environment variables are meant to be used as URI locations. Therefore, in Windows they will have a
+// leading slash (/), resulting in, for example, '/c:\folder\file' instead of 'c:\folder\file'
+pub const INSTANCE_URI_ENV: &str = "TD_URI_INSTANCE";
+pub const REPOSITORY_URI_ENV: &str = "TD_URI_REPOSITORY";
+pub const WORKSPACE_URI_ENV: &str = "TD_URI_WORKSPACE";
+pub const CONFIG_URI_ENV: &str = "TD_URI_CONFIG";
+pub const WORK_URI_ENV: &str = "TD_URI_WORK";
+
+// These environment variables are meant to be used as regular PATH locations.
+pub const INSTANCE_PATH_ENV: &str = "TD_PATH_INSTANCE";
+pub const REPOSITORY_PATH_ENV: &str = "TD_PATH_REPOSITORY";
+pub const WORKSPACE_PATH_ENV: &str = "TD_PATH_WORKSPACE";
+pub const CONFIG_PATH_ENV: &str = "TD_PATH_CONFIG";
+pub const WORK_PATH_ENV: &str = "TD_PATH_WORK";
 
 pub const QUEUE_PARAMETER: &str = "--work";
 

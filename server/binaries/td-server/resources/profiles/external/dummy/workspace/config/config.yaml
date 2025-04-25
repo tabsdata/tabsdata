@@ -24,8 +24,8 @@ controllers:
         location: relative
         program: apiserver
         parameters:
-          - database-url: file://${TD_REPOSITORY}/database/tabsdata.db
-          - storage-url: file://${TD_REPOSITORY}/storage
+          - database-url: file://${TD_URI_REPOSITORY}/database/tabsdata.db
+          - storage-url: file://${TD_URI_REPOSITORY}/storage
       - name: p01
         kind: processor
         location: relative

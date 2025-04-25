@@ -10,7 +10,7 @@ use std::env;
 use std::path::PathBuf;
 use td_common::server::WorkerClass::EPHEMERAL;
 use td_common::server::WorkerName::FUNCTION;
-use td_common::server::WORKSPACE_ENV;
+use td_common::server::WORKSPACE_URI_ENV;
 use td_error::td_error;
 use td_error::TdError;
 use td_objects::datasets::dao::DsWorkerMessageWithNames;
@@ -20,7 +20,7 @@ use td_tower::extractors::Input;
 pub async fn resolve_worker_log_path(
     Input(message): Input<DsWorkerMessageWithNames>,
 ) -> Result<WorkerLogPaths, TdError> {
-    let worker_path = env::var(WORKSPACE_ENV).map_err(ResolveWorkerLogPathError::EnvVar)?;
+    let worker_path = env::var(WORKSPACE_URI_ENV).map_err(ResolveWorkerLogPathError::EnvVar)?;
     let pattern = PathBuf::from(worker_path)
         .join(WORK_FOLDER)
         .join(PROC_FOLDER)

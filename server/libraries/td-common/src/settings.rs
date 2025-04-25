@@ -3,7 +3,7 @@
 //
 
 use crate::env::{get_home_dir, TABSDATA_HOME_DIR};
-use crate::server::INSTANCE_ENV;
+use crate::server::INSTANCE_PATH_ENV;
 use config::{Config, File};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
@@ -64,7 +64,7 @@ pub struct SettingsManager {
 impl SettingsManager {
     fn new() -> Self {
         dump();
-        let instance = var_os(INSTANCE_ENV).map(|value| value.to_string_lossy().into_owned());
+        let instance = var_os(INSTANCE_PATH_ENV).map(|value| value.to_string_lossy().into_owned());
         let settings = match &instance {
             Some(path) => load(path).unwrap_or_default(),
             None => Settings::default(),
@@ -79,12 +79,9 @@ impl SettingsManager {
     }
 
     fn init(&self) {
-        let instance = self
-            .instance
-            .read()
-            .unwrap()
-            .clone()
-            .or_else(|| var_os(INSTANCE_ENV).map(|value| value.to_string_lossy().into_owned()));
+        let instance = self.instance.read().unwrap().clone().or_else(|| {
+            var_os(INSTANCE_PATH_ENV).map(|value| value.to_string_lossy().into_owned())
+        });
 
         if let Some(folder) = instance {
             let file = Path::new(&folder).join(SETTINGS_FILE);
@@ -132,7 +129,8 @@ impl SettingsManager {
 
         // Second, we check for environment variable TD__<instance>_<key>.
         // Search is made all uppercase.
-        if let Some(value) = var_os(INSTANCE_ENV).map(|value| value.to_string_lossy().into_owned())
+        if let Some(value) =
+            var_os(INSTANCE_PATH_ENV).map(|value| value.to_string_lossy().into_owned())
         {
             let path = PathBuf::from(&value);
             if let Some(instance) = path.file_name() {
@@ -186,7 +184,8 @@ fn load(folder: &str) -> Option<Settings> {
 }
 
 fn dump() {
-    if let Some(value) = var_os(INSTANCE_ENV).map(|value| value.to_string_lossy().into_owned()) {
+    if let Some(value) = var_os(INSTANCE_PATH_ENV).map(|value| value.to_string_lossy().into_owned())
+    {
         let path = PathBuf::from(&value);
         if let Some(instance) = path.file_name() {
             let source = get_home_dir()
@@ -278,7 +277,7 @@ mod tests {
         let instance = yaml(None, None);
 
         let result = panic::catch_unwind(|| {
-            env::set_var(INSTANCE_ENV, instance.to_string_lossy().to_string());
+            env::set_var(INSTANCE_PATH_ENV, instance.to_string_lossy().to_string());
 
             sleep(Duration::from_millis(SLEEP_TIME));
 
@@ -526,7 +525,7 @@ mod tests {
                 );
             }
 
-            env::remove_var(INSTANCE_ENV);
+            env::remove_var(INSTANCE_PATH_ENV);
             env::remove_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()));
             env::remove_var(format!(
                 "TD__{}_{}",

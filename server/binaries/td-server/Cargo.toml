@@ -160,6 +160,7 @@ linemux = { workspace = true }
 num-format = { workspace = true }
 object_store = { workspace = true, features = ["aws", "azure", "gcp", "http"] }
 paste = { workspace = true }
+path-slash = { workspace = true }
 polars = { workspace = true, features = ["lazy", "parquet", "csv", "json", "polars-lazy", "streaming", "cloud", "aws", "azure", "gcp", "cloud_write"] }
 regex = { workspace = true }
 reqwest = { workspace = true }

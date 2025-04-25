@@ -21,7 +21,7 @@ controllers:
         location: system
         program: _tdcfgrsv
         parameters:
-          - input: ${TD_CONFIG}/proc/regular/apiserver/config/config.yaml
+          - input: ${TD_PATH_CONFIG}/proc/regular/apiserver/config/config.yaml
           - strategies: env,hashicorp
           - hashicorp-url: ""
           - hashicorp-token: ""
@@ -41,8 +41,8 @@ controllers:
         program: apiserver
         parameters:
           - stdin-config: true
-          - database-url: file://${TD_REPOSITORY}/database/tabsdata.db
-          - storage-url: file://${TD_REPOSITORY}/storage
+          - database-url: file://${TD_URI_REPOSITORY}/database/tabsdata.db
+          - storage-url: file://${TD_URI_REPOSITORY}/storage
         get-states:
           - state-type: blob
             state-key: apiserver

@@ -37,10 +37,12 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use getset::Getters;
 use indexmap::IndexMap;
+use path_slash::PathBufExt;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use std::env::{set_current_dir, set_var};
+use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::fs::{create_dir_all, read_dir};
 #[cfg(not(target_os = "windows"))]
@@ -65,8 +67,9 @@ use td_common::server::SupervisorMessagePayload::{
 };
 use td_common::server::WorkerClass::{EPHEMERAL, INIT, REGULAR};
 use td_common::server::{
-    SupervisorMessage, WorkerClass, CONFIG_ENV, INSTANCE_ENV, REPOSITORY_ENV,
-    REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, WORKSPACE_ENV, WORK_ENV,
+    SupervisorMessage, WorkerClass, CONFIG_PATH_ENV, CONFIG_URI_ENV, INSTANCE_PATH_ENV,
+    INSTANCE_URI_ENV, REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN,
+    RETRIES_DELIMITER, WORKSPACE_PATH_ENV, WORKSPACE_URI_ENV, WORK_PATH_ENV, WORK_URI_ENV,
 };
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataStatus};
 use td_python::venv::prepare;
@@ -1947,13 +1950,96 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
     create_dir_all(config_dir_absolute.clone()).expect("Failed to create config folder '{}'");
     create_dir_all(work_dir_absolute.clone()).expect("Failed to create work folder '{}'");
 
-    // These environment variable are meant to be used as URI locations. Therefore, in Windows they will have a
+    // These environment variables are meant to be used as URI locations. Therefore, in Windows they will have a
     // leading slash (/), resulting in, for example, '/c:\folder\file' instead of 'c:\folder\file'
-    set_var(INSTANCE_ENV, prepend_slash(instance_dir_absolute.clone()));
-    set_var(REPOSITORY_ENV, prepend_slash(repository_dir_absolute));
-    set_var(WORKSPACE_ENV, prepend_slash(workspace_dir_absolute));
-    set_var(CONFIG_ENV, prepend_slash(config_dir_absolute));
-    set_var(WORK_ENV, prepend_slash(work_dir_absolute));
+    set_var(
+        INSTANCE_URI_ENV,
+        prepend_slash(instance_dir_absolute.clone()),
+    );
+    set_var(
+        REPOSITORY_URI_ENV,
+        prepend_slash(repository_dir_absolute.clone()),
+    );
+    set_var(
+        WORKSPACE_URI_ENV,
+        prepend_slash(workspace_dir_absolute.clone()),
+    );
+    set_var(CONFIG_URI_ENV, prepend_slash(config_dir_absolute.clone()));
+    set_var(WORK_URI_ENV, prepend_slash(work_dir_absolute.clone()));
+
+    // These environment variables are meant to be used as regular PATH locations.
+    set_var(
+        INSTANCE_PATH_ENV,
+        OsString::from(
+            instance_dir_absolute
+                .clone()
+                .to_slash()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Invalid characters in instance path: {:?}",
+                        instance_dir_absolute
+                    )
+                })
+                .into_owned(),
+        ),
+    );
+    set_var(
+        REPOSITORY_PATH_ENV,
+        OsString::from(
+            repository_dir_absolute
+                .clone()
+                .to_slash()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Invalid characters in repository path: {:?}",
+                        repository_dir_absolute
+                    )
+                })
+                .into_owned(),
+        ),
+    );
+    set_var(
+        WORKSPACE_PATH_ENV,
+        OsString::from(
+            workspace_dir_absolute
+                .clone()
+                .to_slash()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Invalid characters in workspace path: {:?}",
+                        work_dir_absolute
+                    )
+                })
+                .into_owned(),
+        ),
+    );
+    set_var(
+        CONFIG_PATH_ENV,
+        OsString::from(
+            config_dir_absolute
+                .clone()
+                .to_slash()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Invalid characters in config path: {:?}",
+                        config_dir_absolute
+                    )
+                })
+                .into_owned(),
+        ),
+    );
+    set_var(
+        WORK_PATH_ENV,
+        OsString::from(
+            work_dir_absolute
+                .clone()
+                .to_slash()
+                .unwrap_or_else(|| {
+                    panic!("Invalid characters in work path: {:?}", work_dir_absolute)
+                })
+                .into_owned(),
+        ),
+    );
 
     prepare(&instance_dir_absolute);
 

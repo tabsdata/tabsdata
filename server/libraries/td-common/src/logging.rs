@@ -44,7 +44,7 @@ pub const DEFAULT_LOG_PLACE: &str = "work";
 pub const LOG_LOCATION: &str = "log";
 pub const LOG_FILE: &str = "td.log";
 
-pub const WORK_ENV: &str = "TD_WORK";
+pub const WORK_ENV: &str = "TD_URI_WORK";
 
 // Global logger provider, initialized once.
 static LOGGER_PROVIDER: OnceCell<LoggerGuard> = OnceCell::new();

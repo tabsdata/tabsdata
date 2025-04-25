@@ -9,7 +9,7 @@ access_jwt_expiration: 36288000
 refresh_jwt_expiration: 36288000
 request_timeout: 60
 database:
- uri: file://${env:TD_REPOSITORY}/database/tabsdata.db
+ uri: file://${env:TD_URI_REPOSITORY}/database/tabsdata.db
  min_connections: 1
  max_connections: 10
  acquire_timeout: 30
@@ -20,7 +20,7 @@ storage:
  mounts:
    - id: TDS_LOCAL
      path: /
-     uri: file://${env:TD_REPOSITORY}/storage
+     uri: file://${env:TD_URI_REPOSITORY}/storage
    - id: TDS_S3A
      path: /s3a
      uri: ${hashicorp:/tabsdata/dev/s3a;bucket}
