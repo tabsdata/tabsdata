@@ -40,10 +40,12 @@ pub struct PermissionDB {
 
 #[td_type::Dao(sql_table = "permissions__with_names")]
 pub struct PermissionDBWithNames {
+    #[td_type(extractor)]
     id: PermissionId,
     role_id: RoleId,
     permission_type: PermissionType,
     entity_type: PermissionEntityType,
+    #[td_type(extractor)]
     entity_id: Option<EntityId>,
     granted_by_id: UserId,
     granted_on: AtTime,

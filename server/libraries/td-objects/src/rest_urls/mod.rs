@@ -535,6 +535,7 @@ pub const PERMISSION: &str = url!(PERMISSIONS, "/{permission}");
 
 #[td_type::UrlParam]
 pub struct RolePermissionParam {
+    #[td_type(extractor)]
     role: RoleIdName,
     #[td_type(extractor)]
     permission: PermissionIdName,

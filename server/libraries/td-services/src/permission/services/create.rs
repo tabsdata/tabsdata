@@ -3,7 +3,7 @@
 //
 
 use crate::common::layers::extractor::extract_req_dto;
-use crate::permission::layers::{is_permission_on_collection, PermissionBuildService};
+use crate::permission::layers::{is_permission_on_a_single_collection, PermissionBuildService};
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -66,16 +66,21 @@ impl CreatePermissionService {
 
                 conditional(
                     If(service!(layers!(
-                        from_fn(is_permission_on_collection),
+                        from_fn(is_permission_on_a_single_collection),
                     ))),
                     Do(service!(layers!(
+                        // a permission on a single collection can also be created by a collection admin
                         from_fn(With::<PermissionDB>::extract::<Option<EntityId>>),
                         from_fn(With::<EntityId>::unwrap_option),
                         from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
                         from_fn(AuthzOn::<CollectionId>::set),
                         from_fn(Authz::<SecAdmin, CollAdmin>::check),
                     ))),
-                    Else(service!(layers!()))
+                    Else(service!(layers!(
+                        // a permission on a all collections can be created by a sec_admin only
+                        from_fn(AuthzOn::<System>::set),
+                        from_fn(Authz::<SecAdmin>::check),
+                    )))
                 ),
 
                 from_fn(insert::<DaoQueries, PermissionDB>),
@@ -137,12 +142,14 @@ mod tests {
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
             type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
-            type_of_val(&is_permission_on_collection),
+            type_of_val(&is_permission_on_a_single_collection),
             type_of_val(&With::<PermissionDB>::extract::<Option<EntityId>>),
             type_of_val(&With::<EntityId>::unwrap_option),
             type_of_val(&With::<EntityId>::convert_to::<CollectionId, _>),
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<SecAdmin>::check),
             type_of_val(&insert::<DaoQueries, PermissionDB>),
             type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
             type_of_val(&By::<PermissionId>::select::<DaoQueries, PermissionDBWithNames>),

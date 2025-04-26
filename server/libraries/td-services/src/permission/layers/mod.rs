@@ -2,13 +2,17 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::permission::PermissionError;
 use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
 use td_objects::entity_finder::collections::CollectionFinder;
 use td_objects::tower_service::from::With;
-use td_objects::types::basic::{EntityId, PermissionEntityType};
-use td_objects::types::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
+use td_objects::types::basic::{EntityId, PermissionEntityType, RoleIdName};
+use td_objects::types::permission::{
+    PermissionCreate, PermissionDB, PermissionDBBuilder, PermissionDBWithNames,
+};
+use td_objects::types::IdOrName;
 use td_tower::default_services::Condition;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection};
 
@@ -56,10 +60,47 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
     }
 }
 
-pub async fn is_permission_on_collection(
+pub async fn is_permission_with_names_on_a_single_collection(
+    Input(permission): Input<PermissionDBWithNames>,
+) -> Result<Condition, TdError> {
+    Ok(Condition(
+        permission.permission_type().on_entity_type() == PermissionEntityType::Collection
+            && permission.entity_id().is_some(),
+    ))
+}
+
+pub async fn is_permission_on_a_single_collection(
     Input(permission): Input<PermissionDB>,
 ) -> Result<Condition, TdError> {
     Ok(Condition(
-        permission.permission_type().on_entity_type() == PermissionEntityType::Collection,
+        permission.permission_type().on_entity_type() == PermissionEntityType::Collection
+            && permission.entity_id().is_some(),
     ))
+}
+
+pub async fn assert_permission_is_not_fixed(
+    Input(permission): Input<PermissionDBWithNames>,
+) -> Result<(), TdError> {
+    if **permission.fixed() {
+        Err(PermissionError::PermissionIsFixed)?
+    } else {
+        Ok(())
+    }
+}
+
+pub async fn assert_role_in_permission(
+    Input(role_id_name): Input<RoleIdName>,
+    Input(permission): Input<PermissionDBWithNames>,
+) -> Result<(), TdError> {
+    if let Some(role_id) = role_id_name.id() {
+        if role_id != permission.role_id() {
+            Err(PermissionError::RolePermissionMismatch)?
+        }
+    }
+    if let Some(role_name) = role_id_name.name() {
+        if role_name != permission.role() {
+            Err(PermissionError::RolePermissionMismatch)?
+        }
+    }
+    Ok(())
 }

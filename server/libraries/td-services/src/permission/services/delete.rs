@@ -2,7 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::permission::layers::is_permission_on_collection;
+use crate::permission::layers::{
+    assert_permission_is_not_fixed, assert_role_in_permission,
+    is_permission_with_names_on_a_single_collection,
+};
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -14,8 +17,10 @@ use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{ExtractService, TryIntoService, UnwrapService, With};
 use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
-use td_objects::types::basic::{CollectionId, EntityId, PermissionId, PermissionIdName};
-use td_objects::types::permission::PermissionDB;
+use td_objects::types::basic::{
+    CollectionId, EntityId, PermissionId, PermissionIdName, RoleIdName,
+};
+use td_objects::types::permission::{PermissionDB, PermissionDBWithNames};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{conditional, Do, Else, If, SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
@@ -46,26 +51,36 @@ impl DeletePermissionService {
 
                 from_fn(extract_req_name::<DeleteRequest<RolePermissionParam>, _>),
 
-                // TODO check RoleParam exists
                 from_fn(With::<RolePermissionParam>::extract::<PermissionIdName>),
 
-                from_fn(By::<PermissionIdName>::select::<DaoQueries, PermissionDB>),
+                from_fn(By::<PermissionIdName>::select::<DaoQueries, PermissionDBWithNames>),
+
+                // Check the role in the request matches the role in permission
+                from_fn(With::<RolePermissionParam>::extract::<RoleIdName>),
+                from_fn(assert_role_in_permission),
 
                 conditional(
                     If(service!(layers!(
-                        from_fn(is_permission_on_collection),
+                        from_fn(is_permission_with_names_on_a_single_collection),
                     ))),
                     Do(service!(layers!(
-                        from_fn(With::<PermissionDB>::extract::<Option<EntityId>>),
+                       // a permission on a single collection can also be deleted by a collection admin
+                         from_fn(With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
                         from_fn(With::<EntityId>::unwrap_option),
                         from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
                         from_fn(AuthzOn::<CollectionId>::set),
                         from_fn(Authz::<SecAdmin, CollAdmin>::check),
                     ))),
-                    Else(service!(layers!()))
+                    Else(service!(layers!(
+                        // a permission on a all collections can be deleted by a sec_admin only
+                        from_fn(AuthzOn::<System>::set),
+                        from_fn(Authz::<SecAdmin>::check),
+                    )))
                 ),
 
-                from_fn(With::<PermissionDB>::extract::<PermissionId>),
+                from_fn(assert_permission_is_not_fixed),
+
+                from_fn(With::<PermissionDBWithNames>::extract::<PermissionId>),
                 from_fn(By::<PermissionId>::delete::<DaoQueries, PermissionDB>),
             ))
         }
@@ -79,8 +94,12 @@ impl DeletePermissionService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::permission::services::create::CreatePermissionService;
+    use crate::permission::PermissionError;
+    use std::collections::HashSet;
     use td_error::assert_service_error;
     use td_objects::crudl::RequestContext;
+    use td_objects::rest_urls::RoleParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_permission::{get_permission, seed_permission};
     use td_objects::test_utils::seed_role::seed_role;
@@ -89,11 +108,17 @@ mod tests {
         AccessTokenId, Description, EntityName, PermissionType, RoleId, RoleIdName, RoleName,
         UserId,
     };
+    use td_objects::types::permission::PermissionCreate;
+    use td_security::{
+        ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
+    };
     use td_tower::ctx_service::RawOneshot;
+    use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_delete_permission() {
+        use crate::permission::layers::is_permission_with_names_on_a_single_collection;
         use td_authz::Authz;
         use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
         use td_objects::tower_service::extractor::extract_req_context;
@@ -114,14 +139,19 @@ mod tests {
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
             type_of_val(&extract_req_name::<DeleteRequest<RolePermissionParam>, _>),
             type_of_val(&With::<RolePermissionParam>::extract::<PermissionIdName>),
-            type_of_val(&By::<PermissionIdName>::select::<DaoQueries, PermissionDB>),
-            type_of_val(&is_permission_on_collection),
-            type_of_val(&With::<PermissionDB>::extract::<Option<EntityId>>),
+            type_of_val(&By::<PermissionIdName>::select::<DaoQueries, PermissionDBWithNames>),
+            type_of_val(&With::<RolePermissionParam>::extract::<RoleIdName>),
+            type_of_val(&assert_role_in_permission),
+            type_of_val(&is_permission_with_names_on_a_single_collection),
+            type_of_val(&With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
             type_of_val(&With::<EntityId>::unwrap_option),
             type_of_val(&With::<EntityId>::convert_to::<CollectionId, _>),
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
+            type_of_val(&AuthzOn::<System>::set),
+            type_of_val(&Authz::<SecAdmin>::check),
+            type_of_val(&assert_permission_is_not_fixed),
+            type_of_val(&With::<PermissionDBWithNames>::extract::<PermissionId>),
             type_of_val(&By::<PermissionId>::delete::<DaoQueries, PermissionDB>),
         ]);
     }
@@ -158,6 +188,140 @@ mod tests {
 
         let not_found = get_permission(&db, seeded.id()).await;
         assert!(not_found.is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_create_permission_on_collection_by_coll_admin_ok() -> Result<(), TdError> {
+        let db = td_database::test_utils::db().await?;
+        let coll0: CollectionId = seed_collection(&db, None, "c0").await.into();
+        let coll_admin_role =
+            seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
+        let entity_id: EntityId = (*coll0).into();
+        seed_permission(
+            &db,
+            PermissionType::CollectionAdmin,
+            Some(EntityName::try_from("c0")?),
+            Some(entity_id),
+            &coll_admin_role,
+        )
+        .await;
+
+        let role = seed_role(&db, RoleName::try_from("r1")?, Description::try_from("d")?).await;
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            coll_admin_role.id(),
+            true,
+        )
+        .create(
+            RoleParam::builder()
+                .role(RoleIdName::from_id(role.id()))
+                .build()?,
+            PermissionCreate::builder()
+                .permission_type(PermissionType::CollectionDev)
+                .entity_name(EntityName::try_from("c0")?)
+                .build()?,
+        );
+
+        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
+        assert!(service.raw_oneshot(request).await.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_create_permission_on_other_collection_by_coll_admin_unauthz(
+    ) -> Result<(), TdError> {
+        let db = td_database::test_utils::db().await?;
+        let coll0 = seed_collection(&db, None, "c0").await;
+        let coll_admin_role =
+            seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
+        let entity_id: EntityId = coll0.into();
+        seed_permission(
+            &db,
+            PermissionType::CollectionAdmin,
+            Some(EntityName::try_from("c0")?),
+            Some(entity_id),
+            &coll_admin_role,
+        )
+        .await;
+
+        let role = seed_role(&db, RoleName::try_from("r1")?, Description::try_from("d")?).await;
+        seed_collection(&db, None, "c1").await;
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            coll_admin_role.id(),
+            true,
+        )
+        .create(
+            RoleParam::builder()
+                .role(RoleIdName::from_id(role.id()))
+                .build()?,
+            PermissionCreate::builder()
+                .permission_type(PermissionType::CollectionDev)
+                .entity_name(EntityName::try_from("c1")?)
+                .build()?,
+        );
+
+        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
+        assert_service_error(service, request, |err| match err {
+            AuthzError::UnAuthorized(_) => {}
+            other => panic!("Expected 'UnAuthorized', got {:?}", other),
+        })
+        .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_create_permission_on_all_collection_by_coll_admin_unauthz() -> Result<(), TdError>
+    {
+        let db = td_database::test_utils::db().await?;
+        let coll0 = seed_collection(&db, None, "c0").await;
+        let coll_admin_role =
+            seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
+        let entity_id: EntityId = coll0.into();
+        seed_permission(
+            &db,
+            PermissionType::CollectionAdmin,
+            Some(EntityName::try_from("c0")?),
+            Some(entity_id),
+            &coll_admin_role,
+        )
+        .await;
+
+        seed_collection(&db, None, "c1").await;
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            coll_admin_role.id(),
+            true,
+        )
+        .create(
+            RoleParam::builder()
+                .role(RoleIdName::from_id(coll_admin_role.id()))
+                .build()?,
+            PermissionCreate::builder()
+                .permission_type(PermissionType::CollectionDev)
+                .entity_name(None)
+                .build()?,
+        );
+
+        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
+        assert_service_error(service, request, |err| match err {
+            AuthzError::UnAuthorized(_) => {}
+            other => panic!("Expected 'UnAuthorized', got {:?}", other),
+        })
+        .await;
         Ok(())
     }
 
@@ -204,16 +368,106 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_permission_on_collection_by_coll_admin_unauthz() -> Result<(), TdError> {
+    async fn test_delete_permission_incorrect_role_err() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
         let coll0: CollectionId = seed_collection(&db, None, "c0").await.into();
         let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
         let entity_id: EntityId = (*coll0).into();
+        seed_permission(
+            &db,
+            PermissionType::CollectionAdmin,
+            Some(EntityName::try_from("c0")?),
+            Some(entity_id),
+            &role,
+        )
+        .await;
         let coll_dev_perm = seed_permission(
             &db,
             PermissionType::CollectionDev,
             Some(EntityName::try_from("c0")?),
             Some(entity_id),
+            &role,
+        )
+        .await;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id(), true)
+                .delete(
+                    RolePermissionParam::builder()
+                        .role(RoleIdName::try_from("r_incorrect")?)
+                        .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
+                        .build()?,
+                );
+
+        let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
+
+        assert_service_error(service, request, |err| match err {
+            PermissionError::RolePermissionMismatch => {}
+            other => panic!("Expected 'RolePermissionMismatch', got {:?}", other),
+        })
+        .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_permission_on_diff_collection_by_coll_admin_unauthz() -> Result<(), TdError>
+    {
+        let db = td_database::test_utils::db().await?;
+        let coll0: CollectionId = seed_collection(&db, None, "c0").await.into();
+        let coll1: CollectionId = seed_collection(&db, None, "c1").await.into();
+        let role0 = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
+        let role1 = seed_role(&db, RoleName::try_from("r1")?, Description::try_from("d")?).await;
+        seed_permission(
+            &db,
+            PermissionType::CollectionDev,
+            Some(EntityName::try_from("c0")?),
+            Some((*coll0).into()),
+            &role0,
+        )
+        .await;
+        let perm1 = seed_permission(
+            &db,
+            PermissionType::CollectionDev,
+            Some(EntityName::try_from("c1")?),
+            Some((*coll1).into()),
+            &role1,
+        )
+        .await;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), role0.id(), true)
+                .delete(
+                    RolePermissionParam::builder()
+                        .role(RoleIdName::try_from("r1")?)
+                        .permission(PermissionIdName::try_from(perm1.id().to_string())?)
+                        .build()?,
+                );
+
+        let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
+
+        assert_service_error(service, request, |err| match err {
+            AuthzError::UnAuthorized(_) => {}
+            other => panic!("Expected 'Unauthorized', got {:?}", other),
+        })
+        .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_permission_on_all_collection_by_coll_admin_unauthz() -> Result<(), TdError>
+    {
+        let db = td_database::test_utils::db().await?;
+        seed_collection(&db, None, "c0").await;
+        let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
+        let coll_dev_perm = seed_permission(
+            &db,
+            PermissionType::CollectionDev,
+            Some(EntityName::try_from("c0")?),
+            None,
             &role,
         )
         .await;
@@ -236,6 +490,54 @@ mod tests {
             other => panic!("Expected 'Unauthorized', got {:?}", other),
         })
         .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_system_permissions() -> Result<(), TdError> {
+        let db = td_database::test_utils::db().await?;
+
+        let fixed_permissions = HashSet::from([
+            ENCODED_ID_SA_SYS_ADMIN,
+            ENCODED_ID_SS_SEC_ADMIN,
+            ENCODED_ID_CA_ALL_SEC_ADMIN,
+        ]);
+
+        let permissions: Vec<PermissionDB> = sqlx::query_as("SELECT * FROM permissions")
+            .fetch_all(&db)
+            .await
+            .unwrap();
+
+        for permission in permissions {
+            let service =
+                DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+                    .service()
+                    .await;
+
+            let request: DeleteRequest<RolePermissionParam> = RequestContext::with(
+                AccessTokenId::default(),
+                UserId::admin(),
+                RoleId::sec_admin(),
+                false,
+            )
+            .delete(
+                RolePermissionParam::builder()
+                    .role(RoleIdName::from_id(permission.role_id()))
+                    .permission(PermissionIdName::from_id(permission.id()))
+                    .build()?,
+            );
+
+            if fixed_permissions.contains(permission.id().to_string().as_str()) {
+                assert_service_error(service, request, |err| match err {
+                    PermissionError::PermissionIsFixed => {}
+                    other => panic!("Expected 'PermissionIsFixed', got {:?}", other),
+                })
+                .await;
+            } else {
+                assert!(service.oneshot(request).await.is_ok());
+            }
+        }
+
         Ok(())
     }
 }

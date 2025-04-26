@@ -959,6 +959,17 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
             name: Option<#name>,
         }
 
+        impl #ident {
+
+            pub fn from_id(id: impl Into<#id>) -> Self {
+                Self { id: Some(id.into()), name: None }
+            }
+
+            pub fn from_name(name: impl Into<#name>) -> Self {
+                Self { id: None, name: Some(name.into()) }
+            }
+        }
+
         impl TryFrom<String> for #ident {
             type Error = td_error::TdError;
             fn try_from(s: String) -> Result<Self, Self::Error> {
