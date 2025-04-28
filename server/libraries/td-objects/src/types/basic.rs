@@ -264,16 +264,16 @@ pub struct SessionId;
 pub enum SessionStatus {
     #[strum(to_string = "a")]
     Active,
-    #[strum(to_string = "p")]
-    PasswordChange,
-    #[strum(to_string = "it")]
+    #[strum(to_string = "i_pc")]
+    InvalidPasswordChange,
+    #[strum(to_string = "i_nt")]
     InvalidNewToken,
-    #[strum(to_string = "ir")]
+    #[strum(to_string = "i_rc")]
     InvalidRoleChange,
-    #[strum(to_string = "il")]
+    #[strum(to_string = "i_l")]
     InvalidLogout,
-    #[strum(to_string = "ud")]
-    UserDisabled,
+    #[strum(to_string = "i_ud")]
+    InvalidUserDisabled,
 }
 
 #[td_type::typed(string(min_len = 0, max_len = 4096))]

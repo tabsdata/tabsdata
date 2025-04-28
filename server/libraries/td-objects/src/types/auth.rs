@@ -7,13 +7,8 @@ use crate::types::basic::{
     OldPassword, Password, PasswordMustChange, RefreshToken, RefreshTokenId, RoleId, RoleName,
     SessionStatus, TokenType, UserEnabled, UserId, UserName,
 };
+use crate::types::permission::Permission;
 use crate::types::user::UserDBWithNames;
-
-#[td_type::Dto]
-pub struct RequestTime {
-    #[builder(default)]
-    time: AtTime,
-}
 
 #[td_type::Dto]
 pub struct Login {
@@ -50,13 +45,14 @@ pub struct RoleChange {
 #[td_type::Dto]
 pub struct PasswordChange {
     #[td_type(extractor)]
+    name: UserName,
+    #[td_type(extractor)]
     old_password: OldPassword,
     #[td_type(extractor)]
     new_password: NewPassword,
 }
 
 #[td_type::Dao(sql_table = "sessions")]
-#[td_type(updater(try_from = RequestTime, skip_all))]
 #[td_type(builder(try_from = SessionDB))]
 pub struct SessionDB {
     #[builder(default)]
@@ -67,10 +63,11 @@ pub struct SessionDB {
     user_id: UserId,
     #[td_type(setter)]
     role_id: RoleId,
-    #[td_type(updater(include, field = "time"))]
+    #[td_type(setter)]
     created_on: AtTime,
     expires_on: AtTime,
-    #[td_type(updater(include, field = "time"))]
+    #[builder(default = "AtTime::default()")]
+    // TODO, ideally we should support #[td_type(setter)] on the same type multiple times.
     status_change_on: AtTime,
     #[builder(default = "SessionStatus::Active")]
     status: SessionStatus,
@@ -81,6 +78,14 @@ pub struct SessionLogoutDB {
     #[td_type(setter)]
     status_change_on: AtTime,
     #[builder(default = "SessionStatus::InvalidLogout")]
+    status: SessionStatus,
+}
+
+#[td_type::Dao(sql_table = "sessions")]
+pub struct SessionPasswordChangeDB {
+    #[td_type(setter)]
+    status_change_on: AtTime,
+    #[builder(default = "SessionStatus::InvalidPasswordChange")]
     status: SessionStatus,
 }
 
@@ -118,6 +123,8 @@ pub struct UserInfo {
     enabled: UserEnabled,
     #[td_type(builder(skip), setter)]
     current_role_id: RoleId,
+    #[td_type(builder(skip), setter)]
+    current_permissions: Vec<Permission>,
     #[td_type(builder(skip), setter)]
     user_roles: Vec<UserInfoRoleIdName>,
 }

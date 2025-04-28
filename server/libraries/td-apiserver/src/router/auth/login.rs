@@ -26,5 +26,8 @@ pub async fn login(
     Json(request): Json<Login>,
 ) -> Result<AuthStatusRaw, AuthorizeErrorStatus> {
     let response = state.login_service().await.oneshot(request).await?;
+    // incorrect_role
+    // user disabled
+    // unauthorized
     Ok(AuthStatusRaw::OK(response.into_data()))
 }

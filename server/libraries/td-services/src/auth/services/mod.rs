@@ -179,6 +179,7 @@ impl AuthServices {
                 db.clone(),
                 queries.clone(),
                 password_settings.clone(),
+                sessions.clone(),
             ),
         }
     }
@@ -207,9 +208,7 @@ impl AuthServices {
         self.role_change.service().await
     }
 
-    pub async fn password_change_service(
-        &self,
-    ) -> TdBoxService<UpdateRequest<(), PasswordChange>, (), TdError> {
+    pub async fn password_change_service(&self) -> TdBoxService<PasswordChange, (), TdError> {
         self.password_change.service().await
     }
 
@@ -219,5 +218,64 @@ impl AuthServices {
 
     pub fn sessions(&self) -> &Sessions {
         &self.sessions
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use crate::auth::services::{AuthServices, JwtConfig, PasswordHashConfig};
+    use crate::auth::session;
+    use crate::auth::session::Sessions;
+    use sqlx::FromRow;
+    use std::sync::Arc;
+    use td_database::sql::DbPool;
+    use td_objects::types::auth::SessionDB;
+    use td_objects::types::basic::AccessTokenId;
+
+    pub async fn auth_services(db: &DbPool) -> AuthServices {
+        let sessions: Arc<Sessions> = Arc::new(session::new(db.clone()));
+        let password_hash_config: PasswordHashConfig = PasswordHashConfig::default();
+        let jwt_config: JwtConfig = JwtConfig::default();
+        AuthServices::new(db, sessions, password_hash_config, jwt_config)
+    }
+
+    pub async fn assert_session(db: &DbPool, access_token_id: &Option<AccessTokenId>) {
+        #[derive(Debug, FromRow)]
+        struct Count {
+            count: i64,
+        }
+
+        let mut conn = db.acquire().await.unwrap();
+
+        match access_token_id {
+            Some(access_token_id) => {
+                let count: Count = sqlx::query_as(
+                    "SELECT count(*) as count FROM sessions WHERE access_token_id = ?",
+                )
+                .bind(access_token_id)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+                assert_eq!(count.count, 1);
+            }
+            None => {
+                let count: Count = sqlx::query_as("SELECT count(*) as count FROM sessions")
+                    .fetch_one(&mut *conn)
+                    .await
+                    .unwrap();
+                assert_eq!(count.count, 0);
+            }
+        }
+    }
+
+    pub async fn get_session(db: &DbPool, access_token_id: &AccessTokenId) -> Option<SessionDB> {
+        let mut conn = db.acquire().await.unwrap();
+        let session: Option<SessionDB> =
+            sqlx::query_as("SELECT * FROM sessions WHERE access_token_id = ?")
+                .bind(access_token_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .unwrap();
+        session
     }
 }

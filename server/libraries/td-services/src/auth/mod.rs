@@ -34,6 +34,9 @@ pub enum AuthError {
     #[error("User must change password")]
     UserMustChangePassword = 4005,
 
+    #[error("User does not belong the specified role")]
+    UserDoesNotBelongToRole = 4006,
+
     #[error("Internal error: {0}")]
     InternalError(String) = 5000,
 

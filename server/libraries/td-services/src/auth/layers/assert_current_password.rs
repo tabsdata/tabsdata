@@ -9,7 +9,7 @@ use td_objects::types::basic::PasswordHash;
 use td_security::password;
 use td_tower::extractors::Input;
 
-pub async fn assert_password<P: Deref<Target = String>>(
+pub async fn assert_current_password<P: Deref<Target = String>>(
     Input(password_hash): Input<PasswordHash>,
     Input(password): Input<P>,
 ) -> Result<(), TdError> {

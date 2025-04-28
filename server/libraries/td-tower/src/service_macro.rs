@@ -4,18 +4,21 @@
 
 #[macro_export]
 macro_rules! layers {
-    ($($layer:expr),* $(,)?) => {
+    ($($layer:expr),* $(,)? $(; map_err = $map_err:expr)?) => {
         tower::builder::ServiceBuilder::new()
-            $(.layer($layer))*
+            $(.map_err($map_err))?
+            $(
+                .layer($layer)
+            )*
             .boxed_layer()
     };
 }
 
 #[macro_export]
 macro_rules! service {
-    ($($layers:expr)?) => {
+    ($($layers:expr),* $(,)?) => {
         tower::builder::ServiceBuilder::new()
-            $(.layer($layers))?
+            $(.layer($layers))*
             .map_err(td_error::TdError::from)
             .service($crate::default_services::ServiceReturn)
     };
@@ -23,10 +26,10 @@ macro_rules! service {
 
 #[macro_export]
 macro_rules! service_provider {
-    ($layers:expr) => {
+    ($($layers:expr),* $(,)?) => {
         tower::builder::ServiceBuilder::new()
             .layer($crate::default_services::ServiceEntry::default())
-            .layer($layers)
+            $(.layer($layers))*
             .map_err(td_error::TdError::from)
             .service($crate::default_services::ServiceReturn)
             .into_service_provider()
