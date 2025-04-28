@@ -22,6 +22,7 @@ pub async fn seed_table_data_version(
     let table_data_version_db = TableDataVersionDB::builder()
         .collection_id(collection.id())
         .table_id(table.table_id())
+        .name(table.name())
         .table_version_id(table.id())
         .function_version_id(table.function_version_id())
         .has_data(None)

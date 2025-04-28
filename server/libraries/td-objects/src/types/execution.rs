@@ -144,6 +144,7 @@ pub struct TableDataVersionDB {
     id: TableDataVersionId,
     collection_id: CollectionId,
     table_id: TableId,
+    name: TableName,
     table_version_id: TableVersionId,
     function_version_id: FunctionVersionId,
     #[builder(default)]
@@ -159,6 +160,7 @@ pub struct TableDataVersionDBWithStatus {
     id: TableDataVersionId,
     collection_id: CollectionId,
     table_id: TableId,
+    name: TableName,
     table_version_id: TableVersionId,
     function_version_id: FunctionVersionId,
     has_data: Option<HasData>,
@@ -183,6 +185,7 @@ pub struct TableDataVersionDBWithNames {
     id: TableDataVersionId,
     collection_id: CollectionId,
     table_id: TableId,
+    name: TableName,
     table_version_id: TableVersionId,
     function_version_id: FunctionVersionId,
     has_data: Option<HasData>,
@@ -198,7 +201,6 @@ pub struct TableDataVersionDBWithNames {
 
     collection: CollectionName,
     function: FunctionName,
-    name: TableName,
     triggered_by: UserName,
 }
 

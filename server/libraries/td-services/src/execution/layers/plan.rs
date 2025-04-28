@@ -112,6 +112,7 @@ pub async fn build_table_data_versions(
             TableDataVersionDB::builder()
                 .collection_id(f.collection_id())
                 .table_id(t.table_id())
+                .name(t.name())
                 .table_version_id(t.table_version_id())
                 .function_version_id(t.function_version_id())
                 .execution_id(execution.id())

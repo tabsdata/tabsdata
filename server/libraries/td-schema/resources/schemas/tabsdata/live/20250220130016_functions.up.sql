@@ -396,6 +396,7 @@ CREATE TABLE table_data_versions
     id                  TEXT PRIMARY KEY,
     collection_id       TEXT    NOT NULL,
     table_id            TEXT    NOT NULL,
+    name                TEXT    NOT NULL,
     table_version_id    TEXT    NOT NULL,
     function_version_id TEXT    NOT NULL,
 

@@ -15,7 +15,8 @@ use td_objects::types::execution::{
     CallbackRequest, FunctionRequirementDBWithNames, FunctionRunDB, TableDataVersionDB,
     UpdateFunctionRunDB, UpdateTableDataVersionDB,
 };
-use td_objects::types::worker::v2::{FunctionOutputV2, WrittenTableV2};
+use td_objects::types::worker::v2::WrittenTableV2;
+use td_objects::types::worker::FunctionOutput;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[td_error]
@@ -26,6 +27,8 @@ enum UpdateStatusRunError {
     AlreadyCanceled(FunctionRunId) = 1,
     #[error("Unexpected function run status transition for function run [{0}]: {1:?} -> {2:?}")]
     UnexpectedFunctionRunStatusTransition(FunctionRunId, FunctionRunStatus, FunctionRunStatus) = 2,
+    #[error("Cannot update data version table status for function run [{0}] because the function output is not valid")]
+    InvalidFunctionOutputVersion(FunctionRunId) = 3,
 }
 
 pub async fn update_function_run_status<Q: DerefQueries>(
@@ -214,58 +217,60 @@ pub async fn update_function_run_status<Q: DerefQueries>(
     Ok(())
 }
 
-pub async fn update_table_data_version_status<Q: DerefQueries>(
+pub async fn update_table_data_version_status_v2<Q: DerefQueries>(
     SrvCtx(queries): SrvCtx<Q>,
     Connection(connection): Connection,
     Input(function_run_id): Input<FunctionRunId>,
-    Input(_callback): Input<CallbackRequest>,
+    Input(callback): Input<CallbackRequest>,
 ) -> Result<(), TdError> {
-    // let context = callback.context().as_ref().unwrap(); // TODO this unwrap
-    // let output = match context {
-    //     FunctionOutput::V1(_) => unreachable!(),
-    //     FunctionOutput::V2(output) => output,
-    // };
-    let output = FunctionOutputV2::builder().output(vec![]).build().unwrap();
+    if let Some(context) = callback.context() {
+        let output = match context {
+            FunctionOutput::V2(output) => output,
+            _ => Err(UpdateStatusRunError::InvalidFunctionOutputVersion(
+                *function_run_id,
+            ))?,
+        };
 
-    let futures: Vec<_> = output
-        .output()
-        .iter()
-        .map(|written| {
-            let queries = queries.clone();
-            let connection = connection.clone();
-            let function_run_id = function_run_id.clone();
-            async move {
-                let (table_name, has_data) = match written {
-                    WrittenTableV2::NoData { table } => (table, false),
-                    WrittenTableV2::Data { table } => (table, true),
-                    // TODO partitions should be handled differently, creating partitions and setting
-                    // the table to has_data = true and partition = true.
-                    WrittenTableV2::Partitions { table, .. } => (table, true),
-                };
+        let futures: Vec<_> = output
+            .output()
+            .iter()
+            .map(|written| {
+                let queries = queries.clone();
+                let connection = connection.clone();
+                let function_run_id = function_run_id.clone();
+                async move {
+                    let (table_name, has_data) = match written {
+                        WrittenTableV2::NoData { table } => (table, false),
+                        WrittenTableV2::Data { table } => (table, true),
+                        // TODO partitions should be handled differently, creating partitions and setting
+                        // the table to has_data = true and partition = true.
+                        WrittenTableV2::Partitions { table, .. } => (table, true),
+                    };
 
-                let update = UpdateTableDataVersionDB::builder()
-                    .has_data(Some(has_data.into()))
-                    .build()?;
+                    let update = UpdateTableDataVersionDB::builder()
+                        .has_data(Some(has_data.into()))
+                        .build()?;
 
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
+                    let mut conn = connection.lock().await;
+                    let conn = conn.get_mut_connection()?;
 
-                let res = queries
-                    .update_by::<_, TableDataVersionDB>(
-                        &update,
-                        &(function_run_id.deref(), table_name),
-                    )?
-                    .build()
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
-                assert_one(res)?;
-                Ok::<_, TdError>(())
-            }
-        })
-        .collect();
+                    let res = queries
+                        .update_by::<_, TableDataVersionDB>(
+                            &update,
+                            &(&*function_run_id, table_name),
+                        )?
+                        .build()
+                        .execute(&mut *conn)
+                        .await
+                        .map_err(handle_sql_err)?;
+                    assert_one(res)?;
+                    Ok::<_, TdError>(())
+                }
+            })
+            .collect();
 
-    let _ = futures::future::try_join_all(futures).await?;
+        let _ = futures::future::try_join_all(futures).await?;
+    }
 
     Ok(())
 }

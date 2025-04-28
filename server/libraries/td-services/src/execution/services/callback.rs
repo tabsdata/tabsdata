@@ -4,7 +4,7 @@
 
 use crate::common::layers::extractor::extract_req_dto;
 use crate::execution::layers::update_status::{
-    update_function_run_status, update_table_data_version_status,
+    update_function_run_status, update_table_data_version_status_v2,
 };
 use std::sync::Arc;
 use td_database::sql::DbPool;
@@ -67,7 +67,7 @@ impl ExecutionCallbackService {
                 from_fn(update_function_run_status::<DaoQueries>),
 
                 // Update table data versions status.
-                from_fn(update_table_data_version_status::<DaoQueries>),
+                from_fn(update_table_data_version_status_v2::<DaoQueries>),
             ))
         }
     }
@@ -105,11 +105,13 @@ mod tests {
     use td_objects::types::collection::CollectionDB;
     use td_objects::types::execution::{
         ExecutionDB, ExecutionDBWithStatus, ExecutionStatus, FunctionRunDB, FunctionRunStatus,
-        TableDataVersionDB, TableDataVersionDBWithStatus, TransactionDB, TransactionDBWithStatus,
-        TransactionStatus,
+        TableDataVersionDB, TableDataVersionDBWithNames, TableDataVersionDBWithStatus,
+        TransactionDB, TransactionDBWithStatus, TransactionStatus,
     };
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::table::{TableDB, TableVersionDB};
+    use td_objects::types::worker::v2::{FunctionOutputV2, WrittenTableV2};
+    use td_objects::types::worker::FunctionOutput;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -139,7 +141,7 @@ mod tests {
             type_of_val(&With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
             type_of_val(&update_function_run_status::<DaoQueries>),
             // Update table data versions status.
-            type_of_val(&update_table_data_version_status::<DaoQueries>),
+            type_of_val(&update_table_data_version_status_v2::<DaoQueries>),
         ]);
     }
 
@@ -1002,6 +1004,156 @@ mod tests {
         assert_eq!(*execution.started_on(), None);
         assert_eq!(*execution.ended_on(), None);
         assert_eq!(*execution.status(), ExecutionStatus::Running);
+
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_callback_table_data_version_status(db: DbPool) -> Result<(), TdError> {
+        // Setup
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        let register = FunctionRegister::builder()
+            .try_name("function_1")?
+            .try_description("foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("foo snippet")?
+            .dependencies(vec![TableDependency::try_from("table_1")?])
+            .triggers(None)
+            .tables(vec![
+                TableName::try_from("table_1")?,
+                TableName::try_from("table_2")?,
+            ])
+            .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let function_run = schedule_function_execution(&db, &collection, &register).await?;
+
+        // First set to running
+        let response: CallbackRequest = ResponseMessagePayloadBuilder::default()
+            .id("".to_string())
+            .class(WorkerClass::EPHEMERAL)
+            .worker("".to_string())
+            .action(MessageAction::Notify)
+            .start(123)
+            .end(None)
+            .status(FunctionRunUpdateStatus::Running)
+            .execution(0)
+            .limit(None)
+            .error(None)
+            .context(None)
+            .build()
+            .unwrap();
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .update(
+            FunctionRunParam::builder()
+                .function_run_id(function_run.id())
+                .build()?,
+            response,
+        );
+
+        let service = ExecutionCallbackService::new(db.clone()).service().await;
+        service.raw_oneshot(request).await?;
+
+        // Actual test
+        let response: CallbackRequest = ResponseMessagePayloadBuilder::default()
+            .id("".to_string())
+            .class(WorkerClass::EPHEMERAL)
+            .worker("".to_string())
+            .action(MessageAction::Notify)
+            .start(123)
+            .end(None)
+            .status(FunctionRunUpdateStatus::Done)
+            .execution(0)
+            .limit(None)
+            .error(None)
+            .context(Some(FunctionOutput::V2(
+                FunctionOutputV2::builder()
+                    .output(vec![
+                        WrittenTableV2::NoData {
+                            table: TableName::try_from("table_1")?,
+                        },
+                        WrittenTableV2::Data {
+                            table: TableName::try_from("table_2")?,
+                        },
+                    ])
+                    .build()?,
+            )))
+            .build()
+            .unwrap();
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .update(
+            FunctionRunParam::builder()
+                .function_run_id(function_run.id())
+                .build()?,
+            response,
+        );
+
+        let service = ExecutionCallbackService::new(db.clone()).service().await;
+        service.raw_oneshot(request).await?;
+
+        // Assertions
+        let queries = DaoQueries::default();
+        let function_runs: Vec<FunctionRunDB> = queries
+            .select_by::<FunctionRunDB>(&(function_run.function_version_id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(function_runs.len(), 1);
+        let function_run = &function_runs[0];
+
+        let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
+            .select_by::<TableDataVersionDBWithNames>(&(&TableName::try_from("table_1")?))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(table_data_versions.len(), 1);
+        let table_data_version = &table_data_versions[0];
+        assert_eq!(
+            table_data_version.triggered_on(),
+            function_run.triggered_on()
+        );
+        assert_eq!(
+            table_data_version.triggered_by_id(),
+            function_run.triggered_by_id()
+        );
+        assert_eq!(table_data_version.status(), function_run.status());
+        assert_eq!(*table_data_version.has_data(), Some(false.into()));
+
+        let queries = DaoQueries::default();
+        let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
+            .select_by::<TableDataVersionDBWithNames>(&(&TableName::try_from("table_2")?))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        assert_eq!(table_data_versions.len(), 1);
+        let table_data_version = &table_data_versions[0];
+        assert_eq!(
+            table_data_version.triggered_on(),
+            function_run.triggered_on()
+        );
+        assert_eq!(
+            table_data_version.triggered_by_id(),
+            function_run.triggered_by_id()
+        );
+        assert_eq!(table_data_version.status(), function_run.status());
+        assert_eq!(*table_data_version.has_data(), Some(true.into()));
 
         Ok(())
     }
