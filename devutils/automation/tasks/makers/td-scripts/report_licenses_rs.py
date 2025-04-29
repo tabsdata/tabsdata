@@ -43,6 +43,7 @@ def get_custom_license(dependency_name, dependency_license):
         "BSD",
         "BSL",
         "CC0",
+        "CDLA",
         "ISC",
         "MIT",
         "MPL",

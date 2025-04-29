@@ -49,12 +49,13 @@ deny = [{ crate = "log", reason = "We use 'tracing' crate instead, which has equ
 
 allow = [
     "Apache-2.0",
-    "BSL-1.0",
-    "CC0-1.0",
-    "ISC",
-    "MIT",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
     "MPL-2.0",
     "OpenSSL",
     "Unicode-3.0",
