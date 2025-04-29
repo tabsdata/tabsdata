@@ -426,6 +426,9 @@ version = "0.26.3"
 [workspace.dependencies.strum_macros]
 version = "0.26.4"
 
+[workspace.dependencies.supports-color]
+version = "3.0.2"
+
 [workspace.dependencies.sysinfo]
 version = "0.32.1"
 

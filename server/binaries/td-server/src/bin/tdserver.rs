@@ -39,22 +39,42 @@ fn check_banner() -> std::io::Result<()> {
 }
 
 fn show_banner() -> Result<(), std::io::Error> {
+    let use_colors = supports_color::on(supports_color::Stream::Stdout).is_some();
+
     let width = terminal_size()
         .map(|(Width(w), _)| w as usize - 6)
         .unwrap_or(50)
         .min(80);
     let wrapped_text = fill(BANNER, width);
-    let top_border = format!("╭{}╮", "─".repeat(width + 2)).blue().bold();
-    let bottom_border = format!("╰{}╯", "─".repeat(width + 2)).blue().bold();
+    let top_border = if use_colors {
+        format!("╭{}╮", "─".repeat(width + 2))
+            .blue()
+            .bold()
+            .to_string()
+    } else {
+        format!("╭{}╮", "─".repeat(width + 2))
+    };
+    let bottom_border = if use_colors {
+        format!("╰{}╯", "─".repeat(width + 2))
+            .blue()
+            .bold()
+            .to_string()
+    } else {
+        format!("╰{}╯", "─".repeat(width + 2))
+    };
     println!("\n{}", top_border);
     for line in wrapped_text.lines() {
         let padded_line = format!("{:^width$}", line, width = width);
-        println!(
-            "{} {} {}",
-            "│".blue().bold(),
-            padded_line.truecolor(251, 175, 79).bold(),
-            "│".blue().bold()
-        );
+        if use_colors {
+            println!(
+                "{} {} {}",
+                "│".blue().bold(),
+                padded_line.truecolor(251, 175, 79).bold(),
+                "│".blue().bold()
+            );
+        } else {
+            println!("│ {} │", padded_line);
+        }
     }
     println!("{}", bottom_border);
     Ok(())
