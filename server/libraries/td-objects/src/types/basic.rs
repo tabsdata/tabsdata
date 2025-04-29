@@ -26,38 +26,29 @@ pub struct AccessTokenId;
 #[td_type::typed(timestamp)]
 pub struct AtTime;
 
-#[td_type::typed(id)]
-pub struct BundleId;
-
 #[td_type::typed(string)]
 pub struct BundleHash;
+
+#[td_type::typed(id)]
+pub struct BundleId;
 
 #[td_type::typed(id, try_from = EntityId)]
 pub struct CollectionId;
 
-#[td_type::typed(string(parser = parse_collection))]
-pub struct CollectionName;
-
 #[td_type::typed(id_name(id = CollectionId, name = CollectionName))]
 pub struct CollectionIdName;
+
+#[td_type::typed(string(parser = parse_collection))]
+pub struct CollectionName;
 
 #[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
 pub struct DataLocation;
 
-#[td_type::typed(string(min_len = 0, max_len = 200, default = ""))]
-pub struct Description;
-
 #[td_type::typed(id)]
 pub struct DependencyId;
 
-#[td_type::typed(bool)]
-pub struct SelfDependency;
-
 #[td_type::typed(i16(min = 0, max = 200, default = 0))]
 pub struct DependencyPos;
-
-#[td_type::typed(i16(min = 0, max = 200, default = 0))]
-pub struct VersionPos;
 
 #[td_type::typed_enum]
 pub enum DependencyStatus {
@@ -70,6 +61,12 @@ pub enum DependencyStatus {
 #[td_type::typed(id)]
 pub struct DependencyVersionId;
 
+#[td_type::typed(string(min_len = 0, max_len = 200, default = ""))]
+pub struct Description;
+
+#[td_type::typed(string)]
+pub struct Dot;
+
 #[td_type::typed(string(parser = parse_email))]
 pub struct Email;
 
@@ -79,27 +76,24 @@ pub struct EntityId;
 #[td_type::typed(string(parser = parse_entity))]
 pub struct EntityName;
 
+#[td_type::typed(string)]
+pub struct ExecutionError;
+
 #[td_type::typed(id)]
 pub struct ExecutionId;
-
-#[td_type::typed(string(parser = parse_execution))]
-pub struct ExecutionName;
 
 // ExecutionName is not UNIQUE nor NOT NULL. We cannot use it as a primary key to lookup.
 #[td_type::typed(id_name(id = ExecutionId))]
 pub struct ExecutionIdName;
 
 #[td_type::typed(i16)]
-pub struct ExecutionTry;
-
-#[td_type::typed(i16)]
 pub struct ExecutionLimit;
 
-#[td_type::typed(string)]
-pub struct ExecutionError;
+#[td_type::typed(string(parser = parse_execution))]
+pub struct ExecutionName;
 
-#[td_type::typed(bool(default = false))]
-pub struct HasData;
+#[td_type::typed(i16)]
+pub struct ExecutionTry;
 
 #[td_type::typed(bool(default = false))]
 pub struct Fixed;
@@ -110,23 +104,17 @@ pub struct FixedRole;
 #[td_type::typed(bool(default = false))]
 pub struct Frozen;
 
-#[td_type::typed(bool)]
-pub struct ReuseFrozen;
-
-#[td_type::typed(bool)]
-pub struct Private;
-
-#[td_type::typed(bool)]
-pub struct Partitioned;
-
 #[td_type::typed(id)]
 pub struct FunctionId;
+
+#[td_type::typed(id_name(id = FunctionId, name = FunctionName))]
+pub struct FunctionIdName;
 
 #[td_type::typed(string(parser = parse_function))]
 pub struct FunctionName;
 
-#[td_type::typed(id_name(id = FunctionId, name = FunctionName))]
-pub struct FunctionIdName;
+#[td_type::typed(id)]
+pub struct FunctionRunId;
 
 // JSON blob with `version`, `envs` & `secrets` top entries.
 // info used in decorator.
@@ -155,6 +143,9 @@ pub enum GrantType {
     RefreshToken,
 }
 
+#[td_type::typed(bool(default = false))]
+pub struct HasData;
+
 const MIN_PASSWORD_LEN: usize = 8;
 const MAX_PASSWORD_LEN: usize = 64;
 #[td_type::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
@@ -165,6 +156,9 @@ pub struct OldPassword;
 
 #[td_type::typed(string(min_len = 1, max_len = 1024))]
 pub struct Partition;
+
+#[td_type::typed(bool)]
+pub struct Partitioned;
 
 #[td_type::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct Password;
@@ -178,12 +172,6 @@ pub struct PasswordHash;
 #[td_type::typed(bool(default = false))]
 pub struct PasswordMustChange;
 
-#[td_type::typed(id)]
-pub struct PermissionId;
-
-#[td_type::typed(id_name(id = PermissionId))]
-pub struct PermissionIdName;
-
 #[td_type::typed_enum]
 pub enum PermissionEntityType {
     #[strum(to_string = "s")]
@@ -191,6 +179,12 @@ pub enum PermissionEntityType {
     #[strum(to_string = "c")]
     Collection,
 }
+
+#[td_type::typed(id)]
+pub struct PermissionId;
+
+#[td_type::typed(id_name(id = PermissionId))]
+pub struct PermissionIdName;
 
 #[td_type::typed_enum]
 pub enum PermissionType {
@@ -220,6 +214,9 @@ impl PermissionType {
     }
 }
 
+#[td_type::typed(bool)]
+pub struct Private;
+
 #[td_type::typed(timestamp)]
 pub struct PublishedOn;
 
@@ -228,6 +225,12 @@ pub struct RefreshToken;
 
 #[td_type::typed(id)]
 pub struct RefreshTokenId;
+
+#[td_type::typed(id)]
+pub struct RequirementId;
+
+#[td_type::typed(bool)]
+pub struct ReuseFrozen;
 
 #[td_type::typed(id)]
 pub struct RoleId;
@@ -245,6 +248,10 @@ impl RoleId {
         Self(Id::_new(ID_ROLE_USER))
     }
 }
+
+#[td_type::typed(id_name(id = RoleId, name = RoleName))]
+pub struct RoleIdName;
+
 #[td_type::typed(string(parser = parse_role))]
 pub struct RoleName;
 
@@ -254,8 +261,8 @@ impl RoleName {
     }
 }
 
-#[td_type::typed(id_name(id = RoleId, name = RoleName))]
-pub struct RoleIdName;
+#[td_type::typed(bool)]
+pub struct SelfDependency;
 
 #[td_type::typed(id)]
 pub struct SessionId;
@@ -282,6 +289,12 @@ pub struct Snippet;
 #[td_type::typed(string(min_len = 1, max_len = 10, default = "V1"))]
 pub struct StorageVersion;
 
+#[td_type::typed(id)]
+pub struct TableDataId;
+
+#[td_type::typed(id)]
+pub struct TableDataVersionId;
+
 #[td_type::typed(composed(inner = VersionedTableRef))]
 pub struct TableDependency;
 
@@ -299,26 +312,14 @@ impl TryFrom<&DependencyVersionDBWithNames> for TableDependency {
     }
 }
 
-#[td_type::typed(id)]
-pub struct TableDataId;
-
-#[td_type::typed(id)]
-pub struct FunctionRunId;
-
-#[td_type::typed(id)]
-pub struct RequirementId;
-
-#[td_type::typed(id)]
-pub struct WorkerMessageId;
-
-#[td_type::typed(id)]
-pub struct TableDataVersionId;
-
-#[td_type::typed(string)]
-pub struct Dot;
+#[td_type::typed(i16)]
+pub struct TableFunctionParamPos;
 
 #[td_type::typed(id)]
 pub struct TableId;
+
+#[td_type::typed(id_name(id = TableId, name = TableName))]
+pub struct TableIdName;
 
 #[td_type::typed(string(parser = parse_table))]
 pub struct TableName;
@@ -331,12 +332,6 @@ impl TryFrom<&TableVersionDBWithNames> for TableName {
         Ok(table)
     }
 }
-
-#[td_type::typed(id_name(id = TableId, name = TableName))]
-pub struct TableIdName;
-
-#[td_type::typed(i16)]
-pub struct TableFunctionParamPos;
 
 #[td_type::typed_enum]
 pub enum TableStatus {
@@ -372,14 +367,14 @@ pub struct TableVersions;
 #[td_type::typed(string)]
 pub struct TokenType;
 
+#[td_type::typed(string(default = "F"))]
+pub struct TransactionByStr;
+
 #[td_type::typed(id)]
 pub struct TransactionId;
 
 #[td_type::typed(id_name(id = TransactionId))]
 pub struct TransactionIdName;
-
-#[td_type::typed(string(default = "F"))]
-pub struct TransactionByStr;
 
 #[td_type::typed(string)]
 pub struct TransactionKey;
@@ -423,11 +418,17 @@ impl UserId {
     }
 }
 
-#[td_type::typed(string(parser = parse_user))]
-pub struct UserName;
-
 #[td_type::typed(id_name(id = UserId, name = UserName))]
 pub struct UserIdName;
 
+#[td_type::typed(string(parser = parse_user))]
+pub struct UserName;
+
 #[td_type::typed(id)]
 pub struct UserRoleId;
+
+#[td_type::typed(i16(min = 0, max = 200, default = 0))]
+pub struct VersionPos;
+
+#[td_type::typed(id)]
+pub struct WorkerMessageId;
