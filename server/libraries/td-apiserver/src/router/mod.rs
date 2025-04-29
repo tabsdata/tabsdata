@@ -35,7 +35,9 @@ mod auth;
 mod collections;
 mod execution;
 mod functions;
+mod inter_collection_permissions;
 mod jwt_login;
+
 #[cfg(feature = "api-docs")]
 mod openapi;
 mod permissions;
@@ -69,6 +71,7 @@ use td_services::auth::session::Sessions;
 use td_services::collections::service::CollectionServices;
 use td_services::execution::services::ExecutionServices;
 use td_services::function::services::FunctionServices;
+use td_services::inter_coll_permission::services::InterCollectionPermissionServices;
 use td_services::permission::services::PermissionServices;
 use td_services::role::services::RoleServices;
 use td_services::user_role::services::UserRoleServices;
@@ -94,6 +97,7 @@ pub mod state {
     pub type Execution = Arc<ExecutionServices>;
     pub type Functions = Arc<FunctionServices>;
     pub type Permissions = Arc<PermissionServices>;
+    pub type InterCollectionPermissions = Arc<InterCollectionPermissionServices>;
     pub type Roles = Arc<RoleServices>;
     pub type Status = Arc<StatusLogic>;
     pub type Users = Arc<UserServices>;
@@ -183,6 +187,13 @@ impl ApiServerInstance {
         ))
     }
 
+    fn inter_collection_permissions_state(&self) -> state::InterCollectionPermissions {
+        Arc::new(InterCollectionPermissionServices::new(
+            self.db.clone(),
+            self.authz_context.clone(),
+        ))
+    }
+
     fn user_roles_state(&self) -> state::UserRoles {
         Arc::new(UserRoleServices::new(
             self.db.clone(),
@@ -222,6 +233,7 @@ impl ApiServerInstance {
                     server_status => { state ( self.status_state() ) },
                     roles => { state ( self.roles_state() ) },
                     permissions => { state ( self.permissions_state() ) },
+                    inter_collection_permissions => { state ( self.inter_collection_permissions_state() ) },
                     user_roles => { state ( self.user_roles_state() ) },
                     users => { state ( self.users_state() ) },
                     collections => { state ( self.collection_state() ) },

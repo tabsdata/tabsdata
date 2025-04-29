@@ -8,6 +8,7 @@ pub mod auth;
 pub mod collections;
 pub mod execution;
 pub mod function;
+pub mod inter_coll_permission;
 pub mod permission;
 pub mod role;
 pub mod table;

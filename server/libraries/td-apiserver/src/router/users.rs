@@ -31,7 +31,7 @@ use utoipa::IntoParams;
 pub const USERS: &str = "/users";
 pub const USER: &str = "/users/{user}";
 
-apiserver_tag!(name = "User", description = "Users API");
+apiserver_tag!(name = "Users", description = "Users API");
 
 router! {
     state => { Users },
@@ -48,7 +48,7 @@ pub struct UserUriParams {
 list_status!(UserRead);
 
 const LIST_USERS: &str = USERS;
-#[apiserver_path(method = get, path = LIST_USERS, tag = USER_TAG)]
+#[apiserver_path(method = get, path = LIST_USERS, tag = USERS_TAG)]
 #[doc = "Lists users"]
 async fn list_users(
     State(users_state): State<Users>,
@@ -63,7 +63,7 @@ async fn list_users(
 get_status!(UserRead);
 
 const GET_USER: &str = USER;
-#[apiserver_path(method = get, path = GET_USER, tag = USER_TAG)]
+#[apiserver_path(method = get, path = GET_USER, tag = USERS_TAG)]
 #[doc = "Get a user"]
 pub async fn get_user(
     State(users_state): State<Users>,
@@ -78,7 +78,7 @@ pub async fn get_user(
 create_status!(UserRead);
 
 const CREATE_USER: &str = USERS;
-#[apiserver_path(method = post, path = CREATE_USER, tag = USER_TAG)]
+#[apiserver_path(method = post, path = CREATE_USER, tag = USERS_TAG)]
 #[doc = "Create a user"]
 pub async fn create_user(
     State(users_state): State<Users>,
@@ -93,7 +93,7 @@ pub async fn create_user(
 update_status!(UserRead);
 
 const UPDATE_USER: &str = USER;
-#[apiserver_path(method = post, path = UPDATE_USER, tag = USER_TAG)]
+#[apiserver_path(method = post, path = UPDATE_USER, tag = USERS_TAG)]
 #[doc = "Update a user"]
 pub async fn update_user(
     State(users_state): State<Users>,
@@ -107,7 +107,7 @@ pub async fn update_user(
 }
 
 const DELETE_USER: &str = USER;
-#[apiserver_path(method = delete, path = DELETE_USER, tag = USER_TAG)]
+#[apiserver_path(method = delete, path = DELETE_USER, tag = USERS_TAG)]
 #[doc = "Delete a user"]
 pub async fn delete_user(
     State(users_state): State<Users>,

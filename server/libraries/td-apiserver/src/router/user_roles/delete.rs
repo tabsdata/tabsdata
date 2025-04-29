@@ -3,7 +3,7 @@
 //
 
 use crate::router;
-use crate::router::roles::ROLES_TAG;
+use crate::router::roles::AUTHZ_TAG;
 use crate::router::state::UserRoles;
 use crate::status::error_status::GetErrorStatus;
 use crate::status::DeleteStatus;
@@ -19,7 +19,7 @@ router! {
     routes => { delete_user_role }
 }
 
-#[apiserver_path(method = delete, path = DELETE_USER_ROLE, tag = ROLES_TAG)]
+#[apiserver_path(method = delete, path = DELETE_USER_ROLE, tag = AUTHZ_TAG)]
 #[doc = "Delete a user from a role"]
 pub async fn delete_user_role(
     State(state): State<UserRoles>,

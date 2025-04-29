@@ -34,7 +34,7 @@ use td_objects::rest_urls::{
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
-apiserver_tag!(name = "Collection", description = "Collections API");
+apiserver_tag!(name = "Collections", description = "Collections API");
 
 router! {
     state => { Collections },
@@ -43,7 +43,7 @@ router! {
 
 list_status!(CollectionList);
 
-#[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTION_TAG)]
+#[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTIONS_TAG)]
 #[doc = "Lists collections"]
 pub async fn list_collections(
     State(collection_state): State<Collections>,
@@ -61,7 +61,7 @@ pub async fn list_collections(
 
 get_status!(CollectionRead);
 
-#[apiserver_path(method = get, path = GET_COLLECTION, tag = COLLECTION_TAG)]
+#[apiserver_path(method = get, path = GET_COLLECTION, tag = COLLECTIONS_TAG)]
 #[doc = "Get a collection"]
 pub async fn get_collection(
     State(collection_state): State<Collections>,
@@ -79,7 +79,7 @@ pub async fn get_collection(
 
 create_status!(CollectionRead);
 
-#[apiserver_path(method = post, path = CREATE_COLLECTION, tag = COLLECTION_TAG)]
+#[apiserver_path(method = post, path = CREATE_COLLECTION, tag = COLLECTIONS_TAG)]
 #[doc = "Create a collection"]
 pub async fn create_collection(
     State(collection_state): State<Collections>,
@@ -97,7 +97,7 @@ pub async fn create_collection(
 
 update_status!(CollectionRead);
 
-#[apiserver_path(method = post, path = UPDATE_COLLECTION, tag = COLLECTION_TAG)]
+#[apiserver_path(method = post, path = UPDATE_COLLECTION, tag = COLLECTIONS_TAG)]
 #[doc = "Update a collection"]
 pub async fn update_collection(
     State(collection_state): State<Collections>,
@@ -114,7 +114,7 @@ pub async fn update_collection(
     Ok(UpdateStatus::OK(response.into()))
 }
 
-#[apiserver_path(method = delete, path = DELETE_COLLECTION, tag = COLLECTION_TAG)]
+#[apiserver_path(method = delete, path = DELETE_COLLECTION, tag = COLLECTIONS_TAG)]
 #[doc = "Delete a collection"]
 pub async fn delete_collection(
     State(collections_state): State<Collections>,

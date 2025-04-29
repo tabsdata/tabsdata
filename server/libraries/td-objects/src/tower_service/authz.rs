@@ -118,7 +118,7 @@
 //! ```
 
 use crate::crudl::RequestContext;
-use crate::types::basic::{CollectionId, RoleId, UserId};
+use crate::types::basic::{CollectionId, RoleId, ToCollectionId, UserId};
 use async_trait::async_trait;
 use sqlx::SqliteConnection;
 use std::any::type_name;
@@ -182,6 +182,13 @@ pub trait AuthzContextT {
         };
         Ok(perms)
     }
+
+    /// Return the collections that can access public tables in the the given collection.
+    async fn inter_collection_access(
+        &self,
+        conn: &mut SqliteConnection,
+        collection_id: &CollectionId,
+    ) -> Result<Option<Arc<Vec<ToCollectionId>>>, TdError>;
 
     async fn refresh(&self, _conn: &mut SqliteConnection) -> Result<(), TdError> {
         Ok(())
@@ -735,7 +742,7 @@ mod test {
         AuthzContextT, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,
         CollExec, CollRead, CollReadAll, NoPermissions, Permission, Requester, SecAdmin, SysAdmin,
     };
-    use crate::types::basic::{AccessTokenId, CollectionId, RoleId, UserId};
+    use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
     use async_trait::async_trait;
     use sqlx::SqliteConnection;
     use std::collections::HashMap;
@@ -840,10 +847,11 @@ mod test {
     #[derive(Debug)]
     struct AuthzContextForTest {
         role_permissions_map: HashMap<RoleId, Arc<Vec<Permission>>>,
+        inter_collection_permission_map: HashMap<CollectionId, Arc<Vec<ToCollectionId>>>,
     }
 
     impl AuthzContextForTest {
-        pub fn add(
+        pub fn add_permissions(
             mut self,
             role: impl Into<RoleId>,
             permissions: impl Into<Vec<Permission>>,
@@ -853,7 +861,7 @@ mod test {
             self
         }
 
-        pub fn remove(mut self, role: &RoleId) -> Self {
+        pub fn remove_permissions(mut self, role: &RoleId) -> Self {
             self.role_permissions_map.remove(role);
             self
         }
@@ -861,8 +869,9 @@ mod test {
         pub fn default() -> Self {
             Self {
                 role_permissions_map: HashMap::new(),
+                inter_collection_permission_map: HashMap::new(),
             }
-            .add(
+            .add_permissions(
                 RoleId::sys_admin(),
                 [
                     Permission::SysAdmin,
@@ -874,14 +883,14 @@ mod test {
                     Permission::CollectionReadAll(AuthzEntity::All),
                 ],
             )
-            .add(
+            .add_permissions(
                 RoleId::sec_admin(),
                 [
                     Permission::SecAdmin,
                     Permission::CollectionAdmin(AuthzEntity::All),
                 ],
             )
-            .add(
+            .add_permissions(
                 RoleId::user(),
                 [
                     Permission::CollectionDev(AuthzEntity::All),
@@ -901,6 +910,17 @@ mod test {
             role: &RoleId,
         ) -> Result<Option<Arc<Vec<Permission>>>, TdError> {
             Ok(self.role_permissions_map.get(role).map(Arc::clone))
+        }
+
+        async fn inter_collection_access(
+            &self,
+            _conn: &mut SqliteConnection,
+            collection_id: &CollectionId,
+        ) -> Result<Option<Arc<Vec<ToCollectionId>>>, TdError> {
+            Ok(self
+                .inter_collection_permission_map
+                .get(collection_id)
+                .map(Arc::clone))
         }
     }
 
@@ -1302,12 +1322,12 @@ mod test {
         let one_collection = RoleId::default();
 
         let authz_context = AuthzContextForTest::default()
-            .remove(&RoleId::user())
-            .add(
+            .remove_permissions(&RoleId::user())
+            .add_permissions(
                 all_collections,
                 [Permission::CollectionRead(AuthzEntity::All)],
             )
-            .add(
+            .add_permissions(
                 one_collection,
                 [Permission::CollectionRead(AuthzEntity::On(collection0))],
             );
@@ -1369,8 +1389,8 @@ mod test {
         let role = RoleId::default();
 
         let authz_context = AuthzContextForTest::default()
-            .remove(&RoleId::user())
-            .add(role, [Permission::CollectionRead(AuthzEntity::All)]);
+            .remove_permissions(&RoleId::user())
+            .add_permissions(role, [Permission::CollectionRead(AuthzEntity::All)]);
         let authz_context = Arc::new(authz_context);
 
         // positive
@@ -1533,7 +1553,7 @@ mod test {
         let collection = CollectionId::default();
         let role = RoleId::default();
 
-        let authz_context = AuthzContextForTest::default().add(
+        let authz_context = AuthzContextForTest::default().add_permissions(
             role,
             [
                 Permission::SecAdmin,
@@ -1561,7 +1581,7 @@ mod test {
     #[tokio::test]
     async fn test_collection_system_permission_on_system_scope() {
         let role = RoleId::default();
-        let authz_context = AuthzContextForTest::default().add(
+        let authz_context = AuthzContextForTest::default().add_permissions(
             role,
             [
                 Permission::SecAdmin,
@@ -1590,7 +1610,7 @@ mod test {
     #[tokio::test]
     async fn test_collection_all_in_scope_error() {
         let role = RoleId::default();
-        let authz_context = AuthzContextForTest::default().add(
+        let authz_context = AuthzContextForTest::default().add_permissions(
             role,
             [
                 Permission::SecAdmin,
@@ -1621,7 +1641,7 @@ mod test {
         let user = UserId::default();
         let role = RoleId::default();
 
-        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = AuthzContextForTest::default().add_permissions(role, []);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
@@ -1647,7 +1667,7 @@ mod test {
         let user = UserId::default();
         let role = RoleId::default();
 
-        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = AuthzContextForTest::default().add_permissions(role, []);
         let authz_context = Arc::new(authz_context);
 
         // different user
@@ -1669,8 +1689,8 @@ mod test {
         )
         .await;
 
-        let authz_context =
-            AuthzContextForTest::default().add(role, [Permission::SecAdmin, Permission::SysAdmin]);
+        let authz_context = AuthzContextForTest::default()
+            .add_permissions(role, [Permission::SecAdmin, Permission::SysAdmin]);
         let authz_context = Arc::new(authz_context);
 
         // different user
@@ -1698,7 +1718,7 @@ mod test {
         let user = UserId::default();
         let role = RoleId::default();
 
-        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = AuthzContextForTest::default().add_permissions(role, []);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
@@ -1724,7 +1744,7 @@ mod test {
         let user = UserId::default();
         let role = RoleId::default();
 
-        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = AuthzContextForTest::default().add_permissions(role, []);
         let authz_context = Arc::new(authz_context);
 
         // different user
@@ -1746,8 +1766,8 @@ mod test {
         )
         .await;
 
-        let authz_context =
-            AuthzContextForTest::default().add(role, [Permission::SecAdmin, Permission::SysAdmin]);
+        let authz_context = AuthzContextForTest::default()
+            .add_permissions(role, [Permission::SecAdmin, Permission::SysAdmin]);
         let authz_context = Arc::new(authz_context);
 
         // different user
@@ -1777,7 +1797,8 @@ mod test {
 
         // by role permission only
 
-        let authz_context = AuthzContextForTest::default().add(role, [Permission::SecAdmin]);
+        let authz_context =
+            AuthzContextForTest::default().add_permissions(role, [Permission::SecAdmin]);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
@@ -1799,7 +1820,7 @@ mod test {
 
         // by requester only
 
-        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = AuthzContextForTest::default().add_permissions(role, []);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
@@ -1827,7 +1848,8 @@ mod test {
 
         // by role permission only
 
-        let authz_context = AuthzContextForTest::default().add(role, [Permission::SecAdmin]);
+        let authz_context =
+            AuthzContextForTest::default().add_permissions(role, [Permission::SecAdmin]);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
@@ -1850,7 +1872,7 @@ mod test {
 
         // by requester only
 
-        let authz_context = AuthzContextForTest::default().add(role, []);
+        let authz_context = AuthzContextForTest::default().add_permissions(role, []);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
@@ -1880,8 +1902,8 @@ mod test {
         // by role permission only
 
         let authz_context = AuthzContextForTest::default()
-            .add(role0, [Permission::SysAdmin])
-            .add(role1, []);
+            .add_permissions(role0, [Permission::SysAdmin])
+            .add_permissions(role1, []);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
@@ -1931,8 +1953,8 @@ mod test {
         // by role permission only
 
         let authz_context = AuthzContextForTest::default()
-            .add(role0, [Permission::SecAdmin])
-            .add(role1, []);
+            .add_permissions(role0, [Permission::SecAdmin])
+            .add_permissions(role1, []);
         let authz_context = Arc::new(authz_context);
 
         let request_context = Arc::new(RequestContext::with(
@@ -1989,7 +2011,7 @@ mod test {
             Permission::CollectionDev(AuthzEntity::On(CollectionId::default()));
         let perm_on_all = Permission::CollectionDev(AuthzEntity::All);
 
-        let authz_context = AuthzContextForTest::default().add(
+        let authz_context = AuthzContextForTest::default().add_permissions(
             role,
             [
                 sys_perm.clone(),
@@ -2013,7 +2035,7 @@ mod test {
         let collection = CollectionId::default();
         let role = RoleId::default();
 
-        let authz_context = AuthzContextForTest::default().add(
+        let authz_context = AuthzContextForTest::default().add_permissions(
             role,
             [Permission::CollectionAdmin(AuthzEntity::On(collection))],
         );
@@ -2034,7 +2056,7 @@ mod test {
         )
         .await;
 
-        let authz_context = AuthzContextForTest::default().add(
+        let authz_context = AuthzContextForTest::default().add_permissions(
             role,
             [Permission::CollectionDev(AuthzEntity::On(collection))],
         );

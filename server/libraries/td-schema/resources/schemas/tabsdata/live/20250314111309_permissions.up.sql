@@ -7,14 +7,14 @@ CREATE TABLE permissions
     id              TEXT PRIMARY KEY,
     role_id         TEXT      NOT NULL,
     permission_type TEXT      NOT NULL, -- (sa) sys-admin
-                                        -- (ss) sec-admin
-                                        -- (ca) collection-admin
-                                        -- (cd) collection-developer
-                                        -- (cx) collection-execution
-                                        -- (cr) collection-read
-                                        -- (cR) collection-read-all
+    -- (ss) sec-admin
+    -- (ca) collection-admin
+    -- (cd) collection-developer
+    -- (cx) collection-execution
+    -- (cr) collection-read
+    -- (cR) collection-read-all
     entity_type     TEXT      NOT NULL, -- (S)ystem
-                                        -- (C)ollection
+    -- (C)ollection
     entity_id       TEXT      NULL,     -- NULL means ALL
     granted_by_id   TEXT      NOT NULL,
     granted_on      TIMESTAMP NOT NULL,
@@ -209,3 +209,29 @@ FROM permissions p
          LEFT JOIN users u ON p.granted_by_id = u.id
          LEFT JOIN roles r ON p.role_id = r.id
          LEFT JOIN collections c ON p.entity_id = c.id;
+
+
+CREATE TABLE inter_collection_permissions
+(
+    id                 TEXT PRIMARY KEY,
+    from_collection_id TEXT NOT NULL,
+    to_collection_id   TEXT NOT NULL,
+    granted_on        TIMESTAMP NOT NULL,
+    granted_by_id     TEXT NOT NULL,
+
+    FOREIGN KEY (from_collection_id) REFERENCES collections (id),
+    FOREIGN KEY (to_collection_id) REFERENCES collections (id)
+);
+CREATE UNIQUE INDEX inter_collection_permissions___from_collection_id__to_collection_id__idx
+    ON inter_collection_permissions (from_collection_id, to_collection_id);
+
+CREATE VIEW inter_collection_permissions__with_names AS
+SELECT p.*,
+       -- If the user is deleted, we show the internal id
+       IFNULL(u.name, '[' || p.granted_by_id || ']') as granted_by,
+       c1.name                                       as from_collection,
+       c2.name                                       as to_collection
+FROM inter_collection_permissions p
+         LEFT JOIN users u ON p.granted_by_id = u.id
+         LEFT JOIN collections c1 ON p.from_collection_id = c1.id
+         LEFT JOIN collections c2 ON p.to_collection_id = c2.id;

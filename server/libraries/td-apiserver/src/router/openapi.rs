@@ -125,13 +125,13 @@ mod tests {
         let tags = json["tags"].as_array().unwrap();
         assert!(tags.iter().any(|tag| tag["name"] == "Auth"));
         assert!(tags.iter().any(|tag| tag["name"] == "Internal"));
-        assert!(tags.iter().any(|tag| tag["name"] == "Collection"));
+        assert!(tags.iter().any(|tag| tag["name"] == "Collections"));
         assert!(tags.iter().any(|tag| tag["name"] == "Execution"));
         assert!(tags.iter().any(|tag| tag["name"] == "Functions"));
-        assert!(tags.iter().any(|tag| tag["name"] == "Roles"));
+        assert!(tags.iter().any(|tag| tag["name"] == "Authz"));
         assert!(tags.iter().any(|tag| tag["name"] == "Status"));
         assert!(tags.iter().any(|tag| tag["name"] == "Authentication"));
-        assert!(tags.iter().any(|tag| tag["name"] == "User"));
+        assert!(tags.iter().any(|tag| tag["name"] == "Users"));
     }
 
     #[ignore]

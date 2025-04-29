@@ -7,7 +7,8 @@ use crate::dlo::{
 };
 use crate::types::basic::{
     CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId, FunctionVersionIdName,
-    PermissionIdName, RoleIdName, TableIdName, TransactionIdName, UserIdName,
+    InterCollectionPermissionIdName, PermissionIdName, RoleIdName, TableIdName, TransactionIdName,
+    UserIdName,
 };
 use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
 use constcat::concat;
@@ -577,6 +578,21 @@ pub const GET_COLLECTION: &str = url!(COLLECTION);
 pub const CREATE_COLLECTION: &str = url!(COLLECTIONS);
 pub const UPDATE_COLLECTION: &str = url!(COLLECTION);
 pub const DELETE_COLLECTION: &str = url!(COLLECTION);
+
+#[td_type::UrlParam]
+pub struct InterCollectionPermissionParam {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    permission: InterCollectionPermissionIdName,
+}
+
+pub const INTER_COLLECTION_PERMISSIONS: &str = url!(COLLECTION, "/inter-collection-permissions");
+pub const INTER_COLLECTION_PERMISSION: &str = url!(INTER_COLLECTION_PERMISSIONS, "/{permission}");
+
+pub const LIST_INTER_COLLECTION_PERMISSIONS: &str = url!(INTER_COLLECTION_PERMISSIONS);
+pub const CREATE_INTER_COLLECTION_PERMISSION: &str = url!(INTER_COLLECTION_PERMISSIONS);
+pub const DELETE_INTER_COLLECTION_PERMISSION: &str = url!(INTER_COLLECTION_PERMISSION);
 
 // Functions
 pub const FUNCTIONS: &str = url!(COLLECTION, "/functions");

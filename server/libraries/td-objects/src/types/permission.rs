@@ -4,8 +4,9 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, EntityId, EntityName, FixedRole, PermissionEntityType, PermissionId, PermissionType,
-    RoleId, RoleName, UserId, UserName,
+    AtTime, CollectionId, CollectionName, EntityId, EntityName, FixedRole,
+    InterCollectionPermissionId, PermissionEntityType, PermissionId, PermissionType, RoleId,
+    RoleName, ToCollectionId, ToCollectionName, UserId, UserName,
 };
 use crate::types::role::RoleDB;
 
@@ -71,4 +72,51 @@ pub struct Permission {
     granted_by: UserName,
     role: RoleName,
     entity: Option<EntityName>,
+}
+
+#[td_type::Dto]
+pub struct InterCollectionPermissionCreate {
+    #[td_type(extractor)]
+    to_collection: ToCollectionName,
+}
+
+#[td_type::Dao(sql_table = "inter_collection_permissions")]
+#[td_type(updater(try_from = RequestContext, skip_all))]
+pub struct InterCollectionPermissionDB {
+    #[td_type(extractor)]
+    #[builder(default)]
+    id: InterCollectionPermissionId,
+    #[td_type(setter)]
+    from_collection_id: CollectionId,
+    #[td_type(setter)]
+    to_collection_id: ToCollectionId,
+    #[td_type(updater(try_from = RequestContext, field = "user_id"))]
+    granted_by_id: UserId,
+    #[td_type(updater(try_from = RequestContext, field = "time"))]
+    granted_on: AtTime,
+}
+
+#[td_type::Dao(sql_table = "inter_collection_permissions__with_names")]
+pub struct InterCollectionPermissionDBWithNames {
+    #[td_type(extractor)]
+    id: InterCollectionPermissionId,
+    #[td_type(extractor)]
+    from_collection_id: CollectionId,
+    from_collection: CollectionName,
+    to_collection_id: ToCollectionId,
+    to_collection: CollectionName,
+    granted_by_id: UserId,
+    granted_by: UserName,
+    granted_on: AtTime,
+}
+
+#[td_type::Dto]
+#[td_type(builder(try_from = InterCollectionPermissionDBWithNames))]
+pub struct InterCollectionPermission {
+    id: InterCollectionPermissionId,
+    to_collection_id: ToCollectionId,
+    to_collection: CollectionName,
+    granted_by_id: UserId,
+    granted_by: UserName,
+    granted_on: AtTime,
 }

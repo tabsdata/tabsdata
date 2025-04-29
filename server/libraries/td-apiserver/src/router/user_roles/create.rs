@@ -3,7 +3,7 @@
 //
 
 use crate::router;
-use crate::router::roles::ROLES_TAG;
+use crate::router::roles::AUTHZ_TAG;
 use crate::router::state::UserRoles;
 use crate::status::error_status::CreateErrorStatus;
 use crate::status::extractors::Json;
@@ -26,7 +26,7 @@ router! {
 
 create_status!(UserRole);
 
-#[apiserver_path(method = post, path = CREATE_USER_ROLE, tag = ROLES_TAG)]
+#[apiserver_path(method = post, path = CREATE_USER_ROLE, tag = AUTHZ_TAG)]
 #[doc = "Add a role for a user"]
 pub async fn create_user_role(
     State(state): State<UserRoles>,

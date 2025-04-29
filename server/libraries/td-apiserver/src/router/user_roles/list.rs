@@ -3,7 +3,7 @@
 //
 
 use crate::router;
-use crate::router::roles::ROLES_TAG;
+use crate::router::roles::AUTHZ_TAG;
 use crate::router::state::UserRoles;
 use crate::status::error_status::GetErrorStatus;
 use axum::extract::{Path, Query, State};
@@ -27,7 +27,7 @@ router! {
 
 list_status!(UserRole);
 
-#[apiserver_path(method = get, path = LIST_USER_ROLES, tag = ROLES_TAG)]
+#[apiserver_path(method = get, path = LIST_USER_ROLES, tag = AUTHZ_TAG)]
 #[doc = "List users for a role"]
 pub async fn list_user_role(
     State(state): State<UserRoles>,

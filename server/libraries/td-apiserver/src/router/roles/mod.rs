@@ -12,7 +12,7 @@ use crate::router::state::Roles;
 use crate::routers;
 use td_apiforge::apiserver_tag;
 
-apiserver_tag!(name = "Roles", description = "Roles API");
+apiserver_tag!(name = "Authz", description = "Authorization API");
 
 routers! {
     state => { Roles },

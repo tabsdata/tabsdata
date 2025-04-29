@@ -3,7 +3,7 @@
 //
 
 use crate::router;
-use crate::router::roles::ROLES_TAG;
+use crate::router::roles::AUTHZ_TAG;
 use crate::router::state::Roles;
 use crate::status::error_status::GetErrorStatus;
 use axum::extract::{Path, State};
@@ -25,7 +25,7 @@ router! {
 
 get_status!(Role);
 
-#[apiserver_path(method = get, path = GET_ROLE, tag = ROLES_TAG)]
+#[apiserver_path(method = get, path = GET_ROLE, tag = AUTHZ_TAG)]
 #[doc = "Read a role"]
 pub async fn read_role(
     State(state): State<Roles>,

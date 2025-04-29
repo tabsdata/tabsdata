@@ -32,13 +32,13 @@ pub struct BundleHash;
 #[td_type::typed(id)]
 pub struct BundleId;
 
-#[td_type::typed(id, try_from = EntityId)]
+#[td_type::typed(id, try_from = EntityId, try_from = FromCollectionId, try_from = ToCollectionId)]
 pub struct CollectionId;
 
 #[td_type::typed(id_name(id = CollectionId, name = CollectionName))]
 pub struct CollectionIdName;
 
-#[td_type::typed(string(parser = parse_collection))]
+#[td_type::typed(string(parser = parse_collection), try_from = ToCollectionName)]
 pub struct CollectionName;
 
 #[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
@@ -111,6 +111,9 @@ pub struct Fixed;
 #[td_type::typed(bool)]
 pub struct FixedRole;
 
+#[td_type::typed(id, try_from = CollectionId)]
+pub struct FromCollectionId;
+
 #[td_type::typed(bool(default = false))]
 pub struct Frozen;
 
@@ -155,6 +158,12 @@ pub enum GrantType {
 
 #[td_type::typed(bool(default = false))]
 pub struct HasData;
+
+#[td_type::typed(id)]
+pub struct InterCollectionPermissionId;
+
+#[td_type::typed(id_name(id = InterCollectionPermissionId))]
+pub struct InterCollectionPermissionIdName;
 
 const MIN_PASSWORD_LEN: usize = 8;
 const MAX_PASSWORD_LEN: usize = 64;
@@ -373,6 +382,12 @@ pub struct TableVersionId;
 
 #[td_type::typed(composed(inner = Versions))]
 pub struct TableVersions;
+
+#[td_type::typed(id, try_from = CollectionId)]
+pub struct ToCollectionId;
+
+#[td_type::typed(string(parser = parse_collection))]
+pub struct ToCollectionName;
 
 #[td_type::typed(string)]
 pub struct TokenType;

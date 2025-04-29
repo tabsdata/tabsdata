@@ -3,7 +3,7 @@
 //
 
 use crate::router;
-use crate::router::roles::ROLES_TAG;
+use crate::router::roles::AUTHZ_TAG;
 use crate::router::state::Roles;
 use crate::status::error_status::CreateErrorStatus;
 use crate::status::extractors::Json;
@@ -26,7 +26,7 @@ router! {
 
 update_status!(Role);
 
-#[apiserver_path(method = post, path = UPDATE_ROLE, tag = ROLES_TAG)]
+#[apiserver_path(method = post, path = UPDATE_ROLE, tag = AUTHZ_TAG)]
 #[doc = "Update a role"]
 pub async fn update_role(
     State(state): State<Roles>,

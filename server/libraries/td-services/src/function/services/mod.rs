@@ -91,7 +91,7 @@ pub(crate) mod tests {
     use td_objects::crudl::handle_sql_err;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::types::basic::{
-        Decorator, DependencyStatus, Frozen, FunctionStatus, TableStatus, TriggerStatus, UserId,
+        DependencyStatus, Frozen, FunctionStatus, TableStatus, TriggerStatus, UserId,
     };
     use td_objects::types::collection::CollectionDB;
     use td_objects::types::dependency::{DependencyDBWithNames, DependencyVersionDBWithNames};
