@@ -44,6 +44,16 @@ pub struct CollectionName;
 #[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
 pub struct DataLocation;
 
+#[td_type::typed_enum]
+pub enum Decorator {
+    #[strum(to_string = "P")]
+    Publisher,
+    #[strum(to_string = "T")]
+    Transformer,
+    #[strum(to_string = "S")]
+    Subscriber,
+}
+
 #[td_type::typed(id)]
 pub struct DependencyId;
 

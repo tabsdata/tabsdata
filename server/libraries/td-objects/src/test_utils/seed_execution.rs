@@ -44,9 +44,7 @@ mod tests {
     use super::*;
     use crate::test_utils::seed_collection2::seed_collection;
     use crate::test_utils::seed_function2::seed_function;
-    use crate::types::basic::BundleId;
-    use crate::types::basic::CollectionName;
-    use crate::types::basic::UserId;
+    use crate::types::basic::{BundleId, CollectionName, Decorator, UserId};
     use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;
@@ -72,6 +70,7 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")
             .unwrap()
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies)
             .triggers(triggers)
             .tables(tables)

@@ -91,7 +91,7 @@ pub(crate) mod tests {
     use td_objects::crudl::handle_sql_err;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::types::basic::{
-        DependencyStatus, Frozen, FunctionStatus, TableStatus, TriggerStatus, UserId,
+        Decorator, DependencyStatus, Frozen, FunctionStatus, TableStatus, TriggerStatus, UserId,
     };
     use td_objects::types::collection::CollectionDB;
     use td_objects::types::dependency::{DependencyDBWithNames, DependencyVersionDBWithNames};
@@ -118,6 +118,7 @@ pub(crate) mod tests {
         assert_eq!(response.name(), create.name());
         assert_eq!(response.description(), create.description());
         assert_eq!(*response.status(), FunctionStatus::Active);
+        assert_eq!(response.decorator(), create.decorator());
         assert_eq!(response.bundle_id(), create.bundle_id());
         assert_eq!(response.snippet(), create.snippet());
         assert_eq!(response.defined_by_id(), user_id);
@@ -137,6 +138,7 @@ pub(crate) mod tests {
         assert_eq!(response.function_id(), function.id());
         assert_eq!(response.collection_id(), function.collection_id());
         assert_eq!(response.name(), function.name());
+        assert_eq!(response.decorator(), function.decorator());
         assert_eq!(response.id(), function.function_version_id());
         assert_eq!(Frozen::from(false), *function.frozen());
         assert_eq!(response.defined_on(), function.created_on());
@@ -157,6 +159,7 @@ pub(crate) mod tests {
         assert_eq!(function_version.function_id(), function.id());
         assert_eq!(function_version.bundle_id(), create.bundle_id());
         assert_eq!(function_version.snippet(), create.snippet());
+        assert_eq!(function_version.decorator(), create.decorator());
         assert_eq!(function_version.defined_on(), function.created_on());
         assert_eq!(function_version.defined_by_id(), function.created_by_id());
         assert_eq!(*function_version.status(), FunctionStatus::Active);

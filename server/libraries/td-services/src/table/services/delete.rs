@@ -110,7 +110,8 @@ mod tests {
     use td_objects::test_utils::seed_function2::seed_function;
     use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, FunctionRuntimeValues, RoleId, TableDependency, TableName, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependency,
+        TableName, UserId,
     };
     use td_objects::types::function::{FunctionRegister, FunctionUpdate};
     use td_tower::ctx_service::RawOneshot;
@@ -177,6 +178,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
@@ -195,6 +197,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("keep_this_one")?]))
@@ -258,6 +261,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
@@ -276,6 +280,7 @@ mod tests {
             .try_description("joaquin_dependant_function description")?
             .bundle_id(BundleId::default())
             .try_snippet("joaquin_dependant_function snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(Some(vec![TableDependency::try_from("super_table")?]))
             .triggers(None)
             .tables(None)
@@ -291,6 +296,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("keep_this_one")?]))

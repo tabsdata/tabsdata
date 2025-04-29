@@ -319,7 +319,7 @@ mod tests {
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction2::seed_transaction;
     use td_objects::types::basic::{
-        BundleId, CollectionName, TableDataVersionId, TableName, TransactionKey, UserId,
+        BundleId, CollectionName, Decorator, TableDataVersionId, TableName, TransactionKey, UserId,
     };
     use td_objects::types::execution::FunctionRunStatus;
     use td_objects::types::function::FunctionRegister;
@@ -351,6 +351,7 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")
             .unwrap()
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies)
             .triggers(triggers)
             .tables(Some(created_tables))

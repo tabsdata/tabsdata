@@ -274,8 +274,7 @@ mod tests {
     use super::*;
     use crate::sql::SelectBy;
     use crate::test_utils::seed_collection2::seed_collection;
-    use crate::types::basic::UserId;
-    use crate::types::basic::{BundleId, CollectionName};
+    use crate::types::basic::{BundleId, CollectionName, Decorator, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(sqlx)]
@@ -299,6 +298,7 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")
             .unwrap()
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies)
             .triggers(triggers)
             .tables(tables)

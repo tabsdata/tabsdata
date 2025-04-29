@@ -154,7 +154,7 @@ mod tests {
     use td_objects::test_utils::seed_function2::seed_function;
     use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Frozen, FunctionRuntimeValues, RoleId, UserId,
+        AccessTokenId, BundleId, Decorator, Frozen, FunctionRuntimeValues, RoleId, UserId,
     };
     use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
@@ -295,6 +295,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -310,6 +311,7 @@ mod tests {
             .try_description("foo_updated description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("foo_updated snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -361,6 +363,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -376,6 +379,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -425,6 +429,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -440,6 +445,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -489,6 +495,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -504,6 +511,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -553,6 +561,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -568,6 +577,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(Some(vec![TableDependency::try_from("new_table")?]))
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -617,6 +627,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(Some(vec![TableDependency::try_from("new_table")?]))
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -632,6 +643,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -681,6 +693,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(Some(vec![TableDependency::try_from("new_table")?]))
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -696,6 +709,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(Some(vec![TableDependency::try_from("new_table")?]))
             .triggers(None)
             .tables(Some(vec![TableName::try_from("new_table")?]))
@@ -745,6 +759,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("trigger_table")?]))
@@ -760,6 +775,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -775,6 +791,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
             .tables(None)
@@ -824,6 +841,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("trigger_table")?]))
@@ -839,6 +857,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
             .tables(None)
@@ -854,6 +873,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -903,6 +923,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("trigger_table")?]))
@@ -918,6 +939,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
             .tables(None)
@@ -933,6 +955,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
             .tables(None)
@@ -982,6 +1005,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
@@ -1000,6 +1024,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(Some(vec![TableDependency::try_from("trigger_table")?]))
             .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
             .tables(Some(vec![
@@ -1018,6 +1043,7 @@ mod tests {
             .try_description("function_foo description updated")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
+            .decorator(Decorator::Publisher)
             .dependencies(Some(vec![
                 TableDependency::try_from("trigger_table")?,
                 TableDependency::try_from("trigger_table_2")?,
@@ -1074,6 +1100,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("joaquin_table")?]))
@@ -1089,6 +1116,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -1128,6 +1156,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("joaquin_table")?]))
@@ -1166,6 +1195,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableName::try_from("joaquin_table")?]))

@@ -106,8 +106,8 @@ mod tests {
     use td_objects::test_utils::seed_function2::seed_function;
     use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, DataLocation, FunctionRuntimeValues, RoleId,
-        UserId,
+        AccessTokenId, BundleId, CollectionName, DataLocation, Decorator, FunctionRuntimeValues,
+        RoleId, UserId,
     };
     use td_storage::MountDef;
     use td_test::file::mount_uri;
@@ -173,6 +173,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(None)

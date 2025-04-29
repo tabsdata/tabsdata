@@ -73,8 +73,8 @@ mod tests {
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_function2::seed_function;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, ExecutionName, FunctionRuntimeValues, RoleId,
-        TableDependency, TableName, UserId, WorkerMessageId,
+        AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionRuntimeValues,
+        RoleId, TableDependency, TableName, UserId, WorkerMessageId,
     };
     use td_objects::types::execution::{ExecutionRequest, WorkerMessageDB, WorkerMessageStatus};
     use td_objects::types::function::FunctionRegister;
@@ -116,6 +116,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(vec![TableDependency::try_from("table_1")?])
             .triggers(None)
             .tables(vec![

@@ -199,7 +199,7 @@ mod tests {
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, FunctionRuntimeValues, RoleId, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
     };
     use td_tower::ctx_service::RawOneshot;
 
@@ -314,6 +314,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -357,6 +358,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -400,6 +402,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -443,6 +446,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -486,6 +490,7 @@ mod tests {
             .try_description("function_1 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_1 snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -520,6 +525,7 @@ mod tests {
             .try_description("function_2 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -566,6 +572,7 @@ mod tests {
             .try_description("function_1 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_1 snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -609,6 +616,7 @@ mod tests {
             .try_description("function_2 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -657,6 +665,7 @@ mod tests {
             .try_description("function_1 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_1 snippet")?
+            .decorator(Decorator::Subscriber)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -705,6 +714,7 @@ mod tests {
             .try_description("function_2 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())

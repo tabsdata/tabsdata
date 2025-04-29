@@ -91,7 +91,7 @@ mod tests {
     use td_objects::types::basic::{
         BundleId, CollectionName, FunctionRuntimeValues, TableDependency, TableName, UserId,
     };
-    use td_objects::types::basic::{RoleId, TransactionKey};
+    use td_objects::types::basic::{Decorator, RoleId, TransactionKey};
     use td_objects::types::execution::{
         CallbackRequest, ExecutionDBWithStatus, ExecutionStatus, FunctionRunDB, FunctionRunStatus,
         TableDataVersionDBWithStatus, TransactionDBWithStatus, TransactionStatus,
@@ -144,6 +144,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(vec![TableDependency::try_from("table_1")?])
             .triggers(None)
             .tables(vec![
@@ -162,6 +163,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(vec![TableDependency::try_from("table_1")?])
             .triggers(vec![TableTrigger::try_from("table_1")?])
             .tables(vec![
@@ -180,6 +182,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(vec![TableDependency::try_from("table_10")?])
             .triggers(vec![TableTrigger::try_from("table_10")?])
             .tables(vec![

@@ -89,8 +89,8 @@ mod tests {
     use td_objects::test_utils::seed_function2::seed_function;
     use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, FunctionRuntimeValues, RoleId, TableName, UserId,
-        UserName,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
+        TableName, UserId, UserName,
     };
     use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
@@ -190,6 +190,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -265,6 +266,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())

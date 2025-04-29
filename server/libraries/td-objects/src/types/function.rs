@@ -4,10 +4,10 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, BundleHash, BundleId, CollectionId, CollectionName, DataLocation, Description, Frozen,
-    FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId,
-    ReuseFrozen, Snippet, StorageVersion, TableDependency, TableName, TableTrigger, UserId,
-    UserName,
+    AtTime, BundleHash, BundleId, CollectionId, CollectionName, DataLocation, Decorator,
+    Description, Frozen, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
+    FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableDependency, TableName,
+    TableTrigger, UserId, UserName,
 };
 use axum::body::BodyDataStream;
 use axum::extract::Request;
@@ -23,6 +23,8 @@ pub struct FunctionDB {
     collection_id: CollectionId,
     #[td_type(builder(include))]
     name: FunctionName,
+    #[td_type(builder(include))]
+    decorator: Decorator,
     #[td_type(extractor, builder(include, field = "id"))]
     function_version_id: FunctionVersionId,
     #[builder(default)]
@@ -39,6 +41,7 @@ pub struct FunctionDBWithNames {
     id: FunctionId,
     collection_id: CollectionId,
     name: FunctionName,
+    decorator: Decorator,
     #[td_type(extractor)]
     function_version_id: FunctionVersionId,
     frozen: Frozen,
@@ -55,6 +58,7 @@ pub struct Function {
     id: FunctionId,
     collection_id: CollectionId,
     name: FunctionName,
+    decorator: Decorator,
     function_version_id: FunctionVersionId,
     frozen: Frozen,
     created_on: AtTime,
@@ -71,6 +75,7 @@ pub struct FunctionRegister {
     description: Description,
     bundle_id: BundleId,
     snippet: Snippet,
+    decorator: Decorator,
     #[td_type(extractor)]
     dependencies: Option<Vec<TableDependency>>,
     #[td_type(extractor)]
@@ -145,6 +150,8 @@ pub struct FunctionVersionDB {
     #[td_type(builder(include))]
     description: Description,
     #[td_type(builder(include))]
+    decorator: Decorator,
+    #[td_type(builder(include))]
     runtime_values: FunctionRuntimeValues,
     #[builder(default)]
     #[td_type(setter)]
@@ -176,6 +183,7 @@ pub struct FunctionVersionDBWithNames {
     collection_id: CollectionId,
     name: FunctionName,
     description: Description,
+    decorator: Decorator,
     #[td_type(extractor)]
     function_id: FunctionId,
     data_location: DataLocation,
@@ -197,6 +205,7 @@ pub struct FunctionVersion {
     collection_id: CollectionId,
     name: FunctionName,
     description: Description,
+    decorator: Decorator,
     function_id: FunctionId,
     data_location: DataLocation,
     storage_version: StorageVersion,
@@ -231,33 +240,4 @@ pub struct FunctionVersionWithAllVersions {
     current: FunctionVersionWithTables,
     #[td_type(setter)]
     all: Vec<FunctionVersion>,
-}
-
-#[td_type::Dao]
-pub struct FunctionVersionDBWithNamesList {
-    id: FunctionVersionId,
-    collection_id: CollectionId,
-    name: FunctionName,
-    function_id: FunctionId,
-    defined_on: AtTime,
-    defined_by_id: UserId,
-    status: FunctionStatus,
-
-    collection: CollectionName,
-    defined_by: UserName,
-}
-
-#[td_type::Dto]
-#[td_type(builder(try_from = FunctionVersionDBWithNamesList))]
-pub struct FunctionVersionList {
-    id: FunctionVersionId,
-    collection_id: CollectionId,
-    name: FunctionName,
-    function_id: FunctionId,
-    defined_on: AtTime,
-    defined_by_id: UserId,
-    status: FunctionStatus,
-
-    collection: CollectionName,
-    defined_by: UserName,
 }

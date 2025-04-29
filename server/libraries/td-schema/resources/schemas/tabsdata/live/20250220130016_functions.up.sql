@@ -9,6 +9,7 @@ CREATE TABLE functions
     id                  TEXT PRIMARY KEY,
     collection_id       TEXT      NOT NULL,
     name                TEXT      NOT NULL,
+    decorator           TEXT      NOT NULL,
     function_version_id TEXT      NOT NULL,
     frozen              BOOLEAN   NOT NULL,
 
@@ -37,6 +38,7 @@ CREATE TABLE function_versions
     collection_id   TEXT      NOT NULL,
     name            TEXT      NOT NULL,
     description     TEXT      NOT NULL,
+    decorator       TEXT      NOT NULL,
     runtime_values  TEXT      NOT NULL, -- JSON blob with `envs` & `secrets` info used in decorator
     function_id     TEXT      NOT NULL,
     data_location   TEXT      NOT NULL, -- using '~' when deleted

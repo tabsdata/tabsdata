@@ -136,7 +136,7 @@ mod tests {
     use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::RoleId;
     use td_objects::types::basic::{
-        BundleId, CollectionName, ExecutionName, FunctionName, FunctionRuntimeValues,
+        BundleId, CollectionName, Decorator, ExecutionName, FunctionName, FunctionRuntimeValues,
         TableDependency, TableName, TableTrigger, TriggeredOn, UserId,
     };
     use td_objects::types::execution::{
@@ -232,6 +232,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
             .tables(vec![
@@ -249,6 +250,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
+            .decorator(Decorator::Publisher)
             .dependencies(vec![
                 TableDependency::try_from("table_1")?,
                 TableDependency::try_from("table_2")?,
