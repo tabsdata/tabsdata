@@ -24,7 +24,7 @@ pub async fn create_access_token(
         .try_access_token(encode_token(&jwt_settings, &access_token)?)?
         .try_token_type(BEARER)?
         .try_refresh_token(encode_token(&jwt_settings, &refresh_token)?)?
-        .try_expires_in(session.expires_on().timestamp())?
+        .try_expires_in(*jwt_settings.access_token_expiration())?
         .build()?;
     Ok(token)
 }

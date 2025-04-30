@@ -119,6 +119,7 @@ impl LoginService {
 mod tests {
     use crate::auth::services::tests::{assert_session, auth_services};
     use crate::auth::{decode_token, AuthError};
+    use std::ops::Deref;
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
     use td_objects::types::auth::Login;
@@ -208,6 +209,12 @@ mod tests {
         let access_token_id = decode_token(auth_services.jwt_settings(), access_token)?.jti;
 
         assert_session(&db, &Some(access_token_id.into())).await;
+
+        assert_eq!(
+            token_response.expires_in().deref(),
+            auth_services.jwt_settings().access_token_expiration()
+        );
+        assert!(!token_response.refresh_token().is_empty());
         Ok(())
     }
 
