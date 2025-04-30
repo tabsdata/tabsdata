@@ -293,3 +293,21 @@ def test_driver_uri_fails():
     with pytest.raises(InputConfigurationError) as e:
         OracleSource(uri, query)
     assert e.value.error_code == ErrorCode.ICE2
+
+
+def test_wrong_type_initial_values_key_raises_error():
+    uri = "oracle://DATABASE_IP:DATABASE_PORT/testing"
+    query = "select * from INVOICE_HEADER where id > :number"
+    initial_values = {42: "42"}
+    with pytest.raises(InputConfigurationError) as e:
+        OracleSource(uri, query, initial_values=initial_values)
+    assert e.value.error_code == ErrorCode.ICE40
+
+
+def test_wrong_type_initial_values_value_raises_error():
+    uri = "oracle://DATABASE_IP:DATABASE_PORT/testing"
+    query = "select * from INVOICE_HEADER where id > :number"
+    initial_values = {"42": 42}
+    with pytest.raises(InputConfigurationError) as e:
+        OracleSource(uri, query, initial_values=initial_values)
+    assert e.value.error_code == ErrorCode.ICE41

@@ -413,6 +413,20 @@ class ErrorCode(Enum):
             "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }
+    ICE40 = {
+        "code": "ICE-040",
+        "message": (
+            "The 'initial_values' parameter must be a dictionary where all keys are "
+            "of type 'str', got a key of type '{}' instead."
+        ),
+    }
+    ICE41 = {
+        "code": "ICE-041",
+        "message": (
+            "The 'initial_values' parameter must be a dictionary where all values are "
+            "of one of the types in '{}', got a value of type '{}' instead."
+        ),
+    }
     OCE1 = {
         "code": "OCE-001",
         "message": (

@@ -32,36 +32,29 @@ data = [
     "select * from INVOICE_ITEM where id > :number",
 ]
 
-mysql_input = td.MySQLSource(
-    "mysql://wrongip:3306/testing",
-    ["select * from NO_TABLE where id > :number"],
-    credentials=td.UserPasswordCredentials("wronguser", "wrongpassword"),
-    initial_values={"number": "7"},
-)
-
-mysql_input.uri = "mysql://127.0.0.1:3306/testing"
-mysql_input.query = data
-mysql_input.credentials = td.UserPasswordCredentials("@dmIn", "p@ssw0rd#")
-mysql_input.initial_values = {"number": "2"}
-
 
 @td.publisher(
-    name="test_input_sql_modified_params",
-    source=mysql_input,
+    name="test_initial_values_freeze",
+    source=td.MariaDBSource(
+        "mariadb://127.0.0.1:3307/testing",
+        data,
+        credentials=td.UserPasswordCredentials("@dmIn", "p@ssw0rd#"),
+        initial_values={"number": "2"},
+    ),
     tables=["output1", "output2"],  # required,
 )
-def input_sql_modified_params(
+def initial_values_freeze(
     headers: td.TableFrame, items: td.TableFrame
 ) -> (td.TableFrame, td.TableFrame, dict):
     # transformations can be done here
-    new_initial_values = {"number": "3"}
+    new_initial_values = {}
     return headers, items, new_initial_values
 
 
 if __name__ == "__main__":
     os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
     create_bundle_archive(
-        input_sql_modified_params,
+        initial_values_freeze,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=DEFAULT_SAVE_LOCATION,
     )

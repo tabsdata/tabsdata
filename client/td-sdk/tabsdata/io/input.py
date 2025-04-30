@@ -40,8 +40,30 @@ from tabsdata.io.constants import (
     SupportedAWSS3Regions,
 )
 from tabsdata.tableuri import build_table_uri_object
+from tabsdata.tabsserver.function.initial_values_utils import (
+    INITIAL_VALUES_VALID_VALUE_TYPES,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_initial_values_type(initial_values: dict):
+    """
+    Validates the initial values provided for the SQL queries.
+
+    Args:
+        initial_values (dict): The initial values for the parameters in the SQL queries.
+
+    Raises:
+        InputConfigurationError: If the initial values are not valid.
+    """
+    for key, value in initial_values.items():
+        if not isinstance(key, str):
+            raise InputConfigurationError(ErrorCode.ICE40, type(key))
+        if not isinstance(value, INITIAL_VALUES_VALID_VALUE_TYPES):
+            raise InputConfigurationError(
+                ErrorCode.ICE41, INITIAL_VALUES_VALID_VALUE_TYPES, type(value)
+            )
 
 
 class InputIdentifiers(Enum):
@@ -632,6 +654,7 @@ class MariaDBSource(Input):
         elif not isinstance(initial_values, dict):
             raise InputConfigurationError(ErrorCode.ICE34, type(initial_values))
         else:
+            _validate_initial_values_type(initial_values)
             self._initial_values = initial_values
 
     @property
@@ -805,6 +828,7 @@ class MySQLSource(Input):
         elif not isinstance(initial_values, dict):
             raise InputConfigurationError(ErrorCode.ICE12, type(initial_values))
         else:
+            _validate_initial_values_type(initial_values)
             self._initial_values = initial_values
 
     @property
@@ -978,6 +1002,7 @@ class OracleSource(Input):
         elif not isinstance(initial_values, dict):
             raise InputConfigurationError(ErrorCode.ICE37, type(initial_values))
         else:
+            _validate_initial_values_type(initial_values)
             self._initial_values = initial_values
 
     @property
@@ -1151,6 +1176,8 @@ class PostgresSource(Input):
         elif not isinstance(initial_values, dict):
             raise InputConfigurationError(ErrorCode.ICE31, type(initial_values))
         else:
+            # Check if the initial values are valid
+            _validate_initial_values_type(initial_values)
             self._initial_values = initial_values
 
     @property

@@ -92,8 +92,7 @@ def test_input_azure_csv(tmp_path):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
-    # Initial are current initial values if new initial values are not provided.
-    assert os.path.isfile(path_to_output_initial_values)
+    assert not os.path.isfile(path_to_output_initial_values)
 
 
 @pytest.mark.integration
@@ -137,8 +136,7 @@ def test_input_azure_log(tmp_path):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
-    # Initial are current initial values if new initial values are not provided.
-    assert os.path.isfile(path_to_output_initial_values)
+    assert not os.path.isfile(path_to_output_initial_values)
 
 
 @pytest.mark.integration
@@ -182,8 +180,7 @@ def test_input_azure_parquet(tmp_path):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
-    # Initial are current initial values if new initial values are not provided.
-    assert os.path.isfile(path_to_output_initial_values)
+    assert not os.path.isfile(path_to_output_initial_values)
 
 
 @pytest.mark.integration
@@ -230,5 +227,4 @@ def test_input_azure_ndjson(tmp_path):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
-    # Initial are current initial values if new initial values are not provided.
-    assert os.path.isfile(path_to_output_initial_values)
+    assert not os.path.isfile(path_to_output_initial_values)

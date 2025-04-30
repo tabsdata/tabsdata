@@ -64,7 +64,7 @@ class SourcePlugin:
         current_initial_values = execution_context.initial_values.current_initial_values
         if current_initial_values:
             self.initial_values = current_initial_values
-            logger.debug(f"Updated initial values to: {current_initial_values}")
+            logger.debug(f"Updated plugin initial values to: {current_initial_values}")
         logger.info("Starting plugin stream import")
         parameters = self.stream(destination_dir)
         if self.initial_values:

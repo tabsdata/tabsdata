@@ -25,19 +25,19 @@ def create_response(
     request = execution_context.request
     execution_context_output_tables = [table.name for table in request.output]
     logger.info(f"Execution context output tables: {execution_context_output_tables}")
-    logger.info(f"Modified tables: {modified_tables}")
     not_modified_tables = [
         table
         for table in execution_context_output_tables
         if table not in modified_tables
     ]
-    logger.info(f"Not modified tables: {not_modified_tables}")
     data_tables = [Data(table) for table in modified_tables]
     no_data_tables = [NoData(table) for table in not_modified_tables]
-    if execution_context.initial_values.returns_values:
+    if execution_context.initial_values._data:
         data_tables.append(Data(INITIAL_VALUES_TABLE_NAME))
     else:
         no_data_tables.append(NoData(INITIAL_VALUES_TABLE_NAME))
+    logger.info(f"Modified tables: {modified_tables}")
+    logger.info(f"Not modified tables: {not_modified_tables}")
     response_content = data_tables + no_data_tables
     response_file = execution_context.paths.response_file
     logger.debug(f"Response content: {response_content}")
