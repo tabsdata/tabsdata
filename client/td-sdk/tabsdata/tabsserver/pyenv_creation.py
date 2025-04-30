@@ -56,6 +56,11 @@ from tabsdata.utils.constants import (
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()
 
+FILE_PROTOCOL = "file://"
+WINDOWS_OS_NAME = "nt"
+WINDOWS_URL_PREFIX = "/"
+BACK_SLASH = "\\"
+
 HostPackageSource: TypeAlias = Literal[
     "Development",
     "Local",
@@ -1003,8 +1008,13 @@ def get_tabsdata_package_metadata(
                         direct_url_data = json.load(f)
                         if "url" in direct_url_data and direct_url_data[
                             "url"
-                        ].startswith("file://"):
-                            url = pathlib.Path(direct_url_data["url"][7:])
+                        ].startswith(FILE_PROTOCOL):
+                            url_string = direct_url_data["url"][len(FILE_PROTOCOL):]
+                            if os.name == WINDOWS_OS_NAME and url_string.startswith(
+                                WINDOWS_URL_PREFIX
+                            ):
+                                url_string = url_string[len(WINDOWS_URL_PREFIX):]
+                            url = pathlib.Path(url_string)
                             if url.suffix == WHEEL_EXTENSION:
                                 if url.exists():
                                     provider = "Archive (Wheel)"
@@ -1045,8 +1055,8 @@ def get_tabsdata_package_metadata(
     # leading backslash to produce a regular file path.
     if location is not None:
         location_string = str(location)
-        if location_string.startswith("\\"):
-            location = Path(location_string[1:])
+        if location_string.startswith(BACK_SLASH):
+            location = Path(location_string[len(BACK_SLASH):])
             logger.info(f"Normalized location from '{location_string}' to '{location}'")
     return provider, location
 
@@ -1088,23 +1098,31 @@ def main():
     ) as requirements_file:
         development_packages = []
 
-        tabsdata_provider, tabsdata_location = get_tabsdata_package_metadata(
-            TABSDATA_MODULE_NAME, TD_TABSDATA_DEV_PKG
+        # tabsdata-mongodb connector (start)
+
+        tabsdata_mongodb_provider, tabsdata_mongodb_location = (
+            get_tabsdata_package_metadata(
+                TABSDATA_MONGODB_MODULE_NAME, TD_TABSDATA_MONGODB_DEV_PKG
+            )
         )
         logger.info(
-            "Module tabsdata classified as: "
-            f"provider: {tabsdata_provider} - "
-            f"location: {tabsdata_location}"
+            "Module tabsdata_mongodb classified as: "
+            f"provider: {tabsdata_mongodb_provider} - "
+            f"location: {tabsdata_mongodb_location}"
         )
 
-        if tabsdata_provider in (
+        if tabsdata_mongodb_provider in (
             "Archive (Project)",
             "Archive (Folder)",
             "Archive (Wheel)",
             "Folder (Editable)",
             "Folder (Frozen)",
         ):
-            development_packages.append(str(tabsdata_location))
+            development_packages.append(str(tabsdata_mongodb_location))
+
+        # tabsdata-mongodb connector (end)
+
+        # tabsdata-salesforce connector (start)
 
         tabsdata_salesforce_provider, tabsdata_salesforce_location = (
             get_tabsdata_package_metadata(
@@ -1126,25 +1144,32 @@ def main():
         ):
             development_packages.append(str(tabsdata_salesforce_location))
 
-        tabsdata_mongodb_provider, tabsdata_mongodb_location = (
-            get_tabsdata_package_metadata(
-                TABSDATA_MONGODB_MODULE_NAME, TD_TABSDATA_MONGODB_DEV_PKG
-            )
+        # tabsdata-salesforce connector (end)
+
+        # Note: tabsdata added the last one as then dependencies to other tabsdata
+        # packages do not need to be accessible through PyPI during development stages.
+
+        # tabsdata (start)
+
+        tabsdata_provider, tabsdata_location = get_tabsdata_package_metadata(
+            TABSDATA_MODULE_NAME, TD_TABSDATA_DEV_PKG
         )
         logger.info(
-            "Module tabsdata_mongodb classified as: "
-            f"provider: {tabsdata_mongodb_provider} - "
-            f"location: {tabsdata_mongodb_location}"
+            "Module tabsdata classified as: "
+            f"provider: {tabsdata_provider} - "
+            f"location: {tabsdata_location}"
         )
 
-        if tabsdata_mongodb_provider in (
+        if tabsdata_provider in (
             "Archive (Project)",
             "Archive (Folder)",
             "Archive (Wheel)",
             "Folder (Editable)",
             "Folder (Frozen)",
         ):
-            development_packages.append(str(tabsdata_mongodb_location))
+            development_packages.append(str(tabsdata_location))
+
+        # tabsdata (end)
 
         logger.debug(f"Temporary base requirements file: {requirements_file.name}")
         requirements_path = requirements_file.name
