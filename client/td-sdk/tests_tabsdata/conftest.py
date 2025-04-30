@@ -330,6 +330,7 @@ def create_docker_postgres_database():
             "CREATE TABLE second_output_postgres_transaction (Duration INT, "
             "Pulse INT, Maxpulse INT, Calories FLOAT)"
         )
+        mycursor.execute("CREATE SCHEMA testing_schema")
         mydb.commit()
         logger.info("Postgres container created successfully")
         return
