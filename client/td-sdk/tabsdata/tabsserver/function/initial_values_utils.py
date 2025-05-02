@@ -3,6 +3,7 @@
 #
 import copy
 import logging
+import os
 from typing import Literal
 
 import polars as pl
@@ -307,6 +308,22 @@ class InitialValues:
                 f"Storing the initial values {df} in the table "
                 f"'{INITIAL_VALUES_TABLE_NAME}' with URI '{destination_table_uri}'"
             )
+
+            # Temporary workaround. We need to review this to ensure it works on cloud
+            # storage locations.
+            try:
+                os.makedirs(
+                    os.path.dirname(convert_uri_to_path(destination_table_uri)),
+                    exist_ok=True,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Error creating the directory for the table"
+                    f" '{INITIAL_VALUES_TABLE_NAME}' with URI"
+                    f" '{destination_table_uri}': {e}"
+                )
+                logger.warning("This might be because file is not local")
+
             df.write_parquet(convert_uri_to_path(destination_table_uri))
             logger.debug("Initial values stored successfully.")
             self._data = True

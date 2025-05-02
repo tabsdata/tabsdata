@@ -75,7 +75,8 @@ pub async fn update_transaction_status(
                 .map_err(handle_update_error)?;
             assert_one(res)?;
         }
-
+        // Provisional until we have single-point entry status management.
+        (TransactionStatus::Failed, DataVersionStatus::Running | DataVersionStatus::Failed) => {}
         // Recover status.
         (
             TransactionStatus::Running | TransactionStatus::OnHold | TransactionStatus::Failed,

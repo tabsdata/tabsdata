@@ -1,18 +1,22 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
-
+import glob
+import logging
 import os
 import pathlib
+import re
 
-from tabsdata.tabsserver.function.store_results_utils import (
-    _extract_index,
-    _get_matching_files,
-)
+# from tabsdata.tabsserver.function.store_results_utils import (
+#     _extract_index,
+#     _get_matching_files,
+#
 from tabsdata.tabsserver.utils import convert_uri_to_path
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 
 def test_convert_uri_to_path():
@@ -47,3 +51,23 @@ def test_get_matching_files(tmp_path):
         _get_matching_files(os.path.join(tmp_path, "example_file_*.jsonl"))
         == files_generated
     )
+
+
+# Provisionally duplicating this utility function as the original one is flaky.
+def _get_matching_files(pattern):
+    # Construct the full pattern
+    # Use glob to get the list of matching files
+    matching_files = glob.glob(pattern)
+    ordered_files = sorted(matching_files, key=_extract_index)
+    logger.debug(f"Matching files: {ordered_files}")
+    return ordered_files
+
+
+# Sort the files to ensure that they are processed in the correct order
+def _extract_index(filename):
+    # Extract just the base filename without the path to ensure ordinal extraction is
+    # based only on it.
+    base_filename = os.path.basename(filename)
+    match = re.search(r"_(\d+)\.*", base_filename)
+    # Instead of infinity, this should fail. Else, we cannot guarantee determinacy.
+    return int(match.group(1)) if match else float("inf")
