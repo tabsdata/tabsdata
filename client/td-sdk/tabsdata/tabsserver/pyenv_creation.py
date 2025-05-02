@@ -1009,11 +1009,11 @@ def get_tabsdata_package_metadata(
                         if "url" in direct_url_data and direct_url_data[
                             "url"
                         ].startswith(FILE_PROTOCOL):
-                            url_string = direct_url_data["url"][len(FILE_PROTOCOL):]
+                            url_string = direct_url_data["url"][len(FILE_PROTOCOL) :]
                             if os.name == WINDOWS_OS_NAME and url_string.startswith(
                                 WINDOWS_URL_PREFIX
                             ):
-                                url_string = url_string[len(WINDOWS_URL_PREFIX):]
+                                url_string = url_string[len(WINDOWS_URL_PREFIX) :]
                             url = pathlib.Path(url_string)
                             if url.suffix == WHEEL_EXTENSION:
                                 if url.exists():
@@ -1056,7 +1056,7 @@ def get_tabsdata_package_metadata(
     if location is not None:
         location_string = str(location)
         if location_string.startswith(BACK_SLASH):
-            location = Path(location_string[len(BACK_SLASH):])
+            location = Path(location_string[len(BACK_SLASH) :])
             logger.info(f"Normalized location from '{location_string}' to '{location}'")
     return provider, location
 

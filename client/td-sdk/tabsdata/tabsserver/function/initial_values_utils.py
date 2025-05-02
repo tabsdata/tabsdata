@@ -234,10 +234,7 @@ class InitialValues:
                         "Error retrieving initial values from"
                         f" {td_initial_values_uri}: {e}"
                     )
-                    raise ValueError(
-                        "Error retrieving initial values from"
-                        f" {td_initial_values_uri}: {e}"
-                    )
+                    raise
         self.current_initial_values = copy.deepcopy(self.loaded_initial_values)
         logger.debug(f"Current initial values: {self.current_initial_values}")
 
@@ -249,13 +246,21 @@ class InitialValues:
         Returns:
             True if the initial values have changed, False otherwise.
         """
-        logger.debug("Checking if initial values have changed")
+        # TODO: Remove this when undoing changes related to initial values always
+        #  being stored. https://tabsdata.atlassian.net/browse/TD-328
+        if self.update_mode == NONE_MODE:
+            self.new_initial_values = {}
+        if self.update_mode == SAME_MODE:
+            self.new_initial_values = self.loaded_initial_values
+        return True
+
+        """logger.debug("Checking if initial values have changed")
         if self.update_mode in [NONE_MODE, SAME_MODE]:
             logger.debug(
                 "Initial values have not changed. Update mode is NONE or SAME."
             )
             return False
-        return self.new_initial_values != self.loaded_initial_values
+        return self.new_initial_values != self.loaded_initial_values"""
 
     def store(self, execution_context: InputYaml):
         """

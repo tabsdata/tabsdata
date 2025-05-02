@@ -111,7 +111,8 @@ def test_input_sql(testing_mysql, tmp_path):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
-    assert not os.path.isfile(path_to_output_initial_values)
+    # TODO: Change back in https://tabsdata.atlassian.net/browse/TD-322
+    assert os.path.isfile(path_to_output_initial_values)
 
 
 @pytest.mark.requires_internet
