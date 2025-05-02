@@ -972,6 +972,12 @@ class ErrorCode(Enum):
             "from an aggregation operation."
         ),
     }
+    TF10 = {
+        "code": "TF-010",
+        "message": (
+            "Reserved system column names cannot be used to transform a TableFrame: {}."
+        ),
+    }
     TUCE1 = {
         "code": "TUCE-001",
         "message": (

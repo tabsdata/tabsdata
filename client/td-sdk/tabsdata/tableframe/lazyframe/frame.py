@@ -696,6 +696,68 @@ class TableFrame:
             )
         )
 
+    @pydoc(categories="projection")
+    def rename(self, mapping: dict[str, str]) -> TableFrame:
+        """
+        Rename columns from the `TableFrame`.
+
+        Args:
+            mapping
+                A dictionary mapping column names to their new names.
+                The operation will fail if any specified column name does not exist.
+
+        Examples:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌──────┬──────┐
+        │ i    ┆ f    │
+        │ ---  ┆ ---  │
+        │ i32  ┆ f64  │
+        ╞══════╪══════╡
+        │ 1    ┆ 3.1  │
+        │ 2    ┆ 4.1  │
+        │ 3    ┆ 5.9  │
+        │ 4    ┆ 2.6  │
+        │ 5    ┆ 53.5 │
+        │ 6    ┆ 8.97 │
+        └──────┴──────┘
+        >>>
+        >>> tf.{"i": "index", "f": "amount"})
+        >>>
+        ┌───────┬────────┐
+        │ index ┆ amount │
+        │ ----- ┆ ------ │
+        │ i32   ┆ f64    │
+        ╞═══════╪════════╡
+        │ 1     ┆ 3.1    │
+        │ 2     ┆ 4.1    │
+        │ 3     ┆ 5.9    │
+        │ 4     ┆ 2.6    │
+        │ 5     ┆ 53.5   │
+        │ 6     ┆ 8.97   │
+        └───────┴────────┘
+
+        """
+
+        if not isinstance(mapping, dict):
+            raise TypeError("Expected a dictionary of type dict[str, str]")
+
+        for old_name, new_name in mapping.items():
+            if not isinstance(old_name, str):
+                raise TypeError(
+                    f"Expected dict[str, str], but got old column name: '{old_name!r}'"
+                )
+            if not isinstance(new_name, str):
+                raise TypeError(
+                    f"Expected dict[str, str], but got new column name: '{old_name!r}'"
+                )
+            td_common.check_column_name(old_name)
+            td_common.check_column_name(new_name)
+        return TableFrame.__build__(self._lf.rename(mapping, strict=True))
+
     # ToDo: allways attach system td columns.
     # ToDo: dedicated algorithm for proper provenance handling.
     # ToDo: check for undesired operations of system td columns.

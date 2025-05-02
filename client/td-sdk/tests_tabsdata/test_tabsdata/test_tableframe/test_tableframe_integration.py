@@ -951,6 +951,20 @@ def test_frame_with_columns():
     api_tester(fn)
 
 
+def test_frame_rename():
+    def fn(library: pk, frame: ft):
+        return frame.rename({"u": "uu", "i": "ii"})
+
+    api_tester(fn)
+
+
+def test_frame_rename_swap():
+    def fn(library: pk, frame: ft):
+        return frame.rename({"u": "i", "i": "u"})
+
+    api_tester(fn)
+
+
 def test_frame_drop():
     def fn(library: pk, frame: ft):
         return frame.drop(library.col("i"))

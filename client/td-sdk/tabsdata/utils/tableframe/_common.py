@@ -25,6 +25,11 @@ AddSystemColumnsStrategy: TypeAlias = Literal[
 ]
 
 
+def check_column_name(name: str):
+    if name.startswith(td_constants.TD_COLUMN_PREFIX):
+        raise TableFrameError(ErrorCode.TF10, name)
+
+
 def check_column(name: str):
     if name.startswith(td_constants.REGEXP_ANCHOR_START) and name.endswith(
         td_constants.REGEXP_ANCHOR_END

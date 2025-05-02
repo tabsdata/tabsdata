@@ -11,6 +11,7 @@ import unittest
 import polars as pl
 
 import tabsdata as td
+from tabsdata.exceptions import TableFrameError
 
 # noinspection PyProtectedMember
 from tabsdata.tableframe.lazyframe.frame import _assemble_columns
@@ -56,6 +57,91 @@ class TestTableFrame(unittest.TestCase):
         tf = tf.drop_nulls()
         assert tf is not None
         assert len(tf._lf.collect().rows()) == 1
+
+    def test_rename_none(self):
+        lf = pl.LazyFrame(
+            {
+                "c1": [11, 12, 13],
+                "c2": ["2a", None, "2c"],
+                "c3": ["3a", "3b", None],
+            }
+        )
+        tf = _wrap_polars_frame(lf)
+        with self.assertRaises(TypeError) as context:
+            _ = tf.rename(None)
+
+    def test_rename_no_dict(self):
+        lf = pl.LazyFrame(
+            {
+                "c1": [11, 12, 13],
+                "c2": ["2a", None, "2c"],
+                "c3": ["3a", "3b", None],
+            }
+        )
+        tf = _wrap_polars_frame(lf)
+        with self.assertRaises(TypeError) as context:
+            _ = tf.rename(("c1", "cc1"))
+
+    def test_rename_empty_dict(self):
+        lf = pl.LazyFrame(
+            {
+                "c1": [11, 12, 13],
+                "c2": ["2a", None, "2c"],
+                "c3": ["3a", "3b", None],
+            }
+        )
+        tf = _wrap_polars_frame(lf)
+        _ = tf.rename({})
+
+    def test_rename_no_string_old(self):
+        lf = pl.LazyFrame(
+            {
+                "c1": [11, 12, 13],
+                "c2": ["2a", None, "2c"],
+                "c3": ["3a", "3b", None],
+            }
+        )
+        tf = _wrap_polars_frame(lf)
+        with self.assertRaises(TypeError) as context:
+            _ = tf.rename({1: "id"})
+
+    def test_rename_no_string_new(self):
+        lf = pl.LazyFrame(
+            {
+                "c1": [11, 12, 13],
+                "c2": ["2a", None, "2c"],
+                "c3": ["3a", "3b", None],
+            }
+        )
+        tf = _wrap_polars_frame(lf)
+        with self.assertRaises(TypeError) as context:
+            _ = tf.rename({"id": 1})
+
+    def test_rename_old_name_system(self):
+        lf = pl.LazyFrame(
+            {
+                "c1": [11, 12, 13],
+                "c2": ["2a", None, "2c"],
+                "c3": ["3a", "3b", None],
+            }
+        )
+        tf = _wrap_polars_frame(lf)
+        with self.assertRaises(TableFrameError) as context:
+            _ = tf.rename({"$td.id": "id"})
+        assert context.exception.code == "TF-010"
+
+    def test_rename_new_name_system(self):
+        lf = pl.LazyFrame(
+            {
+                "c1": [11, 12, 13],
+                "c2": ["2a", None, "2c"],
+                "c3": ["3a", "3b", None],
+            }
+        )
+        tf = _wrap_polars_frame(lf)
+        with self.assertRaises(TableFrameError) as context:
+            _ = tf.rename({"c1": "$td.c1"})
+        assert context.exception.code == "TF-010"
 
     def test_join_common(self):
         _, _, tf = load_complex_dataframe(token="0-")

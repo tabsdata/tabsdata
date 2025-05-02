@@ -57,7 +57,6 @@ UNSUPPORTED_METHODS = [
     "reverse",
     "shift",
     "merge_sorted",
-    "rename",
     "remote",
     "remove",
     "rolling",
