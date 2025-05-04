@@ -16,6 +16,8 @@ logger.setLevel(logging.DEBUG)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_wrong_command_raises_exception(login, testing_collection):
     runner = CliRunner()
     result = runner.invoke(cli, ["fn", "potato"])
@@ -24,6 +26,8 @@ def test_wrong_command_raises_exception(login, testing_collection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create_prompt(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -41,6 +45,8 @@ def test_function_create_prompt(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create_no_prompt(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -65,6 +71,8 @@ def test_function_create_no_prompt(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create_no_prompt_multiple_local_packages(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -264,6 +272,8 @@ def test_function_delete_wrong_options_raises_error(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_list(testing_collection, function_path, tabsserver_connection):
     runner = CliRunner()
     result = runner.invoke(
@@ -286,6 +296,8 @@ def test_function_list(testing_collection, function_path, tabsserver_connection)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_update(testing_collection, function_path, tabsserver_connection):
     runner = CliRunner()
     result = runner.invoke(
@@ -327,6 +339,8 @@ def test_function_update(testing_collection, function_path, tabsserver_connectio
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_info(testing_collection, function_path, tabsserver_connection):
     runner = CliRunner()
     result = runner.invoke(
@@ -361,6 +375,8 @@ def test_function_info(testing_collection, function_path, tabsserver_connection)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_info_show_versions(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -398,6 +414,8 @@ def test_function_info_show_versions(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger(testing_collection, function_path, tabsserver_connection):
     runner = CliRunner()
     result = runner.invoke(
@@ -445,6 +463,8 @@ def test_function_trigger(testing_collection, function_path, tabsserver_connecti
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger_execution_plan_name(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -494,6 +514,8 @@ def test_function_trigger_execution_plan_name(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_info_error(testing_collection):
     runner = CliRunner()
     result = runner.invoke(

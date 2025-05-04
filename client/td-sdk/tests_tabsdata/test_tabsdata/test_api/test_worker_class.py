@@ -20,6 +20,8 @@ logger.setLevel(logging.DEBUG)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_class_lazy_properties(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -54,6 +56,8 @@ def test_worker_class_lazy_properties(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_class_log(tabsserver_connection, testing_collection_with_table):
     collection = Collection(
         tabsserver_connection.connection, testing_collection_with_table

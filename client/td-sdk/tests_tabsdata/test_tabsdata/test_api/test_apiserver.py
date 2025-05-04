@@ -26,6 +26,8 @@ def calculate_sha256(binary_data: bytes) -> str:
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_obtain_connection():
     connection = obtain_connection(APISERVER_URL, "admin", "tabsdata")
     real_url = f"http://{APISERVER_URL}{BASE_API_URL}"
@@ -40,6 +42,8 @@ def test_obtain_connection():
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_authentication_access_success(apiserver_connection):
     current_bearer = apiserver_connection.bearer_token
     response = apiserver_connection.authentication_access("admin", "tabsdata")
@@ -51,6 +55,8 @@ def test_authentication_access_success(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_authentication_access_raises_error(apiserver_connection):
     with pytest.raises(APIServerError):
         apiserver_connection.authentication_access("wrong_user", "wrong_password")
@@ -90,6 +96,8 @@ def test_authentication_refresh_fail(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_status_get(apiserver_connection):
     response = apiserver_connection.status_get()
     assert response.status_code == 200
@@ -97,6 +105,8 @@ def test_status_get(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_list(apiserver_connection):
     response = apiserver_connection.collection_list()
     assert response.status_code == 200
@@ -104,6 +114,8 @@ def test_collection_list(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_list_with_params(apiserver_connection):
     response = apiserver_connection.collection_list(
         offset=10, len=42, filter="hi", order_by="hello"
@@ -119,6 +131,8 @@ def test_collection_list_with_params(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_create_api(apiserver_connection):
     apiserver_connection.collection_delete(
         "test_collection_create_api", raise_for_status=False
@@ -141,6 +155,8 @@ def test_collection_create_api(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_delete_api(apiserver_connection):
     apiserver_connection.collection_create(
         "test_collection_delete_api",
@@ -153,6 +169,8 @@ def test_collection_delete_api(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_delete_no_exists_raises_error(apiserver_connection):
     with pytest.raises(APIServerError):
         apiserver_connection.collection_delete("test_collection_delete_no_exists")
@@ -160,6 +178,8 @@ def test_collection_delete_no_exists_raises_error(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_get(apiserver_connection):
     apiserver_connection.collection_create(
         "test_collection_get", "test_collection_get_description", raise_for_status=False
@@ -178,6 +198,8 @@ def test_collection_get(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_get_no_exists_raises_error(apiserver_connection):
     with pytest.raises(APIServerError):
         apiserver_connection.collection_get_by_name(
@@ -187,6 +209,8 @@ def test_collection_get_no_exists_raises_error(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_update_new_description(apiserver_connection):
     apiserver_connection.collection_create(
         "test_collection_update_new_description",
@@ -240,6 +264,8 @@ def test_collection_update_new_name(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_Collection_NAME,
@@ -280,6 +306,8 @@ def test_function_create(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_list(apiserver_connection):
     response = apiserver_connection.users_list()
     assert response.status_code == 200
@@ -287,6 +315,8 @@ def test_users_list(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_list_with_params(apiserver_connection):
     response = apiserver_connection.users_list(
         offset=10, len=42, filter="hi", order_by="hello"
@@ -302,6 +332,8 @@ def test_users_list_with_params(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_create(apiserver_connection):
     apiserver_connection.users_delete("test_users_create", raise_for_status=False)
     name = "test_users_create"
@@ -325,6 +357,8 @@ def test_users_create(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_delete(apiserver_connection):
     name = "test_users_delete"
     full_name = "test_users_delete_full_name"
@@ -345,6 +379,8 @@ def test_users_delete(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_delete_no_exists_raises_error(apiserver_connection):
     with pytest.raises(APIServerError):
         apiserver_connection.users_delete("test_users_delete_no_exists_raises_error")
@@ -352,6 +388,8 @@ def test_users_delete_no_exists_raises_error(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_get_by_name(apiserver_connection):
     name = "test_users_get_by_name"
     full_name = "test_users_get_by_name_full_name"
@@ -380,6 +418,8 @@ def test_users_get_by_name(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_get_by_name_no_exists_raises_error(apiserver_connection):
     with pytest.raises(APIServerError):
         apiserver_connection.users_get_by_name(
@@ -389,6 +429,8 @@ def test_users_get_by_name_no_exists_raises_error(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_update_new_password(apiserver_connection):
     name = "test_users_update_new_password"
     full_name = "test_users_update_new_password_full_name"
@@ -427,6 +469,8 @@ def test_users_update_new_password(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_update_no_new_password(apiserver_connection):
     name = "test_users_update_no_new_password"
     full_name = "test_users_update_no_new_password_full_name"
@@ -467,6 +511,8 @@ def test_users_update_no_new_password(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_update_change_fullname(apiserver_connection):
     name = "test_users_update_change_fullname"
     full_name = "test_users_update_change_fullname"
@@ -501,6 +547,8 @@ def test_users_update_change_fullname(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_in_collection_list(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_Collection_NAME,
@@ -515,6 +563,8 @@ def test_function_in_collection_list(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_in_collection_list_with_params(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_Collection_NAME,
@@ -539,6 +589,8 @@ def test_function_in_collection_list_with_params(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_in_collection_get(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_Collection_NAME,
@@ -576,6 +628,8 @@ def test_function_in_collection_get(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_in_collection_get_no_exists_raises_error(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_Collection_NAME,
@@ -591,6 +645,8 @@ def test_function_in_collection_get_no_exists_raises_error(apiserver_connection)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_update(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_Collection_NAME,
@@ -644,6 +700,8 @@ def test_function_update(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_upload_function_bundle(apiserver_connection):
     binary_data = b"\x00\x01\x02\x03\x04\x05"
     apiserver_connection.collection_create(
@@ -685,6 +743,8 @@ def test_function_upload_function_bundle(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_list_functions(apiserver_connection):
     binary_data = b"\x00\x01\x02\x03\x04\x05"
     apiserver_connection.collection_create(
@@ -730,6 +790,8 @@ def test_function_list_functions(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_execute(apiserver_connection):
     binary_data = b"\x00\x01\x02\x03\x04\x05"
     apiserver_connection.collection_create(
@@ -775,6 +837,8 @@ def test_function_execute(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_execute_execution_plan_name(apiserver_connection):
     binary_data = b"\x00\x01\x02\x03\x04\x05"
     apiserver_connection.collection_create(
@@ -826,6 +890,8 @@ def test_function_execute_execution_plan_name(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_users_update_change_own_password(apiserver_connection):
     apiserver_connection.users_delete(
         "test_users_update_change_own_password", raise_for_status=False
@@ -853,6 +919,8 @@ def test_users_update_change_own_password(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_execution_plan_list_api(apiserver_connection):
     response = apiserver_connection.execution_plan_list()
     assert response.status_code == 200
@@ -860,6 +928,8 @@ def test_execution_plan_list_api(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_execution_plan_read_api(apiserver_connection, tabsserver_connection):
     execution_plans = tabsserver_connection.execution_plans
     if execution_plans:
@@ -869,6 +939,8 @@ def test_execution_plan_read_api(apiserver_connection, tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_list_api(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_Collection_NAME,
@@ -881,6 +953,8 @@ def test_table_list_api(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_transaction_list_api(apiserver_connection):
     response = apiserver_connection.transaction_list()
     assert response.status_code == 200

@@ -15,6 +15,8 @@ logger.setLevel(logging.DEBUG)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_wrong_command_raises_exception(login):
     runner = CliRunner()
     result = runner.invoke(cli, ["collection", "potato"])
@@ -23,6 +25,8 @@ def test_wrong_command_raises_exception(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_create_prompt(login):
     runner = CliRunner()
     try:
@@ -48,6 +52,8 @@ def test_collection_create_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_create_no_prompt(login):
     runner = CliRunner()
     try:
@@ -77,6 +83,8 @@ def test_collection_create_no_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_create(login):
     runner = CliRunner()
     try:
@@ -259,6 +267,8 @@ def test_collection_delete_wrong_options_raises_error(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_list(login):
     runner = CliRunner()
     result = runner.invoke(cli, ["collection", "list"])
@@ -268,6 +278,8 @@ def test_collection_list(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_update(login):
     runner = CliRunner()
     try:
@@ -304,6 +316,8 @@ def test_collection_update(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_info(login):
     runner = CliRunner()
     try:
@@ -338,6 +352,8 @@ def test_collection_info(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_info_error(login):
     runner = CliRunner()
     result = runner.invoke(

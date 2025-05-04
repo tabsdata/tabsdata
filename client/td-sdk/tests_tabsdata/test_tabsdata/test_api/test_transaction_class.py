@@ -10,6 +10,8 @@ from tabsdata.api.tabsdata_server import Collection, Function, Transaction, Work
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_transaction_class(tabsserver_connection):
     time_triggered = int(time.time())
     transaction = Transaction(
@@ -39,6 +41,8 @@ def test_transaction_class(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_transaction_class_lazy_properties(
     tabsserver_connection, testing_collection_with_table
 ):

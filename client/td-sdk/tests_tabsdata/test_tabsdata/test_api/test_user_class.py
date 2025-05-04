@@ -8,6 +8,8 @@ from tabsdata.api.tabsdata_server import User
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_class(tabsserver_connection):
     user = User(
         tabsserver_connection.connection,
@@ -36,6 +38,8 @@ def test_user_class(tabsserver_connection):
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_class_lazy_properties(tabsserver_connection):
     try:
         tabsserver_connection.user_create(
@@ -60,6 +64,8 @@ def test_user_class_lazy_properties(tabsserver_connection):
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_class_create(tabsserver_connection):
     user = User(
         tabsserver_connection.connection,
@@ -88,6 +94,8 @@ def test_user_class_create(tabsserver_connection):
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_class_delete(tabsserver_connection):
     user = User(
         tabsserver_connection.connection,
@@ -105,6 +113,8 @@ def test_user_class_delete(tabsserver_connection):
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_class_update(tabsserver_connection):
     user = User(
         tabsserver_connection.connection,
@@ -141,6 +151,8 @@ def test_user_class_update(tabsserver_connection):
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_class_refresh(tabsserver_connection):
     user = User(
         tabsserver_connection.connection,

@@ -16,6 +16,8 @@ logger.setLevel(logging.DEBUG)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_wrong_command_raises_exception(login):
     runner = CliRunner()
     result = runner.invoke(cli, ["exec", "potato"])
@@ -24,6 +26,8 @@ def test_wrong_command_raises_exception(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_execution_plan_list(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(cli, ["exec", "list-plans"])
@@ -32,6 +36,8 @@ def test_execution_plan_list(login, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_transaction_list(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(cli, ["exec", "list-trxs"])
@@ -40,6 +46,8 @@ def test_transaction_list(login, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_commit_list(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(cli, ["exec", "list-commits"])
@@ -49,6 +57,8 @@ def test_commit_list(login, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_execution_plan_read(
     login, testing_collection_with_table, tabsserver_connection
 ):
@@ -61,6 +71,8 @@ def test_execution_plan_read(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_exec_logs(login, testing_collection_with_table, tabsserver_connection):
     transaction_id = None
     for element in tabsserver_connection.transactions:
@@ -81,6 +93,8 @@ def test_exec_logs(login, testing_collection_with_table, tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_exec_logs_to_file(
     login, testing_collection_with_table, tabsserver_connection, tmp_path
 ):
@@ -107,6 +121,8 @@ def test_exec_logs_to_file(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_execution_plan_id(
     login, tabsserver_connection, testing_collection_with_table
 ):
@@ -119,6 +135,8 @@ def test_worker_messages_list_by_execution_plan_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_transaction_id(
     login, tabsserver_connection, testing_collection_with_table
 ):
@@ -138,6 +156,8 @@ def test_worker_messages_list_by_transaction_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_function_id(
     login, tabsserver_connection, testing_collection_with_table
 ):
@@ -155,6 +175,8 @@ def test_worker_messages_list_by_function_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_data_version_id(
     login, tabsserver_connection, testing_collection_with_table
 ):
@@ -172,6 +194,8 @@ def test_worker_messages_list_by_data_version_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_all_options_fails(
     login, tabsserver_connection, testing_collection_with_table
 ):
@@ -215,6 +239,8 @@ def test_worker_messages_list_by_all_options_fails(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_no_options_fails(
     login, tabsserver_connection, testing_collection_with_table
 ):

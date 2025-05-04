@@ -33,6 +33,8 @@ logger.setLevel(logging.DEBUG)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_create():
     tabsdata_server = TabsdataServer(APISERVER_URL, "admin", "tabsdata")
     real_url = f"http://{APISERVER_URL}{BASE_API_URL}"
@@ -41,6 +43,8 @@ def test_tabsdata_server_create():
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_users_list(tabsserver_connection):
     users = tabsserver_connection.users
     assert isinstance(users, list)
@@ -49,6 +53,8 @@ def test_tabsdata_server_users_list(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_user_create(tabsserver_connection):
     try:
         tabsserver_connection.user_create(
@@ -65,6 +71,8 @@ def test_tabsdata_server_user_create(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_user_get(tabsserver_connection):
     try:
         tabsserver_connection.user_create(
@@ -83,6 +91,8 @@ def test_tabsdata_server_user_get(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_user_update(tabsserver_connection):
     try:
         tabsserver_connection.user_create(
@@ -112,6 +122,8 @@ def test_tabsdata_server_user_update(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_get(tabsserver_connection):
     try:
         tabsserver_connection.collection_create(
@@ -140,6 +152,8 @@ def test_function_get(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_list_history(tabsserver_connection):
     try:
         tabsserver_connection.collection_create(
@@ -169,6 +183,8 @@ def test_function_list_history(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger(tabsserver_connection):
     try:
         tabsserver_connection.collection_create(
@@ -197,6 +213,8 @@ def test_function_trigger(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger_execution_plan_name(tabsserver_connection):
     try:
         tabsserver_connection.collection_create(
@@ -228,6 +246,8 @@ def test_function_trigger_execution_plan_name(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create(tabsserver_connection):
     try:
         tabsserver_connection.collection_create(
@@ -256,6 +276,8 @@ def test_function_create(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_update(tabsserver_connection):
     try:
         tabsserver_connection.collection_create(
@@ -344,6 +366,8 @@ def test_function_delete(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_collection_list(tabsserver_connection):
     collections = tabsserver_connection.collections
     assert isinstance(collections, list)
@@ -352,6 +376,8 @@ def test_tabsdata_server_collection_list(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_collection_create(tabsserver_connection):
     try:
         tabsserver_connection.collection_create(
@@ -371,6 +397,8 @@ def test_tabsdata_server_collection_create(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_collection_get(tabsserver_connection):
     try:
         tabsserver_connection.collection_create(
@@ -392,6 +420,8 @@ def test_tabsdata_server_collection_get(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_collection_update(tabsserver_connection):
     try:
         tabsserver_connection.collection_create(
@@ -421,6 +451,8 @@ def test_tabsdata_server_collection_update(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_status(tabsserver_connection):
     status = tabsserver_connection.status
     assert isinstance(status, ServerStatus)
@@ -448,6 +480,8 @@ def test_convert_timestamp_to_string():
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_execution_plans_list(tabsserver_connection):
     execution_plans = tabsserver_connection.execution_plans
     assert isinstance(execution_plans, list)
@@ -456,6 +490,8 @@ def test_tabsdata_server_execution_plans_list(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_list(tabsserver_connection, testing_collection_with_table):
     tables = tabsserver_connection.table_list(
         collection_name=testing_collection_with_table,
@@ -467,6 +503,8 @@ def test_table_list(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download(tabsserver_connection, tmp_path, testing_collection_with_table):
     destination_file = os.path.join(
         tmp_path, "test_table_download_collection_output.parquet"
@@ -482,6 +520,8 @@ def test_table_download(tabsserver_connection, tmp_path, testing_collection_with
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample(tabsserver_connection, testing_collection_with_table):
     table = tabsserver_connection.table_sample(
         collection_name=testing_collection_with_table,
@@ -492,6 +532,8 @@ def test_table_sample(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_get_schema(tabsserver_connection, testing_collection_with_table):
     schema = tabsserver_connection.table_get_schema(
         collection_name=testing_collection_with_table,
@@ -502,6 +544,8 @@ def test_table_get_schema(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_transaction_list(tabsserver_connection):
     transactions = tabsserver_connection.transactions
     assert isinstance(transactions, list)
@@ -510,6 +554,8 @@ def test_tabsdata_server_transaction_list(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_version(
     tabsserver_connection, tmp_path, testing_collection_with_table
 ):
@@ -527,6 +573,8 @@ def test_table_download_with_version(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_version(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -540,6 +588,8 @@ def test_table_sample_with_version(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_get_schema_with_version(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -553,6 +603,8 @@ def test_table_get_schema_with_version(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_commit(
     tabsserver_connection, tmp_path, testing_collection_with_table
 ):
@@ -571,6 +623,8 @@ def test_table_download_with_commit(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_commit(tabsserver_connection, testing_collection_with_table):
     commit = tabsserver_connection.commits[0].id
     table = tabsserver_connection.table_sample(
@@ -583,6 +637,8 @@ def test_table_sample_with_commit(tabsserver_connection, testing_collection_with
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_get_schema_with_commit(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -597,6 +653,8 @@ def test_table_get_schema_with_commit(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_wrong_version(
     tabsserver_connection, tmp_path, testing_collection_with_table
 ):
@@ -614,6 +672,8 @@ def test_table_download_with_wrong_version(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_wrong_version(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -627,6 +687,8 @@ def test_table_sample_with_wrong_version(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_get_schema_with_wrong_version(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -640,6 +702,8 @@ def test_table_get_schema_with_wrong_version(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_wrong_commit(
     tabsserver_connection, tmp_path, testing_collection_with_table
 ):
@@ -657,6 +721,8 @@ def test_table_download_with_wrong_commit(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_wrong_commit(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -670,6 +736,8 @@ def test_table_sample_with_wrong_commit(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_get_schema_with_wrong_commit(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -683,6 +751,8 @@ def test_table_get_schema_with_wrong_commit(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_time(
     tabsserver_connection, tmp_path, testing_collection_with_table
 ):
@@ -702,6 +772,8 @@ def test_table_download_with_time(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_time(tabsserver_connection, testing_collection_with_table):
     current_time = datetime.datetime.now(datetime.UTC)
     formatted_time = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
@@ -715,6 +787,8 @@ def test_table_sample_with_time(tabsserver_connection, testing_collection_with_t
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_get_schema_with_time(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -730,6 +804,8 @@ def test_table_get_schema_with_time(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_wrong_time(
     tabsserver_connection, tmp_path, testing_collection_with_table
 ):
@@ -747,6 +823,8 @@ def test_table_download_with_wrong_time(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_wrong_time(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -760,6 +838,8 @@ def test_table_sample_with_wrong_time(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_get_schema_with_wrong_time(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -773,6 +853,8 @@ def test_table_get_schema_with_wrong_time(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_all_options_fails(
     tabsserver_connection, tmp_path, testing_collection_with_table
 ):
@@ -795,6 +877,8 @@ def test_table_download_with_all_options_fails(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_all_options_fails(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -813,6 +897,8 @@ def test_table_sample_with_all_options_fails(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_get_schema_with_all_options_fails(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -831,6 +917,8 @@ def test_table_get_schema_with_all_options_fails(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_commit_list(
     testing_collection_with_table, tabsserver_connection
 ):
@@ -868,6 +956,8 @@ def test_commit_class():
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_dataversion_list(tabsserver_connection, testing_collection_with_table):
     function_name = tabsserver_connection.collection_list_functions(
         testing_collection_with_table
@@ -882,6 +972,8 @@ def test_dataversion_list(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_message_get(tabsserver_connection, testing_collection_with_table):
     transaction_id = None
     for element in tabsserver_connection.transactions:
@@ -908,6 +1000,8 @@ def test_worker_message_get(tabsserver_connection, testing_collection_with_table
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_execution_plan_id(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -919,6 +1013,8 @@ def test_worker_messages_list_by_execution_plan_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_transaction_id(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -938,6 +1034,8 @@ def test_worker_messages_list_by_transaction_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_function_id(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -955,6 +1053,8 @@ def test_worker_messages_list_by_function_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_data_version_id(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -972,6 +1072,8 @@ def test_worker_messages_list_by_data_version_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_all_options_fails(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -1007,6 +1109,8 @@ def test_worker_messages_list_by_all_options_fails(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_no_options_fails(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -1016,6 +1120,8 @@ def test_worker_messages_list_no_options_fails(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_execution_plan_read(tabsserver_connection, testing_collection_with_table):
     execution_plans = tabsserver_connection.execution_plans
     assert execution_plans

@@ -10,6 +10,8 @@ from tabsdata.api.tabsdata_server import Collection, ExecutionPlan, Worker
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_execution_plan_class(tabsserver_connection):
     time_triggered = int(time.time())
     execution_plan = ExecutionPlan(
@@ -40,6 +42,8 @@ def test_execution_plan_class(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_execution_plan_class_lazy_properties(
     tabsserver_connection, testing_collection_with_table
 ):

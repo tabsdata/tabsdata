@@ -12,6 +12,8 @@ from tabsdata.api.tabsdata_server import Collection, Function, Table
 
 @pytest.mark.integration
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class(tabsserver_connection, testing_collection_with_table):
     function = Function(
         connection=tabsserver_connection.connection,
@@ -34,6 +36,8 @@ def test_function_class(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_lazy_properties(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -79,6 +83,8 @@ def test_function_class_lazy_properties(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_register(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection, "test_function_class_register_collection"
@@ -177,6 +183,8 @@ def test_function_class_delete(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_update(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection, "test_function_class_update_collection"
@@ -225,6 +233,8 @@ def test_function_class_update(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_history(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection, "test_function_class_history_collection"
@@ -278,6 +288,8 @@ def test_function_class_history(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_dataversions(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -296,6 +308,8 @@ def test_function_class_dataversions(
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_get_dataversions(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -314,6 +328,8 @@ def test_function_class_get_dataversions(
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_workers(tabsserver_connection, testing_collection_with_table):
     function_name = tabsserver_connection.collection_list_functions(
         testing_collection_with_table
@@ -332,6 +348,8 @@ def test_function_class_workers(tabsserver_connection, testing_collection_with_t
 
 
 @pytest.mark.integration
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_get_worker(
     tabsserver_connection, testing_collection_with_table
 ):

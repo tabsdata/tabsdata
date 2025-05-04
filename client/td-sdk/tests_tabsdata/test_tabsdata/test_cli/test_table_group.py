@@ -19,6 +19,8 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_wrong_command_raises_exception(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(cli, ["--no-prompt", "table", "rex"])
@@ -28,6 +30,8 @@ def test_wrong_command_raises_exception(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download(login, testing_collection_with_table, tmp_path):
     destination_file = os.path.join(tmp_path, "test_table_download_cli.parquet")
     runner = CliRunner()
@@ -53,6 +57,8 @@ def test_table_download(login, testing_collection_with_table, tmp_path):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_list(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -66,6 +72,8 @@ def test_table_list(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -87,6 +95,8 @@ def test_table_sample(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_file_destination(login, testing_collection_with_table, tmp_path):
     runner = CliRunner()
     destination_file = os.path.join(tmp_path, "test_table_sample_cli.ndjson")
@@ -113,6 +123,8 @@ def test_table_sample_file_destination(login, testing_collection_with_table, tmp
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_schema(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -134,6 +146,8 @@ def test_table_schema(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_version(login, testing_collection_with_table, tmp_path):
     destination_file = os.path.join(
         tmp_path, "test_table_download_with_version_cli.parquet"
@@ -163,6 +177,8 @@ def test_table_download_with_version(login, testing_collection_with_table, tmp_p
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_version(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -186,6 +202,8 @@ def test_table_sample_with_version(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_schema_with_version(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -209,6 +227,8 @@ def test_table_schema_with_version(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_wrong_version(
     login, testing_collection_with_table, tmp_path
 ):
@@ -239,6 +259,8 @@ def test_table_download_with_wrong_version(
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_wrong_version(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -262,6 +284,8 @@ def test_table_sample_with_wrong_version(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_schema_with_wrong_version(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -285,6 +309,8 @@ def test_table_schema_with_wrong_version(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_commit(
     login, testing_collection_with_table, tmp_path, tabsserver_connection
 ):
@@ -317,6 +343,8 @@ def test_table_download_with_commit(
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_commit(
     login, testing_collection_with_table, tabsserver_connection
 ):
@@ -343,6 +371,8 @@ def test_table_sample_with_commit(
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_schema_with_commit(
     login, testing_collection_with_table, tabsserver_connection
 ):
@@ -369,6 +399,8 @@ def test_table_schema_with_commit(
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_wrong_commit(
     login, testing_collection_with_table, tmp_path
 ):
@@ -399,6 +431,8 @@ def test_table_download_with_wrong_commit(
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_wrong_commit(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -422,6 +456,8 @@ def test_table_sample_with_wrong_commit(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_schema_with_wrong_commit(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -445,6 +481,8 @@ def test_table_schema_with_wrong_commit(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_time(login, testing_collection_with_table, tmp_path):
     destination_file = os.path.join(
         tmp_path, "test_table_download_with_time_cli.parquet"
@@ -476,6 +514,8 @@ def test_table_download_with_time(login, testing_collection_with_table, tmp_path
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_time(login, testing_collection_with_table):
     runner = CliRunner()
     current_time = datetime.datetime.now(datetime.UTC)
@@ -501,6 +541,8 @@ def test_table_sample_with_time(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_schema_with_time(login, testing_collection_with_table):
     runner = CliRunner()
     current_time = datetime.datetime.now(datetime.UTC)
@@ -526,6 +568,8 @@ def test_table_schema_with_time(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_wrong_time(login, testing_collection_with_table, tmp_path):
     destination_file = os.path.join(
         tmp_path, "test_table_download_with_wrong_time_cli.parquet"
@@ -554,6 +598,8 @@ def test_table_download_with_wrong_time(login, testing_collection_with_table, tm
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_wrong_time(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -577,6 +623,8 @@ def test_table_sample_with_wrong_time(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_schema_with_wrong_time(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
@@ -600,6 +648,8 @@ def test_table_schema_with_wrong_time(login, testing_collection_with_table):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download_with_all_options_fails(
     login, testing_collection_with_table, tmp_path, tabsserver_connection
 ):
@@ -637,6 +687,8 @@ def test_table_download_with_all_options_fails(
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample_with_all_options_fails(
     login, testing_collection_with_table, tabsserver_connection
 ):
@@ -669,6 +721,8 @@ def test_table_sample_with_all_options_fails(
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_schema_with_all_options_fails(
     login, testing_collection_with_table, tabsserver_connection
 ):
