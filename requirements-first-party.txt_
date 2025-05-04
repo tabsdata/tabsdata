@@ -2,5 +2,5 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-tabsdata_mongodb==0.9.6
-tabsdata_salesforce==0.9.6
+tabsdata_mongodb==0.9.7
+tabsdata_salesforce==0.9.7
