@@ -100,7 +100,7 @@ mod tests {
         let file_name = url_to_import
             .path_segments()
             .unwrap()
-            .last()
+            .next_back()
             .unwrap()
             .to_string();
 

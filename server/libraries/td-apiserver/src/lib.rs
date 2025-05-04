@@ -52,13 +52,12 @@ pub struct ApiServerBuilder {
 impl ApiServerBuilder {
     pub fn new(addresses: Vec<SocketAddr>, router: Router) -> Self {
         // Never allow no addresses to be set, if there is none we set the default
-        Self {
-            addresses: addresses
-                .is_empty()
-                .then(addresses_default)
-                .unwrap_or(addresses),
-            router,
-        }
+        let addresses = if addresses.is_empty() {
+            addresses_default()
+        } else {
+            addresses
+        };
+        Self { addresses, router }
     }
 
     async fn bind_listeners(&self) -> Result<Vec<TcpListener>, ApiServerError> {

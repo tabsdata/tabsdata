@@ -235,10 +235,7 @@ impl<C: Config, P: Params> Cli<C, P> {
 }
 
 pub fn obtain_current_dir() -> Option<PathBuf> {
-    match current_dir() {
-        Ok(folder) => Some(folder),
-        Err(_) => None,
-    }
+    current_dir().ok()
 }
 
 pub fn obtain_config_dir() -> Option<PathBuf> {

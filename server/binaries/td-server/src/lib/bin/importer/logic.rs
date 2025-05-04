@@ -318,7 +318,7 @@ fn importer_lazy_frame(
             let file_name = url
                 .path_segments()
                 .unwrap_or_else(|| panic!("URL {} does not refer to a file", url))
-                .last()
+                .next_back()
                 .unwrap_or_else(|| panic!("URL {} does not refer to a file", url));
             let reader = LazyCsvReader::new(&url_str);
             let reader = options.apply_to(reader);
