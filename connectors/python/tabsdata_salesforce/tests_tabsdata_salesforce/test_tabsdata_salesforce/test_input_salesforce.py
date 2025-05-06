@@ -42,8 +42,9 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.slow
 @pytest.mark.salesforce
+@pytest.mark.slow
+@pytest.mark.tabsserver
 def test_input_salesforce(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -84,14 +85,14 @@ def test_input_salesforce(tmp_path):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
-    # TODO: Change back in https://tabsdata.atlassian.net/browse/TD-322
-    assert os.path.isfile(path_to_output_initial_values)
+    assert not os.path.isfile(path_to_output_initial_values)
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.slow
 @pytest.mark.salesforce
+@pytest.mark.slow
+@pytest.mark.tabsserver
 def test_input_salesforce_initial_values(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -199,8 +200,7 @@ def test_input_salesforce_initial_values(tmp_path):
     # In this second iteration, nothing has changed, so the initial values stayed the
     # same. Therefore, we will send a "NoData" for the initial values, and the file
     # will not exist
-    # TODO: Change back in https://tabsdata.atlassian.net/browse/TD-322
-    assert os.path.isfile(path_to_output_initial_values)
+    assert not os.path.isfile(path_to_output_initial_values)
 
 
 @pytest.mark.salesforce

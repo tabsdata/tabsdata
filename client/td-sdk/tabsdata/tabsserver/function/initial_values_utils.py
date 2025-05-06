@@ -16,21 +16,19 @@ from .yaml_parsing import InputYaml
 logger = logging.getLogger(__name__)
 
 INITIAL_VALUES_LAST_MODIFIED_VARIABLE_NAME = "last_modified"
-INITIAL_VALUES_TABLE_NAME = "td-initial-values"
+INITIAL_VALUES_LIST_POSITION = 0
 INITIAL_VALUES_VARIABLE_COLUMN = "variable"
 INITIAL_VALUES_VALUE_COLUMN = "value"
 
 NEW_MODE = "NEW"
 NONE_MODE = "NONE"
-RESET_MODE = "RESET"
 SAME_MODE = "SAME"
 VALID_UPDATE_MODES = [
     NEW_MODE,
     NONE_MODE,
     SAME_MODE,
-    RESET_MODE,
 ]
-VALID_UPDATE_MODES_HINT = Literal["NEW", "NONE", "RESET", "SAME"]
+VALID_UPDATE_MODES_HINT = Literal["NEW", "NONE", "SAME"]
 
 INITIAL_VALUES_VALID_VALUE_TYPES = (str,)
 
@@ -47,7 +45,8 @@ class InitialValues:
         self.current_initial_values = {}
         self.returns_values = False
         self.update_mode = NONE_MODE
-        self._data = False
+        self.output_table_name = None
+        self.use_decorator_values = True
 
     @property
     def loaded_initial_values(
@@ -111,17 +110,10 @@ class InitialValues:
             new_values: The new values.
         """
         logger.debug(f"Updating initial values with {new_values}")
-        if new_values is None:
-            # If new_values is None, we want to reset the initial values to the
-            # decorator default. So we will store an empty dictionary as the
-            # initial_values, which is an indicator that the default values should be
-            # used for the next execution.
-            self.new_initial_values = {}
-            self.update_mode = RESET_MODE
-        elif new_values == {}:
-            # If new_values is an empty dictionary, we want to 'freeze' the value of
+        if new_values == SAME_MODE:
+            # If new_values is "SAME", we want to 'freeze' the value of
             # the current execution and use it in the next. Therefore, we mark
-            # update_mode as 'PAUSE', so that no new value is sent in the response
+            # update_mode as 'SAME', so that no new value is sent in the response
             # yaml, and the one used in this execution is used in the next.
             self.update_mode = SAME_MODE
         elif isinstance(new_values, dict):
@@ -187,7 +179,8 @@ class InitialValues:
             f" {str(self.new_initial_values)} ; auxiliary value: "
             f"{str(self.current_initial_values)} ; returns values:"
             f" {str(self.returns_values)} ; update mode:"
-            f" {str(self.update_mode)} >"
+            f" {str(self.update_mode)}, use decorator values: "
+            f"{str(self.use_decorator_values)} >"
         )
 
     def load_current_initial_values(self, request: InputYaml):
@@ -198,45 +191,36 @@ class InitialValues:
             request: The request information.
         """
         logger.debug("Loading current initial values")
-        if request:
-            system_input = request.system_input
-            logger.debug(f"System input: {system_input}")
-            td_initial_values_table = None
-            if system_input:
-                for table in system_input:
-                    if table.name == INITIAL_VALUES_TABLE_NAME:
-                        td_initial_values_table = table
-                        break
-            td_initial_values_uri = None
-            if td_initial_values_table:
-                logger.debug(f"TD initial values table: {td_initial_values_table}")
-                logger.debug(
-                    f"TD initial values location: {td_initial_values_table.location}"
-                )
-                td_initial_values_uri = td_initial_values_table.uri
-            logger.debug(f"TD initial values URI: {td_initial_values_uri}")
-            if td_initial_values_uri:
-                try:
-                    td_initial_values_frame = pl.read_parquet(td_initial_values_uri)
-                    logger.debug(f"TD initial values: {td_initial_values_frame}")
-                    df_dict = td_initial_values_frame.to_dict(as_series=False)
-                    self.loaded_initial_values = (
-                        dict(
-                            zip(
-                                df_dict[INITIAL_VALUES_VARIABLE_COLUMN],
-                                df_dict[INITIAL_VALUES_VALUE_COLUMN],
-                            )
+        system_input = request.system_input
+        logger.debug(f"System input: {system_input}")
+        td_initial_values_table = system_input[INITIAL_VALUES_LIST_POSITION]
+        logger.debug(f"TD initial values table: {td_initial_values_table}")
+        logger.debug(f"TD initial values location: {td_initial_values_table.location}")
+        td_initial_values_uri = td_initial_values_table.uri
+        logger.debug(f"TD initial values URI: {td_initial_values_uri}")
+        if td_initial_values_uri:
+            try:
+                td_initial_values_frame = pl.read_parquet(td_initial_values_uri)
+                logger.debug(f"TD initial values: {td_initial_values_frame}")
+                df_dict = td_initial_values_frame.to_dict(as_series=False)
+                self.loaded_initial_values = (
+                    dict(
+                        zip(
+                            df_dict[INITIAL_VALUES_VARIABLE_COLUMN],
+                            df_dict[INITIAL_VALUES_VALUE_COLUMN],
                         )
-                        if df_dict
-                        else {}
                     )
-                except Exception as e:
-                    logger.error(
-                        "Error retrieving initial values from"
-                        f" {td_initial_values_uri}: {e}"
-                    )
-                    raise
-        self.current_initial_values = copy.deepcopy(self.loaded_initial_values)
+                    if df_dict
+                    else {}
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error retrieving initial values from {td_initial_values_uri}: {e}"
+                )
+                raise
+            self.current_initial_values = copy.deepcopy(self.loaded_initial_values)
+            self.update_mode = NEW_MODE
+            self.use_decorator_values = False
         logger.debug(f"Current initial values: {self.current_initial_values}")
 
     @property
@@ -247,21 +231,13 @@ class InitialValues:
         Returns:
             True if the initial values have changed, False otherwise.
         """
-        # TODO: Remove this when undoing changes related to initial values always
-        #  being stored. https://tabsdata.atlassian.net/browse/TD-328
-        if self.update_mode == NONE_MODE:
-            self.new_initial_values = {}
-        if self.update_mode == SAME_MODE:
-            self.new_initial_values = self.loaded_initial_values
-        return True
-
-        """logger.debug("Checking if initial values have changed")
+        logger.debug("Checking if initial values have changed")
         if self.update_mode in [NONE_MODE, SAME_MODE]:
             logger.debug(
                 "Initial values have not changed. Update mode is NONE or SAME."
             )
             return False
-        return self.new_initial_values != self.loaded_initial_values"""
+        return self.new_initial_values != self.loaded_initial_values
 
     def store(self, execution_context: InputYaml):
         """
@@ -275,63 +251,54 @@ class InitialValues:
         """
         logger.info(pad_string("[Storing execution information]"))
         logger.info(f"Storing initial values {str(self)}")
+        system_output = execution_context.system_output
+        initial_values_output_table = system_output[INITIAL_VALUES_LIST_POSITION]
+        self.output_table_name = initial_values_output_table.name
+        destination_table_uri = initial_values_output_table.uri
+        logger.info(
+            f"Found the table '{initial_values_output_table.name}' with "
+            f"URI '{destination_table_uri}'"
+        )
 
         if not self.changed:
             logger.info("Values have not changed. No values were stored.")
-            self._data = False
             return
 
-        system_output = execution_context.system_output
-        destination_table_uri = None
-        if system_output:
-            for table in system_output:
-                if table.name == INITIAL_VALUES_TABLE_NAME:
-                    destination_table_uri = table.uri
-                    logger.info(
-                        f"Found the table '{INITIAL_VALUES_TABLE_NAME}' with "
-                        f"URI '{destination_table_uri}'"
-                    )
-                    break
         if destination_table_uri:
             variables_column = []
             values_column = []
             for variable_name, value in self.new_initial_values.items():
                 variables_column.append(variable_name)
                 values_column.append(value)
-            df = pl.DataFrame(
-                {
-                    INITIAL_VALUES_VARIABLE_COLUMN: variables_column,
-                    INITIAL_VALUES_VALUE_COLUMN: values_column,
-                }
-            )
+            initial_values_aux_dict = {
+                INITIAL_VALUES_VARIABLE_COLUMN: variables_column,
+                INITIAL_VALUES_VALUE_COLUMN: values_column,
+            }
+            df = pl.LazyFrame(initial_values_aux_dict)
             logger.info(
-                f"Storing the initial values {df} in the table "
-                f"'{INITIAL_VALUES_TABLE_NAME}' with URI '{destination_table_uri}'"
+                f"Storing the initial values {initial_values_aux_dict} in the table "
+                f"'{initial_values_output_table.name}' with URI "
+                f"'{destination_table_uri}'"
             )
 
-            # Temporary workaround. We need to review this to ensure it works on cloud
-            # storage locations.
-            try:
-                os.makedirs(
-                    os.path.dirname(convert_uri_to_path(destination_table_uri)),
-                    exist_ok=True,
-                )
-            except Exception as e:
-                logger.warning(
-                    "Error creating the directory for the table"
-                    f" '{INITIAL_VALUES_TABLE_NAME}' with URI"
-                    f" '{destination_table_uri}': {e}"
-                )
-                logger.warning("This might be because file is not local")
+            if destination_table_uri.startswith("file://"):
+                try:
+                    os.makedirs(
+                        os.path.dirname(convert_uri_to_path(destination_table_uri)),
+                        exist_ok=True,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Error creating the directory for the initial values table"
+                        f" with URI '{destination_table_uri}': {e}"
+                    )
+                    logger.warning("This might be because file is not local")
 
-            df.write_parquet(convert_uri_to_path(destination_table_uri))
+            df.sink_parquet(destination_table_uri, mkdir=True)
             logger.debug("Initial values stored successfully.")
-            self._data = True
             return
         else:
-            logger.warning(
-                f"The URI of the table '{INITIAL_VALUES_TABLE_NAME}' was None. No "
-                "values were stored"
+            raise ValueError(
+                f"The URI of the '{initial_values_output_table.name}' table was None. "
+                "No values were stored"
             )
-            self._data = False
-            return

@@ -594,9 +594,10 @@ def test_docs_per_trx(tmp_path, testing_mongodb):
     assert collection.count_documents({}) == 200
 
 
+@pytest.mark.mongodb
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mongodb
+@pytest.mark.tabsserver
 def test_output_mongodb(tmp_path, testing_mongodb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     database_name = "test_output_mongodb_database"
@@ -645,9 +646,10 @@ def test_output_mongodb(tmp_path, testing_mongodb):
     assert len(expected_output) == collection.count_documents({})
 
 
+@pytest.mark.mongodb
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.mongodb
+@pytest.mark.tabsserver
 def test_multiple_outputs_mongodb(tmp_path, testing_mongodb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     database_name = "test_multiple_outputs_mongodb_database"

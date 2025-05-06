@@ -47,7 +47,7 @@ def initial_values_freeze(
     headers: td.TableFrame, items: td.TableFrame
 ) -> (td.TableFrame, td.TableFrame, dict):
     # transformations can be done here
-    new_initial_values = {}
+    new_initial_values = "SAME"
     return headers, items, new_initial_values
 
 

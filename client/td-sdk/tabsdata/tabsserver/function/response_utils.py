@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, List
 
-from .initial_values_utils import INITIAL_VALUES_TABLE_NAME
 from .yaml_parsing import Data, NoData, store_response_as_yaml
 
 if TYPE_CHECKING:
@@ -32,10 +31,11 @@ def create_response(
     ]
     data_tables = [Data(table) for table in modified_tables]
     no_data_tables = [NoData(table) for table in not_modified_tables]
-    if execution_context.initial_values._data:
-        data_tables.append(Data(INITIAL_VALUES_TABLE_NAME))
+    initial_values_table_name = execution_context.initial_values.output_table_name
+    if execution_context.initial_values.changed:
+        data_tables.append(Data(initial_values_table_name))
     else:
-        no_data_tables.append(NoData(INITIAL_VALUES_TABLE_NAME))
+        no_data_tables.append(NoData(initial_values_table_name))
     logger.info(f"Modified tables: {modified_tables}")
     logger.info(f"Not modified tables: {not_modified_tables}")
     response_content = data_tables + no_data_tables

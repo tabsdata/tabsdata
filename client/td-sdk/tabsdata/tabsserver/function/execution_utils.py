@@ -314,7 +314,11 @@ def execute_sql_query(
     logger.info(f"Importing SQL query: {query}")
     if source.initial_values:
         initial_values.returns_values = True
-        initial_values = initial_values.current_initial_values or source.initial_values
+        initial_values = (
+            source.initial_values
+            if initial_values.use_decorator_values
+            else initial_values.current_initial_values
+        )
         query = replace_initial_values(query, initial_values)
     if isinstance(source, MySQLSource):
         logger.info("Importing SQL query from MySQL")
@@ -391,9 +395,14 @@ def execute_file_importer(
     destination = pathlib.Path(destination).as_uri()
     last_modified = None
     if source.initial_last_modified:
-        last_modified = initial_values.current_initial_values.get(
-            INITIAL_VALUES_LAST_MODIFIED_VARIABLE_NAME, source.initial_last_modified
-        )
+        if initial_values.use_decorator_values:
+            logger.debug("Using decorator last modified value")
+            last_modified = source.initial_last_modified
+        else:
+            logger.debug("Using stored last modified value")
+            last_modified = initial_values.current_initial_values.get(
+                INITIAL_VALUES_LAST_MODIFIED_VARIABLE_NAME
+            )
     logger.debug(f"Last modified: {last_modified}")
     source_list = []
     for location in location_list:

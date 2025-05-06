@@ -61,8 +61,9 @@ class SourcePlugin:
         destination_dir = execution_context.paths.output_folder
         logger.info(f"Importing files to '{destination_dir}'")
         # Add new value of initial values to plugin if provided
-        current_initial_values = execution_context.initial_values.current_initial_values
-        if current_initial_values:
+        initial_values_object = execution_context.initial_values
+        if not initial_values_object.use_decorator_values:
+            current_initial_values = initial_values_object.current_initial_values
             self.initial_values = current_initial_values
             logger.debug(f"Updated plugin initial values to: {current_initial_values}")
         logger.info("Starting plugin stream import")

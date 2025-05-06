@@ -111,8 +111,7 @@ def test_input_sql(testing_mysql, tmp_path):
     )
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
-    # TODO: Change back in https://tabsdata.atlassian.net/browse/TD-322
-    assert os.path.isfile(path_to_output_initial_values)
+    assert not os.path.isfile(path_to_output_initial_values)
 
 
 @pytest.mark.requires_internet
@@ -338,10 +337,12 @@ def test_input_sql_modified_params(testing_mysql, tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
+    path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     write_v1_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
+        output_initial_values_path=path_to_output_initial_values,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)

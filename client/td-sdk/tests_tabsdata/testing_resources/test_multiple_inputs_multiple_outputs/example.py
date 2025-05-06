@@ -36,7 +36,6 @@ format = td.CSVFormat(separator=",", input_has_header=True)
     source=td.LocalFileSource(
         path,
         format=format,
-        initial_last_modified="2024-09-09T00:00:00",
     ),
     tables=["output1", "output2"],  # required,
 )
