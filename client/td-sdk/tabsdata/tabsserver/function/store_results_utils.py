@@ -12,6 +12,7 @@ import re
 import subprocess
 import time
 import uuid
+from functools import partial
 from typing import TYPE_CHECKING, List, Tuple
 
 import polars as pl
@@ -802,16 +803,24 @@ def remove_system_columns_and_convert(result: TableFrame) -> pl.LazyFrame:
         ) from e
 
 
-def _get_matching_files(pattern):
+def _get_matching_files(pattern, file_extension=None):
     # Construct the full pattern
     # Use glob to get the list of matching files
+    file_extension = file_extension or pattern.split(".")[-1]
     matching_files = glob.glob(pattern)
-    ordered_files = sorted(matching_files, key=_extract_index)
+    ordered_files = sorted(matching_files, key=partial(_extract_index, file_extension))
     logger.debug(f"Matching files: {ordered_files}")
     return ordered_files
 
 
 # Sort the files to ensure that they are processed in the correct order
-def _extract_index(filename):
-    match = re.search(r"_(\d+)\.*", filename)
-    return int(match.group(1)) if match else float("inf")
+# This only works if the files are of the form <something>_index.<extension>,
+# otherwise it might produce false positives or negatives
+def _extract_index(file_extension, filename):
+    base_filename = os.path.basename(filename)
+    pattern = r"_(\d+)\." + re.escape(file_extension) + r"$"
+    match = re.search(pattern, base_filename)
+    if match:
+        return int(match.group(1))
+    else:
+        raise ValueError(f"Filename '{filename}' does not contain an index.")
