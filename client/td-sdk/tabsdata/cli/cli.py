@@ -7,8 +7,8 @@ import shutil
 
 import rich_click as click
 
+from tabsdata.cli.auth_group import auth
 from tabsdata.cli.cli_utils import (
-    CONNECTION_FILE,
     DEFAULT_TABSDATA_DIRECTORY,
     initialise_tabsdata_server_connection,
     logical_prompt,
@@ -45,6 +45,7 @@ cli.add_command(collection)
 cli.add_command(data)
 cli.add_command(exec)
 cli.add_command(fn)
+cli.add_command(auth)
 cli.add_command(table)
 cli.add_command(user)
 
@@ -155,6 +156,11 @@ def info(third_party: bool, license: bool, release_notes: bool):
     help="Username for the Tabsdata Server. Will be prompted for it if not provided.",
 )
 @click.option(
+    "--role",
+    "-r",
+    help="Role of the username in the Tabsdata Server.",
+)
+@click.option(
     "--password",
     "-p",
     help=(
@@ -165,15 +171,16 @@ def info(third_party: bool, license: bool, release_notes: bool):
     ),
 )
 @click.pass_context
-def login(ctx: click.Context, server_url: str, user: str, password: str):
+def login(ctx: click.Context, server_url: str, user: str, role: str, password: str):
     """Login to the Tabsdata Server"""
     user = user or logical_prompt(ctx, "Username for the Tabsdata Server")
     password = password or logical_prompt(
         ctx,
-        "Password for the Tabsdata Server",
+        "Password",
         hide_input=True,
     )
-    utils_login(ctx, server_url, user, password)
+    role = role or logical_prompt(ctx, "Role", default_value="user")
+    utils_login(ctx, server_url, user, password, role)
 
 
 @cli.command()
@@ -181,11 +188,10 @@ def login(ctx: click.Context, server_url: str, user: str, password: str):
 def logout(ctx: click.Context):
     """Logout from the Tabsdata Server"""
     try:
-        os.remove(os.path.join(ctx.obj["tabsdata_directory"], CONNECTION_FILE))
-    except FileNotFoundError:
-        click.echo("No credentials found.")
-    else:
+        ctx.obj["tabsdataserver"].logout()
         click.echo("Logout successful.")
+    except Exception as e:
+        raise click.ClickException(f"Failed to logout: {e}")
 
 
 @cli.command()

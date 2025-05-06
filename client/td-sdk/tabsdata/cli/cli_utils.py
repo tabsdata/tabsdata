@@ -49,22 +49,30 @@ def logical_prompt(
     return click.prompt(message, default=default_value, hide_input=hide_input)
 
 
-def utils_login(ctx: click.Context, server_url: str, username: str, password: str):
+def utils_login(
+    ctx: click.Context, server_url: str, username: str, password: str, role: str = None
+):
     try:
-        connection = obtain_connection(server_url, username, password)
+        obtain_connection(
+            server_url,
+            username,
+            password,
+            role=role,
+            credentials_file=os.path.join(
+                ctx.obj["tabsdata_directory"], CONNECTION_FILE
+            ),
+        )
     except Exception as e:
         raise click.ClickException(f"Failed to login: {e}")
-    connection._store_in_file(
-        os.path.join(ctx.obj["tabsdata_directory"], CONNECTION_FILE)
-    )
     click.echo("Login successful.")
 
 
 def request_login_information():
     server_url = click.prompt("Server URL")
     username = click.prompt("Username")
+    role = click.prompt("Role", default="user")
     password = click.prompt("Password", hide_input=True)
-    return server_url, username, password
+    return server_url, username, password, role
 
 
 def initialise_tabsdata_server_connection(ctx: click.Context):
@@ -72,9 +80,17 @@ def initialise_tabsdata_server_connection(ctx: click.Context):
         credentials = json.load(
             open(os.path.join(DEFAULT_TABSDATA_DIRECTORY, CONNECTION_FILE))
         )
-        connection = APIServer(credentials.get("url"))
+        connection = APIServer(
+            credentials.get("url"),
+            credentials_file=os.path.join(
+                ctx.obj["tabsdata_directory"], CONNECTION_FILE
+            ),
+        )
         connection.refresh_token = credentials.get("refresh_token")
         connection.bearer_token = credentials.get("bearer_token")
+        connection.token_type = credentials.get("token_type")
+        connection.expires_in = credentials.get("expires_in")
+        connection.expiration_time = credentials.get("expiration_time")
         tabsdata_server = TabsdataServer.__new__(TabsdataServer)
         tabsdata_server.connection = connection
     except FileNotFoundError:
@@ -85,8 +101,8 @@ def initialise_tabsdata_server_connection(ctx: click.Context):
 def verify_login_or_prompt(ctx: click.Context):
     if not ctx.obj["tabsdataserver"]:
         click.echo("No credentials found. Please login first.")
-        server_url, username, password = request_login_information()
-        utils_login(ctx, server_url, username, password)
+        server_url, username, password, role = request_login_information()
+        utils_login(ctx, server_url, username, password, role)
         initialise_tabsdata_server_connection(ctx)
 
 

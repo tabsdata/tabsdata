@@ -25,6 +25,7 @@ CONNECTION_TIMEOUT = 60 * 5
 READ_TIMEOUT = 60 * 5
 MIN_CONNECTIONS = 2
 MAX_CONNECTIONS = 8
+REFRESH_BUFFER_IN_SECONDS = 300  # 5 minutes
 
 logger = logging.getLogger(__name__)
 
@@ -120,18 +121,43 @@ def process_url(url: str) -> str:
 
 class APIServer:
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, credentials_file: str = None):
         url = process_url(url)
         self.url = url
         self.bearer_token = None
         self.refresh_token = None
+        self.token_type = None
+        self.expires_in = None
+        self.expiration_time = None
+        self.credentials_file = credentials_file
+
+    def _refresh_token_if_needed(self):
+        if not self.refresh_token or not self.expiration_time:
+            # No refresh token or expiration time, no need to refresh
+            return
+        current_time = time.time()
+        already_expired = self.expiration_time < current_time
+        near_expiration = (
+            current_time > self.expiration_time - REFRESH_BUFFER_IN_SECONDS
+        )
+        if near_expiration and not already_expired:
+            logger.debug("Refreshing authentication token")
+            self.authentication_refresh()
 
     @property
     def authentication_header(self):
-        return {"Authorization": f"Bearer {self.bearer_token}"}
+        return (
+            {"Authorization": f"Bearer {self.bearer_token}"}
+            if self.bearer_token
+            else {}
+        )
 
-    def get(self, path, params=None):
+    def get(self, path, params=None, refresh_if_needed=True):
         headers = {}
+
+        if refresh_if_needed:
+            self._refresh_token_if_needed()
+
         headers.update(self.authentication_header)
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
@@ -149,27 +175,49 @@ class APIServer:
                 params=params,
             )
 
-    def post(self, path, data):
+    def post(
+        self,
+        path,
+        data=None,
+        json=None,
+        params=None,
+        refresh_if_needed=True,
+        content_type=None,
+    ):
         headers = {}
+
+        if refresh_if_needed:
+            self._refresh_token_if_needed()
+
         headers.update(self.authentication_header)
+        if content_type:
+            headers.update({"Content-Type": content_type})
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.post(
                 self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                json=data,
+                json=json,
+                data=data,
+                params=params,
             )
         else:
             return DEFAULT_HTTP_SESSION.post(
                 self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                json=data,
+                json=json,
+                data=data,
+                params=params,
             )
 
-    def post_binary(self, path, data):
+    def post_binary(self, path, data, refresh_if_needed=True):
         headers = {}
+
+        if refresh_if_needed:
+            self._refresh_token_if_needed()
+
         headers.update(self.authentication_header)
         headers.update({"Content-Type": "application/octet-stream"})
 
@@ -188,8 +236,12 @@ class APIServer:
                 data=data,
             )
 
-    def delete(self, path):
+    def delete(self, path, refresh_if_needed=True):
         headers = {}
+
+        if refresh_if_needed:
+            self._refresh_token_if_needed()
+
         headers.update(self.authentication_header)
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
@@ -212,6 +264,9 @@ class APIServer:
                     "url": self.url,
                     "bearer_token": self.bearer_token,
                     "refresh_token": self.refresh_token,
+                    "token_type": self.token_type,
+                    "expires_in": self.expires_in,
+                    "expiration_time": self.expiration_time,
                 },
                 file,
             )
@@ -235,24 +290,97 @@ class APIServer:
         else:
             return response
 
-    def authentication_access(self, name: str, password: str):
-        endpoint = "/api/v1/auth/login"
-        data = {"name": name, "password": password, "role": "sys_admin"}
-        response = self.post(endpoint, data)
+    def authentication_info(self, raise_for_status: bool = True):
+        endpoint = "/auth/info"
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def authentication_login(self, name: str, password: str, role: str = None):
+        endpoint = "/auth/login"
+        data = {"name": name, "password": password}
+        if role is not None:
+            data["role"] = role
+        time_of_request = time.time()
+        response = self.post(endpoint, json=data, refresh_if_needed=False)
         if response.status_code == 200:
             self.bearer_token = response.json()["access_token"]
             self.refresh_token = response.json()["refresh_token"]
+            self.token_type = response.json()["token_type"]
+            self.expires_in = response.json()["expires_in"]
+            self.expiration_time = time_of_request + self.expires_in
+            if self.credentials_file:
+                self._store_in_file(self.credentials_file)
             return response
         else:
             raise APIServerError(response.json())
 
+    def authentication_logout(self, raise_for_status: bool = True):
+        endpoint = "/auth/logout"
+        response = self.post(endpoint, json={})
+        if response.status_code == 200:
+            self.bearer_token = None
+            self.refresh_token = None
+            self.token_type = None
+            self.expires_in = None
+            self.expiration_time = None
+        if self.credentials_file:
+            try:
+                os.remove(self.credentials_file)
+            except FileNotFoundError:
+                pass
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def authentication_password_change(
+        self,
+        name: str,
+        old_password: str,
+        new_password: str,
+        raise_for_status: bool = True,
+    ):
+        endpoint = "/auth/password_change"
+        json = {
+            "name": name,
+            "old_password": old_password,
+            "new_password": new_password,
+        }
+        response = self.post(endpoint, json=json, refresh_if_needed=False)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def authentication_refresh(self):
         endpoint = "/auth/refresh"
-        data = {"refresh_token": self.refresh_token}
-        response = self.post(endpoint, data)
+        data = {"refresh_token": self.refresh_token, "grant_type": "refresh_token"}
+        time_of_request = time.time()
+        response = self.post(
+            endpoint,
+            data=data,
+            refresh_if_needed=False,
+            content_type="application/x-www-form-urlencoded",
+        )
         if response.status_code == 200:
             self.bearer_token = response.json()["access_token"]
             self.refresh_token = response.json()["refresh_token"]
+            self.token_type = response.json()["token_type"]
+            self.expires_in = response.json()["expires_in"]
+            self.expiration_time = time_of_request + self.expires_in
+            if self.credentials_file:
+                self._store_in_file(self.credentials_file)
+            return response
+        else:
+            raise APIServerError(response.json())
+
+    def authentication_role_change(self, role: str):
+        endpoint = "/auth/role_change"
+        data = {"role": role}
+        time_of_request = time.time()
+        response = self.post(endpoint, json=data)
+        if response.status_code == 200:
+            self.bearer_token = response.json()["access_token"]
+            self.refresh_token = response.json()["refresh_token"]
+            self.token_type = response.json()["token_type"]
+            self.expires_in = response.json()["expires_in"]
+            self.expiration_time = time_of_request + self.expires_in
+            if self.credentials_file:
+                self._store_in_file(self.credentials_file)
             return response
         else:
             raise APIServerError(response.json())
@@ -278,7 +406,7 @@ class APIServer:
     ):
         endpoint = "/collections"
         data = {"name": name, "description": description}
-        response = self.post(endpoint, data)
+        response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def collection_delete(self, collection_name: str, raise_for_status: bool = True):
@@ -320,7 +448,7 @@ class APIServer:
         data = self.get_params_dict(
             ["name", "description"], [new_collection_name, description]
         )
-        response = self.post(endpoint, data)
+        response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def dataversion_list(
@@ -389,7 +517,7 @@ class APIServer:
             "trigger_by": trigger_by,
             "function_snippet": function_snippet,
         }
-        response = self.post(endpoint, data)
+        response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_delete(
@@ -410,7 +538,7 @@ class APIServer:
     ):
         endpoint = f"/collections/{collection_name}/functions/{function_name}/execute"
         data = self.get_params_dict(["name"], [execution_plan_name])
-        response = self.post(endpoint, data)
+        response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_get(
@@ -488,7 +616,7 @@ class APIServer:
                 function_snippet,
             ],
         )
-        response = self.post(endpoint, data)
+        response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_upload_bundle(
@@ -592,7 +720,7 @@ class APIServer:
 
     def transaction_cancel(self, transaction_id: str, raise_for_status: bool = True):
         endpoint = f"/transactions/{transaction_id}/cancel"
-        response = self.post(endpoint, {})
+        response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def transaction_list(
@@ -613,7 +741,7 @@ class APIServer:
 
     def transaction_recover(self, transaction_id: str, raise_for_status: bool = True):
         endpoint = f"/transactions/{transaction_id}/recover"
-        response = self.post(endpoint, {})
+        response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def users_create(
@@ -633,7 +761,7 @@ class APIServer:
             "password": password,
             "enabled": enabled,
         }
-        response = self.post(endpoint, data)
+        response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def users_delete(self, name: str, raise_for_status: bool = True):
@@ -683,7 +811,7 @@ class APIServer:
             }
         elif force_password_change:
             data["password"] = {"ForceChange": {"temporary_password": new_password}}
-        response = self.post(endpoint, data)
+        response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def worker_log(self, message_id: str, raise_for_status: bool = True):
@@ -731,7 +859,14 @@ class APIServer:
         return {name: value for name, value in zip(names, values) if value is not None}
 
 
-def obtain_connection(url: str, name: str, password: str) -> APIServer:
-    connection = APIServer(url)
-    connection.authentication_access(name, password)
+def obtain_connection(
+    url: str,
+    name: str = None,
+    password: str = None,
+    role: str = None,
+    credentials_file: str = None,
+) -> APIServer:
+    connection = APIServer(url, credentials_file=credentials_file)
+    if name and password:
+        connection.authentication_login(name, password, role=role)
     return connection

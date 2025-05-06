@@ -2107,7 +2107,9 @@ class TabsdataServer:
         password (str): The password of the user.
     """
 
-    def __init__(self, url: str, username: str, password: str):
+    def __init__(
+        self, url: str, username: str = None, password: str = None, role: str = None
+    ):
         """
         Initialize the TabsdataServer object.
 
@@ -2116,7 +2118,7 @@ class TabsdataServer:
             username (str): The username of the user.
             password (str): The password of the user.
         """
-        self.connection = obtain_connection(url, username, password)
+        self.connection = obtain_connection(url, username, password, role)
 
     @property
     def commits(self) -> List[Commit]:
@@ -2518,6 +2520,46 @@ class TabsdataServer:
             new_function_name=new_function_name,
             raise_for_status=raise_for_status,
         )
+
+    def login(self, username: str, password: str, role: str = None):
+        self.connection.authentication_login(
+            username,
+            password,
+            role=role,
+        )
+
+    def logout(self, raise_for_status: bool = True):
+        return self.connection.authentication_logout(raise_for_status=raise_for_status)
+
+    def password_change(
+        self,
+        username: str,
+        old_password: str,
+        new_password: str,
+        raise_for_status: bool = True,
+    ):
+        self.connection.authentication_password_change(
+            username, old_password, new_password, raise_for_status=raise_for_status
+        )
+
+    def role_change(self, role: str):
+        self.connection.authentication_role_change(role)
+
+    def auth_info(self) -> dict:
+        data = self.connection.authentication_info().json().get("data")
+        all_roles = data.get("user_roles", [])
+        roles_by_name = [role["name"] for role in all_roles]
+        current_role_id = data.get("current_role_id", "")
+        current_role = next(
+            (role["name"] for role in all_roles if role["id"] == current_role_id), ""
+        )
+        info = {
+            "name": data.get("name"),
+            "email": data.get("email"),
+            "current_role": current_role,
+            "roles": roles_by_name,
+        }
+        return info
 
     def table_download(
         self,

@@ -46,7 +46,7 @@ def test_obtain_connection():
 @pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_authentication_access_success(apiserver_connection):
     current_bearer = apiserver_connection.bearer_token
-    response = apiserver_connection.authentication_access("admin", "tabsdata")
+    response = apiserver_connection.authentication_login("admin", "tabsdata")
     assert response.status_code == 200
     assert apiserver_connection.bearer_token is not None
     assert apiserver_connection.refresh_token is not None
@@ -59,7 +59,7 @@ def test_authentication_access_success(apiserver_connection):
 @pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_authentication_access_raises_error(apiserver_connection):
     with pytest.raises(APIServerError):
-        apiserver_connection.authentication_access("wrong_user", "wrong_password")
+        apiserver_connection.authentication_login("wrong_user", "wrong_password")
 
 
 @pytest.mark.integration
