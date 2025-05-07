@@ -130,7 +130,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
 
                 let mut input_tables_map = HashMap::new();
                 for req in requirements.iter() {
-                    if let Some(dependency_pos) = req.requirement_dependency_pos() {
+                    if let (Some(dependency_pos), Some(version_idx)) = (req.requirement_dependency_pos(), req.requirement_version_idx()) {
                         let location = match req.requirement_table_data_version_id() {
                             Some(data_version_id) => {
                                 let found_data_version: TableDataVersionDBWithNames = queries
@@ -189,6 +189,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                             .table_version_id(req.requirement_table_version_id())
                             .table_data_version_id(*req.requirement_table_data_version_id())
                             .location(location)
+                            .version_idx(version_idx)
                             .table_pos(dependency_pos)
                             .version_pos(req.requirement_version_pos())
                             .build()?;
@@ -239,7 +240,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
 
                 // Build system/user tables
                 fn partition_and_sort<T, U>(
-                    map: HashMap<i16, T>,
+                    map: HashMap<i32, T>,
                     transform: impl Fn(T) -> U,
                 ) -> (Vec<U>, Vec<U>) {
                     let mut system_tables = Vec::new();

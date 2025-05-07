@@ -326,7 +326,7 @@ mod tests {
                         *output.location().env_prefix(),
                         Some(EnvPrefix::try_from(mount_def.id())?)
                     );
-                    assert_eq!(**output.table_pos(), index as i16);
+                    assert_eq!(**output.table_pos(), index as i32);
                 }
                 _ => panic!("Unexpected Output Table type"),
             }

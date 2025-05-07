@@ -125,6 +125,7 @@ impl ExecuteFunctionService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
     use td_common::id::Id;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -140,7 +141,7 @@ mod tests {
         TableDependency, TableName, TableTrigger, TriggeredOn, UserId,
     };
     use td_objects::types::execution::{
-        ExecutionDBWithStatus, ExecutionStatus, FunctionRequirementDBWithStatus, FunctionRunStatus,
+        ExecutionDBWithStatus, ExecutionStatus, FunctionRequirementDBWithNames, FunctionRunStatus,
         TableDataVersionDBWithStatus, TransactionDBWithStatus, TransactionStatus,
     };
     use td_objects::types::function::{FunctionDBWithNames, FunctionRegister};
@@ -414,24 +415,47 @@ mod tests {
         }
 
         // FunctionCondition
-        let function_requirements: Vec<FunctionRequirementDBWithStatus> = queries
-            .select_by::<FunctionRequirementDBWithStatus>(&())?
+        let function_requirements: Vec<FunctionRequirementDBWithNames> = queries
+            .select_by::<FunctionRequirementDBWithNames>(&())?
             .build_query_as()
             .fetch_all(&db)
             .await
             .map_err(handle_sql_err)?;
         // it can vary depending on the execution
         assert!(function_requirements.is_empty() || function_requirements.len() == 4);
-        for function_condition in function_requirements {
+
+        let mut function_idxs = HashSet::new();
+        for function_condition in &function_requirements {
             assert_eq!(function_condition.collection_id(), collection.id());
             assert_eq!(function_condition.execution_id(), response.id());
-            // ToDo: Provisional change pending revision...
-            // assert_eq!(*function_condition.status(), FunctionRunStatus::Scheduled);
-            assert!(matches!(
-                *function_condition.status(),
-                FunctionRunStatus::Scheduled | FunctionRunStatus::Done
-            ),);
+            if *function_condition.requirement_table() == TableName::try_from("table_3")? {
+                // Self dependency on fist execution, version does not exist, requirement done.
+                assert_eq!(*function_condition.status(), FunctionRunStatus::Done);
+            } else {
+                assert_eq!(*function_condition.status(), FunctionRunStatus::Scheduled);
+            }
+
+            if let Some(dependency_pos) = function_condition.requirement_dependency_pos() {
+                // In the test, table order matches table name
+                assert!(function_condition
+                    .requirement_table()
+                    .as_str()
+                    .contains(&(**dependency_pos + 1).to_string()));
+            }
+
+            if let Some(version_idx) = function_condition.requirement_version_idx() {
+                function_idxs.insert(**version_idx as usize);
+            }
         }
+        assert_eq!(
+            function_idxs,
+            (0..function_requirements
+                .iter()
+                .filter(|f| f.requirement_version_idx().is_some())
+                .collect::<Vec<_>>()
+                .len())
+                .collect::<HashSet<_>>()
+        );
 
         Ok(())
     }

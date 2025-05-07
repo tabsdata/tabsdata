@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_execution::planner::ExecutionPlanner;
 use td_execution::version_resolver::VersionResolver;
 use td_objects::sql::DerefQueries;
-use td_objects::types::basic::{Dot, Trigger, VersionPos};
+use td_objects::types::basic::{Dot, Trigger, VersionIdx, VersionPos};
 use td_objects::types::execution::{
     ExecutionDB, ExecutionResponse, FunctionRequirementDB, FunctionRunDB, FunctionRunDBBuilder,
     FunctionVersionResponseBuilder, ResolvedVersion, TableDataVersionDB,
@@ -181,6 +181,7 @@ pub async fn build_function_requirements(
         .map(|f| (f.function_version_id(), f))
         .collect();
 
+    let mut version_idx = 0;
     for (function, table, edge) in plan.function_version_requirements() {
         for (version_pos, version) in edge.versions().inner().iter().enumerate() {
             let mut builder = FunctionRequirementDB::builder();
@@ -193,19 +194,22 @@ pub async fn build_function_requirements(
                 // condition
                 .requirement_table_id(table.table_id())
                 .requirement_table_version_id(table.table_version_id())
-                .requirement_dependency_pos(edge.dependency_pos().cloned())
-                .requirement_version_pos(VersionPos::try_from(version_pos as i16)?);
+                .requirement_version_pos(VersionPos::try_from(version_pos as i32)?);
 
-            let condition = if let Some(version) = version {
+            if let Some(dependency) = edge.dependency_pos() {
+                builder
+                    .requirement_version_idx(VersionIdx::try_from(version_idx)?)
+                    .requirement_dependency_pos(Some(dependency.clone()));
+                version_idx += 1;
+            }
+
+            if let Some(version) = version {
                 builder
                     .requirement_function_run_id(*version.function_run_id())
-                    .requirement_table_data_version_id(*version.id())
-                    .build()?
-            } else {
-                builder.build()?
-            };
+                    .requirement_table_data_version_id(*version.id());
+            }
 
-            conditions.push(condition);
+            conditions.push(builder.build()?);
         }
     }
 

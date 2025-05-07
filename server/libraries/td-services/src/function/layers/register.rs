@@ -107,7 +107,7 @@ pub async fn build_table_versions(
                 .clone()
                 .table_id(table_id)
                 .name(table_name)
-                .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i16)?))
+                .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i32)?))
                 .status(TableStatus::Active)
                 .build()?;
 
@@ -270,7 +270,7 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
             .table_function_version_id(table_db.function_version_id())
             .table_name(table_db.name())
             .table_versions(dependency_table.versions())
-            .dep_pos(DependencyPos::try_from(pos as i16)?)
+            .dep_pos(DependencyPos::try_from(pos as i32)?)
             .status(DependencyStatus::Active)
             .build()?;
 

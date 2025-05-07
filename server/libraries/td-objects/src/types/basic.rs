@@ -57,7 +57,7 @@ pub enum Decorator {
 #[td_type::typed(id)]
 pub struct DependencyId;
 
-#[td_type::typed(i16(min = 0, max = 200, default = 0))]
+#[td_type::typed(i32(min = 0, default = 0))]
 pub struct DependencyPos;
 
 #[td_type::typed_enum]
@@ -331,7 +331,7 @@ impl TryFrom<&DependencyVersionDBWithNames> for TableDependency {
     }
 }
 
-#[td_type::typed(i16)]
+#[td_type::typed(i32)]
 pub struct TableFunctionParamPos;
 
 #[td_type::typed(id)]
@@ -452,7 +452,10 @@ pub struct UserName;
 #[td_type::typed(id)]
 pub struct UserRoleId;
 
-#[td_type::typed(i16(min = 0, max = 200, default = 0))]
+#[td_type::typed(i32(min = 0, default = 0))]
+pub struct VersionIdx;
+
+#[td_type::typed(i32(min = 0, default = 0))]
 pub struct VersionPos;
 
 #[td_type::typed(id)]

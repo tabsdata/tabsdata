@@ -8,7 +8,8 @@ use crate::types::basic::{
     ExecutionName, FunctionName, FunctionRunId, FunctionVersionId, HasData, Partitioned,
     RequirementId, SelfDependency, StorageVersion, TableDataVersionId, TableFunctionParamPos,
     TableId, TableName, TableVersionId, TableVersions, TransactionByStr, TransactionId,
-    TransactionKey, Trigger, TriggeredOn, UserId, UserName, VersionPos, WorkerMessageId,
+    TransactionKey, Trigger, TriggeredOn, UserId, UserName, VersionIdx, VersionPos,
+    WorkerMessageId,
 };
 use crate::types::dependency::DependencyVersionDBWithNames;
 use crate::types::function::FunctionVersionDBWithNames;
@@ -242,6 +243,8 @@ pub struct FunctionRequirementDB {
     #[builder(default)]
     requirement_table_data_version_id: Option<TableDataVersionId>,
     #[builder(default)]
+    requirement_version_idx: Option<VersionIdx>,
+    #[builder(default)]
     requirement_dependency_pos: Option<DependencyPos>,
     requirement_version_pos: VersionPos,
 }
@@ -257,6 +260,7 @@ pub struct FunctionRequirementDBWithStatus {
     requirement_table_version_id: TableVersionId,
     requirement_function_run_id: Option<FunctionRunId>,
     requirement_table_data_version_id: Option<TableDataVersionId>,
+    requirement_version_idx: Option<VersionIdx>,
     requirement_dependency_pos: Option<DependencyPos>,
     requirement_version_pos: VersionPos,
     status: FunctionRunStatus,
@@ -278,6 +282,7 @@ pub struct FunctionRequirementDBWithNames {
     requirement_table_version_id: TableVersionId,
     requirement_function_run_id: Option<FunctionRunId>,
     requirement_table_data_version_id: Option<TableDataVersionId>,
+    requirement_version_idx: Option<VersionIdx>,
     requirement_dependency_pos: Option<DependencyPos>,
     requirement_version_pos: VersionPos,
     status: FunctionRunStatus,

@@ -108,7 +108,7 @@ pub async fn seed_function(
                 .clone()
                 .table_id(TableId::default())
                 .name(table_name)
-                .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i16).unwrap()))
+                .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i32).unwrap()))
                 .status(TableStatus::Active)
                 .build()
                 .unwrap();
@@ -186,7 +186,7 @@ pub async fn seed_function(
                 .table_version_id(table_db.table_version_id())
                 .table_name(table_db.name())
                 .table_versions(dependency_table.versions())
-                .dep_pos(DependencyPos::try_from(pos as i16).unwrap())
+                .dep_pos(DependencyPos::try_from(pos as i32).unwrap())
                 .status(DependencyStatus::Active)
                 .build()
                 .unwrap();
