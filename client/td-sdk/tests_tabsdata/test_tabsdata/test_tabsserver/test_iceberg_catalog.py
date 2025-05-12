@@ -3,10 +3,10 @@
 #
 
 import copy
-import datetime
 import inspect
 import logging
 import os
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -74,11 +74,11 @@ def test_output_s3_catalog(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file_0 = (
         "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_"
-        f"{int(datetime.datetime.now().timestamp())}_0.parquet"
+        f"{uuid.uuid4()}_0.parquet"
     )
     output_file_1 = (
         "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_"
-        f"{int(datetime.datetime.now().timestamp())}_1.parquet"
+        f"{uuid.uuid4()}_1.parquet"
     )
     output_s3_catalog.output.uri = [
         output_file_0,
@@ -88,7 +88,7 @@ def test_output_s3_catalog(tmp_path, s3_client):
         output_s3_catalog.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    namespace = f"testing_namespace_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
     table_0 = f"{namespace}.s3_catalog_0"
     table_1 = f"{namespace}.s3_catalog_1"
@@ -187,7 +187,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
         output_s3_catalog_replace.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    namespace = f"testing_namespace_replace_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
     table_name = f"{namespace}.s3_catalog_replace"
     output_s3_catalog_replace.output.catalog.tables = table_name
@@ -200,7 +200,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
         for i in range(2):
             output_file = (
                 "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_replace"
-                f"{int(datetime.datetime.now().timestamp())}_{i}.parquet"
+                f"{uuid.uuid4()}_{i}.parquet"
             )
             output_s3_catalog_replace.output.uri = output_file
 
@@ -289,7 +289,7 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
         output_s3_catalog_append.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    namespace = f"testing_namespace_append_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
     table_name = f"{namespace}.s3_catalog_append"
     output_s3_catalog_append.output.catalog.tables = table_name
@@ -302,7 +302,7 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
         for i in range(2):
             output_file = (
                 "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_append"
-                f"{int(datetime.datetime.now().timestamp())}_{i}.parquet"
+                f"{uuid.uuid4()}_{i}.parquet"
             )
             output_s3_catalog_append.output.uri = output_file
 
@@ -390,11 +390,11 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
     output_file_0 = (
         "s3://tabsdata-testing-bucket/testing_output"
         "/test_output_s3_catalog_no_autocreate_"
-        f"{int(datetime.datetime.now().timestamp())}_0.parquet"
+        f"{uuid.uuid4()}_0.parquet"
     )
     output_file_1 = (
         "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_no_autocreate_"
-        f"{int(datetime.datetime.now().timestamp())}_1.parquet"
+        f"{uuid.uuid4()}_1.parquet"
     )
     output_s3_catalog_no_auto_create_at_fails.output.uri = [
         output_file_0,
@@ -404,7 +404,7 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
         output_s3_catalog_no_auto_create_at_fails.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    namespace = f"testing_namespace_no_auto_create_at_fails_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
     table_0 = f"{namespace}.s3_catalog_no_autocreate_0"
     table_1 = f"{namespace}.s3_catalog_no_autocreate_1"
@@ -469,14 +469,14 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client):
     output_file = (
         "s3://tabsdata-testing-bucket/testing_output"
         "/test_output_s3_catalog_schema_update_"
-        f"{int(datetime.datetime.now().timestamp())}.parquet"
+        f"{uuid.uuid4()}.parquet"
     )
     output_s3_catalog_schema_update.output.uri = output_file
     catalog_definition = _recursively_evaluate_secret(
         output_s3_catalog_schema_update.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    namespace = f"testing_namespace_schema_update_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
     table_name = f"{namespace}.s3_catalog_schema_update"
 
@@ -574,14 +574,14 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
     output_file = (
         "s3://tabsdata-testing-bucket/testing_output"
         "/test_output_s3_catalog_schema_strict_"
-        f"{int(datetime.datetime.now().timestamp())}.parquet"
+        f"{uuid.uuid4()}.parquet"
     )
     output_s3_catalog_schema_strict.output.uri = output_file
     catalog_definition = _recursively_evaluate_secret(
         output_s3_catalog_schema_strict.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    namespace = f"testing_namespace_schema_strict_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
     table_name = f"{namespace}.s3_catalog_schema_strict"
 
@@ -658,14 +658,14 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
     output_file = (
         "s3://tabsdata-testing-bucket/testing_output"
         "/test_output_s3_catalog_partition_"
-        f"{int(datetime.datetime.now().timestamp())}_$FRAGMENT_IDX.parquet"
+        f"{uuid.uuid4()}_$FRAGMENT_IDX.parquet"
     )
     output_s3_catalog_partition.output.uri = output_file
     catalog_definition = _recursively_evaluate_secret(
         output_s3_catalog_partition.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    namespace = f"testing_namespace_partition_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
     table_name = f"{namespace}.s3_catalog_partition"
 
@@ -772,11 +772,11 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file_0 = (
         "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_region_creds_"
-        f"{int(datetime.datetime.now().timestamp())}_0.parquet"
+        f"{uuid.uuid4()}_0.parquet"
     )
     output_file_1 = (
         "s3://tabsdata-testing-bucket/testing_output/test_output_s3_catalog_region_creds_"
-        f"{int(datetime.datetime.now().timestamp())}_1.parquet"
+        f"{uuid.uuid4()}_1.parquet"
     )
     output_s3_catalog_region_creds.output.uri = [
         output_file_0,
@@ -786,7 +786,7 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client):
         output_s3_catalog_region_creds.output.catalog.definition
     )
     catalog = load_catalog(**catalog_definition)
-    namespace = f"testing_namespace_{int(datetime.datetime.now().timestamp())}"
+    namespace = f"testing_namespace_region_creds_{uuid.uuid4()}"
     catalog.create_namespace(namespace)
     table_0 = f"{namespace}.s3_catalog_region_creds_0"
     table_1 = f"{namespace}.s3_catalog_region_creds_1"
