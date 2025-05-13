@@ -1914,7 +1914,7 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
             error!("Failed to create temporary profile config folder: {}", e);
             exit(GeneralError.code());
         });
-        let persistent_profile_folder = profile_folder.into_path();
+        let persistent_profile_folder = profile_folder.keep();
         let profile_config = match extract_profile_config(persistent_profile_folder) {
             Ok(config) => config?,
             Err(e) => {

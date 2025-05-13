@@ -261,7 +261,7 @@ mod tests {
             sleep(Duration::from_millis(SLEEP_TIME));
         }
 
-        instance_folder.into_path()
+        instance_folder.keep()
     }
 
     fn value() -> String {
