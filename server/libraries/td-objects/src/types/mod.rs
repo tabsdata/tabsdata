@@ -80,6 +80,10 @@ pub trait DataLogicObject {}
 
 pub trait DataTransferObject {}
 
+pub trait Extractor<T> {
+    fn extract(&self) -> T;
+}
+
 pub trait ComposedString {
     fn parse(s: impl Into<String>) -> Result<Self, td_error::TdError>
     where

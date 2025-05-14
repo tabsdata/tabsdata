@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::types::DataAccessObject;
+    use crate::types::{DataAccessObject, Extractor};
     use td_type::{Dao, Dlo, DloType, Dto};
 
     #[Dao]
@@ -603,7 +603,7 @@ mod tests {
 
         let dxo = TestDxo::builder().name("name")._size(123).build()?;
 
-        let name = String::from(&dxo);
+        let name = dxo.extract();
         assert_eq!(name, "name");
         Ok(())
     }

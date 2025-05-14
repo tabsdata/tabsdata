@@ -556,9 +556,9 @@ fn gen_td_type_field_getset(target: &ItemStruct) -> proc_macro2::TokenStream {
             let field_name = field.ident.as_ref().unwrap();
             let field_type = &field.ty;
             expanded.extend(quote! {
-                impl #impl_generics From<& #to #ty_generics> for #field_type #where_clause {
-                    fn from(from: & #to #ty_generics) -> Self {
-                        from.#field_name.clone()
+                impl #impl_generics crate::types::Extractor<#field_type> for #to #ty_generics #where_clause {
+                    fn extract(&self) -> #field_type {
+                        self.#field_name.clone()
                     }
                 }
             });
