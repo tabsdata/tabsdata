@@ -35,20 +35,10 @@ SELECT '00000000000000000000000004',
        1
 ;
 
-CREATE VIEW users_with_names AS
-SELECT u.id,
-       u.name,
-       u.full_name,
-       u.email,
-       u.created_on,
-       u.created_by_id,
+CREATE VIEW users__with_names AS
+SELECT u.*,
        IFNULL(u_c.name, '[' || u.created_by_id || ']')  as created_by,
-       u.modified_on,
-       u.modified_by_id,
-       IFNULL(u_m.name, '[' || u.modified_by_id || ']') as modified_by,
-       u.password_set_on,
-       u.password_must_change,
-       u.enabled
+       IFNULL(u_m.name, '[' || u.modified_by_id || ']') as modified_by
 FROM users u
          LEFT JOIN users u_c ON u.created_by_id = u_c.id
          LEFT JOIN users u_m ON u.modified_by_id = u_m.id

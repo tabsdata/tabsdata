@@ -53,13 +53,16 @@ pub mod tests {
     use super::*;
     use crate::test_utils::seed_role::seed_role;
     use crate::test_utils::seed_user::seed_user;
-    use crate::types::basic::{Description, RoleName};
+    use crate::types::basic::{Description, RoleName, UserEnabled, UserName};
 
-    #[tokio::test]
-    async fn test_seed_user_role() {
-        let db = td_database::test_utils::db().await.unwrap();
-
-        let user_id = seed_user(&db, None, "joaquin", false).await;
+    #[td_test::test(sqlx)]
+    async fn test_seed_user_role(db: DbPool) {
+        let user = seed_user(
+            &db,
+            &UserName::try_from("joaquin").unwrap(),
+            &UserEnabled::from(false),
+        )
+        .await;
         let role = seed_role(
             &db,
             RoleName::try_from("king").unwrap(),
@@ -67,7 +70,7 @@ pub mod tests {
         )
         .await;
 
-        let user_role = seed_user_role(&db, &UserId::from(user_id), role.id()).await;
+        let user_role = seed_user_role(&db, user.id(), role.id()).await;
 
         let found = get_user_role(&db, role.id()).await.unwrap();
         assert_eq!(user_role.id(), found.id());

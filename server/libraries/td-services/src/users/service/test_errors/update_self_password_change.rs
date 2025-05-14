@@ -2,23 +2,30 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::users::error::UserError;
-use crate::users::service::update_user::UpdateUserService;
+use crate::users::service::update::UpdateUserService;
+use crate::users::UserError;
 use std::sync::Arc;
 use td_authz::AuthzContext;
+use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
+use td_objects::rest_urls::UserParam;
 use td_objects::test_utils::seed_user::seed_user;
-use td_objects::types::basic::{AccessTokenId, RoleId};
-use td_objects::users::dto::UserUpdate;
+use td_objects::types::basic::{
+    AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserName,
+};
+use td_objects::types::user::UserUpdate;
 use td_security::config::PasswordHashingConfig;
 
-#[tokio::test]
-async fn test_update_user_self() {
-    let db = td_database::test_utils::db().await.unwrap();
+#[td_test::test(sqlx)]
+async fn test_update_user_self(db: DbPool) {
     let password_config = Arc::new(PasswordHashingConfig::default());
-
-    let user_id = seed_user(&db, None, "u0", true).await;
+    let user = seed_user(
+        &db,
+        &UserName::try_from("u0").unwrap(),
+        &UserEnabled::from(true),
+    )
+    .await;
 
     let service = UpdateUserService::new(
         db.clone(),
@@ -28,15 +35,23 @@ async fn test_update_user_self() {
     .service()
     .await;
 
-    let user_update = UserUpdate {
-        full_name: Some("U0 Update".to_string()),
-        email: Some("u0update@foo.com".to_string()),
-        password: Some("new_password".to_string()),
-        enabled: None,
-    };
+    let user_update = UserUpdate::builder()
+        .full_name(Some(FullName::try_from("U0 Update").unwrap()))
+        .email(Some(Email::try_from("u0update@foo.com").unwrap()))
+        .password(Some(Password::try_from("new_password").unwrap()))
+        .enabled(None)
+        .build()
+        .unwrap();
 
-    let request = RequestContext::with(AccessTokenId::default(), user_id, RoleId::user(), false)
-        .update("u0", user_update);
+    let request = RequestContext::with(AccessTokenId::default(), user.id(), RoleId::user(), false)
+        .update(
+            UserParam::builder()
+                .try_user("u0")
+                .unwrap()
+                .build()
+                .unwrap(),
+            user_update,
+        );
 
     assert_service_error(service, request, |err| match err {
         UserError::MustUsePasswordChangeEndpointForSelf => {}

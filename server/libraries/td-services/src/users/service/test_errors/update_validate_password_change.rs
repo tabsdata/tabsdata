@@ -6,14 +6,15 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::users::error::UserError;
-use crate::users::service::update_user::UpdateUserService;
+use crate::users::service::update::UpdateUserService;
+use crate::users::UserError;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
-use td_objects::users::dto::UserUpdate;
+use td_objects::rest_urls::UserParam;
+use td_objects::types::basic::{AccessTokenId, Password, RoleId, UserId};
+use td_objects::types::user::UserUpdate;
 use td_security::config::PasswordHashingConfig;
 
 #[tokio::test]
@@ -36,13 +37,21 @@ async fn test_cannot_change_self_password() {
         false,
     );
 
-    let update = UserUpdate {
-        full_name: None,
-        email: None,
-        password: Some("new_password".to_string()),
-        enabled: None,
-    };
-    let request = ctx.update("admin", update);
+    let update = UserUpdate::builder()
+        .full_name(None)
+        .email(None)
+        .password(Some(Password::try_from("new_password").unwrap()))
+        .enabled(None)
+        .build()
+        .unwrap();
+    let request = ctx.update(
+        UserParam::builder()
+            .try_user("admin")
+            .unwrap()
+            .build()
+            .unwrap(),
+        update,
+    );
 
     assert_service_error(service, request, |err| match err {
         UserError::MustUsePasswordChangeEndpointForSelf => {}

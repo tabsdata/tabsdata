@@ -2,12 +2,13 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::users::error::UserError;
-use crate::users::service::delete_user::DeleteUserService;
+use crate::users::service::delete::DeleteUserService;
+use crate::users::UserError;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
+use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 
 #[tokio::test]
@@ -25,7 +26,13 @@ async fn test_not_allowed_to_delete_themselves() {
         true,
     );
 
-    let request = ctx.delete("admin");
+    let request = ctx.delete(
+        UserParam::builder()
+            .try_user("admin")
+            .unwrap()
+            .build()
+            .unwrap(),
+    );
 
     assert_service_error(service, request, |err| match err {
         UserError::NotAllowedToDeleteThemselves => {}

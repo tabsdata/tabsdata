@@ -2,19 +2,20 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::users::error::UserError;
-use crate::users::service::update_user::UpdateUserService;
+use crate::users::service::update::UpdateUserService;
+use crate::users::UserError;
 use std::sync::Arc;
 use td_authz::AuthzContext;
+use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
-use td_objects::users::dto::UserUpdate;
+use td_objects::rest_urls::UserParam;
+use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId};
+use td_objects::types::user::UserUpdate;
 use td_security::config::PasswordHashingConfig;
 
-#[tokio::test]
-async fn test_user_cannot_enable_disable_themselves() {
-    let db = td_database::test_utils::db().await.unwrap();
+#[td_test::test(sqlx)]
+async fn test_user_cannot_enable_disable_themselves(db: DbPool) {
     let password_hashing_config = Arc::new(PasswordHashingConfig::default());
 
     let service = UpdateUserService::new(
@@ -32,13 +33,21 @@ async fn test_user_cannot_enable_disable_themselves() {
         false,
     );
 
-    let update = UserUpdate {
-        full_name: None,
-        email: None,
-        password: None,
-        enabled: Some(false),
-    };
-    let request = ctx.update("admin", update);
+    let update = UserUpdate::builder()
+        .full_name(None)
+        .email(None)
+        .password(None)
+        .enabled(Some(UserEnabled::from(false)))
+        .build()
+        .unwrap();
+    let request = ctx.update(
+        UserParam::builder()
+            .try_user("admin")
+            .unwrap()
+            .build()
+            .unwrap(),
+        update,
+    );
 
     assert_service_error(service, request, |err| match err {
         UserError::UserCannotEnableDisableThemselves => {}
