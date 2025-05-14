@@ -15,16 +15,10 @@ CREATE TABLE collections
     -- because if not we could ever delete a user.
 );
 
-CREATE VIEW collections_with_names AS
-SELECT p.id,
-       p.name,
-       p.description,
-       p.created_on,
-       p.created_by_id,
+CREATE VIEW collections__with_names AS
+SELECT p.*,
        -- If the user is deleted, we show the internal id
        IFNULL(u_c.name, '[' || p.created_by_id || ']')  as created_by,
-       p.modified_on,
-       p.modified_by_id,
        -- If the user is deleted, we show the internal id
        IFNULL(u_m.name, '[' || p.modified_by_id || ']') as modified_by
 FROM collections p

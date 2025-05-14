@@ -2,20 +2,21 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::collections::service::delete_collection::DeleteCollectionService;
+use crate::collections::service::delete::DeleteCollectionService;
 use std::sync::Arc;
 use td_authz::AuthzContext;
+use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::test_utils::seed_collection::seed_collection;
+use td_objects::test_utils::seed_collection2::seed_collection;
 use td_objects::tower_service::authz::AuthzError;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
 
-#[tokio::test]
-async fn test_not_allowed_to_delete_collection() {
-    let db = td_database::test_utils::db().await.unwrap();
-    let _ = seed_collection(&db, None, "ds0").await;
+#[td_test::test(sqlx)]
+async fn test_not_allowed_to_delete_collection(db: DbPool) {
+    let name = CollectionName::try_from("ds0").unwrap();
+    let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
     let service = DeleteCollectionService::new(db.clone(), Arc::new(AuthzContext::default()))
         .service()
@@ -27,7 +28,13 @@ async fn test_not_allowed_to_delete_collection() {
         RoleId::user(),
         false,
     )
-    .delete(CollectionParam::new("ds0"));
+    .delete(
+        CollectionParam::builder()
+            .try_collection(name.to_string())
+            .unwrap()
+            .build()
+            .unwrap(),
+    );
 
     assert_service_error(service, request, |err| match err {
         AuthzError::UnAuthorized(_) => {}

@@ -12,12 +12,13 @@ pub async fn seed_collection(
     collection_name: &CollectionName,
     created_by: &UserId,
 ) -> CollectionDB {
+    let created_on = AtTime::now().await;
     let collection = CollectionDB::builder()
         .name(collection_name)
         .description(Description::default())
-        .created_on(AtTime::now().await)
+        .created_on(&created_on)
         .created_by_id(created_by)
-        .modified_on(AtTime::now().await)
+        .modified_on(&created_on)
         .modified_by_id(created_by)
         .build()
         .unwrap();
