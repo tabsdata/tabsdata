@@ -12,7 +12,10 @@ use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::trigger::TriggerVersionDBWithNames;
 use td_common::id::Id;
 use td_error::TdError;
-use td_security::{ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN, USER_ROLE};
+use td_security::{
+    ADMIN_USER, ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN, SEC_ADMIN_ROLE,
+    SYS_ADMIN_ROLE, USER_ROLE,
+};
 
 #[td_type::typed(string)]
 pub struct AccessToken;
@@ -80,7 +83,7 @@ pub struct Dot;
 #[td_type::typed(string(parser = parse_email))]
 pub struct Email;
 
-#[td_type::typed(id)]
+#[td_type::typed(id, try_from = CollectionId)]
 pub struct EntityId;
 
 #[td_type::typed(string(parser = parse_entity))]
@@ -116,6 +119,9 @@ pub struct FromCollectionId;
 
 #[td_type::typed(bool(default = false))]
 pub struct Frozen;
+
+#[td_type::typed(string)]
+pub struct FullName;
 
 #[td_type::typed(id)]
 pub struct FunctionId;
@@ -167,6 +173,7 @@ pub struct InterCollectionPermissionIdName;
 
 const MIN_PASSWORD_LEN: usize = 8;
 const MAX_PASSWORD_LEN: usize = 64;
+
 #[td_type::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct NewPassword;
 
@@ -275,6 +282,14 @@ pub struct RoleIdName;
 pub struct RoleName;
 
 impl RoleName {
+    pub fn sys_admin() -> Self {
+        Self(SYS_ADMIN_ROLE.to_string())
+    }
+
+    pub fn sec_admin() -> Self {
+        Self(SEC_ADMIN_ROLE.to_string())
+    }
+
     pub fn user() -> Self {
         Self(USER_ROLE.to_string())
     }
@@ -431,7 +446,7 @@ pub enum TriggerStatus {
 #[td_type::typed(id)]
 pub struct TriggerVersionId;
 
-#[td_type::typed(bool)]
+#[td_type::typed(bool(default = true))]
 pub struct UserEnabled;
 
 #[td_type::typed(id)]
@@ -448,6 +463,12 @@ pub struct UserIdName;
 
 #[td_type::typed(string(parser = parse_user))]
 pub struct UserName;
+
+impl UserName {
+    pub fn admin() -> Self {
+        Self(ADMIN_USER.to_string())
+    }
+}
 
 #[td_type::typed(id)]
 pub struct UserRoleId;

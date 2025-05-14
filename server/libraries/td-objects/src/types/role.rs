@@ -26,7 +26,7 @@ pub struct RoleDB {
     modified_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
     modified_by_id: UserId,
-    #[builder(default)]
+    #[builder(default = "Fixed::from(false)")]
     fixed: Fixed,
 }
 
@@ -98,7 +98,7 @@ pub struct UserRoleDB {
     added_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
     added_by_id: UserId,
-    #[builder(default)]
+    #[builder(default = "Fixed::from(false)")]
     fixed: Fixed,
 }
 

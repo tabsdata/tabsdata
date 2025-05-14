@@ -4,7 +4,7 @@
 
 use crate::router;
 use crate::router::auth::{AuthStatusRaw, AUTH_TAG};
-use crate::router::AuthState;
+use crate::router::state::Auth;
 use crate::status::error_status::AuthorizeErrorStatus;
 use axum::extract::State;
 use axum::{Extension, Form};
@@ -16,14 +16,14 @@ use td_tower::ctx_service::IntoData;
 use tower::ServiceExt;
 
 router! {
-    state => { AuthState },
+    state => { Auth },
     routes => { refresh }
 }
 
 #[apiserver_path(method = post, path = AUTH_REFRESH, tag = AUTH_TAG)]
 #[doc = "Refresh Access Token"]
 pub async fn refresh(
-    State(state): State<AuthState>,
+    State(state): State<Auth>,
     Extension(context): Extension<RequestContext>,
     Form(request): Form<RefreshRequestX>,
 ) -> Result<AuthStatusRaw, AuthorizeErrorStatus> {

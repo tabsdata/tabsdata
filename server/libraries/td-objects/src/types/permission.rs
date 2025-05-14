@@ -4,9 +4,9 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, EntityId, EntityName, FixedRole,
-    InterCollectionPermissionId, PermissionEntityType, PermissionId, PermissionType, RoleId,
-    RoleName, ToCollectionId, ToCollectionName, UserId, UserName,
+    AtTime, CollectionId, CollectionName, EntityId, EntityName, Fixed, InterCollectionPermissionId,
+    PermissionEntityType, PermissionId, PermissionType, RoleId, RoleName, ToCollectionId,
+    ToCollectionName, UserId, UserName,
 };
 use crate::types::role::RoleDB;
 
@@ -35,8 +35,8 @@ pub struct PermissionDB {
     granted_by_id: UserId,
     #[td_type(updater(try_from = RequestContext, field = "time"))]
     granted_on: AtTime,
-    #[builder(default)]
-    fixed: FixedRole,
+    #[builder(default = "Fixed::from(false)")]
+    fixed: Fixed,
 }
 
 #[td_type::Dao(sql_table = "permissions__with_names")]
@@ -50,7 +50,7 @@ pub struct PermissionDBWithNames {
     entity_id: Option<EntityId>,
     granted_by_id: UserId,
     granted_on: AtTime,
-    fixed: FixedRole,
+    fixed: Fixed,
 
     granted_by: UserName,
     role: RoleName,
@@ -67,7 +67,7 @@ pub struct Permission {
     entity_id: Option<EntityId>,
     granted_by_id: UserId,
     granted_on: AtTime,
-    fixed: FixedRole,
+    fixed: Fixed,
 
     granted_by: UserName,
     role: RoleName,

@@ -2,9 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dlo::{
-    CollectionName, Creator, DatasetName, ExecutionPlanId, TableName, WorkerMessageId,
-};
 use crate::types::basic::{
     CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId, FunctionVersionIdName,
     InterCollectionPermissionIdName, PermissionIdName, RoleIdName, TableIdName, TransactionIdName,
@@ -28,175 +25,6 @@ pub const AUTH_ROLE_CHANGE: &str = concat!(AUTH, "/role_change");
 pub const AUTH_LOGOUT: &str = concat!(AUTH, "/logout");
 pub const AUTH_USER_INFO: &str = concat!(AUTH, "/info");
 pub const AUTH_PASSWORD_CHANGE: &str = concat!(AUTH, "/password_change");
-
-impl CollectionParam {
-    pub fn new(collection: impl Into<String>) -> Self {
-        let collection = CollectionIdName::try_from(collection.into().as_str()).unwrap();
-        Self { collection }
-    }
-}
-
-impl From<&CollectionParam> for CollectionParam {
-    fn from(params: &CollectionParam) -> Self {
-        params.clone()
-    }
-}
-
-impl From<CollectionParam> for CollectionName {
-    fn from(params: CollectionParam) -> Self {
-        let collection = String::from(params.collection);
-        CollectionName::new(collection)
-    }
-}
-
-impl Creator<CollectionParam> for CollectionName {
-    fn create(value: impl Into<CollectionParam>) -> Self {
-        CollectionName::new(value.into().collection)
-    }
-}
-
-impl FunctionParam {
-    pub fn new(collection: impl Into<String>, dataset: impl Into<String>) -> Self {
-        let collection = collection.into();
-        let collection = CollectionIdName::try_from(collection).unwrap();
-        let function = dataset.into();
-        let function = FunctionIdName::try_from(function).unwrap();
-        Self {
-            collection,
-            function,
-        }
-    }
-}
-
-impl From<&FunctionParam> for FunctionParam {
-    fn from(value: &FunctionParam) -> Self {
-        value.clone()
-    }
-}
-
-impl From<FunctionParam> for CollectionName {
-    fn from(params: FunctionParam) -> Self {
-        CollectionName::new(params.collection)
-    }
-}
-
-impl From<FunctionParam> for DatasetName {
-    fn from(params: FunctionParam) -> Self {
-        DatasetName::new(params.function)
-    }
-}
-
-impl Creator<FunctionParam> for CollectionName {
-    fn create(value: impl Into<FunctionParam>) -> Self {
-        CollectionName::new(value.into().collection)
-    }
-}
-
-impl Creator<FunctionParam> for DatasetName {
-    fn create(value: impl Into<FunctionParam>) -> Self {
-        DatasetName::new(value.into().function)
-    }
-}
-
-#[apiserver_schema]
-#[derive(Debug, Clone, Deserialize, Getters, IntoParams)]
-#[getset(get = "pub")]
-#[allow(dead_code)]
-pub struct FunctionIdParam {
-    collection: String,
-    function: String,
-    function_id: String,
-}
-
-impl FunctionIdParam {
-    pub fn new(
-        collection: impl Into<String>,
-        dataset: impl Into<String>,
-        function_id: impl Into<String>,
-    ) -> Self {
-        Self {
-            collection: collection.into(),
-            function: dataset.into(),
-            function_id: function_id.into(),
-        }
-    }
-}
-
-pub const EXECUTION_PLANS: &str = "/execution_plans";
-pub const EXECUTION_PLAN: &str = concat!(EXECUTION_PLANS, "/{execution_plan_id}");
-pub const EXECUTION_PLAN_GET: &str = EXECUTION_PLAN;
-pub const EXECUTION_PLANS_LIST: &str = EXECUTION_PLANS;
-
-#[apiserver_schema]
-#[derive(Debug, Clone, Deserialize, Getters, IntoParams)]
-#[getset(get = "pub")]
-#[allow(dead_code)]
-pub struct ExecutionPlanIdParam {
-    execution_plan_id: String,
-}
-
-impl ExecutionPlanIdParam {
-    pub fn new(execution_plan_id: impl Into<String>) -> Self {
-        Self {
-            execution_plan_id: execution_plan_id.into(),
-        }
-    }
-}
-
-impl From<&ExecutionPlanIdParam> for ExecutionPlanIdParam {
-    fn from(value: &ExecutionPlanIdParam) -> Self {
-        value.clone()
-    }
-}
-
-impl From<ExecutionPlanIdParam> for ExecutionPlanId {
-    fn from(params: ExecutionPlanIdParam) -> Self {
-        ExecutionPlanId::new(params.execution_plan_id)
-    }
-}
-
-impl Creator<ExecutionPlanIdParam> for ExecutionPlanId {
-    fn create(value: impl Into<ExecutionPlanIdParam>) -> Self {
-        ExecutionPlanId::new(value.into().execution_plan_id())
-    }
-}
-
-pub const COMMITS: &str = "/commits";
-pub const COMMITS_LIST: &str = COMMITS;
-
-impl TableParam {
-    pub fn new(collection: impl Into<String>, table: impl Into<String>) -> Self {
-        let collection = collection.into();
-        let collection = CollectionIdName::try_from(collection).unwrap();
-        let table = table.into();
-        let table = TableIdName::try_from(table).unwrap();
-        Self { collection, table }
-    }
-}
-
-impl From<&TableParam> for TableParam {
-    fn from(value: &TableParam) -> Self {
-        value.clone()
-    }
-}
-
-impl From<TableParam> for CollectionName {
-    fn from(params: TableParam) -> Self {
-        CollectionName::new(params.collection)
-    }
-}
-
-impl Creator<TableParam> for CollectionName {
-    fn create(value: impl Into<TableParam>) -> Self {
-        CollectionName::new(value.into().collection)
-    }
-}
-
-impl Creator<TableParam> for TableName {
-    fn create(value: impl Into<TableParam>) -> Self {
-        TableName::new(value.into().table)
-    }
-}
 
 #[apiserver_schema]
 #[derive(Debug, Clone, Getters, Deserialize, Validate, IntoParams)]
@@ -296,52 +124,6 @@ pub struct TableCommitParam {
     at: At,
 }
 
-impl TableCommitParam {
-    pub fn new(table: &TableParam, at: &AtParam) -> Result<Self, TdError> {
-        Ok(Self {
-            collection: CollectionName::new(table.collection.clone()).to_string(),
-            table: TableName::new(table.table.clone()).to_string(),
-            at: at.try_into()?,
-        })
-    }
-}
-
-impl From<&TableCommitParam> for TableCommitParam {
-    fn from(value: &TableCommitParam) -> Self {
-        value.clone()
-    }
-}
-
-impl From<TableCommitParam> for CollectionName {
-    fn from(params: TableCommitParam) -> Self {
-        CollectionName::new(params.collection)
-    }
-}
-
-impl From<TableCommitParam> for TableName {
-    fn from(params: TableCommitParam) -> Self {
-        TableName::new(params.table)
-    }
-}
-
-impl Creator<TableCommitParam> for CollectionName {
-    fn create(value: impl Into<TableCommitParam>) -> Self {
-        CollectionName::new(value.into().collection())
-    }
-}
-
-impl Creator<TableCommitParam> for TableName {
-    fn create(value: impl Into<TableCommitParam>) -> Self {
-        TableName::new(value.into().table())
-    }
-}
-
-impl Creator<TableCommitParam> for At {
-    fn create(value: impl Into<TableCommitParam>) -> Self {
-        value.into().at
-    }
-}
-
 pub const WORKERS: &str = "/workers";
 pub const WORKER: &str = concat!(WORKERS, "/{worker_id}");
 
@@ -438,49 +220,11 @@ pub struct WorkerMessageListParam {
     by: By,
 }
 
-impl WorkerMessageListParam {
-    pub fn new(by: &ByParam) -> Result<Self, TdError> {
-        Ok(Self { by: by.try_into()? })
-    }
-}
-
-impl From<&WorkerMessageListParam> for WorkerMessageListParam {
-    fn from(value: &WorkerMessageListParam) -> Self {
-        value.clone()
-    }
-}
-
-impl Creator<WorkerMessageListParam> for By {
-    fn create(value: impl Into<WorkerMessageListParam>) -> Self {
-        value.into().by
-    }
-}
-
 #[apiserver_schema]
 #[derive(Debug, Clone, Getters, Deserialize, IntoParams)]
 #[getset(get = "pub")]
 pub struct WorkerMessageParam {
     worker_id: String,
-}
-
-impl WorkerMessageParam {
-    pub fn new(worker_id: impl Into<String>) -> Self {
-        Self {
-            worker_id: worker_id.into(),
-        }
-    }
-}
-
-impl From<&WorkerMessageParam> for WorkerMessageParam {
-    fn from(value: &WorkerMessageParam) -> Self {
-        value.clone()
-    }
-}
-
-impl Creator<WorkerMessageParam> for WorkerMessageId {
-    fn create(value: impl Into<WorkerMessageParam>) -> Self {
-        WorkerMessageId::new(value.into().worker_id())
-    }
 }
 
 // TODO here starts the refactored apiserver
@@ -513,6 +257,16 @@ pub struct FunctionRunParam {
 }
 
 // Endpoints URLs
+
+// Users
+pub const USERS: &str = url!("/users");
+pub const USER: &str = url!("/{user}");
+
+#[td_type::UrlParam]
+pub struct UserParam {
+    #[td_type(extractor)]
+    user: UserIdName,
+}
 
 // Roles
 pub const ROLES: &str = url!("/roles");

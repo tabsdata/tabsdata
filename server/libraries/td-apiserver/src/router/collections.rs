@@ -21,9 +21,6 @@ use serde::{Deserialize, Serialize};
 use td_apiforge::{
     apiserver_path, apiserver_tag, create_status, get_status, list_status, update_status,
 };
-use td_objects::collections::dto::{
-    CollectionCreate, CollectionList, CollectionRead, CollectionUpdate,
-};
 use td_objects::crudl::ListResponse;
 use td_objects::crudl::ListResponseBuilder;
 use td_objects::crudl::{ListParams, RequestContext};
@@ -31,6 +28,7 @@ use td_objects::rest_urls::{
     CollectionParam, CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
     UPDATE_COLLECTION,
 };
+use td_objects::types::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
@@ -41,7 +39,7 @@ router! {
     routes => { list_collections, get_collection, create_collection, update_collection, delete_collection }
 }
 
-list_status!(CollectionList);
+list_status!(CollectionRead);
 
 #[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTIONS_TAG)]
 #[doc = "Lists collections"]

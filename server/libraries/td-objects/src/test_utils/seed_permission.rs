@@ -65,7 +65,7 @@ pub async fn get_permission<E: SqlEntity>(db: &DbPool, by: &E) -> Result<Permiss
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
     use crate::test_utils::seed_permission::seed_permission;
     use crate::test_utils::seed_role::seed_role;

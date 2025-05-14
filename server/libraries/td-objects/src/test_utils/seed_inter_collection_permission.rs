@@ -2,13 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{handle_sql_err, ListParams, ReadRequest, RequestContext};
-use crate::sql::{DaoQueries, Insert, ListBy, SelectBy};
+use crate::crudl::{handle_sql_err, ReadRequest, RequestContext};
+use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
-use crate::types::permission::{
-    InterCollectionPermissionDB, InterCollectionPermissionDBBuilder,
-    InterCollectionPermissionDBWithNames,
-};
+use crate::types::permission::{InterCollectionPermissionDB, InterCollectionPermissionDBBuilder};
 use crate::types::SqlEntity;
 use td_database::sql::DbPool;
 use td_error::TdError;
@@ -53,15 +50,6 @@ pub async fn get_inter_collection_permissions<E: SqlEntity>(
     by: &E,
 ) -> Result<Vec<InterCollectionPermissionDB>, TdError> {
     let queries = DaoQueries::default();
-
-    let res: Vec<InterCollectionPermissionDBWithNames> = queries
-        .list_by::<InterCollectionPermissionDBWithNames>(&ListParams::default(), &())?
-        .build_query_as()
-        .fetch_all(db)
-        .await
-        .unwrap();
-    println!("res: {:#?}", res);
-
     queries
         .select_by::<InterCollectionPermissionDB>(&by)?
         .build_query_as()

@@ -103,14 +103,6 @@ mod tests {
         assert_eq!(json["info"]["title"], "Tabsdata API");
 
         // Assert paths
-        assert!(json["paths"]
-            .as_object()
-            .unwrap()
-            .contains_key("/auth/access"));
-        assert!(json["paths"]
-            .as_object()
-            .unwrap()
-            .contains_key("/auth/refresh"));
         assert!(json["paths"].as_object().unwrap().contains_key("/users"));
         assert!(json["paths"]
             .as_object()
@@ -130,7 +122,6 @@ mod tests {
         assert!(tags.iter().any(|tag| tag["name"] == "Functions"));
         assert!(tags.iter().any(|tag| tag["name"] == "Authz"));
         assert!(tags.iter().any(|tag| tag["name"] == "Status"));
-        assert!(tags.iter().any(|tag| tag["name"] == "Authentication"));
         assert!(tags.iter().any(|tag| tag["name"] == "Users"));
     }
 

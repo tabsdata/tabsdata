@@ -3,7 +3,6 @@
 //
 
 use crate::sql::{DaoQueries, Insert};
-use crate::test_utils::seed_user::admin_user;
 use crate::types::basic::{ExecutionName, TriggeredOn, UserId};
 use crate::types::collection::CollectionDB;
 use crate::types::execution::ExecutionDB;
@@ -15,15 +14,12 @@ pub async fn seed_execution(
     collection: &CollectionDB,
     function_version: &FunctionVersionDB,
 ) -> ExecutionDB {
-    let admin_id = admin_user(db).await;
-    let admin_id = UserId::try_from(admin_id).unwrap();
-
     let execution_db = ExecutionDB::builder()
         .name(ExecutionName::try_from("test_execution").unwrap())
         .collection_id(collection.id())
         .function_version_id(function_version.id())
         .triggered_on(TriggeredOn::now().await)
-        .triggered_by_id(admin_id)
+        .triggered_by_id(UserId::admin())
         .build()
         .unwrap();
 

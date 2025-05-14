@@ -23,10 +23,10 @@ use td_apiforge::{
     apiserver_path, apiserver_tag, create_status, get_status, list_status, update_status,
 };
 use td_objects::crudl::{ListParams, ListResponse, ListResponseBuilder, RequestContext};
-use td_objects::users::dto::{UserCreate, UserRead, UserUpdate};
+use td_objects::rest_urls::UserParam;
+use td_objects::types::user::{UserCreate, UserRead, UserUpdate};
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
-use utoipa::IntoParams;
 
 pub const USERS: &str = "/users";
 pub const USER: &str = "/users/{user}";
@@ -36,13 +36,6 @@ apiserver_tag!(name = "Users", description = "Users API");
 router! {
     state => { Users },
     routes => { list_users, get_user, create_user, update_user, delete_user }
-}
-
-#[derive(Deserialize, IntoParams, Getters)]
-#[getset(get = "pub")]
-pub struct UserUriParams {
-    /// User name
-    user: String,
 }
 
 list_status!(UserRead);
@@ -68,9 +61,9 @@ const GET_USER: &str = USER;
 pub async fn get_user(
     State(users_state): State<Users>,
     Extension(context): Extension<RequestContext>,
-    Path(path_params): Path<UserUriParams>,
+    Path(path_params): Path<UserParam>,
 ) -> Result<GetStatus, GetErrorStatus> {
-    let request = context.read(path_params.user());
+    let request = context.read(path_params);
     let response = users_state.read_user().await.oneshot(request).await?;
     Ok(GetStatus::OK(response.into()))
 }
@@ -98,10 +91,10 @@ const UPDATE_USER: &str = USER;
 pub async fn update_user(
     State(users_state): State<Users>,
     Extension(context): Extension<RequestContext>,
-    Path(path_params): Path<UserUriParams>,
+    Path(path_params): Path<UserParam>,
     Json(request): Json<UserUpdate>,
 ) -> Result<UpdateStatus, UpdateErrorStatus> {
-    let request = context.update::<String, _>(path_params.user(), request);
+    let request = context.update(path_params, request);
     let response = users_state.update_user().await.oneshot(request).await?;
     Ok(UpdateStatus::OK(response.into()))
 }
@@ -112,9 +105,9 @@ const DELETE_USER: &str = USER;
 pub async fn delete_user(
     State(users_state): State<Users>,
     Extension(context): Extension<RequestContext>,
-    Path(path_params): Path<UserUriParams>,
+    Path(path_params): Path<UserParam>,
 ) -> Result<DeleteStatus, DeleteErrorStatus> {
-    let request = context.delete(path_params.user());
+    let request = context.delete(path_params);
     let response = users_state.delete_user().await.oneshot(request).await?;
     Ok(DeleteStatus::OK(response.into()))
 }
@@ -125,13 +118,11 @@ mod tests {
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
     use axum::Router;
-    use chrono::Duration;
     use http::method::Method;
     use serde_json::json;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_database::sql::DbPool;
-    use td_objects::jwt::jwt_logic::JwtLogic;
     use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::RoleId;
     use td_objects::types::basic::UserId;
@@ -141,15 +132,9 @@ mod tests {
 
     async fn users_state() -> Users {
         let db: &'static DbPool = Box::leak(Box::new(td_database::test_utils::db().await.unwrap()));
-        let jwt_logic = Arc::new(JwtLogic::new(
-            "SECRET",
-            Duration::seconds(3600),
-            Duration::seconds(7200),
-        ));
         let logic = UserServices::new(
             db.clone(),
             Arc::new(PasswordHashingConfig::default()),
-            jwt_logic,
             Arc::new(AuthzContext::default()),
         );
         Arc::new(logic)

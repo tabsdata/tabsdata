@@ -36,7 +36,6 @@ mod collections;
 mod execution;
 mod functions;
 mod inter_collection_permissions;
-mod jwt_login;
 
 #[cfg(feature = "api-docs")]
 mod openapi;
@@ -63,7 +62,6 @@ use chrono::Duration;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_database::sql::DbPool;
-use td_objects::jwt::jwt_logic::JwtLogic;
 use td_security::config::PasswordHashingConfig;
 use td_services::auth::services::{AuthServices, PasswordHashConfig};
 use td_services::auth::session;
@@ -84,15 +82,13 @@ pub struct ApiServerInstance {
     db: DbPool,
     authz_context: Arc<AuthzContext>,
     auth_services: Arc<AuthServices>,
-    jwt_logic: Arc<JwtLogic>,
     storage: Arc<Storage>,
 }
-
-pub type AuthState = Arc<AuthServices>;
 
 pub mod state {
     use super::*;
 
+    pub type Auth = Arc<AuthServices>;
     pub type Collections = Arc<CollectionServices>;
     pub type Execution = Arc<ExecutionServices>;
     pub type Functions = Arc<FunctionServices>;
@@ -122,22 +118,16 @@ impl ApiServerInstance {
             password_hash_config,
             &config,
         ));
-        let jwt_logic = Arc::new(JwtLogic::new(
-            config.jwt().secret().as_ref().unwrap(), // at this point we know it's not None
-            Duration::seconds(*config.jwt().access_token_expiration()),
-            Duration::seconds(*config.jwt().access_token_expiration() * 2),
-        ));
         Self {
             config,
             db,
             authz_context,
             auth_services,
-            jwt_logic,
             storage,
         }
     }
 
-    fn auth_state(&self) -> AuthState {
+    fn auth_state(&self) -> state::Auth {
         self.auth_services.clone()
     }
 
@@ -153,7 +143,6 @@ impl ApiServerInstance {
         Arc::new(UserServices::new(
             self.db.clone(),
             Arc::new(PasswordHashingConfig::default()),
-            self.jwt_logic.clone(),
             self.authz_context.clone(),
         ))
     }
@@ -224,7 +213,6 @@ impl ApiServerInstance {
                 // Open Routes
                 router => {
                     auth_unsecure => { state ( self.auth_state() ) },
-                    jwt_login => { state ( self.users_state() ) },
                 },
 
                 // JWT Secured Routes

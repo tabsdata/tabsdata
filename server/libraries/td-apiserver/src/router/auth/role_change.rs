@@ -4,7 +4,7 @@
 
 use crate::router;
 use crate::router::auth::{AuthStatusRaw, AUTH_TAG};
-use crate::router::AuthState;
+use crate::router::state::Auth;
 use crate::status::error_status::AuthorizeErrorStatus;
 use crate::status::extractors::Json;
 use axum::extract::State;
@@ -17,14 +17,14 @@ use td_tower::ctx_service::IntoData;
 use tower::ServiceExt;
 
 router! {
-    state => { AuthState },
+    state => { Auth },
     routes => { role_change }
 }
 
 #[apiserver_path(method = post, path = AUTH_ROLE_CHANGE, tag = AUTH_TAG)]
 #[doc = "Role change"]
 pub async fn role_change(
-    State(state): State<AuthState>,
+    State(state): State<Auth>,
     Extension(context): Extension<RequestContext>,
     Json(request): Json<RoleChange>,
 ) -> Result<AuthStatusRaw, AuthorizeErrorStatus> {

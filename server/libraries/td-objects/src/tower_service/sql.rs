@@ -561,7 +561,7 @@ pub trait SqlListService<E> {
         by: Input<E>,
     ) -> Result<ListResult<D>, TdError>
     where
-        N: Send + Sync,
+        N: Send + Sync + Clone,
         Q: DerefQueries,
         D: DataAccessObject + for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin;
 }
@@ -583,7 +583,7 @@ macro_rules! impl_list {
                 Input(by): Input<($($E),*)>,
             ) -> Result<ListResult<D>, TdError>
             where
-                N: Send + Sync,
+                N: Send + Sync + Clone,
                 Q: DerefQueries,
                 D: DataAccessObject + for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
             {

@@ -2,7 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{list_response, ListRequest, ListResponse, ListResult};
+use crate::crudl::{
+    list_response, Data, IntoData, IntoName, ListRequest, ListResponse, ListResult, Name,
+};
+use crate::types::Extractor;
 use async_trait::async_trait;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -71,7 +74,7 @@ pub trait TryMapListService<T> {
         result: Input<ListResult<T>>,
     ) -> Result<ListResponse<F>, TdError>
     where
-        N: Send + Sync,
+        N: Send + Sync + Clone,
         for<'a> T: Send + Sync + 'a,
         B: for<'a> TryFrom<&'a T, Error = E>,
         F: for<'a> TryFrom<&'a B, Error = E>,
@@ -88,7 +91,7 @@ where
         Input(result): Input<ListResult<T>>,
     ) -> Result<ListResponse<F>, TdError>
     where
-        N: Send + Sync,
+        N: Send + Sync + Clone,
         for<'a> T: Send + Sync + 'a,
         B: for<'a> TryFrom<&'a T, Error = E>,
         F: for<'a> TryFrom<&'a B, Error = E>,
@@ -109,7 +112,7 @@ pub trait ExtractService<T> {
     async fn extract<F>(input: Input<T>) -> Result<F, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: From<&'a T>;
+        T: Extractor<F>;
 }
 
 #[async_trait]
@@ -120,9 +123,53 @@ where
     async fn extract<F>(Input(input): Input<T>) -> Result<F, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: From<&'a T>,
+        T: Extractor<F>,
     {
-        Ok(F::from(input.deref()))
+        Ok(input.extract())
+    }
+}
+
+#[async_trait]
+pub trait ExtractNameService<T> {
+    async fn extract_name<F>(input: Input<T>) -> Result<F, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        T: Extractor<Name<F>>;
+}
+
+#[async_trait]
+impl<T> ExtractNameService<T> for With<T>
+where
+    T: Send + Sync,
+{
+    async fn extract_name<F>(Input(input): Input<T>) -> Result<F, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        T: Extractor<Name<F>>,
+    {
+        Ok(input.extract().into_name())
+    }
+}
+
+#[async_trait]
+pub trait ExtractDataService<T> {
+    async fn extract_data<F>(input: Input<T>) -> Result<F, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        T: Extractor<Data<F>>;
+}
+
+#[async_trait]
+impl<T> ExtractDataService<T> for With<T>
+where
+    T: Send + Sync,
+{
+    async fn extract_data<F>(Input(input): Input<T>) -> Result<F, TdError>
+    where
+        for<'a> T: Send + Sync + 'a,
+        T: Extractor<Data<F>>,
+    {
+        Ok(input.extract().into_data())
     }
 }
 
@@ -131,7 +178,7 @@ pub trait ExtractVecService<T> {
     async fn extract_vec<F>(input: Input<Vec<T>>) -> Result<Vec<F>, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: From<&'a T>;
+        T: Extractor<F>;
 }
 
 #[async_trait]
@@ -142,9 +189,9 @@ where
     async fn extract_vec<F>(Input(input): Input<Vec<T>>) -> Result<Vec<F>, TdError>
     where
         for<'a> T: Send + Sync + 'a,
-        for<'a> F: From<&'a T>,
+        T: Extractor<F>,
     {
-        let output = input.iter().map(|item| F::from(item)).collect::<Vec<F>>();
+        let output = input.iter().map(|item| item.extract()).collect::<Vec<F>>();
         Ok(output)
     }
 }

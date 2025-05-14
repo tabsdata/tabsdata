@@ -3,13 +3,13 @@
 //
 
 use crate::router::auth::{login, password_change};
-use crate::router::AuthState;
+use crate::router::state::Auth;
 use crate::routers;
 
 routers! {
-    state => { AuthState },
+    state => { Auth },
     router => {
-        login => { state ( AuthState ) },
-        password_change => { state ( AuthState ) },
+        login => { state ( Auth ) },
+        password_change => { state ( Auth ) },
     }
 }

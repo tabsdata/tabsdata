@@ -3,9 +3,9 @@
 //
 
 use crate::types::basic::{
-    AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, Email, GrantType, NewPassword,
-    OldPassword, Password, PasswordMustChange, RefreshToken, RefreshTokenId, RoleId, RoleName,
-    SessionStatus, TokenType, UserEnabled, UserId, UserName,
+    AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, Email, FullName, GrantType,
+    NewPassword, OldPassword, Password, PasswordMustChange, RefreshToken, RefreshTokenId, RoleId,
+    RoleName, SessionStatus, TokenType, UserEnabled, UserId, UserName,
 };
 use crate::types::permission::Permission;
 use crate::types::user::UserDBWithNames;
@@ -110,8 +110,8 @@ pub struct SessionNewTokenDB {
 pub struct UserInfo {
     id: UserId,
     name: UserName,
-    full_name: UserName,
-    email: Email,
+    full_name: FullName,
+    email: Option<Email>,
     created_on: AtTime,
     created_by_id: UserId,
     created_by: UserName,

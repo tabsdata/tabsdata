@@ -3,15 +3,15 @@
 //
 
 use crate::router::auth::{logout, refresh_token, role_change, user_info};
-use crate::router::AuthState;
+use crate::router::state::Auth;
 use crate::routers;
 
 routers! {
-    state => { AuthState },
+    state => { Auth },
     router => {
-        refresh_token => { state ( AuthState ) },
-        user_info => { state ( AuthState ) },
-        role_change => { state ( AuthState ) },
-        logout => { state ( AuthState ) },
+        refresh_token => { state ( Auth ) },
+        user_info => { state ( Auth ) },
+        role_change => { state ( Auth ) },
+        logout => { state ( Auth ) },
     }
 }

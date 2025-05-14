@@ -4,7 +4,7 @@
 
 use crate::router;
 use crate::router::auth::{AuthStatusRaw, AUTH_TAG};
-use crate::router::AuthState;
+use crate::router::state::Auth;
 use crate::status::error_status::AuthorizeErrorStatus;
 use crate::status::extractors::Json;
 use axum::extract::State;
@@ -15,14 +15,14 @@ use td_tower::ctx_service::IntoData;
 use tower::ServiceExt;
 
 router! {
-    state => { AuthState },
+    state => { Auth },
     routes => { login }
 }
 
 #[apiserver_path(method = post, path = AUTH_LOGIN, tag = AUTH_TAG)]
 #[doc = "User Login"]
 pub async fn login(
-    State(state): State<AuthState>,
+    State(state): State<Auth>,
     Json(request): Json<Login>,
 ) -> Result<AuthStatusRaw, AuthorizeErrorStatus> {
     let response = state.login_service().await.oneshot(request).await?;
