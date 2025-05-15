@@ -6,9 +6,13 @@ extern crate proc_macro;
 use crate::service_type::service_type_impl;
 use proc_macro::TokenStream;
 
+mod dao;
+mod dlo;
+mod dto;
 mod service_type;
 mod type_builder;
 mod typed_types;
+mod url;
 
 #[proc_macro_attribute]
 pub fn service_type(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -17,41 +21,41 @@ pub fn service_type(args: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(DaoType, attributes(td_type, dao, sqlx))]
 pub fn dao_type(input: TokenStream) -> TokenStream {
-    type_builder::dao_type(input)
+    dao::dao_type(input)
 }
 
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn Dao(args: TokenStream, item: TokenStream) -> TokenStream {
-    type_builder::dao(args, item)
+    dao::dao(args, item)
 }
 
-#[proc_macro_derive(DloType, attributes(td_type, sqlx))]
+#[proc_macro_derive(DloType, attributes(td_type, dlo))]
 pub fn dlo_type(input: TokenStream) -> TokenStream {
-    type_builder::dlo_type(input)
+    dlo::dlo_type(input)
 }
 
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn Dlo(args: TokenStream, item: TokenStream) -> TokenStream {
-    type_builder::dlo(args, item)
+    dlo::dlo(args, item)
 }
 
-#[proc_macro_derive(DtoType, attributes(td_type, sqlx))]
+#[proc_macro_derive(DtoType, attributes(td_type, dto))]
 pub fn dto_type(input: TokenStream) -> TokenStream {
-    type_builder::dto_type(input)
+    dto::dto_type(input)
 }
 
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn Dto(args: TokenStream, item: TokenStream) -> TokenStream {
-    type_builder::dto(args, item)
+    dto::dto(args, item)
 }
 
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn UrlParam(args: TokenStream, item: TokenStream) -> TokenStream {
-    type_builder::url_param(args, item)
+    url::url_param(args, item)
 }
 
 #[proc_macro_attribute]

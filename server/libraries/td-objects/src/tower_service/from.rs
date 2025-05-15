@@ -2,9 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{
-    list_response, Data, IntoData, IntoName, ListRequest, ListResponse, ListResult, Name,
-};
+use crate::crudl::{Data, IntoData, IntoName, Name};
 use crate::types::Extractor;
 use async_trait::async_trait;
 use std::marker::PhantomData;
@@ -64,46 +62,6 @@ where
             .iter()
             .map(|item| F::try_from(item).map_err(Into::into))
             .collect()
-    }
-}
-
-#[async_trait]
-pub trait TryMapListService<T> {
-    async fn try_map_list<N, B, F, E>(
-        request: Input<ListRequest<N>>,
-        result: Input<ListResult<T>>,
-    ) -> Result<ListResponse<F>, TdError>
-    where
-        N: Send + Sync + Clone,
-        for<'a> T: Send + Sync + 'a,
-        B: for<'a> TryFrom<&'a T, Error = E>,
-        F: for<'a> TryFrom<&'a B, Error = E>,
-        E: Into<TdError>;
-}
-
-#[async_trait]
-impl<T> TryMapListService<T> for With<T>
-where
-    T: Send + Sync,
-{
-    async fn try_map_list<N, B, F, E>(
-        Input(request): Input<ListRequest<N>>,
-        Input(result): Input<ListResult<T>>,
-    ) -> Result<ListResponse<F>, TdError>
-    where
-        N: Send + Sync + Clone,
-        for<'a> T: Send + Sync + 'a,
-        B: for<'a> TryFrom<&'a T, Error = E>,
-        F: for<'a> TryFrom<&'a B, Error = E>,
-        E: Into<TdError>,
-    {
-        Ok(list_response(
-            request.list_params().clone(),
-            result.try_map(|t| {
-                let b = B::try_from(t).map_err(Into::into)?;
-                F::try_from(&b).map_err(Into::into)
-            })?,
-        ))
     }
 }
 
@@ -396,8 +354,6 @@ pub async fn combine<T: Clone, U: Clone>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crudl::{ListParams, RequestContext};
-    use crate::types::basic::{AccessTokenId, RoleId, UserId};
     use td_type::Dao;
 
     #[Dao]
@@ -416,28 +372,6 @@ mod tests {
         let input = Input::new(Foo::builder().value(1).build()?);
         let result = With::<Foo>::convert_to::<VarBuilder, _>(input).await?;
         assert_eq!(result.value, Some(1));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_try_map_list() -> Result<(), TdError> {
-        let request: ListRequest<()> = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
-            true,
-        )
-        .list((), ListParams::default());
-        let request = Input::new(request);
-
-        let result = ListResult::new(vec![Foo::builder().value(1).build()?], false);
-        let result = Input::new(result);
-
-        let response = With::<Foo>::try_map_list::<(), VarBuilder, Var, _>(request, result).await?;
-        assert_eq!(response.data().len(), 1);
-        assert_eq!(response.data()[0].value, 1);
-        assert_eq!(*response.offset(), 0);
-        assert!(!response.more());
         Ok(())
     }
 

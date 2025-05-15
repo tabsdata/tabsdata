@@ -16,7 +16,8 @@ pub struct PermissionCreate {
     entity_name: Option<EntityName>, // None means ALL
 }
 
-#[td_type::Dao(sql_table = "permissions")]
+#[td_type::Dao]
+#[dao(sql_table = "permissions")]
 #[td_type(builder(try_from = PermissionCreate, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 #[td_type(updater(try_from = RoleDB, skip_all))]
@@ -39,7 +40,8 @@ pub struct PermissionDB {
     fixed: Fixed,
 }
 
-#[td_type::Dao(sql_table = "permissions__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "permissions__with_names")]
 pub struct PermissionDBWithNames {
     #[td_type(extractor)]
     id: PermissionId,
@@ -58,6 +60,7 @@ pub struct PermissionDBWithNames {
 }
 
 #[td_type::Dto]
+#[dto(list(on = PermissionDBWithNames))]
 #[td_type(builder(try_from = PermissionDBWithNames))]
 pub struct Permission {
     id: PermissionId,
@@ -80,7 +83,8 @@ pub struct InterCollectionPermissionCreate {
     to_collection: ToCollectionName,
 }
 
-#[td_type::Dao(sql_table = "inter_collection_permissions")]
+#[td_type::Dao]
+#[dao(sql_table = "inter_collection_permissions")]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct InterCollectionPermissionDB {
     #[td_type(extractor)]
@@ -96,7 +100,8 @@ pub struct InterCollectionPermissionDB {
     granted_on: AtTime,
 }
 
-#[td_type::Dao(sql_table = "inter_collection_permissions__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "inter_collection_permissions__with_names")]
 pub struct InterCollectionPermissionDBWithNames {
     #[td_type(extractor)]
     id: InterCollectionPermissionId,
@@ -111,8 +116,10 @@ pub struct InterCollectionPermissionDBWithNames {
 }
 
 #[td_type::Dto]
+#[dto(list(on = InterCollectionPermissionDBWithNames))]
 #[td_type(builder(try_from = InterCollectionPermissionDBWithNames))]
 pub struct InterCollectionPermission {
+    #[dto(list(filter_like, filter))]
     id: InterCollectionPermissionId,
     to_collection_id: ToCollectionId,
     to_collection: CollectionName,

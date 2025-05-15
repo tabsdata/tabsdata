@@ -9,9 +9,9 @@ use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
+use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::role::{Role, RoleBuilder, RoleDBWithNames};
+use td_objects::types::role::Role;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
@@ -40,9 +40,7 @@ impl ListRoleService {
                 from_fn(AuthzOn::<System>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
 
-                from_fn(By::<()>::list::<(), DaoQueries, RoleDBWithNames>),
-
-                from_fn(With::<RoleDBWithNames>::try_map_list::<(), RoleBuilder, Role, _>),
+                from_fn(By::<()>::list::<(), DaoQueries, Role>),
             ))
         }
     }
@@ -77,8 +75,7 @@ mod tests {
             type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&By::<()>::list::<(), DaoQueries, RoleDBWithNames>),
-            type_of_val(&With::<RoleDBWithNames>::try_map_list::<(), RoleBuilder, Role, _>),
+            type_of_val(&By::<()>::list::<(), DaoQueries, Role>),
         ]);
     }
 

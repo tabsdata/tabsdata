@@ -8,9 +8,12 @@ use crate::types::basic::{
     UserEnabled, UserId, UserName,
 };
 
-#[td_type::Dao(sql_table = "users")]
-#[td_type(builder(try_from = UserDB))]
-#[td_type(updater(try_from = RequestContext, skip_all))]
+#[td_type::Dao]
+#[dao(sql_table = "users")]
+#[td_type(
+    builder(try_from = UserDB),
+    updater(try_from = RequestContext, skip_all)
+)]
 pub struct UserDB {
     #[builder(default)]
     #[td_type(extractor)]
@@ -36,7 +39,8 @@ pub struct UserDB {
     enabled: UserEnabled,
 }
 
-#[td_type::Dao(sql_table = "users__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "users__with_names")]
 pub struct UserDBWithNames {
     #[td_type(extractor)]
     id: UserId,
@@ -73,8 +77,10 @@ pub struct UserUpdate {
 }
 
 #[td_type::Dao]
-#[td_type(builder(try_from = UserDB))]
-#[td_type(updater(try_from = RequestContext, skip_all))]
+#[td_type(
+    builder(try_from = UserDB),
+    updater(try_from = RequestContext, skip_all)
+)]
 pub struct UserUpdateDB {
     full_name: FullName,
     email: Option<Email>,
@@ -89,6 +95,7 @@ pub struct UserUpdateDB {
 }
 
 #[td_type::Dto]
+#[dto(list(on = UserDBWithNames))]
 #[td_type(builder(try_from = UserDBWithNames))]
 pub struct UserRead {
     id: UserId,

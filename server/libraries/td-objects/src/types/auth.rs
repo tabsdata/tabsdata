@@ -52,7 +52,8 @@ pub struct PasswordChange {
     new_password: NewPassword,
 }
 
-#[td_type::Dao(sql_table = "sessions")]
+#[td_type::Dao]
+#[dao(sql_table = "sessions")]
 #[td_type(builder(try_from = SessionDB))]
 pub struct SessionDB {
     #[builder(default)]
@@ -73,7 +74,8 @@ pub struct SessionDB {
     status: SessionStatus,
 }
 
-#[td_type::Dao(sql_table = "sessions")]
+#[td_type::Dao]
+#[dao(sql_table = "sessions")]
 pub struct SessionLogoutDB {
     #[td_type(setter)]
     status_change_on: AtTime,
@@ -81,7 +83,8 @@ pub struct SessionLogoutDB {
     status: SessionStatus,
 }
 
-#[td_type::Dao(sql_table = "sessions")]
+#[td_type::Dao]
+#[dao(sql_table = "sessions")]
 pub struct SessionPasswordChangeDB {
     #[td_type(setter)]
     status_change_on: AtTime,
@@ -89,7 +92,8 @@ pub struct SessionPasswordChangeDB {
     status: SessionStatus,
 }
 
-#[td_type::Dao(sql_table = "sessions")]
+#[td_type::Dao]
+#[dao(sql_table = "sessions")]
 pub struct SessionRoleChangeDB {
     #[td_type(setter)]
     status_change_on: AtTime,
@@ -97,7 +101,8 @@ pub struct SessionRoleChangeDB {
     status: SessionStatus,
 }
 
-#[td_type::Dao(sql_table = "sessions")]
+#[td_type::Dao]
+#[dao(sql_table = "sessions")]
 pub struct SessionNewTokenDB {
     #[td_type(setter)]
     status_change_on: AtTime,
@@ -129,7 +134,8 @@ pub struct UserInfo {
     user_roles: Vec<UserInfoRoleIdName>,
 }
 
-#[td_type::Dao(sql_table = "users_roles__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "users_roles__with_names")]
 pub struct UserInfoUserRoleDB {
     user_id: UserId,
     role_id: RoleId,

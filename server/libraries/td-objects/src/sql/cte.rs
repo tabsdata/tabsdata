@@ -410,7 +410,8 @@ mod tests {
     #[td_type::typed(string)]
     struct TestStatus;
 
-    #[Dao(
+    #[Dao]
+    #[dao(
         sql_table = "test_table",
         partition_by = "partition_id",
         natural_order_by = "defined_on"

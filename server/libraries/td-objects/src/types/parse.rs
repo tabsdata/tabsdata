@@ -11,7 +11,7 @@ use td_common::id::Id;
 use td_error::{td_error, TdError};
 
 const IDENTIFIER_LEN: &str = "99";
-const IDENTIFIER_PATTERN: &str = concat!("[a-zA-Z_][a-zA-Z0-9_]{0,", IDENTIFIER_LEN, "}");
+pub const IDENTIFIER_PATTERN: &str = concat!("[a-zA-Z_][a-zA-Z0-9_]{0,", IDENTIFIER_LEN, "}");
 
 pub const DATA_LOCATION_REGEX: &str = concat!("^(/|(/", IDENTIFIER_PATTERN, ")*)$");
 

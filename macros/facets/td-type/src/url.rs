@@ -1,0 +1,25 @@
+//
+// Copyright 2025 Tabs Data Inc.
+//
+
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse_macro_input, ItemStruct};
+
+pub fn url_param(_args: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemStruct);
+
+    if !input.generics.params.is_empty() {
+        panic!("the struct must not have generics");
+    }
+
+    let expanded = quote! {
+        #[derive(Debug, Clone, td_type::DtoType, utoipa::IntoParams, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
+        #[builder(try_setter, setter(into))]
+        #[getset(get = "pub")]
+        #[td_apiforge::apiserver_schema]
+        #input
+    };
+
+    expanded.into()
+}

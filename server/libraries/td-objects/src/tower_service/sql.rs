@@ -2,9 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{handle_sql_err, list_result, ListRequest, ListResult};
+use crate::crudl::{handle_sql_err, list_response, ListRequest, ListResponse};
 use crate::sql::{DeleteBy, DerefQueries, FindBy, Insert, ListBy, QueryError, SelectBy, UpdateBy};
-use crate::types::{DataAccessObject, IdOrName, SqlEntity};
+use crate::types::{DataAccessObject, IdOrName, ListQuery, SqlEntity};
 use async_trait::async_trait;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -554,16 +554,16 @@ all_the_tuples!(impl_update);
 
 #[async_trait]
 pub trait SqlListService<E> {
-    async fn list<N, Q, D>(
+    async fn list<N, Q, T>(
         connection: Connection,
         queries: SrvCtx<Q>,
         request: Input<ListRequest<N>>,
         by: Input<E>,
-    ) -> Result<ListResult<D>, TdError>
+    ) -> Result<ListResponse<T>, TdError>
     where
         N: Send + Sync + Clone,
         Q: DerefQueries,
-        D: DataAccessObject + for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin;
+        T: ListQuery;
 }
 
 macro_rules! impl_list {
@@ -576,35 +576,39 @@ macro_rules! impl_list {
         where
             $($E: SqlEntity),*
         {
-            async fn list<N, Q, D>(
+            async fn list<N, Q, T>(
                 Connection(connection): Connection,
                 SrvCtx(queries): SrvCtx<Q>,
                 Input(request): Input<ListRequest<N>>,
                 Input(by): Input<($($E),*)>,
-            ) -> Result<ListResult<D>, TdError>
+            ) -> Result<ListResponse<T>, TdError>
             where
                 N: Send + Sync + Clone,
                 Q: DerefQueries,
-                D: DataAccessObject + for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
+                T: ListQuery,
             {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
 
                 let ($($E),*) = by.deref();
-                let result = queries
-                    .list_by::<D>(request.list_params(), &($($E),*))?
+                let result: Vec<T::Dao> = queries
+                    .list_by::<T>(request.list_params(), &($($E),*))?
                     .build_query_as()
                     .persistent(true)
                     .fetch_all(&mut *conn)
                     .await
                     .map_err(|e| {
-                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
+                        formatted_entity!(T::Dao; $($E),*).map(|(columns, values, table)| {
                             TdError::from(SqlError::SelectError(columns, values, table, e))
                         })
                     })
                     .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                Ok(list_result(request.list_params().clone(), result))
+                let result = result
+                    .iter()
+                    .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
+
+                Ok(list_response(request.list_params(), result))
             }
         }
     };
@@ -676,7 +680,7 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_tower::extractors::{Connection, ConnectionType, Input, SrvCtx};
-    use td_type::Dao;
+    use td_type::{Dao, Dto};
 
     lazy_static! {
         static ref TEST_QUERIES: SrvCtx<DaoQueries> = SrvCtx::new(DaoQueries::default());
@@ -702,10 +706,18 @@ mod tests {
     #[td_type::typed(string)]
     struct FooName;
 
-    #[Dao(sql_table = "foo")]
+    #[Dao]
+    #[dao(sql_table = "foo")]
     struct FooDao {
         id: FooId,
         name: FooName,
+    }
+
+    #[Dto]
+    #[dto(list(on = FooDao))]
+    #[td_type(builder(try_from = FooDao))]
+    struct FooDto {
+        id: FooId,
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
@@ -983,18 +995,20 @@ mod tests {
         )
         .list((), ListParams::default());
 
-        let list = By::<()>::list::<(), DaoQueries, FooDao>(
+        let list = By::<()>::list::<(), DaoQueries, FooDto>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(list_request),
             Input::new(()),
         )
         .await?;
-        assert!(!list.more);
-        let list = list.list;
+        assert!(!list.more());
+        let list = list.data();
         assert_eq!(list.len(), 2);
-        assert!(list.contains(&*MARIO));
-        assert!(list.contains(&*LUIGI));
+        let mario = FooDtoBuilder::try_from(&*MARIO)?.build()?;
+        assert!(list.contains(&mario));
+        let luigi = FooDtoBuilder::try_from(&*LUIGI)?.build()?;
+        assert!(list.contains(&luigi));
         Ok(())
     }
 

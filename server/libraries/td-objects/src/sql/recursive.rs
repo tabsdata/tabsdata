@@ -258,7 +258,8 @@ mod tests {
     struct TestRecursion;
 
     // partitioning by id means there are no groups, each entry is independent
-    #[Dao(
+    #[Dao]
+    #[dao(
         sql_table = "test_table",
         partition_by = "id",
         natural_order_by = "defined_on",
@@ -273,7 +274,8 @@ mod tests {
         defined_on: AtTime,
     }
 
-    #[Dao(
+    #[Dao]
+    #[dao(
         sql_table = "test_table_reference",
         partition_by = "partition_id",
         natural_order_by = "defined_on"

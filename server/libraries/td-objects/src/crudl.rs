@@ -8,8 +8,8 @@ use getset::Getters;
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use sqlx::error::ErrorKind::{ForeignKeyViolation, UniqueViolation};
-use sqlx::sqlite::{SqliteQueryResult, SqliteRow};
-use sqlx::{Error, SqliteConnection};
+use sqlx::sqlite::SqliteQueryResult;
+use sqlx::Error;
 use std::fmt::Debug;
 use td_apiforge::apiserver_schema;
 use td_database::sql::DbError;
@@ -156,12 +156,21 @@ pub struct ListParams {
     #[validate(minimum = 0)]
     #[serde(default = "ListParams::default_len")]
     len: usize,
-    /// The filter to apply when creating the result list (not yet implemented).
+    /// The filter to apply when creating the result list.
     #[serde(alias = "search", default)]
-    filter: String, // TODO define filter syntax (consider RSQL) [TD-240]
-    /// The sort order of the result list (not yet implemented).
+    filter: Vec<String>,
+    /// The sort order of the result list.
     #[serde(alias = "order-by", default)]
-    order_by: String, // TODO define sort syntax [TD-240]
+    order_by: Option<String>,
+    /// The previous value for pagination.
+    #[serde(default)]
+    previous: Option<String>,
+    /// The next value for pagination.
+    #[serde(default)]
+    next: Option<String>,
+    /// The natural ID of the entity used in pagination.
+    #[serde(default)]
+    natural_id: Option<String>,
 }
 
 impl ListParams {
@@ -180,8 +189,11 @@ impl ListParams {
         Self {
             offset: Self::default_offset(),
             len: 1,
-            filter: String::new(),
-            order_by: String::new(),
+            filter: Vec::new(),
+            order_by: None,
+            previous: None,
+            next: None,
+            natural_id: None,
         }
     }
 
@@ -189,8 +201,11 @@ impl ListParams {
         ListParams {
             offset: 0,
             len: usize::MAX - 1,
-            filter: String::new(),
-            order_by: String::new(),
+            filter: Vec::new(),
+            order_by: None,
+            previous: None,
+            next: None,
+            natural_id: None,
         }
     }
 }
@@ -200,8 +215,11 @@ impl Default for ListParams {
         ListParams {
             offset: Self::default_offset(),
             len: Self::default_len(),
-            filter: String::new(),
-            order_by: String::new(),
+            filter: Vec::new(),
+            order_by: None,
+            previous: None,
+            next: None,
+            natural_id: None,
         }
     }
 }
@@ -343,136 +361,22 @@ impl<LL> ListResponseBuilder<LL> {
     }
 }
 
-impl<LL> ListResponse<LL> {
-    /// Creates a builder for a list response.
-    pub fn builder() -> ListResponseBuilder<LL> {
-        ListResponseBuilder::default()
-    }
-}
-
-/// Convenience empty CRULD context type for when no context is not needed.
-#[derive(Debug, Default)]
-pub struct NoContext {}
-
-/// Helper function to create a SQL select for list (paginated) results. It should be used
-/// in tandem with [`list_result`].
-///
-/// It adds LIMIT and OFFSET to the given SQL extracting the length and offset from the given
-/// [`ListParams`].
-///
-/// It adds one to the length to determine if there are more data in the database.
-///
-/// The query result must be passed through the [`list_result`] function to determine if
-/// there is more data in the database and to remove the extra row if necessary.
-pub fn list_select(list_params: &ListParams, sql: &str) -> String {
-    format!(
-        "{} LIMIT {} OFFSET {}",
-        sql,
-        list_params.len() + 1,
-        list_params.offset()
-    )
-}
-
-#[derive(Debug, Serialize, Getters)]
-#[getset(get = "pub")]
-pub struct ListResult<T> {
-    pub list: Vec<T>,
-    pub more: bool,
-}
-
-impl<T> ListResult<T> {
-    pub fn new(list: Vec<T>, more: bool) -> Self {
-        Self { list, more }
-    }
-
-    pub fn map<B, F>(&self, mapper: F) -> ListResult<B>
-    where
-        F: FnMut(&T) -> B,
-    {
-        ListResult {
-            list: self.list().iter().map(mapper).collect(),
-            more: self.more,
-        }
-    }
-
-    pub fn try_map<B, F, E>(&self, mapper: F) -> Result<ListResult<B>, E>
-    where
-        F: FnMut(&T) -> Result<B, E>,
-    {
-        let list: Vec<B> = self
-            .list
-            .iter()
-            .map(mapper)
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(ListResult {
-            list,
-            more: self.more,
-        })
-    }
-}
-
-/// Helper function to determine if there is more data in the database. It should be used
-/// in tandem with [`list_select`].
-///
-/// Determines if there is more data in the database and removes the extra row if necessary.
-pub fn list_result<LL>(list_params: ListParams, list: Vec<LL>) -> ListResult<LL> {
+/// Helper function that creates a [`ListResponse`].
+pub fn list_response<LL>(list_params: &ListParams, list: Vec<LL>) -> ListResponse<LL> {
     let mut list = list;
     let more = list.len() > *list_params.len();
     more.then(|| list.pop());
     // if more {
     //     list.pop();
     // }
-    ListResult { list, more }
-}
-
-impl<LL> From<ListResult<LL>> for (Vec<LL>, bool) {
-    fn from(val: ListResult<LL>) -> Self {
-        (val.list, val.more)
-    }
-}
-
-/// Helper function that creates a [`ListResponse`].
-pub fn list_response<LL>(list_params: ListParams, list_result: ListResult<LL>) -> ListResponse<LL> {
     let offset = *list_params.offset();
     ListResponseBuilder::default()
-        .data(list_result.list)
-        .list_params(list_params)
+        .data(list)
+        .list_params(list_params.clone())
         .offset(offset)
-        .more(list_result.more)
+        .more(more)
         .build()
         .unwrap()
-}
-
-/// Helper function to select a single row from the database by a key.
-pub async fn select_by<DB>(
-    conn: &mut SqliteConnection,
-    select_by_sql: &str,
-    key: &str,
-) -> Result<DB, CrudlErrorX>
-where
-    DB: Unpin + Send + for<'r> sqlx::FromRow<'r, SqliteRow>,
-{
-    sqlx::query_as(select_by_sql)
-        .bind(key.to_string())
-        .fetch_one(conn)
-        .await
-        .map_err(handle_select_error)
-}
-
-/// Helper function to select multiple row from the database by a key.
-pub async fn select_all_by<DB>(
-    conn: &mut SqliteConnection,
-    select_by_sql: &str,
-    key: &str,
-) -> Result<Vec<DB>, CrudlErrorX>
-where
-    DB: Unpin + Send + for<'r> sqlx::FromRow<'r, SqliteRow>,
-{
-    sqlx::query_as(select_by_sql)
-        .bind(key.to_string())
-        .fetch_all(conn)
-        .await
-        .map_err(handle_select_error)
 }
 
 // TODO [TD-258] fine tune SQL error handling [TD-239] to correctly identify dup keys issues, dup keys issues, etc.

@@ -26,10 +26,13 @@ use td_error::TdError;
 
 // Daos
 
-#[td_type::Dao(sql_table = "executions")]
-#[td_type(builder(try_from = FunctionVersionDBWithNames, skip_all))]
-#[td_type(updater(try_from = RequestContext, skip_all))]
-#[td_type(updater(try_from = ExecutionRequest, skip_all))]
+#[td_type::Dao]
+#[dao(sql_table = "executions")]
+#[td_type(
+    builder(try_from = FunctionVersionDBWithNames, skip_all),
+    updater(try_from = RequestContext, skip_all),
+    updater(try_from = ExecutionRequest, skip_all)
+)]
 pub struct ExecutionDB {
     #[builder(default)]
     #[td_type(extractor)]
@@ -46,7 +49,8 @@ pub struct ExecutionDB {
     triggered_by_id: UserId,
 }
 
-#[td_type::Dao(sql_table = "executions__with_status")]
+#[td_type::Dao]
+#[dao(sql_table = "executions__with_status")]
 pub struct ExecutionDBWithStatus {
     id: ExecutionId,
     name: Option<ExecutionName>,
@@ -59,7 +63,8 @@ pub struct ExecutionDBWithStatus {
     status: ExecutionStatus,
 }
 
-#[td_type::Dao(sql_table = "transactions")]
+#[td_type::Dao]
+#[dao(sql_table = "transactions")]
 #[td_type(builder(try_from = ExecutionDB, skip_all))]
 pub struct TransactionDB {
     #[td_type(extractor)]
@@ -74,7 +79,8 @@ pub struct TransactionDB {
     triggered_by_id: UserId,
 }
 
-#[td_type::Dao(sql_table = "transactions__with_status")]
+#[td_type::Dao]
+#[dao(sql_table = "transactions__with_status")]
 pub struct TransactionDBWithStatus {
     id: TransactionId,
     execution_id: ExecutionId,
@@ -87,7 +93,8 @@ pub struct TransactionDBWithStatus {
     status: TransactionStatus,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "function_runs",
     partition_by = "id",
     natural_order_by = "triggered_on"
@@ -115,7 +122,8 @@ pub struct FunctionRunDB {
     status: FunctionRunStatus,
 }
 
-#[td_type::Dao(sql_table = "executable_function_runs")]
+#[td_type::Dao]
+#[dao(sql_table = "executable_function_runs")]
 pub struct ExecutableFunctionRunDB {
     #[td_type(extractor)]
     id: FunctionRunId,
@@ -139,7 +147,8 @@ pub struct ExecutableFunctionRunDB {
     execution: Option<ExecutionName>,
 }
 
-#[td_type::Dao(sql_table = "table_data_versions")]
+#[td_type::Dao]
+#[dao(sql_table = "table_data_versions")]
 pub struct TableDataVersionDB {
     #[builder(default)]
     id: TableDataVersionId,
@@ -156,7 +165,8 @@ pub struct TableDataVersionDB {
     function_param_pos: Option<TableFunctionParamPos>,
 }
 
-#[td_type::Dao(sql_table = "table_data_versions__with_status")]
+#[td_type::Dao]
+#[dao(sql_table = "table_data_versions__with_status")]
 pub struct TableDataVersionDBWithStatus {
     id: TableDataVersionId,
     collection_id: CollectionId,
@@ -176,7 +186,8 @@ pub struct TableDataVersionDBWithStatus {
     partitioned: Partitioned,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "table_data_versions__with_names",
     partition_by = "table_version_id",
     natural_order_by = "triggered_on",
@@ -205,7 +216,8 @@ pub struct TableDataVersionDBWithNames {
     triggered_by: UserName,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "table_data_versions__active",
     partition_by = "table_id",
     natural_order_by = "triggered_on"
@@ -228,7 +240,8 @@ pub struct ActiveTableDataVersionDB {
     partitioned: Partitioned,
 }
 
-#[td_type::Dao(sql_table = "function_requirements")]
+#[td_type::Dao]
+#[dao(sql_table = "function_requirements")]
 pub struct FunctionRequirementDB {
     #[builder(default)]
     id: RequirementId,
@@ -249,7 +262,8 @@ pub struct FunctionRequirementDB {
     requirement_version_pos: VersionPos,
 }
 
-#[td_type::Dao(sql_table = "function_requirements__with_status")]
+#[td_type::Dao]
+#[dao(sql_table = "function_requirements__with_status")]
 pub struct FunctionRequirementDBWithStatus {
     id: RequirementId,
     collection_id: CollectionId,
@@ -266,7 +280,8 @@ pub struct FunctionRequirementDBWithStatus {
     status: FunctionRunStatus,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "function_requirements__with_names",
     partition_by = "id",
     natural_order_by = "id",
@@ -291,7 +306,8 @@ pub struct FunctionRequirementDBWithNames {
     requirement_table: TableName,
 }
 
-#[td_type::Dao(sql_table = "worker_messages")]
+#[td_type::Dao]
+#[dao(sql_table = "worker_messages")]
 pub struct WorkerMessageDB {
     #[builder(default)]
     id: WorkerMessageId,
@@ -458,7 +474,8 @@ impl TryFrom<&CallbackRequest> for UpdateFunctionRun {
     }
 }
 
-#[td_type::Dao(sql_table = "function_runs")]
+#[td_type::Dao]
+#[dao(sql_table = "function_runs")]
 #[td_type(builder(try_from = UpdateFunctionRun))]
 pub struct UpdateFunctionRunDB {
     #[dao(immutable)]
@@ -491,14 +508,16 @@ impl UpdateFunctionRunDB {
     }
 }
 
-#[td_type::Dao(sql_table = "table_data_versions")]
+#[td_type::Dao]
+#[dao(sql_table = "table_data_versions")]
 pub struct UpdateTableDataVersionDB {
     #[dao(immutable)]
     #[builder(default)]
     has_data: Option<HasData>,
 }
 
-#[td_type::Dao(sql_table = "worker_messages")]
+#[td_type::Dao]
+#[dao(sql_table = "worker_messages")]
 pub struct UpdateWorkerMessageDB {
     status: WorkerMessageStatus,
 }

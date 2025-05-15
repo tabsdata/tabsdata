@@ -14,7 +14,8 @@ use axum::extract::Request;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-#[td_type::Dao(sql_table = "functions")]
+#[td_type::Dao]
+#[dao(sql_table = "functions")]
 #[td_type(builder(try_from = FunctionVersionDB, skip_all))]
 pub struct FunctionDB {
     #[td_type(extractor, builder(include, field = "function_id"))]
@@ -35,7 +36,8 @@ pub struct FunctionDB {
     created_by_id: UserId,
 }
 
-#[td_type::Dao(sql_table = "functions__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "functions__with_names")]
 pub struct FunctionDBWithNames {
     #[td_type(extractor)]
     id: FunctionId,
@@ -111,7 +113,8 @@ impl FunctionUpload {
     }
 }
 
-#[td_type::Dao(sql_table = "bundles")]
+#[td_type::Dao]
+#[dao(sql_table = "bundles")]
 #[td_type(builder(try_from = RequestContext, skip_all))]
 pub struct BundleDB {
     #[td_type(setter)]
@@ -132,13 +135,16 @@ pub struct Bundle {
     id: BundleId,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "function_versions",
     partition_by = "function_id",
     natural_order_by = "defined_on"
 )]
-#[td_type(builder(try_from = FunctionRegister, skip_all))]
-#[td_type(updater(try_from = RequestContext, skip_all))]
+#[td_type(
+    builder(try_from = FunctionRegister, skip_all),
+    updater(try_from = RequestContext, skip_all)
+)]
 pub struct FunctionVersionDB {
     #[builder(default)]
     #[td_type(extractor)]
@@ -172,7 +178,8 @@ pub struct FunctionVersionDB {
     status: FunctionStatus,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "function_versions__with_names",
     partition_by = "function_id",
     natural_order_by = "defined_on"

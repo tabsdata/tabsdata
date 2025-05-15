@@ -10,16 +10,11 @@ use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin};
-use td_objects::tower_service::from::{
-    ExtractNameService, ExtractService, TryMapListService, With,
-};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::CollectionDB;
-use td_objects::types::permission::{
-    InterCollectionPermission, InterCollectionPermissionBuilder,
-    InterCollectionPermissionDBWithNames,
-};
+use td_objects::types::permission::InterCollectionPermission;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
@@ -63,10 +58,7 @@ impl ListInterCollectionPermissionService {
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
 
                 // get list of permissions
-                from_fn(By::<CollectionId>::list::<CollectionParam, DaoQueries, InterCollectionPermissionDBWithNames>),
-
-                // map DAOs to DTOs
-                from_fn(With::<InterCollectionPermissionDBWithNames>::try_map_list::<CollectionParam, InterCollectionPermissionBuilder, InterCollectionPermission, _>),
+                from_fn(By::<CollectionId>::list::<CollectionParam, DaoQueries, InterCollectionPermission>),
             ))
         }
     }
@@ -122,10 +114,7 @@ mod tests {
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
 
             // get list of permissions
-            type_of_val(&By::<CollectionId>::list::<CollectionParam, DaoQueries, InterCollectionPermissionDBWithNames>),
-
-            // map DAOs to DTOs
-            type_of_val(&With::<InterCollectionPermissionDBWithNames>::try_map_list::<CollectionParam, InterCollectionPermissionBuilder, InterCollectionPermission, _>),
+            type_of_val(&By::<CollectionId>::list::<CollectionParam, DaoQueries, InterCollectionPermission>),
         ]);
     }
 

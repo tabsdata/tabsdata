@@ -4,21 +4,19 @@
 
 pub mod basic;
 
+pub mod auth;
 pub mod collection;
 pub mod dependency;
 pub mod execution;
 pub mod function;
+pub mod parse;
 pub mod permission;
 pub mod role;
 pub mod table;
+pub mod table_ref;
 pub mod trigger;
 pub mod user;
 pub mod worker;
-
-mod parse;
-pub mod table_ref;
-
-pub mod auth;
 
 #[cfg(test)]
 mod tests;
@@ -59,6 +57,8 @@ pub trait IdOrName: Send + Sync {
 pub trait DataAccessObject:
     for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin
 {
+    type Builder;
+
     fn sql_table() -> &'static str;
     fn order_by() -> &'static str;
     fn fields() -> &'static [&'static str];
@@ -76,9 +76,33 @@ pub trait DataAccessObject:
     ) -> sqlx::QueryBuilder<'_, sqlx::Sqlite>;
 }
 
-pub trait DataLogicObject {}
+pub trait DataLogicObject {
+    type Builder;
+}
 
-pub trait DataTransferObject {}
+pub trait DataTransferObject {
+    type Builder;
+}
+
+pub trait ListQuery: DataTransferObject {
+    type Dao: DataAccessObject;
+
+    fn list_on() -> &'static str {
+        Self::Dao::sql_table()
+    }
+
+    fn fields() -> &'static [&'static str] {
+        Self::Dao::fields()
+    }
+
+    fn try_from_dao(dao: &Self::Dao) -> Result<Self, td_error::TdError>
+    where
+        Self: Sized;
+    fn natural_order_by() -> &'static str;
+    fn order_by_fields() -> &'static [&'static str];
+    fn filter_by_fields() -> &'static [&'static str];
+    fn filter_by_like_fields() -> &'static [&'static str];
+}
 
 pub trait Extractor<T> {
     fn extract(&self) -> T;

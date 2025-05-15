@@ -10,13 +10,11 @@ use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::from::{
-    ExtractNameService, ExtractService, TryMapListService, With,
-};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::role::RoleDB;
-use td_objects::types::role::{UserRole, UserRoleBuilder, UserRoleDBWithNames};
+use td_objects::types::role::UserRole;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
@@ -50,9 +48,7 @@ impl ListUserRoleService {
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
-                from_fn(By::<RoleId>::list::<RoleParam, DaoQueries, UserRoleDBWithNames>),
-
-                from_fn(With::<UserRoleDBWithNames>::try_map_list::<RoleParam, UserRoleBuilder, UserRole, _>),
+                from_fn(By::<RoleId>::list::<RoleParam, DaoQueries, UserRole>),
             ))
         }
     }
@@ -97,8 +93,7 @@ mod tests {
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
-            type_of_val(&By::<RoleId>::list::<RoleParam, DaoQueries, UserRoleDBWithNames>),
-            type_of_val(&With::<UserRoleDBWithNames>::try_map_list::<RoleParam, UserRoleBuilder, UserRole, _>),
+            type_of_val(&By::<RoleId>::list::<RoleParam, DaoQueries, UserRole>),
         ]);
     }
 

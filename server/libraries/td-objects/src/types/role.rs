@@ -7,7 +7,8 @@ use crate::types::basic::{
     AtTime, Description, Fixed, RoleId, RoleName, UserId, UserName, UserRoleId,
 };
 
-#[td_type::Dao(sql_table = "roles")]
+#[td_type::Dao]
+#[dao(sql_table = "roles")]
 #[td_type(builder(try_from = RoleCreate, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct RoleDB {
@@ -52,7 +53,8 @@ pub struct RoleDBUpdate {
 
 pub type RoleUpdate = RoleCreate;
 
-#[td_type::Dao(sql_table = "roles__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "roles__with_names")]
 pub struct RoleDBWithNames {
     #[td_type(extractor)]
     id: RoleId,
@@ -69,6 +71,7 @@ pub struct RoleDBWithNames {
 }
 
 #[td_type::Dto]
+#[dto(list(on = RoleDBWithNames))]
 #[td_type(builder(try_from = RoleDBWithNames))]
 pub struct Role {
     id: RoleId,
@@ -84,7 +87,8 @@ pub struct Role {
     modified_by: UserName,
 }
 
-#[td_type::Dao(sql_table = "users_roles")]
+#[td_type::Dao]
+#[dao(sql_table = "users_roles")]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct UserRoleDB {
     #[td_type(extractor)]
@@ -108,7 +112,8 @@ pub struct UserRoleCreate {
     user: UserName,
 }
 
-#[td_type::Dao(sql_table = "users_roles__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "users_roles__with_names")]
 pub struct UserRoleDBWithNames {
     id: UserRoleId,
     user_id: UserId,
@@ -124,6 +129,7 @@ pub struct UserRoleDBWithNames {
 }
 
 #[td_type::Dto]
+#[dto(list(on = UserRoleDBWithNames))]
 #[td_type(builder(try_from = UserRoleDBWithNames))]
 pub struct UserRole {
     id: UserRoleId,

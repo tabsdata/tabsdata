@@ -10,7 +10,8 @@ use crate::types::basic::{
 };
 use crate::types::function::{FunctionDB, FunctionVersionDB};
 
-#[td_type::Dao(sql_table = "tables")]
+#[td_type::Dao]
+#[dao(sql_table = "tables")]
 #[td_type(builder(try_from = TableVersionDB, skip_all))]
 #[td_type(updater(try_from = FunctionDB, skip_all))]
 pub struct TableDB {
@@ -38,7 +39,8 @@ pub struct TableDB {
     created_by_id: UserId,
 }
 
-#[td_type::Dao(sql_table = "tables__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "tables__with_names")]
 pub struct TableDBWithNames {
     #[td_type(extractor)]
     id: TableId,
@@ -60,7 +62,8 @@ pub struct TableDBWithNames {
     collection: CollectionName,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "table_versions",
     partition_by = "table_id",
     natural_order_by = "defined_on"
@@ -89,7 +92,8 @@ pub struct TableVersionDB {
     status: TableStatus,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "table_versions__with_names",
     order_by = "function_param_pos",
     partition_by = "table_id",

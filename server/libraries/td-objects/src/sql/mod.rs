@@ -11,16 +11,21 @@
 //    refactored into a Generic component providing that SQL building for the
 //    'current' and 'at_time' methods.
 pub mod cte;
+pub mod list;
 pub mod recursive;
 
 use crate::crudl::ListParams;
-use crate::types::{DataAccessObject, SqlEntity};
+use crate::sql::list::{ListError, ListQueryParams, Order, Pagination};
+use crate::types::{DataAccessObject, ListQuery, SqlEntity};
 use std::ops::Deref;
 use td_error::td_error;
 use tracing::trace;
 
 #[td_error]
 pub enum QueryError {
+    #[error("List query error: {0:?}")]
+    ListQueryError(#[from] ListError) = 0,
+
     #[error("Type not found: {0:?}")]
     TypeNotFound(String) = 5000,
 }
@@ -92,22 +97,24 @@ where
 /// The arrays are used to create OR groups. For example, ([E1, E2]) will generate a E1 OR E2 clause.
 /// The macro will generate a WHERE clause with AND groups for the single values and OR groups for the arrays.
 /// For example, ([E1, E2], E3) will generate (E1 OR E2) AND E3.
+/// It returns whether the WHERE clause was empty or not, so subsequent WHERE clauses can be added.
 #[macro_export]
 macro_rules! gen_where_clause {
     // Cases for when there's no condition to add (empty input).
-    ($query_builder:expr, $D:ident, ) => {};
-    ($query_builder:expr, $D:ident, $vect:ident: []) => {};
+    ($query_builder:expr, $D:ty, ) => { true };
+    ($query_builder:expr, $D:ty, $vect:ident: []) => { true };
 
     // Case for when there's at least one condition.
-    ($query_builder:expr, $D:ident, $($rest:tt)+) => {{
+    ($query_builder:expr, $D:ty, $($rest:tt)+) => {{
         $query_builder.push(" WHERE ");
         let mut first = true;
         gen_where_clause!(@munch $query_builder, $D, first, $($rest)+);
+        first
     }};
 
     // Binding
-    (@bind $query_builder:expr, $D:ident, $E:ident) => {{
-        let column = $D::sql_field_for_type::<$E>()
+    (@bind $query_builder:expr, $D:ty, $E:ident) => {{
+        let column = <$D>::sql_field_for_type::<$E>()
             .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
         $query_builder
             .push(format!("{} = ", column))
@@ -115,10 +122,10 @@ macro_rules! gen_where_clause {
     }};
 
     // Base case: nothing to do here
-    (@munch $query_builder:expr, $D:ident, $first:ident) => {};
+    (@munch $query_builder:expr, $D:ty, $first:ident) => {};
 
     // Single identifier (normal case). AND group.
-    (@munch $query_builder:expr, $D:ident, $first:ident, $E:ident $(, $($rest:tt)*)?) => {{
+    (@munch $query_builder:expr, $D:ty, $first:ident, $E:ident $(, $($rest:tt)*)?) => {{
         if !$first { $query_builder.push(" AND "); }
         $first = false;
         gen_where_clause!(@bind $query_builder, $D, $E);
@@ -129,7 +136,7 @@ macro_rules! gen_where_clause {
     (@munch $query_builder:expr, $first:ident, []) => {};
 
     // AND/OR group. Joining arrays.
-    (@munch $query_builder:expr, $D:ident, $first:ident,  $vect:ident: [ $($inner:ident),* ] $(, $($rest:tt)*)?) => {{
+    (@munch $query_builder:expr, $D:ty, $first:ident, $vect:ident: [ $($inner:ident),* ] $(, $($rest:tt)*)?) => {{
         if !$first { $query_builder.push(" AND "); }
         $first = false;
 
@@ -223,7 +230,7 @@ macro_rules! impl_find_by {
 all_the_tuples!(impl_find_by);
 
 pub trait ListBy<'a, E> {
-    fn list_by<D: DataAccessObject>(
+    fn list_by<T: ListQuery + 'a>(
         &self,
         list_params: &ListParams,
         e: &'a E,
@@ -240,23 +247,109 @@ macro_rules! impl_list_by {
             Q: Deref<Target = dyn Queries>,
             $($E: SqlEntity),*
         {
-            fn list_by<D: DataAccessObject>(
+            fn list_by<T: ListQuery + 'a>(
                 &self,
                 list_params: &ListParams,
                 ($($E),*): &'a ($(&'a $E),*),
             ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
-                let table = D::sql_table();
-                let fields = D::fields();
-                let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
+                let query_params = ListQueryParams::<T>::try_from(list_params)?;
 
+                let table = T::list_on();
+                let fields = T::fields();
+                let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
-                gen_where_clause!(query_builder, D, $($E),*);
+
+                let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
+                query_params
+                    .conditions() // And
+                    .conditions() // Or
+                    .into_iter()
+                    .for_each(|or| {
+                        if first {
+                            query_builder.push(" WHERE ");
+                        } else {
+                            query_builder.push(" AND ");
+                        }
+                        first = false;
+
+                        query_builder.push("(");
+                        let mut or_separated = query_builder.separated(" OR ");
+                        for cond in or.conditions() {
+                            or_separated.push(format!("{} {} ", cond.field(), cond.operator()));
+                            let value = cond.value().to_owned();
+                            or_separated.push_bind_unseparated(value);
+                        }
+                        query_builder.push(")");
+                    });
+
+                let natural_order = query_params.natural_order();
+                if let Some(pagination) = query_params.pagination() {
+                    if first {
+                        query_builder.push(" WHERE ");
+                    } else {
+                        query_builder.push(" AND ");
+                    }
+                    query_builder.push("(");
+
+                    let pagination_field = query_params
+                        .order()
+                        .as_ref()
+                        .unwrap_or(query_params.natural_order());
+                    let range_operator = match (pagination_field, pagination) {
+                        (Order::Asc(_), Pagination::Previous(_, _)) => "<",
+                        (Order::Asc(_), Pagination::Next(_, _)) => ">",
+                        (Order::Desc(_), Pagination::Previous(_, _)) => ">",
+                        (Order::Desc(_), Pagination::Next(_, _)) => "<",
+                    };
+
+                    if pagination_field != natural_order {
+                        // field OP value
+                        query_builder.push(format!("{} {} ", pagination_field.field(), range_operator));
+                        query_builder.push_bind(pagination.column_value().to_owned());
+
+                        query_builder.push(" OR ");
+                        query_builder.push("(");
+
+                        // field = value
+                        query_builder.push(format!("{} = ", pagination_field.field()));
+                        query_builder.push_bind(pagination.column_value().to_owned());
+
+                        // natural_field OP value
+                        query_builder.push(format!(
+                            " AND {} {} ",
+                            natural_order.field(),
+                            range_operator
+                        ));
+                        query_builder.push_bind(pagination.natural_id().to_owned());
+
+                        query_builder.push(")");
+                    } else {
+                        // natural_field OP value
+                        query_builder.push(format!("{} {} ", natural_order.field(), range_operator));
+                        query_builder.push_bind(pagination.natural_id().to_owned());
+                    }
+                    query_builder.push(")");
+                }
+
+                query_builder.push(" ORDER BY ");
+                let mut separated = query_builder.separated(", ");
+
+                if let Some(order) = query_params.order() {
+                    separated.push(format!("{} {}", order.field(), order.direction()));
+                }
+
+                separated.push(format!(
+                    "{} {}",
+                    natural_order.field(),
+                    natural_order.direction()
+                ));
+
                 query_builder
                     .push(" LIMIT ")
-                    .push_bind((list_params.len() + 1) as i64);
+                    .push_bind(*query_params.len() as i64);
                 query_builder
                     .push(" OFFSET ")
-                    .push_bind(*list_params.offset() as i64);
+                    .push_bind(*query_params.offset() as i64);
 
                 trace!("list_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
@@ -356,7 +449,6 @@ all_the_tuples!(impl_delete_by);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crudl::ListParamsBuilder;
     use lazy_static::lazy_static;
     use sqlx::Execute;
     use td_database::sql::DbPool;
@@ -372,7 +464,8 @@ mod tests {
     #[td_type::typed(i64)]
     struct TestModifiedOn;
 
-    #[Dao(sql_table = "test_table")]
+    #[Dao]
+    #[dao(sql_table = "test_table")]
     struct TestDao {
         id: TestId,
         name: TestName,
@@ -383,476 +476,1046 @@ mod tests {
         static ref TEST_QUERIES: DaoQueries = DaoQueries::default();
     }
 
-    lazy_static! {
-        static ref FIXTURE_DAOS: Vec<TestDao> = vec![
-            TestDao {
-                id: TestId::try_from("00000000000000000000000004").unwrap(),
-                name: TestName::try_from("mario").unwrap(),
-                modified_on: TestModifiedOn::try_from(1234).unwrap(),
-            },
-            TestDao {
-                id: TestId::try_from("00000000000000000000000008").unwrap(),
-                name: TestName::try_from("luigi").unwrap(),
-                modified_on: TestModifiedOn::try_from(6789).unwrap(),
-            },
-        ];
-    }
+    mod default {
+        use super::*;
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_insert(db: DbPool) -> Result<(), TdError> {
-        let dao = TestDao::builder()
-            .id(TestId::default())
-            .try_name("bowser")?
-            .try_modified_on(123)?
-            .build()?;
-
-        let mut query_builder = TEST_QUERIES.insert(&dao)?;
-        let query = query_builder.build();
-
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "INSERT INTO test_table (id, name, modified_on) VALUES (?, ?, ?)"
-        );
-
-        let result = query.execute(&db).await.unwrap();
-        assert_eq!(result.rows_affected(), 1);
-
-        let db_data: Vec<TestDao> =
-            sqlx::query_as("SELECT * FROM test_table WHERE name = 'bowser'")
-                .fetch_all(&db)
-                .await
-                .unwrap();
-        assert_eq!(db_data.len(), 1);
-        assert_eq!(db_data[0], dao);
-        Ok(())
-    }
-
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_select_by(db: DbPool) -> Result<(), TdError> {
-        let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&())?;
-        let query = query_builder.build_query_as();
-
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table ORDER BY 1 DESC"
-        );
-
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 2);
-        // Due to DESC id order
-        assert_eq!(result[0], FIXTURE_DAOS[1]);
-        assert_eq!(result[1], FIXTURE_DAOS[0]);
-        Ok(())
-    }
-
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_select_by_order_by(db: DbPool) -> Result<(), TdError> {
-        #[Dao(sql_table = "test_table", order_by = "modified_on")]
-        struct OrderedTestDao {
-            id: TestId,
-            name: TestName,
-            modified_on: TestModifiedOn,
+        lazy_static! {
+            static ref FIXTURE_DAOS: Vec<TestDao> = vec![
+                TestDao {
+                    id: TestId::try_from("00000000000000000000000004").unwrap(),
+                    name: TestName::try_from("mario").unwrap(),
+                    modified_on: TestModifiedOn::try_from(1234).unwrap(),
+                },
+                TestDao {
+                    id: TestId::try_from("00000000000000000000000008").unwrap(),
+                    name: TestName::try_from("luigi").unwrap(),
+                    modified_on: TestModifiedOn::try_from(6789).unwrap(),
+                },
+            ];
         }
 
-        let mut query_builder = TEST_QUERIES.select_by::<OrderedTestDao>(&())?;
-        let query = query_builder.build_query_as();
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_insert(db: DbPool) -> Result<(), TdError> {
+            let dao = TestDao::builder()
+                .id(TestId::default())
+                .try_name("bowser")?
+                .try_modified_on(123)?
+                .build()?;
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table ORDER BY modified_on"
-        );
+            let mut query_builder = TEST_QUERIES.insert(&dao)?;
+            let query = query_builder.build();
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], FIXTURE_DAOS[0]);
-        assert_eq!(result[1], FIXTURE_DAOS[1]);
-        Ok(())
-    }
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "INSERT INTO test_table (id, name, modified_on) VALUES (?, ?, ?)"
+            );
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_select_by_where(db: DbPool) -> Result<(), TdError> {
-        let by = &(TestName::try_from("mario")?);
-        let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&by)?;
-        let query = query_builder.build_query_as();
+            let result = query.execute(&db).await.unwrap();
+            assert_eq!(result.rows_affected(), 1);
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE name = ? ORDER BY 1 DESC"
-        );
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name = 'bowser'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 1);
+            assert_eq!(db_data[0], dao);
+            Ok(())
+        }
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], FIXTURE_DAOS[0]);
-        Ok(())
-    }
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_select_by(db: DbPool) -> Result<(), TdError> {
+            let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&())?;
+            let query = query_builder.build_query_as();
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_select_by_where_tuple(db: DbPool) -> Result<(), TdError> {
-        let by = (
-            &TestId::try_from("00000000000000000000000004")?,
-            &TestName::try_from("mario")?,
-        );
-        let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&by)?;
-        let query = query_builder.build_query_as();
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table ORDER BY 1 DESC"
+            );
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE id = ? AND name = ? ORDER BY 1 DESC"
-        );
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 2);
+            // Due to DESC id order
+            assert_eq!(result[0], FIXTURE_DAOS[1]);
+            assert_eq!(result[1], FIXTURE_DAOS[0]);
+            Ok(())
+        }
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], FIXTURE_DAOS[0]);
-        Ok(())
-    }
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_select_by_order_by(db: DbPool) -> Result<(), TdError> {
+            #[Dao]
+            #[dao(sql_table = "test_table", order_by = "modified_on")]
+            struct OrderedTestDao {
+                id: TestId,
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_find_by(db: DbPool) -> Result<(), TdError> {
-        let find_by: [&TestId; 0] = [];
-        let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&find_by)?;
-        let query = query_builder.build_query_as();
+            let mut query_builder = TEST_QUERIES.select_by::<OrderedTestDao>(&())?;
+            let query = query_builder.build_query_as();
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE 1 = 0"
-        );
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table ORDER BY modified_on"
+            );
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 0);
-        Ok(())
-    }
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            assert_eq!(result[1], FIXTURE_DAOS[1]);
+            Ok(())
+        }
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_find_by_where(db: DbPool) -> Result<(), TdError> {
-        let by = [&TestName::try_from("mario")?];
-        let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
-        let query = query_builder.build_query_as();
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_select_by_where(db: DbPool) -> Result<(), TdError> {
+            let by = &(TestName::try_from("mario")?);
+            let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&by)?;
+            let query = query_builder.build_query_as();
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE (name = ?)"
-        );
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE name = ? ORDER BY 1 DESC"
+            );
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], FIXTURE_DAOS[0]);
-        Ok(())
-    }
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            Ok(())
+        }
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_find_by_where_tuple(db: DbPool) -> Result<(), TdError> {
-        let by = [(
-            &TestId::try_from("00000000000000000000000004")?,
-            &TestName::try_from("mario")?,
-        )];
-        let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
-        let query = query_builder.build_query_as();
-
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE (id = ? AND name = ?)"
-        );
-
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], FIXTURE_DAOS[0]);
-        Ok(())
-    }
-
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_find_by_where_multiple_tuple(db: DbPool) -> Result<(), TdError> {
-        let by = [
-            (
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_select_by_where_tuple(db: DbPool) -> Result<(), TdError> {
+            let by = (
                 &TestId::try_from("00000000000000000000000004")?,
                 &TestName::try_from("mario")?,
-            ),
-            (
-                &TestId::try_from("00000000000000000000000008")?,
-                &TestName::try_from("luigi")?,
-            ),
-        ];
-        let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
-        let query = query_builder.build_query_as();
+            );
+            let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&by)?;
+            let query = query_builder.build_query_as();
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE (id = ? AND name = ?) OR (id = ? AND name = ?)"
-        );
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE id = ? AND name = ? ORDER BY 1 DESC"
+            );
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], FIXTURE_DAOS[0]);
-        assert_eq!(result[1], FIXTURE_DAOS[1]);
-        Ok(())
-    }
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            Ok(())
+        }
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_list_by(db: DbPool) -> Result<(), TdError> {
-        let list_params = ListParams::default();
-        let mut query_builder = TEST_QUERIES.list_by::<TestDao>(&list_params, &())?;
-        let query = query_builder.build_query_as();
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_find_by(db: DbPool) -> Result<(), TdError> {
+            let find_by: [&TestId; 0] = [];
+            let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&find_by)?;
+            let query = query_builder.build_query_as();
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table LIMIT ? OFFSET ?"
-        );
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE 1 = 0"
+            );
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result, *FIXTURE_DAOS);
-        Ok(())
-    }
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 0);
+            Ok(())
+        }
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_list_by_where(db: DbPool) -> Result<(), TdError> {
-        let list_params = ListParams::default();
-        let by = &(TestName::try_from("mario")?);
-        let mut query_builder = TEST_QUERIES.list_by::<TestDao>(&list_params, &by)?;
-        let query = query_builder.build_query_as();
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_find_by_where(db: DbPool) -> Result<(), TdError> {
+            let by = [&TestName::try_from("mario")?];
+            let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
+            let query = query_builder.build_query_as();
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE name = ? LIMIT ? OFFSET ?"
-        );
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name = ?)"
+            );
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], FIXTURE_DAOS[0]);
-        Ok(())
-    }
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            Ok(())
+        }
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_list_by_where_tuple(db: DbPool) -> Result<(), TdError> {
-        let list_params = ListParams::default();
-        let by = (
-            &TestId::try_from("00000000000000000000000004")?,
-            &TestName::try_from("mario")?,
-        );
-        let mut query_builder = TEST_QUERIES.list_by::<TestDao>(&list_params, &by)?;
-        let query = query_builder.build_query_as();
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_find_by_where_tuple(db: DbPool) -> Result<(), TdError> {
+            let by = [(
+                &TestId::try_from("00000000000000000000000004")?,
+                &TestName::try_from("mario")?,
+            )];
+            let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
+            let query = query_builder.build_query_as();
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table WHERE id = ? AND name = ? LIMIT ? OFFSET ?"
-        );
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (id = ? AND name = ?)"
+            );
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], FIXTURE_DAOS[0]);
-        Ok(())
-    }
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            Ok(())
+        }
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_list_by_list_params(db: DbPool) -> Result<(), TdError> {
-        let list_params = ListParamsBuilder::default()
-            .offset(0usize)
-            .len(0usize)
-            .build()
-            .unwrap();
-        let mut query_builder = TEST_QUERIES.list_by::<TestDao>(&list_params, &())?;
-        let query = query_builder.build_query_as();
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_find_by_where_multiple_tuple(db: DbPool) -> Result<(), TdError> {
+            let by = [
+                (
+                    &TestId::try_from("00000000000000000000000004")?,
+                    &TestName::try_from("mario")?,
+                ),
+                (
+                    &TestId::try_from("00000000000000000000000008")?,
+                    &TestName::try_from("luigi")?,
+                ),
+            ];
+            let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
+            let query = query_builder.build_query_as();
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "SELECT id, name, modified_on FROM test_table LIMIT ? OFFSET ?"
-        );
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (id = ? AND name = ?) OR (id = ? AND name = ?)"
+            );
 
-        let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], FIXTURE_DAOS[0]);
-        Ok(())
-    }
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            assert_eq!(result[1], FIXTURE_DAOS[1]);
+            Ok(())
+        }
 
-    #[Dao]
-    struct UpdateDao {
-        name: TestName,
-    }
+        #[Dao]
+        struct UpdateDao {
+            name: TestName,
+        }
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_update_by(db: DbPool) -> Result<(), TdError> {
-        let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
-        let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &())?;
-        let query = query_builder.build();
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_update_by(db: DbPool) -> Result<(), TdError> {
+            let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
+            let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &())?;
+            let query = query_builder.build();
 
-        let query_str = query.sql();
-        assert_eq!(query_str, "UPDATE test_table SET name = ?");
+            let query_str = query.sql();
+            assert_eq!(query_str, "UPDATE test_table SET name = ?");
 
-        let result = query.execute(&db).await.unwrap();
-        assert_eq!(result.rows_affected(), 2);
+            let result = query.execute(&db).await.unwrap();
+            assert_eq!(result.rows_affected(), 2);
 
-        // All rows names got changed.
-        let db_data: Vec<TestDao> =
-            sqlx::query_as("SELECT * FROM test_table WHERE name != 'peach'")
+            // All rows names got changed.
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name != 'peach'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 0);
+
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name = 'peach'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 2);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_update_by_where(db: DbPool) -> Result<(), TdError> {
+            let by = &(TestName::try_from("mario")?);
+            let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
+            let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &by)?;
+            let query = query_builder.build();
+
+            let query_str = query.sql();
+            assert_eq!(query_str, "UPDATE test_table SET name = ? WHERE name = ?");
+
+            let result = query.execute(&db).await.unwrap();
+            assert_eq!(result.rows_affected(), 1);
+
+            // Only one row changed.
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name != 'peach'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 1);
+
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name = 'peach'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 1);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_update_by_where_tuple(db: DbPool) -> Result<(), TdError> {
+            let by = (
+                &TestId::try_from("00000000000000000000000004")?,
+                &TestName::try_from("mario")?,
+            );
+            let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
+            let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &by)?;
+            let query = query_builder.build();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "UPDATE test_table SET name = ? WHERE id = ? AND name = ?"
+            );
+
+            let result = query.execute(&db).await.unwrap();
+            assert_eq!(result.rows_affected(), 1);
+
+            // Only one row changed.
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name != 'peach'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 1);
+
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name = 'peach'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 1);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_delete_by(db: DbPool) -> Result<(), TdError> {
+            let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&())?;
+            let query = query_builder.build();
+
+            let query_str = query.sql();
+            assert_eq!(query_str, "DELETE FROM test_table");
+
+            let result = query.execute(&db).await.unwrap();
+            assert_eq!(result.rows_affected(), 2);
+
+            // All rows names got deleted.
+            let db_data: Vec<TestDao> = sqlx::query_as("SELECT * FROM test_table")
                 .fetch_all(&db)
                 .await
                 .unwrap();
-        assert_eq!(db_data.len(), 0);
+            assert_eq!(db_data.len(), 0);
+            Ok(())
+        }
 
-        let db_data: Vec<TestDao> = sqlx::query_as("SELECT * FROM test_table WHERE name = 'peach'")
-            .fetch_all(&db)
-            .await
-            .unwrap();
-        assert_eq!(db_data.len(), 2);
-        Ok(())
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_delete_by_where(db: DbPool) -> Result<(), TdError> {
+            let by = &(TestName::try_from("mario")?);
+            let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&by)?;
+            let query = query_builder.build();
+
+            let query_str = query.sql();
+            assert_eq!(query_str, "DELETE FROM test_table WHERE name = ?");
+
+            let result = query.execute(&db).await.unwrap();
+            assert_eq!(result.rows_affected(), 1);
+
+            // Only one row got deleted.
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name == 'mario'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 0);
+
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name != 'mario'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 1);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_queries"))]
+        async fn test_dao_delete_by_where_tuple(db: DbPool) -> Result<(), TdError> {
+            let by = (
+                &TestId::try_from("00000000000000000000000004")?,
+                &TestName::try_from("mario")?,
+            );
+            let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&by)?;
+            let query = query_builder.build();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "DELETE FROM test_table WHERE id = ? AND name = ?"
+            );
+
+            let result = query.execute(&db).await.unwrap();
+            assert_eq!(result.rows_affected(), 1);
+
+            // Only one row got deleted.
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name == 'mario'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 0);
+
+            let db_data: Vec<TestDao> =
+                sqlx::query_as("SELECT * FROM test_table WHERE name != 'mario'")
+                    .fetch_all(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(db_data.len(), 1);
+            Ok(())
+        }
     }
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_update_by_where(db: DbPool) -> Result<(), TdError> {
-        let by = &(TestName::try_from("mario")?);
-        let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
-        let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &by)?;
-        let query = query_builder.build();
+    mod list {
+        use super::*;
+        use crate::crudl::ListParamsBuilder;
+        use td_type::Dto;
 
-        let query_str = query.sql();
-        assert_eq!(query_str, "UPDATE test_table SET name = ? WHERE name = ?");
+        lazy_static! {
+            static ref FIXTURE_DAOS: Vec<TestDao> = vec![
+                TestDao {
+                    id: TestId::try_from("00000000000000000000000004").unwrap(),
+                    name: TestName::try_from("B").unwrap(),
+                    modified_on: TestModifiedOn::try_from(1).unwrap(),
+                },
+                TestDao {
+                    id: TestId::try_from("00000000000000000000000008").unwrap(),
+                    name: TestName::try_from("A").unwrap(),
+                    modified_on: TestModifiedOn::try_from(2).unwrap(),
+                },
+                TestDao {
+                    id: TestId::try_from("0000000000000000000000000C").unwrap(),
+                    name: TestName::try_from("A").unwrap(),
+                    modified_on: TestModifiedOn::try_from(3).unwrap(),
+                },
+                TestDao {
+                    id: TestId::try_from("0000000000000000000000000G").unwrap(),
+                    name: TestName::try_from("C").unwrap(),
+                    modified_on: TestModifiedOn::try_from(4).unwrap(),
+                },
+            ];
+        }
 
-        let result = query.execute(&db).await.unwrap();
-        assert_eq!(result.rows_affected(), 1);
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao, natural_order_by = "modified_on"))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(filter, filter_like, order_by))]
+                name: TestName,
+                #[dto(list(filter, order_by))]
+                modified_on: TestModifiedOn,
+            }
 
-        // Only one row changed.
-        let db_data: Vec<TestDao> =
-            sqlx::query_as("SELECT * FROM test_table WHERE name != 'peach'")
-                .fetch_all(&db)
-                .await
+            let list_params = ListParamsBuilder::default()
+                .offset(0usize)
+                .len(4usize)
+                .filter(vec![
+                    "modified_on:gt:0".to_string(),
+                    "name:lk:*".to_string(),
+                ])
+                .order_by("name-".to_string())
+                .next("C".to_string())
+                .natural_id("4".to_string())
+                .build()
                 .unwrap();
-        assert_eq!(db_data.len(), 1);
+            let where_clause = &TestName::try_from("A")?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &where_clause)?;
+            let query = query_builder.build_query_as();
 
-        let db_data: Vec<TestDao> = sqlx::query_as("SELECT * FROM test_table WHERE name = 'peach'")
-            .fetch_all(&db)
-            .await
-            .unwrap();
-        assert_eq!(db_data.len(), 1);
-        Ok(())
-    }
+            let query_str = query.sql();
+            assert!(
+                query_str ==
+                "SELECT id, name, modified_on FROM test_table WHERE name = ? AND (modified_on > ?) AND (name LIKE ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ? OFFSET ?"
+                ||
+                query_str ==
+                "SELECT id, name, modified_on FROM test_table WHERE name = ? AND (name LIKE ?) AND (modified_on > ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ? OFFSET ?"
+            );
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_update_by_where_tuple(db: DbPool) -> Result<(), TdError> {
-        let by = (
-            &TestId::try_from("00000000000000000000000004")?,
-            &TestName::try_from("mario")?,
-        );
-        let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
-        let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &by)?;
-        let query = query_builder.build();
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0], FIXTURE_DAOS[2]);
+            assert_eq!(result[1], FIXTURE_DAOS[1]);
+            Ok(())
+        }
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "UPDATE test_table SET name = ? WHERE id = ? AND name = ?"
-        );
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_default(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
 
-        let result = query.execute(&db).await.unwrap();
-        assert_eq!(result.rows_affected(), 1);
+            let list_params = ListParams::default();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
 
-        // Only one row changed.
-        let db_data: Vec<TestDao> =
-            sqlx::query_as("SELECT * FROM test_table WHERE name != 'peach'")
-                .fetch_all(&db)
-                .await
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result, *FIXTURE_DAOS);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_natural_order_by(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao, natural_order_by = "modified_on-"))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParams::default();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table ORDER BY modified_on DESC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            let mut expected = FIXTURE_DAOS.clone();
+            expected.sort_by(|a, b| b.modified_on.cmp(&a.modified_on));
+            assert_eq!(result, expected);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_order_by(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao, natural_order_by = "modified_on-"))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(order_by))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .order_by("name".to_string())
+                .build()
                 .unwrap();
-        assert_eq!(db_data.len(), 1);
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
 
-        let db_data: Vec<TestDao> = sqlx::query_as("SELECT * FROM test_table WHERE name = 'peach'")
-            .fetch_all(&db)
-            .await
-            .unwrap();
-        assert_eq!(db_data.len(), 1);
-        Ok(())
-    }
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table ORDER BY name ASC, modified_on ASC LIMIT ? OFFSET ?"
+            );
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_delete_by(db: DbPool) -> Result<(), TdError> {
-        let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&())?;
-        let query = query_builder.build();
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            let mut expected = FIXTURE_DAOS.clone();
+            expected.sort_by(|a, b| a.name.cmp(&b.name).then(a.modified_on.cmp(&b.modified_on)));
+            assert_eq!(result, expected);
+            Ok(())
+        }
 
-        let query_str = query.sql();
-        assert_eq!(query_str, "DELETE FROM test_table");
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_filter(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(filter))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
 
-        let result = query.execute(&db).await.unwrap();
-        assert_eq!(result.rows_affected(), 2);
-
-        // All rows names got deleted.
-        let db_data: Vec<TestDao> = sqlx::query_as("SELECT * FROM test_table")
-            .fetch_all(&db)
-            .await
-            .unwrap();
-        assert_eq!(db_data.len(), 0);
-        Ok(())
-    }
-
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_delete_by_where(db: DbPool) -> Result<(), TdError> {
-        let by = &(TestName::try_from("mario")?);
-        let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&by)?;
-        let query = query_builder.build();
-
-        let query_str = query.sql();
-        assert_eq!(query_str, "DELETE FROM test_table WHERE name = ?");
-
-        let result = query.execute(&db).await.unwrap();
-        assert_eq!(result.rows_affected(), 1);
-
-        // Only one row got deleted.
-        let db_data: Vec<TestDao> =
-            sqlx::query_as("SELECT * FROM test_table WHERE name == 'mario'")
-                .fetch_all(&db)
-                .await
+            let list_params = ListParamsBuilder::default()
+                .filter(vec!["name:eq:A".to_string()])
+                .build()
                 .unwrap();
-        assert_eq!(db_data.len(), 0);
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
 
-        let db_data: Vec<TestDao> =
-            sqlx::query_as("SELECT * FROM test_table WHERE name != 'mario'")
-                .fetch_all(&db)
-                .await
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0], FIXTURE_DAOS[1]);
+            assert_eq!(result[1], FIXTURE_DAOS[2]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_filter_like(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(filter_like))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .filter(vec!["name:lk:A".to_string()])
+                .build()
                 .unwrap();
-        assert_eq!(db_data.len(), 1);
-        Ok(())
-    }
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
 
-    #[td_test::test(sqlx(fixture = "test_queries"))]
-    async fn test_dao_delete_by_where_tuple(db: DbPool) -> Result<(), TdError> {
-        let by = (
-            &TestId::try_from("00000000000000000000000004")?,
-            &TestName::try_from("mario")?,
-        );
-        let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&by)?;
-        let query = query_builder.build();
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+            );
 
-        let query_str = query.sql();
-        assert_eq!(
-            query_str,
-            "DELETE FROM test_table WHERE id = ? AND name = ?"
-        );
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0], FIXTURE_DAOS[1]);
+            assert_eq!(result[1], FIXTURE_DAOS[2]);
+            Ok(())
+        }
 
-        let result = query.execute(&db).await.unwrap();
-        assert_eq!(result.rows_affected(), 1);
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_filter_like_wildcard(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(filter_like))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
 
-        // Only one row got deleted.
-        let db_data: Vec<TestDao> =
-            sqlx::query_as("SELECT * FROM test_table WHERE name == 'mario'")
-                .fetch_all(&db)
-                .await
+            let list_params = ListParamsBuilder::default()
+                .filter(vec!["name:lk:*".to_string()])
+                .build()
                 .unwrap();
-        assert_eq!(db_data.len(), 0);
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
 
-        let db_data: Vec<TestDao> =
-            sqlx::query_as("SELECT * FROM test_table WHERE name != 'mario'")
-                .fetch_all(&db)
-                .await
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result, *FIXTURE_DAOS);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_offset(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default().offset(3usize).build().unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[3]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_len(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default().len(1usize).build().unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_previous_asc(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .previous(FIXTURE_DAOS[1].id().to_string())
+                .natural_id(FIXTURE_DAOS[1].id().to_string())
+                .build()
                 .unwrap();
-        assert_eq!(db_data.len(), 1);
-        Ok(())
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (id < ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_next_asc(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .next(FIXTURE_DAOS[2].id().to_string())
+                .natural_id(FIXTURE_DAOS[2].id().to_string())
+                .build()
+                .unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[3]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_next_desc(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao, natural_order_by = "id-"))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .next(FIXTURE_DAOS[1].id().to_string())
+                .natural_id(FIXTURE_DAOS[1].id().to_string())
+                .build()
+                .unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (id < ?) ORDER BY id DESC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_previous_desc(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao, natural_order_by = "id-"))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .previous(FIXTURE_DAOS[2].id().to_string())
+                .natural_id(FIXTURE_DAOS[2].id().to_string())
+                .build()
+                .unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) ORDER BY id DESC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[3]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_order_by_next_asc(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(order_by))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .order_by("name+".to_string())
+                .next("A".to_string())
+                .natural_id(FIXTURE_DAOS[1].id().to_string())
+                .build()
+                .unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name ASC, id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 3);
+            assert_eq!(result[0], FIXTURE_DAOS[2]);
+            assert_eq!(result[1], FIXTURE_DAOS[0]);
+            assert_eq!(result[2], FIXTURE_DAOS[3]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_order_by_previous_asc(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(order_by))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .order_by("name+".to_string())
+                .previous("A".to_string())
+                .natural_id(FIXTURE_DAOS[1].id().to_string())
+                .build()
+                .unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name ASC, id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 0);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_order_by_next_desc(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(order_by))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .order_by("name-".to_string())
+                .next("B".to_string())
+                .natural_id(FIXTURE_DAOS[0].id().to_string())
+                .build()
+                .unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name DESC, id DESC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0], FIXTURE_DAOS[2]);
+            assert_eq!(result[1], FIXTURE_DAOS[1]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_order_by_previous_desc(
+            db: DbPool,
+        ) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(order_by))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .order_by("name-".to_string())
+                .previous("B".to_string())
+                .natural_id(FIXTURE_DAOS[0].id().to_string())
+                .build()
+                .unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name DESC, id DESC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[3]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_filters(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                #[dto(list(filter))]
+                id: TestId,
+                #[dto(list(filter))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .filter(vec![
+                    "name:eq:B".to_string(),
+                    "id:gt:0".to_string(),
+                    "name:ge:Z".to_string(),
+                ])
+                .build()
+                .unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert!(
+                query_str ==
+                "SELECT id, name, modified_on FROM test_table WHERE (name = ? OR name >= ?) AND (id > ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+                || query_str ==
+                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) AND (name = ? OR name >= ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_filter_order_by(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao, natural_order_by = "modified_on"))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(order_by, filter))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .offset(0usize)
+                .len(1usize)
+                .filter(vec!["name:eq:C".to_string()])
+                .order_by("name-".to_string())
+                .build()
+                .unwrap();
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY name DESC, modified_on DESC LIMIT ? OFFSET ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0], FIXTURE_DAOS[3]);
+            Ok(())
+        }
     }
 }

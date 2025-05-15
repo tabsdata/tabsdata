@@ -9,7 +9,8 @@ use crate::types::basic::{
 };
 use crate::types::function::FunctionVersionDB;
 
-#[td_type::Dao(sql_table = "triggers")]
+#[td_type::Dao]
+#[dao(sql_table = "triggers")]
 #[td_type(builder(try_from = TriggerVersionDB))]
 pub struct TriggerDB {
     #[td_type(builder(field = "trigger_id"))]
@@ -23,7 +24,8 @@ pub struct TriggerDB {
     trigger_by_table_id: TableId,
 }
 
-#[td_type::Dao(sql_table = "triggers__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "triggers__with_names")]
 pub struct TriggerDBWithNames {
     id: TriggerId,
     collection_id: CollectionId,
@@ -38,14 +40,17 @@ pub struct TriggerDBWithNames {
     trigger_by_table_name: TableName,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "trigger_versions",
     partition_by = "trigger_id",
     natural_order_by = "defined_on",
     recursive(up = "trigger_by_function_version_id", down = "function_version_id")
 )]
-#[td_type(builder(try_from = FunctionVersionDB, skip_all))]
-#[td_type(updater(try_from = RequestContext, skip_all))]
+#[td_type(
+    builder(try_from = FunctionVersionDB, skip_all),
+    updater(try_from = RequestContext, skip_all)
+)]
 pub struct TriggerVersionDB {
     #[builder(default)]
     id: TriggerVersionId,
@@ -69,7 +74,8 @@ pub struct TriggerVersionDB {
     defined_by_id: UserId,
 }
 
-#[td_type::Dao(
+#[td_type::Dao]
+#[dao(
     sql_table = "trigger_versions__with_names",
     partition_by = "trigger_id",
     natural_order_by = "defined_on",
@@ -123,9 +129,3 @@ pub struct TriggerVersionRead {
 pub type TriggerVersionDBWithNamesList = TriggerVersionDBWithNames;
 
 pub type TriggerVersionList = TriggerVersionRead;
-
-#[cfg(test)]
-mod tests {
-    #[tokio::test]
-    async fn test_daos_from_row() {}
-}

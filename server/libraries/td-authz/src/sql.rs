@@ -9,8 +9,8 @@ use sqlx::SqliteConnection;
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_error::TdError;
-use td_objects::crudl::{handle_sql_err, ListParams};
-use td_objects::sql::{DaoQueries, ListBy};
+use td_objects::crudl::handle_sql_err;
+use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::tower_service::authz::{AuthzEntity, Permission};
 use td_objects::types::basic::{CollectionId, PermissionType, RoleId, ToCollectionId};
 use td_objects::types::permission::{InterCollectionPermissionDB, PermissionDB};
@@ -48,7 +48,7 @@ impl SqlAuthzDataProvider {
         conn: &'a mut SqliteConnection,
     ) -> Result<HashMap<RoleId, Arc<Vec<Permission>>>, TdError> {
         let permissions: Vec<PermissionDB> = DaoQueries::default()
-            .list_by::<PermissionDB>(&ListParams::all(), &())?
+            .select_by::<PermissionDB>(&())?
             .build_query_as()
             .fetch_all(conn)
             .await
@@ -68,7 +68,7 @@ impl SqlAuthzDataProvider {
         conn: &'a mut SqliteConnection,
     ) -> Result<HashMap<CollectionId, Arc<Vec<ToCollectionId>>>, TdError> {
         let permissions: Vec<InterCollectionPermissionDB> = DaoQueries::default()
-            .list_by::<InterCollectionPermissionDB>(&ListParams::all(), &())?
+            .select_by::<InterCollectionPermissionDB>(&())?
             .build_query_as()
             .fetch_all(conn)
             .await

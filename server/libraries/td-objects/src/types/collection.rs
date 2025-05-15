@@ -5,10 +5,13 @@
 use crate::crudl::RequestContext;
 use crate::types::basic::{AtTime, CollectionId, CollectionName, Description, UserId, UserName};
 
-#[td_type::Dao(sql_table = "collections")]
-#[td_type(builder(try_from = CollectionDB))]
-#[td_type(builder(try_from = CollectionCreate, skip_all))]
-#[td_type(updater(try_from = RequestContext, skip_all))]
+#[td_type::Dao]
+#[dao(sql_table = "collections")]
+#[td_type(
+    builder(try_from = CollectionDB),
+    builder(try_from = CollectionCreate, skip_all),
+    updater(try_from = RequestContext, skip_all)
+)]
 pub struct CollectionDB {
     #[td_type(extractor)]
     #[builder(default)]
@@ -27,7 +30,8 @@ pub struct CollectionDB {
     modified_by_id: UserId,
 }
 
-#[td_type::Dao(sql_table = "collections__with_names")]
+#[td_type::Dao]
+#[dao(sql_table = "collections__with_names")]
 pub struct CollectionDBWithNames {
     #[td_type(extractor)]
     #[builder(default)]
@@ -57,8 +61,10 @@ pub struct CollectionUpdate {
 }
 
 #[td_type::Dao]
-#[td_type(builder(try_from = CollectionDB))]
-#[td_type(updater(try_from = RequestContext, skip_all))]
+#[td_type(
+    builder(try_from = CollectionDB),
+    updater(try_from = RequestContext, skip_all)
+)]
 pub struct CollectionUpdateDB {
     name: CollectionName,
     description: Description,
@@ -69,6 +75,7 @@ pub struct CollectionUpdateDB {
 }
 
 #[td_type::Dto]
+#[dto(list(on = CollectionDBWithNames))]
 #[td_type(builder(try_from = CollectionDBWithNames))]
 pub struct CollectionRead {
     id: CollectionId,
