@@ -13,7 +13,7 @@ use getset::Getters;
 use serde::Serialize;
 use td_apiforge::{apiserver_path, apiserver_schema, create_status};
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{FunctionParam, FUNCTION_UPLOAD};
+use td_objects::rest_urls::{CollectionParam, FUNCTION_UPLOAD};
 use td_objects::types::function::{Bundle, FunctionUpload};
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
@@ -36,7 +36,7 @@ create_status!(Bundle);
 pub async fn upload_function(
     State(functions): State<Functions>,
     Extension(request_context): Extension<RequestContext>,
-    Path(param): Path<FunctionParam>,
+    Path(param): Path<CollectionParam>,
     request: Request,
 ) -> Result<CreateStatus, CreateErrorStatus> {
     let request = FunctionUpload::new(request);

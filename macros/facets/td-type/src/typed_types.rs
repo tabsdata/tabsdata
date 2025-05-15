@@ -221,8 +221,8 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
             MaxLen(String, usize),
             #[error("String value '{0}' does not match regex '{1}'")]
             Regex(String, String),
-            #[error("Error parsing string value")]
-            Parse(#[from] td_error::TdError),
+            #[error("Error parsing string value: {0}")]
+            Parse(#[source] td_error::TdError),
         }
 
         #default
@@ -255,7 +255,7 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
                     (_, Some(min), _, _, _) if val.len() < min => Err(#error_name::MinLen(val, min))?,
                     (_, _, Some(max), _, _) if val.len() > max => Err(#error_name::MaxLen(val, max))?,
                     (_, _, _, Some(regex), _) if !regex.is_match(&val) => Err(#error_name::Regex(val, regex.to_string()))?,
-                    (_, _, _, _, Some(parser)) => Ok(Self(parser(val).map_err(#error_name::Parse)?)),
+                    (_, _, _, _, Some(parser)) => Ok(Self(parser(val).map_err(|e| #error_name::Parse(e))?)),
                     _ => Ok(Self(val)),
                 }
             }

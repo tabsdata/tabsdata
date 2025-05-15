@@ -57,7 +57,7 @@ impl FunctionServices {
 
     pub async fn upload(
         &self,
-    ) -> TdBoxService<CreateRequest<FunctionParam, FunctionUpload>, Bundle, TdError> {
+    ) -> TdBoxService<CreateRequest<CollectionParam, FunctionUpload>, Bundle, TdError> {
         self.upload.service().await
     }
 

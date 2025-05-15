@@ -84,6 +84,7 @@ pub struct FunctionRegister {
     triggers: Option<Vec<TableTrigger>>,
     #[td_type(extractor)]
     tables: Option<Vec<TableName>>,
+    #[serde(default)]
     runtime_values: FunctionRuntimeValues,
     #[td_type(extractor)]
     reuse_frozen_tables: ReuseFrozen,

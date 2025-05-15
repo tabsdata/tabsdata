@@ -130,7 +130,10 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
 
                 let mut input_tables_map = HashMap::new();
                 for req in requirements.iter() {
-                    if let (Some(dependency_pos), Some(version_idx)) = (req.requirement_dependency_pos(), req.requirement_version_idx()) {
+                    if let (Some(dependency_pos), Some(version_idx)) = (
+                        req.requirement_dependency_pos(),
+                        req.requirement_version_idx(),
+                    ) {
                         let location = match req.requirement_table_data_version_id() {
                             Some(data_version_id) => {
                                 let found_data_version: TableDataVersionDBWithNames = queries
@@ -142,41 +145,38 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
 
                                 let data_version = match found_data_version.has_data() {
                                     // We can use the data version if it has data, otherwise we need to
-                                    // find the first version with data, in the same table version id.
-                                    Some(has_data) if **has_data => found_data_version,
-                                    _ => {
-                                        let data_version: Option<TableDataVersionDBWithNames> =
-                                            queries
-                                                .select_versions_at::<TableDataVersionDBWithNames>(
-                                                    Some(f.triggered_on()),
-                                                    Some(&[&HasData::from(true)]),
-                                                    &(req.requirement_table_version_id()),
-                                                )?
-                                                .build_query_as()
-                                                .fetch_optional(&mut *conn)
-                                                .await
-                                                .map_err(handle_sql_err)?;
-
-                                        if data_version.is_none() {
-                                            unreachable!("At least one version of the table should have data"); // TODO error
-                                        }
-                                        data_version.unwrap()
-                                    }
+                                    // find the first version with data, in the same table version id, if any.
+                                    Some(has_data) if **has_data => Some(found_data_version),
+                                    _ => queries
+                                        .select_versions_at::<TableDataVersionDBWithNames>(
+                                            Some(f.triggered_on()),
+                                            Some(&[&HasData::from(true)]),
+                                            &(req.requirement_table_version_id()),
+                                        )?
+                                        .build_query_as()
+                                        .fetch_optional(&mut *conn)
+                                        .await
+                                        .map_err(handle_sql_err)?,
                                 };
 
-                                let (path, _) = storage_location
-                                    .builder(f.data_location())
-                                    .collection(req.collection_id())
-                                    .data(data_version.id())
-                                    .build();
-                                let (external_path, mount_def) = storage.to_external_uri(&path)?;
-                                let env_prefix = EnvPrefix::try_from(mount_def.id())?;
-                                get_states.insert(env_prefix.clone());
-                                let location = Location::builder()
-                                    .uri(external_path)
-                                    .env_prefix(env_prefix)
-                                    .build()?;
-                                Some(location)
+                                if let Some(data_version) = data_version {
+                                    let (path, _) = storage_location
+                                        .builder(f.data_location())
+                                        .collection(req.collection_id())
+                                        .data(data_version.id())
+                                        .build();
+                                    let (external_path, mount_def) =
+                                        storage.to_external_uri(&path)?;
+                                    let env_prefix = EnvPrefix::try_from(mount_def.id())?;
+                                    get_states.insert(env_prefix.clone());
+                                    let location = Location::builder()
+                                        .uri(external_path)
+                                        .env_prefix(env_prefix)
+                                        .build()?;
+                                    Some(location)
+                                } else {
+                                    None
+                                }
                             }
                             None => None,
                         };

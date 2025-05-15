@@ -9,7 +9,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::CreateRequest;
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::FunctionParam;
+use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
@@ -31,7 +31,7 @@ use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxServ
 use td_tower::{layers, p, service_provider};
 
 pub struct UploadFunctionService {
-    provider: ServiceProvider<CreateRequest<FunctionParam, FunctionUpload>, Bundle, TdError>,
+    provider: ServiceProvider<CreateRequest<CollectionParam, FunctionUpload>, Bundle, TdError>,
 }
 
 impl UploadFunctionService {
@@ -47,12 +47,12 @@ impl UploadFunctionService {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 SrvCtxProvider::new(storage),
-                from_fn(With::<CreateRequest<FunctionParam, FunctionUpload>>::extract::<RequestContext>),
-                from_fn(With::<CreateRequest<FunctionParam, FunctionUpload>>::extract_name::<FunctionParam>),
-                from_fn(With::<CreateRequest<FunctionParam, FunctionUpload>>::extract_data::<FunctionUpload>),
+                from_fn(With::<CreateRequest<CollectionParam, FunctionUpload>>::extract::<RequestContext>),
+                from_fn(With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_name::<CollectionParam>),
+                from_fn(With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_data::<FunctionUpload>),
 
                 // Extract function (TODO also use FunctionId to generate data_location)
-                from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
+                from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
 
                 TransactionProvider::new(db),
 
@@ -85,7 +85,7 @@ impl UploadFunctionService {
 
     pub async fn service(
         &self,
-    ) -> TdBoxService<CreateRequest<FunctionParam, FunctionUpload>, Bundle, TdError> {
+    ) -> TdBoxService<CreateRequest<CollectionParam, FunctionUpload>, Bundle, TdError> {
         self.provider.make().await
     }
 }
@@ -93,7 +93,6 @@ impl UploadFunctionService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::function::services::FunctionUpdate;
     use axum::body::Body;
     use axum::extract::Request;
     use sha2::{Digest, Sha256};
@@ -101,11 +100,7 @@ mod tests {
     use td_objects::location2::StorageLocation;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection2::seed_collection;
-    use td_objects::test_utils::seed_function2::seed_function;
-    use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, DataLocation, Decorator, FunctionRuntimeValues,
-        RoleId, UserId,
-    };
+    use td_objects::types::basic::{AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
     use td_storage::MountDef;
     use td_test::file::mount_uri;
     use td_tower::ctx_service::RawOneshot;
@@ -130,12 +125,22 @@ mod tests {
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<CreateRequest<FunctionParam, FunctionUpload>, Bundle>(&[
-            type_of_val(&With::<CreateRequest<FunctionParam, FunctionUpload>>::extract::<RequestContext>),
-            type_of_val(&With::<CreateRequest<FunctionParam, FunctionUpload>>::extract_name::<FunctionParam>),
-            type_of_val(&With::<CreateRequest<FunctionParam, FunctionUpload>>::extract_data::<FunctionUpload>),
+        metadata.assert_service::<CreateRequest<CollectionParam, FunctionUpload>, Bundle>(&[
+            type_of_val(
+                &With::<CreateRequest<CollectionParam, FunctionUpload>>::extract::<RequestContext>,
+            ),
+            type_of_val(
+                &With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_name::<
+                    CollectionParam,
+                >,
+            ),
+            type_of_val(
+                &With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_data::<
+                    FunctionUpload,
+                >,
+            ),
             // Extract function (TODO also use FunctionId to generate data_location)
-            type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
+            type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
             // Extract collection
             type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
@@ -164,21 +169,6 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let create = FunctionUpdate::builder()
-            .try_name("function_foo")?
-            .try_description("function_foo description")?
-            .bundle_id(BundleId::default())
-            .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
-            .dependencies(None)
-            .triggers(None)
-            .tables(None)
-            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
-            .reuse_frozen_tables(false)
-            .build()?;
-
-        let _ = seed_function(&db, &collection, &create).await;
-
         let test_dir = testdir!();
         let mount_def = MountDef::builder()
             .id("id")
@@ -200,9 +190,8 @@ mod tests {
             true,
         )
         .create(
-            FunctionParam::builder()
+            CollectionParam::builder()
                 .try_collection(format!("{}", collection.name()))?
-                .try_function("function_foo")?
                 .build()?,
             function_upload,
         );
