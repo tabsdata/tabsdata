@@ -1,3 +1,7 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
+
+import pytest
+
+pytestmark = pytest.mark.api

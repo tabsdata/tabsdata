@@ -135,8 +135,9 @@ def list(ctx: click.Context):
 
 @user.command()
 @click.argument("name")
-@click.option("--full-name", "-f", help="Full name of the user.")
-@click.option("--email", "-e", help="Email of the user.")
+@click.option("--full-name", "-f", help="New full name of the user.")
+@click.option("--email", "-e", help="New email of the user.")
+@click.option("--password", "-p", help="New password for the user.")
 @click.option(
     "--enabled",
     type=bool,
@@ -149,11 +150,10 @@ def update(
     name: str,
     full_name: str,
     email: str,
+    password: str,
     enabled: bool,
 ):
     """Update a user by name"""
-    # TODO: Implement change password logic, for now only full name, email
-    #  and disabled are updated
     click.echo(f"Updating user: {name}")
     click.echo("-" * 10)
     try:
@@ -161,6 +161,7 @@ def update(
             name,
             full_name=full_name,
             email=email,
+            password=password,
             enabled=enabled,
         )
         click.echo("User updated successfully")

@@ -68,7 +68,6 @@ def info(ctx: click.Context, name: str):
     """Display a collection by name"""
     try:
         collection = ctx.obj["tabsdataserver"].collection_get(name)
-        click.echo(collection)
 
         table = Table(title=f"Collection '{name}'")
         table.add_column("Name", style="cyan", no_wrap=True)

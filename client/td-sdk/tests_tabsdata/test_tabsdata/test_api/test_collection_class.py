@@ -15,6 +15,9 @@ from tabsdata.api.tabsdata_server import (
     convert_timestamp_to_string,
 )
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 @pytest.mark.integration
 @pytest.mark.wip

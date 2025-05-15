@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import datetime
-import hashlib
 import importlib.util
 import inspect
 import os
@@ -581,6 +580,7 @@ class Function:
         path_to_bundle: str = None,
         requirements: str = None,
         local_packages: List[str] | str | None = None,
+        reuse_frozen_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         result = self.collection.register_function(
@@ -590,6 +590,7 @@ class Function:
             requirements=requirements,
             local_packages=local_packages,
             function_name=self.name,
+            reuse_frozen_tables=reuse_frozen_tables,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -603,6 +604,7 @@ class Function:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         new_function_name=None,
+        reuse_frozen_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         collection = self.collection
@@ -614,6 +616,7 @@ class Function:
             requirements=requirements,
             local_packages=local_packages,
             new_function_name=new_function_name,
+            reuse_frozen_tables=reuse_frozen_tables,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -1090,6 +1093,7 @@ class Collection:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         function_name: str = None,
+        reuse_frozen_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -1120,14 +1124,14 @@ class Collection:
 
         temporary_directory = tempfile.TemporaryDirectory()
         (
-            bundle_hash,
             tables,
             string_dependencies,
             trigger_by,
             function_snippet,
             context_location,
             decorator_function_name,
-        ) = create_archive_and_hash(
+            decorator_type,
+        ) = create_archive(
             function_path,
             temporary_directory,
             path_to_bundle,
@@ -1139,26 +1143,31 @@ class Collection:
 
         description = description or function_name
 
-        response = self.connection.function_create(
+        with open(context_location, "rb") as file:
+            bundle = file.read()
+
+        response = self.connection.function_upload_bundle(
+            collection_name=self.name,
+            bundle=bundle,
+            raise_for_status=raise_for_status,
+        )
+        bundle_id = response.json().get("data").get("id")
+
+        # TODO: Remove this once the parameter is optional
+        runtime_values = "{}"
+
+        self.connection.function_create(
             collection_name=self.name,
             function_name=function_name,
             description=description,
-            bundle_hash=bundle_hash,
             tables=tables,
             dependencies=string_dependencies,
             trigger_by=trigger_by,
             function_snippet=function_snippet,
-            raise_for_status=raise_for_status,
-        )
-        current_function_id = response.json().get("data").get("current_function_id")
-        with open(context_location, "rb") as file:
-            bundle = file.read()
-
-        self.connection.function_upload_bundle(
-            collection_name=self.name,
-            function_name=function_name,
-            function_id=current_function_id,
-            bundle=bundle,
+            bundle_id=bundle_id,
+            runtime_values=runtime_values,
+            reuse_frozen_tables=reuse_frozen_tables,
+            decorator=decorator_type,
             raise_for_status=raise_for_status,
         )
         return Function(self.connection, self, function_name)
@@ -1172,6 +1181,7 @@ class Collection:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         new_function_name=None,
+        reuse_frozen_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -1202,14 +1212,14 @@ class Collection:
         """
         temporary_directory = tempfile.TemporaryDirectory()
         (
-            bundle_hash,
             tables,
             string_dependencies,
             trigger_by,
             function_snippet,
             context_location,
             decorator_new_function_name,
-        ) = create_archive_and_hash(
+            decorator_type,
+        ) = create_archive(
             function_path,
             temporary_directory,
             directory_to_bundle,
@@ -1217,29 +1227,33 @@ class Collection:
             local_packages,
         )
 
+        with open(context_location, "rb") as file:
+            bundle = file.read()
+
+        response = self.connection.function_upload_bundle(
+            collection_name=self.name,
+            bundle=bundle,
+            raise_for_status=raise_for_status,
+        )
+        bundle_id = response.json().get("data").get("id")
+
+        # TODO: Remove this once the parameter is optional
+        runtime_values = "{}"
+
         new_function_name = new_function_name or decorator_new_function_name
-        response = self.connection.function_update(
+        self.connection.function_update(
             collection_name=self.name,
             function_name=function_name,
             new_function_name=new_function_name,
             description=description,
-            bundle_hash=bundle_hash,
             tables=tables,
             dependencies=string_dependencies,
             trigger_by=trigger_by,
             function_snippet=function_snippet,
-            raise_for_status=raise_for_status,
-        )
-
-        current_function_id = response.json().get("data").get("current_function_id")
-        with open(context_location, "rb") as file:
-            bundle = file.read()
-
-        self.connection.function_upload_bundle(
-            collection_name=self.name,
-            function_name=new_function_name,
-            function_id=current_function_id,
-            bundle=bundle,
+            decorator=decorator_type,
+            bundle_id=bundle_id,
+            runtime_values=runtime_values,
+            reuse_frozen_tables=reuse_frozen_tables,
             raise_for_status=raise_for_status,
         )
 
@@ -1844,16 +1858,16 @@ class User:
         self,
         full_name: str = None,
         email: str = None,
+        password: str = None,
         enabled: bool = None,
         raise_for_status: bool = True,
     ) -> User:
-        # TODO: Implement change password logic, for now only full name, email
-        #  and enabled are updated
         response = self.connection.users_update(
             self.name,
             full_name=full_name,
             email=email,
             enabled=enabled,
+            password=password,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -2351,6 +2365,7 @@ class TabsdataServer:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         function_name: str = None,
+        reuse_frozen_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -2388,6 +2403,7 @@ class TabsdataServer:
             requirements=requirements,
             local_packages=local_packages,
             function_name=function_name,
+            reuse_frozen_tables=reuse_frozen_tables,
             raise_for_status=raise_for_status,
         )
 
@@ -2480,6 +2496,7 @@ class TabsdataServer:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         new_function_name: str = None,
+        reuse_frozen_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -2518,6 +2535,7 @@ class TabsdataServer:
             requirements=requirements,
             local_packages=local_packages,
             new_function_name=new_function_name,
+            reuse_frozen_tables=reuse_frozen_tables,
             raise_for_status=raise_for_status,
         )
 
@@ -2788,6 +2806,7 @@ class TabsdataServer:
         full_name: str = None,
         email: str = None,
         enabled: bool = None,
+        password: str = None,
         raise_for_status: bool = True,
     ) -> None:
         """
@@ -2809,6 +2828,7 @@ class TabsdataServer:
             full_name=full_name,
             email=email,
             enabled=enabled,
+            password=password,
             raise_for_status=raise_for_status,
         )
 
@@ -2849,14 +2869,6 @@ class TabsdataServer:
         ]
 
 
-def calculate_file_sha256(file_path: str) -> str:
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
-
-
 def dynamic_import_function_from_path(path: str) -> TabsdataFunction:
     """
     Dynamically import a function from a path in the form of 'path::function_name'.
@@ -2876,7 +2888,7 @@ def dynamic_import_function_from_path(path: str) -> TabsdataFunction:
     return function
 
 
-def create_archive_and_hash(
+def create_archive(
     function_path,
     temporary_directory,
     path_to_bundle=None,
@@ -2906,15 +2918,21 @@ def create_archive_and_hash(
         requirements=requirements,
         local_packages=local_packages,
     )
-    bundle_hash = calculate_file_sha256(context_location)
+
+    function_type_to_api_type = {
+        "publisher": "P",
+        "subscriber": "S",
+        "transformer": "T",
+    }
+    function_type = function_type_to_api_type.get(function.type, "U")  # Unknown type
     return (
-        bundle_hash,
         tables,
         string_dependencies,
         trigger_string_list,
         function_snippet,
         context_location,
         function_name,
+        function_type,
     )
 
 

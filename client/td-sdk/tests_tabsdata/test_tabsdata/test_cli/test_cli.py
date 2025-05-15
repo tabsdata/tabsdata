@@ -9,6 +9,9 @@ from click.testing import CliRunner
 
 from tabsdata.cli.cli import cli
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

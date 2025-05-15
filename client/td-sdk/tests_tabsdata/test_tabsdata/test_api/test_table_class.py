@@ -11,6 +11,9 @@ import pytest
 from tabsdata.api.apiserver import APIServerError
 from tabsdata.api.tabsdata_server import Collection, Table
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 @pytest.mark.integration
 @pytest.mark.wip

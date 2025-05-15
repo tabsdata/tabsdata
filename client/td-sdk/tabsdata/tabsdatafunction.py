@@ -112,6 +112,26 @@ class TabsdataFunction:
             return result
 
     @property
+    def type(self) -> str:
+        """
+        str: The type of the function. It can be "publisher", "transformer" or
+            "subscriber".
+        """
+        table_input = isinstance(self.input, TableInput)
+        table_output = isinstance(self.output, TableOutput)
+        if table_input and table_output:
+            return "transformer"
+        elif table_input and not table_output:
+            return "subscriber"
+        elif not table_input and table_output:
+            return "publisher"
+        else:
+            # This case should not happen, but we return "unrecognized" to avoid
+            # breaking the code if it ever changes.
+            self._verify_valid_input_output()
+            raise ValueError("Unable to determine function type.")
+
+    @property
     def input(self) -> Input | SourcePlugin | None:
         """
         Input | SourcePlugin | None: The data to be used when running the function.

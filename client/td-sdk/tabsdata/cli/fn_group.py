@@ -234,6 +234,7 @@ def list(ctx: click.Context, collection: str):
     multiple=True,
     help="Path to a local package to include in the bundle.",
 )
+@click.option("--reuse-frozen", is_flag=True, help="Reuse frozen tables.")
 @click.pass_context
 def register(
     ctx: click.Context,
@@ -243,6 +244,7 @@ def register(
     dir_to_bundle: str,
     requirements: str,
     local_pkg: Tuple[str, ...],
+    reuse_frozen: bool,
 ):
     """Registering a new function"""
     description = description or ""
@@ -269,6 +271,7 @@ def register(
             dir_to_bundle,
             requirements,
             local_pkg,
+            reuse_frozen_tables=reuse_frozen,
         )
         click.echo("Function registered successfully")
     except Exception as e:
@@ -366,6 +369,7 @@ def trigger(ctx: click.Context, name: str, collection: str, execution_plan_name:
     multiple=True,
     help="Path to a local package to include in the bundle.",
 )
+@click.option("--reuse-frozen", is_flag=True, help="Reuse frozen tables.")
 @click.pass_context
 def update(
     ctx: click.Context,
@@ -376,6 +380,7 @@ def update(
     dir_to_bundle: str,
     requirements: str,
     local_pkg: Tuple[str, ...],
+    reuse_frozen: bool,
 ):
     """Update a function"""
     description = description or ""
@@ -404,6 +409,7 @@ def update(
             directory_to_bundle=dir_to_bundle,
             requirements=requirements,
             local_packages=local_pkg,
+            reuse_frozen_tables=reuse_frozen,
         )
         click.echo("Function updated successfully")
     except Exception as e:

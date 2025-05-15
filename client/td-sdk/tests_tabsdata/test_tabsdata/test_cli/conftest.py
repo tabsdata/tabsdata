@@ -37,7 +37,9 @@ def login(tmp_path_factory, worker_id):
 def atomic_login():
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["login", APISERVER_URL, "--user", "admin"], input="tabsdata\n"
+        cli,
+        ["login", APISERVER_URL, "--user", "admin", "--role", "sys_admin"],
+        input="tabsdata\n",
     )
     logger.debug(result.output)
     assert result.exit_code == 0

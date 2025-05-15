@@ -8,6 +8,9 @@ import pytest
 
 from tabsdata.api.tabsdata_server import Collection, ExecutionPlan, Worker
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 @pytest.mark.integration
 @pytest.mark.wip

@@ -9,14 +9,15 @@ from click.testing import CliRunner
 
 from tabsdata.cli.cli import cli
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_wrong_command_raises_exception(login):
     runner = CliRunner()
     result = runner.invoke(cli, ["collection", "potato"])
@@ -25,8 +26,6 @@ def test_wrong_command_raises_exception(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_create_prompt(login):
     runner = CliRunner()
     try:
@@ -52,8 +51,6 @@ def test_collection_create_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_create_no_prompt(login):
     runner = CliRunner()
     try:
@@ -83,8 +80,6 @@ def test_collection_create_no_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_create(login):
     runner = CliRunner()
     try:

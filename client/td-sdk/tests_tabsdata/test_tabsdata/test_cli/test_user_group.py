@@ -10,8 +10,6 @@ from tabsdata.cli.cli import cli
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_wrong_command_raises_exception(login):
     runner = CliRunner()
     result = runner.invoke(cli, ["user", "potato"])
@@ -20,15 +18,16 @@ def test_wrong_command_raises_exception(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_create_prompt(login):
     runner = CliRunner()
     try:
         result = runner.invoke(
             cli,
             ["user", "create", "test_user_create_prompt"],
-            input="the_password\nthe_password\nthe_prompt_fullname\nprompt_email\n",
+            input=(
+                "the_password\nthe_password\nthe_prompt_fullname\nprompt_email"
+                "@tabsdata.com\n"
+            ),
         )
         assert result.exit_code == 0
     finally:
@@ -39,8 +38,6 @@ def test_user_create_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_create(login):
     runner = CliRunner()
     try:
@@ -55,7 +52,7 @@ def test_user_create(login):
                 "--full-name",
                 "test_user_create_fullname",
                 "--email",
-                "test_user_create_email",
+                "test_user_create_email@tabsdata.com",
             ],
         )
         assert result.exit_code == 0
@@ -67,12 +64,6 @@ def test_user_create(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip(
-    reason=(
-        "Skipped due to a missing feature in the backed: currently, "
-        "creating a user without an email is not supported."
-    )
-)
 def test_user_create_no_prompt(login):
     runner = CliRunner()
     try:
@@ -96,8 +87,6 @@ def test_user_create_no_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_create_no_prompt_missing_password_fails(login):
     runner = CliRunner()
     try:
@@ -119,8 +108,6 @@ def test_user_create_no_prompt_missing_password_fails(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_delete(login):
     runner = CliRunner()
     try:
@@ -135,7 +122,7 @@ def test_user_delete(login):
                 "--full-name",
                 "test_user_delete_fullname",
                 "--email",
-                "test_user_delete_email",
+                "test_user_delete_email@tabsdata.com",
             ],
         )
         assert result.exit_code == 0
@@ -151,8 +138,6 @@ def test_user_delete(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_delete_prompt(login):
     runner = CliRunner()
     try:
@@ -167,7 +152,7 @@ def test_user_delete_prompt(login):
                 "--full-name",
                 "test_user_delete_prompt_fullname",
                 "--email",
-                "test_user_delete_prompt_email",
+                "test_user_delete_prompt_email@tabsdata.com",
             ],
         )
         assert result.exit_code == 0
@@ -183,8 +168,6 @@ def test_user_delete_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_delete_error(login):
     runner = CliRunner()
     try:
@@ -199,7 +182,7 @@ def test_user_delete_error(login):
                 "--full-name",
                 "test_user_delete_error_fullname",
                 "--email",
-                "test_user_delete_error_email",
+                "test_user_delete_error_email@tabsdata.com",
             ],
         )
         assert result.exit_code == 0
@@ -237,8 +220,6 @@ def test_user_delete_error(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_list(login):
     runner = CliRunner()
     result = runner.invoke(cli, ["user", "list"])
@@ -247,8 +228,6 @@ def test_user_list(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_update(login):
     runner = CliRunner()
     try:
@@ -263,7 +242,7 @@ def test_user_update(login):
                 "--full-name",
                 "test_user_update_fullname",
                 "--email",
-                "test_user_update_email",
+                "test_user_update_email@tabsdata.com",
             ],
         )
         assert result.exit_code == 0
@@ -279,8 +258,6 @@ def test_user_update(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_info(login):
     runner = CliRunner()
     try:
@@ -295,7 +272,7 @@ def test_user_info(login):
                 "--full-name",
                 "test_user_info_fullname",
                 "--email",
-                "test_user_info_email",
+                "test_user_info_email@tabsdata.com",
             ],
         )
         assert result.exit_code == 0
@@ -307,8 +284,6 @@ def test_user_info(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_user_info_error(login):
     runner = CliRunner()
     result = runner.invoke(cli, ["user", "info", "test_user_info_error"])

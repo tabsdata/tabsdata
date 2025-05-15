@@ -10,14 +10,15 @@ from click.testing import CliRunner
 
 from tabsdata.cli.cli import cli
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_wrong_command_raises_exception(login, testing_collection):
     runner = CliRunner()
     result = runner.invoke(cli, ["fn", "potato"])
@@ -463,8 +464,6 @@ def test_function_trigger(testing_collection, function_path, tabsserver_connecti
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger_execution_plan_name(
     testing_collection, function_path, tabsserver_connection
 ):

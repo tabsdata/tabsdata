@@ -354,12 +354,12 @@ def testing_postgres(tmp_path_factory, worker_id):
 
 @pytest.fixture(scope="session")
 def apiserver_connection() -> APIServer:
-    return obtain_connection(APISERVER_URL, "admin", "tabsdata")
+    return obtain_connection(APISERVER_URL, "admin", "tabsdata", "sys_admin")
 
 
 @pytest.fixture(scope="session")
 def tabsserver_connection() -> TabsdataServer:
-    return TabsdataServer(APISERVER_URL, "admin", "tabsdata")
+    return TabsdataServer(APISERVER_URL, "admin", "tabsdata", "sys_admin")
 
 
 @pytest.fixture

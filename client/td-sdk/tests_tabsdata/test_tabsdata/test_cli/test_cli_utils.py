@@ -13,6 +13,9 @@ from tabsdata.cli.cli_utils import (
     show_dot_file,
 )
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 def test_beautify_list():
     assert beautify_list(["a", "b", "c"]) == "a\nb\nc"

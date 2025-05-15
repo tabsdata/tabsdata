@@ -16,6 +16,9 @@ from tabsdata import TabsdataFunction
 from tabsdata.cli.cli import cli
 from tabsdata.extensions.tableframe.extension_test import instance as checker
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

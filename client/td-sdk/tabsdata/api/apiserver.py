@@ -297,9 +297,9 @@ class APIServer:
 
     def authentication_login(self, name: str, password: str, role: str = None):
         endpoint = "/auth/login"
-        data = {"name": name, "password": password}
-        if role is not None:
-            data["role"] = role
+        data = self.get_params_dict(
+            ["name", "password", "role"], [name, password, role]
+        )
         time_of_request = time.time()
         response = self.post(endpoint, json=data, refresh_if_needed=False)
         if response.status_code == 200:
@@ -499,11 +499,14 @@ class APIServer:
         collection_name: str,
         function_name: str,
         description: str,
-        bundle_hash: str,
         tables: list[str],
         dependencies: list[str],
         trigger_by: list[str],
         function_snippet: str,
+        bundle_id: str,
+        decorator: str,
+        runtime_values: str,
+        reuse_frozen_tables: bool,
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}/functions"
@@ -511,12 +514,16 @@ class APIServer:
         data = {
             "name": function_name,
             "description": description,
-            "bundle_hash": bundle_hash,
-            "tables": tables,
+            "bundle_id": bundle_id,
+            "snippet": function_snippet,
+            "decorator": decorator,  # Either P, S or T
             "dependencies": dependencies,
-            "trigger_by": trigger_by,
-            "function_snippet": function_snippet,
+            "triggers": trigger_by,
+            "tables": tables,
+            "reuse_frozen_tables": reuse_frozen_tables,
         }
+        if runtime_values:
+            data["runtime_values"] = runtime_values
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -587,11 +594,14 @@ class APIServer:
         function_name: str,
         new_function_name: str = None,
         description: str = None,
-        bundle_hash: str = None,
+        bundle_id: str = None,
         tables: list[str] = None,
         dependencies: list[str] = None,
         trigger_by: list[str] = None,
         function_snippet: str = None,
+        decorator: str = None,
+        runtime_values: str = None,
+        reuse_frozen_tables: bool = None,
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}/functions/{function_name}"
@@ -600,20 +610,26 @@ class APIServer:
             [
                 "name",
                 "description",
-                "bundle_hash",
+                "bundle_id",
                 "tables",
                 "dependencies",
-                "trigger_by",
-                "function_snippet",
+                "triggers",
+                "snippet",
+                "decorator",
+                "runtime_values",
+                "reuse_frozen_tables",
             ],
             [
                 new_function_name,
                 description,
-                bundle_hash,
+                bundle_id,
                 tables,
                 dependencies,
                 trigger_by,
                 function_snippet,
+                decorator,  # Either P, S or T
+                runtime_values,
+                reuse_frozen_tables,
             ],
         )
         response = self.post(endpoint, json=data)
@@ -622,15 +638,10 @@ class APIServer:
     def function_upload_bundle(
         self,
         collection_name: str,
-        function_name: str,
-        function_id: str,
         bundle: bytes,
         raise_for_status: bool = True,
     ):
-        endpoint = (
-            f"/collections/{collection_name}/functions/"
-            f"{function_name}/upload/{function_id}"
-        )
+        endpoint = f"/collections/{collection_name}/function-bundle-upload"
         response = self.post_binary(endpoint, data=bundle)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -754,13 +765,11 @@ class APIServer:
         raise_for_status: bool = True,
     ):
         endpoint = "/users"
-        data = {
-            "name": name,
-            "full_name": full_name,
-            "email": email,
-            "password": password,
-            "enabled": enabled,
-        }
+
+        data = self.get_params_dict(
+            ["name", "full_name", "email", "password", "enabled"],
+            [name, full_name, email, password, enabled],
+        )
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -795,22 +804,15 @@ class APIServer:
         name: str,
         full_name: str = None,
         email: str = None,
-        old_password: str = None,
-        new_password: str = None,
-        force_password_change: bool = False,
+        password: str = None,
         enabled: bool = None,
         raise_for_status: bool = True,
     ):
         endpoint = f"/users/{name}"
         data = self.get_params_dict(
-            ["full_name", "email", "enabled"], [full_name, email, enabled]
+            ["full_name", "email", "enabled", "password"],
+            [full_name, email, enabled, password],
         )
-        if old_password and new_password:
-            data["password"] = {
-                "Change": {"old_password": old_password, "new_password": new_password}
-            }
-        elif force_password_change:
-            data["password"] = {"ForceChange": {"temporary_password": new_password}}
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 

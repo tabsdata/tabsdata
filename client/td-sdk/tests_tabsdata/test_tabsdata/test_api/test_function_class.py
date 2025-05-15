@@ -9,6 +9,9 @@ from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION
 
 from tabsdata.api.tabsdata_server import Collection, Function, Table
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 
 @pytest.mark.integration
 @pytest.mark.slow

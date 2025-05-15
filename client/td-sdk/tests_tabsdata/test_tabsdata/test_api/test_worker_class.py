@@ -14,6 +14,9 @@ from tabsdata.api.tabsdata_server import (
     Worker,
 )
 
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
