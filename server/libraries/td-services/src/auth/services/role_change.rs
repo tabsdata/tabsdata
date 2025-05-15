@@ -9,15 +9,14 @@ use crate::auth::layers::set_session_expiration::set_session_expiration;
 use crate::auth::services::JwtConfig;
 use crate::auth::session::Sessions;
 use crate::auth::AuthError;
-use crate::common::layers::extractor::extract_req_dto;
 use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_context;
 use td_objects::tower_service::from::{
-    builder, combine, BuildService, DefaultService, ExtractService, SetService, With,
+    builder, combine, BuildService, DefaultService, ExtractDataService, ExtractService, SetService,
+    With,
 };
 use td_objects::tower_service::sql::SqlUpdateService;
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
@@ -52,17 +51,16 @@ impl RoleChangeService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, jwt_config: Arc<JwtConfig>, sessions: Arc<Sessions<'static>>,) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, jwt_config: Arc<JwtConfig>, sessions: Arc<Sessions<'static>>,) {
             service_provider!(layers!(
                 layers!(
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(jwt_config),
-                SrvCtxProvider::new(sessions),
-
+                    TransactionProvider::new(db),
+                    SrvCtxProvider::new(queries),
+                    SrvCtxProvider::new(jwt_config),
+                    SrvCtxProvider::new(sessions),
                 ),
                 layers!(
-                    from_fn(extract_req_context::<UpdateRequest<(),RoleChange>>),
+                    from_fn(With::<UpdateRequest<(), RoleChange>>::extract::<RequestContext>),
 
                     // extract access token id, user id and request time from request context
                     from_fn(With::<RequestContext>::extract::<AccessTokenId>),
@@ -70,7 +68,7 @@ impl RoleChangeService {
                     from_fn(With::<RequestContext>::extract::<AtTime>),
 
                     // extract role change from request
-                    from_fn(extract_req_dto::<UpdateRequest<(), RoleChange>, RoleChange>),
+                    from_fn(With::<UpdateRequest<(), RoleChange>>::extract_data::<RoleChange>),
                     from_fn(With::<RoleChange>::extract::<RoleName>),
 
                     // check user is enabled
@@ -121,45 +119,22 @@ impl RoleChangeService {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::auth::services::tests::{assert_session, auth_services, get_session};
     use crate::auth::{decode_token, AuthError};
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
     use td_objects::crudl::RequestContext;
-    use td_objects::types::auth::{Login, RoleChange};
-    use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};
+    use td_objects::types::auth::Login;
+    use td_objects::types::basic::{Password, SessionStatus, UserId, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_role_change() {
-        use crate::auth::layers::assert_user_enabled::assert_user_enabled;
-        use crate::auth::layers::create_access_token::create_access_token;
-        use crate::auth::layers::refresh_sessions::refresh_sessions;
-        use crate::auth::layers::set_session_expiration::set_session_expiration;
-        use crate::auth::services::role_change::RoleChangeService;
-        use crate::auth::services::JwtConfig;
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_role_change(db: DbPool) {
         use crate::auth::session;
-        use crate::common::layers::extractor::extract_req_dto;
-        use std::sync::Arc;
-        use td_objects::crudl::{RequestContext, UpdateRequest};
-        use td_objects::sql::DaoQueries;
-        use td_objects::tower_service::extractor::extract_req_context;
-        use td_objects::tower_service::from::{
-            builder, combine, BuildService, DefaultService, ExtractService, SetService, With,
-        };
-        use td_objects::tower_service::sql::{insert, By, SqlSelectService, SqlUpdateService};
-        use td_objects::types::auth::{
-            RoleChange, SessionDB, SessionDBBuilder, SessionRoleChangeDB,
-            SessionRoleChangeDBBuilder, TokenResponseX,
-        };
-        use td_objects::types::basic::{AccessTokenId, AtTime, RoleId, RoleName, UserId};
-        use td_objects::types::role::UserRoleDBWithNames;
-        use td_objects::types::user::UserDB;
-        use td_tower::ctx_service::RawOneshot;
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let service = RoleChangeService::provider(
             db.clone(),
             Arc::new(DaoQueries::default()),
@@ -172,20 +147,26 @@ mod tests {
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<UpdateRequest<(), RoleChange>, TokenResponseX>(&[
-            type_of_val(&extract_req_context::<UpdateRequest<(), RoleChange>>),
+            type_of_val(&With::<UpdateRequest<(), RoleChange>>::extract::<RequestContext>),
+            // extract access token id, user id and request time from request context
             type_of_val(&With::<RequestContext>::extract::<AccessTokenId>),
             type_of_val(&With::<RequestContext>::extract::<UserId>),
             type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            type_of_val(&extract_req_dto::<UpdateRequest<(), RoleChange>, RoleChange>),
+            // extract role change from request
+            type_of_val(&With::<UpdateRequest<(), RoleChange>>::extract_data::<RoleChange>),
             type_of_val(&With::<RoleChange>::extract::<RoleName>),
+            // check user is enabled
             type_of_val(&By::<UserId>::select::<DaoQueries, UserDB>),
             type_of_val(&assert_user_enabled),
+            // check user has the requested role
             type_of_val(&combine::<UserId, RoleName>),
             type_of_val(&By::<(UserId, RoleName)>::select::<DaoQueries, UserRoleDBWithNames>),
+            // invalidate session entry with previous role
             type_of_val(&With::<SessionRoleChangeDBBuilder>::default),
             type_of_val(&With::<AtTime>::set::<SessionRoleChangeDBBuilder>),
             type_of_val(&With::<SessionRoleChangeDBBuilder>::build::<SessionRoleChangeDB, _>),
             type_of_val(&By::<AccessTokenId>::update::<DaoQueries, SessionRoleChangeDB, SessionDB>),
+            // create user session
             type_of_val(&With::<UserRoleDBWithNames>::extract::<RoleId>),
             type_of_val(&builder::<SessionDBBuilder>),
             type_of_val(&With::<UserId>::set::<SessionDBBuilder>),
@@ -194,7 +175,9 @@ mod tests {
             type_of_val(&set_session_expiration),
             type_of_val(&With::<SessionDBBuilder>::build::<SessionDB, _>),
             type_of_val(&insert::<DaoQueries, SessionDB>),
+            // create access token
             type_of_val(&create_access_token),
+            // invalidate sessions cache
             type_of_val(&refresh_sessions),
         ]);
     }

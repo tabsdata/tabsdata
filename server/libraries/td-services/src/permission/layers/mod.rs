@@ -6,21 +6,23 @@ use crate::permission::PermissionError;
 use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::entity_finder::collections::CollectionFinder;
+use td_objects::crudl::handle_sql_err;
+use td_objects::sql::{DerefQueries, SelectBy};
 use td_objects::tower_service::from::With;
-use td_objects::types::basic::{EntityId, PermissionEntityType, RoleIdName};
+use td_objects::types::basic::{CollectionName, EntityId, PermissionEntityType, RoleIdName};
+use td_objects::types::collection::CollectionDB;
 use td_objects::types::permission::{
     PermissionCreate, PermissionDB, PermissionDBBuilder, PermissionDBWithNames,
 };
 use td_objects::types::IdOrName;
 use td_tower::default_services::Condition;
-use td_tower::extractors::{Connection, Input, IntoMutSqlConnection};
+use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[async_trait]
 pub trait PermissionBuildService {
-    async fn build_permission_db(
+    async fn build_permission_db<Q: DerefQueries>(
         connection: Connection,
-        // queries: SrvCtx<Q>, TODO should we use queries here??
+        queries: SrvCtx<Q>,
         input: Input<PermissionDBBuilder>,
         permission_create: Input<PermissionCreate>,
     ) -> Result<PermissionDB, TdError>;
@@ -28,9 +30,9 @@ pub trait PermissionBuildService {
 
 #[async_trait]
 impl PermissionBuildService for With<PermissionDBBuilder> {
-    async fn build_permission_db(
+    async fn build_permission_db<Q: DerefQueries>(
         Connection(connection): Connection,
-        // SrvCtx(queries): SrvCtx<Q>,
+        SrvCtx(queries): SrvCtx<Q>,
         Input(input): Input<PermissionDBBuilder>,
         Input(permission_create): Input<PermissionCreate>,
     ) -> Result<PermissionDB, TdError> {
@@ -42,10 +44,14 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
         let entity_type = permission_type.on_entity_type();
 
         let entity_id = if let Some(entity_name) = entity_name {
-            let collection = CollectionFinder::default()
-                .find_by_name(conn, entity_name)
-                .await?;
-            let entity_id = EntityId::try_from(collection.id().as_str())?;
+            let collection_name = CollectionName::try_from(entity_name.to_string())?;
+            let collection: CollectionDB = queries
+                .select_by::<CollectionDB>(&(&collection_name))?
+                .build_query_as()
+                .fetch_one(&mut *conn)
+                .await
+                .map_err(handle_sql_err)?;
+            let entity_id = EntityId::try_from(collection.id())?;
             Some(entity_id)
         } else {
             None

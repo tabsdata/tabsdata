@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use crate::function::layers::register::data_location;
 use crate::function::layers::update::assert_function_name_not_exists;
 use std::sync::Arc;
@@ -11,10 +10,9 @@ use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    combine, BuildService, DefaultService, ExtractService, SetService, TryIntoService,
-    UpdateService, With,
+    combine, BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
+    SetService, TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::{
     insert, By, SqlDeleteService, SqlSelectAllService, SqlSelectIdOrNameService, SqlSelectService,
@@ -56,12 +54,12 @@ impl UpdateFunctionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_context::<UpdateRequest<FunctionParam, FunctionUpdate>>),
-                from_fn(extract_req_dto::<UpdateRequest<FunctionParam, FunctionUpdate>, _>),
-                from_fn(extract_req_name::<UpdateRequest<FunctionParam, FunctionUpdate>, _>),
+                from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract::<RequestContext>),
+                from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_name::<FunctionParam>),
+                from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_data::<FunctionUpdate>),
 
                 TransactionProvider::new(db),
 
@@ -147,12 +145,10 @@ mod tests {
     use super::*;
     use crate::function::layers::register::RegisterFunctionError;
     use crate::function::services::tests::assert_update;
-    use td_common::id::Id;
     use td_objects::crudl::handle_sql_err;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_function2::seed_function;
-    use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, Frozen, FunctionRuntimeValues, RoleId, UserId,
     };
@@ -185,9 +181,9 @@ mod tests {
 
         metadata.assert_service::<UpdateRequest<FunctionParam, FunctionUpdate>, FunctionVersion>(
             &[
-                type_of_val(&extract_req_context::<UpdateRequest<FunctionParam, FunctionUpdate>>),
-                type_of_val(&extract_req_dto::<UpdateRequest<FunctionParam, FunctionUpdate>, _>),
-                type_of_val(&extract_req_name::<UpdateRequest<FunctionParam, FunctionUpdate>, _>),
+                type_of_val(&With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract::<RequestContext>),
+                type_of_val(&With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_name::<FunctionParam>),
+                type_of_val(&With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_data::<FunctionUpdate>),
                 // Extract collection and current function from request.
                 type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
                 type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
@@ -286,9 +282,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_fields(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionUpdate::builder()
             .try_name("foo")?
@@ -341,7 +336,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -354,9 +349,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_add_new_table(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionUpdate::builder()
             .try_name("joaquin_workout")?
@@ -407,7 +401,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -420,9 +414,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_remove_table(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionUpdate::builder()
             .try_name("joaquin_workout")?
@@ -473,7 +466,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -486,9 +479,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_maintain_table(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionUpdate::builder()
             .try_name("joaquin_workout")?
@@ -539,7 +531,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -552,9 +544,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_add_dependencies(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionUpdate::builder()
             .try_name("joaquin_workout")?
@@ -605,7 +596,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -618,9 +609,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_remove_dependencies(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionUpdate::builder()
             .try_name("joaquin_workout")?
@@ -671,7 +661,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -684,9 +674,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_maintain_dependencies(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionUpdate::builder()
             .try_name("joaquin_workout")?
@@ -737,7 +726,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -750,9 +739,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_add_trigger(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let trigger_create = FunctionUpdate::builder()
             .try_name("the_trigger")?
@@ -819,7 +807,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -832,9 +820,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_remove_trigger(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let trigger_create = FunctionUpdate::builder()
             .try_name("the_trigger")?
@@ -901,7 +888,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -914,9 +901,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_maintain_trigger(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let trigger_create = FunctionUpdate::builder()
             .try_name("the_trigger")?
@@ -983,7 +969,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -996,9 +982,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_change_everything(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let trigger_create = FunctionUpdate::builder()
             .try_name("the_trigger")?
@@ -1077,7 +1062,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -1090,9 +1075,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_freeze_unfreeze(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
         let queries = DaoQueries::default();
 
         let create = FunctionUpdate::builder()
@@ -1233,7 +1217,7 @@ mod tests {
 
         assert_update(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,

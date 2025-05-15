@@ -6,12 +6,13 @@ use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::{ListRequest, ListResponse};
+use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrRoleId};
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
-use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
+use td_objects::tower_service::from::{
+    ExtractNameService, ExtractService, TryMapListService, With,
+};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::permission::{Permission, PermissionBuilder, PermissionDBWithNames};
@@ -35,14 +36,14 @@ impl ListPermissionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 ConnectionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
-                from_fn(extract_req_context::<ListRequest<RoleParam>>),
+                from_fn(With::<ListRequest<RoleParam>>::extract::<RequestContext>),
 
-                from_fn(extract_req_name::<ListRequest<RoleParam>, _>),
+                from_fn(With::<ListRequest<RoleParam>>::extract_name::<RoleParam>),
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
@@ -73,14 +74,10 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_list_permission() {
-        use td_authz::Authz;
-        use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrRoleId};
-        use td_objects::tower_service::extractor::extract_req_context;
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_list_permission(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let provider =
             ListPermissionService::provider(db, queries, Arc::new(AuthzContext::default()));
@@ -90,8 +87,8 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<ListRequest<RoleParam>, ListResponse<Permission>>(&[
-            type_of_val(&extract_req_context::<ListRequest<RoleParam>>),
-            type_of_val(&extract_req_name::<ListRequest<RoleParam>, _>),
+            type_of_val(&With::<ListRequest<RoleParam>>::extract::<RequestContext>),
+            type_of_val(&With::<ListRequest<RoleParam>>::extract_name::<RoleParam>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
@@ -109,10 +106,8 @@ mod tests {
         ]);
     }
 
-    #[tokio::test]
-    async fn test_list_permissions() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
+    #[td_test::test(sqlx)]
+    async fn test_list_permissions(db: DbPool) -> Result<(), TdError> {
         let role = seed_role(
             &db,
             RoleName::try_from("king")?,

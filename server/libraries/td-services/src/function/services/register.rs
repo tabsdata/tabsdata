@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use crate::function::layers::register::{
     build_dependency_versions, build_table_versions, insert_and_update_tables,
 };
@@ -16,10 +15,9 @@ use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    combine, BuildService, DefaultService, EmptyVecService, ExtractService, SetService,
-    TryIntoService, UpdateService, With,
+    combine, BuildService, DefaultService, EmptyVecService, ExtractDataService, ExtractNameService,
+    ExtractService, SetService, TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::{
     insert, insert_vec, By, SqlDeleteService, SqlSelectAllService, SqlSelectService,
@@ -62,12 +60,12 @@ impl RegisterFunctionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_context::<CreateRequest<CollectionParam, FunctionRegister >>),
-                from_fn(extract_req_dto::<CreateRequest<CollectionParam, FunctionRegister>, _>),
-                from_fn(extract_req_name::<CreateRequest<CollectionParam, FunctionRegister>, _>),
+                from_fn(With::<CreateRequest<CollectionParam, FunctionRegister>>::extract::<RequestContext>),
+                from_fn(With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_name::<CollectionParam>),
+                from_fn(With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_data::<FunctionRegister>),
 
                 TransactionProvider::new(db),
 
@@ -135,7 +133,7 @@ impl RegisterFunctionService {
     }
 
     l! {
-        register_tables() -> TdError {
+        register_tables() {
             layers!(
                 // Insert into table_versions(sql) current function tables status=Active.
                 // Reuse table_id for tables that existed (had status=Frozen)
@@ -152,7 +150,7 @@ impl RegisterFunctionService {
     }
 
     l! {
-        register_dependencies() -> TdError {
+        register_dependencies() {
             layers!(
                 // Insert into dependency_versions(sql) current function table dependencies status=Active.
                 from_fn(With::<FunctionVersionDB>::convert_to::<DependencyVersionDBBuilder, _>),
@@ -168,7 +166,7 @@ impl RegisterFunctionService {
     }
 
     l! {
-        register_triggers() -> TdError {
+        register_triggers() {
             layers!(
                 // Insert into trigger_versions(sql) current function trigger status=Active.
                 from_fn(With::<FunctionVersionDB>::convert_to::<TriggerVersionDBBuilder, _>),
@@ -195,9 +193,7 @@ impl RegisterFunctionService {
 mod tests {
     use super::*;
     use crate::function::services::tests::assert_register;
-    use td_common::id::Id;
     use td_objects::test_utils::seed_collection2::seed_collection;
-    use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
     };
@@ -217,9 +213,9 @@ mod tests {
 
         metadata.assert_service::<CreateRequest<CollectionParam, FunctionRegister>, FunctionVersion>(
             &[
-                type_of_val(&extract_req_context::<CreateRequest<CollectionParam, FunctionRegister>>),
-                type_of_val(&extract_req_dto::<CreateRequest<CollectionParam, FunctionRegister>, _>),
-                type_of_val(&extract_req_name::<CreateRequest<CollectionParam, FunctionRegister>, _>),
+                type_of_val(&With::<CreateRequest<CollectionParam, FunctionRegister>>::extract::<RequestContext>),
+                type_of_val(&With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_name::<CollectionParam>),
+                type_of_val(&With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_data::<FunctionRegister>),
                 // Extract collection from request.
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 // Get collection. Extract collection id and name.
@@ -300,9 +296,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_register_empty(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let dependencies = None;
         let triggers = None;
@@ -339,14 +334,13 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        assert_register(&db, &admin_id, &collection, &create, &response).await
+        assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
     #[td_test::test(sqlx)]
     async fn test_register_empty_vec(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let dependencies = Some(vec![]);
         let triggers = Some(vec![]);
@@ -383,14 +377,13 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        assert_register(&db, &admin_id, &collection, &create, &response).await
+        assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
     #[td_test::test(sqlx)]
     async fn test_register_table_output(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let dependencies = None;
         let triggers = None;
@@ -427,14 +420,13 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        assert_register(&db, &admin_id, &collection, &create, &response).await
+        assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
     #[td_test::test(sqlx)]
     async fn test_register_table_dependency(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let dependencies = Some(vec![TableDependency::try_from("table_foo")?]);
         let triggers = None;
@@ -471,14 +463,13 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        assert_register(&db, &admin_id, &collection, &create, &response).await
+        assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
     #[td_test::test(sqlx)]
     async fn test_register_trigger(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let dependencies = None;
         let triggers = None;
@@ -550,14 +541,13 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        assert_register(&db, &admin_id, &collection, &create, &response).await
+        assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
     #[td_test::test(sqlx)]
     async fn test_register_tables_dependencies_triggers(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let dependencies = None;
         let triggers = None;
@@ -641,16 +631,15 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        assert_register(&db, &admin_id, &collection, &create, &response).await
+        assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
     #[td_test::test(sqlx)]
     async fn test_register_tables_dependencies_triggers_different_collections(
         db: DbPool,
     ) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        let _collection_id = seed_collection(&db, &collection_name_1, &admin_id).await;
+        let _collection_id = seed_collection(&db, &collection_name_1, &UserId::admin()).await;
 
         let dependencies = None;
         let triggers = None;
@@ -691,7 +680,7 @@ mod tests {
 
         // Actual test
         let collection_name_2 = CollectionName::try_from("collection_2")?;
-        let collection_2 = seed_collection(&db, &collection_name_2, &admin_id).await;
+        let collection_2 = seed_collection(&db, &collection_name_2, &UserId::admin()).await;
 
         let dependencies = Some(vec![
             TableDependency::try_from("collection_1/table_1")?,
@@ -739,6 +728,6 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        assert_register(&db, &admin_id, &collection_2, &create, &response).await
+        assert_register(&db, &UserId::admin(), &collection_2, &create, &response).await
     }
 }

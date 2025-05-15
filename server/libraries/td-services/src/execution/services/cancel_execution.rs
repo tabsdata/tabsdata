@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use crate::execution::layers::update_status::update_function_run_status;
 use std::sync::Arc;
 use td_database::sql::DbPool;
@@ -10,8 +9,7 @@ use td_error::TdError;
 use td_objects::crudl::UpdateRequest;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_name;
-use td_objects::tower_service::from::{ExtractService, With};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{ExecutionId, ExecutionIdName};
 use td_objects::types::execution::{ExecutionDB, FunctionRunDB, UpdateFunctionRunDB};
@@ -35,14 +33,13 @@ impl ExecutionCancelService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) {
             service_provider!(layers!(
                 // Set context
                 SrvCtxProvider::new(queries),
 
                 // Extract from request.
-                from_fn(extract_req_dto::<UpdateRequest<ExecutionParam, ()>, _>),
-                from_fn(extract_req_name::<UpdateRequest<ExecutionParam, ()>, _>),
+                from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>),
 
                 // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
                 from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
@@ -115,8 +112,7 @@ mod tests {
 
         metadata.assert_service::<UpdateRequest<ExecutionParam, ()>, ()>(&[
             // Extract from request.
-            type_of_val(&extract_req_dto::<UpdateRequest<ExecutionParam, ()>, _>),
-            type_of_val(&extract_req_name::<UpdateRequest<ExecutionParam, ()>, _>),
+            type_of_val(&With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>),
             // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
             type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
             // Find function run.

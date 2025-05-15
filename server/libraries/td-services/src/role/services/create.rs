@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -10,9 +9,8 @@ use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-use td_objects::tower_service::extractor::extract_req_context;
 use td_objects::tower_service::from::{
-    BuildService, ExtractService, TryIntoService, UpdateService, With,
+    BuildService, ExtractDataService, ExtractService, TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
 use td_objects::types::basic::RoleId;
@@ -38,15 +36,15 @@ impl CreateRoleService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 TransactionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
-                from_fn(extract_req_context::<CreateRequest<(), RoleCreate>>),
+                from_fn(With::<CreateRequest<(), RoleCreate>>::extract::<RequestContext>),
                 from_fn(AuthzOn::<System>::set),
                 from_fn(Authz::<SecAdmin>::check),
-                from_fn(extract_req_dto::<CreateRequest<(), RoleCreate>, _>),
+                from_fn(With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
 
                 from_fn(With::<RoleCreate>::convert_to::<RoleDBBuilder, _>),
                 from_fn(With::<RequestContext>::update::<RoleDBBuilder, _>),
@@ -89,10 +87,10 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<CreateRequest<(), RoleCreate>, Role>(&[
-            type_of_val(&extract_req_context::<CreateRequest<(), RoleCreate>>),
+            type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin>::check),
-            type_of_val(&extract_req_dto::<CreateRequest<(), RoleCreate>, _>),
+            type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
             type_of_val(&With::<RoleCreate>::convert_to::<RoleDBBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<RoleDBBuilder, _>),
             type_of_val(&With::<RoleDBBuilder>::build::<RoleDB, _>),

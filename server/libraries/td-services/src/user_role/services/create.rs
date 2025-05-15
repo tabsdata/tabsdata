@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -11,9 +10,9 @@ use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    builder, BuildService, ExtractService, SetService, TryIntoService, UpdateService, With,
+    builder, BuildService, ExtractDataService, ExtractNameService, ExtractService, SetService,
+    TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::SqlSelectIdOrNameService;
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
@@ -42,19 +41,18 @@ impl CreateUserRoleService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 TransactionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
 
-                from_fn(extract_req_context::<CreateRequest<RoleParam, UserRoleCreate>>),
+                from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract::<RequestContext>),
                 from_fn(AuthzOn::<System>::set),
                 from_fn(Authz::<SecAdmin>::check),
 
-                from_fn(extract_req_dto::<CreateRequest<RoleParam, UserRoleCreate>, _>),
-                from_fn(extract_req_name::<CreateRequest<RoleParam, UserRoleCreate>, _>),
-
+                from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_name::<RoleParam>),
+                from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_data::<UserRoleCreate>),
 
                 from_fn(builder::<UserRoleDBBuilder>),
 
@@ -94,16 +92,15 @@ mod tests {
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::get_user_role;
-    use td_objects::types::basic::{AccessTokenId, Description, RoleName};
+    use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_create_user_role() {
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_create_user_role(db: DbPool) {
         use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let provider =
             CreateUserRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
@@ -113,11 +110,17 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<CreateRequest<RoleParam, UserRoleCreate>, UserRole>(&[
-            type_of_val(&extract_req_context::<CreateRequest<RoleParam, UserRoleCreate>>),
+            type_of_val(
+                &With::<CreateRequest<RoleParam, UserRoleCreate>>::extract::<RequestContext>,
+            ),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin>::check),
-            type_of_val(&extract_req_dto::<CreateRequest<RoleParam, UserRoleCreate>, _>),
-            type_of_val(&extract_req_name::<CreateRequest<RoleParam, UserRoleCreate>, _>),
+            type_of_val(
+                &With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_name::<RoleParam>,
+            ),
+            type_of_val(
+                &With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_data::<UserRoleCreate>,
+            ),
             type_of_val(&builder::<UserRoleDBBuilder>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
@@ -137,11 +140,14 @@ mod tests {
         ]);
     }
 
-    #[tokio::test]
-    async fn test_create_user_role() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
-        let _user_id = seed_user(&db, None, "joaquin", false).await;
+    #[td_test::test(sqlx)]
+    async fn test_create_user_role(db: DbPool) -> Result<(), TdError> {
+        let _user = seed_user(
+            &db,
+            &UserName::try_from("joaquin")?,
+            &UserEnabled::from(false),
+        )
+        .await;
         let _role = seed_role(
             &db,
             RoleName::try_from("king")?,

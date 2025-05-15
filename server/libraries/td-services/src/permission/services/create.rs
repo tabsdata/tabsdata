@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use crate::permission::layers::{is_permission_on_a_single_collection, PermissionBuildService};
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
@@ -12,9 +11,9 @@ use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    BuildService, ExtractService, TryIntoService, UnwrapService, UpdateService, With,
+    BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
+    UnwrapService, UpdateService, With,
 };
 use td_objects::tower_service::sql::SqlSelectIdOrNameService;
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
@@ -43,17 +42,17 @@ impl CreatePermissionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 TransactionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
-                from_fn(extract_req_context::<CreateRequest<RoleParam, PermissionCreate>>),
+                from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>),
                 from_fn(AuthzOn::<System>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
 
-                from_fn(extract_req_dto::<CreateRequest<RoleParam, PermissionCreate>, _>),
-                from_fn(extract_req_name::<CreateRequest<RoleParam, PermissionCreate>, _>),
+                from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>),
+                from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<PermissionCreate>),
 
                 from_fn(With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
                 from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
@@ -62,7 +61,7 @@ impl CreatePermissionService {
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
 
-                from_fn(With::<PermissionDBBuilder>::build_permission_db),
+                from_fn(With::<PermissionDBBuilder>::build_permission_db::<DaoQueries>),
 
                 conditional(
                     If(service!(layers!(
@@ -104,24 +103,21 @@ mod tests {
     use super::*;
     use td_error::assert_service_error;
     use td_objects::crudl::RequestContext;
-    use td_objects::test_utils::seed_collection::seed_collection;
+    use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_permission::{get_permission, seed_permission};
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::tower_service::authz::AuthzError;
     use td_objects::types::basic::{
-        AccessTokenId, Description, EntityName, PermissionType, RoleId, RoleName, UserId,
+        AccessTokenId, CollectionName, Description, EntityName, PermissionType, RoleId, RoleName,
+        UserId,
     };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_create_permission() {
-        use td_authz::Authz;
-        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-        use td_objects::tower_service::extractor::extract_req_context;
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_create_permission(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let provider =
             CreatePermissionService::provider(db, queries, Arc::new(AuthzContext::default()));
@@ -131,17 +127,17 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<CreateRequest<RoleParam, PermissionCreate>, Permission>(&[
-            type_of_val(&extract_req_context::<CreateRequest<RoleParam, PermissionCreate>>),
+            type_of_val(&With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&extract_req_dto::<CreateRequest<RoleParam, PermissionCreate>, _>),
-            type_of_val(&extract_req_name::<CreateRequest<RoleParam, PermissionCreate>, _>),
+            type_of_val(&With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>),
+            type_of_val(&With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<PermissionCreate>),
             type_of_val(&With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<PermissionDBBuilder, _>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
-            type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
+            type_of_val(&With::<PermissionDBBuilder>::build_permission_db::<DaoQueries>),
             type_of_val(&is_permission_on_a_single_collection),
             type_of_val(&With::<PermissionDB>::extract::<Option<EntityId>>),
             type_of_val(&With::<EntityId>::unwrap_option),
@@ -158,10 +154,8 @@ mod tests {
         ]);
     }
 
-    #[tokio::test]
-    async fn test_create_permission() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
+    #[td_test::test(sqlx)]
+    async fn test_create_permission(db: DbPool) -> Result<(), TdError> {
         let create = PermissionCreate::builder()
             .permission_type(PermissionType::SysAdmin)
             .try_entity_name(None)
@@ -199,12 +193,13 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_create_permission_on_collection_by_coll_admin_ok() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-        let coll0: CollectionId = seed_collection(&db, None, "c0").await.into();
+    #[td_test::test(sqlx)]
+    async fn test_create_permission_on_collection_by_coll_admin_ok(
+        db: DbPool,
+    ) -> Result<(), TdError> {
+        let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
-        let entity_id: EntityId = (*coll0).into();
+        let entity_id: EntityId = coll0.id().try_into()?;
         seed_permission(
             &db,
             PermissionType::CollectionAdmin,
@@ -247,13 +242,14 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_create_permission_on_collection_by_coll_admin_unauthz() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-        let coll0: CollectionId = seed_collection(&db, None, "c0").await.into();
-        seed_collection(&db, None, "c1").await;
+    #[td_test::test(sqlx)]
+    async fn test_create_permission_on_collection_by_coll_admin_unauthz(
+        db: DbPool,
+    ) -> Result<(), TdError> {
+        let coll0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
+        let _ = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
         let role = seed_role(&db, RoleName::try_from("r0")?, Description::try_from("d")?).await;
-        let entity_id: EntityId = (*coll0).into();
+        let entity_id: EntityId = coll0.id().try_into()?;
         seed_permission(
             &db,
             PermissionType::CollectionAdmin,

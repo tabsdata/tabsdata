@@ -2,8 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-mod common;
-
 pub mod auth;
 pub mod collections;
 pub mod execution;

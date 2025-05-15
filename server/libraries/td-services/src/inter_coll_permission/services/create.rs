@@ -2,7 +2,6 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use crate::inter_coll_permission::layers::assert_collection_and_to_collection_are_different;
 use std::sync::Arc;
 use td_authz::{refresh_authz_context, Authz, AuthzContext};
@@ -12,9 +11,9 @@ use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    builder, BuildService, ExtractService, SetService, TryIntoService, UpdateService, With,
+    builder, BuildService, ExtractDataService, ExtractNameService, ExtractService, SetService,
+    TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::{insert, By, SqlSelectIdOrNameService, SqlSelectService};
 use td_objects::types::basic::{
@@ -51,15 +50,15 @@ impl CreateInterCollectionPermissionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>, ) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 TransactionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
 
-                from_fn(extract_req_context::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>),
-                from_fn(extract_req_name::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>, _>),
-                from_fn(extract_req_dto::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>, _>),
+                from_fn(With::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>::extract::<RequestContext>),
+                from_fn(With::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>::extract_name::<CollectionParam>),
+                from_fn(With::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>::extract_data::<InterCollectionPermissionCreate>),
 
                 // check requester is sec_admin or coll_admin, early pre-check
                 from_fn(AuthzOn::<System>::set),
@@ -122,7 +121,7 @@ impl CreateInterCollectionPermissionService {
 
 #[cfg(test)]
 mod tests {
-    use crate::inter_coll_permission::services::create::CreateInterCollectionPermissionService;
+    use super::*;
     use crate::inter_coll_permission::InterCollectionPermissionError;
     use std::sync::Arc;
     use td_authz::AuthzContext;
@@ -139,43 +138,10 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_create_inter_collection_permission_service() {
-        use crate::common::layers::extractor::extract_req_dto;
-        use crate::inter_coll_permission::layers::assert_collection_and_to_collection_are_different;
-        use crate::inter_coll_permission::services::create::CreateInterCollectionPermissionService;
-        use std::sync::Arc;
-        use td_authz::refresh_authz_context;
-        use td_authz::Authz;
-        use td_authz::AuthzContext;
-        use td_objects::crudl::{CreateRequest, RequestContext};
-        use td_objects::rest_urls::CollectionParam;
-        use td_objects::sql::DaoQueries;
-        use td_objects::tower_service::authz::CollAdmin;
-        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-        use td_objects::tower_service::extractor::extract_req_context;
-        use td_objects::tower_service::extractor::extract_req_name;
-        use td_objects::tower_service::from::{
-            builder, BuildService, ExtractService, SetService, TryIntoService, UpdateService, With,
-        };
-        use td_objects::tower_service::sql::SqlSelectIdOrNameService;
-        use td_objects::tower_service::sql::{insert, By, SqlSelectService};
-        use td_objects::types::basic::CollectionIdName;
-        use td_objects::types::basic::FromCollectionId;
-        use td_objects::types::basic::{
-            CollectionId, CollectionName, InterCollectionPermissionId, ToCollectionId,
-            ToCollectionName,
-        };
-        use td_objects::types::collection::CollectionDB;
-        use td_objects::types::permission::{
-            InterCollectionPermission, InterCollectionPermissionBuilder,
-            InterCollectionPermissionCreate, InterCollectionPermissionDB,
-            InterCollectionPermissionDBBuilder, InterCollectionPermissionDBWithNames,
-        };
-        use td_tower::ctx_service::RawOneshot;
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_create_inter_collection_permission_service(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
         let provider = CreateInterCollectionPermissionService::provider(db, queries, authz_context);
@@ -185,41 +151,58 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>, InterCollectionPermission>(&[
-            type_of_val(&extract_req_context::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>),
-            type_of_val(&extract_req_name::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>, _>),
-            type_of_val(&extract_req_dto::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>, _>),
+            type_of_val(&With::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>::extract::<RequestContext>),
+            type_of_val(&With::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>::extract_name::<CollectionParam>),
+            type_of_val(&With::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>::extract_data::<InterCollectionPermissionCreate>),
+
+            // check requester is sec_admin or coll_admin, early pre-check
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+
+            // find collection ID for the FROM collection
             type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
             type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            type_of_val(&With::<CollectionId>::convert_to::<FromCollectionId, _>),
+            type_of_val(&With::<CollectionId>::convert_to::<FromCollectionId, _>), //stashing the collection ID we are adding the permission
+
+            // check request is sec_admin or coll_admin for the FROM collection
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+
+            // find collection ID for the TO collection
             type_of_val(&With::<InterCollectionPermissionCreate>::extract::<ToCollectionName>),
             type_of_val(&With::<ToCollectionName>::convert_to::<CollectionName, _>),
             type_of_val(&By::<CollectionName>::select::<DaoQueries, CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
             type_of_val(&With::<CollectionId>::convert_to::<ToCollectionId, _>),
+
+            // restore CollectionId from request name as we dropped it get the ToCollectionId
             type_of_val(&With::<FromCollectionId>::convert_to::<CollectionId, _>),
+
             type_of_val(&assert_collection_and_to_collection_are_different),
+
+            // create permission DAO
             type_of_val(&builder::<InterCollectionPermissionDBBuilder>),
             type_of_val(&With::<RequestContext>::update::<InterCollectionPermissionDBBuilder, _>),
             type_of_val(&With::<CollectionId>::set::<InterCollectionPermissionDBBuilder>),
             type_of_val(&With::<ToCollectionId>::set::<InterCollectionPermissionDBBuilder>),
             type_of_val(&With::<InterCollectionPermissionDBBuilder>::build::<InterCollectionPermissionDB, _>),
+            // insert DAO in DB
             type_of_val(&insert::<DaoQueries, InterCollectionPermissionDB>),
+
+            // Fetch DAO with Names and create DTO response
             type_of_val(&With::<InterCollectionPermissionDB>::extract::<InterCollectionPermissionId>),
             type_of_val(&By::<InterCollectionPermissionId>::select::<DaoQueries, InterCollectionPermissionDBWithNames>),
             type_of_val(&With::<InterCollectionPermissionDBWithNames>::convert_to::<InterCollectionPermissionBuilder, _>),
             type_of_val(&With::<InterCollectionPermissionBuilder>::build::<InterCollectionPermission, _>),
+
+            // refresh the inter collections authz cache
             type_of_val(&refresh_authz_context),
         ]);
     }
 
-    #[tokio::test]
-    async fn test_create_permission_ok() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
+    #[td_test::test(sqlx)]
+    async fn test_create_permission_ok(db: DbPool) -> Result<(), TdError> {
         let authz_context = Arc::new(AuthzContext::default());
         let service = CreateInterCollectionPermissionService::new(db.clone(), authz_context)
             .service()
@@ -258,9 +241,8 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_create_permission_same_collection_err() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
+    #[td_test::test(sqlx)]
+    async fn test_create_permission_same_collection_err(db: DbPool) -> Result<(), TdError> {
         let authz_context = Arc::new(AuthzContext::default());
         let service = CreateInterCollectionPermissionService::new(db.clone(), authz_context)
             .service()
@@ -293,9 +275,8 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_create_permission_authz_err() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
+    #[td_test::test(sqlx)]
+    async fn test_create_permission_authz_err(db: DbPool) -> Result<(), TdError> {
         let authz_context = Arc::new(AuthzContext::default());
         let service = CreateInterCollectionPermissionService::new(db.clone(), authz_context)
             .service()

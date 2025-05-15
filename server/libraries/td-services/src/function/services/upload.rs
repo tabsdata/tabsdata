@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use crate::function::layers::register::data_location;
 use crate::function::layers::upload::upload_function_write_to_storage;
 use std::sync::Arc;
@@ -12,9 +11,9 @@ use td_objects::crudl::CreateRequest;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    BuildService, DefaultService, ExtractService, SetService, TryIntoService, With,
+    BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
+    SetService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{insert, By, SqlSelectIdOrNameService};
 use td_objects::types::basic::{
@@ -44,13 +43,13 @@ impl UploadFunctionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, storage: Arc<Storage>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, storage: Arc<Storage>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 SrvCtxProvider::new(storage),
-                from_fn(extract_req_context::<CreateRequest<FunctionParam, FunctionUpload >>),
-                from_fn(extract_req_dto::<CreateRequest<FunctionParam, FunctionUpload>, _>),
-                from_fn(extract_req_name::<CreateRequest<FunctionParam, FunctionUpload>, _>),
+                from_fn(With::<CreateRequest<FunctionParam, FunctionUpload>>::extract::<RequestContext>),
+                from_fn(With::<CreateRequest<FunctionParam, FunctionUpload>>::extract_name::<FunctionParam>),
+                from_fn(With::<CreateRequest<FunctionParam, FunctionUpload>>::extract_data::<FunctionUpload>),
 
                 // Extract function (TODO also use FunctionId to generate data_location)
                 from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
@@ -98,13 +97,11 @@ mod tests {
     use axum::body::Body;
     use axum::extract::Request;
     use sha2::{Digest, Sha256};
-    use td_common::id::Id;
     use td_objects::crudl::handle_sql_err;
     use td_objects::location2::StorageLocation;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_function2::seed_function;
-    use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, DataLocation, Decorator, FunctionRuntimeValues,
         RoleId, UserId,
@@ -134,9 +131,9 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<CreateRequest<FunctionParam, FunctionUpload>, Bundle>(&[
-            type_of_val(&extract_req_context::<CreateRequest<FunctionParam, FunctionUpload>>),
-            type_of_val(&extract_req_dto::<CreateRequest<FunctionParam, FunctionUpload>, _>),
-            type_of_val(&extract_req_name::<CreateRequest<FunctionParam, FunctionUpload>, _>),
+            type_of_val(&With::<CreateRequest<FunctionParam, FunctionUpload>>::extract::<RequestContext>),
+            type_of_val(&With::<CreateRequest<FunctionParam, FunctionUpload>>::extract_name::<FunctionParam>),
+            type_of_val(&With::<CreateRequest<FunctionParam, FunctionUpload>>::extract_data::<FunctionUpload>),
             // Extract function (TODO also use FunctionId to generate data_location)
             type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
             // Extract collection
@@ -164,9 +161,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_upload(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionUpdate::builder()
             .try_name("function_foo")?
@@ -232,7 +228,7 @@ mod tests {
         assert_eq!(bundle.collection_id(), collection.id());
         let hash = hex::encode(&Sha256::digest(payload)[..]);
         assert_eq!(bundle.hash().to_string(), hash);
-        assert_eq!(*bundle.created_by_id(), admin_id);
+        assert_eq!(*bundle.created_by_id(), UserId::admin());
 
         // Assert storage
         let data_location = DataLocation::default();

@@ -12,8 +12,7 @@ use td_error::TdError;
 use td_objects::crudl::DeleteRequest;
 use td_objects::rest_urls::TableParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_name;
-use td_objects::tower_service::from::{combine, ExtractService, With};
+use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{
     insert, insert_vec, By, SqlDeleteService, SqlSelectAllService, SqlSelectIdOrNameService,
     SqlSelectService,
@@ -44,10 +43,10 @@ impl DeleteTableService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_name::<DeleteRequest<TableParam>, _>),
+                from_fn(With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
 
                 TransactionProvider::new(db),
 
@@ -103,12 +102,10 @@ mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
     use crate::table::services::tests::{assert_delete, assert_not_deleted};
-    use td_common::id::Id;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_function2::seed_function;
-    use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependency,
         TableName, UserId,
@@ -129,7 +126,7 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<DeleteRequest<TableParam>, ()>(&[
-            type_of_val(&extract_req_name::<DeleteRequest<TableParam>, _>),
+            type_of_val(&With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
             // Extract collection and table from request.
             type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
             type_of_val(&With::<TableParam>::extract::<TableIdName>),
@@ -168,9 +165,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_table(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         // Create a function with some tables.
         let create = FunctionRegister::builder()
@@ -242,7 +238,7 @@ mod tests {
 
         assert_delete(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &TableName::try_from("super_table")?,
         )
@@ -251,9 +247,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_function_with_dependency(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         // Create a function with some tables.
         let create = FunctionRegister::builder()
@@ -341,7 +336,7 @@ mod tests {
 
         assert_delete(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &TableName::try_from("super_table")?,
         )
@@ -349,7 +344,7 @@ mod tests {
 
         assert_not_deleted(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &TableName::try_from("keep_this_one")?,
         )

@@ -7,12 +7,11 @@ use std::sync::Arc;
 use td_authz::{refresh_authz_context, Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::DeleteRequest;
+use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::InterCollectionPermissionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
-use td_objects::tower_service::from::{ExtractService, With};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::SqlSelectIdOrNameService;
 use td_objects::tower_service::sql::{By, SqlDeleteService};
 use td_objects::types::basic::{
@@ -27,6 +26,7 @@ use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
 use td_tower::service_provider::{ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
+
 pub struct DeleteInterCollectionPermissionService {
     provider: ServiceProvider<DeleteRequest<InterCollectionPermissionParam>, (), TdError>,
 }
@@ -40,14 +40,14 @@ impl DeleteInterCollectionPermissionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>,) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 TransactionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
 
-                from_fn(extract_req_context::<DeleteRequest<InterCollectionPermissionParam>>),
-                from_fn(extract_req_name::<DeleteRequest<InterCollectionPermissionParam>, _>),
+                from_fn(With::<DeleteRequest<InterCollectionPermissionParam>>::extract::<RequestContext>),
+                from_fn(With::<DeleteRequest<InterCollectionPermissionParam>>::extract_name::<InterCollectionPermissionParam>),
 
                 // check requester is sec_admin or coll_admin, early pre-check
                 from_fn(AuthzOn::<System>::set),
@@ -85,7 +85,7 @@ impl DeleteInterCollectionPermissionService {
 
 #[cfg(test)]
 mod tests {
-    use crate::inter_coll_permission::services::delete::DeleteInterCollectionPermissionService;
+    use super::*;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_error::{assert_service_error, TdError};
@@ -103,35 +103,10 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_delete_inter_collection_permission_service() {
-        use crate::inter_coll_permission::layers::assert_collection_in_permission;
-        use crate::inter_coll_permission::services::delete::DeleteInterCollectionPermissionService;
-        use std::sync::Arc;
-        use td_authz::refresh_authz_context;
-        use td_authz::Authz;
-        use td_authz::AuthzContext;
-        use td_objects::crudl::DeleteRequest;
-        use td_objects::rest_urls::InterCollectionPermissionParam;
-        use td_objects::sql::DaoQueries;
-        use td_objects::tower_service::authz::CollAdmin;
-        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-        use td_objects::tower_service::extractor::extract_req_context;
-        use td_objects::tower_service::extractor::extract_req_name;
-        use td_objects::tower_service::from::{ExtractService, With};
-        use td_objects::tower_service::sql::By;
-        use td_objects::tower_service::sql::SqlDeleteService;
-        use td_objects::tower_service::sql::SqlSelectIdOrNameService;
-        use td_objects::types::basic::CollectionIdName;
-        use td_objects::types::basic::InterCollectionPermissionIdName;
-        use td_objects::types::basic::{CollectionId, InterCollectionPermissionId};
-        use td_objects::types::permission::{
-            InterCollectionPermissionDB, InterCollectionPermissionDBWithNames,
-        };
-        use td_tower::ctx_service::RawOneshot;
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_delete_inter_collection_permission_service(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
         let provider = DeleteInterCollectionPermissionService::provider(db, queries, authz_context);
@@ -141,25 +116,31 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<DeleteRequest<InterCollectionPermissionParam>, ()>(&[
-            type_of_val(&extract_req_context::<DeleteRequest<InterCollectionPermissionParam>>),
-            type_of_val(&extract_req_name::<DeleteRequest<InterCollectionPermissionParam>, _>),
+            type_of_val(&With::<DeleteRequest<InterCollectionPermissionParam>>::extract::<RequestContext>),
+            type_of_val(&With::<DeleteRequest<InterCollectionPermissionParam>>::extract_name::<InterCollectionPermissionParam>),
 
+            // check requester is sec_admin or coll_admin, early pre-check
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
 
+            // find permission
             type_of_val(&With::<InterCollectionPermissionParam>::extract::<InterCollectionPermissionIdName>),
             type_of_val(&By::<InterCollectionPermissionIdName>::select::<DaoQueries, InterCollectionPermissionDBWithNames>),
 
+            // Check the role in the request matches the role in permission
             type_of_val(&With::<InterCollectionPermissionParam>::extract::<CollectionIdName>),
             type_of_val(&assert_collection_in_permission),
 
+            // check the request is sec_admin or coll_admin for the collection in the permission
             type_of_val(&With::<InterCollectionPermissionDBWithNames>::extract::<CollectionId>),
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
 
+            // delete permission from DB
             type_of_val(&With::<InterCollectionPermissionDBWithNames>::extract::<InterCollectionPermissionId>),
             type_of_val(&By::<InterCollectionPermissionId>::delete::<DaoQueries, InterCollectionPermissionDB>),
 
+            // refresh the inter collections authz cache
             type_of_val(&refresh_authz_context),
         ]);
     }

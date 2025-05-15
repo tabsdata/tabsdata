@@ -6,12 +6,13 @@ use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::{ListRequest, ListResponse};
+use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin};
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
-use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
+use td_objects::tower_service::from::{
+    ExtractNameService, ExtractService, TryMapListService, With,
+};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::CollectionDB;
@@ -43,14 +44,14 @@ impl ListInterCollectionPermissionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 TransactionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
 
-                from_fn(extract_req_context::<ListRequest<CollectionParam>>),
-                from_fn(extract_req_name::<ListRequest<CollectionParam>, _>),
+                from_fn(With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
+                from_fn(With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
 
                 // find collection ID
                 from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
@@ -80,7 +81,7 @@ impl ListInterCollectionPermissionService {
 
 #[cfg(test)]
 mod tests {
-    use crate::inter_coll_permission::services::list::ListInterCollectionPermissionService;
+    use super::*;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_error::{assert_service_error, TdError};
@@ -95,35 +96,10 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_list_inter_collection_permission_service() {
-        use crate::inter_coll_permission::services::list::ListInterCollectionPermissionService;
-        use std::sync::Arc;
-        use td_authz::Authz;
-        use td_authz::AuthzContext;
-        use td_objects::crudl::{ListRequest, ListResponse};
-        use td_objects::rest_urls::CollectionParam;
-        use td_objects::sql::DaoQueries;
-        use td_objects::tower_service::authz::CollAdmin;
-        use td_objects::tower_service::authz::{AuthzOn, SecAdmin};
-        use td_objects::tower_service::extractor::extract_req_context;
-        use td_objects::tower_service::extractor::extract_req_name;
-        use td_objects::tower_service::from::TryMapListService;
-        use td_objects::tower_service::from::{ExtractService, With};
-        use td_objects::tower_service::sql::By;
-        use td_objects::tower_service::sql::SqlListService;
-        use td_objects::tower_service::sql::SqlSelectIdOrNameService;
-        use td_objects::types::basic::CollectionId;
-        use td_objects::types::basic::CollectionIdName;
-        use td_objects::types::collection::CollectionDB;
-        use td_objects::types::permission::{
-            InterCollectionPermission, InterCollectionPermissionBuilder,
-            InterCollectionPermissionDBWithNames,
-        };
-        use td_tower::ctx_service::RawOneshot;
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_list_inter_collection_permission_service(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
         let provider = ListInterCollectionPermissionService::provider(db, queries, authz_context);
@@ -133,18 +109,22 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<ListRequest<CollectionParam>, ListResponse<InterCollectionPermission>>(&[
-            type_of_val(&extract_req_context::<ListRequest<CollectionParam>>),
-            type_of_val(&extract_req_name::<ListRequest<CollectionParam>, _>),
+            type_of_val(&With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
+            type_of_val(&With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
 
+            // find collection ID
             type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
             type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
 
+            // check requester is sec_admin or coll_admin for the collection
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
 
+            // get list of permissions
             type_of_val(&By::<CollectionId>::list::<CollectionParam, DaoQueries, InterCollectionPermissionDBWithNames>),
 
+            // map DAOs to DTOs
             type_of_val(&With::<InterCollectionPermissionDBWithNames>::try_map_list::<CollectionParam, InterCollectionPermissionBuilder, InterCollectionPermission, _>),
         ]);
     }

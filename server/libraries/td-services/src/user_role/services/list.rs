@@ -6,12 +6,13 @@ use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::{ListRequest, ListResponse};
+use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
-use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
+use td_objects::tower_service::from::{
+    ExtractNameService, ExtractService, TryMapListService, With,
+};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::role::RoleDB;
@@ -35,16 +36,16 @@ impl ListUserRoleService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 ConnectionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
-                from_fn(extract_req_context::<ListRequest<RoleParam>>),
+                from_fn(With::<ListRequest<RoleParam>>::extract::<RequestContext>),
                 from_fn(AuthzOn::<System>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
 
-                from_fn(extract_req_name::<ListRequest<RoleParam>, _>),
+                from_fn(With::<ListRequest<RoleParam>>::extract_name::<RoleParam>),
 
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
@@ -70,16 +71,16 @@ mod tests {
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::{get_user_role, seed_user_role};
-    use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserId};
+    use td_objects::types::basic::{
+        AccessTokenId, Description, RoleName, UserEnabled, UserId, UserName,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_list_user_role() {
-        use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_list_user_role(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let provider =
             ListUserRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
@@ -89,11 +90,10 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<ListRequest<RoleParam>, ListResponse<UserRole>>(&[
-
-            type_of_val(&extract_req_context::<ListRequest<RoleParam>>),
+            type_of_val(&With::<ListRequest<RoleParam>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&extract_req_name::<ListRequest<RoleParam>, _>),
+            type_of_val(&With::<ListRequest<RoleParam>>::extract_name::<RoleParam>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
@@ -102,18 +102,21 @@ mod tests {
         ]);
     }
 
-    #[tokio::test]
-    async fn test_list_user_role() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
-        let user_id = seed_user(&db, None, "joaquin", false).await;
+    #[td_test::test(sqlx)]
+    async fn test_list_user_role(db: DbPool) -> Result<(), TdError> {
+        let user = seed_user(
+            &db,
+            &UserName::try_from("joaquin").unwrap(),
+            &UserEnabled::from(false),
+        )
+        .await;
         let role = seed_role(
             &db,
             RoleName::try_from("king")?,
             Description::try_from("super user")?,
         )
         .await;
-        let user_role = seed_user_role(&db, &UserId::from(user_id), role.id()).await;
+        let user_role = seed_user_role(&db, user.id(), role.id()).await;
 
         let request = RequestContext::with(
             AccessTokenId::default(),

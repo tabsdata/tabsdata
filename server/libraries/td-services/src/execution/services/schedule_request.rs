@@ -44,7 +44,7 @@ impl<T: WorkerMessageQueue> ScheduleRequestService<T> {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, storage: Arc<Storage>, message_queue: Arc<T>, server_url: Arc<SocketAddr>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, storage: Arc<Storage>, message_queue: Arc<T>, server_url: Arc<SocketAddr>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 SrvCtxProvider::new(message_queue),
@@ -63,7 +63,7 @@ impl<T: WorkerMessageQueue> ScheduleRequestService<T> {
     // - T(MessageQueue)
     // - SocketAddr server URL
     l! {
-        request() -> TdError {
+        request() {
             layers!(
                 // Get all function runs that are ready to execute.
                 // This is, with status scheduled and with all requirements done.

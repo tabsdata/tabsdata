@@ -8,10 +8,9 @@ use td_error::TdError;
 use td_objects::crudl::ReadRequest;
 use td_objects::rest_urls::FunctionVersionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{
-    builder, combine, BuildService, ConvertIntoMapService, ExtractService, SetService,
-    TryIntoService, With,
+    builder, combine, BuildService, ConvertIntoMapService, ExtractNameService, ExtractService,
+    SetService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{
     By, SqlSelectAllService, SqlSelectIdOrNameService, SqlSelectService,
@@ -47,10 +46,10 @@ impl ReadFunctionVersionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_name::<ReadRequest<FunctionVersionParam>, _>),
+                from_fn(With::<ReadRequest<FunctionVersionParam>>::extract_name::<FunctionVersionParam>),
 
                 ConnectionProvider::new(db),
 
@@ -70,7 +69,7 @@ impl ReadFunctionVersionService {
     }
 
     l! {
-        function_version_with_tables_by_id() -> TdError {
+        function_version_with_tables_by_id() {
             layers!(
                 // Builder
                 from_fn(builder::<FunctionVersionWithTablesBuilder>),
@@ -115,7 +114,6 @@ mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_function2::seed_function;
-    use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
         TableDependency, TableName, UserId, UserName,
@@ -136,7 +134,9 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<ReadRequest<FunctionVersionParam>, FunctionVersionWithTables>(&[
-            type_of_val(&extract_req_name::<ReadRequest<FunctionVersionParam>, _>),
+            type_of_val(
+                &With::<ReadRequest<FunctionVersionParam>>::extract_name::<FunctionVersionParam>,
+            ),
             // Extract from request.
             type_of_val(&With::<FunctionVersionParam>::extract::<CollectionIdName>),
             type_of_val(&With::<FunctionVersionParam>::extract::<FunctionVersionIdName>),
@@ -188,13 +188,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_read(db: DbPool) -> Result<(), TdError> {
-        let admin_id = admin_user(&db).await;
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("cofnig")?,
-            &UserId::try_from(admin_id.as_str())?,
-        )
-        .await;
+        let collection =
+            seed_collection(&db, &CollectionName::try_from("cofnig")?, &UserId::admin()).await;
 
         let dependencies = Some(vec![TableDependency::try_from("cofnig/table@HEAD~2")?]);
         let triggers = None;

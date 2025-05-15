@@ -39,13 +39,13 @@ macro_rules! service_provider {
 #[macro_export]
 macro_rules! p {
     {
-        $fn_name:ident($( $arg:ident: $arg_type:ty),* $(,)?) -> $error:ty
+        $fn_name:ident($( $arg:ident: $arg_type:ty),* $(,)?)
     {
         $content:expr
     } } => {
         fn $fn_name<Req, Res>(
             $( $arg: $arg_type, )*
-        ) -> $crate::service_provider::ServiceProvider<Req, Res, $error>
+        ) -> $crate::service_provider::ServiceProvider<Req, Res, td_error::TdError>
         where
             Req: $crate::default_services::Share,
             Res: $crate::default_services::Share,
@@ -58,7 +58,7 @@ macro_rules! p {
 #[macro_export]
 macro_rules! l {
     {
-        $fn_name:ident($( $arg:ident: $arg_type:ty),* $(,)?) -> $error:ty
+        $fn_name:ident($( $arg:ident: $arg_type:ty),* $(,)?)
     {
         $content:expr
     } } => {
@@ -67,12 +67,12 @@ macro_rules! l {
                 In,
                 $crate::handler::Handler,
                 $crate::handler::Handler,
-                $error>
+                td_error::TdError>
         where
             In: tower::Service<
                 $crate::handler::Handler,
                 Response = $crate::handler::Handler,
-                Error = $error,
+                Error = td_error::TdError,
                 Future: Send>
             + Clone + $crate::default_services::Share,
         {
@@ -109,7 +109,7 @@ mod tests {
     #[tokio::test]
     async fn test_p_macro_no_args() {
         p! {
-            test_provider() -> TdError {
+            test_provider() {
                 service_provider!(layers!(Identity::new()))
             }
         }
@@ -119,7 +119,7 @@ mod tests {
     #[tokio::test]
     async fn test_p_macro_single_arg() {
         p! {
-            test_provider(_arg: u32) -> TdError {
+            test_provider(_arg: u32) {
                 service_provider!(layers!(Identity::new()))
             }
         }
@@ -129,7 +129,7 @@ mod tests {
     #[tokio::test]
     async fn test_p_macro_multiple_arg() {
         p! {
-            test_provider(_arg_1: u32, _arg_2: &str) -> TdError {
+            test_provider(_arg_1: u32, _arg_2: &str) {
                 service_provider!(layers!(Identity::new()))
             }
         }
@@ -144,7 +144,7 @@ mod tests {
     #[tokio::test]
     async fn test_l_macro() {
         l! {
-            test_layers() -> TdError {
+            test_layers() {
                 layers!(
                     Identity::new(),
                     from_fn(layer_fn),
@@ -153,7 +153,7 @@ mod tests {
         }
 
         l! {
-            test_layers_with_args(_arg_1: u32, _arg_2: &str) -> TdError {
+            test_layers_with_args(_arg_1: u32, _arg_2: &str) {
                 layers!(
                     Identity::new(),
                     from_fn(layer_fn),
@@ -162,7 +162,7 @@ mod tests {
         }
 
         p! {
-            test_provider(arg_1: u32, arg_2: &str) -> TdError {
+            test_provider(arg_1: u32, arg_2: &str) {
                 service_provider!(layers!(
                     Identity::new(),
                     test_layers(),

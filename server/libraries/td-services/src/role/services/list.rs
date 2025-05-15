@@ -6,11 +6,10 @@ use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::{ListRequest, ListResponse};
+use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::extractor::extract_req_context;
-use td_objects::tower_service::from::{TryMapListService, With};
+use td_objects::tower_service::from::{ExtractService, TryMapListService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::role::{Role, RoleBuilder, RoleDBWithNames};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
@@ -32,12 +31,12 @@ impl ListRoleService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 ConnectionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
-                from_fn(extract_req_context::<ListRequest<()>>),
+                from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
                 from_fn(AuthzOn::<System>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
 
@@ -62,12 +61,11 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_list_role() {
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_list_role(db: DbPool) {
         use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let provider = ListRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
@@ -76,7 +74,7 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<ListRequest<()>, ListResponse<Role>>(&[
-            type_of_val(&extract_req_context::<ListRequest<()>>),
+            type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
             type_of_val(&By::<()>::list::<(), DaoQueries, RoleDBWithNames>),
@@ -84,10 +82,8 @@ mod tests {
         ]);
     }
 
-    #[tokio::test]
-    async fn test_list_role() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
+    #[td_test::test(sqlx)]
+    async fn test_list_role(db: DbPool) -> Result<(), TdError> {
         let _role = seed_role(
             &db,
             RoleName::try_from("joaquin")?,

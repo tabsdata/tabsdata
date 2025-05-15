@@ -49,12 +49,7 @@ impl PasswordChangeService {
     }
 
     p! {
-        provider(
-            db: DbPool,
-            queries: Arc<DaoQueries>,
-            password_hash_config: Arc<PasswordHashConfig>,
-            sessions: Arc<Sessions<'static>>
-    ) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, password_hash_config: Arc<PasswordHashConfig>, sessions: Arc<Sessions<'static>>) {
             service_provider!(
                 layers!(
                     TransactionProvider::new(db),

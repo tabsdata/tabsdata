@@ -8,15 +8,14 @@ use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::layers::set_session_expiration::set_session_expiration;
 use crate::auth::services::JwtConfig;
 use crate::auth::session::Sessions;
-use crate::common::layers::extractor::extract_req_dto;
 use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_context;
 use td_objects::tower_service::from::{
-    builder, combine, BuildService, DefaultService, ExtractService, SetService, With,
+    builder, combine, BuildService, DefaultService, ExtractDataService, ExtractService, SetService,
+    With,
 };
 use td_objects::tower_service::sql::{insert, By, SqlSelectService, SqlUpdateService};
 use td_objects::types::auth::{
@@ -49,14 +48,14 @@ impl RefreshService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, jwt_config: Arc<JwtConfig>, sessions: Arc<Sessions<'static>>,) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, jwt_config: Arc<JwtConfig>, sessions: Arc<Sessions<'static>>,) {
             service_provider!(layers!(
                 TransactionProvider::new(db),
                 SrvCtxProvider::new(queries),
                 SrvCtxProvider::new(jwt_config),
                 SrvCtxProvider::new(sessions),
 
-                from_fn(extract_req_context::<UpdateRequest<(),RefreshToken>>),
+                from_fn(With::<UpdateRequest<(), RefreshToken>>::extract::<RequestContext>),
 
                 // extract access token id, user id, role id and request time from request context
                 from_fn(With::<RequestContext>::extract::<AccessTokenId>),
@@ -65,11 +64,11 @@ impl RefreshService {
                 from_fn(With::<RequestContext>::extract::<AtTime>),
 
                 // extract refresh token from request
-                from_fn(extract_req_dto::<UpdateRequest<(), RefreshToken>, RefreshToken>),
+                from_fn(With::<UpdateRequest<(), RefreshToken>>::extract_data::<RefreshToken>),
                 from_fn(decode_refresh_token),
 
                 // find session ID by access token ID and refresh token ID
-                from_fn(combine::<AccessTokenId,RefreshTokenId>),
+                from_fn(combine::<AccessTokenId, RefreshTokenId>),
                 from_fn(By::<(AccessTokenId,RefreshTokenId)>::select::<DaoQueries, SessionDB>),
 
                 // invalidate session entry with old access token id because of token renewal
@@ -105,44 +104,20 @@ impl RefreshService {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::auth::decode_token;
     use crate::auth::services::tests::{assert_session, auth_services, get_session};
     use td_database::sql::DbPool;
-    use td_objects::crudl::RequestContext;
     use td_objects::types::auth::Login;
     use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_refresh() {
-        use crate::auth::layers::create_access_token::create_access_token;
-        use crate::auth::layers::decode_refresh_token::decode_refresh_token;
-        use crate::auth::layers::refresh_sessions::refresh_sessions;
-        use crate::auth::layers::set_session_expiration::set_session_expiration;
-        use crate::auth::services::refresh::RefreshService;
-        use crate::auth::services::JwtConfig;
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_refresh(db: DbPool) {
         use crate::auth::session;
-        use crate::common::layers::extractor::extract_req_dto;
-        use std::sync::Arc;
-        use td_objects::crudl::{RequestContext, UpdateRequest};
-        use td_objects::sql::DaoQueries;
-        use td_objects::tower_service::extractor::extract_req_context;
-        use td_objects::tower_service::from::{
-            builder, combine, BuildService, DefaultService, ExtractService, SetService, With,
-        };
-        use td_objects::tower_service::sql::{insert, By, SqlSelectService, SqlUpdateService};
-        use td_objects::types::auth::{
-            SessionDB, SessionDBBuilder, SessionNewTokenDB, SessionNewTokenDBBuilder,
-            TokenResponseX,
-        };
-        use td_objects::types::basic::{
-            AccessTokenId, AtTime, RefreshToken, RefreshTokenId, RoleId, UserId,
-        };
-        use td_tower::ctx_service::RawOneshot;
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let service = RefreshService::provider(
             db.clone(),
             Arc::new(DaoQueries::default()),
@@ -155,19 +130,24 @@ mod tests {
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
         metadata.assert_service::<UpdateRequest<(), RefreshToken>, TokenResponseX>(&[
-            type_of_val(&extract_req_context::<UpdateRequest<(), RefreshToken>>),
+            type_of_val(&With::<UpdateRequest<(), RefreshToken>>::extract::<RequestContext>),
+            // extract access token id, user id, role id and request time from request context
             type_of_val(&With::<RequestContext>::extract::<AccessTokenId>),
             type_of_val(&With::<RequestContext>::extract::<UserId>),
             type_of_val(&With::<RequestContext>::extract::<RoleId>),
             type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            type_of_val(&extract_req_dto::<UpdateRequest<(), RefreshToken>, RefreshToken>),
+            // extract refresh token from request
+            type_of_val(&With::<UpdateRequest<(), RefreshToken>>::extract_data::<RefreshToken>),
             type_of_val(&decode_refresh_token),
+            // find session ID by access token ID and refresh token ID
             type_of_val(&combine::<AccessTokenId, RefreshTokenId>),
             type_of_val(&By::<(AccessTokenId, RefreshTokenId)>::select::<DaoQueries, SessionDB>),
+            // invalidate session entry with old access token id because of token renewal
             type_of_val(&With::<SessionNewTokenDBBuilder>::default),
             type_of_val(&With::<AtTime>::set::<SessionNewTokenDBBuilder>),
             type_of_val(&With::<SessionNewTokenDBBuilder>::build::<SessionNewTokenDB, _>),
             type_of_val(&By::<AccessTokenId>::update::<DaoQueries, SessionNewTokenDB, SessionDB>),
+            // create new session entry with new access token id and refresh token id
             type_of_val(&builder::<SessionDBBuilder>),
             type_of_val(&With::<UserId>::set::<SessionDBBuilder>),
             type_of_val(&With::<RoleId>::set::<SessionDBBuilder>),
@@ -175,7 +155,9 @@ mod tests {
             type_of_val(&set_session_expiration),
             type_of_val(&With::<SessionDBBuilder>::build::<SessionDB, _>),
             type_of_val(&insert::<DaoQueries, SessionDB>),
+            // create access token
             type_of_val(&create_access_token),
+            // invalidate sessions cache
             type_of_val(&refresh_sessions),
         ]);
     }

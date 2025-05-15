@@ -6,11 +6,12 @@ use crate::function::layers::delete::build_deleted_function_version;
 use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::DeleteRequest;
+use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
-use td_objects::tower_service::from::{combine, DefaultService, ExtractService, With};
+use td_objects::tower_service::from::{
+    combine, DefaultService, ExtractNameService, ExtractService, With,
+};
 use td_objects::tower_service::sql::{
     insert, By, SqlDeleteService, SqlSelectAllService, SqlSelectIdOrNameService, SqlSelectService,
 };
@@ -44,11 +45,11 @@ impl DeleteFunctionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_context::<DeleteRequest<FunctionParam>>),
-                from_fn(extract_req_name::<DeleteRequest<FunctionParam>, _>),
+                from_fn(With::<DeleteRequest<FunctionParam>>::extract::<RequestContext>),
+                from_fn(With::<DeleteRequest<FunctionParam>>::extract_name::<FunctionParam>),
 
                 TransactionProvider::new(db),
 
@@ -103,12 +104,10 @@ impl DeleteFunctionService {
 mod tests {
     use super::*;
     use crate::function::services::tests::{assert_delete, assert_register};
-    use td_common::id::Id;
     use td_objects::crudl::{handle_sql_err, RequestContext};
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_function2::seed_function;
-    use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
     };
@@ -143,8 +142,8 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<DeleteRequest<FunctionParam>, ()>(&[
-                type_of_val(&extract_req_context::<DeleteRequest<FunctionParam>>),
-                type_of_val(&extract_req_name::<DeleteRequest<FunctionParam>, _>),
+                type_of_val(&With::<DeleteRequest<FunctionParam>>::extract::<RequestContext>),
+                type_of_val(&With::<DeleteRequest<FunctionParam>>::extract_name::<FunctionParam>),
                 // Extract collection and function from request.
                 type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
                 type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
@@ -205,9 +204,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_function(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
@@ -243,7 +241,7 @@ mod tests {
 
         assert_delete(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -254,9 +252,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_function_with_tables(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
@@ -295,7 +292,7 @@ mod tests {
 
         assert_delete(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -306,16 +303,14 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_function_with_dependencies(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Publisher)
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
@@ -360,7 +355,7 @@ mod tests {
 
         assert_delete(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -371,9 +366,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_function_with_triggers(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
@@ -424,7 +418,7 @@ mod tests {
 
         assert_delete(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create,
             &created_function,
@@ -435,9 +429,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_function_unique(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let trigger_create = FunctionRegister::builder()
             .try_name("the_trigger")?
@@ -510,12 +503,19 @@ mod tests {
             .await
             .map_err(handle_sql_err)?;
         let function_version = FunctionVersionBuilder::try_from(&function_version)?.build()?;
-        assert_register(&db, &admin_id, &collection, &create_1, &function_version).await?;
+        assert_register(
+            &db,
+            &UserId::admin(),
+            &collection,
+            &create_1,
+            &function_version,
+        )
+        .await?;
 
         // But the second function is deleted
         assert_delete(
             &db,
-            &admin_id,
+            &UserId::admin(),
             &collection,
             &create_2,
             &created_function_2,

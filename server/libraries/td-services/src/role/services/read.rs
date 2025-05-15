@@ -6,12 +6,13 @@ use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::ReadRequest;
+use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
-use td_objects::tower_service::from::{BuildService, ExtractService, TryIntoService, With};
+use td_objects::tower_service::from::{
+    BuildService, ExtractNameService, ExtractService, TryIntoService, With,
+};
 use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService};
 use td_objects::types::basic::RoleIdName;
 use td_objects::types::role::{Role, RoleBuilder, RoleDBWithNames};
@@ -34,16 +35,16 @@ impl ReadRoleService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 ConnectionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
-                from_fn(extract_req_context::<ReadRequest<RoleParam>>),
+                from_fn(With::<ReadRequest<RoleParam>>::extract::<RequestContext>),
                 from_fn(AuthzOn::<System>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
 
-                from_fn(extract_req_name::<ReadRequest<RoleParam>, _>),
+                from_fn(With::<ReadRequest<RoleParam>>::extract_name::<RoleParam>),
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
 
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDBWithNames>),
@@ -70,12 +71,10 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_read_role() {
-        use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_read_role(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let provider = ReadRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
@@ -84,10 +83,10 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<ReadRequest<RoleParam>, Role>(&[
-            type_of_val(&extract_req_context::<ReadRequest<RoleParam>>),
+            type_of_val(&With::<ReadRequest<RoleParam>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&extract_req_name::<ReadRequest<RoleParam>, _>),
+            type_of_val(&With::<ReadRequest<RoleParam>>::extract_name::<RoleParam>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDBWithNames>),
             type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
@@ -95,10 +94,8 @@ mod tests {
         ]);
     }
 
-    #[tokio::test]
-    async fn test_read_role_with_id() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
+    #[td_test::test(sqlx)]
+    async fn test_read_role_with_id(db: DbPool) -> Result<(), TdError> {
         let role = seed_role(
             &db,
             RoleName::try_from("joaquin")?,
@@ -135,10 +132,8 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_read_role_with_name() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
+    #[td_test::test(sqlx)]
+    async fn test_read_role_with_name(db: DbPool) -> Result<(), TdError> {
         let _role = seed_role(
             &db,
             RoleName::try_from("joaquin")?,

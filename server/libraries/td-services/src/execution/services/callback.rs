@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use crate::execution::layers::update_status::{
     update_function_run_status, update_table_data_version_status_v2,
 };
@@ -12,8 +11,9 @@ use td_error::TdError;
 use td_objects::crudl::UpdateRequest;
 use td_objects::rest_urls::FunctionRunParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_name;
-use td_objects::tower_service::from::{BuildService, ExtractService, TryIntoService, With};
+use td_objects::tower_service::from::{
+    BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService, With,
+};
 use td_objects::tower_service::sql::{By, SqlSelectAllService};
 use td_objects::types::basic::FunctionRunId;
 use td_objects::types::execution::{
@@ -40,14 +40,14 @@ impl ExecutionCallbackService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) {
             service_provider!(layers!(
                 // Set context
                 SrvCtxProvider::new(queries),
 
                 // Extract from request.
-                from_fn(extract_req_dto::<UpdateRequest<FunctionRunParam, CallbackRequest>, _>),
-                from_fn(extract_req_name::<UpdateRequest<FunctionRunParam, CallbackRequest>, _>),
+                from_fn(With::<UpdateRequest<FunctionRunParam, CallbackRequest>>::extract_name::<FunctionRunParam>),
+                from_fn(With::<UpdateRequest<FunctionRunParam, CallbackRequest>>::extract_data::<CallbackRequest>),
 
                 // Convert callback request to status update request.
                 from_fn(With::<CallbackRequest>::convert_to::<UpdateFunctionRun, _>),
@@ -128,8 +128,16 @@ mod tests {
 
         metadata.assert_service::<UpdateRequest<FunctionRunParam, CallbackRequest>, ()>(&[
             // Extract from request.
-            type_of_val(&extract_req_dto::<UpdateRequest<FunctionRunParam, CallbackRequest>, _>),
-            type_of_val(&extract_req_name::<UpdateRequest<FunctionRunParam, CallbackRequest>, _>),
+            type_of_val(
+                &With::<UpdateRequest<FunctionRunParam, CallbackRequest>>::extract_name::<
+                    FunctionRunParam,
+                >,
+            ),
+            type_of_val(
+                &With::<UpdateRequest<FunctionRunParam, CallbackRequest>>::extract_data::<
+                    CallbackRequest,
+                >,
+            ),
             // Convert callback request to status update request.
             type_of_val(&With::<CallbackRequest>::convert_to::<UpdateFunctionRun, _>),
             // Extract function_run_id. We assume it's correct as the callback is constructed by the server.

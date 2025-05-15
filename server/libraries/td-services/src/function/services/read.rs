@@ -9,10 +9,9 @@ use td_error::TdError;
 use td_objects::crudl::ReadRequest;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::extract_req_name;
 use td_objects::tower_service::from::{
-    builder, combine, BuildService, ConvertIntoMapService, ExtractService, SetService,
-    VecBuildService, With,
+    builder, combine, BuildService, ConvertIntoMapService, ExtractNameService, ExtractService,
+    SetService, VecBuildService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{CollectionIdName, FunctionId, FunctionIdName, FunctionVersionId};
@@ -40,10 +39,10 @@ impl ReadFunctionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
-                from_fn(extract_req_name::<ReadRequest<FunctionParam>, _>),
+                from_fn(With::<ReadRequest<FunctionParam>>::extract_name::<FunctionParam>),
 
                 ConnectionProvider::new(db),
 
@@ -87,7 +86,6 @@ mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_function2::seed_function;
-    use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
         TableName, UserId, UserName,
@@ -118,7 +116,7 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<ReadRequest<FunctionParam>, FunctionVersionWithAllVersions>(&[
-            type_of_val(&extract_req_name::<ReadRequest<FunctionParam>, _>),
+            type_of_val(&With::<ReadRequest<FunctionParam>>::extract_name::<FunctionParam>),
 
             // Extract from request.
             type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
@@ -173,13 +171,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_read(db: DbPool) -> Result<(), TdError> {
-        let admin_id = admin_user(&db).await;
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("cofnig")?,
-            &UserId::try_from(admin_id.as_str())?,
-        )
-        .await;
+        let collection =
+            seed_collection(&db, &CollectionName::try_from("cofnig")?, &UserId::admin()).await;
 
         let dependencies = None;
         let triggers = None;
@@ -249,13 +242,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_read_multiple(db: DbPool) -> Result<(), TdError> {
-        let admin_id = admin_user(&db).await;
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("cofnig")?,
-            &UserId::try_from(admin_id.as_str())?,
-        )
-        .await;
+        let collection =
+            seed_collection(&db, &CollectionName::try_from("cofnig")?, &UserId::admin()).await;
 
         let dependencies = None;
         let triggers = None;

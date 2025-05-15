@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::entity_finder::EntityFinderError;
 use crate::types::basic::{AccessTokenId, AtTime, RoleId, UserId};
 use derive_builder::Builder;
 use getset::Getters;
@@ -22,50 +21,24 @@ use utoipa::IntoParams;
 #[td_type::typed(bool)]
 pub struct SysAdmin;
 
-pub trait ServerContext: Debug {}
-
 /// Request context for the logic layer.
-#[derive(Debug, Clone, Getters)]
-#[getset(get = "pub")]
+#[td_type::Dlo]
 pub struct RequestContext {
     /// The ID of the access token in the request.
+    #[td_type(extractor)]
     access_token_id: AccessTokenId,
     /// The ID of the user making the request.
+    #[td_type(extractor)]
     user_id: UserId,
     /// The role of the user making the request.
+    #[td_type(extractor)]
     role_id: RoleId,
     /// if the role has system admin privileges.
+    #[td_type(extractor)]
     sys_admin: SysAdmin,
     /// The time the request was made.
+    #[td_type(extractor)]
     time: AtTime,
-}
-
-// So it works with the extractors
-impl From<&RequestContext> for AccessTokenId {
-    fn from(from: &RequestContext) -> Self {
-        from.access_token_id
-    }
-}
-
-// So it works with the extractors
-impl From<&RequestContext> for UserId {
-    fn from(from: &RequestContext) -> Self {
-        from.user_id
-    }
-}
-
-// So it works with the extractors
-impl From<&RequestContext> for RoleId {
-    fn from(from: &RequestContext) -> Self {
-        from.role_id
-    }
-}
-
-// So it works with the extractors
-impl From<&RequestContext> for AtTime {
-    fn from(from: &RequestContext) -> Self {
-        from.time.clone()
-    }
 }
 
 impl RequestContext {
@@ -96,73 +69,81 @@ impl RequestContext {
     }
 }
 
+pub trait IntoName<T> {
+    fn into_name(self) -> T;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Name<N>(N);
+
+impl<N> IntoName<N> for Name<N> {
+    fn into_name(self) -> N {
+        self.0
+    }
+}
+
+pub trait IntoData<D> {
+    fn into_data(self) -> D;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Data<D>(D);
+
+impl<D> IntoData<D> for Data<D> {
+    fn into_data(self) -> D {
+        self.0
+    }
+}
+
 /// Request to create an entity.
-#[derive(Debug, Getters)]
-#[getset(get = "pub")]
-pub struct CreateRequest<N, C> {
+#[td_type::Dlo]
+pub struct CreateRequest<N: Clone, C: Clone> {
+    #[td_type(extractor)]
     context: RequestContext,
+    #[td_type(extractor)]
     name: Name<N>,
     /// The data to create the entity.
-    data: C,
-}
-
-// The logical name of the entity.
-#[derive(Debug, Clone)]
-pub struct Name<N = String> {
-    value: N,
-}
-
-impl<N> Name<N> {
-    pub fn new(value: impl Into<N>) -> Self {
-        Self {
-            value: value.into(),
-        }
-    }
-
-    pub fn value(&self) -> &N {
-        &self.value
-    }
-}
-
-impl<N> From<N> for Name<N> {
-    fn from(value: N) -> Self {
-        Self::new(value)
-    }
+    #[td_type(extractor)]
+    data: Data<C>,
 }
 
 /// Request to update an entity.
-#[derive(Debug, Getters)]
-#[getset(get = "pub")]
-pub struct UpdateRequest<N, U> {
+#[td_type::Dlo]
+pub struct UpdateRequest<N: Clone, U: Clone> {
+    #[td_type(extractor)]
     context: RequestContext,
     /// The logical name of the entity to update.
+    #[td_type(extractor)]
     name: Name<N>,
     /// The data to update the entity.
-    data: U,
+    #[td_type(extractor)]
+    data: Data<U>,
 }
 
 /// Request to delete an entity.
-#[derive(Debug, Getters)]
-#[getset(get = "pub")]
-pub struct DeleteRequest<N> {
+#[td_type::Dlo]
+pub struct DeleteRequest<N: Clone> {
+    #[td_type(extractor)]
     context: RequestContext,
     /// The logical name of the entity to delete.
+    #[td_type(extractor)]
     name: Name<N>,
 }
 
 /// Request to get an entity.
-#[derive(Debug, Getters)]
-#[getset(get = "pub")]
-pub struct ReadRequest<N> {
+#[td_type::Dlo]
+pub struct ReadRequest<N: Clone> {
+    #[td_type(extractor)]
     context: RequestContext,
     /// The logical name of the entity to read.
+    #[td_type(extractor)]
     name: Name<N>,
 }
 
 /// List parameters for list operations defining filtering, sorting and pagination.
 #[apiserver_schema]
 #[derive(
-    Debug, Clone, PartialEq, Serialize, Deserialize, Validate, Getters, IntoParams, Builder,
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Validate, Getters, IntoParams, Builder,
 )]
 #[builder(setter(into), default)]
 #[getset(get = "pub")]
@@ -226,10 +207,11 @@ impl Default for ListParams {
 }
 
 /// Request to list entities.
-#[derive(Debug, Getters)]
-#[getset(get = "pub")]
-pub struct ListRequest<N> {
+#[td_type::Dlo]
+pub struct ListRequest<N: Clone> {
+    #[td_type(extractor)]
     context: RequestContext,
+    #[td_type(extractor)]
     name: Name<N>,
     list_params: ListParams,
 }
@@ -249,44 +231,48 @@ pub enum AddOrRemove<T: Debug + Clone> {
 
 impl RequestContext {
     /// Creates a create request.
-    pub fn create<N, C>(self, name: impl Into<N>, data: C) -> CreateRequest<N, C> {
+    pub fn create<N: Clone, C: Clone>(self, name: impl Into<N>, data: C) -> CreateRequest<N, C> {
         CreateRequest {
             context: self,
-            name: Name::new(name),
-            data,
+            name: Name(name.into()),
+            data: Data(data),
         }
     }
 
     /// Creates an update request.
-    pub fn update<N, U>(self, name: impl Into<N>, data: U) -> UpdateRequest<N, U> {
+    pub fn update<N: Clone, U: Clone>(self, name: impl Into<N>, data: U) -> UpdateRequest<N, U> {
         UpdateRequest {
             context: self,
-            name: Name::new(name),
-            data,
+            name: Name(name.into()),
+            data: Data(data),
         }
     }
 
     /// Creates a delete request.
-    pub fn delete<N>(self, name: impl Into<N>) -> DeleteRequest<N> {
+    pub fn delete<N: Clone>(self, name: impl Into<N>) -> DeleteRequest<N> {
         DeleteRequest {
             context: self,
-            name: Name::new(name),
+            name: Name(name.into()),
         }
     }
 
     /// Creates a get request.
-    pub fn read<N>(self, name: impl Into<N>) -> ReadRequest<N> {
+    pub fn read<N: Clone>(self, name: impl Into<N>) -> ReadRequest<N> {
         ReadRequest {
             context: self,
-            name: Name::new(name),
+            name: Name(name.into()),
         }
     }
 
     /// Creates a list request.
-    pub fn list<N>(self, name: impl Into<N>, list_params: impl Into<ListParams>) -> ListRequest<N> {
+    pub fn list<N: Clone>(
+        self,
+        name: impl Into<N>,
+        list_params: impl Into<ListParams>,
+    ) -> ListRequest<N> {
         ListRequest {
             context: self,
-            name: Name::new(name),
+            name: Name(name.into()),
             list_params: list_params.into(),
         }
     }
@@ -301,16 +287,6 @@ pub enum CrudlErrorX {
     CannotUpdateUniqueValueExists(String) = 1,
     #[error("Cannot delete: {0}")]
     CannotDelete(String) = 2,
-    #[error("Bad request: {0}")]
-    BadRequest(String) = 3,
-    #[error("Invalid list parameter '{0}': {1}")]
-    InvalidListParams(String, String) = 4,
-    #[error("Dependency not found: {0}")]
-    DependencyNotFound(#[from] EntityFinderError) = 5,
-    #[error("Invalid trigger URI: {0}, {1}")]
-    InvalidTriggerUri(String, String) = 6,
-    #[error("Invalid dependency URI: {0}, {1}")]
-    InvalidDependencyUri(String, String) = 7,
 
     #[error("Not found.")]
     NotFound = 1000,

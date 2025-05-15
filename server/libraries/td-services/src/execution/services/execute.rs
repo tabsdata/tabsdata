@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use crate::execution::layers::plan::{
     build_execution_plan, build_function_requirements, build_function_runs, build_response,
     build_table_data_versions, build_transaction_map, build_transactions,
@@ -14,9 +13,9 @@ use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    combine, BuildService, ExtractService, TryIntoService, UpdateService, With,
+    combine, BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
+    UpdateService, With,
 };
 use td_objects::tower_service::sql::{insert, insert_vec, By, SqlSelectIdOrNameService};
 use td_objects::types::basic::{AtTime, CollectionIdName, FunctionId, FunctionIdName};
@@ -49,16 +48,16 @@ impl ExecuteFunctionService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, transaction_by: Arc<TransactionBy>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, transaction_by: Arc<TransactionBy>) {
             service_provider!(layers!(
                 // Set context
                 SrvCtxProvider::new(queries),
                 SrvCtxProvider::new(transaction_by),
 
                 // Extract from request.
-                from_fn(extract_req_context::<CreateRequest<FunctionParam, ExecutionRequest>>),
-                from_fn(extract_req_dto::<CreateRequest<FunctionParam, ExecutionRequest>, _>),
-                from_fn(extract_req_name::<CreateRequest<FunctionParam, ExecutionRequest>, _>),
+                from_fn(With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract::<RequestContext>),
+                from_fn(With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_name::<FunctionParam>),
+                from_fn(With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_data::<ExecutionRequest>),
                 from_fn(With::<RequestContext>::extract::<AtTime>),
 
                 from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
@@ -126,14 +125,12 @@ impl ExecuteFunctionService {
 mod tests {
     use super::*;
     use std::collections::HashSet;
-    use td_common::id::Id;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{handle_sql_err, RequestContext};
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_function2::seed_function;
-    use td_objects::test_utils::seed_user::admin_user;
     use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::RoleId;
     use td_objects::types::basic::{
@@ -165,13 +162,19 @@ mod tests {
                 &[
                     // Extract from request.
                     type_of_val(
-                        &extract_req_context::<CreateRequest<FunctionParam, ExecutionRequest>>,
+                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract::<
+                            RequestContext,
+                        >,
                     ),
                     type_of_val(
-                        &extract_req_dto::<CreateRequest<FunctionParam, ExecutionRequest>, _>,
+                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_name::<
+                            FunctionParam,
+                        >,
                     ),
                     type_of_val(
-                        &extract_req_name::<CreateRequest<FunctionParam, ExecutionRequest>, _>,
+                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_data::<
+                            ExecutionRequest,
+                        >,
                     ),
                     type_of_val(&With::<RequestContext>::extract::<AtTime>),
                     type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
@@ -224,9 +227,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_execute(db: DbPool) -> Result<(), TdError> {
-        let admin_id = UserId::from(Id::try_from(&admin_user(&db).await)?);
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &admin_id).await;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let create = FunctionRegister::builder()
             .try_name("function_1")?

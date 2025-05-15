@@ -31,7 +31,7 @@ impl<T: WorkerMessageQueue> ScheduleCommitService<T> {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, message_queue: Arc<T>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, message_queue: Arc<T>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 SrvCtxProvider::new(message_queue),
@@ -46,7 +46,7 @@ impl<T: WorkerMessageQueue> ScheduleCommitService<T> {
     // - DaoQueries
     // - T(MessageQueue)
     l! {
-        commit() -> TdError {
+        commit() {
             layers!(
                 from_fn(unlock_worker_messages::<DaoQueries, T>),
             )

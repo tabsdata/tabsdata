@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::common::layers::extractor::extract_req_dto;
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
@@ -11,9 +10,9 @@ use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-use td_objects::tower_service::extractor::{extract_req_context, extract_req_name};
 use td_objects::tower_service::from::{
-    BuildService, ExtractService, TryIntoService, UpdateService, With,
+    BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
+    UpdateService, With,
 };
 use td_objects::tower_service::sql::{
     By, SqlSelectIdOrNameService, SqlSelectService, SqlUpdateService,
@@ -41,17 +40,17 @@ impl UpdateRoleService {
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) -> TdError {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
                 SrvCtxProvider::new(queries),
                 TransactionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
 
-                from_fn(extract_req_context::<UpdateRequest<RoleParam, RoleUpdate>>),
+                from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>),
                 from_fn(AuthzOn::<System>::set),
                 from_fn(Authz::<SecAdmin>::check),
-                from_fn(extract_req_name::<UpdateRequest<RoleParam, RoleUpdate>, _>),
-                from_fn(extract_req_dto::<UpdateRequest<RoleParam, RoleUpdate>, _>),
+                from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>),
+                from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>),
 
                 from_fn(With::<RoleUpdate>::convert_to::<RoleDBUpdateBuilder, _>),
                 from_fn(With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
@@ -86,12 +85,10 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_update_role() {
-        use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_update_role(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
-        let db = td_database::test_utils::db().await.unwrap();
         let queries = Arc::new(DaoQueries::default());
         let provider = UpdateRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
@@ -100,11 +97,11 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<UpdateRequest<RoleParam, RoleUpdate>, Role>(&[
-            type_of_val(&extract_req_context::<UpdateRequest<RoleParam, RoleUpdate>>),
+            type_of_val(&With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin>::check),
-            type_of_val(&extract_req_name::<UpdateRequest<RoleParam, RoleUpdate>, _>),
-            type_of_val(&extract_req_dto::<UpdateRequest<RoleParam, RoleUpdate>, _>),
+            type_of_val(&With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>),
+            type_of_val(&With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>),
             type_of_val(&With::<RoleUpdate>::convert_to::<RoleDBUpdateBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
             type_of_val(&With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate, _>),
@@ -118,10 +115,8 @@ mod tests {
         ]);
     }
 
-    #[tokio::test]
-    async fn test_update_role() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
+    #[td_test::test(sqlx)]
+    async fn test_update_role(db: DbPool) -> Result<(), TdError> {
         let _role = seed_role(
             &db,
             RoleName::try_from("joaquin")?,
