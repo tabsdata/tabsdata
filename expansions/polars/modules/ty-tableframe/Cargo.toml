@@ -64,4 +64,4 @@ pyo3-polars = { workspace = true, features = ["derive"] }
 openssl = { workspace = true, features = ["vendored"] }
 
 [patch.crates-io]
-zip = { git = "https://github.com/zip-rs/zip2", tag = "v2.4.2" }
+zip = { git = "https://github.com/zip-rs/zip2", tag = "v2.6.1" }
