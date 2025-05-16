@@ -68,6 +68,7 @@ te-execution = { workspace = true }
 argon2 = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
+bytes = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
 getset = { workspace = true }

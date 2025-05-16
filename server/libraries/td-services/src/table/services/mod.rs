@@ -3,6 +3,84 @@
 //
 
 pub mod delete;
+mod download;
+pub mod list;
+mod list_data_versions;
+mod sample;
+mod schema;
+
+use crate::table::services::download::TableDownloadService;
+use crate::table::services::list::TableListService;
+use crate::table::services::list_data_versions::TableListDataVersionsService;
+use crate::table::services::sample::{BoxedSyncStream, TableSampleService};
+use crate::table::services::schema::TableSchemaService;
+use std::sync::Arc;
+use td_authz::AuthzContext;
+use td_database::sql::DbPool;
+use td_error::TdError;
+use td_objects::crudl::{ListRequest, ListResponse, ReadRequest};
+use td_objects::types::table::{
+    CollectionAtName, Table, TableAtName, TableDataVersion, TableSampleAtName, TableSchema,
+};
+use td_storage::{SPath, Storage};
+use td_tower::service_provider::TdBoxService;
+
+pub struct TableServices {
+    list_table: TableListService,
+    list_table_data_versions: TableListDataVersionsService,
+    table_schema: TableSchemaService,
+    table_download: TableDownloadService,
+    table_sample: TableSampleService,
+}
+
+impl TableServices {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) -> Self {
+        Self {
+            list_table: TableListService::new(db.clone(), authz_context.clone()),
+            list_table_data_versions: TableListDataVersionsService::new(
+                db.clone(),
+                authz_context.clone(),
+            ),
+            table_schema: TableSchemaService::new(db.clone(), authz_context.clone()),
+            table_download: TableDownloadService::new(db.clone(), authz_context.clone()),
+            table_sample: TableSampleService::new(
+                db.clone(),
+                authz_context.clone(),
+                storage.clone(),
+            ),
+        }
+    }
+
+    pub async fn list_table_service(
+        &self,
+    ) -> TdBoxService<ListRequest<CollectionAtName>, ListResponse<Table>, TdError> {
+        self.list_table.service().await
+    }
+
+    pub async fn list_table_data_versions_service(
+        &self,
+    ) -> TdBoxService<ListRequest<TableAtName>, ListResponse<TableDataVersion>, TdError> {
+        self.list_table_data_versions.service().await
+    }
+
+    pub async fn table_schema_service(
+        &self,
+    ) -> TdBoxService<ReadRequest<TableAtName>, TableSchema, TdError> {
+        self.table_schema.service().await
+    }
+
+    pub async fn table_download_service(
+        &self,
+    ) -> TdBoxService<ReadRequest<TableAtName>, SPath, TdError> {
+        self.table_download.service().await
+    }
+
+    pub async fn table_sample_service(
+        &self,
+    ) -> TdBoxService<ReadRequest<TableSampleAtName>, BoxedSyncStream, TdError> {
+        self.table_sample.service().await
+    }
+}
 
 #[cfg(test)]
 pub(crate) mod tests {

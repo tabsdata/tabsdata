@@ -3,9 +3,9 @@
 //
 
 use crate::types::basic::{
-    CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId, FunctionVersionIdName,
-    InterCollectionPermissionIdName, PermissionIdName, RoleIdName, TableIdName, TransactionIdName,
-    UserIdName,
+    AtMulti, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
+    FunctionVersionIdName, InterCollectionPermissionIdName, PermissionIdName, RoleIdName,
+    SampleLen, SampleOffset, TableIdName, TransactionIdName, UserIdName,
 };
 use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
 use constcat::concat;
@@ -365,7 +365,8 @@ pub const FUNCTION_GET: &str = url!(FUNCTION);
 pub const FUNCTION_DELETE: &str = url!(FUNCTION);
 pub const FUNCTION_LIST: &str = url!(FUNCTIONS);
 pub const FUNCTION_UPDATE: &str = url!(FUNCTION);
-pub const FUNCTION_UPLOAD: &str = url!(FUNCTION, "/upload");
+pub const FUNCTION_UPLOAD: &str = url!(COLLECTION, "/function-bundle-upload");
+
 pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
 pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
 
@@ -383,6 +384,23 @@ pub struct FunctionVersionParam {
 
 pub const FUNCTION_VERSION_GET: &str = url!(FUNCTION_VERSION);
 
+#[td_type::QueryParam]
+pub struct AtMultiParam {
+    #[td_type(extractor)]
+    #[serde(default)]
+    at: AtMulti,
+}
+
+#[td_type::QueryParam]
+pub struct SampleOffsetLenParam {
+    #[td_type(extractor)]
+    #[serde(default)]
+    offset: SampleOffset,
+    #[td_type(extractor)]
+    #[serde(default)]
+    len: SampleLen,
+}
+
 // Tables
 pub const TABLES: &str = url!(COLLECTION, "/tables");
 pub const TABLE: &str = url!(TABLES, "/{table}");
@@ -395,11 +413,13 @@ pub struct TableParam {
     table: TableIdName,
 }
 
-pub const TABLES_LIST: &str = TABLES;
-pub const TABLE_DELETE: &str = TABLE;
-pub const TABLE_SCHEMA: &str = concat!(TABLE, "/schema");
-pub const TABLE_SAMPLE: &str = concat!(TABLE, "/sample");
-pub const TABLE_DATA: &str = concat!(TABLE, "/data");
+pub const LIST_TABLES: &str = url!(TABLES);
+pub const LIST_TABLE_DATA_VERSIONS: &str = url!(TABLE, "/data-versions");
+pub const SCHEMA_TABLE: &str = url!(TABLE, "/schema");
+pub const SAMPLE_TABLE: &str = url!(TABLE, "/sample");
+pub const DOWNLOAD_TABLE: &str = url!(TABLE, "/download");
+
+pub const TABLE_DELETE: &str = url!(TABLE);
 
 // Executions
 pub const EXECUTIONS: &str = url!(COLLECTION, "/executions");

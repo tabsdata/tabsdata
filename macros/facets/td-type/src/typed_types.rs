@@ -738,6 +738,14 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
             }
         }
 
+        impl TryFrom<&String> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: &String) -> Result<Self, Self::Error> {
+                let val = td_common::id::Id::try_from(val)?;
+                #name::parse(val)
+            }
+        }
+
         impl TryFrom<&str> for #name {
             type Error = td_error::TdError;
             fn try_from(val: &str) -> Result<Self, Self::Error> {
@@ -821,10 +829,20 @@ pub fn typed_timestamp(
         }
     };
 
+    let error_name = format_ident!("{}Error", name);
+
     let expanded = quote! {
         #(#attrs)*
         #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
         pub struct #name(chrono::DateTime<chrono::Utc>);
+
+        #[td_error::td_error]
+        pub enum #error_name {
+            #[error("Value '{0}' is not an integer, cannot convert to timestamp")]
+            NotAnInteger(String) = 0,
+            #[error("Value '{0}' is not a timestamp")]
+            NotATimestamp(i64) = 1,
+        }
 
         impl Default for #name {
             fn default() -> Self {
@@ -840,6 +858,10 @@ pub fn typed_timestamp(
             fn parse(val: impl Into<chrono::DateTime<chrono::Utc>>) -> Result<Self, td_error::TdError> {
                 let val = val.into();
                 Ok(Self(val))
+            }
+
+            pub fn as_str_millis(&self) -> String {
+                self.0.timestamp_millis().to_string()
             }
         }
 
@@ -891,6 +913,30 @@ pub fn typed_timestamp(
             }
         }
 
+        impl TryFrom<String> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: String) -> Result<#name, td_error::TdError> {
+                TryFrom::<&String>::try_from(&val)
+            }
+        }
+
+        impl TryFrom<&String> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: &String) -> Result<#name, td_error::TdError> {
+                TryFrom::<&str>::try_from(val.as_str())
+            }
+        }
+
+        impl TryFrom<&str> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: &str) -> Result<#name, td_error::TdError> {
+                let val = val.parse::<i64>().map_err(|_| #error_name::NotAnInteger(val.to_string()))?;
+                let val = chrono::DateTime::from_timestamp_millis(val)
+                    .ok_or_else(|| #error_name::NotATimestamp(val))?;
+                Ok(#name(val))
+            }
+        }
+
         impl std::fmt::Display for #name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}", self.0)
@@ -902,7 +948,9 @@ pub fn typed_timestamp(
             where
                 D: serde::Deserializer<'de>,
             {
-                let s = chrono::DateTime::<chrono::Utc>::deserialize(deserializer)?;
+                let s = i64::deserialize(deserializer)?;
+                let s = chrono::DateTime::from_timestamp_millis(s)
+                    .ok_or_else(|| serde::de::Error::custom("Invalid timestamp"))?;
                 #name::parse(s).map_err(serde::de::Error::custom)
             }
         }
@@ -912,7 +960,7 @@ pub fn typed_timestamp(
             where
                 S: serde::Serializer,
             {
-                self.0.serialize(serializer)
+                self.0.timestamp_millis().serialize(serializer)
             }
         }
 
@@ -952,7 +1000,7 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
     let ident = &input.ident;
 
     let expanded = quote! {
-        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+        #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
         #[serde(try_from = "String", into = "String")]
         pub struct #ident {
             id: Option<#id>,
@@ -1217,13 +1265,22 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
     expanded
 }
 
-pub fn typed_enum(_args: TokenStream, item: TokenStream) -> TokenStream {
+#[derive(Debug, Default, FromMeta)]
+pub struct TypedEnum {
+    #[darling(default)]
+    skip_serde: bool,
+}
+
+pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_meta!(TypedEnum, args).unwrap();
     let input = parse_macro_input!(item as ItemEnum);
 
     let name = &input.ident;
     let error_name = format_ident!("{}Error", name);
 
-    let expanded = quote! {
+    let skip_serde = args.skip_serde;
+
+    let mut expanded = quote! {
         #[td_apiforge::apiserver_schema]
         #[derive(
             Debug, Clone,
@@ -1250,25 +1307,6 @@ pub fn typed_enum(_args: TokenStream, item: TokenStream) -> TokenStream {
         impl From<&#name> for #name {
             fn from(val: &#name) -> Self {
                 val.clone()
-            }
-        }
-
-        impl<'de> serde::Deserialize<'de> for #name {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: serde::Deserializer<'de>,
-            {
-                let s = String::deserialize(deserializer)?;
-                Self::try_from(s).map_err(serde::de::Error::custom)
-            }
-        }
-
-        impl serde::Serialize for #name {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: serde::Serializer,
-            {
-                self.to_string().serialize(serializer)
             }
         }
 
@@ -1319,6 +1357,32 @@ pub fn typed_enum(_args: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     };
+
+    if !skip_serde {
+        expanded = quote! {
+            #expanded
+
+            impl<'de> serde::Deserialize<'de> for #name {
+                    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                    where
+                    D: serde::Deserializer<'de>,
+                {
+                    let s = String::deserialize(deserializer)?;
+                    Self::try_from(s).map_err(serde::de::Error::custom)
+                }
+            }
+
+            impl serde::Serialize for #name {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                S: serde::Serializer,
+                {
+                self.to_string().serialize(serializer)
+                }
+            }
+
+        }
+    }
 
     expanded.into()
 }

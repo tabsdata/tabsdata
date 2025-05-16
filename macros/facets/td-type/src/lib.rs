@@ -59,6 +59,12 @@ pub fn UrlParam(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+#[allow(non_snake_case)]
+pub fn QueryParam(args: TokenStream, item: TokenStream) -> TokenStream {
+    url::url_param(args, item)
+}
+
+#[proc_macro_attribute]
 pub fn typed(args: TokenStream, item: TokenStream) -> TokenStream {
     typed_types::typed_basic(args, item)
 }

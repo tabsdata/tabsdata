@@ -48,6 +48,7 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
 
     // Extract the type of the `Json` request body from the function signature
     let request_body = extract_type_in_generic_argument(&input, "Json");
+    let request_body = request_body.first();
 
     // Extract the Multipart type from the function signature
     let has_multipart = has_type(&input, "Multipart");
@@ -71,23 +72,23 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
         tag = #tag,
     };
 
-    if query_params.is_some() || path_params.is_some() {
-        let mut params = quote! {};
+    let mut params = quote! {};
 
-        if let Some(path_params) = path_params {
-            params = quote! {
-                #params
-                #path_params,
-            };
-        }
+    for path_param in path_params.iter() {
+        params = quote! {
+            #params
+            #path_param,
+        };
+    }
 
-        if let Some(query_params) = query_params {
-            params = quote! {
-                #params
-                #query_params,
-            };
-        }
+    for query_param in query_params.iter() {
+        params = quote! {
+            #params
+            #query_param,
+        };
+    }
 
+    if !query_params.is_empty() || !path_params.is_empty() {
         utoipa_attr = quote! {
             #utoipa_attr
             params(#params),
@@ -158,17 +159,21 @@ fn has_type(input: &ItemFn, method_type: &str) -> bool {
     })
 }
 /// Extracts the type of the generic argument in the arguments of a given type signature.
-fn extract_type_in_generic_argument(input: &ItemFn, generic_attribute: &str) -> Option<Ident> {
-    input.sig.inputs.iter().find_map(|arg| {
+fn extract_type_in_generic_argument(input: &ItemFn, generic_attribute: &str) -> Vec<Ident> {
+    let mut vec = Vec::new();
+    input.sig.inputs.iter().for_each(|arg| {
         if let FnArg::Typed(pat_type) = arg {
             if let Type::Path(type_path) = &*pat_type.ty {
                 if has_generic_attribute(&type_path.path, generic_attribute) {
-                    return extract_first_generic_argument(&type_path.path);
+                    let type_ = extract_first_generic_argument(&type_path.path);
+                    if let Some(type_) = type_ {
+                        vec.push(type_);
+                    }
                 }
             }
         }
-        None
-    })
+    });
+    vec
 }
 
 /// Checks if the path contains the specified generic attribute.

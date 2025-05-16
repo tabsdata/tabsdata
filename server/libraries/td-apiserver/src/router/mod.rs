@@ -44,6 +44,7 @@ mod roles;
 pub mod scheduler_server;
 mod server_status;
 mod status;
+mod tables;
 mod user_roles;
 mod users;
 
@@ -72,6 +73,7 @@ use td_services::function::services::FunctionServices;
 use td_services::inter_coll_permission::services::InterCollectionPermissionServices;
 use td_services::permission::services::PermissionServices;
 use td_services::role::services::RoleServices;
+use td_services::table::services::TableServices;
 use td_services::user_role::services::UserRoleServices;
 use td_services::users::service::UserServices;
 use td_storage::Storage;
@@ -87,6 +89,7 @@ pub struct ApiServerInstance {
 
 pub mod state {
     use super::*;
+    use td_services::table::services::TableServices;
 
     pub type Auth = Arc<AuthServices>;
     pub type Collections = Arc<CollectionServices>;
@@ -96,6 +99,7 @@ pub mod state {
     pub type InterCollectionPermissions = Arc<InterCollectionPermissionServices>;
     pub type Roles = Arc<RoleServices>;
     pub type Status = Arc<StatusLogic>;
+    pub type Tables = Arc<TableServices>;
     pub type Users = Arc<UserServices>;
     pub type UserRoles = Arc<UserRoleServices>;
 
@@ -135,9 +139,9 @@ impl ApiServerInstance {
         Arc::new(StatusLogic::new(self.db.clone()))
     }
 
-    // fn storage_state(&self) -> state::StorageRef {
-    //     self.storage.clone()
-    // }
+    fn storage_state(&self) -> state::StorageRef {
+        self.storage.clone()
+    }
 
     fn users_state(&self) -> state::Users {
         Arc::new(UserServices::new(
@@ -194,6 +198,14 @@ impl ApiServerInstance {
         TimeoutService::new(Duration::seconds(*self.config.request_timeout()))
     }
 
+    fn table_state(&self) -> state::Tables {
+        Arc::new(TableServices::new(
+            self.db.clone(),
+            self.authz_context.clone(),
+            self.storage.clone(),
+        ))
+    }
+
     pub async fn build(&self) -> ApiServer {
         apiserver! {
             apiserver {
@@ -227,7 +239,7 @@ impl ApiServerInstance {
                     collections => { state ( self.collection_state() ) },
                     functions => { state ( self.function_state() ) },
                     execution => { state ( self.execution_state() ) },
-                    // data => { state ( self.function_state(), self.storage_state() ) },
+                    tables => { state ( self.table_state(), self.storage_state() ) },
                 }
                 .layer => from_fn_with_state(self.auth_state(), authorization_layer),
 

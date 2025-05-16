@@ -1,0 +1,61 @@
+//
+// Copyright 2025. Tabs Data Inc.
+//
+
+use crate::router;
+use crate::router::state::{StorageRef, Tables};
+use crate::router::tables::TABLES_TAG;
+use crate::status::error_status::GetErrorStatus;
+use axum::body::Body;
+use axum::extract::{Path, Query, State};
+use axum::response::IntoResponse;
+use axum::Extension;
+#[allow(unused_imports)] // needed for response macro but rustc warns as unused
+use serde_json::json;
+use td_apiforge::{apiserver_path, apiserver_schema};
+use td_error::TdError;
+use td_objects::crudl::RequestContext;
+use td_objects::rest_urls::{AtMultiParam, TableParam, DOWNLOAD_TABLE};
+use td_objects::types::table::TableAtName;
+use tower::ServiceExt;
+use utoipa::IntoResponses;
+
+router! {
+    state => { Tables, StorageRef },
+    routes => { download }
+}
+
+/// This struct is just used to document ParquetFile in the OpenAPI schema.
+/// The server is just returning a stream of bytes, so we need to specify the content type.
+#[allow(dead_code)]
+#[apiserver_schema]
+#[derive(IntoResponses)]
+#[response(
+    status = 200,
+    description = "OK",
+    example = json!([]),
+    content_type = "application/vnd.apache.parquet"
+)]
+pub struct ParquetFile(Vec<u8>);
+
+#[apiserver_path(method = get, path = DOWNLOAD_TABLE, tag = TABLES_TAG, override_response = ParquetFile)]
+#[doc = "Download a table as a parquet file"]
+pub async fn download(
+    State((tables, storage)): State<(Tables, StorageRef)>,
+    Extension(context): Extension<RequestContext>,
+    Path(table_param): Path<TableParam>,
+    Query(at_param): Query<AtMultiParam>,
+) -> Result<impl IntoResponse, GetErrorStatus> {
+    let name = TableAtName::new(table_param, at_param);
+    let request = context.read(name);
+
+    let path = tables
+        .table_download_service()
+        .await
+        .oneshot(request)
+        .await?;
+
+    let stream = storage.read_stream(&path).await.map_err(TdError::from)?;
+
+    Ok(Body::from_stream(stream))
+}

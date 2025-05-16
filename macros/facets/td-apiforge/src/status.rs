@@ -161,7 +161,7 @@ macro_rules! ctx_macro_gen {
 
             $(
                 $(
-                    let type_name = format_ident!("{}Indirection{}", name.to_string(), count.to_string());
+                    let type_name = format_ident!("{}Indirection{}", struct_name.to_string(), count.to_string());
                     let indirection = quote! { $indirection };
                     indirections.extend(quote! {
                         #[td_concrete::concrete]

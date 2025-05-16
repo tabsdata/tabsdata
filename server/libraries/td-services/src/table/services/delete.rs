@@ -7,18 +7,21 @@ use crate::table::layers::delete::{
     build_frozen_function_versions_dependencies, update_frozen_functions,
 };
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::DeleteRequest;
+use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::TableParam;
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{
     insert, insert_vec, By, SqlDeleteService, SqlSelectAllService, SqlSelectIdOrNameService,
     SqlSelectService,
 };
 use td_objects::types::basic::{
-    CollectionIdName, CollectionName, FunctionVersionId, TableId, TableIdName, TableVersionId,
+    CollectionId, CollectionIdName, CollectionName, FunctionVersionId, TableId, TableIdName,
+    TableVersionId,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::DependencyDB;
@@ -30,25 +33,27 @@ use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
 
-pub struct DeleteTableService {
+pub struct TableDeleteService {
     provider: ServiceProvider<DeleteRequest<TableParam>, (), TdError>,
 }
 
-impl DeleteTableService {
-    pub fn new(db: DbPool) -> Self {
+impl TableDeleteService {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                from_fn(With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
-
                 TransactionProvider::new(db),
+                SrvCtxProvider::new(queries),
+                SrvCtxProvider::new(authz_context),
+
+                from_fn(With::<DeleteRequest<TableParam>>::extract::<RequestContext>),
+                from_fn(With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
 
                 // Extract collection and table from request.
                 from_fn(With::<TableParam>::extract::<CollectionIdName>),
@@ -57,6 +62,12 @@ impl DeleteTableService {
                 // Get collection. Extract collection id and name.
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                 from_fn(With::<CollectionDB>::extract::<CollectionName>),
+                from_fn(With::<CollectionDB>::extract::<CollectionId>),
+
+                // check requester has collection permissions
+                from_fn(AuthzOn::<CollectionId>::set),
+                from_fn(Authz::<CollAdmin, CollDev>::check),
+
 
                 // Get table. Extract table id, table version id, function id and function version id.
                 from_fn(combine::<CollectionIdName, TableIdName>),
@@ -119,13 +130,16 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider = DeleteTableService::provider(db, queries);
+        let authz_context = Arc::new(AuthzContext::default());
+
+        let provider = TableDeleteService::provider(db, queries, authz_context);
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
         metadata.assert_service::<DeleteRequest<TableParam>, ()>(&[
+            type_of_val(&With::<DeleteRequest<TableParam>>::extract::<RequestContext>),
             type_of_val(&With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
             // Extract collection and table from request.
             type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
@@ -133,6 +147,10 @@ mod tests {
             // Get collection. Extract collection id and name.
             type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
+            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+            // check requester has collection permissions
+            type_of_val(&AuthzOn::<CollectionId>::set),
+            type_of_val(&Authz::<CollAdmin, CollDev>::check),
             // Get table. Extract table id, table version id, function id and function version id.
             type_of_val(&combine::<CollectionIdName, TableIdName>),
             type_of_val(
@@ -204,7 +222,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
+            RoleId::sys_admin(),
             true,
         )
         .update(
@@ -223,7 +241,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
+            RoleId::sys_admin(),
             true,
         )
         .delete(
@@ -233,7 +251,11 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteTableService::new(db.clone()).service().await;
+        let authz_context = Arc::new(AuthzContext::default());
+
+        let service = TableDeleteService::new(db.clone(), authz_context)
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -302,7 +324,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
+            RoleId::sys_admin(),
             true,
         )
         .update(
@@ -321,7 +343,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::user(),
+            RoleId::sys_admin(),
             true,
         )
         .delete(
@@ -331,7 +353,11 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteTableService::new(db.clone()).service().await;
+        let authz_context = Arc::new(AuthzContext::default());
+
+        let service = TableDeleteService::new(db.clone(), authz_context)
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(

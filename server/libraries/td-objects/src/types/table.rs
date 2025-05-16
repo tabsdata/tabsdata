@@ -3,10 +3,12 @@
 //
 
 use crate::crudl::RequestContext;
+use crate::rest_urls::{AtMultiParam, CollectionParam, SampleOffsetLenParam, TableParam};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, Frozen, FunctionId, FunctionName, FunctionVersionId,
-    Partitioned, Private, TableFunctionParamPos, TableId, TableName, TableStatus, TableVersionId,
-    UserId, UserName,
+    AtMulti, AtTime, CollectionId, CollectionIdName, CollectionName, DataChanged, DataVersionId,
+    ExecutionId, Frozen, FunctionId, FunctionName, FunctionVersionId, Partitioned, Private,
+    SampleLen, SampleOffset, SchemaFieldName, SchemaFieldType, TableFunctionParamPos, TableId,
+    TableIdName, TableName, TableStatus, TableVersionId, TransactionId, UserId, UserName,
 };
 use crate::types::function::{FunctionDB, FunctionVersionDB};
 
@@ -115,4 +117,114 @@ pub struct TableVersionDBWithNames {
     defined_by: UserName,
     collection: CollectionName,
     function: FunctionName,
+}
+
+#[td_type::Dlo]
+pub struct CollectionAtName {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    at: AtMulti,
+}
+
+impl CollectionAtName {
+    pub fn new(collection: CollectionParam, at: AtMultiParam) -> Self {
+        Self {
+            collection: collection.collection().clone(),
+            at: at.at().clone(),
+        }
+    }
+}
+
+#[td_type::Dlo]
+pub struct TableAtName {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    table: TableIdName,
+    #[td_type(extractor)]
+    at: AtMulti,
+}
+
+impl TableAtName {
+    pub fn new(table: TableParam, at: AtMultiParam) -> Self {
+        Self {
+            collection: table.collection().clone(),
+            table: table.table().clone(),
+            at: at.at().clone(),
+        }
+    }
+}
+
+#[td_type::Dlo]
+pub struct TableSampleAtName {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    table: TableIdName,
+    #[td_type(extractor)]
+    at: AtMulti,
+    #[td_type(extractor)]
+    offset: SampleOffset,
+    #[td_type(extractor)]
+    len: SampleLen,
+}
+
+impl TableSampleAtName {
+    pub fn new(table: TableParam, at: AtMultiParam, offset_len: SampleOffsetLenParam) -> Self {
+        Self {
+            collection: table.collection().clone(),
+            table: table.table().clone(),
+            at: at.at().clone(),
+            offset: offset_len.offset().clone(),
+            len: offset_len.len().clone(),
+        }
+    }
+}
+
+#[td_type::Dto(
+    //TODO
+)]
+pub struct Table {
+    id: TableVersionId,
+    name: TableName,
+    collection_id: CollectionId,
+    collection_name: CollectionName,
+    function_id: FunctionId,
+    function_name: FunctionName,
+    last_data_version: DataVersionId,
+    last_data_changed_version: DataVersionId,
+}
+
+#[td_type::Dto(
+    //TODO
+)]
+pub struct TableDataVersion {
+    id: TableVersionId,
+    collection_id: CollectionId,
+    collection_name: CollectionName,
+    table_id: TableId,
+    table_name: TableName,
+    function_id: FunctionId,
+    function_name: FunctionName,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    data_changed: DataChanged,
+    created_at: AtTime,
+}
+
+#[td_type::Dto(
+    //TODO
+)]
+pub struct SchemaField {
+    name: SchemaFieldName,
+    #[serde(rename = "type")]
+    type_: SchemaFieldType,
+}
+
+#[td_type::Dto(
+    //TODO
+)]
+pub struct TableSchema {
+    fields: Vec<SchemaField>,
 }
