@@ -58,20 +58,18 @@ def utils_login(
             username,
             password,
             role=role,
-            credentials_file=os.path.join(
-                ctx.obj["tabsdata_directory"], CONNECTION_FILE
-            ),
+            credentials_file=get_credentials_file_path(ctx),
         )
     except Exception as e:
         raise click.ClickException(f"Failed to login: {e}")
     click.echo("Login successful.")
 
 
-def request_login_information():
-    server_url = click.prompt("Server URL")
-    username = click.prompt("Username")
-    role = click.prompt("Role", default="user")
-    password = click.prompt("Password", hide_input=True)
+def request_login_information(ctx: click.Context):
+    server_url = logical_prompt(ctx, "Server URL")
+    username = logical_prompt(ctx, "Username")
+    password = logical_prompt(ctx, "Password", hide_input=True)
+    role = logical_prompt(ctx, "Role", default_value="user")
     return server_url, username, password, role
 
 
@@ -82,9 +80,7 @@ def initialise_tabsdata_server_connection(ctx: click.Context):
         )
         connection = APIServer(
             credentials.get("url"),
-            credentials_file=os.path.join(
-                ctx.obj["tabsdata_directory"], CONNECTION_FILE
-            ),
+            credentials_file=get_credentials_file_path(ctx),
         )
         connection.refresh_token = credentials.get("refresh_token")
         connection.bearer_token = credentials.get("bearer_token")
@@ -101,7 +97,7 @@ def initialise_tabsdata_server_connection(ctx: click.Context):
 def verify_login_or_prompt(ctx: click.Context):
     if not ctx.obj["tabsdataserver"]:
         click.echo("No credentials found. Please login first.")
-        server_url, username, password, role = request_login_information()
+        server_url, username, password, role = request_login_information(ctx)
         utils_login(ctx, server_url, username, password, role)
         initialise_tabsdata_server_connection(ctx)
 
@@ -216,3 +212,10 @@ def show_dot_file(full_path: str):
         img.show()
     except Exception as e:
         click.echo(f"Failed to open DOT file: {e}")
+
+
+def get_credentials_file_path(ctx: click.Context) -> str:
+    """
+    Get the path to the credentials file.
+    """
+    return os.path.join(ctx.obj["tabsdata_directory"], CONNECTION_FILE)

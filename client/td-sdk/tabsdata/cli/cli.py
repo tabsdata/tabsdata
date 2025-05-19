@@ -10,6 +10,7 @@ import rich_click as click
 from tabsdata.cli.auth_group import auth
 from tabsdata.cli.cli_utils import (
     DEFAULT_TABSDATA_DIRECTORY,
+    get_credentials_file_path,
     initialise_tabsdata_server_connection,
     logical_prompt,
     utils_login,
@@ -192,6 +193,11 @@ def logout(ctx: click.Context):
         click.echo("Logout successful.")
     except Exception as e:
         raise click.ClickException(f"Failed to logout: {e}")
+    finally:
+        try:
+            os.remove(get_credentials_file_path(ctx))
+        except Exception:
+            pass
 
 
 @cli.command()

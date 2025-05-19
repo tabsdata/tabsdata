@@ -21,10 +21,8 @@ from tabsdata.cli.cli_utils import (
 
 
 @click.group()
-@click.pass_context
-def fn(ctx: click.Context):
+def fn():
     """Function management commands"""
-    verify_login_or_prompt(ctx)
 
 
 @fn.command()
@@ -46,6 +44,7 @@ def fn(ctx: click.Context):
 def delete(ctx: click.Context, name: str, collection: str, confirm: str):
     """Delete a function. Currently not supported."""
     raise click.ClickException("Deleting a function is currently not supported.")
+    verify_login_or_prompt(ctx)
     click.echo(f"Deleting function '{name}' in collection '{collection}'")
     click.echo("-" * 10)
     name = name or logical_prompt(ctx, "Name of the function to be deleted")
@@ -83,6 +82,7 @@ def delete(ctx: click.Context, name: str, collection: str, confirm: str):
 @click.pass_context
 def info(ctx: click.Context, name: str, collection: str, show_history: bool):
     """Display a function"""
+    verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be displayed")
     collection = collection or logical_prompt(
         ctx, "Name of the collection to which the function belongs"
@@ -162,6 +162,7 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
 )
 @click.pass_context
 def list(ctx: click.Context, collection: str):
+    verify_login_or_prompt(ctx)
     """List all functions in a collection"""
     collection = collection or logical_prompt(
         ctx, "Name of the collection to which the functions belong"
@@ -247,6 +248,7 @@ def register(
     reuse_frozen: bool,
 ):
     """Registering a new function"""
+    verify_login_or_prompt(ctx)
     description = description or ""
     if local_pkg:
         local_pkg = [element for element in local_pkg]
@@ -298,6 +300,7 @@ def register(
 @click.pass_context
 def trigger(ctx: click.Context, name: str, collection: str, execution_plan_name: str):
     """Trigger a function"""
+    verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be triggered")
     collection = collection or logical_prompt(
         ctx, "Name of the collection to which the function belongs"
@@ -383,6 +386,7 @@ def update(
     reuse_frozen: bool,
 ):
     """Update a function"""
+    verify_login_or_prompt(ctx)
     description = description or ""
     if local_pkg:
         local_pkg = [element for element in local_pkg]

@@ -11,10 +11,8 @@ from tabsdata.cli.cli_utils import logical_prompt, verify_login_or_prompt
 
 
 @click.group()
-@click.pass_context
-def user(ctx: click.Context):
+def user():
     """User management commands"""
-    verify_login_or_prompt(ctx)
 
 
 @user.command()
@@ -37,6 +35,7 @@ def create(
     disabled: bool,
 ):
     """Create a new user"""
+    verify_login_or_prompt(ctx)
     click.echo("Creating a new user")
     click.echo("-" * 10)
     if password is None:
@@ -70,6 +69,7 @@ def create(
 @click.pass_context
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a user by name"""
+    verify_login_or_prompt(ctx)
     click.echo(f"Deleting user: {name}")
     click.echo("-" * 10)
     confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
@@ -89,6 +89,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @click.pass_context
 def info(ctx: click.Context, name: str):
     """Display a user by name"""
+    verify_login_or_prompt(ctx)
     try:
         user = ctx.obj["tabsdataserver"].user_get(name)
 
@@ -112,6 +113,7 @@ def info(ctx: click.Context, name: str):
 @click.pass_context
 def list(ctx: click.Context):
     """List all users"""
+    verify_login_or_prompt(ctx)
     try:
         list_of_users = ctx.obj["tabsdataserver"].users
 
@@ -154,6 +156,7 @@ def update(
     enabled: bool,
 ):
     """Update a user by name"""
+    verify_login_or_prompt(ctx)
     click.echo(f"Updating user: {name}")
     click.echo("-" * 10)
     try:

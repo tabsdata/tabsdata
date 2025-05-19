@@ -11,10 +11,8 @@ from tabsdata.cli.cli_utils import logical_prompt, verify_login_or_prompt
 
 
 @click.group()
-@click.pass_context
-def collection(ctx: click.Context):
+def collection():
     """Collection management commands"""
-    verify_login_or_prompt(ctx)
 
 
 @collection.command()
@@ -27,6 +25,7 @@ def create(
     description: str,
 ):
     """Create a new collection"""
+    verify_login_or_prompt(ctx)
     description = description or ""
     click.echo("Creating a new collection")
     click.echo("-" * 10)
@@ -47,6 +46,7 @@ def create(
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a collection by name. Currently not supported."""
     raise click.ClickException("Deleting a collection is currently not supported.")
+    verify_login_or_prompt(ctx)
     click.echo(f"Deleting collection: {name}")
     click.echo("-" * 10)
     confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
@@ -66,6 +66,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @click.pass_context
 def info(ctx: click.Context, name: str):
     """Display a collection by name"""
+    verify_login_or_prompt(ctx)
     try:
         collection = ctx.obj["tabsdataserver"].collection_get(name)
 
@@ -94,6 +95,7 @@ def info(ctx: click.Context, name: str):
 @click.pass_context
 def list(ctx: click.Context):
     """List all collections"""
+    verify_login_or_prompt(ctx)
     try:
         list_of_collections = ctx.obj["tabsdataserver"].collections
 
@@ -132,6 +134,7 @@ def update(
     description: str,
 ):
     """Update a collection by name"""
+    verify_login_or_prompt(ctx)
     description = description or ""
     click.echo(f"Updating collection: {name}")
     click.echo("-" * 10)

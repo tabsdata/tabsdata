@@ -17,10 +17,8 @@ from tabsdata.cli.cli_utils import (
 
 
 @click.group()
-@click.pass_context
-def table(ctx: click.Context):
+def table():
     """Table management commands"""
-    verify_login_or_prompt(ctx)
 
 
 @table.command()
@@ -78,6 +76,7 @@ def download(
     file: str,
 ):
     """Download the table as a parquet file"""
+    verify_login_or_prompt(ctx)
     file = file or logical_prompt(ctx, "File in which the table will be stored")
     name = name or logical_prompt(ctx, "Name of the table")
     collection = collection or logical_prompt(
@@ -110,6 +109,7 @@ def download(
 @click.pass_context
 def list(ctx: click.Context, collection: str):
     """List all tables in a collection"""
+    verify_login_or_prompt(ctx)
     collection = collection or logical_prompt(
         ctx, "Name of the collection to which the tables belong"
     )
@@ -208,6 +208,7 @@ def sample(
     file=str,
 ):
     """Sample rows from the table"""
+    verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the table")
     collection = collection or logical_prompt(
         ctx, "Name of the collection to which the table belongs"
@@ -276,6 +277,7 @@ def schema(
     ctx: click.Context, collection: str, name: str, commit: str, time: str, version: str
 ):
     """Show table schema"""
+    verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the table")
     collection = collection or logical_prompt(
         ctx, "Name of the collection to which the table belongs"
