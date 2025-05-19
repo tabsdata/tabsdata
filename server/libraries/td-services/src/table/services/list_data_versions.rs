@@ -11,12 +11,12 @@ use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
 };
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::By;
+use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::SqlSelectIdOrNameService;
-use td_objects::types::basic::{CollectionId, CollectionIdName};
+use td_objects::tower_service::sql::{By, SqlListService};
+use td_objects::types::basic::{CollectionId, CollectionIdName, TableIdName, TableVersionId};
 use td_objects::types::collection::CollectionDB;
-use td_objects::types::table::{TableAtName, TableDataVersion};
+use td_objects::types::table::{TableAtName, TableDataVersion, TableVersionDB};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
@@ -46,9 +46,8 @@ impl TableListDataVersionsService {
                 from_fn(With::<ListRequest<TableAtName>>::extract::<RequestContext>),
                 from_fn(With::<ListRequest<TableAtName>>::extract_name::<TableAtName>),
 
-                from_fn(With::<TableAtName>::extract::<CollectionIdName>),
-
                 // find collection ID
+                from_fn(With::<TableAtName>::extract::<CollectionIdName>),
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                 from_fn(With::<CollectionDB>::extract::<CollectionId>),
 
@@ -56,7 +55,14 @@ impl TableListDataVersionsService {
                 from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
 
-                //TODO
+                // find table ID
+                from_fn(With::<TableAtName>::extract::<TableIdName>),
+                from_fn(combine::<CollectionIdName, TableIdName>),
+                from_fn(By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableVersionDB>),
+                from_fn(With::<TableVersionDB>::extract::<TableVersionId>),
+
+                // TODO At is not yet used (using current time for now)
+                from_fn(By::<TableVersionId>::list::<TableAtName, DaoQueries, TableDataVersion>),
             ))
         }
     }

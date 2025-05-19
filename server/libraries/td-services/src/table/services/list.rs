@@ -12,8 +12,8 @@ use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
 };
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::By;
 use td_objects::tower_service::sql::SqlSelectIdOrNameService;
+use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::table::{CollectionAtName, Table};
@@ -56,7 +56,9 @@ impl TableListService {
                 from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
 
-                //TODO
+                // TODO At is not yet used (using current time for now)
+                // Note this works because TableVersionDBWithNames is a Versioned Dao
+                from_fn(By::<CollectionId>::list_versions::<CollectionAtName, DaoQueries, Table>),
             ))
         }
     }

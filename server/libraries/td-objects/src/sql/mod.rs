@@ -15,8 +15,10 @@ pub mod list;
 pub mod recursive;
 
 use crate::crudl::ListParams;
+use crate::sql::cte::LATEST_VERSIONS_CTE;
+use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
 use crate::sql::list::{ListError, ListQueryParams, Order, Pagination};
-use crate::types::{DataAccessObject, ListQuery, SqlEntity};
+use crate::types::{DataAccessObject, ListQuery, PartitionBy, SqlEntity, VersionedAt};
 use std::ops::Deref;
 use td_error::td_error;
 use tracing::trace;
@@ -230,13 +232,38 @@ macro_rules! impl_find_by {
 all_the_tuples!(impl_find_by);
 
 pub trait ListBy<'a, E> {
-    fn list_by<T: ListQuery + 'a>(
+    fn list_by<T>(
         &self,
         list_params: &ListParams,
         e: &'a E,
-    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>;
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+    where
+        T: ListQuery + 'a;
+
+    fn list_by_at<T>(
+        &self,
+        list_params: &ListParams,
+        natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
+        condition: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+        e: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+    where
+        T: ListQuery + 'a,
+        T::Dao: VersionedAt;
+
+    fn list_versions_by_at<T>(
+        &self,
+        list_params: &ListParams,
+        natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
+        status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+        e: &'a E,
+    ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+    where
+        T: ListQuery + 'a,
+        T::Dao: PartitionBy + VersionedAt;
 }
 
+// TODO remove duplicate code and tests for versions
 macro_rules! impl_list_by {
     (
         [$($E:ident),*]
@@ -247,11 +274,14 @@ macro_rules! impl_list_by {
             Q: Deref<Target = dyn Queries>,
             $($E: SqlEntity),*
         {
-            fn list_by<T: ListQuery + 'a>(
+            fn list_by<T>(
                 &self,
                 list_params: &ListParams,
                 ($($E),*): &'a ($(&'a $E),*),
-            ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
+            ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+            where
+                T: ListQuery + 'a,
+            {
                 let query_params = ListQueryParams::<T>::try_from(list_params)?;
 
                 let table = T::list_on();
@@ -260,102 +290,204 @@ macro_rules! impl_list_by {
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
 
                 let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
-                query_params
-                    .conditions() // And
-                    .conditions() // Or
-                    .into_iter()
-                    .for_each(|or| {
-                        if first {
-                            query_builder.push(" WHERE ");
-                        } else {
-                            query_builder.push(" AND ");
-                        }
-                        first = false;
+                first = query_params_where(first, query_params, &mut query_builder);
 
-                        query_builder.push("(");
-                        let mut or_separated = query_builder.separated(" OR ");
-                        for cond in or.conditions() {
-                            or_separated.push(format!("{} {} ", cond.field(), cond.operator()));
-                            let value = cond.value().to_owned();
-                            or_separated.push_bind_unseparated(value);
-                        }
-                        query_builder.push(")");
-                    });
+                trace!("list_{}: sql: {}", table, query_builder.sql());
+                Ok(query_builder)
+            }
 
-                let natural_order = query_params.natural_order();
-                if let Some(pagination) = query_params.pagination() {
+            fn list_by_at<T>(
+                &self,
+                list_params: &ListParams,
+                natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
+                status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+                ($($E),*): &'a ($(&'a $E),*),
+            ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+            where
+                T: ListQuery + 'a,
+                T::Dao: VersionedAt,
+            {
+                let query_params = ListQueryParams::<T>::try_from(list_params)?;
+
+                let table = T::list_on();
+                let fields = T::fields();
+                let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
+                let mut query_builder = sqlx::QueryBuilder::new(sql);
+
+                let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
+
+                if let Some(natural_order_by) = natural_order_by {
                     if first {
                         query_builder.push(" WHERE ");
                     } else {
                         query_builder.push(" AND ");
                     }
-                    query_builder.push("(");
+                    first = false;
 
-                    let pagination_field = query_params
-                        .order()
-                        .as_ref()
-                        .unwrap_or(query_params.natural_order());
-                    let range_operator = match (pagination_field, pagination) {
-                        (Order::Asc(_), Pagination::Previous(_, _)) => "<",
-                        (Order::Asc(_), Pagination::Next(_, _)) => ">",
-                        (Order::Desc(_), Pagination::Previous(_, _)) => ">",
-                        (Order::Desc(_), Pagination::Next(_, _)) => "<",
-                    };
+                    query_builder.push(format!(
+                        "{} <= ",
+                        <T::Dao as VersionedAt>::order_by()
+                    ));
+                    query_builder.push_bind(natural_order_by.value());
+                }
 
-                    if pagination_field != natural_order {
-                        // field OP value
-                        query_builder.push(format!("{} {} ", pagination_field.field(), range_operator));
-                        query_builder.push_bind(pagination.column_value().to_owned());
-
-                        query_builder.push(" OR ");
-                        query_builder.push("(");
-
-                        // field = value
-                        query_builder.push(format!("{} = ", pagination_field.field()));
-                        query_builder.push_bind(pagination.column_value().to_owned());
-
-                        // natural_field OP value
-                        query_builder.push(format!(
-                            " AND {} {} ",
-                            natural_order.field(),
-                            range_operator
-                        ));
-                        query_builder.push_bind(pagination.natural_id().to_owned());
-
-                        query_builder.push(")");
+                if let Some(status) = status {
+                    if first {
+                        query_builder.push(" WHERE ");
                     } else {
-                        // natural_field OP value
-                        query_builder.push(format!("{} {} ", natural_order.field(), range_operator));
-                        query_builder.push_bind(pagination.natural_id().to_owned());
+                        query_builder.push(" AND ");
+                    }
+                    first = false;
+
+                    query_builder.push("(");
+                    let mut separated = query_builder.separated(" OR ");
+                    for status in status {
+                        separated.push(format!("{} = ", T::Dao::condition_by()));
+                        separated.push_bind_unseparated(status.value());
                     }
                     query_builder.push(")");
                 }
 
-                query_builder.push(" ORDER BY ");
-                let mut separated = query_builder.separated(", ");
+                first = query_params_where(first, query_params, &mut query_builder);
 
-                if let Some(order) = query_params.order() {
-                    separated.push(format!("{} {}", order.field(), order.direction()));
-                }
+                trace!("list_at_{}: sql: {}", table, query_builder.sql());
+                Ok(query_builder)
+            }
 
-                separated.push(format!(
-                    "{} {}",
-                    natural_order.field(),
-                    natural_order.direction()
-                ));
+            fn list_versions_by_at<T>(
+                &self,
+                list_params: &ListParams,
+                natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
+                status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+                ($($E),*): &'a ($(&'a $E),*),
+            ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
+            where
+                T: ListQuery + 'a,
+                T::Dao: PartitionBy + VersionedAt,
+            {
+                let mut query_builder = sqlx::QueryBuilder::default();
 
-                query_builder
-                    .push(" LIMIT ")
-                    .push_bind(*query_params.len() as i64);
-                query_builder
-                    .push(" OFFSET ")
-                    .push_bind(*query_params.offset() as i64);
+                // Build CTEs to find needed data (note natural order is needed to find the latest version, before listing)
+                query_builder.push("WITH ");
+                ranked_versions_at::<T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder, natural_order_by);
+                select_ranked_versions_at::<T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder, status);
 
-                trace!("list_{}: sql: {}", table, query_builder.sql());
+                let query_params = ListQueryParams::<T>::try_from(list_params)?;
+
+                let fields = T::fields();
+                let select = format!("SELECT {} FROM {}", fields.join(", "), LATEST_VERSIONS_CTE);
+                query_builder.push(select);
+
+                let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
+                first = query_params_where(first, query_params, &mut query_builder);
+
+                trace!("list_versions_at_{}: sql: {}", T::list_on(), query_builder.sql());
                 Ok(query_builder)
             }
         }
     };
+}
+
+fn query_params_where<T>(
+    first: bool,
+    query_params: ListQueryParams<T>,
+    query_builder: &mut sqlx::QueryBuilder<'_, sqlx::Sqlite>,
+) -> bool
+where
+    T: ListQuery,
+{
+    let mut first = first;
+    query_params
+        .conditions() // And
+        .conditions() // Or
+        .into_iter()
+        .for_each(|or| {
+            if first {
+                query_builder.push(" WHERE ");
+            } else {
+                query_builder.push(" AND ");
+            }
+            first = false;
+
+            query_builder.push("(");
+            let mut or_separated = query_builder.separated(" OR ");
+            for cond in or.conditions() {
+                or_separated.push(format!("{} {} ", cond.field(), cond.operator()));
+                let value = cond.value().to_owned();
+                or_separated.push_bind_unseparated(value);
+            }
+            query_builder.push(")");
+        });
+
+    let natural_order = query_params.natural_order();
+    if let Some(pagination) = query_params.pagination() {
+        if first {
+            query_builder.push(" WHERE ");
+        } else {
+            query_builder.push(" AND ");
+        }
+        first = false;
+
+        query_builder.push("(");
+
+        let pagination_field = query_params
+            .order()
+            .as_ref()
+            .unwrap_or(query_params.natural_order());
+        let range_operator = match (pagination_field, pagination) {
+            (Order::Asc(_), Pagination::Previous(_, _)) => "<",
+            (Order::Asc(_), Pagination::Next(_, _)) => ">",
+            (Order::Desc(_), Pagination::Previous(_, _)) => ">",
+            (Order::Desc(_), Pagination::Next(_, _)) => "<",
+        };
+
+        if pagination_field != natural_order {
+            // field OP value
+            query_builder.push(format!("{} {} ", pagination_field.field(), range_operator));
+            query_builder.push_bind(pagination.column_value().to_owned());
+
+            query_builder.push(" OR ");
+            query_builder.push("(");
+
+            // field = value
+            query_builder.push(format!("{} = ", pagination_field.field()));
+            query_builder.push_bind(pagination.column_value().to_owned());
+
+            // natural_field OP value
+            query_builder.push(format!(
+                " AND {} {} ",
+                natural_order.field(),
+                range_operator
+            ));
+            query_builder.push_bind(pagination.natural_id().to_owned());
+
+            query_builder.push(")");
+        } else {
+            // natural_field OP value
+            query_builder.push(format!("{} {} ", natural_order.field(), range_operator));
+            query_builder.push_bind(pagination.natural_id().to_owned());
+        }
+        query_builder.push(")");
+    }
+
+    query_builder.push(" ORDER BY ");
+    let mut separated = query_builder.separated(", ");
+
+    if let Some(order) = query_params.order() {
+        separated.push(format!("{} {}", order.field(), order.direction()));
+    }
+
+    separated.push(format!(
+        "{} {}",
+        natural_order.field(),
+        natural_order.direction()
+    ));
+
+    query_builder
+        .push(" LIMIT ")
+        .push_bind(*query_params.len() as i64);
+
+    first
 }
 
 all_the_tuples!(impl_list_by);
@@ -939,10 +1071,10 @@ mod tests {
             let query_str = query.sql();
             assert!(
                 query_str ==
-                "SELECT id, name, modified_on FROM test_table WHERE name = ? AND (modified_on > ?) AND (name LIKE ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE name = ? AND (modified_on > ?) AND (name LIKE ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"
                 ||
                 query_str ==
-                "SELECT id, name, modified_on FROM test_table WHERE name = ? AND (name LIKE ?) AND (modified_on > ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE name = ? AND (name LIKE ?) AND (modified_on > ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -970,7 +1102,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -996,7 +1128,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY modified_on DESC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table ORDER BY modified_on DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1028,7 +1160,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY name ASC, modified_on ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table ORDER BY name ASC, modified_on ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1060,7 +1192,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1092,7 +1224,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1124,38 +1256,11 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
             assert_eq!(result, *FIXTURE_DAOS);
-            Ok(())
-        }
-
-        #[td_test::test(sqlx(fixture = "test_list_queries"))]
-        async fn test_dao_list_offset(db: DbPool) -> Result<(), TdError> {
-            #[Dto]
-            #[dto(list(on = TestDao))]
-            #[td_type(builder(try_from = TestDao))]
-            struct TestDto {
-                id: TestId,
-                name: TestName,
-                modified_on: TestModifiedOn,
-            }
-
-            let list_params = ListParamsBuilder::default().offset(3usize).build().unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
-            let query = query_builder.build_query_as();
-
-            let query_str = query.sql();
-            assert_eq!(
-                query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ? OFFSET ?"
-            );
-
-            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
-            assert_eq!(result.len(), 1);
-            assert_eq!(result[0], FIXTURE_DAOS[3]);
             Ok(())
         }
 
@@ -1177,7 +1282,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1208,7 +1313,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id < ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (id < ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1239,7 +1344,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1270,7 +1375,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id < ?) ORDER BY id DESC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (id < ?) ORDER BY id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1301,7 +1406,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) ORDER BY id DESC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) ORDER BY id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1334,7 +1439,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name ASC, id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name ASC, id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1369,7 +1474,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name ASC, id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name ASC, id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1401,7 +1506,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name DESC, id DESC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name DESC, id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1437,7 +1542,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name DESC, id DESC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name DESC, id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1473,9 +1578,9 @@ mod tests {
             let query_str = query.sql();
             assert!(
                 query_str ==
-                "SELECT id, name, modified_on FROM test_table WHERE (name = ? OR name >= ?) AND (id > ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name = ? OR name >= ?) AND (id > ?) ORDER BY id ASC LIMIT ?"
                 || query_str ==
-                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) AND (name = ? OR name >= ?) ORDER BY id ASC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) AND (name = ? OR name >= ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1509,7 +1614,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY name DESC, modified_on DESC LIMIT ? OFFSET ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name = ?) ORDER BY name DESC, modified_on DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();

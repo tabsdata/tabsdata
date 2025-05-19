@@ -2,14 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use lazy_static::lazy_static;
 use std::ops::Deref;
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::{DerefQueries, FindBy, UpdateBy};
 use td_objects::types::basic::{
-    CollectionName, DependencyStatus, FunctionStatus, FunctionVersionId, TableName, TableStatus,
-    TableVersionId,
+    CollectionName, FunctionStatus, FunctionVersionId, TableName, TableStatus, TableVersionId,
 };
 use td_objects::types::dependency::DependencyDB;
 use td_objects::types::function::{FunctionDB, FunctionDBBuilder, FunctionVersionDB};
@@ -17,16 +15,9 @@ use td_objects::types::table::TableVersionDB;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[td_error]
-pub enum DeleteTableError {
+enum DeleteTableError {
     #[error("Table '{0}' exists in collection '{1}' but it is not in frozen state: {2}")]
     TableNotFrozen(TableName, CollectionName, String) = 0,
-}
-
-lazy_static! {
-    static ref ACTIVE_TABLE_STATUS: TableStatus = TableStatus::Active;
-    static ref FROZEN_TABLE_STATUS: TableStatus = TableStatus::Frozen;
-    static ref ACTIVE_FUNCTION_STATUS: FunctionStatus = FunctionStatus::Active;
-    static ref ACTIVE_DEPENDENCY_STATUS: DependencyStatus = DependencyStatus::Active;
 }
 
 pub async fn build_frozen_function_version_table(
@@ -54,10 +45,9 @@ pub async fn build_frozen_function_versions_dependencies<Q: DerefQueries>(
         Vec::new()
     } else {
         // TODO this is not getting chunked. If there are too many we can have issues.
-        let active_status = ACTIVE_FUNCTION_STATUS.deref();
         let function_versions_lookup: Vec<_> = dependencies
             .iter()
-            .map(|d| (d.function_version_id(), active_status))
+            .map(|d| (d.function_version_id(), &FunctionStatus::Active))
             .collect();
         let function_versions_found: Vec<FunctionVersionDB> = queries
             .find_by::<FunctionVersionDB>(&function_versions_lookup)?
@@ -112,7 +102,7 @@ pub async fn build_deleted_table_version(
     Input(function_version): Input<FunctionVersionDB>,
     Input(existing_table_version): Input<TableVersionDB>,
 ) -> Result<TableVersionDB, TdError> {
-    if existing_table_version.status() != FROZEN_TABLE_STATUS.deref() {
+    if !matches!(existing_table_version.status(), TableStatus::Frozen) {
         Err(DeleteTableError::TableNotFrozen(
             existing_table_version.name().clone(),
             collection_name.deref().clone(),

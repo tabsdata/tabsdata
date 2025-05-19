@@ -4,7 +4,7 @@
 
 use crate::crudl::{handle_sql_err, list_response, ListRequest, ListResponse};
 use crate::sql::{DeleteBy, DerefQueries, FindBy, Insert, ListBy, QueryError, SelectBy, UpdateBy};
-use crate::types::{DataAccessObject, IdOrName, ListQuery, SqlEntity};
+use crate::types::{DataAccessObject, IdOrName, ListQuery, PartitionBy, SqlEntity, VersionedAt};
 use async_trait::async_trait;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -564,6 +564,34 @@ pub trait SqlListService<E> {
         N: Send + Sync + Clone,
         Q: DerefQueries,
         T: ListQuery;
+
+    async fn list_at<N, Q, T>(
+        connection: Connection,
+        queries: SrvCtx<Q>,
+        request: Input<ListRequest<N>>,
+        natural_order_by: Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
+        status: Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+        by: Input<E>,
+    ) -> Result<ListResponse<T>, TdError>
+    where
+        N: Send + Sync + Clone,
+        Q: DerefQueries,
+        T: ListQuery,
+        T::Dao: VersionedAt;
+
+    async fn list_versions_at<N, Q, T>(
+        connection: Connection,
+        queries: SrvCtx<Q>,
+        request: Input<ListRequest<N>>,
+        natural_order_by: Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
+        status: Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+        by: Input<E>,
+    ) -> Result<ListResponse<T>, TdError>
+    where
+        N: Send + Sync + Clone,
+        Q: DerefQueries,
+        T: ListQuery,
+        T::Dao: PartitionBy + VersionedAt;
 }
 
 macro_rules! impl_list {
@@ -593,6 +621,92 @@ macro_rules! impl_list {
                 let ($($E),*) = by.deref();
                 let result: Vec<T::Dao> = queries
                     .list_by::<T>(request.list_params(), &($($E),*))?
+                    .build_query_as()
+                    .persistent(true)
+                    .fetch_all(&mut *conn)
+                    .await
+                    .map_err(|e| {
+                        formatted_entity!(T::Dao; $($E),*).map(|(columns, values, table)| {
+                            TdError::from(SqlError::SelectError(columns, values, table, e))
+                        })
+                    })
+                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+                let result = result
+                    .iter()
+                    .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
+
+                Ok(list_response(request.list_params(), result))
+            }
+
+            async fn list_at<N, Q, T>(
+                Connection(connection): Connection,
+                SrvCtx(queries): SrvCtx<Q>,
+                Input(request): Input<ListRequest<N>>,
+                Input(natural_order_by): Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
+                Input(status): Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+                Input(by): Input<($($E),*)>,
+            ) -> Result<ListResponse<T>, TdError>
+            where
+                N: Send + Sync + Clone,
+                Q: DerefQueries,
+                T: ListQuery,
+                T::Dao: VersionedAt,
+            {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
+
+                let ($($E),*) = by.deref();
+                let result: Vec<T::Dao> = queries
+                    .list_by_at::<T>(
+                        request.list_params(),
+                        Some(&*natural_order_by),
+                        Some(&status.iter().collect::<Vec<_>>()[..]),
+                        &($($E),*)
+                    )?
+                    .build_query_as()
+                    .persistent(true)
+                    .fetch_all(&mut *conn)
+                    .await
+                    .map_err(|e| {
+                        formatted_entity!(T::Dao; $($E),*).map(|(columns, values, table)| {
+                            TdError::from(SqlError::SelectError(columns, values, table, e))
+                        })
+                    })
+                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+                let result = result
+                    .iter()
+                    .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
+
+                Ok(list_response(request.list_params(), result))
+            }
+
+            async fn list_versions_at<N, Q, T>(
+                Connection(connection): Connection,
+                SrvCtx(queries): SrvCtx<Q>,
+                Input(request): Input<ListRequest<N>>,
+                Input(natural_order_by): Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
+                Input(status): Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+                Input(by): Input<($($E),*)>,
+            ) -> Result<ListResponse<T>, TdError>
+            where
+                N: Send + Sync + Clone,
+                Q: DerefQueries,
+                T: ListQuery,
+                T::Dao: PartitionBy + VersionedAt,
+            {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
+
+                let ($($E),*) = by.deref();
+                let result: Vec<T::Dao> = queries
+                    .list_versions_by_at::<T>(
+                        request.list_params(),
+                        Some(&*natural_order_by),
+                        Some(&status.iter().collect::<Vec<_>>()[..]),
+                        &($($E),*)
+                    )?
                     .build_query_as()
                     .persistent(true)
                     .fetch_all(&mut *conn)

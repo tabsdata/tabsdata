@@ -9,7 +9,7 @@ use crate::types::{DataAccessObject, PartitionBy, SqlEntity, VersionedAt};
 use std::ops::Deref;
 use tracing::trace;
 
-const LATEST_VERSIONS_CTE: &str = "latest_versions";
+pub const LATEST_VERSIONS_CTE: &str = "latest_versions";
 
 /// Common table expressions (CTEs) used in queries to select versioned views of objects.
 pub trait CteQueries<'a, E> {

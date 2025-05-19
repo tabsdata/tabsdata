@@ -79,6 +79,7 @@ pub struct TableDBWithNames {
 )]
 pub struct TableVersionDB {
     #[builder(default)]
+    #[td_type(extractor)]
     id: TableVersionId,
     #[td_type(extractor, builder(include))]
     collection_id: CollectionId,

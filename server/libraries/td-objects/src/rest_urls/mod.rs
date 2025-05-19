@@ -3,7 +3,7 @@
 //
 
 use crate::types::basic::{
-    AtMulti, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
+    AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
     FunctionVersionIdName, InterCollectionPermissionIdName, PermissionIdName, RoleIdName,
     SampleLen, SampleOffset, TableIdName, TransactionIdName, UserIdName,
 };
@@ -388,7 +388,7 @@ pub const FUNCTION_VERSION_GET: &str = url!(FUNCTION_VERSION);
 pub struct AtMultiParam {
     #[td_type(extractor)]
     #[serde(default)]
-    at: AtMulti,
+    at: AtTime,
 }
 
 #[td_type::QueryParam]
