@@ -124,6 +124,15 @@ FROM table_versions tv
          LEFT JOIN function_versions fv ON tv.function_version_id = fv.id
          LEFT JOIN users u ON tv.defined_by_id = u.id;
 
+CREATE VIEW table_versions__read AS
+SELECT tv.*,
+       tv.collection as collection_name,
+       tv.function   as function_name,
+       tdv.id        as last_data_version
+FROM table_versions__with_names tv
+         LEFT JOIN table_data_versions__with_status tdv on tv.id = tdv.table_version_id
+ORDER BY tdv.triggered_on;
+
 -- Bundles
 
 CREATE TABLE bundles
@@ -434,15 +443,24 @@ WHERE tdv.status NOT IN ('C');
 CREATE VIEW table_data_versions__with_names AS
 SELECT tdv.*,
        c.name                                            as collection,
-       tv.name                                           as name,
        fv.name                                           as function,
 
        IFNULL(u.name, '[' || tdv.triggered_by_id || ']') as triggered_by
 FROM table_data_versions__with_status tdv
          LEFT JOIN collections c ON tdv.collection_id = c.id
-         LEFT JOIN table_versions tv ON tdv.table_version_id = tv.id
          LEFT JOIN function_versions fv ON tdv.function_version_id = fv.id
          LEFT JOIN users u ON tdv.triggered_by_id = u.id;
+
+CREATE VIEW table_data_versions__read AS
+SELECT tdv.*,
+       tdv.collection   as collection_name,
+       tdv.name         as table_name,
+       tdv.function     as function_name,
+       tdv.has_data     as data_changed,
+       tdv.triggered_on as created_at,
+       t.status         as transaction_status
+FROM table_data_versions__with_names tdv
+         LEFT JOIN transactions__with_status t ON tdv.transaction_id = t.id;
 
 -- Partitions  (table & __with_names view)
 

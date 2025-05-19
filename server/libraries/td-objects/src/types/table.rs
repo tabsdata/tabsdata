@@ -212,6 +212,7 @@ pub struct TableVersionDBRead {
 #[dto(list(on = TableVersionDBRead))]
 #[td_type(builder(try_from = TableVersionDBRead))]
 pub struct Table {
+    #[dto(list(pagination_by = "+"))]
     id: TableVersionId,
     #[dto(list(order_by))]
     name: TableName,
@@ -249,6 +250,7 @@ pub struct TableDataVersionDBRead {
 #[dto(list(on = TableDataVersionDBRead))]
 #[td_type(builder(try_from = TableDataVersionDBRead))]
 pub struct TableDataVersion {
+    #[dto(list(pagination_by = "+"))]
     id: TableDataVersionId,
     collection_id: CollectionId,
     collection_name: CollectionName,

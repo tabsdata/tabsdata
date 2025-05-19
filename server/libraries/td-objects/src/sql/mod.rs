@@ -459,13 +459,13 @@ where
                 natural_order.field(),
                 range_operator
             ));
-            query_builder.push_bind(pagination.natural_id().to_owned());
+            query_builder.push_bind(pagination.pagination_id().to_owned());
 
             query_builder.push(")");
         } else {
             // natural_field OP value
             query_builder.push(format!("{} {} ", natural_order.field(), range_operator));
-            query_builder.push_bind(pagination.natural_id().to_owned());
+            query_builder.push_bind(pagination.pagination_id().to_owned());
         }
         query_builder.push(")");
     }
@@ -1042,18 +1042,17 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
         async fn test_dao_list(db: DbPool) -> Result<(), TdError> {
             #[Dto]
-            #[dto(list(on = TestDao, natural_order_by = "modified_on"))]
+            #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
                 id: TestId,
                 #[dto(list(filter, filter_like, order_by))]
                 name: TestName,
-                #[dto(list(filter, order_by))]
+                #[dto(list(filter, pagination_by = "+"))]
                 modified_on: TestModifiedOn,
             }
 
             let list_params = ListParamsBuilder::default()
-                .offset(0usize)
                 .len(4usize)
                 .filter(vec![
                     "modified_on:gt:0".to_string(),
@@ -1090,6 +1089,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 name: TestName,
                 modified_on: TestModifiedOn,
@@ -1113,11 +1113,12 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
         async fn test_dao_list_natural_order_by(db: DbPool) -> Result<(), TdError> {
             #[Dto]
-            #[dto(list(on = TestDao, natural_order_by = "modified_on-"))]
+            #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
                 id: TestId,
                 name: TestName,
+                #[dto(list(pagination_by = "-"))]
                 modified_on: TestModifiedOn,
             }
 
@@ -1141,12 +1142,13 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
         async fn test_dao_list_order_by(db: DbPool) -> Result<(), TdError> {
             #[Dto]
-            #[dto(list(on = TestDao, natural_order_by = "modified_on-"))]
+            #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
                 id: TestId,
                 #[dto(list(order_by))]
                 name: TestName,
+                #[dto(list(pagination_by = "-"))]
                 modified_on: TestModifiedOn,
             }
 
@@ -1176,6 +1178,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 #[dto(list(filter))]
                 name: TestName,
@@ -1208,6 +1211,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 #[dto(list(filter_like))]
                 name: TestName,
@@ -1240,6 +1244,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 #[dto(list(filter_like))]
                 name: TestName,
@@ -1270,6 +1275,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 name: TestName,
                 modified_on: TestModifiedOn,
@@ -1297,6 +1303,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 name: TestName,
                 modified_on: TestModifiedOn,
@@ -1328,6 +1335,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 name: TestName,
                 modified_on: TestModifiedOn,
@@ -1356,9 +1364,10 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
         async fn test_dao_list_pagination_next_desc(db: DbPool) -> Result<(), TdError> {
             #[Dto]
-            #[dto(list(on = TestDao, natural_order_by = "id-"))]
+            #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "-"))]
                 id: TestId,
                 name: TestName,
                 modified_on: TestModifiedOn,
@@ -1387,9 +1396,10 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
         async fn test_dao_list_pagination_previous_desc(db: DbPool) -> Result<(), TdError> {
             #[Dto]
-            #[dto(list(on = TestDao, natural_order_by = "id-"))]
+            #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "-"))]
                 id: TestId,
                 name: TestName,
                 modified_on: TestModifiedOn,
@@ -1421,6 +1431,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 #[dto(list(order_by))]
                 name: TestName,
@@ -1456,6 +1467,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 #[dto(list(order_by))]
                 name: TestName,
@@ -1488,6 +1500,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 #[dto(list(order_by))]
                 name: TestName,
@@ -1524,6 +1537,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
+                #[dto(list(pagination_by = "+"))]
                 id: TestId,
                 #[dto(list(order_by))]
                 name: TestName,
@@ -1557,7 +1571,7 @@ mod tests {
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
-                #[dto(list(filter))]
+                #[dto(list(pagination_by = "+", filter))]
                 id: TestId,
                 #[dto(list(filter))]
                 name: TestName,
@@ -1592,17 +1606,17 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
         async fn test_dao_list_filter_order_by(db: DbPool) -> Result<(), TdError> {
             #[Dto]
-            #[dto(list(on = TestDao, natural_order_by = "modified_on"))]
+            #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
             struct TestDto {
                 id: TestId,
                 #[dto(list(order_by, filter))]
                 name: TestName,
+                #[dto(list(pagination_by = "+"))]
                 modified_on: TestModifiedOn,
             }
 
             let list_params = ListParamsBuilder::default()
-                .offset(0usize)
                 .len(1usize)
                 .filter(vec!["name:eq:C".to_string()])
                 .order_by("name-".to_string())

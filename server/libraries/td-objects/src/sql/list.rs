@@ -481,7 +481,7 @@ mod tests {
         #[dto(list(on = DaoDef))]
         #[td_type(builder(try_from = DaoDef))]
         struct Def {
-            #[dto(list(order_by))]
+            #[dto(list(pagination_by = "+"))]
             #[td_type(builder(field = "id"))]
             order: i64,
             #[dto(list(filter))]

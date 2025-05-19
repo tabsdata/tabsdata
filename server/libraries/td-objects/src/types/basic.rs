@@ -10,7 +10,6 @@ use crate::types::parse::{
 use crate::types::table::TableVersionDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::trigger::TriggerVersionDBWithNames;
-use crate::types::SqlEntity;
 use td_common::id::Id;
 use td_error::TdError;
 use td_security::{

@@ -14,8 +14,11 @@ use td_objects::tower_service::authz::{
 use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::SqlSelectIdOrNameService;
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::basic::{CollectionId, CollectionIdName, TableIdName, TableVersionId};
+use td_objects::types::basic::{
+    AtTime, CollectionId, CollectionIdName, TableIdName, TableVersionId,
+};
 use td_objects::types::collection::CollectionDB;
+use td_objects::types::execution::TransactionStatus;
 use td_objects::types::table::{TableAtName, TableDataVersion, TableVersionDB};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
@@ -61,15 +64,254 @@ impl TableListDataVersionsService {
                 from_fn(By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableVersionDB>),
                 from_fn(With::<TableVersionDB>::extract::<TableVersionId>),
 
-                // TODO At is not yet used (using current time for now)
-                from_fn(By::<TableVersionId>::list::<TableAtName, DaoQueries, TableDataVersion>),
+                // extract attime
+                from_fn(With::<TableAtName>::extract::<AtTime>),
+
+                // list
+                from_fn(Self::transaction_status),
+                from_fn(By::<TableVersionId>::list_at::<TableAtName, DaoQueries, TableDataVersion>),
             ))
         }
+    }
+
+    async fn transaction_status() -> Result<Vec<TransactionStatus>, TdError> {
+        Ok(vec![TransactionStatus::Published])
     }
 
     pub async fn service(
         &self,
     ) -> TdBoxService<ListRequest<TableAtName>, ListResponse<TableDataVersion>, TdError> {
         self.provider.make().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use td_objects::crudl::ListParams;
+    use td_objects::sql::SelectBy;
+    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_execution::seed_execution;
+    use td_objects::test_utils::seed_function2::seed_function;
+    use td_objects::test_utils::seed_function_run::seed_function_run;
+    use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
+    use td_objects::test_utils::seed_transaction2::seed_transaction;
+    use td_objects::types::basic::{
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, RoleId, TableName,
+        TransactionKey, UserId,
+    };
+    use td_objects::types::execution::FunctionRunStatus;
+    use td_objects::types::function::FunctionRegister;
+    use td_tower::ctx_service::RawOneshot;
+
+    #[cfg(feature = "test_tower_metadata")]
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_list_data_versions(db: DbPool) {
+        use td_tower::metadata::{type_of_val, Metadata};
+
+        let queries = Arc::new(DaoQueries::default());
+        let provider =
+            TableListDataVersionsService::provider(db, queries, Arc::new(AuthzContext::default()));
+        let service = provider.make().await;
+
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
+        let metadata = response.get();
+
+        metadata.assert_service::<ListRequest<TableAtName>, ListResponse<TableDataVersion>>(&[
+            type_of_val(&With::<ListRequest<TableAtName>>::extract::<RequestContext>),
+            type_of_val(&With::<ListRequest<TableAtName>>::extract_name::<TableAtName>),
+            // find collection ID
+            type_of_val(&With::<TableAtName>::extract::<CollectionIdName>),
+            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+            // check requester has collection permissions
+            type_of_val(&AuthzOn::<CollectionId>::set),
+            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
+            // find table ID
+            type_of_val(&With::<TableAtName>::extract::<TableIdName>),
+            type_of_val(&combine::<CollectionIdName, TableIdName>),
+            type_of_val(
+                &By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableVersionDB>,
+            ),
+            type_of_val(&With::<TableVersionDB>::extract::<TableVersionId>),
+            // extract attime
+            type_of_val(&With::<TableAtName>::extract::<AtTime>),
+            // list
+            type_of_val(&TableListDataVersionsService::transaction_status),
+            type_of_val(
+                &By::<TableVersionId>::list_at::<TableAtName, DaoQueries, TableDataVersion>,
+            ),
+        ]);
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_list_table_data_versions(db: DbPool) -> Result<(), TdError> {
+        let collection = seed_collection(
+            &db,
+            &CollectionName::try_from("collection")?,
+            &UserId::admin(),
+        )
+        .await;
+
+        let dependencies = None;
+        let triggers = None;
+        let tables = vec![TableName::try_from("table_version")?];
+        let create = FunctionRegister::builder()
+            .try_name("joaquin")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(dependencies)
+            .triggers(triggers)
+            .tables(tables.clone())
+            .try_runtime_values("mock runtime values")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        let (_, function_version) = seed_function(&db, &collection, &create).await;
+        let transaction_key = TransactionKey::try_from("ANY")?;
+
+        // First data_version
+        let t0 = AtTime::now().await;
+
+        let execution = seed_execution(&db, &collection, &function_version).await;
+        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+        let function_run = seed_function_run(
+            &db,
+            &collection,
+            &function_version,
+            &execution,
+            &transaction,
+            &FunctionRunStatus::Done,
+        )
+        .await;
+
+        let t1 = AtTime::now().await;
+
+        let table_version = DaoQueries::default()
+            .select_by::<TableVersionDB>(&(collection.id(), &tables[0]))?
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .unwrap();
+
+        let v1 = seed_table_data_version(
+            &db,
+            &collection,
+            &execution,
+            &transaction,
+            &function_run,
+            &table_version,
+        )
+        .await;
+
+        // Second data_version
+        let execution = seed_execution(&db, &collection, &function_version).await;
+        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+        let function_run = seed_function_run(
+            &db,
+            &collection,
+            &function_version,
+            &execution,
+            &transaction,
+            &FunctionRunStatus::Done,
+        )
+        .await;
+
+        let v2 = seed_table_data_version(
+            &db,
+            &collection,
+            &execution,
+            &transaction,
+            &function_run,
+            &table_version,
+        )
+        .await;
+
+        let t2 = AtTime::now().await;
+
+        // Actual test
+        // t0 -> no versions
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .list(
+            TableAtName::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .try_table(format!("{}", table_version.name()))?
+                .at(t0)
+                .build()?,
+            ListParams::default(),
+        );
+
+        let service =
+            TableListDataVersionsService::new(db.clone(), Arc::new(AuthzContext::default()))
+                .service()
+                .await;
+        let response = service.raw_oneshot(request).await;
+        let response = response?;
+        let data = response.data();
+
+        assert_eq!(data.len(), 0);
+
+        // t1 -> version v1
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .list(
+            TableAtName::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .try_table(format!("{}", table_version.name()))?
+                .at(t1)
+                .build()?,
+            ListParams::default(),
+        );
+
+        let service =
+            TableListDataVersionsService::new(db.clone(), Arc::new(AuthzContext::default()))
+                .service()
+                .await;
+        let response = service.raw_oneshot(request).await;
+        let response = response?;
+        let data = response.data();
+
+        assert_eq!(data.len(), 1);
+        assert_eq!(data[0].id(), v1.id());
+
+        // t2 -> versions v1 and v2
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .list(
+            TableAtName::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .try_table(format!("{}", table_version.name()))?
+                .at(t2)
+                .build()?,
+            ListParams::default(),
+        );
+
+        let service =
+            TableListDataVersionsService::new(db.clone(), Arc::new(AuthzContext::default()))
+                .service()
+                .await;
+        let response = service.raw_oneshot(request).await;
+        let response = response?;
+        let data = response.data();
+
+        assert_eq!(data.len(), 2);
+        assert_eq!(data[0].id(), v1.id());
+        assert_eq!(data[1].id(), v2.id());
+
+        Ok(())
     }
 }

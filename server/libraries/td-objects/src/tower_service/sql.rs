@@ -679,7 +679,18 @@ macro_rules! impl_list {
                     .iter()
                     .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
 
-                Ok(list_response(request.list_params(), result))
+                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &result);
+                let (next, next_pagination_id) = compute_next(request.list_params(), &result);
+
+                let list_response = ListResponseBuilder::default()
+                    .list_params(request.list_params().clone())
+                    .data(result)
+                    .previous_page(previous, previous_pagination_id)
+                    .next_page(next, next_pagination_id)
+                    .build()
+                    .unwrap();
+
+                Ok(list_response)
             }
 
             async fn list_versions_at<N, Q, T>(
@@ -831,6 +842,7 @@ mod tests {
     #[dto(list(on = FooDao))]
     #[td_type(builder(try_from = FooDao))]
     struct FooDto {
+        #[dto(list(pagination_by = "+"))]
         id: FooId,
     }
 
