@@ -99,8 +99,11 @@ pub struct UserUpdateDB {
 #[td_type(builder(try_from = UserDBWithNames))]
 pub struct UserRead {
     id: UserId,
+    #[dto(list(filter, filter_like, order_by))]
     name: UserName,
+    #[dto(list(filter, filter_like, order_by))]
     full_name: FullName,
+    #[dto(list(filter, filter_like, order_by))]
     email: Option<Email>,
     created_on: AtTime,
     created_by_id: UserId,

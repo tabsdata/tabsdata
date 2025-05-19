@@ -79,7 +79,9 @@ pub struct CollectionUpdateDB {
 #[td_type(builder(try_from = CollectionDBWithNames))]
 pub struct CollectionRead {
     id: CollectionId,
+    #[dto(list(filter, filter_like, order_by))]
     name: CollectionName,
+    #[dto(list(filter, filter_like, order_by))]
     description: Description,
     created_on: AtTime,
     created_by_id: UserId,

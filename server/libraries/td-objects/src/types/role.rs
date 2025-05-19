@@ -75,7 +75,9 @@ pub struct RoleDBWithNames {
 #[td_type(builder(try_from = RoleDBWithNames))]
 pub struct Role {
     id: RoleId,
+    #[dto(list(filter, filter_like, order_by))]
     name: RoleName,
+    #[dto(list(filter, filter_like, order_by))]
     description: Description,
     created_on: AtTime,
     created_by_id: UserId,
@@ -139,8 +141,11 @@ pub struct UserRole {
     added_by_id: UserId,
     fixed: Fixed,
 
+    #[dto(list(filter, filter_like, order_by))]
     user: UserName,
+    #[dto(list(filter, filter_like, order_by))]
     role: RoleName,
+    #[dto(list(filter, filter_like, order_by))]
     added_by: UserName,
 }
 

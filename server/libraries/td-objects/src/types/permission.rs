@@ -65,6 +65,7 @@ pub struct PermissionDBWithNames {
 pub struct Permission {
     id: PermissionId,
     role_id: RoleId,
+    #[dto(list(filter, order_by))]
     permission_type: PermissionType,
     entity_type: PermissionEntityType,
     entity_id: Option<EntityId>,
@@ -73,7 +74,9 @@ pub struct Permission {
     fixed: Fixed,
 
     granted_by: UserName,
+    #[dto(list(filter, filter_like, order_by))]
     role: RoleName,
+    #[dto(list(filter, filter_like, order_by))]
     entity: Option<EntityName>,
 }
 
@@ -119,9 +122,9 @@ pub struct InterCollectionPermissionDBWithNames {
 #[dto(list(on = InterCollectionPermissionDBWithNames))]
 #[td_type(builder(try_from = InterCollectionPermissionDBWithNames))]
 pub struct InterCollectionPermission {
-    #[dto(list(filter_like, filter))]
     id: InterCollectionPermissionId,
     to_collection_id: ToCollectionId,
+    #[dto(list(filter, filter_like, order_by))]
     to_collection: CollectionName,
     granted_by_id: UserId,
     granted_by: UserName,

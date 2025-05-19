@@ -69,8 +69,8 @@ te-execution = { workspace = true }
 
 # External dependencies
 
-axum = { workspace = true }
-axum-extra = { workspace = true }
+axum = { workspace = true}
+axum-extra = { workspace = true, features = ["query"] }
 chrono = { workspace = true }
 clap = { workspace = true }
 clap_derive = { workspace = true }
