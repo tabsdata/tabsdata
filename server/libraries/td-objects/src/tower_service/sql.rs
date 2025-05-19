@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{handle_sql_err, list_response, ListRequest, ListResponse};
+use crate::crudl::{handle_sql_err, ListParams, ListRequest, ListResponse, ListResponseBuilder};
 use crate::sql::{DeleteBy, DerefQueries, FindBy, Insert, ListBy, QueryError, SelectBy, UpdateBy};
 use crate::types::{DataAccessObject, IdOrName, ListQuery, PartitionBy, SqlEntity, VersionedAt};
 use async_trait::async_trait;
@@ -636,7 +636,18 @@ macro_rules! impl_list {
                     .iter()
                     .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
 
-                Ok(list_response(request.list_params(), result))
+                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &result);
+                let (next, next_pagination_id) = compute_next(request.list_params(), &result);
+
+                let list_response = ListResponseBuilder::default()
+                    .list_params(request.list_params().clone())
+                    .data(result)
+                    .previous_page(previous, previous_pagination_id)
+                    .next_page(next, next_pagination_id)
+                    .build()
+                    .unwrap();
+
+                Ok(list_response)
             }
 
             async fn list_at<N, Q, T>(
@@ -733,10 +744,59 @@ macro_rules! impl_list {
                     .iter()
                     .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
 
-                Ok(list_response(request.list_params(), result))
+                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &result);
+                let (next, next_pagination_id) = compute_next(request.list_params(), &result);
+
+                let list_response = ListResponseBuilder::default()
+                    .list_params(request.list_params().clone())
+                    .data(result)
+                    .previous_page(previous, previous_pagination_id)
+                    .next_page(next, next_pagination_id)
+                    .build()
+                    .unwrap();
+
+                Ok(list_response)
             }
         }
     };
+}
+
+/// Determine previous info for listing pagination
+fn compute_previous<T: ListQuery>(
+    list_params: &ListParams,
+    result: &[T],
+) -> (Option<String>, Option<String>) {
+    match (list_params.previous(), result.first()) {
+        // default list params, no data => no previous page
+        (None, None) => (None, None),
+        // default list params, data => first page, no previous page
+        (None, Some(_)) => (None, None),
+        // previous list params, no data => before first page, no previous page
+        (Some(_), None) => (None, None),
+        // previous list params, data => use the first data item to get previous info
+        (Some(_), Some(first)) => (
+            first.order_by_str_value(list_params.order_by()),
+            Some(first.pagination_value()),
+        ),
+    }
+}
+
+/// Determine next info for listing pagination
+fn compute_next<T: ListQuery>(
+    list_params: &ListParams,
+    result: &[T],
+) -> (Option<String>, Option<String>) {
+    match (result.len() < *list_params.len(), result.last()) {
+        // If the the result length is less than the requested length, no more pages => no next page
+        (true, _) => (None, None),
+        // not result data => no next page
+        (false, None) => (None, None),
+        // result length eq requested length and result data => use the last data item to get next info
+        (false, Some(last)) => (
+            last.order_by_str_value(list_params.order_by()),
+            Some(last.pagination_value()),
+        ),
+    }
 }
 
 all_the_tuples!(impl_list);
@@ -842,7 +902,7 @@ mod tests {
     #[dto(list(on = FooDao))]
     #[td_type(builder(try_from = FooDao))]
     struct FooDto {
-        #[dto(list(pagination_by = "+"))]
+        #[dto(list(pagination_by = "+", order_by))]
         id: FooId,
     }
 
@@ -1128,7 +1188,6 @@ mod tests {
             Input::new(()),
         )
         .await?;
-        assert!(!list.more());
         let list = list.data();
         assert_eq!(list.len(), 2);
         let mario = FooDtoBuilder::try_from(&*MARIO)?.build()?;
@@ -1169,6 +1228,166 @@ mod tests {
         )
         .await?;
         assert_eq!(&luigi_found, &*LUIGI);
+        Ok(())
+    }
+
+    #[td_type::typed(id)]
+    struct Id;
+    #[td_type::typed(string)]
+    struct Name;
+
+    #[td_type::Dao]
+    struct MyDao {
+        id: Id,
+        name: Name,
+    }
+
+    #[td_type::Dto]
+    #[dto(list(on = MyDao))]
+    #[td_type(builder(try_from = MyDao))]
+    struct MyDto {
+        #[dto(list(pagination_by = "+"))]
+        id: Id,
+        #[dto(list(filter, filter_like, order_by))]
+        name: Name,
+    }
+
+    #[test]
+    fn test_compute_previous() -> Result<(), TdError> {
+        let data = vec![
+            MyDto::builder()
+                .id(Id::default())
+                .name(Name::try_from("a")?)
+                .build()?,
+            MyDto::builder()
+                .id(Id::default())
+                .name(Name::try_from("b")?)
+                .build()?,
+            MyDto::builder()
+                .id(Id::default())
+                .name(Name::try_from("c")?)
+                .build()?,
+            MyDto::builder()
+                .id(Id::default())
+                .name(Name::try_from("d")?)
+                .build()?,
+        ];
+
+        // default list params with no data
+        let list_params = ListParams::builder().order_by("name").build().unwrap();
+        assert_eq!(compute_previous::<MyDto>(&list_params, &[]), (None, None));
+
+        // default list params with data
+        let list_params = ListParams::builder().order_by("name").build().unwrap();
+        assert_eq!(compute_previous::<MyDto>(&list_params, &data), (None, None));
+
+        // previous list params with no data
+        let list_params = ListParams::builder()
+            .order_by("name")
+            .previous(data[0].id().to_string())
+            .pagination_id(data[0].pagination_value())
+            .build()
+            .unwrap();
+        assert_eq!(compute_previous::<MyDto>(&list_params, &[]), (None, None));
+
+        // previous list params with data
+        let list_params = ListParams::builder()
+            .order_by("name")
+            .previous(data[1].id().to_string())
+            .pagination_id(data[1].pagination_value())
+            .build()
+            .unwrap();
+        assert_eq!(
+            compute_previous::<MyDto>(&list_params, &data[0..1]),
+            (
+                data[0].order_by_str_value(&Some("name".to_string())),
+                Some(data[0].pagination_value())
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_compute_next() -> Result<(), TdError> {
+        let data = vec![
+            MyDto::builder()
+                .id(Id::default())
+                .name(Name::try_from("a")?)
+                .build()?,
+            MyDto::builder()
+                .id(Id::default())
+                .name(Name::try_from("b")?)
+                .build()?,
+            MyDto::builder()
+                .id(Id::default())
+                .name(Name::try_from("c")?)
+                .build()?,
+            MyDto::builder()
+                .id(Id::default())
+                .name(Name::try_from("d")?)
+                .build()?,
+        ];
+
+        // default list params with no data
+        let list_params = ListParams::builder().order_by("name").build().unwrap();
+        assert_eq!(compute_next::<MyDto>(&list_params, &[]), (None, None));
+
+        // default list params with less data than requested
+        let list_params = ListParams::builder()
+            .len(10_usize)
+            .order_by("name")
+            .build()
+            .unwrap();
+        assert_eq!(compute_next::<MyDto>(&list_params, &data), (None, None));
+
+        // default list params with exact data
+        let list_params = ListParams::builder()
+            .len(4_usize)
+            .order_by("name")
+            .build()
+            .unwrap();
+        assert_eq!(
+            compute_next::<MyDto>(&list_params, &data),
+            (
+                data[3].order_by_str_value(&Some("name".to_string())),
+                Some(data[3].pagination_value())
+            )
+        );
+
+        // next list params with no data
+        let list_params = ListParams::builder()
+            .order_by("name")
+            .next(data[3].id().to_string())
+            .pagination_id(data[3].pagination_value())
+            .build()
+            .unwrap();
+        assert_eq!(compute_next::<MyDto>(&list_params, &[]), (None, None));
+
+        // next list params with less data than requested
+        let list_params = ListParams::builder()
+            .order_by("name")
+            .len(10_usize)
+            .next(data[3].id().to_string())
+            .pagination_id(data[3].pagination_value())
+            .build()
+            .unwrap();
+        assert_eq!(compute_next::<MyDto>(&list_params, &data), (None, None));
+
+        // next list params with same amount of data than requested
+        let list_params = ListParams::builder()
+            .order_by("name")
+            .len(2_usize)
+            .next(data[1].id().to_string())
+            .pagination_id(data[1].pagination_value())
+            .build()
+            .unwrap();
+        assert_eq!(
+            compute_next::<MyDto>(&list_params, &data[2..]),
+            (
+                data[3].order_by_str_value(&Some("name".to_string())),
+                Some(data[3].pagination_value())
+            )
+        );
         Ok(())
     }
 }

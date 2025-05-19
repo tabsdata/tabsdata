@@ -147,6 +147,5 @@ mod tests {
             .await
             .unwrap();
         assert!(res.is_none());
-
     }
 }

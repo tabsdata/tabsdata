@@ -63,6 +63,7 @@ pub struct PermissionDBWithNames {
 #[dto(list(on = PermissionDBWithNames))]
 #[td_type(builder(try_from = PermissionDBWithNames))]
 pub struct Permission {
+    #[dto(list(pagination_by = "+"))]
     id: PermissionId,
     role_id: RoleId,
     #[dto(list(filter, order_by))]
@@ -76,7 +77,7 @@ pub struct Permission {
     granted_by: UserName,
     #[dto(list(filter, filter_like, order_by))]
     role: RoleName,
-    #[dto(list(filter, filter_like, order_by))]
+    #[dto(list(filter, filter_like))] // TODO should we allow order by on nullable??
     entity: Option<EntityName>,
 }
 
@@ -122,6 +123,7 @@ pub struct InterCollectionPermissionDBWithNames {
 #[dto(list(on = InterCollectionPermissionDBWithNames))]
 #[td_type(builder(try_from = InterCollectionPermissionDBWithNames))]
 pub struct InterCollectionPermission {
+    #[dto(list(pagination_by = "+"))]
     id: InterCollectionPermissionId,
     to_collection_id: ToCollectionId,
     #[dto(list(filter, filter_like, order_by))]

@@ -98,12 +98,13 @@ pub struct UserUpdateDB {
 #[dto(list(on = UserDBWithNames))]
 #[td_type(builder(try_from = UserDBWithNames))]
 pub struct UserRead {
+    #[dto(list(pagination_by = "+"))]
     id: UserId,
     #[dto(list(filter, filter_like, order_by))]
     name: UserName,
     #[dto(list(filter, filter_like, order_by))]
     full_name: FullName,
-    #[dto(list(filter, filter_like, order_by))]
+    #[dto(list(filter, filter_like))] // TODO should we allow order by on nullable??
     email: Option<Email>,
     created_on: AtTime,
     created_by_id: UserId,

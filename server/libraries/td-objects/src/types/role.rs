@@ -74,6 +74,7 @@ pub struct RoleDBWithNames {
 #[dto(list(on = RoleDBWithNames))]
 #[td_type(builder(try_from = RoleDBWithNames))]
 pub struct Role {
+    #[dto(list(pagination_by = "+"))]
     id: RoleId,
     #[dto(list(filter, filter_like, order_by))]
     name: RoleName,
@@ -144,6 +145,7 @@ pub struct UserRoleDBWithNames {
 #[dto(list(on = UserRoleDBWithNames))]
 #[td_type(builder(try_from = UserRoleDBWithNames))]
 pub struct UserRole {
+    #[dto(list(pagination_by = "+"))]
     id: UserRoleId,
     user_id: UserId,
     role_id: RoleId,

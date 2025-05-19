@@ -2,8 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dao::gen_fields_as_list;
-use crate::type_builder::{parse_input_item_struct, td_type, TdTypeFields};
+use crate::type_builder::{parse_input_item_struct, td_type};
 use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
@@ -26,8 +25,11 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
         let field_args = DtoFieldArguments::from_field(field).unwrap();
 
         // Generate doc comments based on field arguments
-        let doc_comments = field_args.list.iter().map(|arg| {
+        let doc_comments = field_args.list.into_iter().map(|arg| {
             let mut field_doc = String::new();
+            if arg.pagination_by.is_some() {
+                field_doc.push_str("pagination_by, ");
+            }
             if arg.filter {
                 field_doc.push_str("filter, ");
             }
@@ -74,8 +76,6 @@ struct DtoArguments {
 struct ListArguments {
     #[darling(default)]
     on: Option<Ident>,
-    #[darling(default)]
-    natural_order_by: Option<String>,
 }
 
 #[derive(FromField)]
@@ -87,6 +87,8 @@ struct DtoFieldArguments {
 
 #[derive(FromMeta)]
 struct FieldListArguments {
+    #[darling(default)]
+    pagination_by: Option<String>,
     #[darling(default)]
     filter: bool,
     #[darling(default)]
@@ -115,42 +117,55 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
         .and_then(|list_args| list_args.on.as_ref())
     {
         // if it is a list DTO, we need to implement the ListQuery trait and check the fields are valid
-        let natural_order_by = parsed_args
-            .list
-            .as_ref()
-            .and_then(|list_args| list_args.natural_order_by.clone())
-            .unwrap_or(gen_fields_as_list(fields)[0].to_string()); // use first field as default
+        let (pagination_by, pagination_order, order_by_fields, filter_fields, filter_like_fields) =
+            fields.iter().fold(
+                (None, String::new(), Vec::new(), Vec::new(), Vec::new()),
+                |(
+                    mut pagination_by,
+                    mut pagination_order,
+                    mut order_by_fields,
+                    mut filter_fields,
+                    mut filter_like_fields,
+                ),
+                 f| {
+                    for args in DtoFieldArguments::from_field(f).unwrap().list {
+                        if let Some(pag) = args.pagination_by {
+                            if pagination_by.is_some() {
+                                panic!("Only one field can be marked as pagination_by");
+                            }
+                            if pag != "+" && pag != "-" && !pag.is_empty() {
+                                panic!(
+                                    "Unsupported pagination by {}. Only empty, + or - is allowed",
+                                    pag
+                                );
+                            }
+                            pagination_by = Some(f.ident.as_ref().unwrap());
+                            pagination_order = pag;
 
-        let (order_by_fields, filter_fields, filter_like_fields) = fields.iter().fold(
-            (Vec::new(), Vec::new(), Vec::new()),
-            |(mut order_by_fields, mut filter_fields, mut filter_like_fields), f| {
-                let td_type_args = TdTypeFields::from_field(f).unwrap();
-                for args in DtoFieldArguments::from_field(f).unwrap().list {
-                    let field = td_type_args.builder.iter().find_map(|arg| {
-                        if arg.field.is_none()
-                            || arg.field == Some(f.ident.as_ref().unwrap().to_string())
-                        {
-                            arg.try_from.as_ref()
-                        } else {
-                            None
+                            order_by_fields.push(f.ident.as_ref().unwrap());
+                        } else if args.order_by {
+                            order_by_fields.push(f.ident.as_ref().unwrap());
                         }
-                    });
-                    let field = field.unwrap_or(f.ident.as_ref().unwrap()).to_string();
-                    let field = quote! { #field };
+                        if args.filter {
+                            filter_fields.push(f.ident.as_ref().unwrap());
+                        }
+                        if args.filter_like {
+                            filter_like_fields.push(f.ident.as_ref().unwrap());
+                        }
+                    }
+                    (
+                        pagination_by,
+                        pagination_order,
+                        order_by_fields,
+                        filter_fields,
+                        filter_like_fields,
+                    )
+                },
+            );
 
-                    if args.order_by {
-                        order_by_fields.push(field.clone());
-                    }
-                    if args.filter {
-                        filter_fields.push(field.clone());
-                    }
-                    if args.filter_like {
-                        filter_like_fields.push(field);
-                    }
-                }
-                (order_by_fields, filter_fields, filter_like_fields)
-            },
-        );
+        if pagination_by.is_none() {
+            panic!("A field must be marked as pagination_by");
+        }
 
         quote! {
             impl #impl_generics crate::types::ListQuery for #ident #ty_generics #where_clause {
@@ -161,21 +176,37 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                     builder.build().map_err(Into::into)
                 }
 
-                fn natural_order_by() -> &'static str {
-                    #natural_order_by
+                fn pagination_by() -> &'static str {
+                    concat!(stringify!(#pagination_by), #pagination_order)
+                }
+
+                fn pagination_value(&self) -> String {
+                    self.#pagination_by().to_string()
                 }
 
                 fn order_by_fields() -> &'static [&'static str] {
-                    &[#(#order_by_fields),*]
+                    &[#(stringify!(#order_by_fields)),*]
+                }
+
+                fn order_by_str_value(&self, ordered_by_field: &Option<String>) -> Option<String> {
+                    if let Some(ordered_by_field) = ordered_by_field {
+                        match ordered_by_field.as_str() {
+                            #(stringify!(#order_by_fields) => Some(self.#order_by_fields().to_string()),)*
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
                 }
 
                 fn filter_by_fields() -> &'static [&'static str] {
-                    &[#(#filter_fields),*]
+                    &[#(stringify!(#filter_fields)),*]
                 }
 
                 fn filter_by_like_fields() -> &'static [&'static str] {
-                    &[#(#filter_like_fields),*]
+                    &[#(stringify!(#filter_like_fields)),*]
                 }
+
             }
         }
     } else {

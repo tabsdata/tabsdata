@@ -100,8 +100,10 @@ pub trait ListQuery: DataTransferObject {
     fn try_from_dao(dao: &Self::Dao) -> Result<Self, td_error::TdError>
     where
         Self: Sized;
-    fn natural_order_by() -> &'static str;
+    fn pagination_by() -> &'static str;
+    fn pagination_value(&self) -> String;
     fn order_by_fields() -> &'static [&'static str];
+    fn order_by_str_value(&self, ordered_by_field: &Option<String>) -> Option<String>;
     fn filter_by_fields() -> &'static [&'static str];
     fn filter_by_like_fields() -> &'static [&'static str];
 }

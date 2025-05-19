@@ -302,10 +302,10 @@ impl Pagination {
         }
     }
 
-    pub fn natural_id(&self) -> &str {
+    pub fn pagination_id(&self) -> &str {
         match self {
-            Pagination::Previous(_, natural_id) => natural_id,
-            Pagination::Next(_, natural_id) => natural_id,
+            Pagination::Previous(_, pagination_id) => pagination_id,
+            Pagination::Next(_, pagination_id) => pagination_id,
         }
     }
 }
@@ -313,7 +313,6 @@ impl Pagination {
 #[derive(Debug, Clone, Getters)]
 #[getset(get = "pub")]
 pub struct ListQueryParams<D: ListQuery> {
-    offset: usize,
     len: usize,
     conditions: AndConditions,
     natural_order: Order,
@@ -377,39 +376,38 @@ impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
             None => Ok(None),
         }?;
 
-        let default_natural_order = Order::parse(D::natural_order_by())?;
+        let default_pagination_order = Order::parse(D::pagination_by())?;
         let natural_order = match &order {
             Some(o) => match o {
-                Order::Asc(o) if o != D::natural_order_by() => {
-                    Order::asc(default_natural_order.field())
+                Order::Asc(o) if o != D::pagination_by() => {
+                    Order::asc(default_pagination_order.field())
                 }
-                Order::Desc(o) if o != D::natural_order_by() => {
-                    Order::desc(default_natural_order.field())
+                Order::Desc(o) if o != D::pagination_by() => {
+                    Order::desc(default_pagination_order.field())
                 }
-                _ => default_natural_order,
+                _ => default_pagination_order,
             },
-            None => default_natural_order,
+            None => default_pagination_order,
         };
 
         // Column value applies to order-by column, or natural-order-by column if order-by is empty.
-        let pagination = match (value.previous(), value.next(), value.natural_id()) {
+        let pagination = match (value.previous(), value.next(), value.pagination_id()) {
             (Some(_), Some(_), _) => Err(ListError::PreviousAndNext),
             (Some(_), _, None) => Err(ListError::MissingPaginationParams),
             (_, Some(_), None) => Err(ListError::MissingPaginationParams),
             (None, None, Some(_)) => Err(ListError::MissingPaginationParams),
-            (Some(column_value), None, Some(natural_id)) => Ok(Some(Pagination::Previous(
+            (Some(column_value), None, Some(pagination_id)) => Ok(Some(Pagination::Previous(
                 column_value.to_string(),
-                natural_id.to_string(),
+                pagination_id.to_string(),
             ))),
-            (None, Some(column_value), Some(natural_id)) => Ok(Some(Pagination::Next(
+            (None, Some(column_value), Some(pagination_id)) => Ok(Some(Pagination::Next(
                 column_value.to_string(),
-                natural_id.to_string(),
+                pagination_id.to_string(),
             ))),
             _ => Ok(None),
         }?;
 
         Ok(ListQueryParams {
-            offset: *value.offset(),
             len: *value.len(),
             conditions,
             natural_order,
@@ -490,10 +488,11 @@ mod tests {
             #[dto(list(filter_like))]
             #[td_type(builder(field = "id"))]
             like: i64,
+
+            id: i64, //TODO remove
         }
 
         let list_params = ListParamsBuilder::default()
-            .offset(0usize)
             .len(0usize)
             .filter(vec![
                 "filter:eq:FILTER".to_string(),
@@ -511,7 +510,6 @@ mod tests {
         assert_eq!(list_query.conditions(), &expect);
 
         let list_params = ListParamsBuilder::default()
-            .offset(0usize)
             .len(0usize)
             .filter(vec![
                 "filterx:eq:FILTER".to_string(),
@@ -523,7 +521,6 @@ mod tests {
         let res: Result<ListQueryParams<Def>, ListError> = (&list_params).try_into();
         assert!(matches!(res, Err(ListError::UndefinedFilter(_))));
         let list_params = ListParamsBuilder::default()
-            .offset(0usize)
             .len(0usize)
             .filter(vec!["likex:lk:LIKE".to_string()])
             .order_by("order".to_string())
@@ -532,7 +529,6 @@ mod tests {
         let res: Result<ListQueryParams<Def>, ListError> = (&list_params).try_into();
         assert!(matches!(res, Err(ListError::UndefinedLikeFilter(_))));
         let list_params = ListParamsBuilder::default()
-            .offset(0usize)
             .len(0usize)
             .order_by("orderx".to_string())
             .build()

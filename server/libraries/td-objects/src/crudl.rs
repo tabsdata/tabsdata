@@ -140,21 +140,23 @@ pub struct ReadRequest<N: Clone> {
     name: Name<N>,
 }
 
+const DEFAULT_PAGE_LEN: usize = 50;
+
+fn default_page_len() -> usize {
+    DEFAULT_PAGE_LEN
+}
+
 /// List parameters for list operations defining filtering, sorting and pagination.
 #[apiserver_schema]
 #[derive(
     Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Validate, Getters, IntoParams, Builder,
 )]
-#[builder(setter(into), default)]
+#[builder(setter(into, strip_option), default)]
 #[getset(get = "pub")]
 pub struct ListParams {
-    /// The desired offset for the result list.
-    #[validate(minimum = 0)]
-    #[serde(default = "ListParams::default_offset")]
-    offset: usize,
     /// The desired length for the result list (for now, default is 10000).
     #[validate(minimum = 0)]
-    #[serde(default = "ListParams::default_len")]
+    #[serde(default = "default_page_len")]
     len: usize,
     /// The filter to apply when creating the result list.
     #[serde(alias = "search", default)]
@@ -170,56 +172,24 @@ pub struct ListParams {
     next: Option<String>,
     /// The natural ID of the entity used in pagination.
     #[serde(default)]
-    natural_id: Option<String>,
+    pagination_id: Option<String>,
 }
 
 impl ListParams {
-    const DEFAULT_OFFSET: usize = 0;
-    const DEFAULT_LEN: usize = 10000;
-
-    fn default_offset() -> usize {
-        Self::DEFAULT_OFFSET
-    }
-
-    fn default_len() -> usize {
-        Self::DEFAULT_LEN
-    }
-
-    pub fn first() -> Self {
-        Self {
-            offset: Self::default_offset(),
-            len: 1,
-            filter: Vec::new(),
-            order_by: None,
-            previous: None,
-            next: None,
-            natural_id: None,
-        }
-    }
-
-    pub fn all() -> Self {
-        ListParams {
-            offset: 0,
-            len: usize::MAX - 1,
-            filter: Vec::new(),
-            order_by: None,
-            previous: None,
-            next: None,
-            natural_id: None,
-        }
+    pub fn builder() -> ListParamsBuilder {
+        ListParamsBuilder::default()
     }
 }
 
 impl Default for ListParams {
     fn default() -> Self {
         ListParams {
-            offset: Self::default_offset(),
-            len: Self::default_len(),
+            len: DEFAULT_PAGE_LEN,
             filter: Vec::new(),
             order_by: None,
             previous: None,
             next: None,
-            natural_id: None,
+            pagination_id: None,
         }
     }
 }
@@ -232,19 +202,6 @@ pub struct ListRequest<N: Clone> {
     #[td_type(extractor)]
     name: Name<N>,
     list_params: ListParams,
-}
-
-/// Convenience API enum for fields that need to add or remove items.
-///
-/// For example, when updating a role, to add or remove users from the role.
-#[derive(Debug, Clone, Deserialize)]
-pub enum AddOrRemove<T: Debug + Clone> {
-    /// Add the given items.
-    Add(Vec<T>),
-    /// Remove the given items.
-    Remove(Vec<T>),
-    /// Remove all items.
-    RemoveAll,
 }
 
 impl RequestContext {
@@ -340,16 +297,23 @@ pub struct ListResponse<LL> {
     // TODO: data being changed while paginating
     /// The list parameters of the request.
     list_params: ListParams,
-    #[builder(default = "0")]
-    /// The offset of the result list.
-    offset: usize,
     /// The length of the result list.
     len: usize,
     #[builder(setter(custom))]
     /// The data of the result list.
     data: Vec<LL>,
-    /// Flag indicating if there are more results.
-    more: bool,
+
+    // Pagination info to go to previous page
+    //TODO    #[builder(private)]
+    previous: Option<String>,
+    //TODO    #[builder(private)]
+    previous_pagination_id: Option<String>,
+
+    // Pagination info to go to next page
+    //TODO    #[builder(private)]
+    next: Option<String>,
+    //TODO    #[builder(private)]
+    next_pagination_id: Option<String>,
 }
 
 impl<LL> ListResponseBuilder<LL> {
@@ -359,27 +323,25 @@ impl<LL> ListResponseBuilder<LL> {
         self.data = Some(data);
         self
     }
-}
 
-/// Helper function that creates a [`ListResponse`].
-pub fn list_response<LL>(list_params: &ListParams, list: Vec<LL>) -> ListResponse<LL> {
-    let mut list = list;
-    let more = list.len() > *list_params.len();
-    more.then(|| list.pop());
-    // if more {
-    //     list.pop();
-    // }
-    let offset = *list_params.offset();
-    ListResponseBuilder::default()
-        .data(list)
-        .list_params(list_params.clone())
-        .offset(offset)
-        .more(more)
-        .build()
-        .unwrap()
-}
+    /// Sets info to paginate to previous page
+    pub fn previous_page(
+        mut self,
+        previous: Option<String>,
+        previous_pagination_id: Option<String>,
+    ) -> Self {
+        self.previous = Some(previous);
+        self.previous_pagination_id = Some(previous_pagination_id);
+        self
+    }
 
-// TODO [TD-258] fine tune SQL error handling [TD-239] to correctly identify dup keys issues, dup keys issues, etc.
+    /// Sets info to paginate to next page
+    pub fn next_page(mut self, next: Option<String>, next_pagination_id: Option<String>) -> Self {
+        self.next = Some(next);
+        self.next_pagination_id = Some(next_pagination_id);
+        self
+    }
+}
 
 /// Crudl helper function to handle SQL create errors.
 pub fn handle_create_error(e: Error) -> CrudlErrorX {

@@ -60,11 +60,14 @@ impl<T: FromMeta + Default> FromMeta for OptionWrapper<T> {
     fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
         match meta {
             syn::Meta::Path(_) => Ok(OptionWrapper::None),
+            syn::Meta::NameValue(v) => Ok({
+                let v = T::from_expr(&v.value)?;
+                OptionWrapper::Some(v)
+            }),
             syn::Meta::List(list) => {
                 let nested = NestedMeta::parse_meta_list(list.tokens.clone())?;
                 Ok(OptionWrapper::Some(T::from_list(&nested)?))
             }
-            _ => Err(darling::Error::custom("Unexpected meta-item format")),
         }
     }
 }

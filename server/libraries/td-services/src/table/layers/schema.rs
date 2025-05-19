@@ -13,6 +13,7 @@ use td_storage::{SPath, Storage};
 use td_tower::extractors::{Input, SrvCtx};
 
 #[td_error]
+#[allow(clippy::enum_variant_names)]
 enum SchemaError {
     #[error("Could not create storage configs: {0}")]
     CouldNotCreateStorageConfig(#[source] PolarsError) = 5005,

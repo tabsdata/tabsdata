@@ -400,7 +400,7 @@ where
     query_params
         .conditions() // And
         .conditions() // Or
-        .into_iter()
+        .iter()
         .for_each(|or| {
             if first {
                 query_builder.push(" WHERE ");
@@ -1060,7 +1060,7 @@ mod tests {
                 ])
                 .order_by("name-".to_string())
                 .next("C".to_string())
-                .natural_id("4".to_string())
+                .pagination_id("4".to_string())
                 .build()
                 .unwrap();
             let where_clause = &TestName::try_from("A")?;
@@ -1311,7 +1311,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .previous(FIXTURE_DAOS[1].id().to_string())
-                .natural_id(FIXTURE_DAOS[1].id().to_string())
+                .pagination_id(FIXTURE_DAOS[1].id().to_string())
                 .build()
                 .unwrap();
             let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
@@ -1343,7 +1343,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .next(FIXTURE_DAOS[2].id().to_string())
-                .natural_id(FIXTURE_DAOS[2].id().to_string())
+                .pagination_id(FIXTURE_DAOS[2].id().to_string())
                 .build()
                 .unwrap();
             let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
@@ -1375,7 +1375,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .next(FIXTURE_DAOS[1].id().to_string())
-                .natural_id(FIXTURE_DAOS[1].id().to_string())
+                .pagination_id(FIXTURE_DAOS[1].id().to_string())
                 .build()
                 .unwrap();
             let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
@@ -1407,7 +1407,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .previous(FIXTURE_DAOS[2].id().to_string())
-                .natural_id(FIXTURE_DAOS[2].id().to_string())
+                .pagination_id(FIXTURE_DAOS[2].id().to_string())
                 .build()
                 .unwrap();
             let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
@@ -1441,7 +1441,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .order_by("name+".to_string())
                 .next("A".to_string())
-                .natural_id(FIXTURE_DAOS[1].id().to_string())
+                .pagination_id(FIXTURE_DAOS[1].id().to_string())
                 .build()
                 .unwrap();
             let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
@@ -1477,7 +1477,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .order_by("name+".to_string())
                 .previous("A".to_string())
-                .natural_id(FIXTURE_DAOS[1].id().to_string())
+                .pagination_id(FIXTURE_DAOS[1].id().to_string())
                 .build()
                 .unwrap();
             let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
@@ -1510,7 +1510,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .order_by("name-".to_string())
                 .next("B".to_string())
-                .natural_id(FIXTURE_DAOS[0].id().to_string())
+                .pagination_id(FIXTURE_DAOS[0].id().to_string())
                 .build()
                 .unwrap();
             let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
@@ -1547,7 +1547,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .order_by("name-".to_string())
                 .previous("B".to_string())
-                .natural_id(FIXTURE_DAOS[0].id().to_string())
+                .pagination_id(FIXTURE_DAOS[0].id().to_string())
                 .build()
                 .unwrap();
             let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;

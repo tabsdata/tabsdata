@@ -228,7 +228,7 @@ mod tests {
                 .at(t1)
                 .build()?,
             ListParamsBuilder::default()
-                .order_by(Some("name".to_string()))
+                .order_by("name".to_string())
                 .build()
                 .unwrap(),
         );
