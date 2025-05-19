@@ -2,6 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use std::fmt::Debug;
+
 pub mod basic;
 
 pub mod auth;
@@ -55,7 +57,7 @@ pub trait IdOrName: Send + Sync {
 }
 
 pub trait DataAccessObject:
-    for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin
+    for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin + Debug
 {
     type Builder;
 

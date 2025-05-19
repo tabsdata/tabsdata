@@ -91,7 +91,7 @@ pub struct Role {
 
 #[td_type::Dao]
 #[dao(sql_table = "users_roles")]
-#[td_type(updater(try_from = RequestContext, skip_all))]
+#[td_type(updater(try_from = RequestContext, skip_all), updater(try_from = FixedUserRole, skip_all))]
 pub struct UserRoleDB {
     #[td_type(extractor)]
     #[builder(default)]
@@ -99,12 +99,22 @@ pub struct UserRoleDB {
     #[td_type(setter)]
     user_id: UserId,
     #[td_type(setter)]
+    #[td_type(updater(include, try_from = FixedUserRole))]
     role_id: RoleId,
-    #[td_type(updater(include, field = "time"))]
+    #[td_type(updater(include, try_from = RequestContext, field = "time"))]
     added_on: AtTime,
-    #[td_type(updater(include, field = "user_id"))]
+    #[td_type(updater(include, try_from = RequestContext, field = "user_id"))]
     added_by_id: UserId,
     #[builder(default = "Fixed::from(false)")]
+    #[td_type(updater(include, try_from = FixedUserRole))]
+    fixed: Fixed,
+}
+
+#[td_type::Dlo]
+pub struct FixedUserRole {
+    #[builder(default = "RoleId::user()")]
+    role_id: RoleId,
+    #[builder(default = "Fixed::from(true)")]
     fixed: Fixed,
 }
 

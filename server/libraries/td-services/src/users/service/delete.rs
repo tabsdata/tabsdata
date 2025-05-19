@@ -103,7 +103,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_user(db: DbPool) {
-        let _ = seed_user(
+        let user = seed_user(
             &db,
             &UserName::try_from("u0").unwrap(),
             &UserEnabled::from(true),
@@ -138,5 +138,15 @@ mod tests {
             .await
             .unwrap();
         assert!(res.is_none());
+
+        let res: Option<UserRoleDB> = DaoQueries::default()
+            .select_by::<UserRoleDB>(&user.id())
+            .unwrap()
+            .build_query_as()
+            .fetch_optional(&db)
+            .await
+            .unwrap();
+        assert!(res.is_none());
+
     }
 }
