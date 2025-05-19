@@ -101,13 +101,18 @@ execution: 1
 limit: 5
 error: null,
 context:
-  !V1
+  !V2
   system_output:
-  - !Data                      # indicates that the table was written with new data as part of the function run
-    table:
-      name: td-initial-values    # table name
+  - !Data                     # indicates that the table was written with new data as part of the function run
+    table: td-initial-values  # table name
   output:
-  - !NoData                    # indicates that the table was not written with new data as part of the function run
-    table:
-      name: users
+  - !Data                     # indicates that the table was written with new data as part of the function run
+    table: users              # table name  
+  - !NoData                   # indicates that the table was not written with new data as part of the function run
+    table: users              # table name
+  - !Partitions               
+    table: users              
+    partitions:
+        p0: file...
+        p1: file...    
 ```

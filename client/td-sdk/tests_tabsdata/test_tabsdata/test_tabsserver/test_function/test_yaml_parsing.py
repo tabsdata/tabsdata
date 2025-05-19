@@ -1,0 +1,57 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+import tempfile
+from pathlib import Path
+
+import yaml
+
+from tabsdata.tabsserver.function.yaml_parsing import (
+    Data,
+    NoData,
+    store_response_as_yaml,
+)
+
+# noinspection PyUnresolvedReferences
+from .. import pytestmark  # noqa: F401
+
+
+def test_store_response_as_yaml_generates_correct_yaml():
+    tables = [
+        Data("d01"),
+        Data("d02"),
+        NoData("nod01"),
+        NoData("nod02"),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        response_file = Path(tmpdir) / "response.yaml"
+
+        store_response_as_yaml(tables, response_file)
+
+        class TestResponseLoader(yaml.SafeLoader):
+            pass
+
+        def v2_constructor(loader, node):
+            return loader.construct_mapping(node)
+
+        TestResponseLoader.add_constructor("!V2", v2_constructor)
+
+        with open(response_file, "r") as f:
+            content = yaml.load(f, Loader=TestResponseLoader)
+
+        expected_structure = {
+            "context": {
+                "V2": {
+                    "output": [
+                        {"Data": {"table": "d01"}},
+                        {"Data": {"table": "d02"}},
+                        {"NoData": {"table": "nod01"}},
+                        {"NoData": {"table": "nod02"}},
+                    ]
+                }
+            }
+        }
+
+        assert content == expected_structure

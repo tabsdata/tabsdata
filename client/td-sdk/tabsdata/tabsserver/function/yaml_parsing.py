@@ -250,19 +250,19 @@ def parse_request_yaml(yaml_file: str) -> InputYaml:
 
 
 class Data:
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, table):
+        self.table = table
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(name={self.name})"
+        return f"{self.__class__.__name__}(name={self.table})"
 
 
 class NoData:
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, table):
+        self.table = table
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(name={self.name})"
+        return f"{self.__class__.__name__}(name={self.table})"
 
 
 class ResponseYaml(ABC):
@@ -284,29 +284,38 @@ class V2ResponseFormat:
 def v2_response_format_representer(
     dumper: yaml.SafeDumper, v2_response_format: V2ResponseFormat
 ) -> yaml.nodes.MappingNode:
-    """Represent a V1_yaml instance as a YAML mapping node."""
-    dumper.add_representer(Data, v2_data_representer)
-    dumper.add_representer(NoData, v2_no_data_representer)
-    return dumper.represent_mapping("!V2", v2_response_format.content)
+    """Represent a V2ResponseFormat instance as a YAML mapping node."""
+    # Convert Data and NoData objects to dictionaries
+    output_list = []
+    for item in v2_response_format.content["context"]["V2"]["output"]:
+        if isinstance(item, Data):
+            output_list.append({"Data": {"table": item.table}})
+        elif isinstance(item, NoData):
+            output_list.append({"NoData": {"table": item.table}})
+    return dumper.represent_mapping("!V2", {"context": {"V2": {"output": output_list}}})
 
 
 def v2_data_representer(dumper: yaml.SafeDumper, data: Data) -> yaml.nodes.MappingNode:
     """Represent a Data instance as a YAML mapping node."""
-    return dumper.represent_mapping("!Data", {"table": {"name": data.name}})
+    return dumper.represent_mapping(None, {"Data": {"table": data.table}})
 
 
 def v2_no_data_representer(
     dumper: yaml.SafeDumper, no_data: NoData
 ) -> yaml.nodes.MappingNode:
     """Represent a NoData instance as a YAML mapping node."""
-    return dumper.represent_mapping("!NoData", {"table": {"name": no_data.name}})
+    return dumper.represent_mapping(None, {"NoData": {"table": no_data.table}})
 
 
 def get_response_dumper():
     """Add representers to a YAML serializer."""
-    safe_dumper = yaml.SafeDumper
-    safe_dumper.add_representer(V2ResponseFormat, v2_response_format_representer)
-    return safe_dumper
+
+    # This prevents overwriting the global SafeDumper
+    class ResponseDumper(yaml.SafeDumper):
+        pass
+
+    ResponseDumper.add_representer(V2ResponseFormat, v2_response_format_representer)
+    return ResponseDumper
 
 
 def store_response_as_yaml(tables: list[Data | NoData], response_file: str):
@@ -314,7 +323,11 @@ def store_response_as_yaml(tables: list[Data | NoData], response_file: str):
         yaml.dump(
             V2ResponseFormat(
                 content={
-                    "context": tables,
+                    "context": {
+                        "V2": {
+                            "output": tables,
+                        }
+                    }
                 }
             ),
             file,
