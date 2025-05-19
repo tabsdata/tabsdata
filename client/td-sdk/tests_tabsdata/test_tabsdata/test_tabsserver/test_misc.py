@@ -19,7 +19,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v1_yaml_file,
+    write_v2_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_custom_requirements.example import (
     custom_requirements,
@@ -95,7 +95,7 @@ def test_input_output_dataframe(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -136,7 +136,7 @@ def test_multiple_inputs_multiple_outputs(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -193,7 +193,7 @@ def test_path_to_code(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -247,7 +247,7 @@ def test_custom_requirements(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output1_path = os.path.join(tmp_path, "output1.parquet")
     output2_path = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output1_path, output2_path],
@@ -314,7 +314,7 @@ def test_custom_requirements_no_package_version(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -380,7 +380,7 @@ def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
-    write_v1_yaml_file(input_yaml_file, context_archive)
+    write_v2_yaml_file(input_yaml_file, context_archive)
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
@@ -406,7 +406,7 @@ def test_failed_execution_returns_error_code(tmp_path):
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
-    write_v1_yaml_file(input_yaml_file, context_archive)
+    write_v2_yaml_file(input_yaml_file, context_archive)
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
@@ -434,7 +434,7 @@ def test_custom_logs_folder(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -491,7 +491,7 @@ def test_sequential_runs_no_error(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -548,7 +548,7 @@ def test_sequential_registers_no_error(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -603,7 +603,7 @@ def test_custom_bin_folder(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -662,7 +662,7 @@ def test_relative_import(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -701,7 +701,7 @@ def test_failing_file_in_folder(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -745,7 +745,7 @@ def test_initial_values_freeze(testing_mariadb, tmp_path):
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -804,7 +804,7 @@ def test_initial_values_wrong_value_type(testing_postgres, tmp_path):
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -839,7 +839,7 @@ def test_initial_values_wrong_key_type(testing_postgres, tmp_path):
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],

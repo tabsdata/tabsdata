@@ -32,10 +32,17 @@ def create_response(
     data_tables = [Data(table) for table in modified_tables]
     no_data_tables = [NoData(table) for table in not_modified_tables]
     initial_values_table_name = execution_context.initial_values.output_table_name
-    if execution_context.initial_values.changed:
-        data_tables.append(Data(initial_values_table_name))
+    # TODO: Temporary fix, remove once initial_values_table_name is always provided
+
+    if initial_values_table_name is None:
+        pass
     else:
-        no_data_tables.append(NoData(initial_values_table_name))
+        if execution_context.initial_values.changed:
+            data_tables.append(Data(initial_values_table_name))
+        else:
+            no_data_tables.append(NoData(initial_values_table_name))
+
+    # TODO: End of temporary fix
     logger.info(f"Modified tables: {modified_tables}")
     logger.info(f"Not modified tables: {not_modified_tables}")
     response_content = data_tables + no_data_tables

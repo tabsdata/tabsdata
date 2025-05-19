@@ -15,7 +15,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v1_yaml_file,
+    write_v2_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_input_file_csv_dtype_inference.example import (
     input_file_csv_dtype_inference,
@@ -86,7 +86,7 @@ def test_input_file_wildcard(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -125,7 +125,7 @@ def test_input_file_csv_string_format(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -166,7 +166,7 @@ def test_input_file_parquet_string_format(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -207,7 +207,7 @@ def test_input_file_parquet_wildcard(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -247,7 +247,7 @@ def test_input_file_csv_separator(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -288,7 +288,7 @@ def test_input_file_csv_modified_path(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -329,7 +329,7 @@ def test_input_file_csv_modified_format(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -370,7 +370,7 @@ def test_input_file_log_string_format(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -411,7 +411,7 @@ def test_input_file_log_wildcard(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -451,7 +451,7 @@ def test_input_file_ndjson_string_format(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -492,7 +492,7 @@ def test_input_file_ndjson_wildcard(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -532,7 +532,7 @@ def test_input_file_csv_dtype_inference(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -563,7 +563,7 @@ def test_input_file_ndjson_dtype_inference(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_table_location=[output_file]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")

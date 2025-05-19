@@ -23,7 +23,7 @@ from tests_tabsdata.conftest import (
     clean_polars_df,
     get_lf,
     read_json_and_clean,
-    write_v1_yaml_file,
+    write_v2_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_mariadb_driver_provided.example import (
     output_mariadb_driver_provided,
@@ -84,7 +84,7 @@ def test_output_mariadb_list(tmp_path, testing_mariadb):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_mariadb_list", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -138,7 +138,7 @@ def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
         "test_output_mariadb_with_charset",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -185,7 +185,7 @@ def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
         "test_output_mariadb_with_collation",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -232,7 +232,7 @@ def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
         "test_output_mariadb_driver_provided",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -279,7 +279,7 @@ def test_output_mariadb_list_single_element(tmp_path, testing_mariadb):
         "test_output_mariadb_list_single_element",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -326,7 +326,7 @@ def test_output_mariadb_transaction(tmp_path, testing_mariadb):
         "test_output_mariadb_transaction",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")

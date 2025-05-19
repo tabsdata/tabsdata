@@ -16,7 +16,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v1_yaml_file,
+    write_v2_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_file.example import (
     output_file as output_file_format_testing,
@@ -73,7 +73,7 @@ def test_output_file_parquet(tmp_path):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -139,7 +139,7 @@ def test_output_file_multiple_files(tmp_path):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -213,7 +213,7 @@ def test_output_file_csv(tmp_path):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -274,7 +274,7 @@ def test_output_file_ndjson(tmp_path):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -340,7 +340,7 @@ def test_output_file_multiple_files_with_none(tmp_path):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_file", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -407,7 +407,7 @@ def test_output_file_with_none(tmp_path):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_file_with_none", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -465,7 +465,7 @@ def test_output_file_frame_list(tmp_path):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_file_frame_list", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],

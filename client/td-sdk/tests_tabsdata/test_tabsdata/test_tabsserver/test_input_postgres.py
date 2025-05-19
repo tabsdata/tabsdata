@@ -22,7 +22,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v1_yaml_file,
+    write_v2_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_input_postgres.example import input_postgres
 from tests_tabsdata.testing_resources.test_input_postgres_initial_values.example import (
@@ -69,7 +69,7 @@ def test_input_postgres(testing_postgres, tmp_path):
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -128,7 +128,7 @@ def test_input_postgres_initial_values(testing_postgres, tmp_path):
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -198,7 +198,7 @@ def test_input_postgres_initial_values_stored_number_0(testing_postgres, tmp_pat
         "mock_number_0.parquet",
     )
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
@@ -269,7 +269,7 @@ def test_input_postgres_initial_values_stored_number_2(testing_postgres, tmp_pat
         "mock_number_2.parquet",
     )
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],

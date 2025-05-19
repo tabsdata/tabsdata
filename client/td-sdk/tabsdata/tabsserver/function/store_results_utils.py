@@ -748,6 +748,7 @@ def store_polars_lf_in_file(
     if file_ending in FORMAT_TO_POLARS_WRITE_FUNCTION:
         # polars does not create parent folders when writing a file.
         folder = os.path.dirname(result_file)
+        logger.debug(f"Creating folder to store the file: '{folder}'")
         os.makedirs(folder, exist_ok=True)
         if isinstance(format, CSVFormat):
             # TODO: Add maintain_order as an option once we are using sink instead of

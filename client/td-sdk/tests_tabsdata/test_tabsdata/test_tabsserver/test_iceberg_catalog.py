@@ -22,7 +22,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v1_yaml_file,
+    write_v2_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_s3_catalog.example import (
     output_s3_catalog,
@@ -111,7 +111,7 @@ def test_output_s3_catalog(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3_catalog", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -218,7 +218,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
                 "test_output_s3_catalog_replace",
                 "mock_table.parquet",
             )
-            write_v1_yaml_file(
+            write_v2_yaml_file(
                 input_yaml_file,
                 context_archive,
                 [mock_parquet_table],
@@ -320,7 +320,7 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
                 "test_output_s3_catalog_append",
                 "mock_table.parquet",
             )
-            write_v1_yaml_file(
+            write_v2_yaml_file(
                 input_yaml_file,
                 context_archive,
                 [mock_parquet_table],
@@ -424,7 +424,7 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3_catalog", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -508,7 +508,7 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client):
         "test_output_s3_catalog_schema_strategy",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -613,7 +613,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
         "test_output_s3_catalog_schema_strategy",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -708,7 +708,7 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
         "test_output_s3_catalog_partition",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
@@ -817,7 +817,7 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client):
         "test_output_s3_catalog_region_creds",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],

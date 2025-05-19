@@ -14,7 +14,7 @@ from tests_tabsdata.conftest import (
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     clean_polars_df,
     read_json_and_clean,
-    write_v1_yaml_file,
+    write_v2_yaml_file,
 )
 from tests_tabsdata_salesforce.conftest import TESTING_RESOURCES_FOLDER
 from tests_tabsdata_salesforce.testing_resources.test_input_salesforce.example import (
@@ -58,7 +58,7 @@ def test_input_salesforce(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
@@ -107,7 +107,7 @@ def test_input_salesforce_initial_values(tmp_path):
     output_file = os.path.join(tmp_path, "output.parquet")
     second_output_file = os.path.join(tmp_path, "second_output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file, second_output_file],
@@ -173,7 +173,7 @@ def test_input_salesforce_initial_values(tmp_path):
     path_to_output_initial_values = os.path.join(
         tmp_path, "second_initial_values.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file, second_output_file],

@@ -16,7 +16,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v1_yaml_file,
+    write_v2_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_table.example import output_table
 from tests_tabsdata.testing_resources.test_output_table_multiple_tables.example import (
@@ -64,7 +64,7 @@ def test_output_table_multiple_tables(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output1_path = os.path.join(tmp_path, "output1.parquet")
     output2_path = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output1_path, output2_path],
@@ -112,7 +112,7 @@ def test_output_table(tmp_path):
         TESTING_RESOURCES_FOLDER, "test_output_table", "mock_table.parquet"
     )
     output_path = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_dependency_table],
@@ -157,7 +157,7 @@ def test_output_table_multiple_tables_with_none(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output1_path = os.path.join(tmp_path, "output1.parquet")
     output2_path = os.path.join(tmp_path, "output2.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output1_path, output2_path],
@@ -207,7 +207,7 @@ def test_output_table_with_none(tmp_path):
         TESTING_RESOURCES_FOLDER, "test_output_table_with_none", "mock_table.parquet"
     )
     output_path = os.path.join(tmp_path, "output.parquet")
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_dependency_location=[mock_dependency_table],

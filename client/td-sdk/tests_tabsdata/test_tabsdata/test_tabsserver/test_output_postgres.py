@@ -22,7 +22,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
     read_json_and_clean,
-    write_v1_yaml_file,
+    write_v2_yaml_file,
 )
 from tests_tabsdata.testing_resources.test_output_postgres_driver_provided.example import (
     output_postgres_driver_provided,
@@ -80,7 +80,7 @@ def test_output_postgres_list(tmp_path, testing_postgres):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_postgres_list", "mock_table.parquet"
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -134,7 +134,7 @@ def test_output_postgres_driver_provided(tmp_path, testing_postgres):
         "test_output_postgres_driver_provided",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -181,7 +181,7 @@ def test_output_postgres_transaction(tmp_path, testing_postgres):
         "test_output_postgres_transaction",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -229,7 +229,7 @@ def test_output_postgres_table_replace(tmp_path, testing_postgres):
         "test_output_postgres_table_replace",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
@@ -277,7 +277,7 @@ def test_output_postgres_schema(tmp_path, testing_postgres):
         "test_output_postgres_schema",
         "mock_table.parquet",
     )
-    write_v1_yaml_file(
+    write_v2_yaml_file(
         input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")

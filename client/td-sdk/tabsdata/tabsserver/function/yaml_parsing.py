@@ -44,7 +44,7 @@ class Table:
         return self.data.get("table_pos")
 
     @property
-    def version_pos(self) -> str:
+    def version_pos(self) -> int:
         return self.data.get("version_pos")
 
     @property
@@ -52,7 +52,7 @@ class Table:
         return self.data.get("input_idx")
 
     def __repr__(self):
-        return f"Table(name={self.name}, uri={self.uri})"
+        return f"Table(name={self.name}, uri={self.uri}, data={self.data})"
 
 
 # Define a custom constructor for the !TableVersions tag
@@ -101,11 +101,6 @@ class InputYaml(ABC):
     @abstractmethod
     def system_output(self) -> list[Table]:
         """Return the output section of the YAML file."""
-
-    @property
-    @abstractmethod
-    def dataset_data_version(self) -> str:
-        """Dataset data version."""
 
     @property
     @abstractmethod
@@ -170,6 +165,54 @@ class V1(InputYaml):
         return f"V1(content={self.content})"
 
 
+class V2(InputYaml):
+    def __init__(self, content):
+        self.content = content
+
+    @property
+    def info(self):
+        return self.content.get("info")
+
+    @property
+    def triggered_on(self) -> str:
+        return self.info.get("triggered_on") if self.info else None
+
+    @property
+    def execution_plan_triggered_on(self) -> str:
+        return self.info.get("execution_plan_triggered_on") if self.info else None
+
+    @property
+    def function_bundle(self):
+        return self.info.get("function_bundle") if self.info else None
+
+    @property
+    def function_bundle_uri(self):
+        return self.function_bundle.get("uri") if self.function_bundle else None
+
+    @property
+    def function_bundle_env_prefix(self):
+        return self.function_bundle.get("env_prefix") if self.function_bundle else None
+
+    @property
+    def input(self) -> list[Table | TableVersions]:
+        return self.content.get("input")
+
+    @property
+    def output(self) -> list[Table]:
+        return self.content.get("output")
+
+    @property
+    def system_input(self) -> list[Table]:
+        return self.content.get("system_input")
+
+    @property
+    def system_output(self) -> list[Table]:
+        return self.content.get("system_output")
+
+    def __repr__(self):
+        return f"V2(content={self.content})"
+
+
 def v1_table_constructor(loader, node):
     return Table(loader.construct_mapping(node))
 
@@ -185,12 +228,19 @@ def v1_constructor(loader, node):
     return V1(loader.construct_mapping(node))
 
 
+def v2_constructor(loader, node):
+    loader.add_constructor("!Table", v1_table_constructor)
+    loader.add_constructor("!TableVersions", v1_table_versions_constructor)
+    return V2(loader.construct_mapping(node))
+
+
 def get_input_yaml_loader():
     """Add constructors to PyYAML loader."""
     loader = yaml.SafeLoader
     # When more versions are added, they will be listed here, and each will have its
     # own constructor.
     loader.add_constructor("!V1", v1_constructor)
+    loader.add_constructor("!V2", v2_constructor)
     return loader
 
 
@@ -219,7 +269,7 @@ class ResponseYaml(ABC):
     """Just an abstract class to help with type hinting."""
 
 
-class V1ResponseFormat:
+class V2ResponseFormat:
     """
     Simple class to enable us to generate response yaml files
     """
@@ -231,38 +281,38 @@ class V1ResponseFormat:
         return f"{self.__class__.__name__}(content={self.content})"
 
 
-def v1_response_format_representer(
-    dumper: yaml.SafeDumper, v1_response_format: V1ResponseFormat
+def v2_response_format_representer(
+    dumper: yaml.SafeDumper, v2_response_format: V2ResponseFormat
 ) -> yaml.nodes.MappingNode:
     """Represent a V1_yaml instance as a YAML mapping node."""
-    dumper.add_representer(Data, v1_data_representer)
-    dumper.add_representer(NoData, v1_no_data_representer)
-    return dumper.represent_mapping("!V1", v1_response_format.content)
+    dumper.add_representer(Data, v2_data_representer)
+    dumper.add_representer(NoData, v2_no_data_representer)
+    return dumper.represent_mapping("!V2", v2_response_format.content)
 
 
-def v1_data_representer(dumper: yaml.SafeDumper, data: Data) -> yaml.nodes.MappingNode:
+def v2_data_representer(dumper: yaml.SafeDumper, data: Data) -> yaml.nodes.MappingNode:
     """Represent a Data instance as a YAML mapping node."""
-    return dumper.represent_mapping("!Data", {"name": data.name})
+    return dumper.represent_mapping("!Data", {"table": {"name": data.name}})
 
 
-def v1_no_data_representer(
+def v2_no_data_representer(
     dumper: yaml.SafeDumper, no_data: NoData
 ) -> yaml.nodes.MappingNode:
     """Represent a NoData instance as a YAML mapping node."""
-    return dumper.represent_mapping("!NoData", {"name": no_data.name})
+    return dumper.represent_mapping("!NoData", {"table": {"name": no_data.name}})
 
 
 def get_response_dumper():
     """Add representers to a YAML serializer."""
     safe_dumper = yaml.SafeDumper
-    safe_dumper.add_representer(V1ResponseFormat, v1_response_format_representer)
+    safe_dumper.add_representer(V2ResponseFormat, v2_response_format_representer)
     return safe_dumper
 
 
 def store_response_as_yaml(tables: list[Data | NoData], response_file: str):
     with open(response_file, "w") as file:
         yaml.dump(
-            V1ResponseFormat(
+            V2ResponseFormat(
                 content={
                     "context": tables,
                 }

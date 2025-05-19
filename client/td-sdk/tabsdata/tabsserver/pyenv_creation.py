@@ -504,7 +504,7 @@ def create_virtual_environment(
             f"Locks folder {locks_folder} does not exist. If in production, this could"
             " be a sign of an issue with the --locks-folder parameter provided, as it"
             " should have been created before calling the environment-creation script."
-            " Creating the folder now."
+            f" Creating the folder now: {locks_folder}."
         )
         os.makedirs(locks_folder, exist_ok=True)
 

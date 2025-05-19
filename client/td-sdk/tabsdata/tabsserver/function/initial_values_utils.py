@@ -193,6 +193,16 @@ class InitialValues:
         logger.debug("Loading current initial values")
         system_input = request.system_input
         logger.debug(f"System input: {system_input}")
+
+        # TODO: Temporary fix, remove when system_input always has the initial values
+        #  table
+
+        if not system_input:
+            logger.debug("System input is empty. No initial values loaded.")
+            return
+
+        # TODO: End of temporary fix
+
         td_initial_values_table = system_input[INITIAL_VALUES_LIST_POSITION]
         logger.debug(f"TD initial values table: {td_initial_values_table}")
         logger.debug(f"TD initial values location: {td_initial_values_table.location}")
@@ -252,6 +262,15 @@ class InitialValues:
         logger.info(pad_string("[Storing execution information]"))
         logger.info(f"Storing initial values {str(self)}")
         system_output = execution_context.system_output
+
+        # TODO: Temporary fix, remove when system_output always has the initial values
+
+        if not system_output:
+            logger.debug("System output is empty. No initial values stored.")
+            return
+
+        # TODO: End of temporary fix
+
         initial_values_output_table = system_output[INITIAL_VALUES_LIST_POSITION]
         self.output_table_name = initial_values_output_table.name
         destination_table_uri = initial_values_output_table.uri
@@ -274,17 +293,25 @@ class InitialValues:
                 INITIAL_VALUES_VARIABLE_COLUMN: variables_column,
                 INITIAL_VALUES_VALUE_COLUMN: values_column,
             }
-            df = pl.LazyFrame(initial_values_aux_dict)
+            df = pl.DataFrame(initial_values_aux_dict)
             logger.info(
-                f"Storing the initial values {initial_values_aux_dict} in the table "
+                f"Storing the initial values {df} in the table "
                 f"'{initial_values_output_table.name}' with URI "
                 f"'{destination_table_uri}'"
             )
 
             if destination_table_uri.startswith("file://"):
                 try:
+                    logger.debug(
+                        "Creating the directories for the initial values table"
+                    )
+                    logger.debug(f"Destination table URI: {destination_table_uri}")
+                    directories_to_create = os.path.dirname(
+                        convert_uri_to_path(destination_table_uri)
+                    )
+                    logger.debug(f"Directories to create: {directories_to_create}")
                     os.makedirs(
-                        os.path.dirname(convert_uri_to_path(destination_table_uri)),
+                        directories_to_create,
                         exist_ok=True,
                     )
                 except Exception as e:
@@ -294,7 +321,8 @@ class InitialValues:
                     )
                     logger.warning("This might be because file is not local")
 
-            df.sink_parquet(destination_table_uri, mkdir=True)
+            logger.debug(f"Performing sink to file {destination_table_uri}")
+            df.write_parquet(convert_uri_to_path(destination_table_uri))
             logger.debug("Initial values stored successfully.")
             return
         else:
