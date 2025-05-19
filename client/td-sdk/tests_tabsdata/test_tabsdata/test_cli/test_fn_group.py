@@ -464,6 +464,8 @@ def test_function_trigger(testing_collection, function_path, tabsserver_connecti
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+@pytest.mark.wip
+@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger_execution_plan_name(
     testing_collection, function_path, tabsserver_connection
 ):

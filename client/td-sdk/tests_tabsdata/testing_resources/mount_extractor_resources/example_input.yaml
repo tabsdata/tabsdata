@@ -1,0 +1,32 @@
+addresses:
+ - 127.0.0.1:2457
+jwt_secret: secret
+access_jwt_expiration: 36288000
+refresh_jwt_expiration: 36288000
+request_timeout: 60
+database:
+ uri: file:///tmp/atabase/tabsdata.db
+ min_connections: 1
+ max_connections: 10
+ acquire_timeout: 30
+ max_lifetime: 3600
+ idle_timeout: 60
+ test_before_acquire: true
+storage:
+ mounts:
+   - id: TDS_LOCAL
+     path: /
+     uri: file:///tmp/storage
+   - id: TDS_S3A
+     path: /s3a
+     uri: s3://my-bucket/my-path
+     options:
+       aws_region: eu-north1
+       aws_access_key_id: MY_ACCESS_KEY
+       aws_secret_access_key: MY_SECRET_KEY
+   - id: TDS_AZB
+     path: /aza
+     uri: az://my-az-bucket/a
+     options:
+       azure_storage_account_name: MY_ACCOUNT_NAME
+       azure_storage_account_key: MY_ACCOUNT_KEY

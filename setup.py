@@ -579,6 +579,7 @@ setup(
             "_tdvenv = tabsdata.tabsserver.pyenv_creation:main",
             "_tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
             "_tdinvoker = tabsdata.tabsserver.invoker:main",
+            "_tdmntext = tabsdata.tabsserver.tools.mount_extractor:main",
             "_tdupgrader = tabsdata.tabsserver.server.upgrader:main",
         ]
     },
