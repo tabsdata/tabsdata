@@ -17,7 +17,7 @@ use td_objects::types::function::{FunctionVersionDB, FunctionVersionDBWithNames}
 use td_objects::types::table::TableVersionDBWithNames;
 use td_objects::types::table_ref::Versions;
 use td_objects::types::trigger::TriggerVersionDBWithNames;
-use td_objects::types::{DataAccessObject, NaturalOrder, PartitionBy, Recursive, Status};
+use td_objects::types::{DataAccessObject, PartitionBy, Recursive, VersionedAt};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use te_execution::transaction::TransactionBy;
 
@@ -29,19 +29,19 @@ pub async fn version_graph<Q, V>(
 ) -> Result<Vec<V>, TdError>
 where
     Q: DerefQueries,
-    V: DataAccessObject + PartitionBy + Recursive + NaturalOrder + Status,
-    V::Status: Default,
-    V::NaturalOrder: From<AtTime>,
+    V: DataAccessObject + PartitionBy + Recursive + VersionedAt,
+    V::Condition: Default,
+    V::Order: From<AtTime>,
 {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
-    let v_at_time = V::NaturalOrder::from(at_time.deref().clone());
+    let v_at_time = V::Order::from(at_time.deref().clone());
 
     let result: Vec<V> = queries
         .select_recursive_versions_at::<V, FunctionVersionDB, _>(
             Some(&v_at_time),
-            Some(&[&V::Status::default()]),
+            Some(&[&V::Condition::default()]),
             Some(&at_time),
             Some(&[&FunctionStatus::Active]),
             function.deref(),

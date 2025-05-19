@@ -5,7 +5,7 @@
 use crate::gen_where_clause;
 use crate::sql::{Queries, QueryError};
 use crate::types::table_ref::{Version, Versions};
-use crate::types::{DataAccessObject, NaturalOrder, PartitionBy, SqlEntity, Status};
+use crate::types::{DataAccessObject, PartitionBy, SqlEntity, VersionedAt};
 use std::ops::Deref;
 use tracing::trace;
 
@@ -15,21 +15,21 @@ const LATEST_VERSIONS_CTE: &str = "latest_versions";
 pub trait CteQueries<'a, E> {
     fn select_versions_at<D>(
         &self,
-        natural_order_by: Option<&'a D::NaturalOrder>,
-        status: Option<&'a [&'a D::Status]>,
+        natural_order_by: Option<&'a <D as VersionedAt>::Order>,
+        status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
         e: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
-        D: DataAccessObject + PartitionBy + NaturalOrder + Status;
+        D: DataAccessObject + PartitionBy + VersionedAt;
 
     fn find_versions_at<D>(
         &self,
-        natural_order_by: Option<&'a D::NaturalOrder>,
-        status: Option<&'a [&'a D::Status]>,
+        natural_order_by: Option<&'a <D as VersionedAt>::Order>,
+        status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
         e: &'a [E],
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
-        D: DataAccessObject + PartitionBy + NaturalOrder + Status;
+        D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
 macro_rules! impl_select_versions_at {
@@ -44,12 +44,12 @@ macro_rules! impl_select_versions_at {
         {
             fn select_versions_at<D>(
                 &self,
-                natural_order_by: Option<&'a D::NaturalOrder>,
-                status: Option<&'a [&'a D::Status]>,
+                natural_order_by: Option<&'a <D as VersionedAt>::Order>,
+                status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
                 ($($E),*): &'a ($(&'a $E),*),
             ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
             where
-                D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+                D: DataAccessObject + PartitionBy + VersionedAt,
             {
                 let mut query_builder = sqlx::QueryBuilder::default();
 
@@ -70,7 +70,7 @@ macro_rules! impl_select_versions_at {
 
                 // And last, order by
                 query_builder.push(" ");
-                query_builder.push(D::order_by());
+                query_builder.push(<D as DataAccessObject>::order_by());
 
                 trace!("select_versions: sql: {}", query_builder.sql());
                 Ok(query_builder)
@@ -78,12 +78,12 @@ macro_rules! impl_select_versions_at {
 
             fn find_versions_at<D>(
                 &self,
-                natural_order_by: Option<&'a D::NaturalOrder>,
-                status: Option<&'a [&'a D::Status]>,
+                natural_order_by: Option<&'a <D as VersionedAt>::Order>,
+                status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
                 e: &'a [ ($(&'a $E),*) ],
             ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
             where
-                D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+                D: DataAccessObject + PartitionBy + VersionedAt,
             {
                 let mut query_builder = sqlx::QueryBuilder::default();
 
@@ -106,7 +106,7 @@ macro_rules! impl_select_versions_at {
 
                 // And last, order by
                 query_builder.push(" ");
-                query_builder.push(D::order_by());
+                query_builder.push(<D as DataAccessObject>::order_by());
 
                 trace!("find_active_versions: sql: {}", query_builder.sql());
                 Ok(query_builder)
@@ -127,13 +127,13 @@ all_the_tuples!(impl_select_versions_at);
 pub(crate) fn ranked_versions_at<'a, D>(
     cte_table_prefix: &str,
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    natural_order_by: Option<&'a D::NaturalOrder>,
+    natural_order_by: Option<&'a <D as VersionedAt>::Order>,
 ) where
-    D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+    D: DataAccessObject + PartitionBy + VersionedAt,
 {
     let table = D::sql_table();
     let partition_field = D::partition_by();
-    let natural_order_field = D::natural_order_by();
+    let natural_order_field = <D as VersionedAt>::order_by();
 
     // Build CTEs containing ranked versions ordered by defined_on DESC
     query_builder.push(format!("{cte_table_prefix}_ranked AS ("));
@@ -156,9 +156,9 @@ pub(crate) fn ranked_versions_at<'a, D>(
 pub(crate) fn select_ranked_versions_at<'a, D>(
     cte_table_prefix: &str,
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    status: Option<&'a [&'a D::Status]>,
+    status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
 ) where
-    D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+    D: DataAccessObject + PartitionBy + VersionedAt,
 {
     // Build CTEs containing only the latest versions, which are the ones with rn = 1
     query_builder.push(format!("{cte_table_prefix} AS ("));
@@ -183,23 +183,23 @@ pub(crate) fn select_ranked_versions_at<'a, D>(
 pub trait TableQueries<'a> {
     fn select_table_data_versions_at<D>(
         &self,
-        natural_order_by: Option<&'a D::NaturalOrder>,
-        status: Option<&'a [&'a D::Status]>,
+        natural_order_by: Option<&'a <D as VersionedAt>::Order>,
+        status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
         table_id: &'a D::PartitionBy,
         versions: &'a Versions,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
-        D: DataAccessObject + PartitionBy + NaturalOrder + Status;
+        D: DataAccessObject + PartitionBy + VersionedAt;
 
     fn find_relative_offset<D>(
         &self,
-        natural_order_by: Option<&'a D::NaturalOrder>,
-        status: Option<&'a [&'a D::Status]>,
+        natural_order_by: Option<&'a <D as VersionedAt>::Order>,
+        status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
         table_id: &'a D::PartitionBy,
         versions: &'a Versions,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
-        D: DataAccessObject + PartitionBy + NaturalOrder + Status;
+        D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
 impl<'a, Q> TableQueries<'a> for Q
@@ -208,13 +208,13 @@ where
 {
     fn select_table_data_versions_at<D>(
         &self,
-        natural_order_by: Option<&'a D::NaturalOrder>,
-        status: Option<&'a [&'a D::Status]>,
+        natural_order_by: Option<&'a <D as VersionedAt>::Order>,
+        status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
         table_id: &'a D::PartitionBy,
         versions: &'a Versions,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
-        D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+        D: DataAccessObject + PartitionBy + VersionedAt,
     {
         let mut query_builder = sqlx::QueryBuilder::default();
 
@@ -241,13 +241,13 @@ where
 
     fn find_relative_offset<D>(
         &self,
-        natural_order_by: Option<&'a D::NaturalOrder>,
-        status: Option<&'a [&'a D::Status]>,
+        natural_order_by: Option<&'a <D as VersionedAt>::Order>,
+        status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
         table_id: &'a D::PartitionBy,
         versions: &'a Versions,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
-        D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+        D: DataAccessObject + PartitionBy + VersionedAt,
     {
         let mut query_builder = sqlx::QueryBuilder::default();
 
@@ -275,11 +275,11 @@ where
 fn select_table_data_versions_at<'a, D>(
     cte_table_prefix: &str,
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    status: Option<&'a [&'a D::Status]>,
+    status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
     table_id: &'a D::PartitionBy,
     versions: &'a Versions,
 ) where
-    D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+    D: DataAccessObject + PartitionBy + VersionedAt,
 {
     let table_id_field = D::partition_by();
 
@@ -365,11 +365,11 @@ fn select_table_data_versions_at<'a, D>(
     query_builder.push(")");
 }
 
-fn status_where<'a, D: DataAccessObject + Status>(
+fn status_where<'a, D: DataAccessObject + VersionedAt>(
     query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
-    status: Option<&'a [&'a D::Status]>,
+    status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
 ) {
-    let status_field = D::status_by();
+    let status_field = D::condition_by();
     if let Some(status) = status {
         query_builder.push(" AND (");
         let mut separated = query_builder.separated(" OR ");
@@ -414,7 +414,7 @@ mod tests {
     #[dao(
         sql_table = "test_table",
         partition_by = "partition_id",
-        natural_order_by = "defined_on"
+        versioned_at(order_by = "defined_on", condition_by = "status")
     )]
     struct TestDao {
         id: TestId,
@@ -789,7 +789,7 @@ mod tests {
     async fn test_select_versions_at_types(db: DbPool) -> Result<(), TdError> {
         async fn test_query<D>(db: &DbPool) -> Result<(), TdError>
         where
-            D: DataAccessObject + PartitionBy + NaturalOrder + Status,
+            D: DataAccessObject + PartitionBy + VersionedAt,
         {
             let mut query_builder = TEST_QUERIES.select_versions_at::<D>(None, None, &())?;
             let _result: Vec<D> = query_builder.build_query_as().fetch_all(db).await.unwrap();

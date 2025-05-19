@@ -29,9 +29,14 @@ struct DaoArguments {
     sql_table: Option<String>,
     order_by: Option<String>,
     partition_by: Option<String>,
-    natural_order_by: Option<String>,
-    status_by: Option<String>,
+    versioned_at: Option<VersionedAtArguments>,
     recursive: Option<DaoRecursiveArguments>,
+}
+
+#[derive(FromMeta)]
+struct VersionedAtArguments {
+    order_by: String,
+    condition_by: String,
 }
 
 #[derive(FromMeta)]
@@ -94,15 +99,24 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             quote! {}
         }
     };
-    let natural_order_by = match parsed_args.natural_order_by {
-        Some(natural_order_by) => {
-            let natural_order_by = natural_order_by.as_str();
-            let natural_order_type = type_for_field(fields, natural_order_by);
+    let versioned_at = match parsed_args.versioned_at {
+        Some(versioned_at) => {
+            let order_by = versioned_at.order_by.as_str();
+            let order_type = type_for_field(fields, order_by);
+
+            let condition_by = versioned_at.condition_by.as_str();
+            let condition_type = type_for_field(fields, condition_by);
+
             quote! {
-                impl #impl_generics crate::types::NaturalOrder for #ident #ty_generics #where_clause {
-                    type NaturalOrder = #natural_order_type;
-                    fn natural_order_by() -> &'static str {
-                        #natural_order_by
+                impl #impl_generics crate::types::VersionedAt for #ident #ty_generics #where_clause {
+                    type Order = #order_type;
+                    fn order_by() -> &'static str {
+                        #order_by
+                    }
+
+                    type Condition = #condition_type;
+                    fn condition_by() -> &'static str {
+                        #condition_by
                     }
                 }
             }
@@ -110,34 +124,6 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         None => {
             quote! {}
         }
-    };
-    let status_by = if let Some(status_by) = parsed_args.status_by {
-        let status_by = status_by.as_str();
-        let status_type = type_for_field(fields, status_by);
-        quote! {
-            impl #impl_generics crate::types::Status for #ident #ty_generics #where_clause {
-                type Status = #status_type;
-                fn status_by() -> &'static str {
-                    #status_by
-                }
-            }
-        }
-    } else if fields
-        .iter()
-        .any(|f| f.ident.as_ref().is_some_and(|ident| ident == "status"))
-    {
-        // if status field is present, we can impl this by default
-        let status_type = type_for_field(fields, "status");
-        quote! {
-            impl #impl_generics crate::types::Status for #ident #ty_generics #where_clause {
-                type Status = #status_type;
-                fn status_by() -> &'static str {
-                    "status"
-                }
-            }
-        }
-    } else {
-        quote! {}
     };
     let recursive = match parsed_args.recursive {
         Some(recursive) => {
@@ -241,8 +227,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
 
         #td_type
         #partition_by
-        #natural_order_by
-        #status_by
+        #versioned_at
         #recursive
     };
 

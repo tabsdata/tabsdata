@@ -47,7 +47,7 @@ pub struct DependencyDBWithNames {
 #[dao(
     sql_table = "dependency_versions",
     partition_by = "dependency_id",
-    natural_order_by = "defined_on",
+    versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "function_version_id", down = "table_function_version_id")
 )]
 #[td_type(
@@ -84,7 +84,7 @@ pub struct DependencyVersionDB {
     sql_table = "dependency_versions__with_names",
     order_by = "dep_pos",
     partition_by = "dependency_id",
-    natural_order_by = "defined_on",
+    versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "function_version_id", down = "table_function_version_id")
 )]
 pub struct DependencyVersionDBWithNames {

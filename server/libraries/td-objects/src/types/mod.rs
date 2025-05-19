@@ -116,19 +116,17 @@ pub trait ComposedString {
     fn compose(&self) -> String;
 }
 
+pub trait VersionedAt {
+    type Order: SqlEntity;
+    fn order_by() -> &'static str;
+
+    type Condition: SqlEntity;
+    fn condition_by() -> &'static str;
+}
+
 pub trait PartitionBy {
     type PartitionBy: SqlEntity;
     fn partition_by() -> &'static str;
-}
-
-pub trait NaturalOrder {
-    type NaturalOrder: SqlEntity;
-    fn natural_order_by() -> &'static str;
-}
-
-pub trait Status {
-    type Status: SqlEntity;
-    fn status_by() -> &'static str;
 }
 
 pub trait Recursive {

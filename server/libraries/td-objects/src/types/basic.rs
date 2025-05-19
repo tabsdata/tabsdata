@@ -26,100 +26,7 @@ pub struct AccessTokenExpiration;
 #[td_type::typed(id)]
 pub struct AccessTokenId;
 
-#[td_type::typed_enum(skip_serde)]
-pub enum AtMulti {
-    Time(AtTime),
-    Trx(TransactionId),
-    Exec(ExecutionId),
-    Data(DataVersionId),
-}
-
-impl AtMulti {
-    pub fn time(&self) -> Option<AtTime> {
-        match self {
-            AtMulti::Time(time) => Some(time.clone()),
-            _ => None,
-        }
-    }
-    pub fn trx(&self) -> Option<TransactionId> {
-        match self {
-            AtMulti::Trx(trx) => Some(*trx),
-            _ => None,
-        }
-    }
-    pub fn exec(&self) -> Option<ExecutionId> {
-        match self {
-            AtMulti::Exec(exec) => Some(*exec),
-            _ => None,
-        }
-    }
-    pub fn data(&self) -> Option<DataVersionId> {
-        match self {
-            AtMulti::Data(data) => Some(*data),
-            _ => None,
-        }
-    }
-}
-
-impl Default for AtMulti {
-    fn default() -> Self {
-        AtMulti::Time(Default::default())
-    }
-}
-
-static AT_MULTI_TIME: &str = "time:";
-static AT_MULTI_TRX: &str = "trx:";
-static AT_MULTI_EXEC: &str = "exec:";
-static AT_MULTI_DATA: &str = "data:";
-
-impl<'de> serde::Deserialize<'de> for AtMulti {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        if let Some(stripped) = s.strip_prefix(AT_MULTI_TIME) {
-            return Ok(AtMulti::Time(
-                AtTime::try_from(stripped).map_err(serde::de::Error::custom)?,
-            ));
-        }
-        if let Some(stripped) = s.strip_prefix(AT_MULTI_TRX) {
-            return Ok(AtMulti::Trx(
-                TransactionId::try_from(stripped).map_err(serde::de::Error::custom)?,
-            ));
-        }
-        if let Some(stripped) = s.strip_prefix(AT_MULTI_EXEC) {
-            return Ok(AtMulti::Exec(
-                ExecutionId::try_from(stripped).map_err(serde::de::Error::custom)?,
-            ));
-        }
-        if let Some(stripped) = s.strip_prefix(AT_MULTI_DATA) {
-            return Ok(AtMulti::Data(
-                DataVersionId::try_from(stripped).map_err(serde::de::Error::custom)?,
-            ));
-        }
-        Err(serde::de::Error::custom(format!(
-            "Value '{}' with unknown prefix",
-            s
-        )))
-    }
-}
-
-impl serde::Serialize for AtMulti {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            AtMulti::Time(ref val) => format!("time:{}", val.as_str_millis()).serialize(serializer),
-            AtMulti::Trx(ref val) => format!("trx:{}", val).serialize(serializer),
-            AtMulti::Exec(ref val) => format!("exec:{}", val).serialize(serializer),
-            AtMulti::Data(ref val) => format!("data:{}", val).serialize(serializer),
-        }
-    }
-}
-
-#[td_type::typed(timestamp)]
+#[td_type::typed(timestamp, try_from = TriggeredOn)]
 pub struct AtTime;
 
 #[td_type::typed(string)]
@@ -142,9 +49,6 @@ pub struct DataChanged;
 
 #[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
 pub struct DataLocation;
-
-#[td_type::typed(id)]
-pub struct DataVersionId;
 
 #[td_type::typed_enum]
 pub enum Decorator {
@@ -592,66 +496,3 @@ pub struct VersionPos;
 
 #[td_type::typed(id)]
 pub struct WorkerMessageId;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_at_multi_methods() {
-        let at_multi = AtMulti::Time(AtTime::default());
-        assert!(at_multi.time().is_some());
-        assert!(at_multi.trx().is_none());
-        assert!(at_multi.exec().is_none());
-        assert!(at_multi.data().is_none());
-
-        let at_multi_trx = AtMulti::Trx(TransactionId::default());
-        assert!(at_multi_trx.time().is_none());
-        assert!(at_multi_trx.trx().is_some());
-        assert!(at_multi_trx.exec().is_none());
-        assert!(at_multi_trx.data().is_none());
-
-        let at_multi_exec = AtMulti::Exec(ExecutionId::default());
-        assert!(at_multi_exec.time().is_none());
-        assert!(at_multi_exec.trx().is_none());
-        assert!(at_multi_exec.exec().is_some());
-        assert!(at_multi_exec.data().is_none());
-
-        let at_multi_data = AtMulti::Data(DataVersionId::default());
-        assert!(at_multi_data.time().is_none());
-        assert!(at_multi_data.trx().is_none());
-        assert!(at_multi_data.exec().is_none());
-        assert!(at_multi_data.data().is_some());
-    }
-
-    #[test]
-    fn test_at_multi_serde() {
-        let at_multi = AtMulti::Time(AtTime::default());
-        let serialized = serde_json::to_string(&at_multi).unwrap();
-        assert!(serialized.starts_with("\"time:"));
-
-        let deserialized: AtMulti = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(at_multi, deserialized);
-
-        let at_multi_trx = AtMulti::Trx(TransactionId::default());
-        let serialized_trx = serde_json::to_string(&at_multi_trx).unwrap();
-        assert!(serialized_trx.starts_with("\"trx:"));
-        let deserialized_trx: AtMulti = serde_json::from_str(&serialized_trx).unwrap();
-        assert_eq!(at_multi_trx, deserialized_trx);
-
-        let at_multi_exec = AtMulti::Exec(ExecutionId::default());
-        let serialized_exec = serde_json::to_string(&at_multi_exec).unwrap();
-        assert!(serialized_exec.starts_with("\"exec:"));
-        let deserialized_exec: AtMulti = serde_json::from_str(&serialized_exec).unwrap();
-        assert_eq!(at_multi_exec, deserialized_exec);
-
-        let at_multi_data = AtMulti::Data(DataVersionId::default());
-        let serialized_data = serde_json::to_string(&at_multi_data).unwrap();
-        assert!(serialized_data.starts_with("\"data:"));
-        let deserialized_data: AtMulti = serde_json::from_str(&serialized_data).unwrap();
-        assert_eq!(at_multi_data, deserialized_data);
-
-        let invalid_str = "\"invalid_prefix:12345\"";
-        serde_json::from_str::<AtMulti>(invalid_str).unwrap_err();
-    }
-}

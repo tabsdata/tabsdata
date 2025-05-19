@@ -97,7 +97,7 @@ pub struct TransactionDBWithStatus {
 #[dao(
     sql_table = "function_runs",
     partition_by = "id",
-    natural_order_by = "triggered_on"
+    versioned_at(order_by = "triggered_on", condition_by = "status")
 )]
 #[td_type(builder(try_from = ExecutionDB, skip_all))]
 pub struct FunctionRunDB {
@@ -151,11 +151,13 @@ pub struct ExecutableFunctionRunDB {
 #[dao(sql_table = "table_data_versions")]
 pub struct TableDataVersionDB {
     #[builder(default)]
+    #[td_type(extractor)]
     id: TableDataVersionId,
     collection_id: CollectionId,
     table_id: TableId,
     name: TableName,
     table_version_id: TableVersionId,
+    #[td_type(extractor)]
     function_version_id: FunctionVersionId,
     #[builder(default)]
     has_data: Option<HasData>,
@@ -190,8 +192,7 @@ pub struct TableDataVersionDBWithStatus {
 #[dao(
     sql_table = "table_data_versions__with_names",
     partition_by = "table_version_id",
-    natural_order_by = "triggered_on",
-    status_by = "has_data"
+    versioned_at(order_by = "triggered_on", condition_by = "has_data")
 )]
 pub struct TableDataVersionDBWithNames {
     id: TableDataVersionId,
@@ -220,7 +221,7 @@ pub struct TableDataVersionDBWithNames {
 #[dao(
     sql_table = "table_data_versions__active",
     partition_by = "table_id",
-    natural_order_by = "triggered_on"
+    versioned_at(order_by = "triggered_on", condition_by = "status")
 )]
 #[derive(Hash)]
 pub struct ActiveTableDataVersionDB {
@@ -284,7 +285,7 @@ pub struct FunctionRequirementDBWithStatus {
 #[dao(
     sql_table = "function_requirements__with_names",
     partition_by = "id",
-    natural_order_by = "id",
+    versioned_at(order_by = "id", condition_by = "status"),
     recursive(up = "requirement_function_run_id", down = "function_run_id")
 )]
 pub struct FunctionRequirementDBWithNames {

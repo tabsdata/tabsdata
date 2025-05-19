@@ -5,12 +5,15 @@
 use crate::crudl::RequestContext;
 use crate::rest_urls::{AtMultiParam, CollectionParam, SampleOffsetLenParam, TableParam};
 use crate::types::basic::{
-    AtMulti, AtTime, CollectionId, CollectionIdName, CollectionName, DataChanged, DataVersionId,
-    ExecutionId, Frozen, FunctionId, FunctionName, FunctionVersionId, Partitioned, Private,
-    SampleLen, SampleOffset, SchemaFieldName, SchemaFieldType, TableFunctionParamPos, TableId,
+    AtTime, CollectionId, CollectionIdName, CollectionName, DataChanged, ExecutionId, Frozen,
+    FunctionId, FunctionName, FunctionVersionId, Partitioned, Private, SampleLen, SampleOffset,
+    SchemaFieldName, SchemaFieldType, TableDataVersionId, TableFunctionParamPos, TableId,
     TableIdName, TableName, TableStatus, TableVersionId, TransactionId, UserId, UserName,
 };
+use crate::types::execution::TransactionStatus;
 use crate::types::function::{FunctionDB, FunctionVersionDB};
+use polars::prelude::Field;
+use td_error::TdError;
 
 #[td_type::Dao]
 #[dao(sql_table = "tables")]
@@ -68,10 +71,12 @@ pub struct TableDBWithNames {
 #[dao(
     sql_table = "table_versions",
     partition_by = "table_id",
-    natural_order_by = "defined_on"
+    versioned_at(order_by = "defined_on", condition_by = "status")
 )]
-#[td_type(builder(try_from = FunctionVersionDB, skip_all))]
-#[td_type(updater(try_from = RequestContext, skip_all))]
+#[td_type(
+    builder(try_from = FunctionVersionDB, skip_all),
+    updater(try_from = RequestContext, skip_all)
+)]
 pub struct TableVersionDB {
     #[builder(default)]
     id: TableVersionId,
@@ -99,7 +104,7 @@ pub struct TableVersionDB {
     sql_table = "table_versions__with_names",
     order_by = "function_param_pos",
     partition_by = "table_id",
-    natural_order_by = "defined_on"
+    versioned_at(order_by = "defined_on", condition_by = "status")
 )]
 pub struct TableVersionDBWithNames {
     id: TableVersionId,
@@ -124,7 +129,7 @@ pub struct CollectionAtName {
     #[td_type(extractor)]
     collection: CollectionIdName,
     #[td_type(extractor)]
-    at: AtMulti,
+    at: AtTime,
 }
 
 impl CollectionAtName {
@@ -143,7 +148,7 @@ pub struct TableAtName {
     #[td_type(extractor)]
     table: TableIdName,
     #[td_type(extractor)]
-    at: AtMulti,
+    at: AtTime,
 }
 
 impl TableAtName {
@@ -163,7 +168,7 @@ pub struct TableSampleAtName {
     #[td_type(extractor)]
     table: TableIdName,
     #[td_type(extractor)]
-    at: AtMulti,
+    at: AtTime,
     #[td_type(extractor)]
     offset: SampleOffset,
     #[td_type(extractor)]
@@ -182,35 +187,79 @@ impl TableSampleAtName {
     }
 }
 
-#[td_type::Dto(
-    //TODO
+#[td_type::Dao]
+#[dao(
+    sql_table = "table_versions__read",
+    partition_by = "table_id",
+    versioned_at(order_by = "defined_on", condition_by = "status")
 )]
+pub struct TableVersionDBRead {
+    id: TableVersionId,
+    name: TableName,
+    table_id: TableId,
+    collection_id: CollectionId,
+    collection_name: CollectionName,
+    function_version_id: FunctionVersionId,
+    function_name: FunctionName,
+    last_data_version: Option<TableDataVersionId>,
+    // last_data_changed_version: Option<TableDataVersionId>,
+    status: TableStatus,
+    defined_on: AtTime,
+}
+
+#[td_type::Dto]
+#[dto(list(on = TableVersionDBRead))]
+#[td_type(builder(try_from = TableVersionDBRead))]
 pub struct Table {
     id: TableVersionId,
+    #[dto(list(order_by))]
     name: TableName,
     collection_id: CollectionId,
     collection_name: CollectionName,
-    function_id: FunctionId,
+    table_id: TableId,
+    function_version_id: FunctionVersionId,
     function_name: FunctionName,
-    last_data_version: DataVersionId,
-    last_data_changed_version: DataVersionId,
+    last_data_version: Option<TableDataVersionId>,
+    // last_data_changed_version: Option<TableDataVersionId>, // TODO this is hard to get in a view
+    defined_on: AtTime,
 }
 
-#[td_type::Dto(
-    //TODO
+#[td_type::Dao]
+#[dao(
+    sql_table = "table_data_versions__read",
+    versioned_at(order_by = "created_at", condition_by = "transaction_status")
 )]
-pub struct TableDataVersion {
-    id: TableVersionId,
+pub struct TableDataVersionDBRead {
+    id: TableDataVersionId,
     collection_id: CollectionId,
     collection_name: CollectionName,
-    table_id: TableId,
+    table_version_id: TableVersionId,
     table_name: TableName,
-    function_id: FunctionId,
+    function_version_id: FunctionVersionId,
     function_name: FunctionName,
     execution_id: ExecutionId,
     transaction_id: TransactionId,
     data_changed: DataChanged,
     created_at: AtTime,
+    transaction_status: TransactionStatus,
+}
+
+#[td_type::Dto]
+#[dto(list(on = TableDataVersionDBRead))]
+#[td_type(builder(try_from = TableDataVersionDBRead))]
+pub struct TableDataVersion {
+    id: TableDataVersionId,
+    collection_id: CollectionId,
+    collection_name: CollectionName,
+    table_version_id: TableVersionId,
+    table_name: TableName,
+    function_version_id: FunctionVersionId,
+    function_name: FunctionName,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    data_changed: DataChanged,
+    created_at: AtTime,
+    transaction_status: TransactionStatus,
 }
 
 #[td_type::Dto(
@@ -220,6 +269,17 @@ pub struct SchemaField {
     name: SchemaFieldName,
     #[serde(rename = "type")]
     type_: SchemaFieldType,
+}
+
+impl TryFrom<Field> for SchemaField {
+    type Error = TdError;
+    fn try_from(field: Field) -> Result<Self, TdError> {
+        let schema_field = SchemaField::builder()
+            .try_name(field.name().to_string())?
+            .try_type_(field.dtype().to_string())?
+            .build()?;
+        Ok(schema_field)
+    }
 }
 
 #[td_type::Dto(

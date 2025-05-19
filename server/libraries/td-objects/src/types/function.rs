@@ -140,7 +140,7 @@ pub struct Bundle {
 #[dao(
     sql_table = "function_versions",
     partition_by = "function_id",
-    natural_order_by = "defined_on"
+    versioned_at(order_by = "defined_on", condition_by = "status")
 )]
 #[td_type(
     builder(try_from = FunctionRegister, skip_all),
@@ -183,7 +183,7 @@ pub struct FunctionVersionDB {
 #[dao(
     sql_table = "function_versions__with_names",
     partition_by = "function_id",
-    natural_order_by = "defined_on"
+    versioned_at(order_by = "defined_on", condition_by = "status")
 )]
 pub struct FunctionVersionDBWithNames {
     #[td_type(extractor)]

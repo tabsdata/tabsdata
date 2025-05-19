@@ -4,7 +4,7 @@
 
 use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
 use crate::sql::{Queries, QueryError};
-use crate::types::{DataAccessObject, NaturalOrder, PartitionBy, Recursive, SqlEntity, Status};
+use crate::types::{DataAccessObject, PartitionBy, Recursive, SqlEntity, VersionedAt};
 use std::ops::Deref;
 use tracing::trace;
 
@@ -102,15 +102,15 @@ pub trait RecursiveQueries {
     /// ```
     fn select_recursive_versions_at<'a, D, R, E>(
         &self,
-        d_defined_on: Option<&'a D::NaturalOrder>,
-        d_status: Option<&'a [&'a D::Status]>,
-        r_defined_on: Option<&'a R::NaturalOrder>,
-        r_status: Option<&'a [&'a R::Status]>,
+        d_defined_on: Option<&'a <D as VersionedAt>::Order>,
+        d_status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
+        r_defined_on: Option<&'a <R as VersionedAt>::Order>,
+        r_status: Option<&'a [&'a <R as VersionedAt>::Condition]>,
         direct_reference_entity: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
-        D: DataAccessObject + Recursive + PartitionBy + NaturalOrder + Status,
-        R: DataAccessObject + PartitionBy + NaturalOrder + Status,
+        D: DataAccessObject + Recursive + PartitionBy + VersionedAt,
+        R: DataAccessObject + PartitionBy + VersionedAt,
         E: SqlEntity, // has to be in R
     {
         let mut query_builder = sqlx::QueryBuilder::default();
@@ -144,7 +144,7 @@ pub trait RecursiveQueries {
 
         // And last, order by
         query_builder.push(" ");
-        query_builder.push(D::order_by());
+        query_builder.push(<D as DataAccessObject>::order_by());
 
         trace!(
             "select_active_recursive_versions_at: sql: {}",
@@ -262,7 +262,7 @@ mod tests {
     #[dao(
         sql_table = "test_table",
         partition_by = "id",
-        natural_order_by = "defined_on",
+        versioned_at(order_by = "defined_on", condition_by = "status"),
         recursive(up = "current", down = "downstream")
     )]
     struct TestDao {
@@ -278,7 +278,7 @@ mod tests {
     #[dao(
         sql_table = "test_table_reference",
         partition_by = "partition_id",
-        natural_order_by = "defined_on"
+        versioned_at(order_by = "defined_on", condition_by = "status")
     )]
     struct RecursionReference {
         id: TestId,
@@ -697,8 +697,8 @@ mod tests {
     async fn test_select_active_versions_at_types(db: DbPool) -> Result<(), TdError> {
         async fn test_query<D, R, E>(db: &DbPool, recursion_ref: &E) -> Result<(), TdError>
         where
-            D: DataAccessObject + Recursive + PartitionBy + NaturalOrder + Status,
-            R: DataAccessObject + PartitionBy + NaturalOrder + Status,
+            D: DataAccessObject + Recursive + PartitionBy + VersionedAt,
+            R: DataAccessObject + PartitionBy + VersionedAt,
             E: SqlEntity,
         {
             let mut query_builder = TEST_QUERIES.select_recursive_versions_at::<D, R, E>(
