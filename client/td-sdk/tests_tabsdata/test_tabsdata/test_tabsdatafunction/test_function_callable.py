@@ -22,7 +22,8 @@ VALID_PD_DATAFRAME = pd.DataFrame(BASE_DATA)
 VALID_PL_DATAFRAME = pl.DataFrame(BASE_DATA)
 VALID_PL_LAZYFRAME = pl.LazyFrame(BASE_DATA)
 VALID_TD_TABLEFRAME = TableFrame.__build__(
-    _add_dummy_required_columns(pl.DataFrame(BASE_DATA))
+    _add_dummy_required_columns(pl.DataFrame(BASE_DATA)),
+    None,
 )
 
 

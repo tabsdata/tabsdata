@@ -12,7 +12,7 @@ import pathlib
 import subprocess
 import tempfile
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, List, Tuple, Union
 from urllib.parse import unquote
 
 import base32hex
@@ -36,7 +36,7 @@ from tabsdata.io.input import (
     S3Source,
     TableInput,
 )
-from tabsdata.tableframe.lazyframe.frame import TableFrame
+from tabsdata.tableframe.lazyframe.frame import AUTO, TableFrame
 from tabsdata.tableuri import build_table_uri_object
 from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
@@ -177,6 +177,8 @@ def trigger_non_plugin_source(
         local_sources = execute_sql_importer(source, destination_folder, initial_values)
     elif isinstance(source, TableInput):
         logger.debug("Triggering TableInput")
+        # When loading tabsdata tables, we return tuples of (uri, table), so that
+        # coming operations can use information on the request for further processing.
         local_sources = execute_table_importer(source, request)
     else:
         logger.error(f"Invalid source type: {type(source)}. No data imported.")
@@ -190,7 +192,7 @@ def trigger_non_plugin_source(
 
 def execute_table_importer(
     source: TableInput, execution_context: InputYaml
-) -> List[str]:
+) -> List[Union[Tuple[str, Table], List[Tuple[str, Table]]]]:
     # Right now, source provides very little information, but we use it to do a small
     # sanity check and to ensure that everything is running properly
     execution_context_input_entry_list = execution_context.input
@@ -198,7 +200,7 @@ def execute_table_importer(
         f"Importing tables '{execution_context_input_entry_list}' and matching them"
         f" with source '{source}'"
     )
-    table_list = []
+    table_list: List[Union[Tuple[str, Table], List[Tuple[str, Table]]]] = []
     # Note: source.uri is a list of URIs, it can't be a single URI because when we
     # serialised it we stored it as such even if it was a single one.
     if len(execution_context_input_entry_list) != len(source.table):
@@ -222,17 +224,17 @@ def execute_table_importer(
             real_table_uri = obtain_table_uri_and_verify(
                 execution_context_input_entry, source_table_str
             )
-            table_list.append(real_table_uri)
+            table_list.append((real_table_uri, execution_context_input_entry))
         elif isinstance(execution_context_input_entry, TableVersions):
             logger.debug(
                 f"Matching TableVersions '{execution_context_input_entry}' with source"
                 f" URI '{source_table_str}'"
             )
             list_of_table_objects = execution_context_input_entry.list_of_table_objects
-            list_of_table_uris = []
+            list_of_table_uris: List[Tuple[str, Table]] = []
             for table in list_of_table_objects:
                 real_table_uri = obtain_table_uri_and_verify(table, source_table_str)
-                list_of_table_uris.append(real_table_uri)
+                list_of_table_uris.append((real_table_uri, table))
             table_list.append(list_of_table_uris)
         else:
             logger.error(
@@ -594,12 +596,28 @@ def load_sources_from_list(source_list: list) -> List[TableFrame]:
     return [load_source(path) for path in source_list]
 
 
-def load_source(path_to_source: str | os.PathLike) -> TableFrame | None:
+def load_source(
+    spec: Union[str, os.PathLike, Tuple[Union[str, os.PathLike], Table]],
+) -> TableFrame | None:
+    if spec is None:
+        logger.warning("Spec to source is None. No data loaded.")
+        return None
+
+    # This should mean a table loaded from repository, which should already have an idx.
+    if isinstance(spec, tuple):
+        path_to_source, table = spec
+        idx = table.version_idx
+    # This should mean a table loaded from a publisher, meaning it requiring a new idx.
+    else:
+        path_to_source = spec
+        idx = AUTO
+
     if path_to_source is None:
         logger.warning("Path to source is None. No data loaded.")
         return None
+
     logger.debug(f"Loading parquet file from path: {path_to_source}")
     result = pl.scan_parquet(path_to_source) if path_to_source else None
-    result = TableFrame.__build__(result)
+    result = TableFrame.__build__(result, idx)
     logger.debug("Loaded parquet file successfully.")
     return result

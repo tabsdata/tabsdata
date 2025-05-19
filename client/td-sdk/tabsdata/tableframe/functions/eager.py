@@ -81,7 +81,10 @@ def _wrap_polars_type(
 ) -> td_frame.TdType:
     if isinstance(obj, pl.LazyFrame):
         # noinspection PyProtectedMember
-        return td_frame.TableFrame.__build__(obj)
+        return td_frame.TableFrame.__build__(
+            obj,
+            None,
+        )
     elif isinstance(obj, pl.Expr):
         # noinspection PyProtectedMember
         return td_expr.Expr(obj)

@@ -105,10 +105,12 @@ class TableFrameGroupBy:
 
         expressions = unwrapped_aggs + unwrapped_required_columns + unwrapped_named_aggs
 
+        # ToDo...
         return td_frame.TableFrame.__build__(
             self._lgb.agg(
                 expressions,
-            )
+            ),
+            None,
         )
 
     def len(self) -> td_frame.TableFrame:
@@ -154,11 +156,19 @@ class TableFrameGroupBy:
         │ D    ┆ 1   │
         └──────┴─────┘
         """
-        return td_frame.TableFrame.__build__(self._lgb.len())
+        # ToDo...
+        return td_frame.TableFrame.__build__(
+            self._lgb.len(),
+            None,
+        )
 
     @pydoc(categories="aggregation")
     def count(self) -> td_frame.TableFrame:
-        return td_frame.TableFrame.__build__(self._lgb.count())
+        # ToDo...
+        return td_frame.TableFrame.__build__(
+            self._lgb.count(),
+            None,
+        )
 
     @pydoc(categories="aggregation")
     def max(self) -> td_frame.TableFrame:
@@ -205,7 +215,11 @@ class TableFrameGroupBy:
         │ F    ┆ 9    ┆ NaN  │
         └──────┴──────┴──────┘
         """
-        return td_frame.TableFrame.__build__(self._lgb.max())
+        # ToDo...
+        return td_frame.TableFrame.__build__(
+            self._lgb.max(),
+            None,
+        )
 
     @pydoc(categories="aggregation")
     def mean(self) -> td_frame.TableFrame:
@@ -252,7 +266,11 @@ class TableFrameGroupBy:
         │ F    ┆ 9.0      ┆ NaN      │
         └──────┴──────────┴──────────┘
         """
-        return td_frame.TableFrame.__build__(self._lgb.mean())
+        # ToDo...
+        return td_frame.TableFrame.__build__(
+            self._lgb.mean(),
+            None,
+        )
 
     @pydoc(categories="aggregation")
     def median(self) -> td_frame.TableFrame:
@@ -299,7 +317,11 @@ class TableFrameGroupBy:
         │ F    ┆ 9.0  ┆ NaN  │
         └──────┴──────┴──────┘
         """
-        return td_frame.TableFrame.__build__(self._lgb.median())
+        # ToDo...
+        return td_frame.TableFrame.__build__(
+            self._lgb.median(),
+            None,
+        )
 
     @pydoc(categories="aggregation")
     def min(self) -> td_frame.TableFrame:
@@ -346,7 +368,11 @@ class TableFrameGroupBy:
         │ F    ┆ 9    ┆ NaN  │
         └──────┴──────┴──────┘
         """
-        return td_frame.TableFrame.__build__(self._lgb.min())
+        # ToDo...
+        return td_frame.TableFrame.__build__(
+            self._lgb.min(),
+            None,
+        )
 
     @pydoc(categories="aggregation")
     def n_unique(self) -> td_frame.TableFrame:
@@ -393,7 +419,11 @@ class TableFrameGroupBy:
         │ F    ┆ 1   ┆ 1   │
         └──────┴─────┴─────┘
         """
-        return td_frame.TableFrame.__build__(self._lgb.n_unique())
+        # ToDo...
+        return td_frame.TableFrame.__build__(
+            self._lgb.n_unique(),
+            None,
+        )
 
     @pydoc(categories="aggregation")
     def sum(self) -> td_frame.TableFrame:
@@ -440,4 +470,8 @@ class TableFrameGroupBy:
         │ F    ┆ 9   ┆ NaN  │
         └──────┴─────┴──────┘
         """
-        return td_frame.TableFrame.__build__(self._lgb.sum())
+        # ToDo...
+        return td_frame.TableFrame.__build__(
+            self._lgb.sum(),
+            None,
+        )

@@ -297,12 +297,19 @@ def _convert_recursively_to_tableframe(arguments: Any):
     elif isinstance(arguments, td_frame.TableFrame):
         return arguments
     elif isinstance(arguments, pl.DataFrame):
-        return td_frame.TableFrame.__build__(_add_dummy_required_columns(arguments))
+        return td_frame.TableFrame.__build__(
+            _add_dummy_required_columns(arguments),
+            None,
+        )
     elif isinstance(arguments, pl.LazyFrame):
-        return td_frame.TableFrame.__build__(_add_dummy_required_columns(arguments))
+        return td_frame.TableFrame.__build__(
+            _add_dummy_required_columns(arguments),
+            None,
+        )
     elif isinstance(arguments, pd.DataFrame):
         return td_frame.TableFrame.__build__(
-            _add_dummy_required_columns(pl.DataFrame(arguments))
+            _add_dummy_required_columns(pl.DataFrame(arguments)),
+            None,
         )
     return arguments
 

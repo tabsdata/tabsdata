@@ -262,7 +262,10 @@ class TestTableFrame(unittest.TestCase):
                 "numbers": [1, 2, 3],
             }
         )
-        tf = td.TableFrame.__build__(lf)
+        tf = td.TableFrame.__build__(
+            lf,
+            None,
+        )
         tf = tf.with_columns(
             td.col("letters").str.to_uppercase().alias("letters_uppercase")
         )
@@ -281,7 +284,10 @@ class TestTableFrame(unittest.TestCase):
                 "numbers": [1, 2, 3],
             }
         )
-        tf = td.TableFrame.__build__(lf)
+        tf = td.TableFrame.__build__(
+            lf,
+            None,
+        )
         tf._lf.sink_ndjson(os.path.join(tempfile.gettempdir(), "delete.sink_1.json"))
         _unwrap_table_frame(tf).sink_ndjson(
             os.path.join(tempfile.gettempdir(), "delete.sink_2.json")
@@ -294,7 +300,10 @@ class TestTableFrame(unittest.TestCase):
                 "numbers": [],
             }
         )
-        tf = td.TableFrame.__build__(lf)
+        tf = td.TableFrame.__build__(
+            lf,
+            None,
+        )
 
         item = tf.select(td.col("numbers").mean()).item()
         assert item is None
@@ -306,7 +315,10 @@ class TestTableFrame(unittest.TestCase):
                 "numbers": [1, 2, 3],
             }
         )
-        tf = td.TableFrame.__build__(lf)
+        tf = td.TableFrame.__build__(
+            lf,
+            None,
+        )
 
         item = tf.select(td.col("numbers").mean()).item()
         assert item == 2.0

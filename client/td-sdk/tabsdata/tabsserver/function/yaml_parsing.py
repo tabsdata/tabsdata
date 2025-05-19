@@ -39,6 +39,18 @@ class Table:
     def name(self):
         return self.data.get("name")
 
+    @property
+    def table_pos(self) -> int:
+        return self.data.get("table_pos")
+
+    @property
+    def version_pos(self) -> str:
+        return self.data.get("version_pos")
+
+    @property
+    def version_idx(self) -> int:
+        return self.data.get("version_idx")
+
     def __repr__(self):
         return f"Table(name={self.name}, uri={self.uri})"
 

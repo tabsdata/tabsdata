@@ -16,3 +16,11 @@ def _id_default() -> pl.Expr:
 
 def _id(_old_value: pl.String | None = None) -> pl.String:
     return base32hex.b32encode(uuid7().bytes)[:26]
+
+
+def _idx():
+    if not hasattr(_idx, "idx"):
+        _idx.idx = 0
+    idx = _idx.idx
+    _idx.idx += 1
+    return idx

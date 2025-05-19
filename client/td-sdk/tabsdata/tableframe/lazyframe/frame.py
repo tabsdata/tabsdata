@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from typing import Any, List, Literal, NoReturn, TypeVar
+from typing import Any, List, Literal, NoReturn, TypeVar, Union
 
 import polars as pl
 from accessify import accessify, private
@@ -53,6 +53,11 @@ from tabsdata.utils.annotations import pydoc
 # ToDo: SDK-128: Define the logging model for SDK CLI execution
 logger = logging.getLogger(__name__)
 
+AUTO = "auto"
+
+IndexKeyword = Literal["auto"]
+IndexInput = Union[int, None, IndexKeyword]
+
 
 @accessify
 class TableFrame:
@@ -60,7 +65,10 @@ class TableFrame:
 
     @classmethod
     def _from_lazy(cls, lf: pl.LazyFrame) -> TableFrame:
-        return TableFrame.__build__(lf)
+        return TableFrame.__build__(
+            lf,
+            None,
+        )
 
     def _to_lazy(self) -> pl.LazyFrame:
         return self._lf
@@ -70,14 +78,21 @@ class TableFrame:
     @classmethod
     @pydoc(categories="tableframe")
     def empty(cls) -> TableFrame:
-        return TableFrame.__build__(None)
+        return TableFrame.__build__(
+            None,
+            None,
+        )
 
+    # Value "auto" for idx is meant to be used only when populating pub tables, Using
+    # "auto" assumes a single function is running on the Python process, as it will use
+    # a global singleton.
     @classmethod
     def __build__(
         cls,
         df: (
             td_typing.TableDictionary | pl.LazyFrame | pl.DataFrame | TableFrame | None
         ) = None,
+        idx: IndexInput = None,
     ) -> TableFrame:
         # noinspection PyProtectedMember
         if df is None:
@@ -97,6 +112,7 @@ class TableFrame:
 
         # noinspection PyProtectedMember
         instance._id = td_generators._id()
+        instance._idx = idx
         df = td_common.add_system_columns(df)
         instance._lf = df
         return instance
@@ -108,6 +124,8 @@ class TableFrame:
         if isinstance(df, TableFrame):
             # noinspection PyProtectedMember
             df = df._lf
+            # noinspection PyProtectedMember
+            idx = df._idx
         else:
             if df is None:
                 df = pl.LazyFrame(None)
@@ -116,11 +134,22 @@ class TableFrame:
             else:
                 raise TableFrameError(ErrorCode.TF2, type(df))
             df = td_common.add_system_columns(df)
+            idx = None
 
         td_reflection.check_required_columns(df)
 
         # noinspection PyProtectedMember
         self._id = td_generators._id()
+        if idx == "auto":
+            # noinspection PyProtectedMember
+            self._idx = td_generators._idx()
+        elif idx is None:
+            self._idx = None
+        elif isinstance(idx, int):
+            self._idx = idx
+        else:
+            raise ValueError(f"Invalid idx: {idx}")
+
         self._lf = df
 
     def columns(
@@ -163,7 +192,10 @@ class TableFrame:
                 def wrapper(*args, **kwargs):
                     result = attr(*args, **kwargs)
                     if isinstance(result, pl.LazyFrame):
-                        return TableFrame.__build__(result)
+                        return TableFrame.__build__(
+                            result,
+                            self._idx,
+                        )
                     return result
 
                 return wrapper
@@ -229,7 +261,10 @@ class TableFrame:
         raise TypeError(msg)
 
     def __getitem__(self, item: int | range | slice) -> TableFrame:
-        return TableFrame.__build__(self._lf.__getitem__(item=item))
+        return TableFrame.__build__(
+            self._lf.__getitem__(item=item),
+            self._idx,
+        )
 
     def __str__(self) -> str:
         return self._lf.explain(optimized=False)
@@ -292,7 +327,10 @@ class TableFrame:
 
     @private
     def inspect(self, fmt: str = "{}") -> TableFrame:
-        return TableFrame.__build__(self._lf.inspect(fmt=fmt))
+        return TableFrame.__build__(
+            self._lf.inspect(fmt=fmt),
+            self._idx,
+        )
 
     """ Transformation Functions """
 
@@ -367,7 +405,8 @@ class TableFrame:
                 nulls_last=nulls_last,
                 maintain_order=maintain_order,
                 multithreaded=False,
-            )
+            ),
+            self._idx,
         )
 
     # ToDo: disallow transformations in system td columns.
@@ -432,7 +471,8 @@ class TableFrame:
         """
         # noinspection PyProtectedMember
         return TableFrame.__build__(
-            self._lf.cast(dtypes=td_translator._unwrap_tdexpr(dtypes), strict=strict)
+            self._lf.cast(dtypes=td_translator._unwrap_tdexpr(dtypes), strict=strict),
+            self._idx,
         )
 
     # ToDo: should we allow only clear to 0 rows?
@@ -474,7 +514,10 @@ class TableFrame:
         ╞══════╪═══════╡
         └──────┴───────┘
         """
-        return TableFrame.__build__(self._lf.clear(n=n))
+        return TableFrame.__build__(
+            self._lf.clear(n=n),
+            self._idx,
+        )
 
     # ToDo: allways attach system td columns.
     # ToDo: dedicated algorithm for proper provenance handling.
@@ -633,7 +676,10 @@ class TableFrame:
             allow_parallel=True,
             force_parallel=False,
         )
-        return TableFrame.__build__(_assemble_columns(lf))
+        return TableFrame.__build__(
+            _assemble_columns(lf),
+            self._idx,
+        )
 
     # ToDo: allways attach system td columns.
     # ToDo: dedicated algorithm for proper provenance handling.
@@ -693,11 +739,13 @@ class TableFrame:
             self._lf.with_columns(
                 *[td_translator._unwrap_into_tdexpr_column(column) for column in exprs],
                 **named_exprs,
-            )
+            ),
+            self._idx,
         )
 
     @pydoc(categories="projection")
     def rename(self, mapping: dict[str, str]) -> TableFrame:
+        # noinspection PyShadowingNames
         """
         Rename columns from the `TableFrame`.
 
@@ -756,7 +804,10 @@ class TableFrame:
                 )
             td_common.check_column_name(old_name)
             td_common.check_column_name(new_name)
-        return TableFrame.__build__(self._lf.rename(mapping, strict=True))
+        return TableFrame.__build__(
+            self._lf.rename(mapping, strict=True),
+            self._idx,
+        )
 
     # ToDo: allways attach system td columns.
     # ToDo: dedicated algorithm for proper provenance handling.
@@ -813,7 +864,8 @@ class TableFrame:
         """
         # noinspection PyProtectedMember
         return TableFrame.__build__(
-            self._lf.drop(td_translator._unwrap_tdexpr(*columns), strict=strict)
+            self._lf.drop(td_translator._unwrap_tdexpr(*columns), strict=strict),
+            self._idx,
         )
 
     # ToDo: ensure system td columns are left unchanged.
@@ -871,7 +923,8 @@ class TableFrame:
                 strategy=None,
                 limit=None,
                 matches_supertype=True,
-            )
+            ),
+            self._idx,
         )
 
     # ToDo: ensure system td columns are left unchanged.
@@ -921,7 +974,8 @@ class TableFrame:
         """
         # noinspection PyProtectedMember
         return TableFrame.__build__(
-            self._lf.fill_nan(value=td_translator._unwrap_tdexpr(value))
+            self._lf.fill_nan(value=td_translator._unwrap_tdexpr(value)),
+            self._idx,
         )
 
     # ToDo: check for undesired operations of system td columns.
@@ -991,7 +1045,8 @@ class TableFrame:
                 subset=td_translator._unwrap_tdexpr(subset),
                 keep=keep,
                 maintain_order=maintain_order,
-            )
+            ),
+            self._idx,
         )
 
     # ToDo: check for undesired operations of system td columns.
@@ -1055,7 +1110,8 @@ class TableFrame:
         """
         # noinspection PyProtectedMember
         return TableFrame.__build__(
-            self._lf.drop_nans(subset=td_translator._unwrap_tdexpr(subset))
+            self._lf.drop_nans(subset=td_translator._unwrap_tdexpr(subset)),
+            self._idx,
         )
 
     # ToDo: check for undesired operations of system td columns.
@@ -1120,7 +1176,8 @@ class TableFrame:
         """
         # noinspection PyProtectedMember
         return TableFrame.__build__(
-            self._lf.drop_nulls(subset=td_translator._unwrap_tdexpr(subset))
+            self._lf.drop_nulls(subset=td_translator._unwrap_tdexpr(subset)),
+            self._idx,
         )
 
     """Retrieval Functions"""
@@ -1183,7 +1240,8 @@ class TableFrame:
                     td_translator._unwrap_into_tdexpr_column(column)
                     for column in predicates
                 ],
-            )
+            ),
+            self._idx,
         )
 
     # TODO: should we hide the named_exprs parameter?
@@ -1269,7 +1327,8 @@ class TableFrame:
                     columns,
                     **named_exprs,
                 )
-            )
+            ),
+            self._idx,
         )
 
     # ToDo: allways attach system td columns.
@@ -1371,7 +1430,10 @@ class TableFrame:
         │ D   ┆ 5   │
         └─────┴─────┘
         """
-        return TableFrame.__build__(self._lf.slice(offset=offset, length=length))
+        return TableFrame.__build__(
+            self._lf.slice(offset=offset, length=length),
+            self._idx,
+        )
 
     # status(Status.DONE)
     @pydoc(categories="filters")
@@ -1413,7 +1475,10 @@ class TableFrame:
         │ X   ┆ 10  │
         └─────┴─────┘
         """
-        return TableFrame.__build__(self._lf.limit(n=n))
+        return TableFrame.__build__(
+            self._lf.limit(n=n),
+            self._idx,
+        )
 
     # status(Status.DONE)
     @pydoc(categories="filters")
@@ -1454,7 +1519,10 @@ class TableFrame:
         │ X   ┆ 10  │
         └─────┴─────┘
         """
-        return TableFrame.__build__(self._lf.head(n=n))
+        return TableFrame.__build__(
+            self._lf.head(n=n),
+            self._idx,
+        )
 
     # status(Status.DONE)
     @pydoc(categories="filters")
@@ -1495,7 +1563,10 @@ class TableFrame:
         │ M   ┆ 9   │
         └─────┴─────┘
         """
-        return TableFrame.__build__(self._lf.tail(n=n))
+        return TableFrame.__build__(
+            self._lf.tail(n=n),
+            self._idx,
+        )
 
     # status(Status.DONE)
     @pydoc(categories="filters")
@@ -1532,7 +1603,10 @@ class TableFrame:
         │ M   ┆ 9   │
         └─────┴─────┘
         """
-        return TableFrame.__build__(self._lf.last())
+        return TableFrame.__build__(
+            self._lf.last(),
+            self._idx,
+        )
 
     # status(Status.DONE)
     @pydoc(categories="filters")
@@ -1569,12 +1643,16 @@ class TableFrame:
         │ A   ┆ 1   │
         └─────┴─────┘
         """
-        return TableFrame.__build__(self._lf.first())
+        return TableFrame.__build__(
+            self._lf.first(),
+            self._idx,
+        )
 
     """ Functions derived from DataFrame"""
 
     @pydoc(categories="projection")
     def item(self) -> Any:
+        # noinspection PyShadowingNames
         """
         Returns a scalar value if the TableFrame contains exactly one user column and
         one row.
@@ -1614,11 +1692,13 @@ def _assemble_columns(f: TableFrame | pl.LazyFrame) -> td.TableFrame:
     if isinstance(f, pl.LazyFrame):
         return td.TableFrame.__build__(
             TableFrameExtension.instance().assemble_columns(f),
+            None,
         )
     elif isinstance(f, td.TableFrame):
         # noinspection PyProtectedMember
         return td.TableFrame.__build__(
             TableFrameExtension.instance().assemble_columns(f._lf),
+            f._idx,
         )
     else:
         raise TypeError(
