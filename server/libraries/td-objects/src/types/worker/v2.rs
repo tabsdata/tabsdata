@@ -4,8 +4,8 @@
 
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, ExecutionId, ExecutionName, FunctionName,
-    FunctionRunId, FunctionVersionId, TableDataVersionId, TableFunctionParamPos, TableId,
-    TableName, TableVersionId, TransactionId, VersionIdx, VersionPos,
+    FunctionRunId, FunctionVersionId, InputIdx, TableDataVersionId, TableFunctionParamPos, TableId,
+    TableName, TableVersionId, TransactionId, VersionPos,
 };
 use crate::types::worker::{Location, Locations};
 use serde::{Deserialize, Serialize};
@@ -65,7 +65,7 @@ pub struct InputTableVersion {
     table_data_version_id: Option<TableDataVersionId>,
     #[builder(default)]
     location: Option<Location>,
-    version_idx: VersionIdx,
+    input_idx: InputIdx,
     table_pos: DependencyPos,
     version_pos: VersionPos,
 }
@@ -89,7 +89,7 @@ pub struct InputPartitionTableVersion {
     table_version_id: TableVersionId,
     table_data_version_id: Option<TableDataVersionId>,
     partitions: HashMap<PartitionName, Location>,
-    version_idx: VersionIdx,
+    input_idx: InputIdx,
     table_pos: DependencyPos,
     version_pos: VersionPos,
 }
@@ -208,7 +208,7 @@ mod tests {
             .try_collection("cn")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
-            .try_version_idx(1)?
+            .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
             .build()?;
@@ -225,7 +225,7 @@ mod tests {
             .table_version_id(TableVersionId::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(location.clone())
-            .try_version_idx(1)?
+            .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
             .build()?;
@@ -242,7 +242,7 @@ mod tests {
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .table_data_version_id(TableDataVersionId::default())
-            .try_version_idx(1)?
+            .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
             .partitions(HashMap::new())
@@ -260,7 +260,7 @@ mod tests {
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .table_data_version_id(TableDataVersionId::default())
-            .try_version_idx(1)?
+            .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
             .partitions(partitions)
@@ -282,7 +282,7 @@ mod tests {
             .table_version_id(TableVersionId::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(location.clone())
-            .try_version_idx(1)?
+            .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
             .build()?;
@@ -299,7 +299,7 @@ mod tests {
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .table_data_version_id(TableDataVersionId::default())
-            .try_version_idx(1)?
+            .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
             .partitions(HashMap::from([(
@@ -379,7 +379,7 @@ mod tests {
             .table_version_id(TableVersionId::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(location1.clone())
-            .try_version_idx(1)?
+            .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
             .build()?;
@@ -391,7 +391,7 @@ mod tests {
             .table_version_id(TableVersionId::default())
             .table_data_version_id(TableDataVersionId::default())
             .location(location2.clone())
-            .try_version_idx(1)?
+            .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
             .build()?;

@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_execution::planner::ExecutionPlanner;
 use td_execution::version_resolver::VersionResolver;
 use td_objects::sql::DerefQueries;
-use td_objects::types::basic::{Dot, Trigger, VersionIdx, VersionPos};
+use td_objects::types::basic::{Dot, InputIdx, Trigger, VersionPos};
 use td_objects::types::execution::{
     ExecutionDB, ExecutionResponse, FunctionRequirementDB, FunctionRunDB, FunctionRunDBBuilder,
     FunctionVersionResponseBuilder, ResolvedVersion, TableDataVersionDB,
@@ -181,7 +181,7 @@ pub async fn build_function_requirements(
         .map(|f| (f.function_version_id(), f))
         .collect();
 
-    let mut version_idx = 0;
+    let mut input_idx = 0;
     for (function, table, edge) in plan.function_version_requirements() {
         for (version_pos, version) in edge.versions().inner().iter().enumerate() {
             let mut builder = FunctionRequirementDB::builder();
@@ -198,9 +198,9 @@ pub async fn build_function_requirements(
 
             if let Some(dependency) = edge.dependency_pos() {
                 builder
-                    .requirement_version_idx(VersionIdx::try_from(version_idx)?)
+                    .requirement_input_idx(InputIdx::try_from(input_idx)?)
                     .requirement_dependency_pos(Some(dependency.clone()));
-                version_idx += 1;
+                input_idx += 1;
             }
 
             if let Some(version) = version {

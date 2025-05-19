@@ -445,15 +445,15 @@ mod tests {
                     .contains(&(**dependency_pos + 1).to_string()));
             }
 
-            if let Some(version_idx) = function_condition.requirement_version_idx() {
-                function_idxs.insert(**version_idx as usize);
+            if let Some(input_idx) = function_condition.requirement_input_idx() {
+                function_idxs.insert(**input_idx as usize);
             }
         }
         assert_eq!(
             function_idxs,
             (0..function_requirements
                 .iter()
-                .filter(|f| f.requirement_version_idx().is_some())
+                .filter(|f| f.requirement_input_idx().is_some())
                 .collect::<Vec<_>>()
                 .len())
                 .collect::<HashSet<_>>()

@@ -606,7 +606,7 @@ def load_source(
     # This should mean a table loaded from repository, which should already have an idx.
     if isinstance(spec, tuple):
         path_to_source, table = spec
-        idx = table.version_idx
+        idx = table.input_idx
     # This should mean a table loaded from a publisher, meaning it requiring a new idx.
     else:
         path_to_source = spec

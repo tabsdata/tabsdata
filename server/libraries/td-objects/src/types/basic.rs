@@ -489,7 +489,7 @@ impl UserName {
 pub struct UserRoleId;
 
 #[td_type::typed(i32(min = 0, default = 0))]
-pub struct VersionIdx;
+pub struct InputIdx;
 
 #[td_type::typed(i32(min = 0, default = 0))]
 pub struct VersionPos;

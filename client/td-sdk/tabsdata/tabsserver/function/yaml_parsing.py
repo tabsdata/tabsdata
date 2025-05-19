@@ -48,8 +48,8 @@ class Table:
         return self.data.get("version_pos")
 
     @property
-    def version_idx(self) -> int:
-        return self.data.get("version_idx")
+    def input_idx(self) -> int:
+        return self.data.get("input_idx")
 
     def __repr__(self):
         return f"Table(name={self.name}, uri={self.uri})"

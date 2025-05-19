@@ -21,7 +21,7 @@ callback: !Http
   method: POST
   headers: {}
   body: true
-context: !V1
+context: !V2
   info:                                                                # metadata about the function
     collection_id: {c_id}                                            
     collection: {c}                                   
@@ -60,6 +60,7 @@ context: !V1
       env_prefix: TD_2_   
     table_pos: 0                                                       # position in the table array (always >= 0)
     version_pos: 0                                                     # position in the versions array
+    input_idx: 0                                                       # global sequential id of input table/version
   system_output:                                                       # array with all system output tables
   - !Table
     name: td-initial-values

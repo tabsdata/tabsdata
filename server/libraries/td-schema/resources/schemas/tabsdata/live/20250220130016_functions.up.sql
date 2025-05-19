@@ -495,7 +495,7 @@ CREATE TABLE function_requirements
     requirement_table_version_id      TEXT    NOT NULL,
     requirement_function_run_id       TEXT    NULL,
     requirement_table_data_version_id TEXT    NULL,
-    requirement_version_idx           INTEGER NULL,
+    requirement_input_idx             INTEGER NULL,
     requirement_dependency_pos        INTEGER NULL,
     requirement_version_pos           INTEGER NOT NULL
 );
