@@ -1,0 +1,52 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+from tabsdata.tabsserver.function.logging_utils import pad_string
+from tabsdata.tabsserver.function.offset_utils import Offset
+
+if TYPE_CHECKING:
+    from tabsdata.tabsserver.function.yaml_parsing import InputYaml
+
+logger = logging.getLogger(__name__)
+
+
+class Status:
+    """
+    A class to represent the status (currently offset plus metadata) of the function.
+    """
+
+    def __init__(self):
+        self.offset = Offset()
+        self.meta = {}
+
+    def __str__(self):
+        return f"#Status#< Offset: {str(self.offset)} ; meta: {str(self.meta)} >"
+
+    def load(self, request: InputYaml):
+        """
+        Load the current status from the execution context.
+
+        Args:
+            request: The request information.
+        """
+        logger.debug("Loading current status")
+        self.offset.load_current_offset(request)
+        logger.debug(f"Current status: {self}")
+
+    def store(self, request: InputYaml):
+        """
+        Store the status.
+
+        Args:
+            request: The execution context.
+
+        """
+        logger.info(pad_string("[Storing execution information]"))
+        logger.debug(f"Storing status: {self}")
+        self.offset.store(request)

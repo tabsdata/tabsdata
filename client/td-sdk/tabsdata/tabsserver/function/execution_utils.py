@@ -82,7 +82,7 @@ def execute_function_from_config(
     logger.info("Starting execution of function provided by the user")
     result = execution_context.user_provided_function(*parameters)
     logger.info("Finished executing function provided by the user")
-    if execution_context.offset.returns_values:
+    if execution_context.status.offset.returns_values:
         result = update_initial_values(execution_context, result)
     result = ResultsCollection(result)
     result.check_collection_integrity()
@@ -102,7 +102,7 @@ def update_initial_values(execution_context: ExecutionContext, result):
         else:
             new_initial_values = result
             result = (None,)
-    execution_context.offset.update_new_values(new_initial_values)
+    execution_context.status.offset.update_new_values(new_initial_values)
     return result
 
 
@@ -122,7 +122,7 @@ def obtain_user_provided_function_parameters(
             non_plugin_source,
             working_dir,
             old_execution_context,
-            execution_context.offset,
+            execution_context.status.offset,
         )
     return parameters
 

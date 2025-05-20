@@ -31,13 +31,13 @@ def create_response(
     ]
     data_tables = [Data(table) for table in modified_tables]
     no_data_tables = [NoData(table) for table in not_modified_tables]
-    initial_values_table_name = execution_context.offset.output_table_name
+    initial_values_table_name = execution_context.status.offset.output_table_name
     # TODO: Temporary fix, remove once initial_values_table_name is always provided
 
     if initial_values_table_name is None:
         pass
     else:
-        if execution_context.offset.changed:
+        if execution_context.status.offset.changed:
             data_tables.append(Data(initial_values_table_name))
         else:
             no_data_tables.append(NoData(initial_values_table_name))

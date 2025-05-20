@@ -32,7 +32,7 @@ def execute_bundled_function(
         execution_context,
         results,
     )
-    execution_context.store_offset()
+    execution_context.store_status()
     create_response(
         execution_context,
         modified_tables,

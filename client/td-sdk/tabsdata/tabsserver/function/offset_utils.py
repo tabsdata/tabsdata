@@ -9,10 +9,8 @@ from typing import Literal
 
 import polars as pl
 
-from tabsdata.tabsserver.function.logging_utils import pad_string
-
-from .global_utils import convert_uri_to_path
-from .yaml_parsing import InputYaml
+from tabsdata.tabsserver.function.global_utils import convert_uri_to_path
+from tabsdata.tabsserver.function.yaml_parsing import InputYaml
 
 logger = logging.getLogger(__name__)
 
@@ -254,10 +252,7 @@ class Offset:
         Args:
             execution_context: The execution context.
 
-        Returns:
-            True if the offset was stored successfully, False otherwise.
         """
-        logger.info(pad_string("[Storing execution information]"))
         logger.info(f"Storing offset {str(self)}")
         system_output = execution_context.system_output
 

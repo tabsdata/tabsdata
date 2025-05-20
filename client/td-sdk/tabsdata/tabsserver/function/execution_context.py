@@ -14,8 +14,8 @@ from tabsdata.io.input import build_input
 from tabsdata.io.output import build_output
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.tabsserver.function.configuration_utils import load_function_config
-from tabsdata.tabsserver.function.offset_utils import Offset
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata.tabsserver.function.status import Status
 from tabsdata.tabsserver.function.yaml_parsing import parse_request_yaml
 from tabsdata.utils.bundle_utils import (
     CODE_FOLDER,
@@ -46,13 +46,13 @@ class ExecutionContext:
         paths: ExecutionPaths,
         function_config: dict = None,
         request: InputYaml = None,
-        offset: Offset = None,
+        status: Status = None,
     ):
         self.paths = paths
         self.paths.parent_context = self
         self.function_config = function_config
         self.request = request
-        self.offset = offset
+        self.status = status
         self.logger = logger
         # Create the required folders for the function
         self.paths.create_required_folders()
@@ -153,35 +153,35 @@ class ExecutionContext:
             )
 
     @property
-    def offset(self) -> Offset:
+    def status(self) -> Status:
         """
-        Get the offset object.
+        Get the status object.
         """
-        if self._offset is None:
-            self._offset = Offset()
-            self._offset.load_current_offset(self.request)
-        return self._offset
+        if self._status is None:
+            self._status = Status()
+            self._status.load(self.request)
+        return self._status
 
-    @offset.setter
-    def offset(self, offset: Offset):
+    @status.setter
+    def status(self, status: Status):
         """
-        Set the offset object.
+        Set the status object.
         """
-        if offset is None:
-            self._offset = None
-        elif isinstance(offset, Offset):
-            self._offset = offset
+        if status is None:
+            self._status = None
+        elif isinstance(status, Status):
+            self._status = status
         else:
             raise TypeError(
-                "'offset' must be an instance of Offset or None, "
-                f"got {type(offset)} instead"
+                "'status' must be an instance of Status or None, "
+                f"got {type(status)} instead"
             )
 
-    def store_offset(self) -> bool:
+    def store_status(self) -> bool:
         """
-        Store the offset.
+        Store the status.
         """
-        return self.offset.store(self.request)
+        return self.status.store(self.request)
 
 
 class FunctionConfig:
