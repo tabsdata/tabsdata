@@ -1,7 +1,7 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
-
+import os
 from abc import ABC, abstractmethod
 
 import yaml
@@ -196,6 +196,10 @@ class V2(InputYaml):
     @property
     def input(self) -> list[Table | TableVersions]:
         return self.content.get("input")
+
+    @property
+    def function_data(self) -> Table:
+        return self.info.get("function_data")
 
     @property
     def output(self) -> list[Table]:
