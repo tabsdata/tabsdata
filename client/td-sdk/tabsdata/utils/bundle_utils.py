@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import pkgutil
 import shutil
 import sys
 import tarfile
@@ -212,22 +211,21 @@ def copy_and_verify_requirements_file(
 
 
 def obtain_ordered_dists() -> List[str]:
-    available_modules = [module.name for module in pkgutil.iter_modules()]
     dists = []
-    mapping = importlib_metadata.packages_distributions()
     real_modules = [
-        mapping[module][0] for module in available_modules if module in mapping
+        dist.metadata["Name"] for dist in importlib_metadata.distributions()
     ]
     for module in real_modules:
         if module == TABSDATA_MODULE_NAME:
             dists.append(f"{TABSDATA_MODULE_NAME}==$current")
-        try:
-            version = importlib_metadata.version(module)
-            if version:
-                dists.append(f"{module}=={version}")
-        except importlib_metadata.PackageNotFoundError:  # pragma: no cover
-            # Skip modules that do not have version information
-            continue
+        else:
+            try:
+                version = importlib_metadata.version(module)
+                if version:
+                    dists.append(f"{module}=={version}")
+            except importlib_metadata.PackageNotFoundError:  # pragma: no cover
+                # Skip modules that do not have version information
+                continue
     return sorted(
         list(set(dists)),
         key=str.casefold,

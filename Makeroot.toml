@@ -37,8 +37,9 @@ PROJECT_PY_TA_FEATURES_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/clien
 PROJECT_PY_TA_TABLEFRAME_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/client/td-lib/ta_tableframe/", normalize = true }
 PROJECT_PY_TE_TABLEFRAME_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/extensions/python/td-lib/te_tableframe/", normalize = true }
 PROJECT_PY_TD_SDK_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/client/td-sdk/", normalize = true }
-PROJECT_PY_TABSDATA_SALESFORCE_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/connectors/python/tabsdata_salesforce/", normalize = true }
 PROJECT_PY_TABSDATA_MONGODB_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/connectors/python/tabsdata_mongodb/", normalize = true }
+PROJECT_PY_TABSDATA_SALESFORCE_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/connectors/python/tabsdata_salesforce/", normalize = true }
+PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/connectors/python/tabsdata_snowflake/", normalize = true }
 
 PROJECT_RS_TABSDATA_CARGO_TOML = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/Cargo.toml", normalize = true }
 PROJECT_RS_TD_MACROS_CARGO_TOML = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/macros/Cargo.toml", normalize = true }
@@ -50,8 +51,9 @@ TESTS_PY_TA_FEATURES_FOLDER = { value = "tests_ta_features/", normalize = true }
 TESTS_PY_TA_TABLEFRAME_FOLDER = { value = "tests_ta_tableframe/", normalize = true }
 TESTS_PY_TE_TABLEFRAME_FOLDER = { value = "tests_te_tableframe/", normalize = true }
 TESTS_PY_TABSDATA_FOLDER = { value = "tests_tabsdata/", normalize = true }
-TESTS_PY_TABSDATA_SALESFORCE_FOLDER = { value = "tests_tabsdata_salesforce/", normalize = true }
 TESTS_PY_TABSDATA_MONGODB_FOLDER = { value = "tests_tabsdata_mongodb/", normalize = true }
+TESTS_PY_TABSDATA_SALESFORCE_FOLDER = { value = "tests_tabsdata_salesforce/", normalize = true }
+TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER = { value = "tests_tabsdata_snowflake/", normalize = true }
 
 RUST_DOCS = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/target/doc/tabsdatalib/index.html", normalize = true }
 PYTHON_DOCS = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/client/td-sdk/site/index.html", normalize = true }

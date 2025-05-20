@@ -337,7 +337,10 @@ def _recursively_evaluate_secret(value: Any) -> Any:
         valid_identifiers = [element.value for element in SecretIdentifier]
         if len(value) == 1 and list(value.keys())[0] in valid_identifiers:
             return build_secret(value).secret_value
-        return {key: _recursively_evaluate_secret(val) for key, val in value.items()}
+        return {
+            _recursively_evaluate_secret(key): _recursively_evaluate_secret(val)
+            for key, val in value.items()
+        }
     elif isinstance(value, Secret):
         return value.secret_value
     elif isinstance(value, list):

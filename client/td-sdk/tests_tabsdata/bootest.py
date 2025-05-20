@@ -197,6 +197,16 @@ def enrich_sys_path():
                 root,
                 "connectors",
                 "python",
+                "tabsdata_mongodb",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "connectors",
+                "python",
                 "tabsdata_salesforce",
             )
         ),
@@ -207,7 +217,7 @@ def enrich_sys_path():
                 root,
                 "connectors",
                 "python",
-                "tabsdata_mongodb",
+                "tabsdata_snowflake",
             )
         ),
     )

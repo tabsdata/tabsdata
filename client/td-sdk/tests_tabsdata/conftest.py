@@ -86,6 +86,7 @@ LOCAL_PACKAGES_LIST = [
     ROOT_PROJECT_DIR,
     os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_mongodb"),
     os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_salesforce"),
+    os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_snowflake"),
 ]
 
 TESTING_AWS_ACCESS_KEY_ID = "TRANSPORTER_AWS_ACCESS_KEY_ID"
@@ -159,21 +160,22 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("size", [metafunc.config.getoption("performance_size")])
 
 
-def read_json_and_clean(path):
+def read_json_and_clean(path, sort=True):
     """Reads a json file and removes the td.id column. Also sorts it to make
     comparison more stable"""
     df = pl.read_json(path)
-    df = clean_polars_df(df)
+    df = clean_polars_df(df, sort=sort)
     return df
 
 
-def clean_polars_df(df) -> pl.DataFrame:
+def clean_polars_df(df, sort=True) -> pl.DataFrame:
     """Removes the td column. Also sorts it to make comparison more stable"""
     # TODO: change to quote
 
     df = df.select(pl.exclude(f"^{re.escape(td_constants.TD_COLUMN_PREFIX)}.*$"))
-    df = df.select(sorted(df.columns))
-    df = df.sort(df.columns)
+    if sort:
+        df = df.select(sorted(df.columns))
+        df = df.sort(df.columns)
     return df
 
 

@@ -82,6 +82,14 @@ def clean_py(project_folder):
             "connectors/python/tabsdata_salesforce/tabsdata_salesforce/"
             "assets/manifest/LICENSE"
         ),
+        (
+            "connectors/python/tabsdata_snowflake/tabsdata_snowflake/"
+            "assets/manifest/BANNER"
+        ),
+        (
+            "connectors/python/tabsdata_snowflake/tabsdata_snowflake/"
+            "assets/manifest/LICENSE"
+        ),
     ]
 
     exclusion_patterns = [

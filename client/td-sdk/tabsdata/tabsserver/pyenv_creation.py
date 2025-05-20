@@ -50,6 +50,7 @@ from tabsdata.utils.constants import (
     TABSDATA_MODULE_NAME,
     TABSDATA_MONGODB_MODULE_NAME,
     TABSDATA_SALESFORCE_MODULE_NAME,
+    TABSDATA_SNOWFLAKE_MODULE_NAME,
     TRUE_VALUES,
 )
 
@@ -82,8 +83,9 @@ TARGET_FOLDER = "target"
 PYTHON_BASE_VERSION = "3.12"
 
 TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
-TD_TABSDATA_SALESFORCE_DEV_PKG = "TD_TABSDATA_SALESFORCE_DEV_PKG"
 TD_TABSDATA_MONGODB_DEV_PKG = "TD_TABSDATA_MONGODB_DEV_PKG"
+TD_TABSDATA_SALESFORCE_DEV_PKG = "TD_TABSDATA_SALESFORCE_DEV_PKG"
+TD_TABSDATA_SNOWFLAKE_DEV_PKG = "TD_TABSDATA_SNOWFLAKE_DEV_PKG"
 
 UV_EXECUTABLE = "uv"
 
@@ -95,6 +97,7 @@ TABSDATA_PACKAGES = [
     TABSDATA_MODULE_NAME,
     TABSDATA_MONGODB_MODULE_NAME,
     TABSDATA_SALESFORCE_MODULE_NAME,
+    TABSDATA_SNOWFLAKE_MODULE_NAME,
 ]
 TD_INHERIT_TABSDATA_PACKAGES = "TD_INHERIT_TABSDATA_PACKAGES"
 
@@ -1145,6 +1148,30 @@ def main():
             development_packages.append(str(tabsdata_salesforce_location))
 
         # tabsdata-salesforce connector (end)
+
+        # tabsdata-snowflake connector (start)
+
+        tabsdata_snowflake_provider, tabsdata_snowflake_location = (
+            get_tabsdata_package_metadata(
+                TABSDATA_SNOWFLAKE_MODULE_NAME, TD_TABSDATA_SNOWFLAKE_DEV_PKG
+            )
+        )
+        logger.info(
+            "Module tabsdata_snowflake classified as: "
+            f"provider: {tabsdata_snowflake_provider} - "
+            f"location: {tabsdata_snowflake_location}"
+        )
+
+        if tabsdata_snowflake_provider in (
+            "Archive (Project)",
+            "Archive (Folder)",
+            "Archive (Wheel)",
+            "Folder (Editable)",
+            "Folder (Frozen)",
+        ):
+            development_packages.append(str(tabsdata_snowflake_location))
+
+        # tabsdata-snowflake connector (end)
 
         # Note: tabsdata added the last one as then dependencies to other tabsdata
         # packages do not need to be accessible through PyPI during development stages.

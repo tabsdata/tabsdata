@@ -13,6 +13,7 @@ run_task = [
         "build_py_tabsdata",
         "build_py_tabsdata_mongodb",
         "build_py_tabsdata_salesforce",
+        "build_py_tabsdata_snowflake",
     ] }
 ]
 
@@ -37,5 +38,9 @@ category = "02 - Build"
 private = true
 
 [tasks.build_py_tabsdata_salesforce]
+category = "02 - Build"
+private = true
+
+[tasks.build_py_tabsdata_snowflake]
 category = "02 - Build"
 private = true

@@ -426,6 +426,7 @@ setup(
     extras_require={
         "mongodb": read_requirements("requirements-connector-mongodb.txt"),
         "salesforce": read_requirements("requirements-connector-salesforce.txt"),
+        "snowflake": read_requirements("requirements-connector-snowflake.txt"),
         "test": read_requirements("requirements-dev.txt"),
     },
     options={

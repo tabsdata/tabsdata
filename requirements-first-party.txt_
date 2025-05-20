@@ -4,3 +4,4 @@
 
 tabsdata_mongodb==0.9.7
 tabsdata_salesforce==0.9.7
+tabsdata_snowflake==0.9.7

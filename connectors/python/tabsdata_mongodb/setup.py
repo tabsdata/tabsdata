@@ -415,7 +415,7 @@ setup(
             "VERSION",
         )
     ),
-    description="Tabsdata plugin to access Salesforce data.",
+    description="Tabsdata plugin to access MongoDB data.",
     long_description=read(
         os.path.join(
             "tabsdata_mongodb",

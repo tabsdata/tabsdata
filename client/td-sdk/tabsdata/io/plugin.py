@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from tabsdata.tabsserver.function.execution_context import ExecutionContext
     from tabsdata.tabsserver.function.results_collection import ResultsCollection
 
-    VALID_PLUGIN_RESULT = List[List[pl.LazyFrame | None] | pl.LazyFrame | None]
+    VALID_PLUGIN_RESULT = List[pl.LazyFrame | None] | pl.LazyFrame | None
 
 
 class SourcePlugin:

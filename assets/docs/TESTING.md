@@ -129,23 +129,23 @@ Python:
 TBD
 ```
 
-## Salesforce
+## MongoDB
 
-* `<PREFIX>_SALESFORCE_URI`: The URI of the Salesforce instance.
-* `<PREFIX>_SALESFORCE_USER`: The user for the Salesforce instance.
-* `<PREFIX>_SALESFORCE_PASSWORD`: The password for the Salesforce instance.
-* `<PREFIX>_SALESFORCE_TOKEN`: The token for the Salesforce instance.
+* `<PREFIX>_MONGO_URI`: The URI of the MongoDB database.
+* `<PREFIX>_MONGO_USER`: The user for the MongoDB database.
+* `<PREFIX>_MONGO_PASSWORD`: The password for the MongoDB database.
 
 Python:
 ```python
 TBD
 ```
 
-## MongoDB
+## Salesforce
 
-* `<PREFIX>_MONGO_URI`: The URI of the MongoDB database.
-* `<PREFIX>_MONGO_USER`: The user for the MongoDB database.
-* `<PREFIX>_MONGO_PASSWORD`: The password for the MongoDB database.
+* `<PREFIX>_SALESFORCE_URI`: The URI of the Salesforce instance.
+* `<PREFIX>_SALESFORCE_USER`: The user for the Salesforce instance.
+* `<PREFIX>_SALESFORCE_PASSWORD`: The password for the Salesforce instance.
+* `<PREFIX>_SALESFORCE_TOKEN`: The token for the Salesforce instance.
 
 Python:
 ```python

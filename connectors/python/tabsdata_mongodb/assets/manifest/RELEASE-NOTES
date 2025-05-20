@@ -1,6 +1,0 @@
-
-Tabsdata 0.9.7
-
-* Known Issues
-
-- `tabsdata` does not work with Miniconda virtual environments in Windows.

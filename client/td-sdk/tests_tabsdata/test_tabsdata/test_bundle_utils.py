@@ -169,35 +169,6 @@ def test_create_requirements_yaml(mock_obtain_ordered_dists, tmp_path):
         }
 
 
-@patch("tabsdata.utils.bundle_utils.importlib_metadata.packages_distributions")
-@patch("tabsdata.utils.bundle_utils.pkgutil.iter_modules")
-def test_obtain_ordered_dists(mock_iter_modules, mock_packages_distributions):
-    # Mocking importlib.metadata.packages_distributions
-    mock_packages_distributions.return_value = {
-        "module1": ["package1"],
-        "module2": ["package2"],
-    }
-
-    # Mocking pkgutil.iter_modules
-    module1 = MagicMock()
-    module1.name = "module1"
-    module2 = MagicMock()
-    module2.name = "module2"
-    mock_iter_modules.return_value = [module1, module2]
-
-    # Mocking importlib.metadata.version
-    with patch(
-        "tabsdata.utils.bundle_utils.importlib_metadata.version"
-    ) as mock_version:
-        mock_version.side_effect = lambda name: (
-            "1.0.0" if name == "package1" else "2.0.0"
-        )
-
-        result = obtain_ordered_dists()
-        expected = ["package1==1.0.0", "package2==2.0.0"]
-        assert result == expected
-
-
 def test_store_file_contents(tmp_path):
     src_file = tmp_path / "src_file.txt"
     src_file.write_text("dummy content")

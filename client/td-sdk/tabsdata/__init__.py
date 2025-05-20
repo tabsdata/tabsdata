@@ -82,6 +82,7 @@ from tabsdata.tabsdatafunction import TabsdataFunction
 from tabsdata.tabsserver.function.execution_exceptions import CustomException
 from tabsdata_mongodb.connector import MongoDBDestination
 from tabsdata_salesforce.connector import SalesforceSource
+from tabsdata_snowflake.connector import SnowflakeDestination
 
 logging.basicConfig(
     level=logging.getLevelName(logging.WARNING),
@@ -166,8 +167,10 @@ __all__ = [
     UInt16,
     UInt32,
     UInt64,
-    # From tabsdata_salesforce.connector
-    "SalesforceSource",
     # From tabsdata_mongodb.connector
     "MongoDBDestination",
+    # From tabsdata_salesforce.connector
+    "SalesforceSource",
+    # From tabsdata_snowflake.connector
+    "SnowflakeDestination",
 ]
