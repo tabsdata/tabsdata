@@ -17,7 +17,8 @@ use std::sync::RwLock;
 use td_common::execution_status::FunctionRunUpdateStatus;
 use td_common::server::SupervisorMessage;
 use td_common::server::SupervisorMessagePayload::{
-    SupervisorRequestMessagePayload, SupervisorResponseMessagePayload,
+    SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
+    SupervisorResponseMessagePayload,
 };
 use thiserror::Error;
 use tokio::process::Child;
@@ -117,15 +118,16 @@ pub async fn notify(
     execution: u16,
     limit: Option<u16>,
     error: Option<String>,
-) -> Result<(), RunnerError> {
+) -> Result<bool, RunnerError> {
+    let mut failed = false;
     let payload = match request_message.payload() {
         SupervisorRequestMessagePayload(payload) => payload,
-        SupervisorResponseMessagePayload(_) => {
+        SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
             return Err(InvalidMessageType);
         }
     };
     if let Some(callback) = payload.callback() {
-        callback
+        failed = callback
             .clone()
             .notify(
                 worker,
@@ -139,7 +141,7 @@ pub async fn notify(
             )
             .await?;
     }
-    Ok(())
+    Ok(failed)
 }
 
 #[derive(Debug, Error)]

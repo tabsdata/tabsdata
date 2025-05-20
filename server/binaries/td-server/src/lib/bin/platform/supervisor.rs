@@ -62,7 +62,8 @@ use td_common::env::to_absolute;
 use td_common::execution_status::FunctionRunUpdateStatus;
 use td_common::os::terminate_process;
 use td_common::server::SupervisorMessagePayload::{
-    SupervisorRequestMessagePayload, SupervisorResponseMessagePayload,
+    SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
+    SupervisorResponseMessagePayload,
 };
 use td_common::server::WorkerClass::{EPHEMERAL, INIT, REGULAR};
 use td_common::server::{
@@ -596,7 +597,8 @@ impl Supervisor {
                 if let Ok(retry) = run.parse::<u16>() {
                     let payload = match message.payload() {
                         SupervisorRequestMessagePayload(payload) => payload,
-                        SupervisorResponseMessagePayload(_) => {
+                        SupervisorResponseMessagePayload(_)
+                        | SupervisorExceptionMessagePayload(_) => {
                             return Err(RuntimeError::new(
                                 "Unexpected response message received".to_string(),
                             ));
@@ -720,7 +722,10 @@ impl Supervisor {
                     debug!("Received message '{:?}", message);
                     let payload = match message.payload() {
                         SupervisorRequestMessagePayload(payload) => {payload},
-                        SupervisorResponseMessagePayload(_) => {return Err(RuntimeError::new("Unexpected response message received".to_string()));}
+                        SupervisorResponseMessagePayload(_) |
+                        SupervisorExceptionMessagePayload(_) => {
+                            return Err(RuntimeError::new("Unexpected response message received".to_string()));
+                        }
                     };
                     let send_result = match payload.class() {
                         INIT => sender_init.send(message.clone()),
@@ -1081,7 +1086,10 @@ impl Supervisor {
                 Some(message) = receiver.recv(), if !can_spawn_worker && can_spawn_task => {
                     let payload = match message.payload() {
                         SupervisorRequestMessagePayload(payload) => {payload},
-                        SupervisorResponseMessagePayload(_) => {return Err(RuntimeError::new("Unexpected response message received".to_string()));}
+                        SupervisorResponseMessagePayload(_) |
+                        SupervisorExceptionMessagePayload(_) => {
+                            return Err(RuntimeError::new("Unexpected response message received".to_string()));
+                        }
                     };
                     let worker = controller.workers.get(payload.worker());
                     match worker {
@@ -1221,28 +1229,58 @@ impl Supervisor {
                 }
             }
         };
-        match notify(
+
+        let notify_answer = notify(
             worker_run,
             message.clone(),
             start,
             Some(end),
-            status,
+            status.clone(),
             execution,
             Some(limit),
-            error,
+            error.clone(),
         )
-        .await
-        {
-            Ok(_) => match result {
+        .await;
+
+        let failed = match notify_answer {
+            Ok(answer) => answer,
+            Err(_) => {
+                SupervisorMessageQueue::error(message)?;
+                return Ok(());
+            }
+        };
+        if failed {
+            info!(
+                "Failing worker as function returned a failure exit status:\n\
+                - Worker:\n{}\n\
+                - Request Message: {}\n\
+                - Start Time: {}\n\
+                - End Time: {}\n\
+                - Status: {:?}\n\
+                - Execution: {}\n\
+                - Executions Limit: {}\n\
+                - Error: {:?}",
+                match &worker_run {
+                    Some(worker) => worker.describer().to_string(),
+                    None => "No worker...".to_string(),
+                },
+                serde_yaml::to_string(&message)?,
+                start,
+                end,
+                status,
+                execution,
+                limit,
+                error
+            );
+            SupervisorMessageQueue::fail(message)?;
+        } else {
+            match result {
                 Ok(_) => {
                     SupervisorMessageQueue::complete(message)?;
                 }
                 Err(_) => {
                     SupervisorMessageQueue::error(message)?;
                 }
-            },
-            Err(_) => {
-                SupervisorMessageQueue::error(message)?;
             }
         }
         Ok(())
@@ -1593,7 +1631,7 @@ impl Supervisor {
                 let message = message.unwrap();
                 let payload = match message.payload() {
                     SupervisorRequestMessagePayload(payload) => payload,
-                    SupervisorResponseMessagePayload(_) => {
+                    SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };

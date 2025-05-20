@@ -9,7 +9,7 @@ use crate::logic::platform::component::runner::RunnerError::{
     BadRequest, BadStatus, BrokenContent, InvalidMessageType,
 };
 use crate::logic::platform::launch::worker::{TabsDataWorker, Worker};
-use crate::logic::platform::resource::instance::{RESPONSE_FILE, RESPONSE_FOLDER};
+use crate::logic::platform::resource::instance::{EXCEPTION_FILE, RESPONSE_FILE, RESPONSE_FOLDER};
 use http::HeaderMap;
 use regex::Regex;
 use reqwest::header::{HeaderName, HeaderValue};
@@ -20,12 +20,14 @@ use std::str::FromStr;
 use td_common::execution_status::FunctionRunUpdateStatus;
 use td_common::server::MessageAction::Notify;
 use td_common::server::SupervisorMessagePayload::{
-    SupervisorRequestMessagePayload, SupervisorResponseMessagePayload,
+    SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
+    SupervisorResponseMessagePayload,
 };
 use td_common::server::{
-    Callback, PayloadType, ResponseMessagePayload, SupervisorMessage, REQUEST_MESSAGE_FILE_PATTERN,
-    UNKNOWN_RUN,
+    Callback, ExceptionMessagePayload, PayloadType, ResponseMessagePayload, SupervisorMessage,
+    REQUEST_MESSAGE_FILE_PATTERN, UNKNOWN_RUN,
 };
+use td_common::status::ExitStatus;
 use tracing::{debug, info};
 
 /// Notifies the execution result of a run worker.
@@ -42,7 +44,7 @@ pub trait WorkerNotifier: Debug {
         execution: u16,
         limit: Option<u16>,
         error: Option<String>,
-    ) -> Result<(), RunnerError>;
+    ) -> Result<bool, RunnerError>;
 }
 
 #[async_trait::async_trait]
@@ -57,7 +59,9 @@ impl WorkerNotifier for Callback {
         execution: u16,
         limit: Option<u16>,
         error: Option<String>,
-    ) -> Result<(), RunnerError> {
+    ) -> Result<bool, RunnerError> {
+        let mut failed = false;
+
         fn hashmap_to_headers(input: HashMap<String, String>) -> Result<HeaderMap, RunnerError> {
             let mut header_map: HeaderMap = HeaderMap::new();
             for (key, value) in input {
@@ -69,7 +73,7 @@ impl WorkerNotifier for Callback {
         }
 
         // ToDo: temporarily, we omit sending notifications for errors, and we wait either for final failure (Fail) or
-        //       eventual success (Done). Thus, we currently do not notify to the API Server error statuses (Error) .
+        //       eventual success (Done). Thus, we currently do not notify to the API Server error statuses (Error).
         if matches!(status, FunctionRunUpdateStatus::Error) {
             info!("Omitting notification of finalization for state {:?} of worker:: name: '{}' - id: '{}'",
                 FunctionRunUpdateStatus::Error,
@@ -79,7 +83,7 @@ impl WorkerNotifier for Callback {
                 },
                 request_message.id(),
             );
-            return Ok(());
+            return Ok(failed);
         };
 
         debug!(
@@ -108,10 +112,43 @@ impl WorkerNotifier for Callback {
             Callback::Http(callback) => {
                 let request_payload = match request_message.payload() {
                     SupervisorRequestMessagePayload(payload) => payload,
-                    SupervisorResponseMessagePayload(_) => {
+                    SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };
+
+                let exception_payload = match worker {
+                    None => ExceptionMessagePayload::default(),
+                    Some(worker) => {
+                        if matches!(status, FunctionRunUpdateStatus::Running) {
+                            ExceptionMessagePayload::default()
+                        } else {
+                            let exception_file = worker
+                                .describer()
+                                .work()
+                                .join(RESPONSE_FOLDER)
+                                .join(EXCEPTION_FILE);
+                            if exception_file.exists() {
+                                let exception_message = SupervisorMessage::try_from((
+                                    exception_file.clone(),
+                                    PayloadType::Exception,
+                                ))?;
+                                let exception_payload: &ExceptionMessagePayload<Value> =
+                                    match exception_message.payload() {
+                                        SupervisorRequestMessagePayload(_)
+                                        | SupervisorResponseMessagePayload(_) => {
+                                            return Err(InvalidMessageType);
+                                        }
+                                        SupervisorExceptionMessagePayload(payload) => payload,
+                                    };
+                                exception_payload.clone()
+                            } else {
+                                ExceptionMessagePayload::default()
+                            }
+                        }
+                    }
+                };
+
                 let mut response_payload = match worker {
                     None => ResponseMessagePayload::default(),
                     Some(worker) => {
@@ -130,7 +167,8 @@ impl WorkerNotifier for Callback {
                                 ))?;
                                 let response_payload: &ResponseMessagePayload<Value> =
                                     match response_message.payload() {
-                                        SupervisorRequestMessagePayload(_) => {
+                                        SupervisorRequestMessagePayload(_)
+                                        | SupervisorExceptionMessagePayload(_) => {
                                             return Err(InvalidMessageType);
                                         }
                                         SupervisorResponseMessagePayload(payload) => payload,
@@ -152,11 +190,23 @@ impl WorkerNotifier for Callback {
                     .set_status(status)
                     .set_execution(execution as i16)
                     .set_limit(limit.map(|x| x as i16))
-                    .set_error(error);
+                    .set_error(error)
+                    .set_exception_kind(exception_payload.kind().clone())
+                    .set_exception_message(exception_payload.message().clone())
+                    .set_exception_error_code(exception_payload.error_code().clone())
+                    .set_exit_status(*exception_payload.exit_status());
+
+                // Exit status 202 is using to signal work termination without further retry.
+                if *exception_payload.exit_status() == ExitStatus::TabsDataStatus.code() {
+                    response_payload.set_status(FunctionRunUpdateStatus::Failed);
+                    failed = true;
+                }
+
                 debug!(
                     "Sending message payload:\n{}",
                     serde_json::to_string_pretty(&response_payload)?
                 );
+
                 let client = reqwest::Client::new();
                 let mut request = client
                     .request(callback.method().clone(), callback.url().clone())
@@ -193,7 +243,7 @@ impl WorkerNotifier for Callback {
                         return Err(BadRequest { cause: e });
                     }
                 };
-                Ok(())
+                Ok(failed)
             }
         }
     }

@@ -73,6 +73,7 @@ mod tests {
     use td_common::datetime::IntoDateTimeUtc;
     use td_common::execution_status::FunctionRunUpdateStatus;
     use td_common::server::{MessageAction, ResponseMessagePayloadBuilder, WorkerClass};
+    use td_common::status::ExitStatus;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{handle_sql_err, RequestContext};
@@ -252,6 +253,10 @@ mod tests {
             .execution(0)
             .limit(None)
             .error(None)
+            .exception_kind(None)
+            .exception_message(None)
+            .exception_error_code(None)
+            .exit_status(ExitStatus::GeneralError.code())
             .context(None)
             .build()
             .unwrap();

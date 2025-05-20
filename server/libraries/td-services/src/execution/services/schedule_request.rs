@@ -223,7 +223,8 @@ mod tests {
         let created_message = created_message[0].payload();
         let created_message = match created_message {
             SupervisorMessagePayload::SupervisorRequestMessagePayload(message) => message.context(),
-            SupervisorMessagePayload::SupervisorResponseMessagePayload(_) => {
+            SupervisorMessagePayload::SupervisorResponseMessagePayload(_)
+            | SupervisorMessagePayload::SupervisorExceptionMessagePayload(_) => {
                 panic!("Unexpected SupervisorMessagePayload")
             }
         };

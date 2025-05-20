@@ -13,6 +13,7 @@ use crate::server::QueueError::{
     MessageAlreadyExisting, MessageNonExisting, QueuePlannedCreationError, QueueRootCreationError,
 };
 use crate::server::SupervisorMessagePayload::SupervisorRequestMessagePayload;
+use crate::status::ExitStatus;
 use async_trait::async_trait;
 use chrono::Utc;
 use const_format::concatcp;
@@ -29,6 +30,7 @@ use std::collections::HashMap;
 use std::fs::{create_dir_all, read_dir, remove_file, rename, File};
 use std::io;
 use std::io::{Error, Write};
+use std::marker::PhantomData;
 use std::option::Option;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -143,6 +145,7 @@ where
 {
     SupervisorRequestMessagePayload(RequestMessagePayload<T>),
     SupervisorResponseMessagePayload(ResponseMessagePayload<T>),
+    SupervisorExceptionMessagePayload(ExceptionMessagePayload<T>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
@@ -172,6 +175,45 @@ where
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
+#[getset(get = "pub", set = "pub")]
+pub struct ExceptionMessagePayload<T = Value>
+where
+    T: Clone,
+{
+    _type: PhantomData<T>,
+    kind: Option<String>,
+    message: Option<String>,
+    error_code: Option<String>,
+    #[serde(default = "default_exit_status")]
+    exit_status: i32,
+}
+
+fn default_exit_status() -> i32 {
+    ExitStatus::Success.code()
+}
+
+impl ExceptionMessagePayload {
+    pub fn builder() -> ExceptionMessagePayloadBuilder {
+        ExceptionMessagePayloadBuilder::default()
+    }
+}
+
+impl<T> Default for ExceptionMessagePayload<T>
+where
+    T: Clone + Default,
+{
+    fn default() -> Self {
+        Self {
+            _type: PhantomData::<T>,
+            kind: None,
+            message: None,
+            error_code: None,
+            exit_status: default_exit_status(),
+        }
+    }
+}
+
 #[apiserver_schema]
 #[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
 #[getset(get = "pub", set = "pub")]
@@ -196,6 +238,11 @@ where
     execution: i16,
     limit: Option<i16>,
     error: Option<String>,
+    exception_kind: Option<String>,
+    exception_message: Option<String>,
+    exception_error_code: Option<String>,
+    #[serde(default = "default_exit_status")]
+    exit_status: i32,
     context: Option<T>,
 }
 
@@ -249,6 +296,10 @@ where
             execution: default_execution(),
             limit: None,
             error: None,
+            exception_kind: None,
+            exception_message: None,
+            exception_error_code: None,
+            exit_status: default_exit_status(),
             context: None,
         }
     }
@@ -318,6 +369,7 @@ pub struct FileWorkerMessageQueue {
 pub enum PayloadType {
     Request,
     Response,
+    Exception,
 }
 
 impl<T> TryFrom<(PathBuf, PayloadType)> for SupervisorMessage<T>
@@ -349,6 +401,16 @@ where
                         )
                     })?;
                 SupervisorMessagePayload::SupervisorResponseMessagePayload(response_payload)
+            }
+            PayloadType::Exception => {
+                let exception_payload: ExceptionMessagePayload<T> = serde_yaml::from_reader(&file)
+                    .map_err(|e| {
+                        Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("Error deserializing exception message {:?}: {}", message, e),
+                        )
+                    })?;
+                SupervisorMessagePayload::SupervisorExceptionMessagePayload(exception_payload)
             }
         };
         let work = if let Some(file_stem) = message.file_stem() {
