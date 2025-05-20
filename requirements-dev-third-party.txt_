@@ -33,6 +33,7 @@ pipdeptree==2.25.1
 pip-tools==7.4.1
 psutil==7.0.0
 psycopg2-binary==2.9.10
+pydevd_pycharm
 pytest==8.3.5
 pytest-check==2.5.1
 pytest-cov==6.0.0
