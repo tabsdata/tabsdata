@@ -14,6 +14,7 @@ from tabsdata.cli.cli_utils import (
     DOT_FOLDER,
     beautify_list,
     cleanup_dot_files,
+    get_currently_pinned_object,
     logical_prompt,
     show_dot_file,
     verify_login_or_prompt,
@@ -48,8 +49,10 @@ def delete(ctx: click.Context, name: str, collection: str, confirm: str):
     click.echo(f"Deleting function '{name}' in collection '{collection}'")
     click.echo("-" * 10)
     name = name or logical_prompt(ctx, "Name of the function to be deleted")
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the function belongs"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
     confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
     if confirm != "delete":
@@ -84,8 +87,10 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
     """Display a function"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be displayed")
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the function belongs"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
     try:
         if show_history:
@@ -164,8 +169,10 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
 def list(ctx: click.Context, collection: str):
     verify_login_or_prompt(ctx)
     """List all functions in a collection"""
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the functions belong"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the functions belong")
     )
     try:
         list_of_functions = ctx.obj["tabsdataserver"].collection_list_functions(
@@ -256,8 +263,10 @@ def register(
         local_pkg = None
     click.echo("Registering a new function")
     click.echo("-" * 10)
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the function belongs"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
     fn_path = fn_path or logical_prompt(
         ctx,
@@ -302,8 +311,10 @@ def trigger(ctx: click.Context, name: str, collection: str, execution_plan_name:
     """Trigger a function"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be triggered")
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the function belongs"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
     click.echo(f"Triggering function '{name}' in collection '{collection}'")
     click.echo("-" * 10)
@@ -393,8 +404,10 @@ def update(
     else:
         local_pkg = None
     name = name or logical_prompt(ctx, "Name of the function to be updated")
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the function belongs"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
     fn_path = fn_path or logical_prompt(
         ctx,

@@ -94,6 +94,41 @@ def initialise_tabsdata_server_connection(ctx: click.Context):
     ctx.obj["tabsdataserver"] = tabsdata_server
 
 
+def get_pinned_objects_file_path(ctx: click.Context) -> str:
+    """
+    Get the path to the pinned objects file.
+    """
+    return os.path.join(ctx.obj["tabsdata_directory"], "pinned.json")
+
+
+def get_currently_pinned_object(ctx: click.Context, object: str) -> str | None:
+    """
+    Get the currently pinned object from the context.
+    """
+    currently_pinned = ctx.obj["pinned_objects"].get(object, None)
+    if currently_pinned:
+        click.echo(f"Using currently pinned {object}: {currently_pinned}")
+    return currently_pinned
+
+
+def load_pinned_objects(ctx: click.Context):
+    try:
+        with open(get_pinned_objects_file_path(ctx)) as f:
+            pinned_objects = json.load(f)
+        ctx.obj["pinned_objects"] = pinned_objects
+    except FileNotFoundError:
+        ctx.obj["pinned_objects"] = {}
+
+
+def store_pinned_objects(ctx: click.Context):
+    try:
+        with open(get_pinned_objects_file_path(ctx), "w") as f:
+            json.dump(ctx.obj["pinned_objects"], f)
+    except Exception as e:
+        click.echo(f"Failed to store pinned objects: {e}")
+        click.echo("This will not affect the rest of the command execution.")
+
+
 def verify_login_or_prompt(ctx: click.Context):
     if not ctx.obj["tabsdataserver"]:
         click.echo("No credentials found. Please login first.")

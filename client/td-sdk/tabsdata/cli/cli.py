@@ -12,7 +12,9 @@ from tabsdata.cli.cli_utils import (
     DEFAULT_TABSDATA_DIRECTORY,
     get_credentials_file_path,
     initialise_tabsdata_server_connection,
+    load_pinned_objects,
     logical_prompt,
+    store_pinned_objects,
     utils_login,
     verify_login_or_prompt,
 )
@@ -40,6 +42,7 @@ def cli(ctx: click.Context, no_prompt: bool):
     os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
     ctx.obj = {"tabsdata_directory": DEFAULT_TABSDATA_DIRECTORY, "no_prompt": no_prompt}
     initialise_tabsdata_server_connection(ctx)
+    load_pinned_objects(ctx)
 
 
 cli.add_command(collection)
@@ -196,6 +199,11 @@ def logout(ctx: click.Context):
     finally:
         try:
             os.remove(get_credentials_file_path(ctx))
+        except Exception:
+            pass
+        try:
+            ctx.obj["pinned_objects"] = {}
+            store_pinned_objects(ctx)
         except Exception:
             pass
 

@@ -7,7 +7,11 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-from tabsdata.cli.cli_utils import logical_prompt, verify_login_or_prompt
+from tabsdata.cli.cli_utils import (
+    logical_prompt,
+    store_pinned_objects,
+    verify_login_or_prompt,
+)
 
 
 @click.group()
@@ -120,6 +124,42 @@ def list(ctx: click.Context):
         click.echo()
     except Exception as e:
         raise click.ClickException(f"Failed to list collections: {e}")
+
+
+@collection.command()
+@click.argument("name")
+@click.pass_context
+def pin(ctx: click.Context, name: str):
+    """Pin a collection by name"""
+    click.echo(f"Pinning collection: {name}")
+    click.echo("-" * 10)
+    try:
+        previously_pinned = ctx.obj["pinned_objects"].get("collection")
+        if previously_pinned:
+            click.echo(f"Unpinning previously pinned collection: {previously_pinned}")
+        ctx.obj["pinned_objects"]["collection"] = name
+        store_pinned_objects(ctx)
+        click.echo("Collection pinned successfully")
+    except Exception as e:
+        raise click.ClickException(f"Failed to pin collection: {e}")
+
+
+@collection.command()
+@click.pass_context
+def unpin(ctx: click.Context):
+    """Pin a collection by name"""
+    click.echo("Unpinning collection")
+    click.echo("-" * 10)
+    try:
+        previously_pinned = ctx.obj["pinned_objects"].get("collection")
+        if not previously_pinned:
+            click.echo("No previously pinned collection to unpin.")
+        else:
+            ctx.obj["pinned_objects"]["collection"] = None
+            store_pinned_objects(ctx)
+            click.echo("Collection unpinned successfully")
+    except Exception as e:
+        raise click.ClickException(f"Failed to unpin collection: {e}")
 
 
 @collection.command()

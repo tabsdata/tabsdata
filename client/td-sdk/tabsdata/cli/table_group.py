@@ -11,6 +11,7 @@ from rich.table import Table
 from tabsdata.cli.cli_utils import (
     MutuallyExclusiveOption,
     complete_datetime,
+    get_currently_pinned_object,
     logical_prompt,
     verify_login_or_prompt,
 )
@@ -79,8 +80,10 @@ def download(
     verify_login_or_prompt(ctx)
     file = file or logical_prompt(ctx, "File in which the table will be stored")
     name = name or logical_prompt(ctx, "Name of the table")
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the table belongs"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the table belongs")
     )
     click.echo(f"Downloading table to file '{file}'")
     click.echo("-" * 10)
@@ -110,8 +113,10 @@ def download(
 def list(ctx: click.Context, collection: str):
     """List all tables in a collection"""
     verify_login_or_prompt(ctx)
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the tables belong"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the tables belong")
     )
     try:
         list_of_tables = ctx.obj["tabsdataserver"].table_list(collection)
@@ -210,8 +215,10 @@ def sample(
     """Sample rows from the table"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the table")
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the table belongs"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the table belongs")
     )
     try:
         sampled_table: pl.DataFrame = ctx.obj["tabsdataserver"].table_sample(
@@ -279,8 +286,10 @@ def schema(
     """Show table schema"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the table")
-    collection = collection or logical_prompt(
-        ctx, "Name of the collection to which the table belongs"
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the table belongs")
     )
     try:
         table_schema = ctx.obj["tabsdataserver"].table_get_schema(
