@@ -37,7 +37,7 @@ def test_add_and_drop_system_columns():
         }
     )
 
-    lf = add_system_columns(lf)
+    lf = add_system_columns(lf, 0)
 
     df = lf.collect()
     system_columns = SYSTEM_COLUMNS_METADATA

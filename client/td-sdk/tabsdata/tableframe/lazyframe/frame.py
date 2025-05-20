@@ -53,10 +53,7 @@ from tabsdata.utils.annotations import pydoc
 # ToDo: SDK-128: Define the logging model for SDK CLI execution
 logger = logging.getLogger(__name__)
 
-AUTO = "auto"
-
-IndexKeyword = Literal["auto"]
-IndexInput = Union[int, None, IndexKeyword]
+IndexInput = Union[int, td_generators.IdxGenerator, None]
 
 
 @accessify
@@ -83,9 +80,9 @@ class TableFrame:
             None,
         )
 
-    # Value "auto" for idx is meant to be used only when populating pub tables, Using
-    # "auto" assumes a single function is running on the Python process, as it will use
-    # a global singleton.
+    # Passing a IdxGenerator for idx is meant to be used only when populating pub
+    # tables, An IdxGenerator is a stateful callable class that ensures a unique
+    # sequential id is generated in each invocation.
     @classmethod
     def __build__(
         cls,
@@ -112,8 +109,17 @@ class TableFrame:
 
         # noinspection PyProtectedMember
         instance._id = td_generators._id()
-        instance._idx = idx
-        df = td_common.add_system_columns(df)
+        if isinstance(idx, td_generators.IdxGenerator):
+            # noinspection PyProtectedMember
+            instance._idx = idx()
+        elif idx is None:
+            instance._idx = None
+        elif isinstance(idx, int):
+            instance._idx = idx
+        else:
+            raise ValueError(f"Invalid idx: {idx}")
+
+        df = td_common.add_system_columns(df, instance._idx)
         instance._lf = df
         return instance
 
@@ -123,9 +129,9 @@ class TableFrame:
     ) -> None:
         if isinstance(df, TableFrame):
             # noinspection PyProtectedMember
-            df = df._lf
-            # noinspection PyProtectedMember
             idx = df._idx
+            # noinspection PyProtectedMember
+            df = df._lf
         else:
             if df is None:
                 df = pl.LazyFrame(None)
@@ -133,23 +139,21 @@ class TableFrame:
                 df = pl.LazyFrame(df)
             else:
                 raise TableFrameError(ErrorCode.TF2, type(df))
-            df = td_common.add_system_columns(df)
             idx = None
+            df = td_common.add_system_columns(df, idx)
 
         td_reflection.check_required_columns(df)
 
         # noinspection PyProtectedMember
         self._id = td_generators._id()
-        if idx == "auto":
-            # noinspection PyProtectedMember
-            self._idx = td_generators._idx()
+        if isinstance(idx, td_generators.IdxGenerator):
+            raise ValueError("IdxGenerator not supported on __init__")
         elif idx is None:
             self._idx = None
         elif isinstance(idx, int):
             self._idx = idx
         else:
             raise ValueError(f"Invalid idx: {idx}")
-
         self._lf = df
 
     def columns(

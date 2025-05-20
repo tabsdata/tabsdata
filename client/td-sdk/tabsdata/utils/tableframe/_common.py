@@ -59,18 +59,23 @@ def check_columns(columns: Any, *more_columns: Any):
 
 
 def add_system_columns(
-    lf: pl.LazyFrame, strategy: AddSystemColumnsStrategy = "map_element"
+    lf: pl.LazyFrame,
+    idx: int | None = None,
+    strategy: AddSystemColumnsStrategy = "map_element",
 ) -> pl.LazyFrame:
     match strategy:
         case "map_element":
-            return add_system_columns_map_element(lf)
+            return add_system_columns_map_element(lf, idx)
         case "map_batches":
-            return add_system_columns_map_batches(lf)
+            return add_system_columns_map_batches(lf, idx)
         case _:
             raise ValueError(f"Unknown add system column strategy: {strategy}")
 
 
-def add_system_columns_map_element(lf: pl.LazyFrame) -> pl.LazyFrame:
+def add_system_columns_map_element(
+    lf: pl.LazyFrame,
+    idx: int | None = None,
+) -> pl.LazyFrame:
     current_columns = set(lf.collect_schema().names())
     for column, metadata in td_helpers.SYSTEM_COLUMNS_METADATA.items():
         if column in current_columns:
@@ -80,14 +85,21 @@ def add_system_columns_map_element(lf: pl.LazyFrame) -> pl.LazyFrame:
             metadata[td_constants.TD_COL_DEFAULT],
             metadata[td_constants.TD_COL_GENERATOR],
         )
+        generator_instance = generator(idx)
+
         lf = lf.with_columns(default().alias(column))
-        lf = lf.with_columns(
-            pl.col(column).map_elements(generator, return_dtype=dtype).alias(column)
+        lf = lf.with_columns_seq(
+            pl.col(column)
+            .map_elements(generator_instance, return_dtype=dtype)
+            .alias(column)
         )
     return lf
 
 
-def add_system_columns_map_batches(lf: pl.LazyFrame) -> pl.LazyFrame:
+def add_system_columns_map_batches(
+    lf: pl.LazyFrame,
+    idx: int | None = None,
+) -> pl.LazyFrame:
     def generate_system_column(
         series: pl.Series, series_generator, series_dtype
     ) -> pl.Series:
@@ -110,8 +122,10 @@ def add_system_columns_map_batches(lf: pl.LazyFrame) -> pl.LazyFrame:
             metadata[td_constants.TD_COL_DEFAULT],
             metadata[td_constants.TD_COL_GENERATOR],
         )
+        generator_instance = generator(idx)
+
         missing_columns.append(default().cast(dtype).alias(column))
-        generators[column] = generator
+        generators[column] = generator_instance
         dtypes[column] = dtype
 
     if missing_columns:

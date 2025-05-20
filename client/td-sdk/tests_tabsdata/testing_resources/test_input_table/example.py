@@ -9,6 +9,7 @@ from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 import tabsdata as td
+from tabsdata.extensions.tableframe.extension import SystemColumns
 from tabsdata.utils.bundle_utils import create_bundle_archive
 
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +35,7 @@ DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 def input_table(df: td.TableFrame):
     if df is None:
         return td.TableFrame.__build__(
-            pl.LazyFrame({"answer": 42, "$td.id": "fake_id"}),
+            pl.LazyFrame({"answer": 42, SystemColumns.TD_IDENTIFIER.value: "fake_id"}),
             None,
         )
     new_df = df.drop_nulls()

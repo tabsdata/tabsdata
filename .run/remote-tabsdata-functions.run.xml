@@ -9,7 +9,7 @@
       </option>
     </PathMappingSettings>
     <option name="REDIRECT_OUTPUT" value="true" />
-    <option name="SUSPEND_AFTER_CONNECT" value="true" />
+    <option name="SUSPEND_AFTER_CONNECT" value="false" />
     <method v="2" />
   </configuration>
 </component>

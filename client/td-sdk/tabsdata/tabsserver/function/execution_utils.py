@@ -19,6 +19,8 @@ import base32hex
 import polars as pl
 from uuid_v7.base import uuid7
 
+# noinspection PyProtectedMember
+import tabsdata.utils.tableframe._generators as td_generators
 from tabsdata.format import (
     CSVFormat,
     FileFormat,
@@ -36,7 +38,7 @@ from tabsdata.io.input import (
     S3Source,
     TableInput,
 )
-from tabsdata.tableframe.lazyframe.frame import AUTO, TableFrame
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import build_table_uri_object
 from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
@@ -582,21 +584,25 @@ def load_sources(
     :return: A list were each element is either a DataFrame or a list of DataFrames.
     """
     logger.debug(f"Loading list of sources: {local_sources}")
+    idx = td_generators.IdxGenerator()
     sources = []
     for source in local_sources:
         logger.debug(f"Loading single source: {source}")
         if isinstance(source, list):
-            sources.append(load_sources_from_list(source))
+            sources.append(load_sources_from_list(idx, source))
         else:
-            sources.append(load_source(source))
+            sources.append(load_source(idx, source))
     return sources
 
 
-def load_sources_from_list(source_list: list) -> List[TableFrame]:
-    return [load_source(path) for path in source_list]
+def load_sources_from_list(
+    idx: td_generators.IdxGenerator, source_list: list
+) -> List[TableFrame]:
+    return [load_source(idx, path) for path in source_list]
 
 
 def load_source(
+    idx: td_generators.IdxGenerator,
     spec: Union[str, os.PathLike, Tuple[Union[str, os.PathLike], Table]],
 ) -> TableFrame | None:
     if spec is None:
@@ -610,7 +616,6 @@ def load_source(
     # This should mean a table loaded from a publisher, meaning it requiring a new idx.
     else:
         path_to_source = spec
-        idx = AUTO
 
     if path_to_source is None:
         logger.warning("Path to source is None. No data loaded.")

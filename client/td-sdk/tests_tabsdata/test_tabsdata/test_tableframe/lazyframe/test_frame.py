@@ -12,6 +12,7 @@ import polars as pl
 
 import tabsdata as td
 from tabsdata.exceptions import TableFrameError
+from tabsdata.extensions.tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
 from tabsdata.tableframe.lazyframe.frame import _assemble_columns
@@ -127,7 +128,7 @@ class TestTableFrame(unittest.TestCase):
         )
         tf = _wrap_polars_frame(lf)
         with self.assertRaises(TableFrameError) as context:
-            _ = tf.rename({"$td.id": "id"})
+            _ = tf.rename({SystemColumns.TD_IDENTIFIER.value: "id"})
         assert context.exception.code == "TF-010"
 
     def test_rename_new_name_system(self):

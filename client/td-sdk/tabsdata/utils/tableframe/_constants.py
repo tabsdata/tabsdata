@@ -105,7 +105,7 @@ class StandardSystemColumnsMetadata(Enum):
     TD_IDENTIFIER = {
         TD_COL_DEFAULT: td_generators._id_default,
         TD_COL_DTYPE: pl.String,
-        TD_COL_GENERATOR: td_generators._id,
+        TD_COL_GENERATOR: td_generators.IdGenerator,
     }
 
 
