@@ -52,6 +52,7 @@ pub struct FunctionInfoV2 {
     transaction_id: TransactionId,
     execution_id: ExecutionId,
     execution_name: Option<ExecutionName>,
+    function_data: Location,
 }
 
 #[td_type::Dlo]
@@ -356,6 +357,9 @@ mod tests {
 
     #[test]
     fn test_function_input_v1_locations() -> Result<(), TdError> {
+        let function_run_location = Location::builder()
+            .uri(Url::parse("file:///function_run_location").unwrap())
+            .build()?;
         let location1 = Location::builder()
             .uri(Url::parse("file:///foo1").unwrap())
             .build()?;
@@ -431,6 +435,7 @@ mod tests {
             .transaction_id(TransactionId::default())
             .execution_id(ExecutionId::default())
             .execution_name(Some(ExecutionName::try_from("en")?))
+            .function_data(function_run_location)
             .build()?;
         let function_input = FunctionInputV2::builder()
             .info(info)
@@ -446,10 +451,7 @@ mod tests {
         );
         assert_eq!(
             function_input.env_prefixes(),
-            HashSet::from([
-                &EnvPrefix::try_from("PA_").unwrap(),
-                &EnvPrefix::try_from("PB_").unwrap()
-            ])
+            HashSet::from([&EnvPrefix::try_from("PA_")?, &EnvPrefix::try_from("PB_")?])
         );
         Ok(())
     }

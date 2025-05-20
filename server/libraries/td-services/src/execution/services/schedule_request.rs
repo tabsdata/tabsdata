@@ -275,6 +275,19 @@ mod tests {
             Some(ExecutionName::try_from("test_execution")?)
         );
 
+        let function_data_path = SPath::parse(format!(
+            "/c/{}/x/{}/f/{}",
+            collection.id(),
+            function_run.transaction_id(),
+            function_run.function_version_id()
+        ))?;
+        let (uri, mount_def) = storage.to_external_uri(&function_data_path)?;
+        assert_eq!(*info.function_data().uri(), uri);
+        assert_eq!(
+            *info.function_data().env_prefix(),
+            Some(EnvPrefix::try_from(mount_def.id())?)
+        );
+
         // Input
         assert_eq!(message.input().len(), 1);
         let input_table = &message.input()[0];
@@ -316,9 +329,11 @@ mod tests {
                     assert_eq!(output.table_data_version_id(), table_data_version.id());
 
                     let table_path = SPath::parse(format!(
-                        "/c/{}/d/{}",
+                        "/c/{}/d/{}/t/{}/{}.t",
                         collection.id(),
-                        table_data_version.id()
+                        table_data_version.id(),
+                        table_data_version.table_id(),
+                        table_data_version.table_version_id(),
                     ))?;
                     let (uri, mount_def) = storage.to_external_uri(&table_path)?;
 

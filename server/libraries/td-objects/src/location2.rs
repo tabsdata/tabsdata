@@ -3,8 +3,8 @@
 //
 
 use crate::types::basic::{
-    BundleId, CollectionId, DataLocation, Partition, StorageVersion, TableDataVersionId, TableId,
-    TableVersionId,
+    BundleId, CollectionId, DataLocation, FunctionVersionId, Partition, StorageVersion,
+    TableDataVersionId, TableId, TableVersionId, TransactionId,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -24,6 +24,7 @@ pub enum StorageLocation {
     /// COLLECTION: collection ID
     /// FUNCTION: function ID
     /// FUNCTION_VERSION: function_version ID
+    /// TRANSACTION: transaction ID
     /// DATA_VERSION: data_version ID
     /// TABLE: table ID
     /// TABLE_VERSION: table_version ID
@@ -31,6 +32,7 @@ pub enum StorageLocation {
     /// * /LOCATION
     /// * /LOCATION/c/COLLECTION
     /// * /LOCATION/c/COLLECTION/f/BUNDLE.tgz
+    /// * /LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION (function_run contents)
     /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t
     /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p
     V2,
@@ -89,6 +91,8 @@ struct LocationBuilderInfo {
     collection: Option<String>,
     bundle: Option<String>,
     data_version: Option<String>,
+    transaction: Option<String>,
+    function_version: Option<String>,
     table: Option<String>,
     table_version: Option<String>,
     partition: Option<String>,
@@ -254,7 +258,83 @@ impl CollectionBuilder {
         builder
     }
 
+    /// Return a [`TransactionBuilder`] based on the [`CollectionBuilder`]
+    pub fn transaction(self, transaction: &TransactionId) -> TransactionBuilder {
+        let mut builder = TransactionBuilder {
+            info: self.info,
+            version_builder: self.version_builder,
+        };
+        builder.transaction(transaction);
+        builder
+    }
+
     /// Build the collection location.
+    pub fn build(&self) -> (SPath, StorageLocation) {
+        self.version_builder.build(&self.info, None)
+    }
+
+    /// Build the meta collection location.
+    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+        self.version_builder.build(
+            &self.info,
+            Some(format!("{}.meta", meta_name.into()).as_str()),
+        )
+    }
+}
+
+/// Builder for the transaction location.
+#[derive(Debug)]
+pub struct TransactionBuilder {
+    info: LocationBuilderInfo,
+    version_builder: Box<dyn VersionLocationBuilder>,
+}
+
+impl TransactionBuilder {
+    /// Set the transaction name for the transaction location.
+    pub fn transaction(&mut self, transaction: &TransactionId) -> &mut Self {
+        self.info.transaction = Some(transaction.to_string());
+        self
+    }
+
+    /// Return a [`FunctionVersionBuilder`] based on the [`CollectionBuilder`]
+    pub fn function_version(self, version: &FunctionVersionId) -> FunctionVersionBuilder {
+        let mut builder = FunctionVersionBuilder {
+            info: self.info,
+            version_builder: self.version_builder,
+        };
+        builder.function_version(version);
+        builder
+    }
+
+    /// Build the transaction location.
+    pub fn build(&self) -> (SPath, StorageLocation) {
+        self.version_builder.build(&self.info, None)
+    }
+
+    /// Build the meta collection location.
+    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+        self.version_builder.build(
+            &self.info,
+            Some(format!("{}.meta", meta_name.into()).as_str()),
+        )
+    }
+}
+
+/// Builder for the collection location.
+#[derive(Debug)]
+pub struct FunctionVersionBuilder {
+    info: LocationBuilderInfo,
+    version_builder: Box<dyn VersionLocationBuilder>,
+}
+
+impl FunctionVersionBuilder {
+    /// Set the function_version name for the function_version location.
+    pub fn function_version(&mut self, function_version: &FunctionVersionId) -> &mut Self {
+        self.info.function_version = Some(function_version.to_string());
+        self
+    }
+
+    /// Build the function_version location.
     pub fn build(&self) -> (SPath, StorageLocation) {
         self.version_builder.build(&self.info, None)
     }
@@ -358,6 +438,11 @@ impl VersionLocationBuilder for V2LocationBuilder {
                         path = path.child(&format!("{}.t", table_version)).unwrap();
                     }
                 }
+            } else if let Some(transaction) = &info.transaction {
+                path = path.child("x").unwrap().child(transaction).unwrap();
+                if let Some(function_version) = &info.function_version {
+                    path = path.child("f").unwrap().child(function_version).unwrap();
+                }
             }
         }
         if let Some(postfix) = postfix {
@@ -376,8 +461,8 @@ impl VersionLocationBuilder for V2LocationBuilder {
 mod tests {
     use super::StorageLocation;
     use crate::types::basic::{
-        BundleId, CollectionId, DataLocation, Partition, TableDataVersionId, TableId,
-        TableVersionId,
+        BundleId, CollectionId, DataLocation, FunctionVersionId, Partition, TableDataVersionId,
+        TableId, TableVersionId, TransactionId,
     };
     use td_error::TdError;
     use td_storage::SPath;
@@ -555,6 +640,34 @@ mod tests {
             SPath::parse(format!(
                 "/L/c/{}/d/{}/t/{}/{}/p/{}.p",
                 collection, table_data_version, table, table_version, partition
+            ))?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_transaction_function_version_builder_v2() -> Result<(), TdError> {
+        let data_location = DataLocation::try_from("/L")?;
+        let collection = CollectionId::default();
+        let transaction = TransactionId::default();
+        let function_version = FunctionVersionId::default();
+        let builder = StorageLocation::V2
+            .builder(&data_location)
+            .collection(&collection)
+            .transaction(&transaction)
+            .function_version(&function_version);
+        assert_eq!(
+            builder.build().0,
+            SPath::parse(format!(
+                "/L/c/{}/x/{}/f/{}",
+                collection, transaction, function_version
+            ))?
+        );
+        assert_eq!(
+            builder.build_meta("foo").0,
+            SPath::parse(format!(
+                "/L/c/{}/x/{}/f/{}-foo.meta",
+                collection, transaction, function_version
             ))?
         );
         Ok(())

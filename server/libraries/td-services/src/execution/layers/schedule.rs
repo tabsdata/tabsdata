@@ -93,7 +93,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                 // Build storage location
                 let storage_location = StorageLocation::try_from(f.storage_version()).unwrap();
 
-                // Build message info
+                // Bundle location
                 let (path, _) = storage_location
                     .builder(f.data_location())
                     .collection(f.collection_id())
@@ -102,22 +102,39 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                 let (external_path, mount_def) = storage.to_external_uri(&path)?;
                 let env_prefix = EnvPrefix::try_from(mount_def.id())?;
                 get_states.insert(env_prefix.clone());
-                let location = Location::builder()
+                let bundle_location = Location::builder()
                     .uri(external_path)
                     .env_prefix(env_prefix)
                     .build()?;
 
+                // Function run content location
+                let (path, _) = storage_location
+                    .builder(f.data_location())
+                    .collection(f.collection_id())
+                    .transaction(f.transaction_id())
+                    .function_version(f.function_version_id())
+                    .build();
+                let (external_path, mount_def) = storage.to_external_uri(&path)?;
+                let env_prefix = EnvPrefix::try_from(mount_def.id())?;
+                get_states.insert(env_prefix.clone());
+                let function_run_location = Location::builder()
+                    .uri(external_path)
+                    .env_prefix(env_prefix)
+                    .build()?;
+
+                // Build message info
                 let info = FunctionInfoV2::builder()
                     .collection_id(f.collection_id())
                     .collection(f.collection())
                     .function_version_id(f.function_version_id())
                     .function(f.name())
                     .function_run_id(f.id())
-                    .function_bundle(location)
+                    .function_bundle(bundle_location)
                     .try_triggered_on(f.triggered_on().timestamp_millis())?
                     .transaction_id(f.transaction_id())
                     .execution_id(f.execution_id())
                     .execution_name(f.execution().clone())
+                    .function_data(function_run_location)
                     .build()?;
 
                 // Build input tables
@@ -164,6 +181,10 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                                         .builder(f.data_location())
                                         .collection(req.collection_id())
                                         .data(data_version.id())
+                                        .table(
+                                            data_version.table_id(),
+                                            data_version.table_version_id(),
+                                        )
                                         .build();
                                     let (external_path, mount_def) =
                                         storage.to_external_uri(&path)?;
@@ -215,6 +236,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                         .builder(f.data_location())
                         .collection(table.collection_id())
                         .data(table.id())
+                        .table(table.table_id(), table.table_version_id())
                         .build();
                     let (external_path, mount_def) = storage.to_external_uri(&path)?;
                     let env_prefix = EnvPrefix::try_from(mount_def.id())?;
