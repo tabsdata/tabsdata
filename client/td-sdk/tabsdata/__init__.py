@@ -79,6 +79,7 @@ from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import TableURI
 from tabsdata.tabsdatafunction import TabsdataFunction
+from tabsdata.tabsserver.function.execution_exceptions import CustomException
 from tabsdata_mongodb.connector import MongoDBDestination
 from tabsdata_salesforce.connector import SalesforceSource
 
@@ -138,6 +139,8 @@ __all__ = [
     "ExecutionPlan",
     "TabsdataServer",
     "User",
+    # from tabsserver.function.execution_exceptions.py
+    "CustomException",
     # from tableframe....
     "col",
     "concat",

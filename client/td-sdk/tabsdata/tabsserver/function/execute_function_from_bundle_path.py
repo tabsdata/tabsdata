@@ -7,11 +7,17 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
 import traceback
 
 from tabsdata.tabsserver.function.execution_context import (
     ExecutionContext,
     ExecutionPaths,
+)
+from tabsdata.tabsserver.function.execution_exceptions import (
+    GENERAL_ERROR_EXIT_STATUS,
+    TABSDATA_ERROR_EXIT_STATUS,
+    CustomException,
 )
 from tabsdata.tabsserver.function.execution_utils import execute_function_from_config
 from tabsdata.tabsserver.function.global_utils import ABSOLUTE_LOCATION, setup_logging
@@ -19,6 +25,7 @@ from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.response_utils import create_response
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
 from tabsdata.tabsserver.function.store_results_utils import store_results
+from tabsdata.tabsserver.function.yaml_utils.exception_yaml import store_exception_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -94,4 +101,9 @@ if __name__ == "__main__":
         logger.info(pad_string("[Exiting function execution]"))
         logger.error(f"Error executing the function: {e}")
         logger.error(traceback.format_exc())
-        raise e
+        is_user_error = isinstance(e, CustomException)
+        exit_status = (
+            TABSDATA_ERROR_EXIT_STATUS if is_user_error else GENERAL_ERROR_EXIT_STATUS
+        )
+        store_exception_yaml(e, exit_status, arguments.response_folder)
+        sys.exit(exit_status)

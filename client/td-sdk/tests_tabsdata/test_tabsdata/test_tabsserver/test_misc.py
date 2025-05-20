@@ -21,6 +21,9 @@ from tests_tabsdata.conftest import (
     read_json_and_clean,
     write_v2_yaml_file,
 )
+from tests_tabsdata.testing_resources.test_custom_execution_exception.example import (
+    custom_execution_exception,
+)
 from tests_tabsdata.testing_resources.test_custom_requirements.example import (
     custom_requirements,
 )
@@ -29,6 +32,9 @@ from tests_tabsdata.testing_resources.test_failed_execution_returns_error_code.e
 )
 from tests_tabsdata.testing_resources.test_failing_file_in_folder.example import (
     failing_file_in_folder,
+)
+from tests_tabsdata.testing_resources.test_general_execution_exception.example import (
+    general_execution_exception,
 )
 from tests_tabsdata.testing_resources.test_initial_values_freeze.example import (
     initial_values_freeze,
@@ -49,7 +55,14 @@ from tests_tabsdata.testing_resources.test_relative_import.example import (
     relative_import,
 )
 
+from tabsdata.tabsserver.function.execution_exceptions import (
+    GENERAL_ERROR_EXIT_STATUS,
+    TABSDATA_ERROR_EXIT_STATUS,
+)
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata.tabsserver.function.yaml_utils.exception_yaml import (
+    EXCEPTION_YAML_FILE_NAME,
+)
 from tabsdata.tabsserver.invoker import (
     REQUEST_FILE_NAME,
 )
@@ -817,3 +830,120 @@ def test_initial_values_wrong_key_type(testing_postgres, tmp_path):
         logs_folder=logs_folder,
     )
     assert result != 0
+
+
+class V1:
+    def __init__(self, content):
+        self.content = content
+
+    @property
+    def kind(self):
+        return self.content["kind"]
+
+    @property
+    def message(self):
+        return self.content["message"]
+
+    @property
+    def error_code(self):
+        return self.content["error_code"]
+
+    @property
+    def exit_status(self):
+        return self.content["exit_status"]
+
+    def __repr__(self):
+        return (
+            f"V1(type={self.type}, message={self.message},"
+            f" error_code={self.error_code})"
+        )
+
+
+def v1_constructor(loader, node):
+    return V1(loader.construct_mapping(node))
+
+
+def get_exception_yaml_loader():
+    """Add constructors to PyYAML loader."""
+
+    class ExceptionLoader(yaml.SafeLoader):
+        pass
+
+    ExceptionLoader.add_constructor("!V1", v1_constructor)
+    return ExceptionLoader
+
+
+def parse_exception_yaml(yaml_file: str):
+    with open(yaml_file, "r") as file:
+        return yaml.load(file, Loader=get_exception_yaml_loader())
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_custom_execution_exception(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        custom_execution_exception,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v2_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == TABSDATA_ERROR_EXIT_STATUS
+    exception_yaml = os.path.join(response_folder, EXCEPTION_YAML_FILE_NAME)
+    assert os.path.exists(exception_yaml)
+    exception_info = parse_exception_yaml(exception_yaml)
+    assert exception_info.kind == "CustomException"
+    assert exception_info.message == "Testing Custom Exception"
+    assert exception_info.error_code == "TEST-001"
+    assert exception_info.exit_status == TABSDATA_ERROR_EXIT_STATUS
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_general_execution_exception(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        general_execution_exception,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    write_v2_yaml_file(
+        input_yaml_file, context_archive, mock_table_location=[output_file]
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+    )
+    assert result == GENERAL_ERROR_EXIT_STATUS
+    exception_yaml = os.path.join(response_folder, EXCEPTION_YAML_FILE_NAME)
+    assert os.path.exists(exception_yaml)
+    exception_info = parse_exception_yaml(exception_yaml)
+    assert exception_info.kind == "ValueError"
+    assert exception_info.message == "Testing General Exception"
+    with pytest.raises(KeyError):
+        _ = exception_info.error_code
+    assert exception_info.exit_status == GENERAL_ERROR_EXIT_STATUS
