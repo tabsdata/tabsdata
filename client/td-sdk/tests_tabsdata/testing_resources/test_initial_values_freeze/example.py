@@ -39,7 +39,7 @@ data = [
         "mariadb://127.0.0.1:3307/testing",
         data,
         credentials=td.UserPasswordCredentials("@dmIn", "p@ssw0rd#"),
-        initial_values={"number": "2"},
+        initial_values={"number": 2},
     ),
     tables=["output1", "output2"],  # required,
 )

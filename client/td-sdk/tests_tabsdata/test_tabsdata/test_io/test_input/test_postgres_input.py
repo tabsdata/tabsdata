@@ -337,12 +337,3 @@ def test_wrong_type_initial_values_key_raises_error():
     with pytest.raises(InputConfigurationError) as e:
         PostgresSource(uri, query, initial_values=initial_values)
     assert e.value.error_code == ErrorCode.ICE40
-
-
-def test_wrong_type_initial_values_value_raises_error():
-    uri = "postgres://DATABASE_IP:DATABASE_PORT/testing"
-    query = "select * from INVOICE_HEADER where id > :number"
-    initial_values = {"42": 42}
-    with pytest.raises(InputConfigurationError) as e:
-        PostgresSource(uri, query, initial_values=initial_values)
-    assert e.value.error_code == ErrorCode.ICE41

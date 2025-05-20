@@ -36,9 +36,6 @@ from tests_tabsdata.testing_resources.test_initial_values_freeze.example import 
 from tests_tabsdata.testing_resources.test_initial_values_wrong_key_type.example import (
     initial_values_wrong_key_type,
 )
-from tests_tabsdata.testing_resources.test_initial_values_wrong_value_type.example import (
-    initial_values_wrong_value_type,
-)
 from tests_tabsdata.testing_resources.test_input_output_dataframe.example import (
     input_output_dataframe,
 )
@@ -785,41 +782,6 @@ def test_initial_values_freeze(testing_mariadb, tmp_path):
     expected_output = read_json_and_clean(expected_output_file)
     assert output.equals(expected_output)
     assert not os.path.isfile(path_to_output_initial_values)
-
-
-@pytest.mark.postgres
-@pytest.mark.requires_internet
-@pytest.mark.slow
-def test_initial_values_wrong_value_type(testing_postgres, tmp_path):
-    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        initial_values_wrong_value_type,
-        local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
-
-    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
-    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
-    os.makedirs(response_folder, exist_ok=True)
-    output_file1 = os.path.join(tmp_path, "output1.parquet")
-    output_file2 = os.path.join(tmp_path, "output2.parquet")
-    path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
-    write_v2_yaml_file(
-        input_yaml_file,
-        context_archive,
-        mock_table_location=[output_file1, output_file2],
-        output_initial_values_path=path_to_output_initial_values,
-    )
-    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
-    os.makedirs(tabsserver_output_folder, exist_ok=True)
-    environment_name, result = tabsserver_main(
-        tmp_path,
-        response_folder,
-        tabsserver_output_folder,
-        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-        logs_folder=logs_folder,
-    )
-    assert result != 0
 
 
 @pytest.mark.postgres

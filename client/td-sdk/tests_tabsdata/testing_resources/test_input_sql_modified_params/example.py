@@ -36,13 +36,13 @@ mysql_input = td.MySQLSource(
     "mysql://wrongip:3306/testing",
     ["select * from NO_TABLE where id > :number"],
     credentials=td.UserPasswordCredentials("wronguser", "wrongpassword"),
-    initial_values={"number": "7"},
+    initial_values={"number": 7},
 )
 
 mysql_input.uri = "mysql://127.0.0.1:3306/testing"
 mysql_input.query = data
 mysql_input.credentials = td.UserPasswordCredentials("@dmIn", "p@ssw0rd#")
-mysql_input.initial_values = {"number": "2"}
+mysql_input.initial_values = {"number": 2}
 
 
 @td.publisher(

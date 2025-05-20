@@ -29,7 +29,7 @@ DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 # output of applying the function to the  input data.
 @td.publisher(
     name="test_input_plugin_initial_values",
-    source=ImporterWithInitialValues(folder=f"{ABSOLUTE_LOCATION}", file_number="1"),
+    source=ImporterWithInitialValues(folder=f"{ABSOLUTE_LOCATION}", file_number=1),
     tables="output",
 )
 def input_plugin_initial_values(df: td.TableFrame):

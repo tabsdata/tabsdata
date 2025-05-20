@@ -14,7 +14,7 @@ from tabsdata.io.input import build_input
 from tabsdata.io.output import build_output
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.tabsserver.function.configuration_utils import load_function_config
-from tabsdata.tabsserver.function.initial_values_utils import InitialValues
+from tabsdata.tabsserver.function.offset_utils import Offset
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata.tabsserver.function.yaml_parsing import parse_request_yaml
 from tabsdata.utils.bundle_utils import (
@@ -46,13 +46,13 @@ class ExecutionContext:
         paths: ExecutionPaths,
         function_config: dict = None,
         request: InputYaml = None,
-        initial_values: InitialValues = None,
+        offset: Offset = None,
     ):
         self.paths = paths
         self.paths.parent_context = self
         self.function_config = function_config
         self.request = request
-        self.initial_values = initial_values
+        self.offset = offset
         self.logger = logger
         # Create the required folders for the function
         self.paths.create_required_folders()
@@ -153,35 +153,35 @@ class ExecutionContext:
             )
 
     @property
-    def initial_values(self) -> InitialValues:
+    def offset(self) -> Offset:
         """
-        Get the initial values object.
+        Get the offset object.
         """
-        if self._initial_values is None:
-            self._initial_values = InitialValues()
-            self._initial_values.load_current_initial_values(self.request)
-        return self._initial_values
+        if self._offset is None:
+            self._offset = Offset()
+            self._offset.load_current_offset(self.request)
+        return self._offset
 
-    @initial_values.setter
-    def initial_values(self, initial_values: InitialValues):
+    @offset.setter
+    def offset(self, offset: Offset):
         """
-        Set the initial values object.
+        Set the offset object.
         """
-        if initial_values is None:
-            self._initial_values = None
-        elif isinstance(initial_values, InitialValues):
-            self._initial_values = initial_values
+        if offset is None:
+            self._offset = None
+        elif isinstance(offset, Offset):
+            self._offset = offset
         else:
             raise TypeError(
-                "'initial_values' must be an instance of InitialValues or None, "
-                f"got {type(initial_values)} instead"
+                "'offset' must be an instance of Offset or None, "
+                f"got {type(offset)} instead"
             )
 
-    def store_initial_values(self) -> bool:
+    def store_offset(self) -> bool:
         """
-        Store the initial values.
+        Store the offset.
         """
-        return self.initial_values.store(self.request)
+        return self.offset.store(self.request)
 
 
 class FunctionConfig:

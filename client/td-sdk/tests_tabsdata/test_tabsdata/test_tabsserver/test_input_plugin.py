@@ -172,12 +172,7 @@ def test_input_plugin_initial_values(tmp_path):
 
     assert os.path.isfile(path_to_output_initial_values)
     output_initial_values = pl.read_parquet(path_to_output_initial_values)
-    assert (
-        output_initial_values.filter(pl.col("variable") == "number")
-        .select("value")
-        .item()
-        == "2"
-    )
+    assert output_initial_values.equals(pl.DataFrame({"number": 2}))
 
 
 @pytest.mark.requires_internet
@@ -232,12 +227,7 @@ def test_input_plugin_initial_values_stored_number_2(tmp_path):
 
     assert os.path.isfile(path_to_output_initial_values)
     output_initial_values = pl.read_parquet(path_to_output_initial_values)
-    assert (
-        output_initial_values.filter(pl.col("variable") == "number")
-        .select("value")
-        .item()
-        == "3"
-    )
+    assert output_initial_values.equals(pl.DataFrame({"number": 3}))
 
 
 @pytest.mark.requires_internet

@@ -420,13 +420,6 @@ class ErrorCode(Enum):
             "of type 'str', got a key of type '{}' instead."
         ),
     }
-    ICE41 = {
-        "code": "ICE-041",
-        "message": (
-            "The 'initial_values' parameter must be a dictionary where all values are "
-            "of one of the types in '{}', got a value of type '{}' instead."
-        ),
-    }
     OCE1 = {
         "code": "OCE-001",
         "message": (

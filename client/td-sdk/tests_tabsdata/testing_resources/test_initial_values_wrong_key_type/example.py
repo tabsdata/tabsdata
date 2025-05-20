@@ -39,7 +39,7 @@ data = [
         "postgres://127.0.0.1:5432/testing",
         data,
         credentials=td.UserPasswordCredentials("@dmIn", "p@ssw0rd#"),
-        initial_values={"number": "2"},
+        initial_values={"number": 2},
     ),
     tables=["output1", "output2"],  # required,
 )
@@ -47,7 +47,7 @@ def initial_values_wrong_key_type(
     headers: td.TableFrame, items: td.TableFrame
 ) -> (td.TableFrame, td.TableFrame, dict):
     # transformations can be done here
-    new_initial_values = {3: "3"}
+    new_initial_values = {3: 3}
     return headers, items, new_initial_values
 
 

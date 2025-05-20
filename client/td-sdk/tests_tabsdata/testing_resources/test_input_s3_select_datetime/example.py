@@ -42,8 +42,14 @@ s3_credentials = td.S3AccessKeyCredentials(
     tables="output",
 )
 def input_s3_select_datetime(df: List[td.TableFrame]):
-    if len(df) != 1:
-        raise ValueError("Expected only one file to be imported")
+    len_df = len(df)
+    if len_df != 1:
+        # Note: this exception is raised for the sake of testing, in a real
+        # environment, it is perfectly plausible and acceptable to receive 0 files in
+        # an incremental import, and that would not cause an error.
+        raise ValueError(
+            f"Expected exactly one file to be imported, {len_df} found instead."
+        )
     df = df[0]
     new_df = df.drop_nulls()
     return new_df

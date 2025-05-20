@@ -40,9 +40,6 @@ from tabsdata.io.constants import (
     SupportedAWSS3Regions,
 )
 from tabsdata.tableuri import build_table_uri_object
-from tabsdata.tabsserver.function.initial_values_utils import (
-    INITIAL_VALUES_VALID_VALUE_TYPES,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +57,6 @@ def _validate_initial_values_type(initial_values: dict):
     for key, value in initial_values.items():
         if not isinstance(key, str):
             raise InputConfigurationError(ErrorCode.ICE40, type(key))
-        if not isinstance(value, INITIAL_VALUES_VALID_VALUE_TYPES):
-            raise InputConfigurationError(
-                ErrorCode.ICE41, INITIAL_VALUES_VALID_VALUE_TYPES, type(value)
-            )
 
 
 class InputIdentifiers(Enum):

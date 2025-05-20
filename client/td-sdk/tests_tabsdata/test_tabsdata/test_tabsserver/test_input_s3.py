@@ -366,11 +366,8 @@ def test_input_s3_select_datetime(tmp_path):
     assert output.equals(expected_output)
     assert os.path.isfile(path_to_output_initial_values)
     output_initial_values = pl.read_parquet(path_to_output_initial_values)
-    assert (
-        output_initial_values.filter(pl.col("variable") == "last_modified")
-        .select("value")
-        .item()
-    )
+    assert "last_modified" in output_initial_values.columns
+    assert output_initial_values["last_modified"].len() == 1
 
 
 @pytest.mark.integration
@@ -424,11 +421,8 @@ def test_input_s3_select_datetime_stored_valid_last_modified(tmp_path):
     assert output.equals(expected_output)
     assert os.path.isfile(path_to_output_initial_values)
     output_initial_values = pl.read_parquet(path_to_output_initial_values)
-    assert (
-        output_initial_values.filter(pl.col("variable") == "last_modified")
-        .select("value")
-        .item()
-    )
+    assert "last_modified" in output_initial_values.columns
+    assert output_initial_values["last_modified"].len() == 1
 
 
 @pytest.mark.integration

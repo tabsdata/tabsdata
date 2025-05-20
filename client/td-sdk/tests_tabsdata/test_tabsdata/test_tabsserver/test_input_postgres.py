@@ -169,11 +169,7 @@ def test_input_postgres_initial_values(testing_postgres, tmp_path):
     assert output.equals(expected_output)
     assert os.path.isfile(path_to_output_initial_values)
     output_initial_values = pl.read_parquet(path_to_output_initial_values)
-    assert (
-        output_initial_values.filter(pl.col("variable") == "number")
-        .select("value")
-        .item()
-    )
+    assert output_initial_values.equals(pl.DataFrame({"number": 3}))
 
 
 @pytest.mark.postgres
@@ -240,11 +236,7 @@ def test_input_postgres_initial_values_stored_number_0(testing_postgres, tmp_pat
     assert output.equals(expected_output)
     assert os.path.isfile(path_to_output_initial_values)
     output_initial_values = pl.read_parquet(path_to_output_initial_values)
-    assert (
-        output_initial_values.filter(pl.col("variable") == "number")
-        .select("value")
-        .item()
-    )
+    assert output_initial_values.equals(pl.DataFrame({"number": 3}))
 
 
 @pytest.mark.requires_internet
@@ -311,8 +303,4 @@ def test_input_postgres_initial_values_stored_number_2(testing_postgres, tmp_pat
     assert output.equals(expected_output)
     assert os.path.isfile(path_to_output_initial_values)
     output_initial_values = pl.read_parquet(path_to_output_initial_values)
-    assert (
-        output_initial_values.filter(pl.col("variable") == "number")
-        .select("value")
-        .item()
-    )
+    assert output_initial_values.equals(pl.DataFrame({"number": 3}))

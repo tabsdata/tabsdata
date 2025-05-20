@@ -53,15 +53,15 @@ from .global_utils import (
     TABSDATA_IDENTIFIER_COLUMN,
     convert_path_to_uri,
 )
-from .initial_values_utils import (
-    INITIAL_VALUES_LAST_MODIFIED_VARIABLE_NAME,
+from .offset_utils import (
+    OFFSET_LAST_MODIFIED_VARIABLE_NAME,
 )
 from .yaml_parsing import InputYaml, Table, TableVersions
 
 if TYPE_CHECKING:
     from tabsdata.io.input import Input
     from tabsdata.tabsserver.function.execution_context import ExecutionContext
-    from tabsdata.tabsserver.function.initial_values_utils import InitialValues
+    from tabsdata.tabsserver.function.offset_utils import Offset
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ def execute_function_from_config(
     logger.info("Starting execution of function provided by the user")
     result = execution_context.user_provided_function(*parameters)
     logger.info("Finished executing function provided by the user")
-    if execution_context.initial_values.returns_values:
+    if execution_context.offset.returns_values:
         result = update_initial_values(execution_context, result)
     result = ResultsCollection(result)
     result.check_collection_integrity()
@@ -102,7 +102,7 @@ def update_initial_values(execution_context: ExecutionContext, result):
         else:
             new_initial_values = result
             result = (None,)
-    execution_context.initial_values.update_new_values(new_initial_values)
+    execution_context.offset.update_new_values(new_initial_values)
     return result
 
 
@@ -122,7 +122,7 @@ def obtain_user_provided_function_parameters(
             non_plugin_source,
             working_dir,
             old_execution_context,
-            execution_context.initial_values,
+            execution_context.offset,
         )
     return parameters
 
@@ -140,7 +140,7 @@ def trigger_non_plugin_source(
     source: Input,
     working_dir: str,
     request: InputYaml = None,
-    initial_values: InitialValues = None,
+    initial_values: Offset = None,
 ) -> List[TableFrame | None | List[TableFrame | None]]:
     # Call binary to import files
     destination_folder = os.path.join(working_dir, SOURCES_FOLDER)
@@ -275,7 +275,7 @@ def obtain_table_uri_and_verify(
 def execute_sql_importer(
     source: MariaDBSource | MySQLSource | OracleSource | PostgresSource,
     destination: str,
-    initial_values: InitialValues,
+    initial_values: Offset,
 ) -> list | dict:
     if isinstance(source.query, str):
         source_list = [
@@ -311,7 +311,7 @@ def execute_sql_query(
     source: MariaDBSource | MySQLSource | OracleSource | PostgresSource,
     destination: str,
     query: str,
-    initial_values: InitialValues,
+    initial_values: Offset,
 ) -> str:
     logger.info(f"Importing SQL query: {query}")
     if source.initial_values:
@@ -319,7 +319,7 @@ def execute_sql_query(
         initial_values = (
             source.initial_values
             if initial_values.use_decorator_values
-            else initial_values.current_initial_values
+            else initial_values.current_offset
         )
         query = replace_initial_values(query, initial_values)
     if isinstance(source, MySQLSource):
@@ -376,7 +376,7 @@ def td_id_column(size: int):
 def execute_file_importer(
     source: AzureSource | LocalFileSource | S3Source,
     destination: str,
-    initial_values: InitialValues = None,
+    initial_values: Offset = None,
 ) -> list:
     """
     Import files from a source to a destination. The source can be either a local file
@@ -402,8 +402,8 @@ def execute_file_importer(
             last_modified = source.initial_last_modified
         else:
             logger.debug("Using stored last modified value")
-            last_modified = initial_values.current_initial_values.get(
-                INITIAL_VALUES_LAST_MODIFIED_VARIABLE_NAME
+            last_modified = initial_values.current_offset.get(
+                OFFSET_LAST_MODIFIED_VARIABLE_NAME
             )
     logger.debug(f"Last modified: {last_modified}")
     source_list = []
@@ -419,7 +419,7 @@ def execute_file_importer(
     if source.initial_last_modified:
         new_last_modified = datetime.now().isoformat()
         initial_values.update_new_values(
-            {INITIAL_VALUES_LAST_MODIFIED_VARIABLE_NAME: new_last_modified}
+            {OFFSET_LAST_MODIFIED_VARIABLE_NAME: new_last_modified}
         )
     return source_list
 
