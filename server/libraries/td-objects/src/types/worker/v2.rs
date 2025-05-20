@@ -32,7 +32,8 @@ pub struct FunctionInputV2 {
 
 impl Locations for FunctionInputV2 {
     fn locations(&self) -> Vec<&Location> {
-        let mut locations = self.system_input.locations();
+        let mut locations = vec![self.info.function_data(), self.info.function_bundle()];
+        locations.extend(self.system_input.locations());
         locations.extend(self.input.locations());
         locations.extend(self.system_output.locations());
         locations.extend(self.output.locations());
@@ -196,7 +197,9 @@ pub enum WrittenTableV2 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::basic::FunctionId;
     use crate::types::worker::{EnvPrefix, FunctionInput};
+    use itertools::Itertools;
     use std::collections::HashSet;
     use td_error::TdError;
     use url::Url;
@@ -355,71 +358,143 @@ mod tests {
         Ok(())
     }
 
+    // #[test]
+    // fn test_output_table_serde_yaml() -> Result<(), TdError> {
+    //     let function_output = FunctionOutputV2::builder()
+    //         .output(vec![
+    //             WrittenTableV2::Data {
+    //                 table: TableName::try_from("table_1")?,
+    //             },
+    //             WrittenTableV2::NoData {
+    //                 table: TableName::try_from("table_2")?,
+    //             },
+    //         ])
+    //         .build()?;
+    //     let function_output = FunctionOutput::V2(function_output);
+    //
+    //     println!("{}", serde_yaml::to_string(&function_output).unwrap());
+    //     Ok(())
+    // }
+
     #[test]
     fn test_function_input_v1_locations() -> Result<(), TdError> {
-        let function_run_location = Location::builder()
-            .uri(Url::parse("file:///function_run_location").unwrap())
-            .build()?;
-        let location1 = Location::builder()
-            .uri(Url::parse("file:///foo1").unwrap())
-            .build()?;
-        let location2 = Location::builder()
-            .uri(Url::parse("file:///foo2").unwrap())
-            .env_prefix(Some(EnvPrefix::try_from("PA_")?))
-            .build()?;
-        let location3 = Location::builder()
-            .uri(Url::parse("file:///foo3").unwrap())
-            .env_prefix(Some(EnvPrefix::try_from("PA_")?))
-            .build()?;
-        let location4 = Location::builder()
-            .uri(Url::parse("file:///foo4").unwrap())
-            .env_prefix(Some(EnvPrefix::try_from("PB_")?))
+        let locations = vec![
+            Location::builder()
+                .uri(Url::parse("file:///foo0").unwrap())
+                .build()?,
+            Location::builder()
+                .uri(Url::parse("file:///foo1").unwrap())
+                .build()?,
+            Location::builder()
+                .uri(Url::parse("file:///foo2").unwrap())
+                .env_prefix(Some(EnvPrefix::try_from("PA_")?))
+                .build()?,
+            Location::builder()
+                .uri(Url::parse("file:///foo3").unwrap())
+                .env_prefix(Some(EnvPrefix::try_from("PA_")?))
+                .build()?,
+            Location::builder()
+                .uri(Url::parse("file:///foo4").unwrap())
+                .env_prefix(Some(EnvPrefix::try_from("PB_")?))
+                .build()?,
+            Location::builder()
+                .uri(Url::parse("file:///foo5").unwrap())
+                .env_prefix(Some(EnvPrefix::try_from("PC_")?))
+                .build()?,
+            Location::builder()
+                .uri(Url::parse("file:///foo5").unwrap())
+                .env_prefix(Some(EnvPrefix::try_from("PC_")?))
+                .build()?,
+            Location::builder()
+                .uri(Url::parse("file:///foo5").unwrap())
+                .env_prefix(Some(EnvPrefix::try_from("PC_")?))
+                .build()?,
+            Location::builder()
+                .uri(Url::parse("file:///foo6").unwrap())
+                .env_prefix(Some(EnvPrefix::try_from("PD_")?))
+                .build()?,
+        ];
+        let itv0 = InputTableVersion::builder()
+            .try_name(format!("fn_state_{}", FunctionId::default()))?
+            .collection_id(CollectionId::default())
+            .try_collection("collection_1")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .table_data_version_id(TableDataVersionId::default())
+            .location(locations[1].clone())
+            .try_input_idx(0)?
+            .try_table_pos(-1)?
+            .try_version_pos(0)?
             .build()?;
         let itv1 = InputTableVersion::builder()
-            .try_name("n")?
+            .try_name("table_1")?
             .collection_id(CollectionId::default())
-            .try_collection("cn")?
+            .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .table_data_version_id(TableDataVersionId::default())
-            .location(location1.clone())
-            .try_input_idx(1)?
-            .try_table_pos(1)?
-            .try_version_pos(1)?
+            .location(locations[2].clone())
+            .try_input_idx(0)?
+            .try_table_pos(0)?
+            .try_version_pos(0)?
             .build()?;
         let itv2 = InputTableVersion::builder()
-            .try_name("n")?
+            .try_name("table_2")?
             .collection_id(CollectionId::default())
-            .try_collection("cn")?
+            .try_collection("collection_1")?
             .table_id(TableId::default())
             .table_version_id(TableVersionId::default())
             .table_data_version_id(TableDataVersionId::default())
-            .location(location2.clone())
+            .location(locations[3].clone())
             .try_input_idx(1)?
-            .try_table_pos(1)?
+            .try_table_pos(0)?
             .try_version_pos(1)?
+            .build()?;
+        let itv3 = InputTableVersion::builder()
+            .try_name("table_3")?
+            .collection_id(CollectionId::default())
+            .try_collection("collection_1")?
+            .table_id(TableId::default())
+            .table_version_id(TableVersionId::default())
+            .table_data_version_id(TableDataVersionId::default())
+            .location(locations[4].clone())
+            .try_input_idx(2)?
+            .try_table_pos(1)?
+            .try_version_pos(0)?
             .build()?;
         let ot3 = OutputTable::Table(
             OutputTableVersion::builder()
-                .try_name("n")?
+                .try_name(format!("fn_state_{}", FunctionId::default()))?
                 .collection_id(CollectionId::default())
-                .try_collection("cn")?
+                .try_collection("collection_1")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
                 .table_data_version_id(TableDataVersionId::default())
-                .location(location3.clone())
-                .try_table_pos(1)?
+                .location(locations[5].clone())
+                .try_table_pos(-1)?
                 .build()?,
         );
         let ot4 = OutputTable::Table(
             OutputTableVersion::builder()
-                .try_name("n")?
+                .try_name("table_4")?
                 .collection_id(CollectionId::default())
-                .try_collection("cn")?
+                .try_collection("collection_1")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
                 .table_data_version_id(TableDataVersionId::default())
-                .location(location4.clone())
+                .location(locations[6].clone())
+                .try_table_pos(1)?
+                .build()?,
+        );
+        let ot5 = OutputTable::Table(
+            OutputTableVersion::builder()
+                .try_name("table_5")?
+                .collection_id(CollectionId::default())
+                .try_collection("collection_1")?
+                .table_id(TableId::default())
+                .table_version_id(TableVersionId::default())
+                .table_data_version_id(TableDataVersionId::default())
+                .location(locations[7].clone())
                 .try_table_pos(1)?
                 .build()?,
         );
@@ -430,29 +505,47 @@ mod tests {
             .function_version_id(FunctionVersionId::default())
             .function(FunctionName::try_from("fn")?)
             .function_run_id(FunctionRunId::default())
-            .function_bundle(location1.clone())
+            .function_bundle(locations[8].clone())
             .triggered_on(TriggeredOnMillis::default())
             .transaction_id(TransactionId::default())
             .execution_id(ExecutionId::default())
             .execution_name(Some(ExecutionName::try_from("en")?))
-            .function_data(function_run_location)
+            .function_data(locations[0].clone())
             .build()?;
         let function_input = FunctionInputV2::builder()
             .info(info)
-            .system_input(vec![InputTable::Table(itv1)])
-            .input(vec![InputTable::Table(itv2)])
+            .system_input(vec![InputTable::Table(itv0)])
+            .input(vec![
+                InputTable::Table(itv1),
+                InputTable::Table(itv2),
+                InputTable::Table(itv3),
+            ])
             .system_output(vec![ot3])
-            .output(vec![ot4])
+            .output(vec![ot4, ot5])
             .build()?;
         let function_input = FunctionInput::V2(function_input.clone());
         assert_eq!(
-            function_input.locations(),
-            vec![&location1, &location2, &location3, &location4]
+            function_input
+                .locations()
+                .clone()
+                .into_iter()
+                .sorted_by_key(|k| k.uri())
+                .collect::<Vec<_>>(),
+            locations
+                .iter()
+                .sorted_by_key(|k| k.uri())
+                .collect::<Vec<_>>()
         );
         assert_eq!(
             function_input.env_prefixes(),
-            HashSet::from([&EnvPrefix::try_from("PA_")?, &EnvPrefix::try_from("PB_")?])
+            HashSet::from([
+                &EnvPrefix::try_from("PA_")?,
+                &EnvPrefix::try_from("PB_")?,
+                &EnvPrefix::try_from("PC_")?,
+                &EnvPrefix::try_from("PD_")?
+            ])
         );
+        // println!("{}", serde_yaml::to_string(&function_input).unwrap());
         Ok(())
     }
 }

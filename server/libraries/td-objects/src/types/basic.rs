@@ -63,7 +63,7 @@ pub enum Decorator {
 #[td_type::typed(id)]
 pub struct DependencyId;
 
-#[td_type::typed(i32(min = 0, default = 0))]
+#[td_type::typed(i32(default = 0))]
 pub struct DependencyPos;
 
 #[td_type::typed_enum]

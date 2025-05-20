@@ -436,9 +436,9 @@ pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
 
         #[td_error::td_error]
         pub enum #error_name {
-            #[error("Value '{0}' cannot be lower than '{1}' characters")]
+            #[error("Value '{0}' cannot be lower than '{1}'")]
             Min(#int_type, #int_type),
-            #[error("Value '{0}' cannot be higher than '{1}' characters")]
+            #[error("Value '{0}' cannot be higher than '{1}'")]
             Max(#int_type, #int_type),
         }
 
