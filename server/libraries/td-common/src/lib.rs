@@ -22,6 +22,5 @@ pub mod settings;
 pub mod signal;
 pub mod status;
 pub mod str;
-pub mod system_tables;
 pub mod time;
 pub mod uri;

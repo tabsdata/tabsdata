@@ -86,6 +86,9 @@ impl FunctionServices {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::function::layers::register::{
+        SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
+    };
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::handle_sql_err;
@@ -171,7 +174,10 @@ pub(crate) mod tests {
             .fetch_all(db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(table_versions.len(), req_tables.len());
+        assert_eq!(
+            table_versions.len(),
+            req_tables.len() + SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES.len()
+        );
         for table in req_tables {
             let found = table_versions
                 .iter()
@@ -192,7 +198,10 @@ pub(crate) mod tests {
             .fetch_all(db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(tables.len(), req_tables.len());
+        assert_eq!(
+            tables.len(),
+            req_tables.len() + SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES.len()
+        );
         for table in req_tables {
             let found = tables
                 .iter()
@@ -216,7 +225,10 @@ pub(crate) mod tests {
             .fetch_all(db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(dependency_versions.len(), req_dependencies.len());
+        assert_eq!(
+            dependency_versions.len(),
+            req_dependencies.len() + SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES.len()
+        );
         for dependency in req_dependencies {
             let found = dependency_versions
                 .iter()
@@ -246,7 +258,10 @@ pub(crate) mod tests {
             .fetch_all(db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(dependencies.len(), req_dependencies.len());
+        assert_eq!(
+            dependencies.len(),
+            req_dependencies.len() + SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES.len()
+        );
         for dependency in req_dependencies {
             let found = dependencies
                 .iter()

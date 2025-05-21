@@ -48,10 +48,15 @@ pub async fn data_location(
     Ok(DataLocation::default())
 }
 
+pub const SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES: [&str; 1] = ["td_fn_state"];
+pub const SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES: [&str; 1] = ["td_fn_state"];
+
+#[allow(clippy::too_many_arguments)]
 pub async fn build_table_versions(
     ReqCtx(ctx): ReqCtx,
     Input(collection_id): Input<CollectionId>,
     Input(collection_name): Input<CollectionName>,
+    Input(function_id): Input<FunctionId>,
     Input(existing_versions): Input<Vec<TableVersionDB>>,
     Input(new_tables): Input<Option<Vec<TableName>>>,
     Input(table_version_builder): Input<TableVersionDBBuilder>,
@@ -65,55 +70,79 @@ pub async fn build_table_versions(
         .map(|t| ((t.collection_id(), t.name()), t))
         .collect();
 
-    // Create new table versions
-    if let Some(new_tables) = new_tables.as_deref().filter(|t| !t.is_empty()) {
-        for (pos, table_name) in new_tables.iter().enumerate() {
-            // Reuse table id if the table is the same
-            let existing_version = existing_versions.get(&(&*collection_id, table_name));
-            let table_id = if let Some(existing_version) = existing_version {
-                match existing_version.status() {
-                    TableStatus::Active => existing_version.table_id(),
-                    TableStatus::Frozen => {
-                        // We can only unfreeze a frozen table if reuse_frozen is enabled
-                        if **reuse_frozen {
-                            ctx.warning(RegisterFunctionError::FrozenTableAlreadyExists(
-                                table_name.clone(),
-                                collection_name.deref().clone(),
-                                "unfreezing with new table definition".to_string(),
-                            ))
-                            .await;
+    // System output tables
+    let new_system_tables = SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES
+        .iter()
+        .map(|prefix| {
+            // system tables are the same for the same function
+            // TODO we need to make sure these names are not going to conflict with user tables
+            let table_name = format!("{}__{}", prefix, function_id);
+            TableName::try_from(table_name)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
-                            existing_version.table_id()
-                        } else {
-                            Err(RegisterFunctionError::FrozenTableAlreadyExists(
-                                table_name.clone(),
-                                collection_name.deref().clone(),
-                                "could not reuse frozen table".to_string(),
-                            ))?
-                        }
-                    }
-                    _ => {
-                        // Status deleted, table is detached from the created table
-                        &TableId::default()
+    // Add iterators of new tables (system tables with negative pos)
+    let new_tables = new_tables
+        .as_deref()
+        .unwrap_or(Default::default())
+        .iter()
+        .enumerate()
+        .map(|(pos, table_name)| (pos as i32, table_name))
+        .chain(
+            new_system_tables
+                .iter()
+                .enumerate()
+                .map(|(pos, prefix)| (-(pos as i32 + 1), prefix)),
+        )
+        .collect::<Vec<_>>();
+
+    // Create new table versions
+    for (pos, table_name) in new_tables {
+        // Reuse table id if the table is the same
+        let existing_version = existing_versions.get(&(&*collection_id, table_name));
+        let table_id = if let Some(existing_version) = existing_version {
+            match existing_version.status() {
+                TableStatus::Active => existing_version.table_id(),
+                TableStatus::Frozen => {
+                    // We can only unfreeze a frozen table if reuse_frozen is enabled
+                    if **reuse_frozen {
+                        ctx.warning(RegisterFunctionError::FrozenTableAlreadyExists(
+                            table_name.clone(),
+                            collection_name.deref().clone(),
+                            "unfreezing with new table definition".to_string(),
+                        ))
+                        .await;
+
+                        existing_version.table_id()
+                    } else {
+                        Err(RegisterFunctionError::FrozenTableAlreadyExists(
+                            table_name.clone(),
+                            collection_name.deref().clone(),
+                            "could not reuse frozen table".to_string(),
+                        ))?
                     }
                 }
-            } else {
-                // Straight up new table
-                &TableId::default()
-            };
+                _ => {
+                    // Status deleted, table is detached from the created table
+                    &TableId::default()
+                }
+            }
+        } else {
+            // Straight up new table
+            &TableId::default()
+        };
 
-            let table_version = table_version_builder
-                .deref()
-                .clone()
-                .table_id(table_id)
-                .name(table_name)
-                .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i32)?))
-                .status(TableStatus::Active)
-                .build()?;
+        let table_version = table_version_builder
+            .deref()
+            .clone()
+            .table_id(table_id)
+            .name(table_name)
+            .function_param_pos(Some(TableFunctionParamPos::try_from(pos)?))
+            .status(TableStatus::Active)
+            .build()?;
 
-            new_table_versions.insert((&*collection_id, table_name), table_version);
-        }
-    };
+        new_table_versions.insert((&*collection_id, table_name), table_version);
+    }
 
     // Freeze if dropped
     for (key, existing_version) in existing_versions {
@@ -179,6 +208,7 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
     Input(existing_versions): Input<Vec<DependencyVersionDB>>,
     Input(new_dependencies): Input<Option<Vec<TableDependency>>>,
     Input(collection_in_context): Input<CollectionName>,
+    Input(function_id): Input<FunctionId>,
     Input(dependency_version_builder): Input<DependencyVersionDBBuilder>,
 ) -> Result<Vec<DependencyVersionDB>, TdError> {
     let mut conn = connection.lock().await;
@@ -202,7 +232,31 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
         })
         .collect();
 
-    let new_dependencies = new_dependencies.as_deref().unwrap_or(&[]);
+    // System dependencies
+    let new_system_dependencies = SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES
+        .iter()
+        .map(|prefix| {
+            // system tables are the same for the same function
+            // TODO we need to make sure these names are not going to conflict with user tables
+            let table_name = format!("{}__{}", prefix, function_id);
+            TableDependency::try_from(table_name)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Add iterators of new dependencies (dependency tables with negative pos)
+    let new_dependencies = new_dependencies
+        .as_deref()
+        .unwrap_or(Default::default())
+        .iter()
+        .enumerate()
+        .map(|(pos, table_name)| (pos as i32, table_name))
+        .chain(
+            new_system_dependencies
+                .iter()
+                .enumerate()
+                .map(|(pos, prefix)| (-(pos as i32 + 1), prefix)),
+        )
+        .collect::<Vec<_>>();
 
     // Create new dependency versions
     let tables_found = if new_dependencies.is_empty() {
@@ -212,7 +266,7 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
         // TODO this is not getting chunked. If there are too many we can have issues.
         let dependency_tables_lookup: Vec<_> = new_dependencies
             .iter()
-            .map(|d| {
+            .map(|(_, d)| {
                 (
                     d.collection().as_ref().unwrap_or(&*collection_in_context),
                     d.table(),
@@ -234,7 +288,7 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
         .collect();
 
     // Create new versions
-    for (pos, dependency_table) in new_dependencies.iter().enumerate() {
+    for (pos, dependency_table) in new_dependencies {
         let table_db = match tables_found.get(&(
             dependency_table
                 .collection()
@@ -270,7 +324,7 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
             .table_function_version_id(table_db.function_version_id())
             .table_name(table_db.name())
             .table_versions(dependency_table.versions())
-            .dep_pos(DependencyPos::try_from(pos as i32)?)
+            .dep_pos(DependencyPos::try_from(pos)?)
             .status(DependencyStatus::Active)
             .build()?;
 

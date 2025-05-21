@@ -131,6 +131,7 @@ SELECT tv.*,
        tdv.id        as last_data_version
 FROM table_versions__with_names tv
          LEFT JOIN table_data_versions__with_status tdv on tv.id = tdv.table_version_id
+WHERE tv.function_param_pos >= 0 -- non-system tables only
 ORDER BY tdv.triggered_on;
 
 -- Bundles

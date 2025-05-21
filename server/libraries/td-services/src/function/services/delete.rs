@@ -105,6 +105,7 @@ mod tests {
     use super::*;
     use crate::function::services::tests::{assert_delete, assert_register};
     use td_objects::crudl::{handle_sql_err, RequestContext};
+    use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_function2::seed_function;
@@ -460,7 +461,22 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (_, created_function_version_1) = seed_function(&db, &collection, &create_1).await;
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create_1.clone(),
+        );
+
+        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let response = service.raw_oneshot(request).await;
+        let created_function_version_1 = response?;
 
         let create_2 = FunctionRegister::builder()
             .try_name("joaquin_workout_2")?
