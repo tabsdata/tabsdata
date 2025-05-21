@@ -81,7 +81,7 @@ test_tower_metadata = ["td-tower/test_tower_metadata"]
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "paste", "strum", "toml", "utoipa-axum"]
+ignored = ["openssl", "paste", "strum", "td-schema", "toml", "utoipa-axum"]
 
 # Build dependencies
 
@@ -174,10 +174,11 @@ walkdir = { workspace = true }
 wildmatch = { workspace = true }
 
 [dev-dependencies]
+ta-tableframe = { workspace = true, features = ["td-test"] }
+te-tableframe = { workspace = true, features = ["td-test"] }
 td-common = { workspace = true, features = ["td-test"] }
 td-database = { workspace = true, features = ["td-test"] }
-te-tableframe = { workspace = true, features = ["td-test"] }
-ta-tableframe = { workspace = true, features = ["td-test"] }
+td-schema = { workspace = true, features = ["td-test"] }
 td-server = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

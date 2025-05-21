@@ -76,7 +76,6 @@ hex = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
 jsonwebtoken = { workspace = true }
-lazy_static = { workspace = true }
 polars = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }

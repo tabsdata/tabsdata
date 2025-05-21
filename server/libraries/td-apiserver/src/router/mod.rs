@@ -159,7 +159,10 @@ impl ApiServerInstance {
     }
 
     fn execution_state(&self) -> state::Execution {
-        Arc::new(ExecutionServices::new(self.db.clone()))
+        Arc::new(ExecutionServices::new(
+            self.db.clone(),
+            self.authz_context.clone(),
+        ))
     }
 
     fn function_state(&self) -> state::Functions {

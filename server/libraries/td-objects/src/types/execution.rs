@@ -122,6 +122,53 @@ pub struct FunctionRunDB {
 }
 
 #[td_type::Dao]
+#[dao(sql_table = "function_runs__with_names")]
+pub struct FunctionRunDBWithNames {
+    id: FunctionRunId,
+    collection_id: CollectionId,
+    function_version_id: FunctionVersionId,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    triggered_on: TriggeredOn,
+    trigger: Trigger,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: FunctionRunStatus,
+
+    data_location: DataLocation,
+    name: FunctionName,
+    collection: CollectionName,
+    execution: Option<ExecutionName>,
+    triggered_by: UserName,
+}
+
+#[td_type::Dto]
+#[td_type(builder(try_from = FunctionRunDBWithNames))]
+pub struct FunctionRun {
+    id: FunctionRunId,
+    collection_id: CollectionId,
+    function_version_id: FunctionVersionId,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    triggered_on: TriggeredOn,
+    trigger: Trigger,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: FunctionRunStatus,
+
+    data_location: DataLocation,
+    name: FunctionName,
+    collection: CollectionName,
+    execution: Option<ExecutionName>,
+    triggered_by: UserName,
+    // TODO exception info
+    // kind: Option<String>,
+    // message: Option<String>,
+    // error_code: Option<String>,
+    // exit_status: i32,
+}
+
+#[td_type::Dao]
 #[dao(sql_table = "executable_function_runs")]
 pub struct ExecutableFunctionRunDB {
     #[td_type(extractor)]

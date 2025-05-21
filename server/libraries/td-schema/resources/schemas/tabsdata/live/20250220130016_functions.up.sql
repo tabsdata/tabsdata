@@ -357,7 +357,7 @@ FROM (SELECT t.*,
          LEFT JOIN function_runs fr ON fr.transaction_id = t.id
 GROUP BY s.id;
 
--- Function runs  (table)
+-- Function runs (table & __with_names & executable_ views)
 
 CREATE TABLE function_runs
 (
@@ -380,17 +380,24 @@ CREATE TABLE function_runs
     FOREIGN KEY (function_version_id) REFERENCES function_versions (id)
 );
 
+CREATE VIEW function_runs__with_names AS
+SELECT f.*,
+       fv.data_location                                AS data_location,
+       fv.name                                         AS name,
+       c.name                                          AS collection,
+       e.name                                          AS execution,
+       IFNULL(u.name, '[' || f.triggered_by_id || ']') as triggered_by
+FROM function_runs f
+         LEFT JOIN collections c ON f.collection_id = c.id
+         LEFT JOIN function_versions fv ON f.function_version_id = fv.id
+         LEFT JOIN executions e ON f.execution_id = e.id
+         LEFT JOIN users u ON f.triggered_by_id = u.id;
+
 CREATE VIEW executable_function_runs AS
 SELECT f.*,
-
-       fv.data_location   AS data_location,
        fv.storage_version AS storage_version,
-       fv.bundle_id       AS bundle_id,
-
-       fv.name            AS name,
-       c.name             AS collection,
-       e.name             AS execution
-FROM function_runs f
+       fv.bundle_id       AS bundle_id
+FROM function_runs__with_names f
          LEFT JOIN collections c ON f.collection_id = c.id
          LEFT JOIN function_versions fv ON f.function_version_id = fv.id
          LEFT JOIN executions e ON f.execution_id = e.id

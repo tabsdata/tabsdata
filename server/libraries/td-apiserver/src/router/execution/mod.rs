@@ -8,6 +8,7 @@ use td_apiforge::apiserver_tag;
 
 pub mod callback;
 pub mod execute;
+pub mod read_run;
 
 apiserver_tag!(name = "Execution", description = "Execution API");
 
@@ -15,5 +16,6 @@ routers! {
     state => { Execution },
     router => {
         execute => { state ( Execution ) },
+        read_run => { state ( Execution ) },
     }
 }

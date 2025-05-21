@@ -9,7 +9,7 @@ use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::UpdateRequest;
-use td_objects::rest_urls::FunctionRunParam;
+use td_objects::rest_urls::FunctionRunIdParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService, With,
@@ -28,7 +28,7 @@ use td_tower::service_provider::{ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
 
 pub struct ExecutionCallbackService {
-    provider: ServiceProvider<UpdateRequest<FunctionRunParam, CallbackRequest>, (), TdError>,
+    provider: ServiceProvider<UpdateRequest<FunctionRunIdParam, CallbackRequest>, (), TdError>,
 }
 
 impl ExecutionCallbackService {
@@ -46,14 +46,14 @@ impl ExecutionCallbackService {
                 SrvCtxProvider::new(queries),
 
                 // Extract from request.
-                from_fn(With::<UpdateRequest<FunctionRunParam, CallbackRequest>>::extract_name::<FunctionRunParam>),
-                from_fn(With::<UpdateRequest<FunctionRunParam, CallbackRequest>>::extract_data::<CallbackRequest>),
+                from_fn(With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_name::<FunctionRunIdParam>),
+                from_fn(With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_data::<CallbackRequest>),
 
                 // Convert callback request to status update request.
                 from_fn(With::<CallbackRequest>::convert_to::<UpdateFunctionRun, _>),
 
                 // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
-                from_fn(With::<FunctionRunParam>::extract::<FunctionRunId>),
+                from_fn(With::<FunctionRunIdParam>::extract::<FunctionRunId>),
 
                 // DB Transaction start.
                 TransactionProvider::new(db),
@@ -74,7 +74,7 @@ impl ExecutionCallbackService {
 
     pub async fn service(
         &self,
-    ) -> TdBoxService<UpdateRequest<FunctionRunParam, CallbackRequest>, (), TdError> {
+    ) -> TdBoxService<UpdateRequest<FunctionRunIdParam, CallbackRequest>, (), TdError> {
         self.provider.make().await
     }
 }
@@ -127,22 +127,22 @@ mod tests {
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<UpdateRequest<FunctionRunParam, CallbackRequest>, ()>(&[
+        metadata.assert_service::<UpdateRequest<FunctionRunIdParam, CallbackRequest>, ()>(&[
             // Extract from request.
             type_of_val(
-                &With::<UpdateRequest<FunctionRunParam, CallbackRequest>>::extract_name::<
-                    FunctionRunParam,
+                &With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_name::<
+                    FunctionRunIdParam,
                 >,
             ),
             type_of_val(
-                &With::<UpdateRequest<FunctionRunParam, CallbackRequest>>::extract_data::<
+                &With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_data::<
                     CallbackRequest,
                 >,
             ),
             // Convert callback request to status update request.
             type_of_val(&With::<CallbackRequest>::convert_to::<UpdateFunctionRun, _>),
             // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
-            type_of_val(&With::<FunctionRunParam>::extract::<FunctionRunId>),
+            type_of_val(&With::<FunctionRunIdParam>::extract::<FunctionRunId>),
             // Find function run (we will always have 1).
             type_of_val(&By::<FunctionRunId>::select_all::<DaoQueries, FunctionRunDB>),
             // Update function requirements status.
@@ -312,7 +312,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(function_run.id())
                 .build()?,
             response,
@@ -440,7 +440,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(function_run.id())
                 .build()?,
             response,
@@ -476,7 +476,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(function_run.id())
                 .build()?,
             response,
@@ -610,7 +610,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(function_run.id())
                 .build()?,
             response,
@@ -646,7 +646,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(function_run.id())
                 .build()?,
             response,
@@ -869,7 +869,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(requirement_function_run.id())
                 .build()?,
             response,
@@ -905,7 +905,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(requirement_function_run.id())
                 .build()?,
             response,
@@ -1100,7 +1100,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(function_run.id())
                 .build()?,
             response,
@@ -1147,7 +1147,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(function_run.id())
                 .build()?,
             response,

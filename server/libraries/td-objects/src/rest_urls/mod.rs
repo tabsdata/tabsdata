@@ -251,7 +251,7 @@ pub const INTERNAL_PREFIX: &str = url!("/internal");
 pub const UPDATE_FUNCTION_RUN: &str = url!(INTERNAL_PREFIX, "/function_run/{function_run_id}");
 
 #[td_type::UrlParam]
-pub struct FunctionRunParam {
+pub struct FunctionRunIdParam {
     #[td_type(extractor)]
     function_run_id: FunctionRunId,
 }
@@ -400,6 +400,22 @@ pub struct SampleOffsetLenParam {
     #[serde(default)]
     len: SampleLen,
 }
+
+// Function runs
+pub const FUNCTION_RUNS: &str = url!(FUNCTION_VERSION, "/executions");
+pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{execution}");
+
+#[td_type::UrlParam]
+pub struct FunctionRunParam {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    function_version: FunctionVersionIdName,
+    #[td_type(extractor)]
+    execution: ExecutionIdName,
+}
+
+pub const FUNCTION_RUN_GET: &str = url!(FUNCTION_RUN);
 
 // Tables
 pub const TABLES: &str = url!(COLLECTION, "/tables");

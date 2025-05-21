@@ -11,7 +11,7 @@ use axum::extract::{Path, State};
 use axum::Extension;
 use td_apiforge::{apiserver_path, apiserver_tag};
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{FunctionRunParam, UPDATE_FUNCTION_RUN};
+use td_objects::rest_urls::{FunctionRunIdParam, UPDATE_FUNCTION_RUN};
 use td_objects::types::execution::CallbackRequest;
 use tower::ServiceExt;
 
@@ -27,7 +27,7 @@ apiserver_tag!(name = "Internal", description = "Internal API");
 pub async fn callback(
     State(execution): State<Execution>,
     Extension(context): Extension<RequestContext>,
-    Path(param): Path<FunctionRunParam>,
+    Path(param): Path<FunctionRunIdParam>,
     Json(request): Json<CallbackRequest>,
 ) -> Result<EmptyUpdateStatus, UpdateErrorStatus> {
     let request = context.update(param, request);

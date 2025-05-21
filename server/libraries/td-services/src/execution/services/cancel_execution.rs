@@ -77,7 +77,7 @@ mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{handle_sql_err, RequestContext};
-    use td_objects::rest_urls::FunctionRunParam;
+    use td_objects::rest_urls::FunctionRunIdParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection2::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -267,7 +267,7 @@ mod tests {
             true,
         )
         .update(
-            FunctionRunParam::builder()
+            FunctionRunIdParam::builder()
                 .function_run_id(function_runs[0].id())
                 .build()?,
             response,
