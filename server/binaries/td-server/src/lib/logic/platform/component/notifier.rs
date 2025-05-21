@@ -197,7 +197,7 @@ impl WorkerNotifier for Callback {
                     .set_exit_status(*exception_payload.exit_status());
 
                 // Exit status 202 is using to signal work termination without further retry.
-                if *exception_payload.exit_status() == ExitStatus::TabsDataStatus.code() {
+                if *exception_payload.exit_status() == ExitStatus::TabsDataError.code() {
                     response_payload.set_status(FunctionRunUpdateStatus::Failed);
                     failed = true;
                 }

@@ -56,7 +56,7 @@ from .global_utils import (
 from .offset_utils import (
     OFFSET_LAST_MODIFIED_VARIABLE_NAME,
 )
-from .yaml_parsing import InputYaml, Table, TableVersions
+from .yaml_parsing import Table, TableVersions
 
 if TYPE_CHECKING:
     from tabsdata.io.input import Input
@@ -118,11 +118,10 @@ def obtain_user_provided_function_parameters(
         #  plugin section for now
         non_plugin_source = execution_context.non_plugin_source
         working_dir = execution_context.paths.output_folder
-        old_execution_context = execution_context.request
         parameters = trigger_non_plugin_source(
             non_plugin_source,
             working_dir,
-            old_execution_context,
+            execution_context,
             execution_context.status.offset,
         )
     return parameters
@@ -140,7 +139,7 @@ def convert_tuple_to_list(
 def trigger_non_plugin_source(
     source: Input,
     working_dir: str,
-    request: InputYaml = None,
+    execution_context: ExecutionContext,
     initial_values: Offset = None,
     idx: td_generators.IdxGenerator | None = None,
 ) -> List[TableFrame | None | List[TableFrame | None]]:
@@ -181,45 +180,46 @@ def trigger_non_plugin_source(
         logger.debug("Triggering TableInput")
         # When loading tabsdata tables, we return tuples of (uri, table), so that
         # coming operations can use information on the request for further processing.
-        local_sources = execute_table_importer(source, request)
+        local_sources = execute_table_importer(source, execution_context)
     else:
         logger.error(f"Invalid source type: {type(source)}. No data imported.")
         raise TypeError(f"Invalid source type: {type(source)}. No data imported.")
     # Upload all files in a specific folder, with parquet format always
     logger.debug(f"Local sources: '{local_sources}'")
-    result = load_sources(request, local_sources, idx)
+    result = load_sources(execution_context, local_sources, idx)
     logger.info("Loaded sources successfully")
     return result
 
 
 def execute_table_importer(
-    source: TableInput, execution_context: InputYaml
+    source: TableInput,
+    execution_context: ExecutionContext,
 ) -> List[Union[Tuple[str, Table], List[Tuple[str, Table]]]]:
     # Right now, source provides very little information, but we use it to do a small
     # sanity check and to ensure that everything is running properly
-    execution_context_input_entry_list = execution_context.input
+    context_request_input = execution_context.request.input
     logger.info(
-        f"Importing tables '{execution_context_input_entry_list}' and matching them"
+        f"Importing tables '{context_request_input}' and matching them"
         f" with source '{source}'"
     )
     table_list: List[Union[Tuple[str, Table], List[Tuple[str, Table]]]] = []
     # Note: source.uri is a list of URIs, it can't be a single URI because when we
     # serialised it we stored it as such even if it was a single one.
-    if len(execution_context_input_entry_list) != len(source.table):
+    if len(context_request_input) != len(source.table):
         logger.error(
             "Number of tables in the execution context input"
-            f" ({len(execution_context_input_entry_list)}) does not match the "
+            f" ({len(context_request_input)}) does not match the "
             "number of"
             f" URIs in the source ({len(source.table)}). No data imported."
         )
         raise ValueError(
             "Number of tables in the execution context input"
-            f" ({len(execution_context_input_entry_list)}) does not match the "
+            f" ({len(context_request_input)}) does not match the "
             "number of"
             f" URIs in the source ({len(source.table)}). No data imported."
         )
     for execution_context_input_entry, source_table_str in zip(
-        execution_context_input_entry_list, source.table
+        context_request_input, source.table
     ):
         logger.info(f"Unpacking '{execution_context_input_entry}'")
         if isinstance(execution_context_input_entry, Table):
@@ -558,14 +558,15 @@ def convert_characters_to_ascii(dictionary: dict) -> dict:
 
 
 def load_sources(
-    request: InputYaml,
+    execution_context: ExecutionContext,
     local_sources: list,
     idx: td_generators.IdxGenerator | None = None,
 ) -> List[TableFrame | None | List[TableFrame | None]]:
     """
     Given a list of sources, load them into tabsdata TableFrames.
-    :param request: The request object containing the context of the function.
+    :param execution_context: The context of the function.
     :param local_sources: A list of lists of paths to parquet files. Each element is
+    :param idx: Table index generator to use for global indexing.
         either a string to a single file or a list of strings to multiple files.
     :return: A list were each element is either a DataFrame or a list of DataFrames.
     """
@@ -576,22 +577,22 @@ def load_sources(
     for source in local_sources:
         logger.debug(f"Loading single source: {source}")
         if isinstance(source, list):
-            sources.append(load_sources_from_list(request, idx, source))
+            sources.append(load_sources_from_list(execution_context, idx, source))
         else:
-            sources.append(load_source(request, idx, source))
+            sources.append(load_source(execution_context, idx, source))
     return sources
 
 
 def load_sources_from_list(
-    request: InputYaml,
+    execution_context: ExecutionContext,
     idx: td_generators.IdxGenerator,
     source_list: list,
 ) -> List[TableFrame]:
-    return [load_source(request, idx, path) for path in source_list]
+    return [load_source(execution_context, idx, path) for path in source_list]
 
 
 def load_source(
-    request: InputYaml,
+    execution_context: ExecutionContext,
     idx: td_generators.IdxGenerator,
     spec: Union[str, os.PathLike, Tuple[Union[str, os.PathLike], Table]],
 ) -> TableFrame | None:
@@ -617,7 +618,7 @@ def load_source(
     logger.debug("Loaded parquet file successfully!")
 
     if table is None:
-        return store_source_raw_data(request, lf, idx)
+        return store_source_raw_data(execution_context, lf, idx)
     else:
         return TableFrame.__build__(df=lf, mode="tab", idx=idx)
 
@@ -625,12 +626,13 @@ def load_source(
 # ToDo: Pending storing metadata. This will require deciding how to determine which
 #       information defines each raw data file depending on the source type.
 def store_source_raw_data(
-    request: InputYaml,
+    execution_context: ExecutionContext,
     lf: pl.LazyFrame,
     idx: td_generators.IdxGenerator,
 ) -> TableFrame:
     logger.info("Storing raw data...")
 
+    request = execution_context.request
     function_data = request.function_data
     if not function_data:
         raise ValueError("The function data location is required for publishers")

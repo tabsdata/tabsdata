@@ -230,8 +230,8 @@ impl Bootloader {
             Ok(_) => Ok(Success),
             Err(e) => {
                 error!("Tabsdata bootloader initialization failed: {}", e);
-                error!("Leaving with exit code: {}", TabsDataStatus.code());
-                Ok(TabsDataStatus)
+                error!("Leaving with exit code: {}", TabsDataError.code());
+                Ok(TabsDataError)
             }
         }
     }
@@ -268,8 +268,8 @@ pub fn start() {
             let result = Bootloader::new().run(config, params).await;
             if let Err(e) = result {
                 error!("Tabsdata bootloader execution failed: {}", e);
-                error!("Leaving with exit code: {}", TabsDataStatus.code());
-                return TabsDataStatus;
+                error!("Leaving with exit code: {}", TabsDataError.code());
+                return TabsDataError;
             }
             Success
         },

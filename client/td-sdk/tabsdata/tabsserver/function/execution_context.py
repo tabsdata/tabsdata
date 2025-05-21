@@ -6,13 +6,14 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import cloudpickle
 
 from tabsdata.io.input import build_input
 from tabsdata.io.output import build_output
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata.tabsdatafunction import TabsdataFunction
 from tabsdata.tabsserver.function.configuration_utils import load_function_config
 from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata.tabsserver.function.status import Status
@@ -65,7 +66,7 @@ class ExecutionContext:
         self.request.work = work
 
     @property
-    def user_provided_function(self) -> Callable:
+    def user_provided_function(self) -> TabsdataFunction:
         if not hasattr(self, "_user_provided_function"):
             with open(self.paths.function_file, "rb") as f:
                 self._user_provided_function = cloudpickle.load(f)

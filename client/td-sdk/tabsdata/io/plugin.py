@@ -23,18 +23,19 @@ if TYPE_CHECKING:
 
     from tabsdata.tabsserver.function.execution_context import ExecutionContext
     from tabsdata.tabsserver.function.results_collection import ResultsCollection
-    from tabsdata.tabsserver.function.yaml_parsing import InputYaml
 
     VALID_PLUGIN_RESULT = List[pl.LazyFrame | None] | pl.LazyFrame | None
 
 
 @contextmanager
-def td_context(source: SourcePlugin, execution_context: ExecutionContext):
-    setattr(source, "_ec", execution_context)
+def td_context(
+    plugin: SourcePlugin | DestinationPlugin, execution_context: ExecutionContext
+):
+    setattr(plugin, "_ec", execution_context)
     try:
         yield
     finally:
-        delattr(source, "_ec")
+        delattr(plugin, "_ec")
 
 
 class SourcePlugin:
@@ -87,6 +88,7 @@ class SourcePlugin:
             logger.debug(f"Updated plugin initial values to: {current_initial_values}")
         logger.info("Starting plugin stream import")
 
+        parameters = None
         # For a custom stream implementations, method is executed as is.
         if self._is_overridden("stream"):
             parameters = self.stream(destination_dir)
@@ -99,44 +101,43 @@ class SourcePlugin:
         if self.initial_values:
             execution_context.status.offset.returns_values = True
         # Verify if the parameters are valid
-        if isinstance(parameters, list):
-            for element in parameters:
-                if isinstance(element, list):
-                    for single_element in element:
-                        if (
-                            not isinstance(single_element, TableFrame)
-                            and single_element is not None
-                        ):
-                            logger.error(
-                                "The return value of the stream method of a plugin"
-                                " must be a list of Tableframes or Nones, got"
-                                f" {type(single_element)} instead"
-                            )
-                            raise TypeError(
-                                "The return value of the stream method of a plugin"
-                                " must be a list of Tableframes or Nones, got"
-                                f" {type(single_element)} instead"
-                            )
-                elif not isinstance(element, TableFrame) and element is not None:
-                    logger.error(
-                        "The return value of the stream method of a plugin must be "
-                        f"a list of Tableframes or Nones, got {type(element)} instead"
-                    )
-                    raise TypeError(
-                        "The return value of the stream method of a plugin must be "
-                        f"a list of Tableframes or Nones, got {type(element)} instead"
-                    )
-        else:
+        if not isinstance(parameters, list):
             logger.error(
                 "The return value of the stream method of a plugin must be "
-                f"a list of Tableframes or Nones, got {type(parameters)} "
+                f"a list of TableFrames or Nones, got {type(parameters)} "
                 "instead"
             )
             raise TypeError(
                 "The return value of the stream method of a plugin must be "
-                f"a list of Tableframes or Nones, got {type(parameters)} "
+                f"a list of TableFrames or Nones, got {type(parameters)} "
                 "instead"
             )
+        for element in parameters:
+            if isinstance(element, list):
+                for single_element in element:
+                    if (
+                        not isinstance(single_element, TableFrame)
+                        and single_element is not None
+                    ):
+                        logger.error(
+                            "The return value of the stream method of a plugin"
+                            " must be a list of TableFrames or Nones, got"
+                            f" {type(single_element)} instead"
+                        )
+                        raise TypeError(
+                            "The return value of the stream method of a plugin"
+                            " must be a list of TableFrames or Nones, got"
+                            f" {type(single_element)} instead"
+                        )
+            elif not isinstance(element, TableFrame) and element is not None:
+                logger.error(
+                    "The return value of the stream method of a plugin must be "
+                    f"a list of TableFrames or Nones, got {type(element)} instead"
+                )
+                raise TypeError(
+                    "The return value of the stream method of a plugin must be "
+                    f"a list of TableFrames or Nones, got {type(element)} instead"
+                )
         return parameters
 
     # ToDo: this must be refined to:
@@ -163,7 +164,7 @@ class SourcePlugin:
                     resulting_files,
                     working_dir,
                     idx=idx,
-                    request=self._ec.request,
+                    execution_context=self._ec,
                 )
             ]
         elif isinstance(resulting_files, (list, tuple)):
@@ -176,7 +177,7 @@ class SourcePlugin:
                                 single_element,
                                 working_dir,
                                 idx=idx,
-                                request=self._ec.request,
+                                execution_context=self._ec,
                             )
                             for single_element in element
                         ]
@@ -187,7 +188,7 @@ class SourcePlugin:
                             element,
                             working_dir,
                             idx=idx,
-                            request=self._ec.request,
+                            execution_context=self._ec,
                         )
                     )
                 else:
@@ -277,7 +278,7 @@ def _import_plugin_file_from_single_element(
     resulting_files: str | None,
     working_dir: str,
     idx: td_generators.IdxGenerator,
-    request: InputYaml = None,
+    execution_context: ExecutionContext,
 ) -> Union[TableFrame, None, List[TableFrame | None]]:
     if resulting_files is None:
         return None
@@ -286,7 +287,7 @@ def _import_plugin_file_from_single_element(
     return trigger_non_plugin_source(
         source_config,
         working_dir,
-        request=request,
+        execution_context=execution_context,
         idx=idx,
     )[0]
 
@@ -302,6 +303,11 @@ class DestinationPlugin:
     """
 
     IDENTIFIER = "destination-plugin"
+
+    def _is_overridden(self, method_name: str) -> bool:
+        class_method = getattr(DestinationPlugin, method_name)
+        object_method = getattr(self.__class__, method_name)
+        return object_method is not class_method
 
     def _run(self, execution_context: ExecutionContext, results: ResultsCollection):
         self._tabsdata_internal_logger = execution_context.logger
@@ -337,7 +343,14 @@ class DestinationPlugin:
                 )
             results_to_provide.append(intermediate_result)
         logger.info("Exporting files with plugin stream method")
-        self.stream(execution_context.paths.output_folder, *results_to_provide)
+        # For a custom stream implementations, method is executed as is.
+        if self._is_overridden("stream"):
+            self.stream(execution_context.paths.output_folder, *results_to_provide)
+        else:
+            # For the core stream implementations, method is executed as with the
+            # execution context.
+            with td_context(self, execution_context):
+                self.stream(execution_context.paths.output_folder, *results_to_provide)
         logger.info("Exported files with plugin stream method successfully")
 
     def stream(self, working_dir: str, *results: VALID_PLUGIN_RESULT):

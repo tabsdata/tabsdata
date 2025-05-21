@@ -10,6 +10,7 @@ import inspect
 import os
 import sys
 import tempfile
+from enum import Enum
 from typing import Generator, List
 
 import polars as pl
@@ -22,16 +23,29 @@ from tabsdata.tabsdatafunction import TabsdataFunction
 from tabsdata.utils.bundle_utils import create_bundle_archive
 from tabsdata.utils.sql_utils import verify_output_sql_drivers
 
+
+class FunctionRunStatus(Enum):
+    CANCELED = "C"
+    DONE = "D"
+    FAILED = "F"
+    ON_HOLD = "H"
+    INCOMPLETE = "I"
+    PUBLISHED = "P"
+    RUNNING = "R"
+    RUN_REQUESTED = "RR"
+    SCHEDULED = "S"
+
+
 STATUS_MAPPING = {
-    "C": "Canceled",
-    "D": "Done",
-    "F": "Failed",
-    "H": "On Hold",
-    "I": "Incomplete",
-    "P": "Published",
-    "R": "Running",
-    "Rr": "Run Requested",
-    "S": "Scheduled",
+    FunctionRunStatus.CANCELED.value: "Canceled",
+    FunctionRunStatus.DONE.value: "Done",
+    FunctionRunStatus.FAILED.value: "Failed",
+    FunctionRunStatus.ON_HOLD.value: "On Hold",
+    FunctionRunStatus.INCOMPLETE.value: "Incomplete",
+    FunctionRunStatus.PUBLISHED.value: "Published",
+    FunctionRunStatus.RUNNING.value: "Running",
+    FunctionRunStatus.RUN_REQUESTED.value: "Run Requested",
+    FunctionRunStatus.SCHEDULED.value: "Scheduled",
 }
 
 

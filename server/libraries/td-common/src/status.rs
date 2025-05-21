@@ -6,7 +6,7 @@
 pub enum ExitStatus {
     Success,
     GeneralError,
-    TabsDataStatus,
+    TabsDataError,
     TabsDataSigInt,
     TabsDataSigKill,
     TabsDataSigTerm,
@@ -17,7 +17,7 @@ impl ExitStatus {
         match self {
             ExitStatus::Success => 0,
             ExitStatus::GeneralError => 201,
-            ExitStatus::TabsDataStatus => 202,
+            ExitStatus::TabsDataError => 202,
             ExitStatus::TabsDataSigInt => 203,
             ExitStatus::TabsDataSigKill => 204,
             ExitStatus::TabsDataSigTerm => 205,

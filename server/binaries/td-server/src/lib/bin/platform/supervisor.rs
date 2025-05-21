@@ -72,10 +72,9 @@ use td_common::server::{
     RETRIES_DELIMITER, WORKSPACE_PATH_ENV, WORKSPACE_URI_ENV, WORK_PATH_ENV, WORK_URI_ENV,
 };
 use td_common::signal::terminate;
-use td_common::status::ExitStatus::{GeneralError, Success, TabsDataStatus};
+use td_common::status::ExitStatus::{GeneralError, Success, TabsDataError};
 use td_python::venv::prepare;
 use tempfile::tempdir;
-use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio::runtime::Handle;
 use tokio::select;
@@ -1606,7 +1605,7 @@ impl Supervisor {
                     worker.name(),
                     err
                 );
-                self.exit(TabsDataStatus.code());
+                self.exit(TabsDataError.code());
                 // This line is never executed, as exit will actually exit...
                 Vec::new()
             });
@@ -2106,14 +2105,11 @@ pub fn start() {
             let result = Supervisor::new(config, params).run().await;
             if let Err(e) = result {
                 error!("Supervisor worker failed: {}", e);
-                error!("Leaving with exit code: {}", TabsDataStatus.code());
-                return TabsDataStatus;
+                error!("Leaving with exit code: {}", TabsDataError.code());
+                return TabsDataError;
             }
             Success
         },
         config_dir,
     );
 }
-
-#[derive(Debug, Error)]
-pub enum TabsDataError {}
