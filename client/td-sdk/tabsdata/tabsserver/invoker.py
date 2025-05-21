@@ -113,6 +113,8 @@ def invoke(
         get_path_to_environment_bin(python_environment),
         "-m",
         tabsdata.tabsserver.function.execute_function_from_bundle_path.__name__,
+        "--work",
+        work,
         "--bundle-path",
         uncompressed_bundle_folder,
         "--request-file",

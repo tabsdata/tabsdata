@@ -1,10 +1,30 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
-
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import yaml
+
+
+# Define a custom constructor for basic locations-like entries
+@dataclass
+class Location:
+    data: dict
+
+    @property
+    def uri(self):
+        return self.data.get("uri")
+
+    @property
+    def env_prefix(self):
+        return self.data.get("env_prefix")
+
+    def __eq__(self, other):
+        return isinstance(other, Location) and self.data == other.data
+
+    def __repr__(self):
+        return f"Location(uri={self.uri}, env_prefix={self.env_prefix})"
 
 
 # Define a custom constructor for the !Table tag
@@ -176,8 +196,8 @@ class V2(InputYaml):
         return self.function_bundle.get("uri") if self.function_bundle else None
 
     @property
-    def function_data(self) -> Table:
-        return self.info.get("function_data")
+    def function_data(self) -> Location:
+        return Location(self.info.get("function_data"))
 
     @property
     def function_run_id(self):

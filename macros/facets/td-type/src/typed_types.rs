@@ -26,7 +26,7 @@ struct FromTyped {
 enum Typed {
     // Basic types
     #[darling(rename = "string")]
-    String(OptionWrapper<TypedString>),
+    String(Box<OptionWrapper<TypedString>>),
     #[darling(rename = "i16")]
     i16(OptionWrapper<TypedNumeric<i16>>),
     #[darling(rename = "i32")]
@@ -38,7 +38,7 @@ enum Typed {
     #[darling(rename = "f64")]
     f64(OptionWrapper<TypedNumeric<f64>>),
     #[darling(rename = "bool")]
-    bool(OptionWrapper<TypedBool>),
+    bool(Box<OptionWrapper<TypedBool>>),
 
     // Complex types
     #[darling(rename = "id")]
@@ -62,13 +62,13 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
     );
 
     let typed = match args.typed {
-        Typed::String(t) => typed_string(&input, t.into()),
+        Typed::String(t) => typed_string(&input, (*t).into()),
         Typed::i16(t) => typed_int(&input, t.into()),
         Typed::i32(t) => typed_int(&input, t.into()),
         Typed::i64(t) => typed_int(&input, t.into()),
         Typed::f32(t) => typed_float(&input, t.into()),
         Typed::f64(t) => typed_float(&input, t.into()),
-        Typed::bool(t) => typed_bool(&input, t.into()),
+        Typed::bool(t) => typed_bool(&input, (*t).into()),
         Typed::Id(t) => typed_id(&input, t.into()),
         Typed::Timestamp(t) => typed_timestamp(&input, t.into()),
         Typed::IdName(t) => typed_id_name(&input, t.into()),

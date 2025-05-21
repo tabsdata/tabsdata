@@ -1403,8 +1403,8 @@ script_runner = "@duckscript"
 script = [
     '''
     exec --fail-on-error pip uninstall tabsdata --yes
-    exec uv cache clean
-    exec pip cache purge
+    exec uv cache clean tabsdata
+    exec pip cache remove tabsdata
     exec python setup.py --quiet clean --all
     rm -r ${ROOT_PROJECT_TABSDATA_FOLDER}/target/python/
     ''']
@@ -1415,8 +1415,8 @@ script_runner = "@duckscript"
 script = [
     '''
     exec --fail-on-error pip uninstall tabsdata_mongodb --yes
-    exec uv cache clean
-    exec pip cache purge
+    exec uv cache clean tabsdata_mongodb
+    exec pip cache remove tabsdata_mongodb
     exec python setup.py --quiet clean --all
     rm -r ${PROJECT_PY_TABSDATA_MONGODB_FOLDER}/target/python/
     ''']
@@ -1427,8 +1427,8 @@ script_runner = "@duckscript"
 script = [
     '''
     exec --fail-on-error pip uninstall tabsdata_salesforce --yes
-    exec uv cache clean
-    exec pip cache purge
+    exec uv cache clean tabsdata_salesforce
+    exec pip cache remove tabsdata_salesforce
     exec python setup.py --quiet clean --all
     rm -r ${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}/target/python/
     ''']
@@ -1439,8 +1439,8 @@ script_runner = "@duckscript"
 script = [
     '''
     exec --fail-on-error pip uninstall tabsdata_snowflake --yes
-    exec uv cache clean
-    exec pip cache purge
+    exec uv cache clean tabsdata_snowflake
+    exec pip cache remove tabsdata_snowflake
     exec python setup.py --quiet clean --all
     rm -r ${PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER}/target/python/
     ''']

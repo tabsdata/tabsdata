@@ -53,6 +53,7 @@ from tabsdata.utils.constants import (
     TABSDATA_SNOWFLAKE_MODULE_NAME,
     TRUE_VALUES,
 )
+from tabsdata.utils.debug import debug_enabled
 
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()
@@ -100,6 +101,12 @@ TABSDATA_PACKAGES = [
     TABSDATA_SNOWFLAKE_MODULE_NAME,
 ]
 TD_INHERIT_TABSDATA_PACKAGES = "TD_INHERIT_TABSDATA_PACKAGES"
+
+DEBUG_PACKAGES = [
+    "gTTS",
+    "pydevd_pycharm",
+    "pygame",
+]
 
 
 def extract_package_name(requirement):
@@ -1212,7 +1219,7 @@ def main():
                     "Folder (Frozen)",
                 )
             ),
-            PYTHON_PUBLIC_PACKAGES_KEY: [],
+            PYTHON_PUBLIC_PACKAGES_KEY: DEBUG_PACKAGES if debug_enabled() else [],
             PYTHON_DEVELOPMENT_PACKAGES_KEY: development_packages,
         }
 

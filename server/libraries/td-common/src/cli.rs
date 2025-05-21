@@ -254,13 +254,10 @@ pub fn move_to_dir(folder: Option<PathBuf>) -> std::io::Result<()> {
     if let Some(folder) = folder {
         match set_current_dir(&folder) {
             Ok(_) => Ok(()),
-            Err(e) => Err(Error::new(
-                ErrorKind::Other,
-                format!(
-                    "Failed to set current folder '{:?}' for this worker: {}",
-                    folder, e
-                ),
-            )),
+            Err(e) => Err(Error::other(format!(
+                "Failed to set current folder '{:?}' for this worker: {}",
+                folder, e
+            ))),
         }
     } else {
         Err(Error::new(

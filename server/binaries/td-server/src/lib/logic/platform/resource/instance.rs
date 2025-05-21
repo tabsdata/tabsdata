@@ -54,7 +54,7 @@ pub const CONFIG_FILE: &str = "config.yaml";
 
 pub const REQUEST_FILE: &str = "request.yaml";
 pub const RESPONSE_FILE: &str = "response.yaml";
-pub const EXCEPTION_FILE: &str = "response.yaml";
+pub const EXCEPTION_FILE: &str = "exception.yaml";
 
 pub const WORKER_PID_FILE: &str = "pid";
 pub const WORKER_OUT_FILE: &str = "out.log";

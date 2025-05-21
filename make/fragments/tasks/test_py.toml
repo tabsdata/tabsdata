@@ -367,7 +367,6 @@ script = [
         cm_run_task remove_pytest_tabsdata
         sleep 5000
         cm_run_task start_pytest_tabsdata
-        sleep 30000
         cm_run_task status_pytest_tabsdata
     end
     ''']
@@ -556,9 +555,36 @@ script = [
     else
         tdserver = set "tdserver"
     end
+
     debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
     debug "🚀 ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest"
-    exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+
+    status_timeout = calc 3 * 60
+    status_sleep = set 1000
+    status_attempts = calc ${status_timeout} * 1000
+    status_attempts = calc ${status_attempts} / ${status_sleep}
+
+    status_attempt = set 0
+    status_running = set true
+
+    while ${status_running}
+        exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+        output = exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+        status_started = contains ${output.stdout} "apiserver"
+        if ${status_started}
+            debug "🔅 Verified supervisor & apiserver are running"
+            exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
+            status_running = set false
+        else
+            status_attempt = calc ${status_attempt} + 1
+            status_exhausted = eq ${status_attempt} ${status_attempts}
+            if ${status_exhausted}
+                error "😡 Cancelling execution as supervisor did not start after ${status_timeout} seconds"
+                exit 1
+            end
+            sleep ${status_sleep}
+        end
+    end
     ''']
 
 [tasks.stop_pytest_tabsdata]

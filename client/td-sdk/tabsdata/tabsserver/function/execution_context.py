@@ -44,11 +44,13 @@ class ExecutionContext:
     def __init__(
         self,
         paths: ExecutionPaths,
+        work: str,
         function_config: dict = None,
         request: InputYaml = None,
         status: Status = None,
     ):
         self.paths = paths
+        self.work = work
         self.paths.parent_context = self
         self.function_config = function_config
         self.request = request
@@ -60,6 +62,7 @@ class ExecutionContext:
         self.function_config = load_function_config(self.paths.bundle_folder)
         # Parse and load the information of the request file
         self.request = parse_request_yaml(self.paths.request_file)
+        self.request.work = work
 
     @property
     def user_provided_function(self) -> Callable:

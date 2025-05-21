@@ -138,11 +138,7 @@ def test_parse_minimal_input_yaml(tmp_path):
     )
     config = parse_request_yaml(tmp_yaml_file)
     assert isinstance(config, V2)
-    expected_function_data = Table(
-        {"location": {"uri": pathlib.Path(function_data_folder).as_uri()}}
-    )
     assert config.info == {
-        # "function_data": Table(name=None, uri=function_data_folder, data={'location': {'uri': function_data_folder}}),
         "function_bundle": {
             "uri": expected_uri,
             "env_prefix": None,
@@ -152,7 +148,10 @@ def test_parse_minimal_input_yaml(tmp_path):
         "function_run_id": FAKE_FUNCTION_RUN_ID,
         "triggered_on": FAKE_TRIGGERED_TIME,
         "execution_plan_triggered_on": FAKE_SCHEDULED_TIME,
-        "function_data": expected_function_data,
+        "function_data": {
+            "uri": pathlib.Path(function_data_folder).as_uri(),
+            "env_prefix": None,
+        },
     }
     assert config.function_bundle == {
         "uri": expected_uri,

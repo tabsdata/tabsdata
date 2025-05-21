@@ -10,7 +10,7 @@ use td_objects::types::function::FunctionUpload;
 use td_storage::location::StorageLocation;
 use td_storage::{Storage, StorageError};
 use td_tower::extractors::{Input, SrvCtx};
-use tokio::io::{BufWriter, ErrorKind};
+use tokio::io::BufWriter;
 use tokio_util::io::StreamReader;
 
 #[td_error]
@@ -38,7 +38,7 @@ pub async fn upload_function_write_to_storage(
         .await
         .ok_or(UploadError::FunctionBundleUploadFailed)?; //cannot easily test this error
 
-    let body_with_io_error = stream.map_err(|err| std::io::Error::new(ErrorKind::Other, err));
+    let body_with_io_error = stream.map_err(std::io::Error::other);
     let body_reader = StreamReader::new(body_with_io_error);
     futures::pin_mut!(body_reader);
 

@@ -7,10 +7,6 @@ import os
 import time
 from io import BytesIO
 
-import pydevd_pycharm
-import pygame
-from gtts import gTTS
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -35,6 +31,9 @@ FALSE_VALUES = {FALSE_0, FALSE_FALSE, FALSE_NO, FALSE_N, FALSE_OFF}
 
 
 def notification(text, language="en"):
+    import pygame
+    from gtts import gTTS
+
     pygame.mixer.init()
     mp3_fp = BytesIO()
     tts = gTTS(text, lang=language)
@@ -46,8 +45,14 @@ def notification(text, language="en"):
         time.sleep(0.1)
 
 
+def debug_enabled() -> bool:
+    return os.getenv(REMOTE_DEBUG, FALSE_FALSE).lower() in TRUE_VALUES
+
+
 def remote_debug(force: bool = False) -> bool:
-    remote_debug_enabled = os.getenv(REMOTE_DEBUG, FALSE_FALSE).lower() in TRUE_VALUES
+    import pydevd_pycharm
+
+    remote_debug_enabled = debug_enabled()
     if remote_debug_enabled or force:
         # noinspection PyBroadException
         try:

@@ -839,15 +839,13 @@ def write_v2_yaml_file(
             "transaction_id": FAKE_TRANSACTION_ID,
             "triggered_on": FAKE_TRIGGERED_TIME,
             "execution_plan_triggered_on": FAKE_SCHEDULED_TIME,
+            "function_data": {
+                "uri": pathlib.Path(function_data_path).as_uri(),
+                "env_prefix": None,
+            },
         },
         "input": [],
     }
-    function_data_content = {
-        "location": {
-            "uri": pathlib.Path(function_data_path).as_uri(),
-        }
-    }
-    content["info"]["function_data"] = MockTable(function_data_content)
     if mock_dependency_location:
         for mocked_table in mock_dependency_location:
             if isinstance(mocked_table, str):

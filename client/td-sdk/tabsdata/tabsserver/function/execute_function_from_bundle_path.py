@@ -51,7 +51,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Execute a python function from a file path"
     )
-    parser.add_argument("--bundle-path", type=str, help="Path of the function bundle")
+    parser.add_argument(
+        "--work",
+        type=str,
+        help="Counter of the work number for the same function run.",
+        required=True,
+    )
+    parser.add_argument(
+        "--bundle-path",
+        type=str,
+        help="Path of the function bundle",
+    )
     parser.add_argument(
         "--request-file",
         type=str,
@@ -93,7 +103,10 @@ if __name__ == "__main__":
             response_folder=arguments.response_folder,
             output_folder=arguments.output_folder,
         )
-        execution_context = ExecutionContext(paths=execution_fs)
+        execution_context = ExecutionContext(
+            paths=execution_fs,
+            work=arguments.work,
+        )
         execute_bundled_function(execution_context)
         logger.info(pad_string("[Exiting function execution]"))
         logger.info("Function executed successfully. Exiting.")
