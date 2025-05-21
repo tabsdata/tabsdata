@@ -3,7 +3,7 @@
 //
 
 use crate::types::basic::{
-    CollectionId, CollectionName, DependencyPos, ExecutionId, ExecutionName, FunctionName,
+    AtTime, CollectionId, CollectionName, DependencyPos, ExecutionId, ExecutionName, FunctionName,
     FunctionRunId, FunctionVersionId, InputIdx, TableDataVersionId, TableFunctionParamPos, TableId,
     TableName, TableVersionId, TransactionId, VersionPos,
 };
@@ -18,8 +18,12 @@ pub struct PartitionName;
 #[td_type::typed(string)]
 pub struct PartitionFileName;
 
-#[td_type::typed(i64)]
+#[td_type::typed(i64(default = default_triggered_on()))]
 pub struct TriggeredOnMillis;
+
+fn default_triggered_on() -> i64 {
+    AtTime::default().timestamp_millis()
+}
 
 #[td_type::Dlo]
 pub struct FunctionInputV2 {
@@ -54,6 +58,8 @@ pub struct FunctionInfoV2 {
     execution_id: ExecutionId,
     execution_name: Option<ExecutionName>,
     function_data: Location,
+    #[builder(default)]
+    scheduled_on: TriggeredOnMillis, // when the request yaml was created
 }
 
 #[td_type::Dlo]

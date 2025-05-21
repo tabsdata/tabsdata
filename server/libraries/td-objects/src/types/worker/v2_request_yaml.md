@@ -36,6 +36,7 @@ context: !V2
     transaction_id: {t_id}                                         
     execution_id: {e_id}
     execution_name: {e}
+    scheduled_on: {int}                                                # when the yaml was created
   system_input:                                                        # array with all system input tables
   - !Table
     name: td-initial-values           
@@ -121,6 +122,7 @@ info:
   function_data:
     uri: file:///foo0
     env_prefix: null
+  scheduled_on: 0
 system_input:
 - !Table
   name: fn_state_06BCT5V3S5SG72253ODG7G5354

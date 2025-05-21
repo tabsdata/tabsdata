@@ -269,6 +269,7 @@ mod tests {
             **info.triggered_on(),
             function_run.triggered_on().timestamp_millis()
         );
+        assert!(info.triggered_on() < info.scheduled_on());
         assert_eq!(info.execution_id(), function_run.execution_id());
         assert_eq!(
             *info.execution_name(),
