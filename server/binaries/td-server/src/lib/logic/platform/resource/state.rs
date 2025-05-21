@@ -24,8 +24,8 @@ use strum_macros::{AsRefStr, EnumString};
 use td_error::{td_error, TdError};
 use tokio::sync::RwLock;
 
-const START_TAG: &str = "<state><i>";
-const END_TAG: &str = "<state><f>";
+const START_TAG: &str = "<message><i>";
+const END_TAG: &str = "<message><f>";
 
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, AsRefStr,
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn test_blob_success() {
         let content =
-            "something before<state><i>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω<state><f>something after";
+            "something before<message><i>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω<message><f>something after";
         let result =
             extract_state_data_from_string(content.to_string(), StateDataKind::BLOB).unwrap();
         match result {
@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_map_success() {
-        let content = "<state><i>\nkey1: value1\nkey2: value2\n<state><f>";
+        let content = "<message><i>\nkey1: value1\nkey2: value2\n<message><f>";
         let result =
             extract_state_data_from_string(content.to_string(), StateDataKind::MAP).unwrap();
         match result {
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_missing_start_tag() {
-        let content = "<state><f>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω";
+        let content = "<message><f>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω";
         let err =
             extract_state_data_from_string(content.to_string(), StateDataKind::BLOB).unwrap_err();
         let err = err.domain_err::<StateError>();
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn test_missing_end_tag() {
-        let content = "<state><i>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω";
+        let content = "<message><i>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω";
         let err =
             extract_state_data_from_string(content.to_string(), StateDataKind::BLOB).unwrap_err();
         let err = err.domain_err::<StateError>();
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_misplaced_tags() {
-        let content = "<state><f>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω<state><i>";
+        let content = "<message><f>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω<message><i>";
         let err =
             extract_state_data_from_string(content.to_string(), StateDataKind::BLOB).unwrap_err();
         let err = err.domain_err::<StateError>();
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_invalid_yaml_structure() {
-        let content = "<state><i>- not: a map<state><f>";
+        let content = "<message><i>- not: a map<message><f>";
         let err =
             extract_state_data_from_string(content.to_string(), StateDataKind::MAP).unwrap_err();
         let err = err.domain_err::<StateError>();
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn test_invalid_yaml_entry_type() {
-        let content = "<state><i>\n123:\n   abc: def <state><f>";
+        let content = "<message><i>\n123:\n   abc: def <message><f>";
         let err =
             extract_state_data_from_string(content.to_string(), StateDataKind::MAP).unwrap_err();
         let err = err.domain_err::<StateError>();

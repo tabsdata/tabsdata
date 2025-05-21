@@ -14,8 +14,8 @@ import yaml
 ENV_VAR_PATTERN = r"\${env:(\w+)}"
 HASHICORP_PATTERN = r"\${hashicorp:([^;]+;[^}]+)}"
 
-START_TAG = "<state><i>"
-END_TAG = "<state><f>"
+START_TAG = "<message><i>"
+END_TAG = "<message><f>"
 
 
 class ConfigResolver:

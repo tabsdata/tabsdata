@@ -16,7 +16,7 @@ controllers:
           - repository
           - workspace
           - profile
-      - name: apiserver-cfgrsv
+      - name: apiserver-configuration-resolver
         kind: processor
         location: system
         program: _tdcfgrsv
@@ -31,7 +31,17 @@ controllers:
           - env-hashicorp-namespace: ""
         set-state:
           state-type: blob
-          state-key: apiserver
+          state-key: apiserver-configuration
+      - name: apiserver-mounts-options-extractor
+        kind: processor
+        location: system
+        program: _tdmntext
+        get-states:
+          - state-type: blob
+            state-key: apiserver-configuration
+        set-state:
+          state-type: map
+          state-key: apiserver-mounts-options
   regular:
     concurrency: 0
     workers:
@@ -45,7 +55,7 @@ controllers:
           - storage-url: file://${TD_URI_REPOSITORY}/storage
         get-states:
           - state-type: blob
-            state-key: apiserver
+            state-key: apiserver-configuration
   ephemeral:
     concurrency: 8
     workers:

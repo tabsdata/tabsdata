@@ -5,12 +5,11 @@
 import os
 
 import pytest
-import yaml
 from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
 )
 
-from tabsdata.tabsserver.tools.mount_extractor import main
+from tabsdata.tabsserver.tools.mount_extractor import resolve
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -26,7 +25,7 @@ def test_resolve_example_yaml(testing_hashicorp_vault):
     with open(destination_path, "r") as file:
         piped_input = file.read()
 
-    result = main(piped_input)
+    result = resolve(piped_input)
 
     expected_result = {
         "TDS_AZB_AZURE_STORAGE_ACCOUNT_KEY": "MY_ACCOUNT_KEY",
