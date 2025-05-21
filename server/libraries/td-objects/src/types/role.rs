@@ -38,6 +38,7 @@ pub struct RoleCreate {
 }
 
 #[td_type::Dao]
+#[dao(sql_table = "roles")]
 #[td_type(builder(try_from = RoleUpdate, skip_all))]
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct RoleDBUpdate {

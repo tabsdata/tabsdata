@@ -4,15 +4,15 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{AtTime, CollectionId, CollectionName, Description, UserId, UserName};
+use td_common::id::Id;
 
 #[td_type::Dao]
 #[dao(sql_table = "collections")]
 #[td_type(
-    builder(try_from = CollectionDB),
     builder(try_from = CollectionCreate, skip_all),
     updater(try_from = RequestContext, skip_all)
 )]
-pub struct CollectionDB {
+pub struct CollectionCreateDB {
     #[td_type(extractor)]
     #[builder(default)]
     id: CollectionId,
@@ -28,6 +28,48 @@ pub struct CollectionDB {
     modified_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
     modified_by_id: UserId,
+    #[builder(default)]
+    name_when_deleted: Option<CollectionName>,
+}
+
+#[td_type::Dao]
+#[dao(sql_table = "collections_active")]
+#[td_type(
+    builder(try_from = CollectionCreateDB),
+)]
+pub struct CollectionDB {
+    #[td_type(extractor)]
+    id: CollectionId,
+    #[td_type(extractor)]
+    name: CollectionName,
+    description: Description,
+    created_on: AtTime,
+    created_by_id: UserId,
+    modified_on: AtTime,
+    modified_by_id: UserId,
+}
+
+fn generate_deleted_name() -> CollectionName {
+    CollectionName::try_from(format!("deleted_{}", Id::default())).unwrap()
+}
+
+#[td_type::Dao]
+#[dao(sql_table = "collections")]
+#[td_type(
+    updater(try_from = RequestContext, skip_all),
+    updater(try_from = CollectionDB, skip_all)
+)]
+pub struct CollectionDeleteDB {
+    #[builder(default = "generate_deleted_name()")]
+    name: CollectionName,
+
+    #[td_type(updater(try_from = RequestContext, include, field = "time"))]
+    modified_on: AtTime,
+    #[td_type(updater(try_from = RequestContext, include, field = "user_id"))]
+    modified_by_id: UserId,
+
+    #[td_type(updater(try_from = CollectionDB, include, field="name"))]
+    name_when_deleted: CollectionName,
 }
 
 #[td_type::Dao]
@@ -61,6 +103,7 @@ pub struct CollectionUpdate {
 }
 
 #[td_type::Dao]
+#[dao(sql_table = "collections")]
 #[td_type(
     builder(try_from = CollectionDB),
     updater(try_from = RequestContext, skip_all)

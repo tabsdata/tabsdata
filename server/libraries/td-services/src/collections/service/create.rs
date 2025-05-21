@@ -15,8 +15,8 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
 use td_objects::types::basic::CollectionId;
 use td_objects::types::collection::{
-    CollectionCreate, CollectionDB, CollectionDBBuilder, CollectionDBWithNames, CollectionRead,
-    CollectionReadBuilder,
+    CollectionCreate, CollectionCreateDB, CollectionCreateDBBuilder, CollectionDBWithNames,
+    CollectionRead, CollectionReadBuilder,
 };
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
@@ -47,12 +47,12 @@ impl CreateCollectionService {
                 from_fn(Authz::<SysAdmin>::check),
 
                 from_fn(With::<CreateRequest<(), CollectionCreate>>::extract_data::<CollectionCreate>),
-                from_fn(With::<CollectionCreate>::convert_to::<CollectionDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<CollectionDBBuilder, _>),
-                from_fn(With::<CollectionDBBuilder>::build::<CollectionDB, _>),
-                from_fn(insert::<DaoQueries, CollectionDB>),
+                from_fn(With::<CollectionCreate>::convert_to::<CollectionCreateDBBuilder, _>),
+                from_fn(With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
+                from_fn(With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB, _>),
+                from_fn(insert::<DaoQueries, CollectionCreateDB>),
 
-                from_fn(With::<CollectionDB>::extract::<CollectionId>),
+                from_fn(With::<CollectionCreateDB>::extract::<CollectionId>),
                 from_fn(By::<CollectionId>::select::<DaoQueries, CollectionDBWithNames>),
                 from_fn(With::<CollectionDBWithNames>::convert_to::<CollectionReadBuilder, _>),
                 from_fn(With::<CollectionReadBuilder>::build::<CollectionRead, _>),
@@ -78,7 +78,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
     };
-    use td_objects::types::collection::{CollectionCreate, CollectionDB};
+    use td_objects::types::collection::{CollectionCreate, CollectionCreateDB};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -101,11 +101,11 @@ mod tests {
             type_of_val(
                 &With::<CreateRequest<(), CollectionCreate>>::extract_data::<CollectionCreate>,
             ),
-            type_of_val(&With::<CollectionCreate>::convert_to::<CollectionDBBuilder, _>),
-            type_of_val(&With::<RequestContext>::update::<CollectionDBBuilder, _>),
-            type_of_val(&With::<CollectionDBBuilder>::build::<CollectionDB, _>),
-            type_of_val(&insert::<DaoQueries, CollectionDB>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+            type_of_val(&With::<CollectionCreate>::convert_to::<CollectionCreateDBBuilder, _>),
+            type_of_val(&With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
+            type_of_val(&With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB, _>),
+            type_of_val(&insert::<DaoQueries, CollectionCreateDB>),
+            type_of_val(&With::<CollectionCreateDB>::extract::<CollectionId>),
             type_of_val(&By::<CollectionId>::select::<DaoQueries, CollectionDBWithNames>),
             type_of_val(&With::<CollectionDBWithNames>::convert_to::<CollectionReadBuilder, _>),
             type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead, _>),
@@ -148,8 +148,8 @@ mod tests {
         assert_eq!(*created.modified_by_id(), UserId::admin());
         assert_eq!(*created.modified_by(), UserName::admin());
 
-        let found: Vec<CollectionDB> = DaoQueries::default()
-            .select_by::<CollectionDB>(&(&name))
+        let found: Vec<CollectionCreateDB> = DaoQueries::default()
+            .select_by::<CollectionCreateDB>(&(&name))
             .unwrap()
             .build_query_as()
             .fetch_all(&db)

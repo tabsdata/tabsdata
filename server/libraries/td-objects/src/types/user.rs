@@ -77,6 +77,7 @@ pub struct UserUpdate {
 }
 
 #[td_type::Dao]
+#[dao(sql_table = "users")]
 #[td_type(
     builder(try_from = UserDB),
     updater(try_from = RequestContext, skip_all)

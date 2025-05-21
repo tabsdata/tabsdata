@@ -10,10 +10,12 @@ use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
+use td_objects::tower_service::from::{
+    builder, BuildService, ExtractNameService, ExtractService, UpdateService, With,
+};
+use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService, SqlUpdateService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
-use td_objects::types::collection::CollectionDB;
+use td_objects::types::collection::{CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
@@ -47,9 +49,15 @@ impl DeleteCollectionService {
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
 
                 from_fn(With::<CollectionDB>::extract::<CollectionId>),
-                // TODO delete permissions with this collection
-                // from_fn(By::<CollectionId>::delete::<DaoQueries, PermissionDB>),
-                from_fn(By::<CollectionId>::delete::<DaoQueries, CollectionDB>),
+
+                from_fn(builder::<CollectionDeleteDBBuilder>),
+                from_fn(With::<RequestContext>::update::<CollectionDeleteDBBuilder, _>),
+                from_fn(With::<CollectionDB>::update::<CollectionDeleteDBBuilder, _>),
+                from_fn(With::<CollectionDeleteDBBuilder>::build::<CollectionDeleteDB, _>),
+                from_fn(By::<CollectionId>::update::<DaoQueries, CollectionDeleteDB, CollectionDB>),
+
+                // TODO logic delete collection functions (freezing all their tables)
+                // TODO logic delete collection tables (freezing all the functions that use those tables)
             ))
         }
     }
@@ -70,7 +78,7 @@ mod tests {
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
-    use td_objects::types::collection::CollectionDB;
+    use td_objects::types::collection::{CollectionCreateDB, CollectionDB};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -94,16 +102,20 @@ mod tests {
             type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
             type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            // TODO delete permissions with this collection
-            // type_of_val(&By::<CollectionId>::delete::<DaoQueries, PermissionDB>),
-            type_of_val(&By::<CollectionId>::delete::<DaoQueries, CollectionDB>),
+            type_of_val(&builder::<CollectionDeleteDBBuilder>),
+            type_of_val(&With::<RequestContext>::update::<CollectionDeleteDBBuilder, _>),
+            type_of_val(&With::<CollectionDB>::update::<CollectionDeleteDBBuilder, _>),
+            type_of_val(&With::<CollectionDeleteDBBuilder>::build::<CollectionDeleteDB, _>),
+            type_of_val(
+                &By::<CollectionId>::update::<DaoQueries, CollectionDeleteDB, CollectionDB>,
+            ),
         ]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_delete_collection(db: DbPool) {
         let name = CollectionName::try_from("ds0").unwrap();
-        let _ = seed_collection(&db, &name, &UserId::admin()).await;
+        let collection = seed_collection(&db, &name, &UserId::admin()).await;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
@@ -126,12 +138,21 @@ mod tests {
         assert!(response.is_ok());
 
         let found: Vec<CollectionDB> = DaoQueries::default()
-            .select_by::<CollectionDB>(&(&name))
+            .select_by::<CollectionDB>(&())
             .unwrap()
             .build_query_as()
             .fetch_all(&db)
             .await
             .unwrap();
         assert_eq!(found.len(), 0);
+
+        let res: CollectionCreateDB = DaoQueries::default()
+            .select_by::<CollectionCreateDB>(&(collection.id()))
+            .unwrap()
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(res.name_when_deleted().as_ref().unwrap(), collection.name());
     }
 }

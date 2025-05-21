@@ -4,7 +4,7 @@
 
 use crate::sql::{DaoQueries, Insert};
 use crate::types::basic::{AtTime, CollectionName, Description, UserId};
-use crate::types::collection::CollectionDB;
+use crate::types::collection::{CollectionCreateDB, CollectionDB, CollectionDBBuilder};
 use td_database::sql::DbPool;
 
 pub async fn seed_collection(
@@ -13,7 +13,7 @@ pub async fn seed_collection(
     created_by: &UserId,
 ) -> CollectionDB {
     let created_on = AtTime::now().await;
-    let collection = CollectionDB::builder()
+    let collection = CollectionCreateDB::builder()
         .name(collection_name)
         .description(Description::default())
         .created_on(&created_on)
@@ -32,7 +32,10 @@ pub async fn seed_collection(
         .await
         .unwrap();
 
-    collection
+    CollectionDBBuilder::try_from(&collection)
+        .unwrap()
+        .build()
+        .unwrap()
 }
 
 #[cfg(test)]

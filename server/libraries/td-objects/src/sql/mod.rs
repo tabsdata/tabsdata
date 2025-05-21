@@ -512,7 +512,7 @@ macro_rules! impl_update_by {
             $($E: SqlEntity),*
         {
             fn update_by<U: DataAccessObject, D: DataAccessObject>(&self, dao: &'a U, ($($E),*): &'a ($(&'a $E),*)) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError> {
-                let table = D::sql_table();
+                let table = U::sql_table();
                 let fields = U::fields();
                 let sql = format!("UPDATE {} SET ", table);
                 let mut query_builder = dao.tuples_query_builder(sql, fields);
@@ -820,6 +820,7 @@ mod tests {
         }
 
         #[Dao]
+        #[dao(sql_table = "test_table")]
         struct UpdateDao {
             name: TestName,
         }
