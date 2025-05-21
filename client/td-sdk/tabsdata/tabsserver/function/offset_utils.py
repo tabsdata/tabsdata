@@ -185,16 +185,6 @@ class Offset:
         logger.debug("Loading current offset")
         system_input = request.system_input
         logger.debug(f"System input: {system_input}")
-
-        # TODO: Temporary fix, remove when system_input always has the offset
-        #  table
-
-        if not system_input:
-            logger.debug("System input is empty. No offset loaded.")
-            return
-
-        # TODO: End of temporary fix
-
         td_offset_table = system_input[OFFSET_LIST_POSITION]
         logger.debug(f"TD offset table name: {td_offset_table}")
         logger.debug(f"TD offset table location: {td_offset_table.location}")
@@ -255,15 +245,6 @@ class Offset:
         """
         logger.info(f"Storing offset {str(self)}")
         system_output = execution_context.system_output
-
-        # TODO: Temporary fix, remove when system_output always has the offset
-
-        if not system_output:
-            logger.debug("System output is empty. No offset stored.")
-            return
-
-        # TODO: End of temporary fix
-
         offset_output_table = system_output[OFFSET_LIST_POSITION]
         self.output_table_name = offset_output_table.name
         destination_table_uri = offset_output_table.uri

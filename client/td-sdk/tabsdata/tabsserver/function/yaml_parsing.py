@@ -1,6 +1,7 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
