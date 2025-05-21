@@ -169,7 +169,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_run_impl_local_cvs() {
+    async fn test_run_impl_local_csv() {
         let test_dir = testdir!();
         let url = Url::from_file_path(test_dir.join("input.csv")).unwrap();
 

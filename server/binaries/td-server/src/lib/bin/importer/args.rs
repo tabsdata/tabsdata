@@ -555,7 +555,7 @@ impl ImporterParquetReadOptions {
 pub struct ImporterNdJsonReadOptions {}
 
 impl ImporterNdJsonReadOptions {
-    /// Apply the NDJson format options to the Polars CVS reader
+    /// Apply the NDJson format options to the Polars CSV reader
     pub fn apply_to(&self, reader: LazyJsonLineReader) -> LazyJsonLineReader {
         reader
     }
@@ -566,7 +566,7 @@ impl ImporterNdJsonReadOptions {
 pub struct ImporterLogReadOptions {}
 
 impl ImporterLogReadOptions {
-    /// Apply the LOG format options to the Polars CVS reader
+    /// Apply the LOG format options to the Polars CSV reader
     pub fn apply_to(&self, reader: LazyCsvReader) -> LazyCsvReader {
         let mut reader = reader;
         // using a control character so the whole log line is a single column
@@ -599,7 +599,7 @@ pub fn sample_csv_read_options() -> ImporterCsvReadOptions {
 }
 
 impl ImporterCsvReadOptions {
-    /// Apply the CVS format options to the Polars CVS reader
+    /// Apply the CVS format options to the Polars CSV reader
     pub fn apply_to(&self, reader: LazyCsvReader) -> LazyCsvReader {
         let mut reader = reader;
         if let Some(parse_options) = &self.parse_options {
