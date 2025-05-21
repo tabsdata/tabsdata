@@ -97,7 +97,9 @@ class SnowflakeDestination(DestinationPlugin):
                 logger.error(
                     f"Failed to upload results from file {file_path} to table {table}"
                 )
+                conn.close()
                 raise
+        conn.close()
 
     def _upload_single_file_to_table(self, conn, file_path: str, table: str):
         file_name = os.path.basename(file_path)

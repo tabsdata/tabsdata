@@ -34,23 +34,29 @@ def test_store_response_as_yaml_generates_correct_yaml():
             pass
 
         def v2_constructor(loader, node):
-            return loader.construct_mapping(node)
+            return {"!V2": loader.construct_mapping(node)}
+
+        def v2_data_constructor(loader, node):
+            return {"!Data": loader.construct_mapping(node)}
+
+        def v2_no_data_constructor(loader, node):
+            return {"!NoData": loader.construct_mapping(node)}
 
         TestResponseLoader.add_constructor("!V2", v2_constructor)
+        TestResponseLoader.add_constructor("!Data", v2_data_constructor)
+        TestResponseLoader.add_constructor("!NoData", v2_no_data_constructor)
 
         with open(response_file, "r") as f:
             content = yaml.load(f, Loader=TestResponseLoader)
 
         expected_structure = {
-            "context": {
-                "V2": {
-                    "output": [
-                        {"Data": {"table": "d01"}},
-                        {"Data": {"table": "d02"}},
-                        {"NoData": {"table": "nod01"}},
-                        {"NoData": {"table": "nod02"}},
-                    ]
-                }
+            "!V2": {
+                "output": [
+                    {"!Data": {"table": "d01"}},
+                    {"!Data": {"table": "d02"}},
+                    {"!NoData": {"table": "nod01"}},
+                    {"!NoData": {"table": "nod02"}},
+                ]
             }
         }
 

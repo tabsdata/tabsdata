@@ -278,7 +278,7 @@ class Data:
         self.table = table
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(name={self.table})"
+        return f"{self.__class__.__name__}(table={self.table})"
 
 
 class NoData:
@@ -286,7 +286,7 @@ class NoData:
         self.table = table
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(name={self.table})"
+        return f"{self.__class__.__name__}(table={self.table})"
 
 
 class ResponseYaml(ABC):
@@ -308,27 +308,22 @@ class V2ResponseFormat:
 def v2_response_format_representer(
     dumper: yaml.SafeDumper, v2_response_format: V2ResponseFormat
 ) -> yaml.nodes.MappingNode:
-    """Represent a V2ResponseFormat instance as a YAML mapping node."""
-    # Convert Data and NoData objects to dictionaries
-    output_list = []
-    for item in v2_response_format.content["context"]["V2"]["output"]:
-        if isinstance(item, Data):
-            output_list.append({"Data": {"table": item.table}})
-        elif isinstance(item, NoData):
-            output_list.append({"NoData": {"table": item.table}})
-    return dumper.represent_mapping("!V2", {"context": {"V2": {"output": output_list}}})
+    """Represent a V1_yaml instance as a YAML mapping node."""
+    dumper.add_representer(Data, v2_data_representer)
+    dumper.add_representer(NoData, v2_no_data_representer)
+    return dumper.represent_mapping("!V2", v2_response_format.content)
 
 
 def v2_data_representer(dumper: yaml.SafeDumper, data: Data) -> yaml.nodes.MappingNode:
     """Represent a Data instance as a YAML mapping node."""
-    return dumper.represent_mapping(None, {"Data": {"table": data.table}})
+    return dumper.represent_mapping("!Data", {"table": data.table})
 
 
 def v2_no_data_representer(
     dumper: yaml.SafeDumper, no_data: NoData
 ) -> yaml.nodes.MappingNode:
     """Represent a NoData instance as a YAML mapping node."""
-    return dumper.represent_mapping(None, {"NoData": {"table": no_data.table}})
+    return dumper.represent_mapping("!NoData", {"table": no_data.table})
 
 
 def get_response_dumper():
@@ -347,11 +342,7 @@ def store_response_as_yaml(tables: list[Data | NoData], response_file: str):
         yaml.dump(
             V2ResponseFormat(
                 content={
-                    "context": {
-                        "V2": {
-                            "output": tables,
-                        }
-                    }
+                    "output": tables,
                 }
             ),
             file,

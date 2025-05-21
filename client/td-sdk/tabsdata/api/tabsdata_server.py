@@ -2541,7 +2541,7 @@ class TabsdataServer:
         function_name,
         execution_plan_name: str | None = None,
         raise_for_status: bool = True,
-    ) -> requests.Response:
+    ) -> ExecutionPlan:
         """
         Trigger a function in the server.
 
