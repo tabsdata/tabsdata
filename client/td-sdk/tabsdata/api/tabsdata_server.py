@@ -631,16 +631,36 @@ class Function:
 
     def __repr__(self) -> str:
         representation = (
-            f"{self.__class__.__name__}(name={self.name!r},"
+            f"{self.__class__.__name__}(name={self.name!r}, "
             f"collection={self.collection!r})"
         )
         return representation
+
+    def read_run(
+        self, execution_plan: ExecutionPlan | str, raise_for_status: bool = True
+    ) -> requests.Response:
+        """
+        Read the status of a function run.
+
+        Args:
+            execution_plan (ExecutionPlan | str): The execution plan of the run.
+
+        """
+        execution_plan_id = (
+            execution_plan if isinstance(execution_plan, str) else execution_plan.id
+        )
+        return self.connection.execution_read_function_run(
+            self.collection.name,
+            self.name,
+            execution_plan_id,
+            raise_for_status=raise_for_status,
+        )
 
     def trigger(
         self,
         execution_plan_name: str | None = None,
         raise_for_status: bool = True,
-    ) -> requests.Response:
+    ) -> ExecutionPlan:
         """
         Trigger a function in the server.
 
@@ -656,11 +676,19 @@ class Function:
             APIServerError: If the function could not be triggered.
         """
         # TODO Aleix: Maybe return the execution plan
-        return self.connection.function_execute(
+        response = self.connection.function_execute(
             self.collection.name,
             self.name,
             execution_plan_name=execution_plan_name,
             raise_for_status=raise_for_status,
+        )
+        return ExecutionPlan(
+            self.connection,
+            **{
+                **response.json().get("data"),
+                "collection": self.collection.name,
+                "function": self.name,
+            },
         )
 
     @property
@@ -1043,6 +1071,28 @@ class Collection:
             Table(**{**table, "connection": self.connection, "collection": self})
             for table in raw_tables
         ]
+
+    def read_function_run(
+        self,
+        function: Function | str,
+        execution_plan: ExecutionPlan | str,
+        raise_for_status=True,
+    ) -> requests.Response:
+        """
+        Read the status of a function run.
+
+        Args:
+            function (Function | str): The function to read the status of.
+            execution_plan (ExecutionPlan | str): The execution plan of the run.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+        """
+        function = (
+            function
+            if isinstance(function, Function)
+            else Function(self.connection, self, function)
+        )
+        return function.read_run(execution_plan, raise_for_status=raise_for_status)
 
     def refresh(self) -> Collection:
         self.description = None
@@ -2457,6 +2507,33 @@ class TabsdataServer:
         """
         function = Function(self.connection, collection_name, function_name)
         return function.history
+
+    def function_read_run(
+        self,
+        collection: Collection | str,
+        function: Function | str,
+        execution_plan: ExecutionPlan | str,
+        raise_for_status: bool = True,
+    ) -> requests.Response:
+        """
+        Read the run of a function in the server.
+
+        Args:
+            collection(Collection | str): The name of the collection or a
+                Collection object.
+            function(Function | str): The name of the function or a Function object.
+            execution_plan(ExecutionPlan | str): The name of the execution plan or a
+                ExecutionPlan object.
+
+        Raises:
+            APIServerError: If the run could not be obtained.
+        """
+        function = (
+            function
+            if isinstance(function, Function)
+            else Function(self.connection, collection, function)
+        )
+        return function.read_run(execution_plan, raise_for_status=raise_for_status)
 
     def function_trigger(
         self,

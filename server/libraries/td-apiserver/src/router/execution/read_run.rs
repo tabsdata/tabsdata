@@ -25,7 +25,7 @@ router! {
 
 get_status!(FunctionRun);
 
-#[apiserver_path(method = post, path = FUNCTION_RUN_GET, tag = EXECUTION_TAG)]
+#[apiserver_path(method = get, path = FUNCTION_RUN_GET, tag = EXECUTION_TAG)]
 #[doc = "Read function run"]
 pub async fn read_run(
     State(function): State<Execution>,

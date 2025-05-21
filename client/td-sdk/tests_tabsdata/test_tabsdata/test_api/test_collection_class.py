@@ -4,9 +4,10 @@
 
 import os
 import time
+import uuid
 
 import pytest
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION
+from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
 from tabsdata.api.tabsdata_server import (
     Collection,
@@ -338,3 +339,27 @@ def test_collection_class_update_function(tabsserver_connection):
             "input_file_csv_modified_format",
         )
         collection.delete(raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_collection_class_read_run(tabsserver_connection):
+    collection = tabsserver_connection.collection_create(
+        f"test_collection_class_read_run_{uuid.uuid4().hex[:16]}"
+    )
+    file_path = os.path.join(
+        ABSOLUTE_TEST_FOLDER_LOCATION,
+        "testing_resources",
+        "test_input_file_csv_string_format",
+        "example.py",
+    )
+    function_path = file_path + "::input_file_csv_string_format"
+    function = collection.register_function(
+        function_path, local_packages=LOCAL_PACKAGES_LIST
+    )
+    plan = function.trigger(
+        f"test_collection_class_read_run_plan_{uuid.uuid4().hex[:16]}"
+    )
+    response = collection.read_function_run(function, plan)
+    assert response.status_code == 200
+    response = collection.read_function_run(function.name, plan)
+    assert response.status_code == 200

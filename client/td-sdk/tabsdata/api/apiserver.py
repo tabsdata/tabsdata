@@ -494,6 +494,20 @@ class APIServer:
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def execution_read_function_run(
+        self,
+        collection_name: str,
+        function_name_or_version_id: str,
+        execution_id: str,
+        raise_for_status: bool = True,
+    ):
+        endpoint = (
+            f"/collections/{collection_name}/function_versions/"
+            f"{function_name_or_version_id}/executions/{execution_id}"
+        )
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def function_create(
         self,
         collection_name: str,

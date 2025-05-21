@@ -6,10 +6,15 @@ import datetime
 import logging
 import os
 import time
+import uuid
 
 import polars as pl
 import pytest
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, APISERVER_URL
+from tests_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    APISERVER_URL,
+    LOCAL_PACKAGES_LIST,
+)
 
 from tabsdata.api.apiserver import BASE_API_URL, APIServerError
 from tabsdata.api.tabsdata_server import (
@@ -1129,3 +1134,29 @@ def test_execution_plan_read(tabsserver_connection, testing_collection_with_tabl
     execution_plans = tabsserver_connection.execution_plans
     assert execution_plans
     assert tabsserver_connection.execution_plan_read(execution_plans[0].id)
+
+
+@pytest.mark.integration
+def test_tabsdata_server_class_read_run(tabsserver_connection):
+    collection = tabsserver_connection.collection_create(
+        f"test_tabsdata_server_class_read_run_{uuid.uuid4().hex[:16]}"
+    )
+    file_path = os.path.join(
+        ABSOLUTE_TEST_FOLDER_LOCATION,
+        "testing_resources",
+        "test_input_file_csv_string_format",
+        "example.py",
+    )
+    function_path = file_path + "::input_file_csv_string_format"
+    function = collection.register_function(
+        function_path, local_packages=LOCAL_PACKAGES_LIST
+    )
+    plan = function.trigger(
+        f"test_tabsdata_server_class_read_run_plan_{uuid.uuid4().hex[:16]}"
+    )
+    response = tabsserver_connection.function_read_run(
+        collection.name, function.name, plan.id
+    )
+    assert response.status_code == 200
+    response = tabsserver_connection.function_read_run(collection, function, plan)
+    assert response.status_code == 200
