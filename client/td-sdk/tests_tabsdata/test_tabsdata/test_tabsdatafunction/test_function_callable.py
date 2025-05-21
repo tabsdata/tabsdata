@@ -10,44 +10,46 @@ import polars as pl
 import tabsdata as td
 from tabsdata import TableFrame
 from tabsdata.tabsdatafunction import (
-    _add_dummy_required_columns,
     _clean_recursively_and_convert_to_datatype,
     _convert_recursively_to_tableframe,
     _recursively_obtain_datatype,
 )
+from tabsdata.utils.tableframe._common import add_system_columns
 from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
 
 BASE_DATA = {"a": [1, 2, 3], "b": [4, 5, 6]}
 VALID_PD_DATAFRAME = pd.DataFrame(BASE_DATA)
 VALID_PL_DATAFRAME = pl.DataFrame(BASE_DATA)
 VALID_PL_LAZYFRAME = pl.LazyFrame(BASE_DATA)
+# Only for testing; thus, using index None does the trick.
 VALID_TD_TABLEFRAME = TableFrame.__build__(
-    _add_dummy_required_columns(pl.DataFrame(BASE_DATA)),
-    None,
+    df=pl.DataFrame(BASE_DATA),
+    mode="raw",
+    idx=None,
 )
 
 
-def test_add_dummy_required_columns_polars_dataframe():
+def test_has_required_columns_polars_dataframe():
     df = pl.DataFrame({"a": [1, 2, 3, 4], "b": [4, 5, 6, 7]})
-    df = _add_dummy_required_columns(df)
+    df = add_system_columns(lf=df.lazy(), mode="raw", idx=None).collect()
     assert all(col in df.columns for col in SYSTEM_COLUMNS)
 
 
-def test_add_dummy_required_columns_empty_polars_dataframe():
+def test_has_required_columns_empty_polars_dataframe():
     df = pl.DataFrame({})
-    df = _add_dummy_required_columns(df)
+    df = add_system_columns(lf=df.lazy(), mode="raw", idx=None).collect()
     assert all(col in df.columns for col in SYSTEM_COLUMNS)
 
 
-def test_add_dummy_required_columns_polars_lazyframe():
+def test_has_required_columns_polars_lazyframe():
     df = pl.LazyFrame({"a": [1, 2, 3, 4], "b": [4, 5, 6, 7]})
-    df = _add_dummy_required_columns(df)
+    df = add_system_columns(lf=df, mode="raw", idx=None)
     assert all(col in df.collect_schema().names() for col in SYSTEM_COLUMNS)
 
 
-def test_add_dummy_required_columns_empty_polars_lazyframe():
+def test_has_required_columns_empty_polars_lazyframe():
     df = pl.LazyFrame({})
-    df = _add_dummy_required_columns(df)
+    df = add_system_columns(lf=df, mode="raw", idx=None)
     assert all(col in df.collect_schema().names() for col in SYSTEM_COLUMNS)
 
 

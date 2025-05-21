@@ -69,7 +69,20 @@ class Extension(ABC):
         pass
 
     @abstractmethod
-    def assemble_columns(self, lf: pl.LazyFrame) -> pl.LazyFrame:
+    def apply_system_column(
+        self,
+        lf: pl.LazyFrame,
+        column: str,
+        function: str,
+    ) -> pl.LazyFrame:
+        """
+        Given a LazyFrame, creates a new column based on the provided abstract
+        function, and returns a new LazyFrame with the new column.
+        """
+        pass
+
+    @abstractmethod
+    def assemble_system_columns(self, lf: pl.LazyFrame) -> pl.LazyFrame:
         """
         For a LazyFrame coming from operating on the internal LazyFrame
         of one or more TableFrame's, normalizes and merges system columns

@@ -11,6 +11,7 @@ import pymongo
 import pytest
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
+    FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     get_lf,
@@ -622,7 +623,13 @@ def test_output_mongodb(tmp_path, testing_mongodb):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_mongodb", "mock_table.parquet"
     )
-    write_v2_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
@@ -677,7 +684,13 @@ def test_multiple_outputs_mongodb(tmp_path, testing_mongodb):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_multiple_outputs_mongodb", "mock_table.parquet"
     )
-    write_v2_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(

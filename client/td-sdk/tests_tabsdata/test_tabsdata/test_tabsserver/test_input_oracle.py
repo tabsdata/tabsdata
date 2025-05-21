@@ -15,6 +15,7 @@ from tests_tabsdata.conftest import (
     DB_HOST,
     DB_PASSWORD,
     DB_USER,
+    FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     ORACLE_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
@@ -66,11 +67,13 @@ def test_input_oracle(testing_oracle, tmp_path):
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -125,11 +128,13 @@ def test_input_oracle_initial_values(testing_oracle, tmp_path):
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -191,12 +196,14 @@ def test_input_oracle_initial_values_stored_number_0(testing_oracle, tmp_path):
         "mock_number_0.parquet",
     )
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
         input_initial_values_path=path_to_input_initial_values,
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -258,12 +265,14 @@ def test_input_oracle_initial_values_stored_number_2(testing_oracle, tmp_path):
         "mock_number_2.parquet",
     )
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
         input_initial_values_path=path_to_input_initial_values,
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)

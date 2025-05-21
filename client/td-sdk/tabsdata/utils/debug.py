@@ -46,9 +46,9 @@ def notification(text, language="en"):
         time.sleep(0.1)
 
 
-def remote_debug() -> bool:
+def remote_debug(force: bool = False) -> bool:
     remote_debug_enabled = os.getenv(REMOTE_DEBUG, FALSE_FALSE).lower() in TRUE_VALUES
-    if remote_debug_enabled:
+    if remote_debug_enabled or force:
         # noinspection PyBroadException
         try:
             pydevd_pycharm.settrace(

@@ -5,8 +5,11 @@
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, List, Tuple, Union
 
+# noinspection PyProtectedMember
+import tabsdata.utils.tableframe._generators as td_generators
 from tabsdata.io.input import LocalFileSource
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tabsserver.function.execution_utils import trigger_non_plugin_source
@@ -15,12 +18,23 @@ from tabsdata.tabsserver.function.store_results_utils import (
 )
 
 if TYPE_CHECKING:
+
     import polars as pl
 
     from tabsdata.tabsserver.function.execution_context import ExecutionContext
     from tabsdata.tabsserver.function.results_collection import ResultsCollection
+    from tabsdata.tabsserver.function.yaml_parsing import InputYaml
 
     VALID_PLUGIN_RESULT = List[pl.LazyFrame | None] | pl.LazyFrame | None
+
+
+@contextmanager
+def td_context(source: SourcePlugin, execution_context: ExecutionContext):
+    setattr(source, "_ec", execution_context)
+    try:
+        yield
+    finally:
+        delattr(source, "_ec")
 
 
 class SourcePlugin:
@@ -41,6 +55,11 @@ class SourcePlugin:
     """
 
     IDENTIFIER = "source-plugin"
+
+    def _is_overridden(self, method_name: str) -> bool:
+        class_method = getattr(SourcePlugin, method_name)
+        object_method = getattr(self.__class__, method_name)
+        return object_method is not class_method
 
     def _run(
         self, execution_context: ExecutionContext
@@ -67,7 +86,16 @@ class SourcePlugin:
             self.initial_values = current_initial_values
             logger.debug(f"Updated plugin initial values to: {current_initial_values}")
         logger.info("Starting plugin stream import")
-        parameters = self.stream(destination_dir)
+
+        # For a custom stream implementations, method is executed as is.
+        if self._is_overridden("stream"):
+            parameters = self.stream(destination_dir)
+        else:
+            # For the core stream implementations, method is executed as with the
+            # execution context.
+            with td_context(self, execution_context):
+                parameters = self.stream(destination_dir)
+
         if self.initial_values:
             execution_context.status.offset.returns_values = True
         # Verify if the parameters are valid
@@ -111,8 +139,14 @@ class SourcePlugin:
             )
         return parameters
 
+    # ToDo: this must be refined to:
+    #   - Expose a function that the user can apply to generate TableFrame's from data.
+    #   - Ensure that, when stream is overridden, resulting TableFrames are repopulated
+    #       with the correct metadata and system columns, and persisted in folder
+    #       {function_data} before forwarding them the the user function.
     def stream(
-        self, working_dir: str
+        self,
+        working_dir: str,
     ) -> List[TableFrame | None | List[TableFrame | None]]:
         # Default streaming implementation, delegates to chunking.
         # An implementation doing streaming should override this method.
@@ -122,9 +156,15 @@ class SourcePlugin:
             f"Imported files to '{working_dir}'. Resulting files: '{resulting_files}'"
         )
 
+        idx = td_generators.IdxGenerator()
         if isinstance(resulting_files, str) or resulting_files is None:
             parameters = [
-                _import_plugin_file_from_single_element(resulting_files, working_dir)
+                _import_plugin_file_from_single_element(
+                    resulting_files,
+                    working_dir,
+                    idx=idx,
+                    request=self._ec.request,
+                )
             ]
         elif isinstance(resulting_files, (list, tuple)):
             parameters = []
@@ -133,14 +173,22 @@ class SourcePlugin:
                     parameters.append(
                         [
                             _import_plugin_file_from_single_element(
-                                single_element, working_dir
+                                single_element,
+                                working_dir,
+                                idx=idx,
+                                request=self._ec.request,
                             )
                             for single_element in element
                         ]
                     )
                 elif isinstance(element, str) or element is None:
                     parameters.append(
-                        _import_plugin_file_from_single_element(element, working_dir)
+                        _import_plugin_file_from_single_element(
+                            element,
+                            working_dir,
+                            idx=idx,
+                            request=self._ec.request,
+                        )
                     )
                 else:
                     logger.error(
@@ -226,13 +274,21 @@ class SourcePlugin:
 
 
 def _import_plugin_file_from_single_element(
-    resulting_files: str | None, working_dir: str
+    resulting_files: str | None,
+    working_dir: str,
+    idx: td_generators.IdxGenerator,
+    request: InputYaml = None,
 ) -> Union[TableFrame, None, List[TableFrame | None]]:
     if resulting_files is None:
         return None
     resulting_files_paths = os.path.join(working_dir, resulting_files)
     source_config = LocalFileSource(path=resulting_files_paths)
-    return trigger_non_plugin_source(source_config, working_dir)[0]
+    return trigger_non_plugin_source(
+        source_config,
+        working_dir,
+        request=request,
+        idx=idx,
+    )[0]
 
 
 class DestinationPlugin:

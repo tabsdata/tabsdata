@@ -11,6 +11,7 @@ import pytest
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
@@ -64,7 +65,13 @@ def test_output_plugin(tmp_path):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_plugin", "mock_table.parquet"
     )
-    write_v2_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
@@ -123,7 +130,13 @@ def test_output_plugin_multiple_outputs(tmp_path):
         "test_output_plugin_multiple_outputs",
         "mock_table.parquet",
     )
-    write_v2_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
@@ -183,7 +196,13 @@ def test_output_plugin_multiple_outputs_with_none(tmp_path):
         "test_output_plugin_multiple_with_none",
         "mock_table.parquet",
     )
-    write_v2_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(
@@ -213,7 +232,13 @@ def test_output_plugin_with_none(tmp_path):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_plugin_with_none", "mock_table.parquet"
     )
-    write_v2_yaml_file(input_yaml_file, context_archive, [mock_parquet_table])
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
     environment_name, result = tabsserver_main(

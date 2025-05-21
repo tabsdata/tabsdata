@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 import polars as pl
+import pytest
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._translator import (
@@ -55,7 +56,7 @@ class TestTableFrame(unittest.TestCase):
         lf_count = lf.select(pl.count()).collect().item()
         self.assertEqual(lf_row_count, lf_len, "LazyFrame len (2) mismatch.")
         self.assertEqual(lf_row_count, lf_count, "LazyFrame count (2) mismatch.")
-        tf_len = tf._lf.select(pl.len()).collect().item()
+        tf_len = tf._lf.select(pl.len()).collect(no_optimization=True).item()
         self.assertEqual(lf_row_count, tf_len, "TableFrame len (2.1) mismatch.")
         tf_len = _unwrap_table_frame(tf).select(pl.len()).collect().item()
         tf_count = _unwrap_table_frame(tf).select(pl.count()).collect().item()

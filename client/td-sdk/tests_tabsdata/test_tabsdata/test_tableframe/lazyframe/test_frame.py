@@ -15,7 +15,7 @@ from tabsdata.exceptions import TableFrameError
 from tabsdata.extensions.tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
-from tabsdata.tableframe.lazyframe.frame import _assemble_columns
+from tabsdata.tableframe.lazyframe.frame import _assemble_system_columns
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._helpers import required_columns
@@ -68,7 +68,7 @@ class TestTableFrame(unittest.TestCase):
             }
         )
         tf = _wrap_polars_frame(lf)
-        with self.assertRaises(TypeError) as context:
+        with self.assertRaises(TypeError):
             _ = tf.rename(None)
 
     def test_rename_no_dict(self):
@@ -80,7 +80,7 @@ class TestTableFrame(unittest.TestCase):
             }
         )
         tf = _wrap_polars_frame(lf)
-        with self.assertRaises(TypeError) as context:
+        with self.assertRaises(TypeError):
             _ = tf.rename(("c1", "cc1"))
 
     def test_rename_empty_dict(self):
@@ -103,7 +103,7 @@ class TestTableFrame(unittest.TestCase):
             }
         )
         tf = _wrap_polars_frame(lf)
-        with self.assertRaises(TypeError) as context:
+        with self.assertRaises(TypeError):
             _ = tf.rename({1: "id"})
 
     def test_rename_no_string_new(self):
@@ -115,7 +115,7 @@ class TestTableFrame(unittest.TestCase):
             }
         )
         tf = _wrap_polars_frame(lf)
-        with self.assertRaises(TypeError) as context:
+        with self.assertRaises(TypeError):
             _ = tf.rename({"id": 1})
 
     def test_rename_old_name_system(self):
@@ -179,7 +179,7 @@ class TestTableFrame(unittest.TestCase):
         )
         lf = pl.concat([lf] * 10)
         start_time = time.perf_counter()
-        lf = _assemble_columns(lf)
+        lf = _assemble_system_columns(lf)
         lf._lf.profile()
         end_time = time.perf_counter()
         logger.debug(f"Execution time: {end_time - start_time:.6f} seconds")
@@ -264,8 +264,9 @@ class TestTableFrame(unittest.TestCase):
             }
         )
         tf = td.TableFrame.__build__(
-            lf,
-            None,
+            df=lf,
+            mode="raw",
+            idx=None,
         )
         tf = tf.with_columns(
             td.col("letters").str.to_uppercase().alias("letters_uppercase")
@@ -278,7 +279,7 @@ class TestTableFrame(unittest.TestCase):
         column = rows["letters_uppercase"]
         assert all(value.isupper() for value in column)
 
-    def test_sink(self):
+    def test_sink_csv(self):
         lf = pl.LazyFrame(
             {
                 "letters": ["a", "b", "c"],
@@ -286,12 +287,47 @@ class TestTableFrame(unittest.TestCase):
             }
         )
         tf = td.TableFrame.__build__(
-            lf,
-            None,
+            df=lf,
+            mode="raw",
+            idx=None,
         )
-        tf._lf.sink_ndjson(os.path.join(tempfile.gettempdir(), "delete.sink_1.json"))
+        _unwrap_table_frame(tf).sink_csv(
+            os.path.join(tempfile.gettempdir(), "delete.sink_csv.csv")
+        )
+
+    def test_sink_ndjson(self):
+        lf = pl.LazyFrame(
+            {
+                "letters": ["a", "b", "c"],
+                "numbers": [1, 2, 3],
+            }
+        )
+        tf = td.TableFrame.__build__(
+            df=lf,
+            mode="raw",
+            idx=None,
+        )
         _unwrap_table_frame(tf).sink_ndjson(
-            os.path.join(tempfile.gettempdir(), "delete.sink_2.json")
+            os.path.join(tempfile.gettempdir(), "delete.sink.ndjson")
+        )
+
+    def test_sink_parquet(self):
+        lf = pl.LazyFrame(
+            {
+                "letters": ["a", "b", "c"],
+                "numbers": [1, 2, 3],
+            }
+        )
+        tf = td.TableFrame.__build__(
+            df=lf,
+            mode="raw",
+            idx=None,
+        )
+        tf._lf.sink_parquet(
+            os.path.join(tempfile.gettempdir(), "delete.sink_parquet_1.parquet")
+        )
+        _unwrap_table_frame(tf).sink_parquet(
+            os.path.join(tempfile.gettempdir(), "delete.sink_parquet_2.parquet")
         )
 
     def test_item_empty(self):
@@ -302,8 +338,9 @@ class TestTableFrame(unittest.TestCase):
             }
         )
         tf = td.TableFrame.__build__(
-            lf,
-            None,
+            df=lf,
+            mode="raw",
+            idx=None,
         )
 
         item = tf.select(td.col("numbers").mean()).item()
@@ -317,8 +354,9 @@ class TestTableFrame(unittest.TestCase):
             }
         )
         tf = td.TableFrame.__build__(
-            lf,
-            None,
+            df=lf,
+            mode="raw",
+            idx=None,
         )
 
         item = tf.select(td.col("numbers").mean()).item()

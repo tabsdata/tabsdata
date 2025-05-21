@@ -301,7 +301,6 @@ class Offset:
                         "Error creating the directory for the offset table"
                         f" with URI '{destination_table_uri}': {e}"
                     )
-                    logger.warning("This might be because file is not local")
 
             logger.debug(f"Performing sink to file {destination_table_uri}")
             df.write_parquet(convert_uri_to_path(destination_table_uri))

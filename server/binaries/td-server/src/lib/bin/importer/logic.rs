@@ -10,10 +10,11 @@ use object_store::path::Path;
 use object_store::{parse_url_opts, ObjectMeta, ObjectStore};
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
-    first, lit, nth, Column, GetOutput, IntoLazy, LazyCsvReader, LazyFileListReader, LazyFrame,
-    LazyJsonLineReader, PolarsError,
+    lit, nth, IntoLazy, LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader,
+    PolarsError,
 };
 use serde::{Deserialize, Serialize};
+use std::string::ToString;
 use std::sync::{Arc, Mutex};
 use td_common::id;
 use tracing::{debug, info};
@@ -217,9 +218,12 @@ impl ProgressMeter {
         }
     }
 
+    /*
+    // Not used if system columns are not being generated...
     pub fn progress(&self, rows: usize) {
         Self::progress_impl(self, rows, false);
     }
+     */
 
     pub fn final_report(&self) -> ProgressMeterInfo {
         Self::progress_impl(self, 0, true);
@@ -231,10 +235,19 @@ pub fn run_import(import: FileImportInstructions) -> Result<FileImportReport, Im
     let import = Arc::new(import);
     let progress_meter = Arc::new(ProgressMeter::new(import.idx, import.from_url.as_str()));
 
+    /*
+    // Not used if system columns are not being generated...
     let progress_meter_for_spawned = progress_meter.clone();
+     */
+
     let import_for_spanned = import.clone();
 
+    /*
+    // Not used if system columns are not being generated...
     import_file_with_polars(import_for_spanned, progress_meter_for_spawned)?;
+     */
+
+    import_file_with_polars(import_for_spanned)?;
 
     let meter_info = progress_meter.final_report();
     let report = FileImportReport {
@@ -253,7 +266,10 @@ pub fn run_import(import: FileImportInstructions) -> Result<FileImportReport, Im
 /// Import a single file from the object store into the internal object store.
 fn import_file_with_polars(
     import: Arc<FileImportInstructions>,
+    /*
+    // Not used if system columns are not being generated...
     progress_meter: Arc<ProgressMeter>,
+     */
 ) -> Result<(), PolarsError> {
     debug!(
         "Started importing file from {} to {}",
@@ -263,8 +279,10 @@ fn import_file_with_polars(
     // create a LazyFrame from the file to be imported
     let lz = importer_lazy_frame(&import.from_url, &import.importer_options)?;
 
-    // add a provenance ID column to the LazyFrame
-    let lz = add_provenance_id_column(import.idx, lz, progress_meter);
+    // add an id column to the LazyFrame
+    // Currently the system columns are all generated in the python-side for homogeneity.
+    // This could change in the future. Until then, we comment this line.
+    // let lz = add_td_id_column(import.idx, lz, progress_meter);
 
     // write the LazyFrame to the internal object store
     write_imported_lazy_frame(&import.to_url, &import.importer_options, lz)?;
@@ -331,6 +349,8 @@ fn importer_lazy_frame(
     Ok(lazy_frame)
 }
 
+/*
+// Not used if system columns are not being generated...
 /// Create a series of the specified size with unique IDs post-fixed with the imported file index.
 fn create_id_series(input_idx: usize, rows: usize) -> Column {
     let mut ids = Vec::with_capacity(rows);
@@ -339,19 +359,34 @@ fn create_id_series(input_idx: usize, rows: usize) -> Column {
     }
     Column::new("dummy_not_used".into(), ids)
 }
+ */
 
+/*
+// Not used if system columns are not being generated...
 /// Returns a function that creates an ID series matching the size of the parameter given series.
 fn create_id_series_f(input_idx: usize) -> impl Fn(Column) -> Column {
     move |c: Column| create_id_series(input_idx, c.len())
 }
+ */
 
-/// Name of the provenance column
-const PROVENANCE_COL_NAME: &str = "$td.id";
+/*
+// Not used if system columns are not being generated...
+/// Name of the id column
+pub const TD_ID_COLUMN_NAME: &str = "$td.id";
+ */
 
-/// Adds a provenance ID column to the LazyFrame.
+/// Names of the system columns managed by the server side.
+/// By now we leave it empty until we reconsider if only the python-side components will manage system columns.
+// const TD_SYSTEM_COLUMNS: [&str; 1] = [TD_ID_COLUMN_NAME];
+#[allow(dead_code)]
+pub const TD_SYSTEM_COLUMNS: [&str; 0] = [];
+
+/*
+// Not used if system columns are not being generated...
+/// Adds a id column to the LazyFrame.
 ///
-/// We piggyback on the provenance ID column creation to report progress.
-fn add_provenance_id_column(
+/// We piggyback on the id column creation to report progress.
+fn add_td_id_column(
     input_idx: usize,
     lazy_frame: LazyFrame,
     progress_meter: Arc<ProgressMeter>,
@@ -365,9 +400,10 @@ fn add_provenance_id_column(
                 },
                 GetOutput::from_type(polars::prelude::DataType::String),
             )
-            .alias(PROVENANCE_COL_NAME),
+            .alias(TD_ID_COLUMN_NAME),
     )
 }
+ */
 
 /// Write the imported LazyFrame to the internal object store.
 fn write_imported_lazy_frame(
@@ -613,14 +649,20 @@ mod tests {
     fn test_progress_meter() {
         let start = chrono::Utc::now();
         let progress_meter = super::ProgressMeter::new(0, "test_file");
+        /*
+        // Not used if system columns are not being generated...
         progress_meter.progress(10);
         progress_meter.progress(10);
+         */
         sleep(std::time::Duration::from_millis(2));
         let info = progress_meter.final_report();
         let end = chrono::Utc::now();
         assert_eq!(info.idx, 0);
         assert_eq!(info.file, "test_file");
+        /*
+        // Not used if system columns are not being generated...
         assert_eq!(info.rows_reported, 20);
+         */
         assert_eq!(info.new_rows, 0);
         assert!(info.start >= start);
         assert!(info.last_reported <= end);

@@ -3,11 +3,13 @@
 #
 
 import os
+import pathlib
 import platform
 
 from tests_tabsdata.conftest import (
     FAKE_SCHEDULED_TIME,
     FAKE_TRIGGERED_TIME,
+    FUNCTION_DATA_FOLDER,
     TESTING_RESOURCES_FOLDER,
     write_v2_yaml_file,
 )
@@ -126,10 +128,19 @@ def test_parse_minimal_input_yaml(tmp_path):
         if platform.system() == "Windows"
         else f"file://{context_file}"
     )
-    write_v2_yaml_file(tmp_yaml_file, context_file)
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        tmp_yaml_file,
+        context_file,
+        function_data_path=function_data_folder,
+    )
     config = parse_request_yaml(tmp_yaml_file)
     assert isinstance(config, V2)
+    expected_function_data = Table(
+        {"location": {"uri": pathlib.Path(function_data_folder).as_uri()}}
+    )
     assert config.info == {
+        # "function_data": Table(name=None, uri=function_data_folder, data={'location': {'uri': function_data_folder}}),
         "function_bundle": {
             "uri": expected_uri,
             "env_prefix": None,
@@ -137,6 +148,7 @@ def test_parse_minimal_input_yaml(tmp_path):
         "dataset_data_version": "fake_dataset_version",
         "triggered_on": FAKE_TRIGGERED_TIME,
         "execution_plan_triggered_on": FAKE_SCHEDULED_TIME,
+        "function_data": expected_function_data,
     }
     assert config.function_bundle == {
         "uri": expected_uri,

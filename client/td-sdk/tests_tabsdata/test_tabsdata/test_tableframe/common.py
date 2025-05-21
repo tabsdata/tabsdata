@@ -34,8 +34,9 @@ def load_simple_dataframe(
 
     data_frame = pl.DataFrame(lazy_frame.collect())
     table_frame = td.TableFrame.__build__(
-        lazy_frame,
-        None,
+        df=lazy_frame,
+        mode="raw",
+        idx=0,
     )
     return lazy_frame, data_frame, table_frame
 
@@ -51,7 +52,8 @@ def load_complex_dataframe(
     lazy_frame = pl.scan_csv(data)
     data_frame = pl.DataFrame(lazy_frame.collect())
     table_frame = td.TableFrame.__build__(
-        lazy_frame,
-        None,
+        df=lazy_frame,
+        mode="raw",
+        idx=0,
     )
     return lazy_frame, data_frame, table_frame

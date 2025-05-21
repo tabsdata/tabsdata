@@ -10,6 +10,7 @@ import pathlib
 import re
 import sys
 from time import sleep
+from typing import Any
 
 import boto3
 import cx_Oracle
@@ -140,6 +141,8 @@ FORMAT_TYPE_TO_CONFIG = {
     "log": {},
     "parquet": {},
 }
+
+FUNCTION_DATA_FOLDER = "function_data_folder"
 
 MAXIMUM_RETRY_COUNT = int(os.environ.get("PYTEST_MAXIMUM_RETRY_COUNT", "36"))
 if not os.environ.get("TD_CLI_SHOW"):
@@ -820,8 +823,9 @@ def write_v2_yaml_file(
     mock_table_location: list[str] | None = None,
     input_initial_values_path: str | None = None,
     output_initial_values_path: str | None = None,
+    function_data_path: str | None = None,
 ):
-    content = {
+    content: dict[str, Any] = {
         "info": {
             "function_bundle": {
                 "uri": pathlib.Path(bundle_archive_location).as_uri(),
@@ -833,6 +837,12 @@ def write_v2_yaml_file(
         },
         "input": [],
     }
+    function_data_content = {
+        "location": {
+            "uri": pathlib.Path(function_data_path).as_uri(),
+        }
+    }
+    content["info"]["function_data"] = MockTable(function_data_content)
     if mock_dependency_location:
         for mocked_table in mock_dependency_location:
             if isinstance(mocked_table, str):

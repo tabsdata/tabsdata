@@ -70,7 +70,7 @@ async fn run_impl(params: Params) {
 #[cfg(test)]
 mod tests {
     use crate::bin::importer::args::Params;
-    use crate::bin::importer::logic::FileImportReport;
+    use crate::bin::importer::logic::{FileImportReport, TD_SYSTEM_COLUMNS};
     use clap::{command, Parser};
     use object_store::path::Path;
     use polars::df;
@@ -142,7 +142,10 @@ mod tests {
         let report: Vec<FileImportReport> =
             serde_json::from_reader(File::open(report).unwrap()).unwrap();
         assert_eq!(report.len(), 1);
+        /*
+        // Not used if system columns are not being generated...
         assert_eq!(*report[0].rows(), 2);
+         */
         let written_to = Url::parse(report[0].to()).unwrap().to_file_path().unwrap();
         assert!(written_to.exists());
 
@@ -180,7 +183,10 @@ A,B,C"#;
             &url,
             &HashMap::new(),
             2,
-            vec!["0", "1", "2", "$td.id"],
+            ["0", "1", "2"]
+                .into_iter()
+                .chain(TD_SYSTEM_COLUMNS)
+                .collect(),
         )
         .await;
     }
@@ -199,7 +205,7 @@ A,B,C"#;
             &url,
             &HashMap::new(),
             2,
-            vec!["A", "B", "$td.id"],
+            ["A", "B"].into_iter().chain(TD_SYSTEM_COLUMNS).collect(),
         )
         .await;
     }
@@ -218,7 +224,10 @@ A,B,C"#;
             &url,
             &HashMap::new(),
             2,
-            vec!["file", "message", "$td.id"],
+            ["file", "message"]
+                .into_iter()
+                .chain(TD_SYSTEM_COLUMNS)
+                .collect(),
         )
         .await;
     }
@@ -246,7 +255,7 @@ A,B,C"#;
             &url,
             &HashMap::new(),
             2,
-            vec!["A", "B", "$td.id"],
+            ["A", "B"].into_iter().chain(TD_SYSTEM_COLUMNS).collect(),
         )
         .await;
     }
@@ -304,7 +313,10 @@ A,B,C"#;
             "csv",
             data.as_bytes().into(),
             2,
-            vec!["0", "1", "2", "$td.id"],
+            vec!["0", "1", "2"]
+                .into_iter()
+                .chain(TD_SYSTEM_COLUMNS)
+                .collect(),
         )
         .await;
     }
@@ -319,7 +331,10 @@ A,B,C"#;
             "log",
             data.as_bytes().into(),
             2,
-            vec!["file", "message", "$td.id"],
+            ["file", "message"]
+                .into_iter()
+                .chain(TD_SYSTEM_COLUMNS)
+                .collect(),
         )
         .await;
     }
@@ -334,7 +349,10 @@ A,B,C"#;
             "nd-json",
             data.as_bytes().into(),
             2,
-            vec!["A", "B", "$td.id"],
+            vec!["A", "B"]
+                .into_iter()
+                .chain(TD_SYSTEM_COLUMNS)
+                .collect(),
         )
         .await;
     }
@@ -364,7 +382,10 @@ A,B,C"#;
             "parquet",
             data,
             2,
-            vec!["A", "B", "$td.id"],
+            vec!["A", "B"]
+                .into_iter()
+                .chain(TD_SYSTEM_COLUMNS)
+                .collect(),
         )
         .await;
     }

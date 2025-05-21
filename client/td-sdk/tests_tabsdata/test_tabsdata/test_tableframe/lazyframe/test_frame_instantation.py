@@ -43,8 +43,9 @@ def test_init_with_lazyframe_with_required_columns():
     data = {col: [1, 2, 3] for col in REQUIRED_COLUMNS}
     d = pl.DataFrame(data).to_dict(as_series=False)
     tdf = TableFrame.__build__(
-        d,
-        None,
+        df=d,
+        mode="raw",
+        idx=None,
     )
     assert isinstance(tdf, td.TableFrame)
 
@@ -54,8 +55,9 @@ def test_init_with_tabsdata_lazyframe():
     df = pl.DataFrame(data)
     tdf_i = _wrap_polars_frame(df)
     tdf_o = td.TableFrame.__build__(
-        tdf_i,
-        None,
+        df=tdf_i,
+        mode="raw",
+        idx=None,
     )
     assert isinstance(tdf_o, td.TableFrame)
 
@@ -65,7 +67,8 @@ def test_init_with_string():
     with pytest.raises(TabsDataException) as error:
         # noinspection PyTypeChecker
         td.TableFrame.__build__(
-            data,
-            None,
+            df=data,
+            mode="raw",
+            idx=None,
         )
     assert error.value.error_code == ErrorCode.TF2

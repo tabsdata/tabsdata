@@ -47,6 +47,10 @@ REQUIRED_COLUMNS_METADATA = {
 }
 
 
+def system_columns() -> list[str]:
+    return [member.value for member in SystemColumns]
+
+
 class TableFrameExtension(Extension, ABC):
     name = "TableFrame Extension (Standard)"
     version = version()
@@ -90,17 +94,34 @@ class TableFrameExtension(Extension, ABC):
     def required_columns_metadata(self) -> dict[str, Any]:
         return REQUIRED_COLUMNS_METADATA
 
-    # ToDo: This function might be incorrect. Review when revisiting provenance.
-    def assemble_columns(self, lf: pl.LazyFrame) -> pl.LazyFrame:
+    def apply_system_column(
+        self,
+        lf: pl.LazyFrame,
+        column: str,
+        function: str,
+    ) -> pl.LazyFrame:
+        return lf
+
+    # From a given LazyFrame, expectedly coming from an internal of a TableFrame, it
+    # selects:
+    #   - All non system columns
+    #   - All system columns
+    # Therefore, all columns whose prefix is a system column prefix, but not being
+    # recognized as a system column, are removed.
+    # This way, when joins and similar operations are performed, which might provide
+    # system columns from more than one source (and that will be attached automatically
+    # discriminator suffix by polars), the one preserving the original name is
+    # preserved.
+    # As a general rule, system columns are totally system-managed. Therefore, dropping
+    # (internally) these extra columns is safe, and should produce no data loss or
+    # inconsistency.
+    def assemble_system_columns(self, lf: pl.LazyFrame) -> pl.LazyFrame:
         target_cols = [
-            td_constants.StandardSystemColumns.TD_IDENTIFIER.value,
-        ] + [
             c
             for c in lf.collect_schema().names()
-            if not c.startswith(td_constants.TD_COLUMN_PREFIX)
+            if c in system_columns() or not c.startswith(td_constants.TD_COLUMN_PREFIX)
         ]
-        lf = lf.select(target_cols)
-        return lf
+        return lf.select(target_cols)
 
 
 instance = TableFrameExtension()

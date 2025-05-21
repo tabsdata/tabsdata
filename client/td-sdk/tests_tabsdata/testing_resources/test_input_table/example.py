@@ -35,8 +35,11 @@ DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
 def input_table(df: td.TableFrame):
     if df is None:
         return td.TableFrame.__build__(
-            pl.LazyFrame({"answer": 42, SystemColumns.TD_IDENTIFIER.value: "fake_id"}),
-            None,
+            df=pl.LazyFrame(
+                {"answer": 42, SystemColumns.TD_IDENTIFIER.value: "fake_id"}
+            ),
+            mode="raw",
+            idx=0,
         )
     new_df = df.drop_nulls()
     return new_df

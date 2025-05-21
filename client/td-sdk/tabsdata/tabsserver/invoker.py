@@ -61,6 +61,7 @@ def invoke(
     environment_prefix: str = None,
     locks_folder: str = DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
     logs_folder: str = None,
+    work: str = "0",
 ):
     request_file_path = os.path.join(request_folder, REQUEST_FILE_NAME)
     setup_logging(os.path.join(ABSOLUTE_LOCATION, "logging.yaml"))
@@ -72,6 +73,7 @@ def invoke(
             "the instance environments creation are stored."
         )
     request_content = parse_request_yaml(request_file_path)
+    request_content.work = work
     logger.debug(f"Request YAML content: {request_content}")
     compressed_bundle_uri = request_content.function_bundle_uri
 
@@ -140,6 +142,12 @@ def main():
         description=(
             "Install a Python virtual environment and execute a function from a file."
         )
+    )
+    parser.add_argument(
+        "--work",
+        type=str,
+        help="Counter of the work number for the same function run.",
+        required=True,
     )
     parser.add_argument(
         "--request-folder",
@@ -212,6 +220,7 @@ def main():
 
     args = parser.parse_args()
     environment_created, result = invoke(
+        work=args.work,
         request_folder=args.request_folder,
         response_folder=args.response_folder,
         current_instance=args.current_instance,

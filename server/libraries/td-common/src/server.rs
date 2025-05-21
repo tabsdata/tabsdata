@@ -32,7 +32,7 @@ use std::io;
 use std::io::{Error, Write};
 use std::marker::PhantomData;
 use std::option::Option;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, Display, EnumString};
 use td_apiforge::apiserver_schema;
@@ -611,6 +611,19 @@ fn base(stem: &str) -> String {
         .to_string()
 }
 
+pub fn counter(path: &Path) -> String {
+    if let Some(stem) = path.file_stem() {
+        stem.to_string_lossy()
+            .to_string()
+            .split_once(RETRIES_DELIMITER)
+            .and_then(|(_, counter)| counter.parse::<u32>().ok())
+            .unwrap_or(0)
+            .to_string()
+    } else {
+        0.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -756,5 +769,65 @@ mod tests {
         let message = "test_message5";
         let result = queue.commit(message).await;
         assert!(matches!(result, Err(MessageNonExisting { .. })));
+    }
+
+    #[test]
+    fn test_valid_counter() {
+        let path = PathBuf::from("/a/b/work_3");
+        assert_eq!(counter(&path), "3");
+    }
+
+    #[test]
+    fn test_no_counter() {
+        let path = PathBuf::from("/a/b/work");
+        assert_eq!(counter(&path), "0");
+    }
+
+    #[test]
+    fn test_non_numeric_counter() {
+        let path = PathBuf::from("/a/b/work_xyz");
+        assert_eq!(counter(&path), "0");
+    }
+
+    #[test]
+    fn test_empty_stem() {
+        let path = PathBuf::from("");
+        assert_eq!(counter(&path), "0");
+    }
+
+    #[test]
+    fn test_multiple_underscores() {
+        let path = PathBuf::from("/a/b/run_work_42");
+        assert_eq!(counter(&path), "0");
+    }
+
+    #[test]
+    fn test_valid_counter_extension() {
+        let path = PathBuf::from("/a/b/work_3.t");
+        assert_eq!(counter(&path), "3");
+    }
+
+    #[test]
+    fn test_no_counter_extension() {
+        let path = PathBuf::from("/a/b/work.t");
+        assert_eq!(counter(&path), "0");
+    }
+
+    #[test]
+    fn test_non_numeric_counter_extension() {
+        let path = PathBuf::from("/a/b/work_xyz.t");
+        assert_eq!(counter(&path), "0");
+    }
+
+    #[test]
+    fn test_empty_stem_extension() {
+        let path = PathBuf::from(".t");
+        assert_eq!(counter(&path), "0");
+    }
+
+    #[test]
+    fn test_multiple_underscores_extension() {
+        let path = PathBuf::from("/a/b/run_work_42.t");
+        assert_eq!(counter(&path), "0");
     }
 }

@@ -15,6 +15,7 @@ from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     FAKE_SCHEDULED_TIME,
     FAKE_TRIGGERED_TIME,
+    FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
@@ -71,10 +72,12 @@ def test_output_s3_parquet(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     bucket_name = output_file.split("/")[2]
@@ -141,10 +144,12 @@ def test_output_s3_parquet_with_data_version(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     bucket_name = output_file.split("/")[2]
@@ -211,10 +216,12 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     bucket_name = output_file.split("/")[2]
@@ -292,10 +299,12 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     bucket_name = output_file.split("/")[2]
@@ -374,10 +383,12 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     bucket_name = output_file.split("/")[2]
@@ -461,10 +472,12 @@ def test_output_s3_csv(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     bucket_name = output_file.split("/")[2]
     file_name = "/".join(output_file.split("/")[3:])
@@ -532,10 +545,12 @@ def test_output_s3_ndjson(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     bucket_name = output_file.split("/")[2]
@@ -600,10 +615,12 @@ def test_output_s3_frame_list(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3_frame_list", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     bucket_name = output_file.split("/")[2]

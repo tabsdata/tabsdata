@@ -16,6 +16,7 @@ from tests_tabsdata.conftest import (
     DB_NAME,
     DB_PASSWORD,
     DB_USER,
+    FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     MYSQL_PORT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
@@ -86,8 +87,12 @@ def test_output_sql_list(tmp_path, testing_mysql):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_sql_list", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+        input_yaml_file,
+        context_archive,
+        mock_dependency_location=[mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -140,8 +145,12 @@ def test_output_sql_modified_params(tmp_path, testing_mysql):
         "test_output_sql_modified_params",
         "mock_table.parquet",
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+        input_yaml_file,
+        context_archive,
+        mock_dependency_location=[mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -194,8 +203,12 @@ def test_output_sql_wrong_driver_fails(tmp_path, testing_mysql):
         "test_output_sql_wrong_driver_fails",
         "mock_table.parquet",
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+        input_yaml_file,
+        context_archive,
+        mock_dependency_location=[mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -228,8 +241,12 @@ def test_output_sql_driver_provided(tmp_path, testing_mysql):
         "test_output_sql_driver_provided",
         "mock_table.parquet",
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+        input_yaml_file,
+        context_archive,
+        mock_dependency_location=[mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -271,8 +288,12 @@ def test_output_sql_list_none(tmp_path, testing_mysql):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_sql_list_none", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+        input_yaml_file,
+        context_archive,
+        mock_dependency_location=[mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -316,8 +337,12 @@ def test_output_sql_none(tmp_path, testing_mysql):
         "test_output_sql_none",
         "mock_table.parquet",
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+        input_yaml_file,
+        context_archive,
+        mock_dependency_location=[mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -354,8 +379,12 @@ def test_output_sql_transaction(tmp_path, testing_mysql):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_sql_transaction", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_dependency_location=[mock_parquet_table]
+        input_yaml_file,
+        context_archive,
+        mock_dependency_location=[mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)

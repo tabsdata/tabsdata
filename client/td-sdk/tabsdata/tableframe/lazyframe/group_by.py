@@ -107,10 +107,11 @@ class TableFrameGroupBy:
 
         # ToDo...
         return td_frame.TableFrame.__build__(
-            self._lgb.agg(
+            df=self._lgb.agg(
                 expressions,
             ),
-            None,
+            mode="tab",
+            idx=None,
         )
 
     def len(self) -> td_frame.TableFrame:
@@ -158,16 +159,18 @@ class TableFrameGroupBy:
         """
         # ToDo...
         return td_frame.TableFrame.__build__(
-            self._lgb.len(),
-            None,
+            df=self._lgb.len(),
+            mode="tab",
+            idx=None,
         )
 
     @pydoc(categories="aggregation")
     def count(self) -> td_frame.TableFrame:
         # ToDo...
         return td_frame.TableFrame.__build__(
-            self._lgb.count(),
-            None,
+            df=self._lgb.count(),
+            mode="tab",
+            idx=None,
         )
 
     @pydoc(categories="aggregation")
@@ -217,8 +220,9 @@ class TableFrameGroupBy:
         """
         # ToDo...
         return td_frame.TableFrame.__build__(
-            self._lgb.max(),
-            None,
+            df=self._lgb.max(),
+            mode="tab",
+            idx=None,
         )
 
     @pydoc(categories="aggregation")
@@ -268,8 +272,9 @@ class TableFrameGroupBy:
         """
         # ToDo...
         return td_frame.TableFrame.__build__(
-            self._lgb.mean(),
-            None,
+            df=self._lgb.mean(),
+            mode="tab",
+            idx=None,
         )
 
     @pydoc(categories="aggregation")
@@ -319,8 +324,9 @@ class TableFrameGroupBy:
         """
         # ToDo...
         return td_frame.TableFrame.__build__(
-            self._lgb.median(),
-            None,
+            df=self._lgb.median(),
+            mode="tab",
+            idx=None,
         )
 
     @pydoc(categories="aggregation")
@@ -370,8 +376,9 @@ class TableFrameGroupBy:
         """
         # ToDo...
         return td_frame.TableFrame.__build__(
-            self._lgb.min(),
-            None,
+            df=self._lgb.min(),
+            mode="tab",
+            idx=None,
         )
 
     @pydoc(categories="aggregation")
@@ -421,8 +428,9 @@ class TableFrameGroupBy:
         """
         # ToDo...
         return td_frame.TableFrame.__build__(
-            self._lgb.n_unique(),
-            None,
+            df=self._lgb.n_unique(),
+            mode="tab",
+            idx=None,
         )
 
     @pydoc(categories="aggregation")
@@ -472,6 +480,7 @@ class TableFrameGroupBy:
         """
         # ToDo...
         return td_frame.TableFrame.__build__(
-            self._lgb.sum(),
-            None,
+            df=self._lgb.sum(),
+            mode="tab",
+            idx=None,
         )

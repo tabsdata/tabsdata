@@ -11,6 +11,7 @@ import pytest
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
@@ -65,11 +66,13 @@ def test_input_azure_csv(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -109,11 +112,13 @@ def test_input_azure_log(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -153,11 +158,13 @@ def test_input_azure_parquet(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -200,11 +207,13 @@ def test_input_azure_ndjson(tmp_path):
         "output.parquet",
     )
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)

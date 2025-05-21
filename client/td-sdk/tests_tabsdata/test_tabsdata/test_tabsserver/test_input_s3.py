@@ -11,6 +11,7 @@ import pytest
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
@@ -83,11 +84,13 @@ def test_input_s3(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -129,11 +132,13 @@ def test_input_s3_eu_north_region(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -174,8 +179,12 @@ def test_input_s3_environment_secret(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_table_location=[output_file]
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -215,8 +224,12 @@ def test_input_s3_modified_uri(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_table_location=[output_file]
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -256,8 +269,12 @@ def test_input_s3_explicit_format(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_table_location=[output_file]
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -295,8 +312,12 @@ def test_input_s3_wildcard(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_table_location=[output_file]
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -337,11 +358,13 @@ def test_input_s3_select_datetime(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -391,12 +414,14 @@ def test_input_s3_select_datetime_stored_valid_last_modified(tmp_path):
         "mock_valid_date.parquet",
     )
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
         input_initial_values_path=path_to_initial_values,
         output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -445,11 +470,13 @@ def test_input_s3_select_datetime_stored_late_last_modified(tmp_path):
         "test_input_s3_select_datetime",
         "mock_late_date.parquet",
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file],
         input_initial_values_path=path_to_initial_values,
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -479,10 +506,12 @@ def test_input_s3_uri_list(tmp_path):
     os.makedirs(response_folder, exist_ok=True)
     output_file1 = os.path.join(tmp_path, "output1.parquet")
     output_file2 = os.path.join(tmp_path, "output2.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         mock_table_location=[output_file1, output_file2],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -534,8 +563,12 @@ def test_input_s3_explicit_format_object(tmp_path):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_table_location=[output_file]
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -576,8 +609,12 @@ def test_input_s3_hashicorp_secret(tmp_path, testing_hashicorp_vault):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_table_location=[output_file]
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)
@@ -618,8 +655,12 @@ def test_input_s3_hashicorp_secret_vault_name(tmp_path, testing_hashicorp_vault)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     output_file = os.path.join(tmp_path, "output.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
-        input_yaml_file, context_archive, mock_table_location=[output_file]
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
     os.makedirs(tabsserver_output_folder, exist_ok=True)

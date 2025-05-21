@@ -10,6 +10,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use strum_macros::{AsRefStr, EnumIter, EnumString};
 use td_common::env::{to_absolute, EnvironmentError};
+use td_common::server::counter;
 use thiserror::Error;
 
 #[derive(Debug, Clone, EnumIter, EnumString, AsRefStr)]
@@ -27,6 +28,7 @@ pub enum InheritedArgumentKey {
 #[derive(Debug, Clone, EnumIter, EnumString, AsRefStr)]
 #[strum(serialize_all = "kebab-case")]
 pub enum ArgumentKey {
+    Work,
     LocksFolder,
     LogsFolder,
     BinFolder,
@@ -45,6 +47,7 @@ impl ArgumentKey {
         child_work: PathBuf,
     ) -> Result<String, ArgumentError> {
         match self {
+            ArgumentKey::Work => ArgumentKey::work(child_work),
             ArgumentKey::LocksFolder => ArgumentKey::locks_folder(parent_work),
             ArgumentKey::LogsFolder => ArgumentKey::log_folder(child_work),
             ArgumentKey::BinFolder => ArgumentKey::bin_folder(child_work),
@@ -54,6 +57,12 @@ impl ArgumentKey {
             ArgumentKey::OutputFolder => ArgumentKey::output_folder(child_work),
             ArgumentKey::CurrentInstance => ArgumentKey::current_instance(instance),
         }
+    }
+
+    fn work(child_work: PathBuf) -> Result<String, ArgumentError> {
+        child_work
+            .parent()
+            .map_or_else(|| Ok("0".to_string()), |p| Ok(counter(p)))
     }
 
     fn locks_folder(parent_work: PathBuf) -> Result<String, ArgumentError> {

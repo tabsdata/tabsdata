@@ -17,6 +17,7 @@ from pyiceberg.transforms import YearTransform
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
     TESTING_RESOURCES_FOLDER,
@@ -111,10 +112,12 @@ def test_output_s3_catalog(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3_catalog", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
 
@@ -218,10 +221,12 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
                 "test_output_s3_catalog_replace",
                 "mock_table.parquet",
             )
+            function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
             write_v2_yaml_file(
                 input_yaml_file,
                 context_archive,
                 [mock_parquet_table],
+                function_data_path=function_data_folder,
             )
             tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
 
@@ -320,10 +325,12 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
                 "test_output_s3_catalog_append",
                 "mock_table.parquet",
             )
+            function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
             write_v2_yaml_file(
                 input_yaml_file,
                 context_archive,
                 [mock_parquet_table],
+                function_data_path=function_data_folder,
             )
             tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
 
@@ -424,10 +431,12 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER, "test_output_s3_catalog", "mock_table.parquet"
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
 
@@ -508,10 +517,12 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client):
         "test_output_s3_catalog_schema_strategy",
         "mock_table.parquet",
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
 
@@ -613,10 +624,12 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
         "test_output_s3_catalog_schema_strategy",
         "mock_table.parquet",
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
 
@@ -708,10 +721,12 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
         "test_output_s3_catalog_partition",
         "mock_table.parquet",
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
 
@@ -817,10 +832,12 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client):
         "test_output_s3_catalog_region_creds",
         "mock_table.parquet",
     )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
         [mock_parquet_table],
+        function_data_path=function_data_folder,
     )
     tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
 

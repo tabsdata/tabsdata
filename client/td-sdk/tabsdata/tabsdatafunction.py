@@ -13,6 +13,11 @@ import pandas as pd
 import polars as pl
 
 import tabsdata.tableframe.lazyframe.frame as td_frame
+
+# noinspection PyProtectedMember
+import tabsdata.utils.tableframe._common as td_common
+
+# noinspection PyProtectedMember
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata.exceptions import (
     ErrorCode,
@@ -296,20 +301,24 @@ def _convert_recursively_to_tableframe(arguments: Any):
         return tuple(_convert_recursively_to_tableframe(v) for v in arguments)
     elif isinstance(arguments, td_frame.TableFrame):
         return arguments
+    # From here this is only for testing; thus, using always index None does the trick.
     elif isinstance(arguments, pl.DataFrame):
         return td_frame.TableFrame.__build__(
-            _add_dummy_required_columns(arguments),
-            None,
+            df=arguments,
+            mode="raw",
+            idx=None,
         )
     elif isinstance(arguments, pl.LazyFrame):
         return td_frame.TableFrame.__build__(
-            _add_dummy_required_columns(arguments),
-            None,
+            df=arguments,
+            mode="raw",
+            idx=None,
         )
     elif isinstance(arguments, pd.DataFrame):
         return td_frame.TableFrame.__build__(
-            _add_dummy_required_columns(pl.DataFrame(arguments)),
-            None,
+            df=pl.DataFrame(arguments),
+            mode="raw",
+            idx=None,
         )
     return arguments
 
@@ -337,33 +346,38 @@ def _clean_recursively_and_convert_to_datatype(
     elif isinstance(result, td_frame.TableFrame):
         try:
             if datatype == pl.DataFrame:
-                return result._lf.drop(td_helpers.SYSTEM_COLUMNS).collect()
+                # noinspection PyProtectedMember
+                return td_common.drop_system_columns(
+                    lf=result._lf,
+                    ignore_missing=True,
+                ).collect()
             elif datatype == pl.LazyFrame:
-                return result._lf.drop(td_helpers.SYSTEM_COLUMNS)
+                # noinspection PyProtectedMember
+                return td_common.drop_system_columns(
+                    lf=result._lf,
+                    ignore_missing=True,
+                )
             elif datatype == pd.DataFrame:
-                return result._lf.drop(td_helpers.SYSTEM_COLUMNS).collect().to_pandas()
+                # noinspection PyProtectedMember
+                return (
+                    td_common.drop_system_columns(
+                        lf=result._lf,
+                        ignore_missing=True,
+                    )
+                    .collect()
+                    .to_pandas()
+                )
             else:
                 return result
         except pl.exceptions.ColumnNotFoundError as e:
             raise ValueError(
-                "Missing one of the following system columns"
-                f" '{td_helpers.SYSTEM_COLUMNS}'. This indicates tampering in the data."
-                " Ensure you are not modifying system columns in your data."
+                "Missing one of the following system columns: "
+                f"'{td_helpers.SYSTEM_COLUMNS}'. "
+                "This indicates tampering in the data. "
+                "Ensure you are not modifying system columns in your data."
             ) from e
     else:
         return result
-
-
-def _add_dummy_required_columns(
-    lf: pl.LazyFrame | pl.DataFrame,
-) -> pl.LazyFrame | pl.DataFrame:
-    return lf.with_columns(
-        [
-            pl.lit("fake_value").alias(col_name)
-            for col_name in td_helpers.SYSTEM_COLUMNS
-            if col_name not in lf.collect_schema().names()
-        ]
-    )
 
 
 def _recursively_obtain_datatype(

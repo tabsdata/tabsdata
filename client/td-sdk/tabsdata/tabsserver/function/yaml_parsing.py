@@ -1,7 +1,7 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
-import os
+
 from abc import ABC, abstractmethod
 
 import yaml
@@ -51,6 +51,9 @@ class Table:
     def input_idx(self) -> int:
         return self.data.get("input_idx")
 
+    def __eq__(self, other):
+        return isinstance(other, Table) and self.data == other.data
+
     def __repr__(self):
         return f"Table(name={self.name}, uri={self.uri}, data={self.data})"
 
@@ -79,6 +82,16 @@ class InputYaml(ABC):
 
     @property
     @abstractmethod
+    def work(self):
+        """Return the work section of the YAML file."""
+
+    @work.setter
+    @abstractmethod
+    def work(self, value):
+        """Set the work section of the YAML file."""
+
+    @property
+    @abstractmethod
     def function_bundle_uri(self) -> str:
         """Return the function bundle URI."""
 
@@ -86,6 +99,11 @@ class InputYaml(ABC):
     @abstractmethod
     def input(self) -> list[Table | TableVersions]:
         """Return the input section of the YAML file."""
+
+    @property
+    @abstractmethod
+    def function_data(self) -> Table:
+        """Return the function_data section of the YAML file."""
 
     @property
     @abstractmethod
@@ -116,6 +134,14 @@ class InputYaml(ABC):
 class V1(InputYaml):
     def __init__(self, content):
         self.content = content
+
+    @property
+    def work(self) -> str:
+        return self.content.get("work")
+
+    @work.setter
+    def work(self, value: str):
+        self.content["work"] = value
 
     @property
     def info(self):
@@ -150,6 +176,10 @@ class V1(InputYaml):
         return self.content.get("input")
 
     @property
+    def function_data(self) -> None:
+        return None
+
+    @property
     def output(self) -> list[Table]:
         return self.content.get("output")
 
@@ -168,6 +198,14 @@ class V1(InputYaml):
 class V2(InputYaml):
     def __init__(self, content):
         self.content = content
+
+    @property
+    def work(self) -> str:
+        return self.content.get("work")
+
+    @work.setter
+    def work(self, value: str):
+        self.content["work"] = value
 
     @property
     def info(self):

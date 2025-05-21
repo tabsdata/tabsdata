@@ -25,6 +25,7 @@ def _is_instance_of_union(obj, tp):
 
 
 def _wrap_polars_frame(f: pl.LazyFrame | pl.DataFrame) -> td_frame.TableFrame:
+    """Use only for testing."""
     if isinstance(f, pl.LazyFrame):
         # noinspection PyProtectedMember
         return td_frame.TableFrame._from_lazy(f)
@@ -37,7 +38,7 @@ def _wrap_polars_frame(f: pl.LazyFrame | pl.DataFrame) -> td_frame.TableFrame:
 
 def _unwrap_table_frame(tf: td_frame.TableFrame):
     # noinspection PyProtectedMember
-    return td_common.drop_system_columns(td_frame.TableFrame._to_lazy(tf))
+    return td_common.drop_system_columns(lf=tf._to_lazy())
 
 
 # noinspection PyProtectedMember

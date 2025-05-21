@@ -7,6 +7,8 @@ import unittest
 import polars as pl
 
 import tabsdata as td
+
+# noinspection PyProtectedMember
 from tabsdata.utils.tableframe import _constants, _helpers
 
 # noinspection PyProtectedMember
@@ -63,7 +65,7 @@ class TestTableFrame(unittest.TestCase):
         for column, metadata in _helpers.SYSTEM_COLUMNS_METADATA.items():
             expected_dtypes.append(metadata[_constants.TD_COL_DTYPE])
         dtypes = self.table_frame.dtypes
-        self.assertEqual(dtypes, expected_dtypes)
+        self.assertCountEqual(dtypes, expected_dtypes)
 
     def test_schema(self):
         schema = str(self.table_frame)

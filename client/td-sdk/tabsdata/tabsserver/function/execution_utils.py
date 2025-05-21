@@ -15,9 +15,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, List, Tuple, Union
 from urllib.parse import unquote
 
-import base32hex
 import polars as pl
-from uuid_v7.base import uuid7
 
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._generators as td_generators
@@ -52,8 +50,8 @@ from .cloud_connectivity_utils import (
 )
 from .global_utils import (
     CURRENT_PLATFORM,
-    TABSDATA_IDENTIFIER_COLUMN,
     convert_path_to_uri,
+    convert_uri_to_path,
 )
 from .offset_utils import (
     OFFSET_LAST_MODIFIED_VARIABLE_NAME,
@@ -113,6 +111,7 @@ def obtain_user_provided_function_parameters(
 ) -> List[TableFrame | None | List[TableFrame | None]]:
     if source_plugin := execution_context.source_plugin:
         logger.debug("Running the source plugin")
+        # noinspection PyProtectedMember
         parameters = source_plugin._run(execution_context)
     else:
         # TODO: Remake this to also use execution_context, trying to finish only the
@@ -143,6 +142,7 @@ def trigger_non_plugin_source(
     working_dir: str,
     request: InputYaml = None,
     initial_values: Offset = None,
+    idx: td_generators.IdxGenerator | None = None,
 ) -> List[TableFrame | None | List[TableFrame | None]]:
     # Call binary to import files
     destination_folder = os.path.join(working_dir, SOURCES_FOLDER)
@@ -187,7 +187,7 @@ def trigger_non_plugin_source(
         raise TypeError(f"Invalid source type: {type(source)}. No data imported.")
     # Upload all files in a specific folder, with parquet format always
     logger.debug(f"Local sources: '{local_sources}'")
-    result = load_sources(local_sources)
+    result = load_sources(request, local_sources, idx)
     logger.info("Loaded sources successfully")
     return result
 
@@ -343,36 +343,12 @@ def execute_sql_query(
     else:
         logger.error(f"Invalid SQL source type: {type(source)}. No data imported.")
         raise TypeError(f"Invalid SQL source type: {type(source)}. No data imported.")
-    # TODO: Convert into a plugin
-    #   https://tabsdata.atlassian.net/browse/TAB-14
-    loaded_frame = loaded_frame.with_columns(
-        pl.first()
-        .map_batches(lambda x: td_id_column(x.len()), is_elementwise=True)
-        .cast(pl.String)
-        .alias(TABSDATA_IDENTIFIER_COLUMN)
-    )
     destination_file = os.path.join(
         destination, f"{datetime.now().timestamp()}.parquet"
     )
     loaded_frame.write_parquet(destination_file)
     logger.info(f"Imported SQL query to: {destination_file}")
     return destination_file
-
-
-# TODO: Convert into a plugin
-# https://tabsdata.atlassian.net/browse/TAB-14
-def td_id():
-    i = uuid7().bytes
-    return base32hex.b32encode(i)[:26]
-
-
-# TODO: Convert into a plugin
-# https://tabsdata.atlassian.net/browse/TAB-14
-def td_id_column(size: int):
-    b = []
-    for i in range(size):
-        b.append(td_id())
-    return pl.Series("uuid", b, dtype=pl.String)
 
 
 def execute_file_importer(
@@ -389,8 +365,10 @@ def execute_file_importer(
         of paths to parquet files.
     """
     if isinstance(source, LocalFileSource):
+        # noinspection PyProtectedMember
         location_list = [convert_path_to_uri(path) for path in source._path_list]
     elif isinstance(source, (S3Source, AzureSource)):
+        # noinspection PyProtectedMember
         location_list = source._uri_list
     else:
         logger.error(f"Invalid source type: {type(source)}. No data imported.")
@@ -414,7 +392,7 @@ def execute_file_importer(
             execute_single_file_import(
                 location=location,
                 destination=destination,
-                format=source.format,
+                file_format=source.format,
                 initial_last_modified=last_modified,
             )
         )
@@ -438,68 +416,74 @@ INPUT_FORMAT_CLASS_TO_IMPORTER_FORMAT = {
 }
 
 
-def format_object_to_string(format: FileFormat) -> str:
-    logger.debug(f"Converting format object to string: {format}")
-    if isinstance(format, FileFormat):
-        return INPUT_FORMAT_CLASS_TO_IMPORTER_FORMAT.get(type(format))
+def format_object_to_string(file_format: FileFormat) -> str:
+    logger.debug(f"Converting format object to string: {file_format}")
+    if isinstance(file_format, FileFormat):
+        # noinspection PyTypeChecker
+        return INPUT_FORMAT_CLASS_TO_IMPORTER_FORMAT.get(type(file_format))
     else:
-        logger.error(f"Invalid format type: {type(format)}")
-        raise TypeError(f"Invalid format type: {type(format)}")
+        logger.error(f"Invalid format type: {type(file_format)}")
+        raise TypeError(f"Invalid format type: {type(file_format)}")
 
 
-def format_object_to_config_dict(format: FileFormat) -> dict:
-    logger.debug(f"Converting format object to config dict: {format}")
-    if isinstance(format, CSVFormat):
+def format_object_to_config_dict(file_format: FileFormat) -> dict:
+    logger.debug(f"Converting format object to config dict: {file_format}")
+    if isinstance(file_format, CSVFormat):
         config_dict = {
             "parse_options": {
-                "separator": format.separator,  # Default for the polars importer, it
-                # expects its unicode value of 44 as an integer
-                "quote_char": format.quote_char,  # Default for the polars importer, it
-                # expects its unicode value of 34 as an integer
-                "eol_char": format.eol_char,  # Default for the polars importer, it
-                # expects its unicode value of 10 as an integer
+                "separator": (
+                    file_format.separator
+                ),  # Default for the polars importer, it
+                # expects its Unicode value of 44 as an integer
+                "quote_char": (
+                    file_format.quote_char
+                ),  # Default for the polars importer, it
+                # expects its Unicode value of 34 as an integer
+                "eol_char": file_format.eol_char,  # Default for the polars importer, it
+                # expects its Unicode value of 10 as an integer
                 # Default encoding for the polars importer
-                "encoding": format.input_encoding,
-                "null_values": format.input_null_values,
-                "missing_is_null": format.input_missing_is_null,
-                "truncate_ragged_lines": format.input_truncate_ragged_lines,
-                "comment_prefix": format.input_comment_prefix,
-                "try_parse_dates": format.input_try_parse_dates,
-                "decimal_comma": format.input_decimal_comma,
+                "encoding": file_format.input_encoding,
+                "null_values": file_format.input_null_values,
+                "missing_is_null": file_format.input_missing_is_null,
+                "truncate_ragged_lines": file_format.input_truncate_ragged_lines,
+                "comment_prefix": file_format.input_comment_prefix,
+                "try_parse_dates": file_format.input_try_parse_dates,
+                "decimal_comma": file_format.input_decimal_comma,
             },
-            "has_header": format.input_has_header,
-            "skip_rows": format.input_skip_rows,
-            "skip_rows_after_header": format.input_skip_rows_after_header,
-            "raise_if_empty": format.input_raise_if_empty,
-            "ignore_errors": format.input_ignore_errors,
+            "has_header": file_format.input_has_header,
+            "skip_rows": file_format.input_skip_rows,
+            "skip_rows_after_header": file_format.input_skip_rows_after_header,
+            "raise_if_empty": file_format.input_raise_if_empty,
+            "ignore_errors": file_format.input_ignore_errors,
         }
         logger.debug(f"CSV format config: {config_dict}")
         return config_dict
-    elif isinstance(format, ParquetFormat):
+    elif isinstance(file_format, ParquetFormat):
         # Currently we only allow loading parquet files with the default configuration.
         # In the future, this piece might be extended to support more options.
         config_dict = {}
         logger.debug(f"Parquet format config: {config_dict}")
         return config_dict
-    elif isinstance(format, LogFormat):
+    elif isinstance(file_format, LogFormat):
         # Currently we only allow loading log files with the default configuration.
         # In the future, this piece might be extended to support more options.
         config_dict = {}
         logger.debug(f"Log format config: {config_dict}")
         return config_dict
-    elif isinstance(format, NDJSONFormat):
+    elif isinstance(file_format, NDJSONFormat):
         # Currently we only allow loading json files with the default configuration.
         # In the future, this piece might be extended to support more options.
         config_dict = {}
         logger.debug(f"NDJSON format config: {config_dict}")
         return config_dict
     else:
-        logger.error(f"Invalid format type: {type(format)}")
-        raise TypeError(f"Invalid format type: {type(format)}")
+        logger.error(f"Invalid format type: {type(file_format)}")
+        raise TypeError(f"Invalid format type: {type(file_format)}")
 
 
+# noinspection DuplicatedCode
 def execute_single_file_import(
-    location: str, destination: str, format: FileFormat, initial_last_modified: str
+    location: str, destination: str, file_format: FileFormat, initial_last_modified: str
 ) -> list | str:
     """
     Import a file from a location to a destination with a specific format. The file is
@@ -519,12 +503,12 @@ def execute_single_file_import(
         arguments = (
             f"--location {basedir} --file-pattern {data} --to"
             f" {destination} --format"
-            f" {format_object_to_string(format)} --out"
+            f" {format_object_to_string(file_format)} --out"
             f" {temporary_out_file.name}"
         )
         if initial_last_modified:
             arguments += f" --modified-since {initial_last_modified}"
-        format_config = format_object_to_config_dict(format)
+        format_config = format_object_to_config_dict(file_format)
         format_config = convert_characters_to_ascii(format_config)
         if format_config:  # Check if there are other keys in the format dict
             logger.debug(f"Format config: {format_config}")
@@ -543,7 +527,6 @@ def execute_single_file_import(
         result = subprocess.run(
             [path_to_binary] + arguments.split(), capture_output=True, text=True
         )
-
         if result.returncode != 0:
             logger.error(f"Error importing file: {result.stderr}")
             raise Exception(f"Error importing file: {result.stderr}")
@@ -575,33 +558,40 @@ def convert_characters_to_ascii(dictionary: dict) -> dict:
 
 
 def load_sources(
+    request: InputYaml,
     local_sources: list,
+    idx: td_generators.IdxGenerator | None = None,
 ) -> List[TableFrame | None | List[TableFrame | None]]:
     """
     Given a list of sources, load them into tabsdata TableFrames.
+    :param request: The request object containing the context of the function.
     :param local_sources: A list of lists of paths to parquet files. Each element is
         either a string to a single file or a list of strings to multiple files.
     :return: A list were each element is either a DataFrame or a list of DataFrames.
     """
     logger.debug(f"Loading list of sources: {local_sources}")
-    idx = td_generators.IdxGenerator()
+    if idx is None:
+        idx = td_generators.IdxGenerator()
     sources = []
     for source in local_sources:
         logger.debug(f"Loading single source: {source}")
         if isinstance(source, list):
-            sources.append(load_sources_from_list(idx, source))
+            sources.append(load_sources_from_list(request, idx, source))
         else:
-            sources.append(load_source(idx, source))
+            sources.append(load_source(request, idx, source))
     return sources
 
 
 def load_sources_from_list(
-    idx: td_generators.IdxGenerator, source_list: list
+    request: InputYaml,
+    idx: td_generators.IdxGenerator,
+    source_list: list,
 ) -> List[TableFrame]:
-    return [load_source(idx, path) for path in source_list]
+    return [load_source(request, idx, path) for path in source_list]
 
 
 def load_source(
+    request: InputYaml,
     idx: td_generators.IdxGenerator,
     spec: Union[str, os.PathLike, Tuple[Union[str, os.PathLike], Table]],
 ) -> TableFrame | None:
@@ -609,20 +599,73 @@ def load_source(
         logger.warning("Spec to source is None. No data loaded.")
         return None
 
-    # This should mean a table loaded from repository, which should already have an idx.
+    # This case means table was loaded from repository, implying it already has an idx.
     if isinstance(spec, tuple):
         path_to_source, table = spec
         idx = table.input_idx
-    # This should mean a table loaded from a publisher, meaning it requiring a new idx.
+    # This case means table was loaded from a publisher, implying it requires a new idx.
     else:
         path_to_source = spec
+        table = None
 
     if path_to_source is None:
         logger.warning("Path to source is None. No data loaded.")
         return None
 
     logger.debug(f"Loading parquet file from path: {path_to_source}")
-    result = pl.scan_parquet(path_to_source) if path_to_source else None
-    result = TableFrame.__build__(result, idx)
-    logger.debug("Loaded parquet file successfully.")
-    return result
+    lf = pl.scan_parquet(path_to_source)
+    logger.debug("Loaded parquet file successfully!")
+
+    if table is None:
+        return store_source_raw_data(request, lf, idx)
+    else:
+        return TableFrame.__build__(df=lf, mode="tab", idx=idx)
+
+
+# ToDo: Pending storing metadata. This will require deciding how to determine which
+#       information defines each raw data file depending on the source type.
+def store_source_raw_data(
+    request: InputYaml,
+    lf: pl.LazyFrame,
+    idx: td_generators.IdxGenerator,
+) -> TableFrame:
+    logger.info("Storing raw data...")
+
+    function_data = request.function_data
+    if not function_data:
+        raise ValueError("The function data location is required for publishers")
+    if function_data.uri is None:
+        raise ValueError("The uri for the function data is required")
+
+    tf = TableFrame.__build__(df=lf, mode="raw", idx=idx)
+    uri = function_data.uri
+    # noinspection PyProtectedMember
+    uri = uri.rstrip("/").rstrip("\\") + f"/e/{request.work}/r/{tf._idx}.t"
+
+    logger.info(f"Storing the raw data at location {uri}")
+
+    if uri.startswith("file://"):
+        try:
+            logger.debug("Creating the folders for the raw data")
+            logger.debug(f"Location for raw data uri: {uri}")
+            uri_folder = os.path.dirname(convert_uri_to_path(uri))
+            logger.debug(f"Folders to create: {uri_folder}")
+            os.makedirs(
+                uri_folder,
+                exist_ok=True,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Error creating the folder for the raw data with uri '{uri}': {e}"
+            )
+
+    logger.debug(f"Performing sink of raw data to file {uri}")
+    # noinspection PyProtectedMember
+    tf._to_lazy().sink_parquet(
+        convert_uri_to_path(uri),
+        maintain_order=True,
+    )
+    logger.debug("File for raw data stored successfully!")
+    # ToDo: this might need some adjustments if uri points to a cloud storage location.
+    # noinspection PyProtectedMember
+    return TableFrame.__build__(df=pl.scan_parquet(uri), mode="tab", idx=tf._idx)
