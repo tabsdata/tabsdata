@@ -5,7 +5,7 @@
 # Example of an input.yaml for tabsserver main function. Used in
 # test_tabsserver/test_yaml_parsing.py::test_parse_input_yaml
 
-!V1
+!V2
 info:
   function_bundle:
     uri: file:///users/tucu/.tdserver/default/s/ID1/d/ID2/f/ID3.f

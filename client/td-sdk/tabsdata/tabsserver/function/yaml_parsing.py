@@ -82,13 +82,13 @@ class InputYaml(ABC):
 
     @property
     @abstractmethod
-    def work(self):
-        """Return the work section of the YAML file."""
+    def execution_id(self):
+        """Return the execution ID of the request."""
 
-    @work.setter
+    @property
     @abstractmethod
-    def work(self, value):
-        """Set the work section of the YAML file."""
+    def execution_plan_triggered_on(self) -> str:
+        """Timestamp of the trigger of the whole execution plan."""
 
     @property
     @abstractmethod
@@ -97,13 +97,23 @@ class InputYaml(ABC):
 
     @property
     @abstractmethod
-    def input(self) -> list[Table | TableVersions]:
-        """Return the input section of the YAML file."""
+    def function_data(self) -> Table:
+        """Return the function_data section of the YAML file."""
 
     @property
     @abstractmethod
-    def function_data(self) -> Table:
-        """Return the function_data section of the YAML file."""
+    def function_run_id(self):
+        """Return the function run ID of the request."""
+
+    @property
+    @abstractmethod
+    def info(self) -> dict:
+        """Return the info section of the YAML file."""
+
+    @property
+    @abstractmethod
+    def input(self) -> list[Table | TableVersions]:
+        """Return the input section of the YAML file."""
 
     @property
     @abstractmethod
@@ -119,6 +129,11 @@ class InputYaml(ABC):
     @abstractmethod
     def system_output(self) -> list[Table]:
         """Return the output section of the YAML file."""
+
+    @property
+    @abstractmethod
+    def transaction_id(self):
+        """Return the transaction ID of the request."""
 
     @property
     @abstractmethod
@@ -127,72 +142,13 @@ class InputYaml(ABC):
 
     @property
     @abstractmethod
-    def execution_plan_triggered_on(self) -> str:
-        """Timestamp of the trigger of the whole execution plan."""
-
-
-class V1(InputYaml):
-    def __init__(self, content):
-        self.content = content
-
-    @property
-    def work(self) -> str:
-        return self.content.get("work")
+    def work(self):
+        """Return the work section of the YAML file."""
 
     @work.setter
-    def work(self, value: str):
-        self.content["work"] = value
-
-    @property
-    def info(self):
-        return self.content.get("info")
-
-    @property
-    def dataset_data_version(self) -> str:
-        return self.info.get("dataset_data_version") if self.info else None
-
-    @property
-    def triggered_on(self) -> str:
-        return self.info.get("triggered_on") if self.info else None
-
-    @property
-    def execution_plan_triggered_on(self) -> str:
-        return self.info.get("execution_plan_triggered_on") if self.info else None
-
-    @property
-    def function_bundle(self):
-        return self.info.get("function_bundle") if self.info else None
-
-    @property
-    def function_bundle_uri(self):
-        return self.function_bundle.get("uri") if self.function_bundle else None
-
-    @property
-    def function_bundle_env_prefix(self):
-        return self.function_bundle.get("env_prefix") if self.function_bundle else None
-
-    @property
-    def input(self) -> list[Table | TableVersions]:
-        return self.content.get("input")
-
-    @property
-    def function_data(self) -> None:
-        return None
-
-    @property
-    def output(self) -> list[Table]:
-        return self.content.get("output")
-
-    @property
-    def system_input(self) -> list[Table]:
-        return self.content.get("system_input")
-
-    @property
-    def system_output(self) -> list[Table]:
-        return self.content.get("system_output")
-
-    def __repr__(self):
-        return f"V1(content={self.content})"
+    @abstractmethod
+    def work(self, value):
+        """Set the work section of the YAML file."""
 
 
 class V2(InputYaml):
@@ -200,44 +156,40 @@ class V2(InputYaml):
         self.content = content
 
     @property
-    def work(self) -> str:
-        return self.content.get("work")
-
-    @work.setter
-    def work(self, value: str):
-        self.content["work"] = value
-
-    @property
-    def info(self):
-        return self.content.get("info")
-
-    @property
-    def triggered_on(self) -> str:
-        return self.info.get("triggered_on") if self.info else None
+    def execution_id(self):
+        return self.info["execution_id"]
 
     @property
     def execution_plan_triggered_on(self) -> str:
-        return self.info.get("execution_plan_triggered_on") if self.info else None
+        return self.info["execution_plan_triggered_on"]
 
     @property
     def function_bundle(self):
         return self.info.get("function_bundle") if self.info else None
 
     @property
-    def function_bundle_uri(self):
-        return self.function_bundle.get("uri") if self.function_bundle else None
-
-    @property
     def function_bundle_env_prefix(self):
         return self.function_bundle.get("env_prefix") if self.function_bundle else None
 
     @property
-    def input(self) -> list[Table | TableVersions]:
-        return self.content.get("input")
+    def function_bundle_uri(self):
+        return self.function_bundle.get("uri") if self.function_bundle else None
 
     @property
     def function_data(self) -> Table:
         return self.info.get("function_data")
+
+    @property
+    def function_run_id(self):
+        return self.info["function_run_id"]
+
+    @property
+    def info(self):
+        return self.content.get("info", {})
+
+    @property
+    def input(self) -> list[Table | TableVersions]:
+        return self.content.get("input")
 
     @property
     def output(self) -> list[Table]:
@@ -251,28 +203,38 @@ class V2(InputYaml):
     def system_output(self) -> list[Table]:
         return self.content.get("system_output")
 
+    @property
+    def transaction_id(self):
+        return self.info["transaction_id"]
+
+    @property
+    def triggered_on(self) -> str:
+        return self.info.get("triggered_on") if self.info else None
+
+    @property
+    def work(self) -> str:
+        return self.content.get("work")
+
+    @work.setter
+    def work(self, value: str):
+        self.content["work"] = value
+
     def __repr__(self):
         return f"V2(content={self.content})"
 
 
-def v1_table_constructor(loader, node):
+def v2_table_constructor(loader, node):
     return Table(loader.construct_mapping(node))
 
 
-def v1_table_versions_constructor(loader, node):
+def v2_table_versions_constructor(loader, node):
     list_of_tables = loader.construct_sequence(node, deep=True)
     return TableVersions(list_of_tables)
 
 
-def v1_constructor(loader, node):
-    loader.add_constructor("!Table", v1_table_constructor)
-    loader.add_constructor("!TableVersions", v1_table_versions_constructor)
-    return V1(loader.construct_mapping(node))
-
-
 def v2_constructor(loader, node):
-    loader.add_constructor("!Table", v1_table_constructor)
-    loader.add_constructor("!TableVersions", v1_table_versions_constructor)
+    loader.add_constructor("!Table", v2_table_constructor)
+    loader.add_constructor("!TableVersions", v2_table_versions_constructor)
     return V2(loader.construct_mapping(node))
 
 
@@ -281,7 +243,6 @@ def get_input_yaml_loader():
     loader = yaml.SafeLoader
     # When more versions are added, they will be listed here, and each will have its
     # own constructor.
-    loader.add_constructor("!V1", v1_constructor)
     loader.add_constructor("!V2", v2_constructor)
     return loader
 

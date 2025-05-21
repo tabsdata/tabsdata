@@ -101,31 +101,32 @@ FORMAT_TO_POLARS_EAGER_WRITE_FUNCTION = {
     TABSDATA_EXTENSION: pl.DataFrame.write_parquet,
 }
 
-DATA_VERSION_PLACEHOLDER = "$DATA_VERSION"
+
+EXECUTION_ID_PLACEHOLDER = "$EXECUTION_ID"
 EXPORT_TIMESTAMP_PLACEHOLDER = "$EXPORT_TIMESTAMP"
+FUNCTION_RUN_ID_PLACEHOLDER = "$FUNCTION_RUN_ID"
 SCHEDULER_TIMESTAMP_PLACEHOLDER = "$SCHEDULER_TIMESTAMP"
 TRIGGER_TIMESTAMP_PLACEHOLDER = "$TRIGGER_TIMESTAMP"
+TRANSACTION_ID_PLACEHOLDER = "$TRANSACTION_ID"
 
 
-def replace_placeholders_in_path(path: str, execution_context: InputYaml) -> str:
+def replace_placeholders_in_path(path: str, request: InputYaml) -> str:
     new_path = path
-    if DATA_VERSION_PLACEHOLDER in new_path:
-        new_path = new_path.replace(
-            DATA_VERSION_PLACEHOLDER, str(execution_context.dataset_data_version)
-        )
-    if EXPORT_TIMESTAMP_PLACEHOLDER in new_path:
-        new_path = new_path.replace(
-            EXPORT_TIMESTAMP_PLACEHOLDER, str(round(time.time() * 1000))
-        )
-    if TRIGGER_TIMESTAMP_PLACEHOLDER in new_path:
-        new_path = new_path.replace(
-            TRIGGER_TIMESTAMP_PLACEHOLDER, str(execution_context.triggered_on)
-        )
-    if SCHEDULER_TIMESTAMP_PLACEHOLDER in new_path:
-        new_path = new_path.replace(
-            SCHEDULER_TIMESTAMP_PLACEHOLDER,
-            str(execution_context.execution_plan_triggered_on),
-        )
+    new_path = new_path.replace(EXECUTION_ID_PLACEHOLDER, str(request.execution_id))
+    new_path = new_path.replace(
+        EXPORT_TIMESTAMP_PLACEHOLDER, str(round(time.time() * 1000))
+    )
+    new_path = new_path.replace(
+        FUNCTION_RUN_ID_PLACEHOLDER, str(request.function_run_id)
+    )
+    new_path = new_path.replace(
+        SCHEDULER_TIMESTAMP_PLACEHOLDER,
+        str(request.execution_plan_triggered_on),
+    )
+    new_path = new_path.replace(
+        TRIGGER_TIMESTAMP_PLACEHOLDER, str(request.triggered_on)
+    )
+    new_path = new_path.replace(TRANSACTION_ID_PLACEHOLDER, str(request.transaction_id))
     logger.info(f"Replaced placeholders in path '{path}' with '{new_path}'")
     return new_path
 

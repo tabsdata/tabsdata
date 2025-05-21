@@ -104,8 +104,11 @@ MYSQL_PORT = 3306
 ORACLE_PORT = 1521
 POSTGRES_PORT = 5432
 
-FAKE_TRIGGERED_TIME = 1234567890123
+FAKE_EXECUTION_ID = 24
+FAKE_FUNCTION_RUN_ID = 60
 FAKE_SCHEDULED_TIME = 1248067890123
+FAKE_TRANSACTION_ID = 42
+FAKE_TRIGGERED_TIME = 1234567890123
 
 # Expected output of the foo1 function when called with f1="o1" and f2="o2"
 EXPECTED_FOO1_OUTPUT = ("o1", "o2")
@@ -831,7 +834,9 @@ def write_v2_yaml_file(
                 "uri": pathlib.Path(bundle_archive_location).as_uri(),
                 "env_prefix": None,
             },
-            "dataset_data_version": "fake_dataset_version",
+            "function_run_id": FAKE_FUNCTION_RUN_ID,
+            "execution_id": FAKE_EXECUTION_ID,
+            "transaction_id": FAKE_TRANSACTION_ID,
             "triggered_on": FAKE_TRIGGERED_TIME,
             "execution_plan_triggered_on": FAKE_SCHEDULED_TIME,
         },

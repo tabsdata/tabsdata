@@ -13,7 +13,10 @@ import pytest
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
+    FAKE_EXECUTION_ID,
+    FAKE_FUNCTION_RUN_ID,
     FAKE_SCHEDULED_TIME,
+    FAKE_TRANSACTION_ID,
     FAKE_TRIGGERED_TIME,
     FUNCTION_DATA_FOLDER,
     LOCAL_PACKAGES_LIST,
@@ -123,12 +126,12 @@ def test_output_s3_parquet(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
-def test_output_s3_parquet_with_data_version(tmp_path, s3_client):
+def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_data_version = copy.deepcopy(output_s3_format_testing)
     output_file = (
         "s3://tabsdata-testing-bucket/testing_output/test_output_s3_parquet_with_data_"
-        f"version_{int(datetime.datetime.now().timestamp())}_$DATA_VERSION.parquet"
+        f"version_{int(datetime.datetime.now().timestamp())}_$TRANSACTION_ID.parquet"
     )
     output_s3_parquet_with_data_version.output.uri = output_file
     context_archive = create_bundle_archive(
@@ -136,7 +139,151 @@ def test_output_s3_parquet_with_data_version(tmp_path, s3_client):
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=tmp_path,
     )
-    output_file = output_file.replace("$DATA_VERSION", "fake_dataset_version")
+    output_file = output_file.replace("$TRANSACTION_ID", str(FAKE_TRANSACTION_ID))
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    bucket_name = output_file.split("/")[2]
+    file_name = "/".join(output_file.split("/")[3:])
+    try:
+        environment_name, result = tabsserver_main(
+            tmp_path,
+            response_folder,
+            tabsserver_output_folder,
+            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+            logs_folder=logs_folder,
+        )
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
+        assert os.path.isfile(temporary_output_file)
+        output = pl.read_parquet(temporary_output_file)
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3",
+            "expected_result.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+
+        copy_destination = os.path.join(tmp_path, "output.parquet")
+        s3_client.download_file(bucket_name, file_name, copy_destination)
+        output = pl.read_parquet(copy_destination)
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3",
+            "expected_result.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+    finally:
+        # Clean up the S3 bucket
+        s3_client.delete_object(Bucket=bucket_name, Key=file_name)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_s3_parquet_with_data_version = copy.deepcopy(output_s3_format_testing)
+    output_file = (
+        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_parquet_with_data_"
+        f"version_{int(datetime.datetime.now().timestamp())}_$FUNCTION_RUN_ID.parquet"
+    )
+    output_s3_parquet_with_data_version.output.uri = output_file
+    context_archive = create_bundle_archive(
+        output_s3_parquet_with_data_version,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+    output_file = output_file.replace("$FUNCTION_RUN_ID", str(FAKE_FUNCTION_RUN_ID))
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_s3", "mock_table.parquet"
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    bucket_name = output_file.split("/")[2]
+    file_name = "/".join(output_file.split("/")[3:])
+    try:
+        environment_name, result = tabsserver_main(
+            tmp_path,
+            response_folder,
+            tabsserver_output_folder,
+            environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+            logs_folder=logs_folder,
+        )
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
+        assert os.path.isfile(temporary_output_file)
+        output = pl.read_parquet(temporary_output_file)
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3",
+            "expected_result.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+
+        copy_destination = os.path.join(tmp_path, "output.parquet")
+        s3_client.download_file(bucket_name, file_name, copy_destination)
+        output = pl.read_parquet(copy_destination)
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_s3",
+            "expected_result.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+    finally:
+        # Clean up the S3 bucket
+        s3_client.delete_object(Bucket=bucket_name, Key=file_name)
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_output_s3_parquet_with_execution_id(tmp_path, s3_client):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    output_s3_parquet_with_data_version = copy.deepcopy(output_s3_format_testing)
+    output_file = (
+        "s3://tabsdata-testing-bucket/testing_output/test_output_s3_parquet_with_data_"
+        f"version_{int(datetime.datetime.now().timestamp())}_$EXECUTION_ID.parquet"
+    )
+    output_s3_parquet_with_data_version.output.uri = output_file
+    context_archive = create_bundle_archive(
+        output_s3_parquet_with_data_version,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+    output_file = output_file.replace("$EXECUTION_ID", str(FAKE_EXECUTION_ID))
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)

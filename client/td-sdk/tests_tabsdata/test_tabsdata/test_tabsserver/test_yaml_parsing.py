@@ -7,7 +7,10 @@ import pathlib
 import platform
 
 from tests_tabsdata.conftest import (
+    FAKE_EXECUTION_ID,
+    FAKE_FUNCTION_RUN_ID,
     FAKE_SCHEDULED_TIME,
+    FAKE_TRANSACTION_ID,
     FAKE_TRIGGERED_TIME,
     FUNCTION_DATA_FOLDER,
     TESTING_RESOURCES_FOLDER,
@@ -15,7 +18,6 @@ from tests_tabsdata.conftest import (
 )
 
 from tabsdata.tabsserver.function.yaml_parsing import (
-    V1,
     V2,
     Table,
     TableVersions,
@@ -32,7 +34,7 @@ def test_parse_input_yaml():
         "example_file_input.yaml",
     )
     config = parse_request_yaml(input_yaml)
-    assert isinstance(config, V1)
+    assert isinstance(config, V2)
     assert config.info == {
         "function_bundle": {
             "uri": "file:///users/tucu/.tdserver/default/s/ID1/d/ID2/f/ID3.f",
@@ -145,7 +147,9 @@ def test_parse_minimal_input_yaml(tmp_path):
             "uri": expected_uri,
             "env_prefix": None,
         },
-        "dataset_data_version": "fake_dataset_version",
+        "execution_id": FAKE_EXECUTION_ID,
+        "transaction_id": FAKE_TRANSACTION_ID,
+        "function_run_id": FAKE_FUNCTION_RUN_ID,
         "triggered_on": FAKE_TRIGGERED_TIME,
         "execution_plan_triggered_on": FAKE_SCHEDULED_TIME,
         "function_data": expected_function_data,
