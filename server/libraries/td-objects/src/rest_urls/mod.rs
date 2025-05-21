@@ -7,227 +7,8 @@ use crate::types::basic::{
     FunctionVersionIdName, InterCollectionPermissionIdName, PermissionIdName, RoleIdName,
     SampleLen, SampleOffset, TableIdName, TransactionIdName, UserIdName,
 };
-use chrono::{DateTime, NaiveDateTime, ParseError, Utc};
 use constcat::concat;
-use getset::Getters;
-use serde::Deserialize;
-use serde_valid::Validate;
-use td_apiforge::apiserver_schema;
-use td_common::id::Id;
-use td_common::uri::Version;
-use td_error::TdError;
-use utoipa::IntoParams;
 
-pub const AUTH: &str = "/auth";
-pub const AUTH_LOGIN: &str = concat!(AUTH, "/login");
-pub const AUTH_REFRESH: &str = concat!(AUTH, "/refresh");
-pub const AUTH_ROLE_CHANGE: &str = concat!(AUTH, "/role_change");
-pub const AUTH_LOGOUT: &str = concat!(AUTH, "/logout");
-pub const AUTH_USER_INFO: &str = concat!(AUTH, "/info");
-pub const AUTH_PASSWORD_CHANGE: &str = concat!(AUTH, "/password_change");
-
-#[apiserver_schema]
-#[derive(Debug, Clone, Getters, Deserialize, Validate, IntoParams)]
-#[getset(get = "pub")]
-pub struct AtParam {
-    #[serde(default = "AtParam::none")]
-    at_version: Option<String>,
-    #[serde(default = "AtParam::none")]
-    at_commit: Option<String>,
-    #[serde(default = "AtParam::none")]
-    at_time: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub enum At {
-    Version(Version),
-    Commit(Id),
-    Time(DateTime<Utc>),
-}
-
-#[td_error::td_error]
-pub enum TableAtParamError {
-    #[error("Only one alternative option can be provided")]
-    OnlyOneAltOptionCanBeProvided = 0,
-    #[error("Datetime must be <yyyy>-<mm>-<dd>T<HH>:<MM>:<SS>.<mmm>Z")]
-    InvalidDateTimeFormat(#[from] ParseError) = 1,
-}
-
-impl TryInto<At> for &AtParam {
-    type Error = TdError;
-
-    fn try_into(self) -> Result<At, Self::Error> {
-        let count = self.at_version.as_ref().map(|_| 1).unwrap_or(0)
-            + self.at_commit.as_ref().map(|_| 1).unwrap_or(0)
-            + self.at_time.as_ref().map(|_| 1).unwrap_or(0);
-        match count {
-            c if c <= 1 => get_table_at(self),
-            _ => Err(TableAtParamError::OnlyOneAltOptionCanBeProvided)?,
-        }
-    }
-}
-
-pub const DATE_TIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.3fZ";
-
-fn get_table_at(at: &AtParam) -> Result<At, TdError> {
-    let at = if let Some(version) = &at.at_version {
-        At::Version(Version::parse(version)?)
-    } else if let Some(commit) = &at.at_commit {
-        At::Commit(Id::try_from(commit)?)
-    } else if let Some(time) = &at.at_time {
-        At::Time(
-            NaiveDateTime::parse_from_str(time, DATE_TIME_FORMAT)
-                .map_err(TableAtParamError::InvalidDateTimeFormat)?
-                .and_utc(),
-        )
-    } else {
-        At::Version(Version::Head(0))
-    };
-    Ok(at)
-}
-
-impl AtParam {
-    pub fn version(version: impl Into<Option<String>>) -> Self {
-        Self {
-            at_version: version.into(),
-            at_commit: None,
-            at_time: None,
-        }
-    }
-
-    pub fn commit(commit: impl Into<String>) -> Self {
-        Self {
-            at_version: None,
-            at_commit: Some(commit.into()),
-            at_time: None,
-        }
-    }
-
-    pub fn time(time: impl Into<String>) -> Self {
-        Self {
-            at_version: None,
-            at_commit: None,
-            at_time: Some(time.into()),
-        }
-    }
-
-    fn none() -> Option<String> {
-        None
-    }
-}
-
-#[derive(Debug, Clone, Getters)]
-#[getset(get = "pub")]
-pub struct TableCommitParam {
-    collection: String,
-    table: String,
-    at: At,
-}
-
-pub const WORKERS: &str = "/workers";
-pub const WORKER: &str = concat!(WORKERS, "/{worker_id}");
-
-pub const LIST_WORKERS: &str = WORKERS;
-pub const WORKER_LOGS: &str = concat!(WORKER, "/logs");
-
-// TODO this should be managed by filters once we have them
-#[apiserver_schema]
-#[derive(Debug, Clone, Default, Getters, Deserialize, IntoParams)]
-#[getset(get = "pub")]
-pub struct ByParam {
-    by_function_id: Option<String>,
-    by_transaction_id: Option<String>,
-    by_execution_plan_id: Option<String>,
-    by_data_version_id: Option<String>,
-}
-
-impl ByParam {
-    pub fn function_id(function_id: impl Into<String>) -> Self {
-        Self {
-            by_function_id: Some(function_id.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn transaction_id(transaction_id: impl Into<String>) -> Self {
-        Self {
-            by_transaction_id: Some(transaction_id.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn execution_plan_id(execution_plan_id: impl Into<String>) -> Self {
-        Self {
-            by_execution_plan_id: Some(execution_plan_id.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn data_version_id(data_version_id: impl Into<String>) -> Self {
-        Self {
-            by_data_version_id: Some(data_version_id.into()),
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum By {
-    FunctionId(Id),
-    TransactionId(Id),
-    ExecutionPlanId(Id),
-    DataVersionId(Id),
-}
-
-#[td_error::td_error]
-pub enum ByParamError {
-    #[error("One alternative option must be provided")]
-    OneAltOptionMustBeProvided = 0,
-}
-
-impl TryInto<By> for &ByParam {
-    type Error = TdError;
-
-    fn try_into(self) -> Result<By, Self::Error> {
-        let mut iter = [
-            self.by_function_id
-                .as_ref()
-                .map(|id| Id::try_from(id).map(By::FunctionId)),
-            self.by_transaction_id
-                .as_ref()
-                .map(|id| Id::try_from(id).map(By::TransactionId)),
-            self.by_execution_plan_id
-                .as_ref()
-                .map(|id| Id::try_from(id).map(By::ExecutionPlanId)),
-            self.by_data_version_id
-                .as_ref()
-                .map(|id| Id::try_from(id).map(By::DataVersionId)),
-        ]
-        .into_iter()
-        .flatten();
-
-        if let (Some(by), None) = (iter.next(), iter.next()) {
-            Ok(by?)
-        } else {
-            Err(ByParamError::OneAltOptionMustBeProvided)?
-        }
-    }
-}
-
-#[derive(Debug, Clone, Getters)]
-#[getset(get = "pub")]
-pub struct WorkerMessageListParam {
-    by: By,
-}
-
-#[apiserver_schema]
-#[derive(Debug, Clone, Getters, Deserialize, IntoParams)]
-#[getset(get = "pub")]
-pub struct WorkerMessageParam {
-    worker_id: String,
-}
-
-// TODO here starts the refactored apiserver
 macro_rules! url {
     ($( $path:expr $(,)? )*) => {
         concat!($( $path, )*)
@@ -257,6 +38,15 @@ pub struct FunctionRunIdParam {
 }
 
 // Endpoints URLs
+
+// Auth
+pub const AUTH: &str = "/auth";
+pub const AUTH_LOGIN: &str = concat!(AUTH, "/login");
+pub const AUTH_REFRESH: &str = concat!(AUTH, "/refresh");
+pub const AUTH_ROLE_CHANGE: &str = concat!(AUTH, "/role_change");
+pub const AUTH_LOGOUT: &str = concat!(AUTH, "/logout");
+pub const AUTH_USER_INFO: &str = concat!(AUTH, "/info");
+pub const AUTH_PASSWORD_CHANGE: &str = concat!(AUTH, "/password_change");
 
 // Users
 pub const USERS: &str = url!("/users");

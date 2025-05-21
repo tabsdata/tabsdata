@@ -101,7 +101,7 @@ mod tests {
     use td_error::assert_service_error;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::RoleParam;
-    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_permission::{get_permission, seed_permission};
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::tower_service::authz::AuthzError;

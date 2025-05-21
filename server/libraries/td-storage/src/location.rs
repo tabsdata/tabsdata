@@ -1,54 +1,62 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
 use crate::SPath;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
+use std::ops::Deref;
+use td_objects::types::basic::{
+    BundleId, CollectionId, DataLocation, FunctionVersionId, Partition, StorageVersion,
+    TableDataVersionId, TableId, TableVersionId, TransactionId,
+};
 
 /// The [`StorageLocation`] creates storage URIS for the different types of data tabsdata stores.
 ///
 /// It is an enum to allow adding URI creation strategies and using them side to side in a
 /// backwards compatible way.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, strum_macros::Display)]
 pub enum StorageLocation {
-    /// Version 1 of the storage location. produces [`SPath`] in the following format
+    /// Version 2 of the storage location. produces [`SPath`] in the following format
     /// (words in uppercase are placeholders for IDs):
     ///
+    /// LOCATION: function datalocation
+    /// COLLECTION: collection ID
+    /// FUNCTION: function ID
+    /// FUNCTION_VERSION: function_version ID
+    /// TRANSACTION: transaction ID
+    /// DATA_VERSION: data_version ID
+    /// TABLE: table ID
+    /// TABLE_VERSION: table_version ID
+    ///
     /// * /LOCATION
-    /// * /LOCATION/s/COLLECTION
-    /// * /LOCATION/s/COLLECTION/d/DATASET
-    /// * /LOCATION/s/COLLECTION/d/DATASET/f/FUNCTION.f
-    /// * /LOCATION/s/COLLECTION/d/DATASET/v/FUNCTION/VERSION
-    /// * /LOCATION/s/COLLECTION/d/DATASET/v/FUNCTION/VERSION/t/TABLE.t
-    /// * /LOCATION/s/COLLECTION/d/DATASET/v/FUNCTION/VERSION/t/TABLE/p/PARTITION.p
-    V1,
-}
-
-impl Display for StorageLocation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            StorageLocation::V1 => write!(f, "V1"),
-        }
-    }
+    /// * /LOCATION/c/COLLECTION
+    /// * /LOCATION/c/COLLECTION/f/BUNDLE.tgz
+    /// * /LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION (function_run contents)
+    /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t
+    /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p
+    V2,
 }
 
 impl StorageLocation {
-    /// Returns the current version of the storage location.
+    /// Return the current version of the storage location.
     pub fn current() -> Self {
-        Self::V1
+        Self::V2
     }
 
-    /// Returns a builder for the storage location variant
-    pub fn builder(&self, location: impl Into<SPath>) -> LocationBuilder {
+    /// Return a builder for the storage location variant
+    pub fn builder(&self, location: &DataLocation) -> LocationBuilder {
         match self {
-            StorageLocation::V1 => LocationBuilder::new(location, Box::new(V1LocationBuilder)),
+            StorageLocation::V2 => LocationBuilder::new(
+                SPath::parse(location.deref()).unwrap(),
+                Box::new(V2LocationBuilder),
+            ),
         }
     }
 
     pub fn parse<'a>(version: impl Into<&'a str>) -> Result<Self, String> {
         match version.into() {
-            "V1" => Ok(Self::V1),
+            "V1" => Ok(Self::V2),
             unknown_version => Err(format!(
                 "Unknown StorageLocation version {}",
                 unknown_version
@@ -70,49 +78,61 @@ impl TryFrom<String> for StorageLocation {
     }
 }
 
+impl TryFrom<&StorageVersion> for StorageLocation {
+    type Error = String;
+    fn try_from(value: &StorageVersion) -> Result<Self, String> {
+        StorageLocation::parse(value.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 struct LocationBuilderInfo {
     location: SPath,
     collection: Option<String>,
-    dataset: Option<String>,
-    function: Option<String>,
-    version: Option<String>,
+    bundle: Option<String>,
+    data_version: Option<String>,
+    transaction: Option<String>,
+    function_version: Option<String>,
     table: Option<String>,
+    table_version: Option<String>,
     partition: Option<String>,
 }
 
 /// Builder for the table location.
 #[derive(Debug)]
-pub struct TableLocationBuilder {
+pub struct TableBuilder {
     info: LocationBuilderInfo,
     version_builder: Box<dyn VersionLocationBuilder>,
 }
 
-impl TableLocationBuilder {
-    /// Sets the table name for the table location.
-    pub fn table(&mut self, table: impl Into<String>) -> &mut Self {
-        self.info.table = Some(table.into());
+impl TableBuilder {
+    /// Set the table name for the table location.
+    pub fn table(&mut self, table: &TableId, table_version: &TableVersionId) -> &mut Self {
+        self.info.table = Some(table.to_string());
+        self.info.table_version = Some(table_version.to_string());
         self.info.partition = None;
         self
     }
 
-    /// Sets the table name and partition for the table location.
+    /// Set the table name and partition for the table location.
     pub fn partition(
         &mut self,
-        table: impl Into<String>,
-        partition: impl Into<String>,
+        table: &TableId,
+        table_version: &TableVersionId,
+        partition: &Partition,
     ) -> &mut Self {
-        self.info.table = Some(table.into());
-        self.info.partition = Some(partition.into());
+        self.info.table = Some(table.to_string());
+        self.info.table_version = Some(table_version.to_string());
+        self.info.partition = Some(partition.to_string());
         self
     }
 
-    /// Builds the table location.
+    /// Build the table location.
     pub fn build(&self) -> (SPath, StorageLocation) {
         self.version_builder.build(&self.info, None)
     }
 
-    /// Builds the meta table location.
+    /// Build the meta table location.
     pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
         self.version_builder.build(
             &self.info,
@@ -123,50 +143,51 @@ impl TableLocationBuilder {
 
 /// Builder for the data location.
 #[derive(Debug)]
-pub struct DataVersionLocationBuilder {
+pub struct DataBuilder {
     info: LocationBuilderInfo,
     version_builder: Box<dyn VersionLocationBuilder>,
 }
 
-impl DataVersionLocationBuilder {
-    /// Sets the version for the data location.
-    pub fn version(&mut self, version: impl Into<String>) -> &mut Self {
-        self.info.version = Some(version.into());
+impl DataBuilder {
+    /// Set the version for the data location.
+    pub fn data(&mut self, data_version: &TableDataVersionId) -> &mut Self {
+        self.info.data_version = Some(data_version.to_string());
         self
     }
 
-    /// Returns a [`TableLocationBuilder`] based on the [`DataVersionLocationBuilder`]
+    /// Return a [`TableBuilder`] based on the [`DataBuilder`]
     /// with the given table name.
-    pub fn table(self, table: impl Into<String>) -> TableLocationBuilder {
-        let mut builder = TableLocationBuilder {
+    pub fn table(self, table: &TableId, table_version: &TableVersionId) -> TableBuilder {
+        let mut builder = TableBuilder {
             info: self.info,
             version_builder: self.version_builder,
         };
-        builder.table(table);
+        builder.table(table, table_version);
         builder
     }
 
-    /// Returns a [`TableLocationBuilder`] based on the [`DataVersionLocationBuilder`]
+    /// Return a [`TableBuilder`] based on the [`DataBuilder`]
     /// with the given table name and partition.
     pub fn partition(
         self,
-        table: impl Into<String>,
-        partition: impl Into<String>,
-    ) -> TableLocationBuilder {
-        let mut builder = TableLocationBuilder {
+        table: &TableId,
+        table_version: &TableVersionId,
+        partition: &Partition,
+    ) -> TableBuilder {
+        let mut builder = TableBuilder {
             info: self.info,
             version_builder: self.version_builder,
         };
-        builder.partition(table, partition);
+        builder.partition(table, table_version, partition);
         builder
     }
 
-    /// Builds the data location.
+    /// Build the data location.
     pub fn build(&self) -> (SPath, StorageLocation) {
         self.version_builder.build(&self.info, None)
     }
 
-    /// Builds the meta data location.
+    /// Build the meta data location.
     pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
         self.version_builder.build(
             &self.info,
@@ -177,73 +198,24 @@ impl DataVersionLocationBuilder {
 
 /// Builder for the function location.
 #[derive(Debug)]
-pub struct FunctionLocationBuilder {
+pub struct FunctionBuilder {
     info: LocationBuilderInfo,
     version_builder: Box<dyn VersionLocationBuilder>,
 }
 
-impl FunctionLocationBuilder {
-    /// Sets the function name for the function location.
-    pub fn function(&mut self, function: impl Into<String>) -> &mut Self {
-        self.info.function = Some(function.into());
+impl FunctionBuilder {
+    /// Set the function and function version.
+    pub fn function(&mut self, bundle: &BundleId) -> &mut Self {
+        self.info.bundle = Some(bundle.to_string());
         self
     }
 
-    /// Returns a [`DataVersionLocationBuilder`] based on the [`FunctionLocationBuilder`]
-    /// for the given data version.
-    pub fn version(self, version: impl Into<String>) -> DataVersionLocationBuilder {
-        let mut builder = DataVersionLocationBuilder {
-            info: self.info,
-            version_builder: self.version_builder,
-        };
-        builder.version(version);
-        builder
-    }
-
-    /// Builds the function location.
+    /// Build the function location.
     pub fn build(&self) -> (SPath, StorageLocation) {
         self.version_builder.build(&self.info, None)
     }
 
-    /// Builds the meta function location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
-        self.version_builder.build(
-            &self.info,
-            Some(format!("{}.meta", meta_name.into()).as_str()),
-        )
-    }
-}
-
-/// Builder for the dataset location.
-#[derive(Debug)]
-pub struct DatasetLocationBuilder {
-    info: LocationBuilderInfo,
-    version_builder: Box<dyn VersionLocationBuilder>,
-}
-
-impl DatasetLocationBuilder {
-    /// Sets the dataset name for the dataset location.
-    pub fn dataset(&mut self, dataset: impl Into<String>) -> &mut Self {
-        self.info.dataset = Some(dataset.into());
-        self
-    }
-
-    /// Returns a [`FunctionLocationBuilder`] based on the [`DatasetLocationBuilder`] for the given function.
-    pub fn function(self, function: impl Into<String>) -> FunctionLocationBuilder {
-        let mut builder = FunctionLocationBuilder {
-            info: self.info,
-            version_builder: self.version_builder,
-        };
-        builder.function(function);
-        builder
-    }
-
-    /// Builds the dataset location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
-        self.version_builder.build(&self.info, None)
-    }
-
-    /// Builds the meta dataset location.
+    /// Build the meta function location.
     pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
         self.version_builder.build(
             &self.info,
@@ -254,35 +226,120 @@ impl DatasetLocationBuilder {
 
 /// Builder for the collection location.
 #[derive(Debug)]
-pub struct CollectionLocationBuilder {
+pub struct CollectionBuilder {
     info: LocationBuilderInfo,
     version_builder: Box<dyn VersionLocationBuilder>,
 }
 
-impl CollectionLocationBuilder {
-    /// Sets the collection name for the collection location.
-    pub fn collection(&mut self, collection: impl Into<String>) -> &mut Self {
-        self.info.collection = Some(collection.into());
+impl CollectionBuilder {
+    /// Set the collection name for the collection location.
+    pub fn collection(&mut self, collection: &CollectionId) -> &mut Self {
+        self.info.collection = Some(collection.to_string());
         self
     }
 
-    /// Returns a [`DatasetLocationBuilder`] based on the [`CollectionLocationBuilder`]
-    /// for the given dataset.
-    pub fn dataset(self, dataset: impl Into<String>) -> DatasetLocationBuilder {
-        let mut builder = DatasetLocationBuilder {
+    /// Return a [`FunctionBuilder`] based on the [`CollectionBuilder`]
+    pub fn function(self, bundle: &BundleId) -> FunctionBuilder {
+        let mut builder = FunctionBuilder {
             info: self.info,
             version_builder: self.version_builder,
         };
-        builder.dataset(dataset);
+        builder.function(bundle);
         builder
     }
 
-    /// Builds the collection location.
+    /// Return a [`DataBuilder`] based on the [`CollectionBuilder`]
+    pub fn data(self, data_version: &TableDataVersionId) -> DataBuilder {
+        let mut builder = DataBuilder {
+            info: self.info,
+            version_builder: self.version_builder,
+        };
+        builder.data(data_version);
+        builder
+    }
+
+    /// Return a [`TransactionBuilder`] based on the [`CollectionBuilder`]
+    pub fn transaction(self, transaction: &TransactionId) -> TransactionBuilder {
+        let mut builder = TransactionBuilder {
+            info: self.info,
+            version_builder: self.version_builder,
+        };
+        builder.transaction(transaction);
+        builder
+    }
+
+    /// Build the collection location.
     pub fn build(&self) -> (SPath, StorageLocation) {
         self.version_builder.build(&self.info, None)
     }
 
-    /// Builds the meta collection location.
+    /// Build the meta collection location.
+    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+        self.version_builder.build(
+            &self.info,
+            Some(format!("{}.meta", meta_name.into()).as_str()),
+        )
+    }
+}
+
+/// Builder for the transaction location.
+#[derive(Debug)]
+pub struct TransactionBuilder {
+    info: LocationBuilderInfo,
+    version_builder: Box<dyn VersionLocationBuilder>,
+}
+
+impl TransactionBuilder {
+    /// Set the transaction name for the transaction location.
+    pub fn transaction(&mut self, transaction: &TransactionId) -> &mut Self {
+        self.info.transaction = Some(transaction.to_string());
+        self
+    }
+
+    /// Return a [`FunctionVersionBuilder`] based on the [`CollectionBuilder`]
+    pub fn function_version(self, version: &FunctionVersionId) -> FunctionVersionBuilder {
+        let mut builder = FunctionVersionBuilder {
+            info: self.info,
+            version_builder: self.version_builder,
+        };
+        builder.function_version(version);
+        builder
+    }
+
+    /// Build the transaction location.
+    pub fn build(&self) -> (SPath, StorageLocation) {
+        self.version_builder.build(&self.info, None)
+    }
+
+    /// Build the meta collection location.
+    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+        self.version_builder.build(
+            &self.info,
+            Some(format!("{}.meta", meta_name.into()).as_str()),
+        )
+    }
+}
+
+/// Builder for the collection location.
+#[derive(Debug)]
+pub struct FunctionVersionBuilder {
+    info: LocationBuilderInfo,
+    version_builder: Box<dyn VersionLocationBuilder>,
+}
+
+impl FunctionVersionBuilder {
+    /// Set the function_version name for the function_version location.
+    pub fn function_version(&mut self, function_version: &FunctionVersionId) -> &mut Self {
+        self.info.function_version = Some(function_version.to_string());
+        self
+    }
+
+    /// Build the function_version location.
+    pub fn build(&self) -> (SPath, StorageLocation) {
+        self.version_builder.build(&self.info, None)
+    }
+
+    /// Build the meta collection location.
     pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
         self.version_builder.build(
             &self.info,
@@ -309,16 +366,16 @@ impl LocationBuilder {
         }
     }
 
-    /// Sets the location for the location builder.
-    pub fn location(&mut self, location: impl Into<SPath>) -> &mut Self {
-        self.info.location = location.into();
+    /// Set the location for the location builder.
+    pub fn location(&mut self, location: &DataLocation) -> &mut Self {
+        self.info.location = SPath::parse(location.as_str()).unwrap();
         self
     }
 
-    /// Returns a [`CollectionLocationBuilder`] based on the [`LocationBuilder`]
+    /// Return a [`CollectionBuilder`] based on the [`LocationBuilder`]
     /// for the given collection.
-    pub fn collection(self, collection: impl Into<String>) -> CollectionLocationBuilder {
-        let mut builder = CollectionLocationBuilder {
+    pub fn collection(self, collection: &CollectionId) -> CollectionBuilder {
+        let mut builder = CollectionBuilder {
             info: self.info,
             version_builder: self.version_builder,
         };
@@ -326,12 +383,12 @@ impl LocationBuilder {
         builder
     }
 
-    /// Builds the location.
+    /// Build the location.
     pub fn build(&self) -> (SPath, StorageLocation) {
         self.version_builder.build(&self.info, None)
     }
 
-    /// Builds the meta location.
+    /// Build the meta location.
     pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
         self.version_builder.build(
             &self.info,
@@ -344,54 +401,47 @@ impl LocationBuilder {
 ///
 /// It is used to build the location based on the information provided.
 trait VersionLocationBuilder: Debug {
-    /// Builds the location based on the information provided.
+    /// Build the location based on the information provided.
     fn build(&self, info: &LocationBuilderInfo, postfix: Option<&str>) -> (SPath, StorageLocation);
 }
 
 /// Builder for the V1 version.
 #[derive(Debug)]
-struct V1LocationBuilder;
+struct V2LocationBuilder;
 
-impl VersionLocationBuilder for V1LocationBuilder {
+impl VersionLocationBuilder for V2LocationBuilder {
     fn build(&self, info: &LocationBuilderInfo, postfix: Option<&str>) -> (SPath, StorageLocation) {
         let mut path = info.location.clone();
         if let Some(collection) = &info.collection {
-            path = path.child("s").unwrap().child(collection).unwrap();
-            if let Some(dataset) = &info.dataset {
-                path = path.child("d").unwrap().child(dataset).unwrap();
-                if let Some(data) = &info.version {
-                    // function always is present if data is present
-                    path = path
-                        .child("v")
-                        .unwrap()
-                        .child(info.function.as_ref().unwrap())
-                        .unwrap()
-                        .child(data)
-                        .unwrap();
+            path = path.child("c").unwrap().child(collection).unwrap();
+            if let Some(bundle) = &info.bundle {
+                path = path
+                    .child("f")
+                    .unwrap()
+                    .child(&format!("{}.tgz", bundle))
+                    .unwrap();
+            } else if let Some(data_version) = &info.data_version {
+                // function always is present if data is present
+                path = path.child("d").unwrap().child(data_version).unwrap();
+                if let Some(table) = &info.table {
+                    let table_version = info.table_version.as_ref().unwrap();
+                    path = path.child("t").unwrap().child(table).unwrap();
                     if let Some(partition) = &info.partition {
-                        let table = info.table.as_ref().unwrap();
                         path = path
-                            .child("t")
-                            .unwrap()
-                            .child(table)
+                            .child(table_version)
                             .unwrap()
                             .child("p")
                             .unwrap()
                             .child(&format!("{}.p", partition))
                             .unwrap();
-                    } else if let Some(table) = &info.table {
-                        path = path
-                            .child("t")
-                            .unwrap()
-                            .child(&format!("{}.t", table))
-                            .unwrap();
+                    } else {
+                        path = path.child(&format!("{}.t", table_version)).unwrap();
                     }
-                } else if let Some(function) = &info.function {
-                    path = path
-                        .child("f")
-                        .unwrap()
-                        .child(&format!("{}.f", function))
-                        .unwrap();
+                }
+            } else if let Some(transaction) = &info.transaction {
+                path = path.child("x").unwrap().child(transaction).unwrap();
+                if let Some(function_version) = &info.function_version {
+                    path = path.child("f").unwrap().child(function_version).unwrap();
                 }
             }
         }
@@ -403,152 +453,222 @@ impl VersionLocationBuilder for V1LocationBuilder {
                 .child(&format!("{}-{}", name, postfix))
                 .unwrap()
         }
-        (path, StorageLocation::V1)
+        (path, StorageLocation::V2)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::location::StorageLocation;
-    use crate::SPath;
+    use super::*;
+    use td_error::TdError;
+    use td_objects::types::basic::{
+        BundleId, CollectionId, DataLocation, FunctionVersionId, Partition, TableDataVersionId,
+        TableId, TableVersionId, TransactionId,
+    };
 
     #[test]
     fn test_data_location_current_version() {
-        assert!(matches!(StorageLocation::current(), StorageLocation::V1))
+        assert!(matches!(StorageLocation::current(), StorageLocation::V2))
     }
 
     #[test]
-    fn test_location_current_builder_version() {
+    fn test_location_current_builder_version() -> Result<(), TdError> {
+        let data_location = DataLocation::try_from("/")?;
         assert!(matches!(
-            StorageLocation::current()
-                .builder(SPath::default())
-                .build()
-                .1,
-            StorageLocation::V1
-        ))
+            StorageLocation::current().builder(&data_location).build().1,
+            StorageLocation::V2
+        ));
+        Ok(())
     }
 
     #[test]
-    fn test_location_builder_v1() {
-        let mut builder = StorageLocation::V1.builder(SPath::parse("/L").unwrap());
-        assert_eq!(builder.build().0, SPath::parse("/L").unwrap());
-        assert_eq!(
-            builder.build_meta("foo").0,
-            SPath::parse("/L-foo.meta").unwrap()
-        );
-        builder.location(SPath::parse("/LL").unwrap());
-        assert_eq!(builder.build().0, SPath::parse("/LL").unwrap());
+    fn test_location_builder_v2() -> Result<(), TdError> {
+        let data_location = DataLocation::try_from("/L")?;
+        let mut builder = StorageLocation::V2.builder(&data_location);
+        assert_eq!(builder.build().0, SPath::parse("/L")?);
+        assert_eq!(builder.build_meta("foo").0, SPath::parse("/L-foo.meta")?);
+        let data_location = DataLocation::try_from("/LL")?;
+        builder.location(&data_location);
+        assert_eq!(builder.build().0, SPath::parse("/LL")?);
+        Ok(())
     }
 
     #[test]
-    fn test_collection_builder_v1() {
-        let mut builder = StorageLocation::V1
-            .builder(SPath::parse("/L").unwrap())
-            .collection("DS");
-        assert_eq!(builder.build().0, SPath::parse("/L/s/DS").unwrap());
+    fn test_collection_builder_v2() -> Result<(), TdError> {
+        let data_location = DataLocation::try_from("/L")?;
+        let collection = CollectionId::default();
+        let mut builder = StorageLocation::V2
+            .builder(&data_location)
+            .collection(&collection);
+        assert_eq!(
+            builder.build().0,
+            SPath::parse(format!("/L/c/{}", collection))?
+        );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse("/L/s/DS-foo.meta").unwrap()
+            SPath::parse(format!("/L/c/{}-foo.meta", collection)).unwrap()
         );
-        builder.collection("DDSS");
-        assert_eq!(builder.build().0, SPath::parse("/L/s/DDSS").unwrap());
+        let collection = CollectionId::default();
+        builder.collection(&collection);
+        assert_eq!(
+            builder.build().0,
+            SPath::parse(format!("/L/c/{}", collection))?
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_dataset_builder_v1() {
-        let mut builder = StorageLocation::V1
-            .builder(SPath::parse("/L").unwrap())
-            .collection("DS")
-            .dataset("D");
-        assert_eq!(builder.build().0, SPath::parse("/L/s/DS/d/D").unwrap());
+    fn test_function_builder_v2() -> Result<(), TdError> {
+        let data_location = DataLocation::try_from("/L")?;
+        let collection = CollectionId::default();
+        let bundle = BundleId::default();
+        let mut builder = StorageLocation::V2
+            .builder(&data_location)
+            .collection(&collection)
+            .function(&bundle);
+        assert_eq!(
+            builder.build().0,
+            SPath::parse(format!("/L/c/{}/f/{}.tgz", collection, bundle))?
+        );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse("/L/s/DS/d/D-foo.meta").unwrap()
+            SPath::parse(format!("/L/c/{}/f/{}.tgz-foo.meta", collection, bundle))?
         );
-        builder.dataset("DD");
-        assert_eq!(builder.build().0, SPath::parse("/L/s/DS/d/DD").unwrap());
+
+        let bundle = BundleId::default();
+        builder.function(&bundle);
+        assert_eq!(
+            builder.build().0,
+            SPath::parse(format!("/L/c/{}/f/{}.tgz", collection, bundle))?
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_function_builder_v1() {
-        let mut builder = StorageLocation::V1
-            .builder(SPath::parse("/L").unwrap())
-            .collection("DS")
-            .dataset("D")
-            .function("F");
+    fn test_data_builder_v2() -> Result<(), TdError> {
+        let data_location = DataLocation::try_from("/L")?;
+        let collection = CollectionId::default();
+        let table_data_version = TableDataVersionId::default();
+        let mut builder = StorageLocation::V2
+            .builder(&data_location)
+            .collection(&collection)
+            .data(&table_data_version);
+
         assert_eq!(
             builder.build().0,
-            SPath::parse("/L/s/DS/d/D/f/F.f").unwrap()
+            SPath::parse(format!("/L/c/{}/d/{}", collection, table_data_version))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse("/L/s/DS/d/D/f/F.f-foo.meta").unwrap()
+            SPath::parse(format!(
+                "/L/c/{}/d/{}-foo.meta",
+                collection, table_data_version
+            ))?
         );
-        builder.function("FF");
+        let table_data_version = TableDataVersionId::default();
+        builder.data(&table_data_version);
         assert_eq!(
             builder.build().0,
-            SPath::parse("/L/s/DS/d/D/f/FF.f").unwrap()
+            SPath::parse(format!("/L/c/{}/d/{}", collection, table_data_version))?
         );
+        Ok(())
     }
 
     #[test]
-    fn test_data_builder_v1() {
-        let mut builder = StorageLocation::V1
-            .builder(SPath::parse("/L").unwrap())
-            .collection("DS")
-            .dataset("D")
-            .function("F")
-            .version("V");
+    fn test_table_builder_v2() -> Result<(), TdError> {
+        let data_location = DataLocation::try_from("/L")?;
+        let collection = CollectionId::default();
+        let table_data_version = TableDataVersionId::default();
+        let table = TableId::default();
+        let table_version = TableVersionId::default();
+        let mut builder = StorageLocation::V2
+            .builder(&data_location)
+            .collection(&collection)
+            .data(&table_data_version)
+            .table(&table, &table_version);
+
         assert_eq!(
             builder.build().0,
-            SPath::parse("/L/s/DS/d/D/v/F/V").unwrap()
+            SPath::parse(format!(
+                "/L/c/{}/d/{}/t/{}/{}.t",
+                collection, table_data_version, table, table_version
+            ))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse("/L/s/DS/d/D/v/F/V-foo.meta").unwrap()
+            SPath::parse(format!(
+                "/L/c/{}/d/{}/t/{}/{}.t-foo.meta",
+                collection, table_data_version, table, table_version
+            ))?
         );
-        builder.version("VV");
+
+        let table = TableId::default();
+        let table_version = TableVersionId::default();
+        builder.table(&table, &table_version);
         assert_eq!(
             builder.build().0,
-            SPath::parse("/L/s/DS/d/D/v/F/VV").unwrap()
+            SPath::parse(format!(
+                "/L/c/{}/d/{}/t/{}/{}.t",
+                collection, table_data_version, table, table_version
+            ))?
         );
+
+        let partition = Partition::try_from("p")?;
+        builder.partition(&table, &table_version, &partition);
+        assert_eq!(
+            builder.build().0,
+            SPath::parse(format!(
+                "/L/c/{}/d/{}/t/{}/{}/p/{}.p",
+                collection, table_data_version, table, table_version, partition
+            ))?
+        );
+        assert_eq!(
+            builder.build_meta("foo").0,
+            SPath::parse(format!(
+                "/L/c/{}/d/{}/t/{}/{}/p/{}.p-foo.meta",
+                collection, table_data_version, table, table_version, partition
+            ))?
+        );
+
+        let table = TableId::default();
+        let table_version = TableVersionId::default();
+        let partition = Partition::try_from("p")?;
+        builder.partition(&table, &table_version, &partition);
+        assert_eq!(
+            builder.build().0,
+            SPath::parse(format!(
+                "/L/c/{}/d/{}/t/{}/{}/p/{}.p",
+                collection, table_data_version, table, table_version, partition
+            ))?
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_table_builder_v1() {
-        let mut builder = StorageLocation::V1
-            .builder(SPath::parse("/L").unwrap())
-            .collection("DS")
-            .dataset("D")
-            .function("F")
-            .version("V")
-            .table("T");
+    fn test_transaction_function_version_builder_v2() -> Result<(), TdError> {
+        let data_location = DataLocation::try_from("/L")?;
+        let collection = CollectionId::default();
+        let transaction = TransactionId::default();
+        let function_version = FunctionVersionId::default();
+        let builder = StorageLocation::V2
+            .builder(&data_location)
+            .collection(&collection)
+            .transaction(&transaction)
+            .function_version(&function_version);
         assert_eq!(
             builder.build().0,
-            SPath::parse("/L/s/DS/d/D/v/F/V/t/T.t").unwrap()
+            SPath::parse(format!(
+                "/L/c/{}/x/{}/f/{}",
+                collection, transaction, function_version
+            ))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse("/L/s/DS/d/D/v/F/V/t/T.t-foo.meta").unwrap()
+            SPath::parse(format!(
+                "/L/c/{}/x/{}/f/{}-foo.meta",
+                collection, transaction, function_version
+            ))?
         );
-        builder.table("TT");
-        assert_eq!(
-            builder.build().0,
-            SPath::parse("/L/s/DS/d/D/v/F/V/t/TT.t").unwrap()
-        );
-        builder.partition("T", "P");
-        assert_eq!(
-            builder.build().0,
-            SPath::parse("/L/s/DS/d/D/v/F/V/t/T/p/P.p").unwrap()
-        );
-        assert_eq!(
-            builder.build_meta("foo").0,
-            SPath::parse("/L/s/DS/d/D/v/F/V/t/T/p/P.p-foo.meta").unwrap()
-        );
-        builder.table("TTT");
-        assert_eq!(
-            builder.build().0,
-            SPath::parse("/L/s/DS/d/D/v/F/V/t/TTT.t").unwrap()
-        );
+        Ok(())
     }
 }

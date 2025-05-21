@@ -112,8 +112,8 @@ impl ReadFunctionVersionService {
 mod tests {
     use super::*;
     use td_objects::crudl::RequestContext;
-    use td_objects::test_utils::seed_collection2::seed_collection;
-    use td_objects::test_utils::seed_function2::seed_function;
+    use td_objects::test_utils::seed_collection::seed_collection;
+    use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
         TableDependency, TableName, UserId, UserName,

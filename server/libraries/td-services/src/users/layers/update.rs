@@ -33,7 +33,7 @@ pub async fn update_user_validate_password_change(
     if update.password().is_some() {
         if &*request_user_id == user_db.id() {
             // a self password change must be done via de password_change endpoint
-            return Err(UserError::MustUsePasswordChangeEndpointForSelf)?;
+            return Err(UserError::PasswordChangeNotAllowed)?;
         }
         // only a sec_admin can make it here without being the requester
     }

@@ -128,7 +128,7 @@ mod tests {
     use td_error::{assert_service_error, TdError};
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
-    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_inter_collection_permission::get_inter_collection_permissions;
     use td_objects::tower_service::authz::AuthzError;
     use td_objects::types::basic::{

@@ -23,7 +23,7 @@ use td_objects::types::table_ref::Versions;
 use td_objects::types::trigger::TriggerVersionDBWithNames;
 
 #[td_error]
-pub enum GraphError {
+enum GraphError {
     #[error("Graph is not a Direct Acyclic Graph. Cycle found in: {0:?}")]
     Cyclic(FunctionName) = 0,
     #[error("Graph is not a transactional Direct Acyclic Graph with transaction mode: {0:?}. Cycle found in: {1:?}"

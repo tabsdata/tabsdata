@@ -61,7 +61,7 @@ pub async fn get_inter_collection_permissions<E: SqlEntity>(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::test_utils::seed_collection2::seed_collection;
+    use crate::test_utils::seed_collection::seed_collection;
     use crate::types::basic::CollectionName;
 
     #[tokio::test]

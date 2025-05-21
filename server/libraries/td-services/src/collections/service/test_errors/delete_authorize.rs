@@ -9,7 +9,7 @@ use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::test_utils::seed_collection2::seed_collection;
+use td_objects::test_utils::seed_collection::seed_collection;
 use td_objects::tower_service::authz::AuthzError;
 use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
 

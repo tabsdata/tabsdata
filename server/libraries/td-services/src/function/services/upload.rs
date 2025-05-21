@@ -97,10 +97,10 @@ mod tests {
     use axum::extract::Request;
     use sha2::{Digest, Sha256};
     use td_objects::crudl::handle_sql_err;
-    use td_objects::location2::StorageLocation;
     use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::types::basic::{AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
+    use td_storage::location::StorageLocation;
     use td_storage::MountDef;
     use td_test::file::mount_uri;
     use td_tower::ctx_service::RawOneshot;

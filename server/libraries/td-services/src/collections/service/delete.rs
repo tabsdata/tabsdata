@@ -68,7 +68,7 @@ mod tests {
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::{DaoQueries, SelectBy};
-    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
     use td_objects::types::collection::CollectionDB;
     use td_tower::ctx_service::RawOneshot;

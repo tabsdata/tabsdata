@@ -273,7 +273,7 @@ pub async fn seed_function(
 mod tests {
     use super::*;
     use crate::sql::SelectBy;
-    use crate::test_utils::seed_collection2::seed_collection;
+    use crate::test_utils::seed_collection::seed_collection;
     use crate::types::basic::{BundleId, CollectionName, Decorator, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 

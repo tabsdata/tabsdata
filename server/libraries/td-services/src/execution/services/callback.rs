@@ -91,13 +91,13 @@ mod tests {
     use td_error::TdError;
     use td_objects::crudl::{handle_sql_err, RequestContext};
     use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function2::seed_function;
+    use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_function_requirement::seed_function_requirement;
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
-    use td_objects::test_utils::seed_transaction2::seed_transaction;
+    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{AccessTokenId, Decorator, TransactionKey};
     use td_objects::types::basic::{
         BundleId, CollectionName, FunctionRuntimeValues, TableDependency, TableName, UserId,

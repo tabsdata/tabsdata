@@ -83,8 +83,8 @@ mod tests {
     use crate::function::services::update::UpdateFunctionService;
     use td_objects::crudl::{ListParams, ListParamsBuilder};
     use td_objects::rest_urls::FunctionParam;
-    use td_objects::test_utils::seed_collection2::seed_collection;
-    use td_objects::test_utils::seed_function2::seed_function;
+    use td_objects::test_utils::seed_collection::seed_collection;
+    use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, RoleId, TableName, UserId,
     };

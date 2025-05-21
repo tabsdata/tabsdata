@@ -103,7 +103,7 @@ mod tests {
     use td_common::provider::Provider;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::types::basic::{CollectionName, RoleId, ToCollectionId, UserId};
 

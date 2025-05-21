@@ -16,7 +16,6 @@ use td_common::server::{
 };
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
-use td_objects::location2::StorageLocation;
 use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::{DerefQueries, FindBy, SelectBy, UpdateBy};
@@ -30,6 +29,7 @@ use td_objects::types::worker::v2::{
     FunctionInfoV2, FunctionInputV2, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
 };
 use td_objects::types::worker::{EnvPrefix, FunctionInput, Location};
+use td_storage::location::StorageLocation;
 use td_storage::Storage;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use tracing::{error, trace};

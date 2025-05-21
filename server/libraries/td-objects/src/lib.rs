@@ -8,7 +8,6 @@ extern crate core;
 pub mod all_the_tuples;
 
 pub mod crudl;
-pub mod location2;
 pub mod rest_urls;
 pub mod sql;
 pub mod tower_service;

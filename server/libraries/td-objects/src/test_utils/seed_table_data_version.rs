@@ -48,11 +48,11 @@ pub async fn seed_table_data_version(
 mod tests {
     use super::*;
     use crate::sql::SelectBy;
-    use crate::test_utils::seed_collection2::seed_collection;
+    use crate::test_utils::seed_collection::seed_collection;
     use crate::test_utils::seed_execution::seed_execution;
-    use crate::test_utils::seed_function2::seed_function;
+    use crate::test_utils::seed_function::seed_function;
     use crate::test_utils::seed_function_run::seed_function_run;
-    use crate::test_utils::seed_transaction2::seed_transaction;
+    use crate::test_utils::seed_transaction::seed_transaction;
     use crate::types::basic::{
         BundleId, CollectionName, Decorator, TableName, TransactionKey, UserId,
     };

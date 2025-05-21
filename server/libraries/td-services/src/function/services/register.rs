@@ -193,7 +193,7 @@ impl RegisterFunctionService {
 mod tests {
     use super::*;
     use crate::function::services::tests::assert_register;
-    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
     };

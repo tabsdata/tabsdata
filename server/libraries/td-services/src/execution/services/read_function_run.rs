@@ -96,11 +96,11 @@ impl FunctionRunReadService {
 mod tests {
     use super::*;
     use td_objects::crudl::RequestContext;
-    use td_objects::test_utils::seed_collection2::seed_collection;
+    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function2::seed_function;
+    use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_transaction2::seed_transaction;
+    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, RoleId, TableName,
         TransactionKey, UserId, UserName,
