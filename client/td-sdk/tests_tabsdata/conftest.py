@@ -955,7 +955,7 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
         "example.py",
     )
     function_path = file_path + "::input_file_csv_string_format"
-    tabsserver_connection.collection_create(collection_name, description="description")
+    tabsserver_connection.create_collection(collection_name, description="description")
     tabsserver_connection.function_create(
         collection_name, function_path, local_packages=LOCAL_PACKAGES_LIST
     )

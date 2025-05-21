@@ -21,8 +21,6 @@ from . import pytestmark  # noqa: F401
 
 
 @pytest.mark.integration
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_class(tabsserver_connection):
     created_time = int(time.time())
     collection = Collection(
@@ -58,15 +56,13 @@ def test_collection_class(tabsserver_connection):
 
 
 @pytest.mark.integration
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_class_lazy_properties(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_collection_class_lazy_properties",
             description="test_collection_class_lazy_properties",
         )
-        example_collection = tabsserver_connection.collection_get(
+        example_collection = tabsserver_connection.get_collection(
             "test_collection_class_lazy_properties"
         )
         lazy_collection = Collection(
@@ -81,7 +77,7 @@ def test_collection_class_lazy_properties(tabsserver_connection):
         assert lazy_collection.__repr__()
         assert lazy_collection.__str__()
     finally:
-        tabsserver_connection.collection_delete(
+        tabsserver_connection.delete_collection(
             "test_collection_class_lazy_properties", raise_for_status=False
         )
 
@@ -172,8 +168,6 @@ def test_collection_delete(tabsserver_connection):
 
 
 @pytest.mark.integration
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_update(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection,
@@ -220,8 +214,6 @@ def test_collection_get_function(tabsserver_connection):
 
 
 @pytest.mark.integration
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_create(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection, "test_collection_create_collection"
@@ -234,8 +226,6 @@ def test_collection_create(tabsserver_connection):
 
 
 @pytest.mark.integration
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_refresh(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection,
@@ -246,7 +236,7 @@ def test_collection_refresh(tabsserver_connection):
         collection.create()
         assert collection in tabsserver_connection.collections
         assert collection.description == "old_description"
-        tabsserver_connection.collection_update(
+        tabsserver_connection.update_collection(
             "test_collection_refresh_collection", new_description="new_description"
         )
         assert collection.description == "old_description"
@@ -343,7 +333,7 @@ def test_collection_class_update_function(tabsserver_connection):
 
 @pytest.mark.integration
 def test_collection_class_read_run(tabsserver_connection):
-    collection = tabsserver_connection.collection_create(
+    collection = tabsserver_connection.create_collection(
         f"test_collection_class_read_run_{uuid.uuid4().hex[:16]}"
     )
     file_path = os.path.join(

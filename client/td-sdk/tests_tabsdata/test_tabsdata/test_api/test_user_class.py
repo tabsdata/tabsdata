@@ -41,7 +41,7 @@ def test_user_class(tabsserver_connection):
 @pytest.mark.integration
 def test_user_class_lazy_properties(tabsserver_connection):
     try:
-        tabsserver_connection.user_create(
+        tabsserver_connection.create_user(
             name="test_user_class_lazy_properties",
             password="testingpassword",
             full_name="Test User Class",
@@ -57,7 +57,7 @@ def test_user_class_lazy_properties(tabsserver_connection):
         assert user.__repr__()
         assert user.__str__()
     finally:
-        tabsserver_connection.user_delete(
+        tabsserver_connection.delete_user(
             "test_user_class_lazy_properties", raise_for_status=False
         )
 
@@ -75,7 +75,7 @@ def test_user_class_create(tabsserver_connection):
         assert user not in tabsserver_connection.users
         user.create(password="testingpassword")
         assert user in tabsserver_connection.users
-        found_user = tabsserver_connection.user_get("test_user_class_create")
+        found_user = tabsserver_connection.get_user("test_user_class_create")
         assert found_user.name == "test_user_class_create"
         assert found_user.full_name == "Test User Class Create"
         assert found_user.email == "test_user_class_create_email@tabsdata.com"
@@ -85,7 +85,7 @@ def test_user_class_create(tabsserver_connection):
         assert user.email == "test_user_class_create_email@tabsdata.com"
         assert user.enabled is False
     finally:
-        tabsserver_connection.user_delete(
+        tabsserver_connection.delete_user(
             "test_user_class_create", raise_for_status=False
         )
 
@@ -102,7 +102,7 @@ def test_user_class_delete(tabsserver_connection):
         user.delete()
         assert user not in tabsserver_connection.users
     finally:
-        tabsserver_connection.user_delete(
+        tabsserver_connection.delete_user(
             "test_user_class_delete", raise_for_status=False
         )
 
@@ -120,7 +120,7 @@ def test_user_class_update(tabsserver_connection):
         assert user.full_name == "Test User Class Update"
         assert user.email == "test_user_class_update_email@tabsdata.com"
         assert user.enabled is True
-        found_user = tabsserver_connection.user_get("test_user_class_update")
+        found_user = tabsserver_connection.get_user("test_user_class_update")
         assert found_user.full_name == "Test User Class Update"
         assert found_user.email == "test_user_class_update_email@tabsdata.com"
         assert found_user.enabled is True
@@ -133,12 +133,12 @@ def test_user_class_update(tabsserver_connection):
         assert user.full_name == "Test User Class Update Updated"
         assert user.email == "test_user_class_update_email_updated@tabsdata.com"
         assert user.enabled is False
-        found_user = tabsserver_connection.user_get("test_user_class_update")
+        found_user = tabsserver_connection.get_user("test_user_class_update")
         assert found_user.full_name == "Test User Class Update Updated"
         assert found_user.email == "test_user_class_update_email_updated@tabsdata.com"
         assert found_user.enabled is False
     finally:
-        tabsserver_connection.user_delete(
+        tabsserver_connection.delete_user(
             "test_user_class_update", raise_for_status=False
         )
 
@@ -157,7 +157,7 @@ def test_user_class_refresh(tabsserver_connection):
         assert user.email == "test_user_class_refresh_email@tabsdata.com"
         assert user.enabled is True
 
-        tabsserver_connection.user_update(
+        tabsserver_connection.update_user(
             name="test_user_class_refresh",
             full_name="Test User Class Refresh Refreshed",
             email="test_user_class_refresh_email_refreshed@tabsdata.com",
@@ -171,6 +171,6 @@ def test_user_class_refresh(tabsserver_connection):
         assert user.email == "test_user_class_refresh_email_refreshed@tabsdata.com"
         assert user.enabled is False
     finally:
-        tabsserver_connection.user_delete(
+        tabsserver_connection.delete_user(
             "test_user_class_refresh", raise_for_status=False
         )

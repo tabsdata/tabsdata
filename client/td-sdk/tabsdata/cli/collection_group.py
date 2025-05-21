@@ -34,7 +34,7 @@ def create(
     click.echo("Creating a new collection")
     click.echo("-" * 10)
     try:
-        ctx.obj["tabsdataserver"].collection_create(name, description)
+        ctx.obj["tabsdataserver"].create_collection(name, description)
         click.echo("Collection created successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to create collection: {e}")
@@ -59,7 +59,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
             "Deletion not confirmed. The confirmation word is 'delete'."
         )
     try:
-        ctx.obj["tabsdataserver"].collection_delete(name)
+        ctx.obj["tabsdataserver"].delete_collection(name)
         click.echo("Collection deleted successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to delete collection: {e}")
@@ -72,7 +72,7 @@ def info(ctx: click.Context, name: str):
     """Display a collection by name"""
     verify_login_or_prompt(ctx)
     try:
-        collection = ctx.obj["tabsdataserver"].collection_get(name)
+        collection = ctx.obj["tabsdataserver"].get_collection(name)
 
         table = Table(title=f"Collection '{name}'")
         table.add_column("Name", style="cyan", no_wrap=True)
@@ -179,7 +179,7 @@ def update(
     click.echo(f"Updating collection: {name}")
     click.echo("-" * 10)
     try:
-        ctx.obj["tabsdataserver"].collection_update(
+        ctx.obj["tabsdataserver"].update_collection(
             name, new_name=new_name, new_description=description
         )
         click.echo("Collection updated successfully")

@@ -108,8 +108,6 @@ def test_status_get(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_list(apiserver_connection):
     response = apiserver_connection.collection_list()
     assert response.status_code == 200
@@ -117,25 +115,20 @@ def test_collection_list(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_list_with_params(apiserver_connection):
     response = apiserver_connection.collection_list(
-        offset=10, len=42, filter="hi", order_by="hello"
+        order_by="name", request_len=42, request_filter="name:eq:invent"
     )
     assert response.status_code == 200
     list_params = response.json().get("data").get("list_params")
     assert list_params is not None
-    assert list_params.get("offset") == 10
     assert list_params.get("len") == 42
-    assert list_params.get("filter") == "hi"
-    assert list_params.get("order_by") == "hello"
+    assert list_params.get("filter") == ["name:eq:invent"]
+    assert list_params.get("order_by") == "name"
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_create_api(apiserver_connection):
     apiserver_connection.collection_delete(
         "test_collection_create_api", raise_for_status=False
@@ -181,8 +174,6 @@ def test_collection_delete_no_exists_raises_error(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_get(apiserver_connection):
     apiserver_connection.collection_create(
         "test_collection_get", "test_collection_get_description", raise_for_status=False
@@ -201,8 +192,6 @@ def test_collection_get(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_get_no_exists_raises_error(apiserver_connection):
     with pytest.raises(APIServerError):
         apiserver_connection.collection_get_by_name(
@@ -212,8 +201,6 @@ def test_collection_get_no_exists_raises_error(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_update_new_description(apiserver_connection):
     apiserver_connection.collection_create(
         "test_collection_update_new_description",
@@ -237,12 +224,6 @@ def test_collection_update_new_description(apiserver_connection):
         )
 
 
-@pytest.mark.skip(
-    reason=(
-        "This test is not working due to a backend bug: when "
-        "provided a new name, the backend errors out."
-    )
-)
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_collection_update_new_name(apiserver_connection):
@@ -291,6 +272,26 @@ def test_users_create(apiserver_connection):
         assert response_json.get("full_name") == full_name
         assert response_json.get("email") == email
         assert response_json.get("enabled") == enabled
+    finally:
+        apiserver_connection.users_delete(name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_users_list(apiserver_connection):
+    apiserver_connection.users_delete("test_users_list", raise_for_status=False)
+    name = "test_users_list"
+    full_name = "test_users_list_full_name"
+    email = "test_users_list_email@tabsdata.com"
+    password = "test_users_list_password"
+    enabled = True
+    try:
+        response = apiserver_connection.users_create(
+            name, full_name, email, password, enabled
+        )
+        assert response.status_code == 201
+        response = apiserver_connection.users_list()
+        assert response.status_code == 200
     finally:
         apiserver_connection.users_delete(name, raise_for_status=False)
 

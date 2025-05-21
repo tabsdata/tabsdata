@@ -10,7 +10,7 @@ import inspect
 import os
 import sys
 import tempfile
-from typing import List
+from typing import Generator, List
 
 import polars as pl
 import requests
@@ -2192,7 +2192,7 @@ class TabsdataServer:
             object might yield different results.
 
         Returns:
-            List[Transaction]: The list of commits in the server.
+            List[Commit]: The list of commits in the server.
         """
         # TODO Aleix
         raw_commits = self.connection.commit_list().json().get("data").get("data")
@@ -2208,13 +2208,7 @@ class TabsdataServer:
         Returns:
             List[Collection]: The list of collections in the server.
         """
-        raw_collections = (
-            self.connection.collection_list().json().get("data").get("data")
-        )
-        return [
-            Collection(**{**collection, "connection": self.connection})
-            for collection in raw_collections
-        ]
+        return self.list_collections()
 
     @property
     def execution_plans(self) -> List[ExecutionPlan]:
@@ -2274,10 +2268,9 @@ class TabsdataServer:
         Returns:
             List[User]: The list of users in the server.
         """
-        raw_users = self.connection.users_list().json().get("data").get("data")
-        return [User(**{**user, "connection": self.connection}) for user in raw_users]
+        return self.list_users()
 
-    def collection_create(
+    def create_collection(
         self, name: str, description: str = None, raise_for_status: bool = True
     ) -> Collection:
         """
@@ -2296,7 +2289,7 @@ class TabsdataServer:
         collection.create(raise_for_status=raise_for_status)
         return collection
 
-    def collection_delete(self, name: str, raise_for_status: bool = True) -> None:
+    def delete_collection(self, name: str, raise_for_status: bool = True) -> None:
         """
         Delete a collection in the server.
 
@@ -2311,7 +2304,7 @@ class TabsdataServer:
         collection = Collection(self.connection, name)
         collection.delete(raise_for_status=raise_for_status)
 
-    def collection_get(self, name: str) -> Collection:
+    def get_collection(self, name: str) -> Collection:
         """
         Get a collection in the server.
 
@@ -2324,7 +2317,51 @@ class TabsdataServer:
         Raises:
             APIServerError: If the collection could not be obtained.
         """
-        return Collection(self.connection, name)
+        collection_definition = self.connection.collection_get_by_name(name)
+        return Collection(
+            self.connection,
+            **collection_definition.json().get("data"),
+        )
+
+    def list_collections(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Collection]:
+        return list(
+            self.list_collections_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_collections_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Collection]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.collection_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_collections = data.get("data")
+            for raw_collection in raw_collections:
+                built_collection = Collection(self.connection, **raw_collection)
+                yield built_collection
+            first_page = False
 
     def collection_list_functions(self, collection_name) -> List[Function]:
         """
@@ -2341,13 +2378,13 @@ class TabsdataServer:
         """
         return Collection(self.connection, collection_name).functions
 
-    def collection_update(
+    def update_collection(
         self,
         name: str,
-        new_name=None,
+        new_name: str = None,
         new_description: str = None,
         raise_for_status: bool = True,
-    ) -> None:
+    ) -> Collection:
         """
         Update a collection in the server.
 
@@ -2362,7 +2399,7 @@ class TabsdataServer:
             APIServerError: If the collection could not be updated.
         """
         collection = Collection(self.connection, name)
-        collection.update(
+        return collection.update(
             name=new_name,
             description=new_description,
             raise_for_status=raise_for_status,
@@ -2817,7 +2854,7 @@ class TabsdataServer:
         transaction = Transaction(self.connection, transaction_id)
         return transaction.recover()
 
-    def user_create(
+    def create_user(
         self,
         name: str,
         password: str,
@@ -2847,7 +2884,7 @@ class TabsdataServer:
         )
         return user.create(password, raise_for_status=raise_for_status)
 
-    def user_delete(self, name: str, raise_for_status: bool = True) -> None:
+    def delete_user(self, name: str, raise_for_status: bool = True) -> None:
         """
         Delete a user in the server.
 
@@ -2862,7 +2899,7 @@ class TabsdataServer:
         user = User(self.connection, name)
         user.delete(raise_for_status=raise_for_status)
 
-    def user_get(self, name: str) -> User:
+    def get_user(self, name: str) -> User:
         """
         Get a user in the server.
 
@@ -2875,9 +2912,53 @@ class TabsdataServer:
         Raises:
             APIServerError: If the user could not be obtained.
         """
-        return User(self.connection, name)
+        user_definition = self.connection.users_get_by_name(name)
+        return User(
+            self.connection,
+            **user_definition.json().get("data"),
+        )
 
-    def user_update(
+    def list_users(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[User]:
+        return list(
+            self.list_users_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_users_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[User]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.users_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_users = data.get("data")
+            for raw_user in raw_users:
+                built_user = User(self.connection, **raw_user)
+                yield built_user
+            first_page = False
+
+    def update_user(
         self,
         name: str,
         full_name: str = None,
@@ -2885,7 +2966,7 @@ class TabsdataServer:
         enabled: bool = None,
         password: str = None,
         raise_for_status: bool = True,
-    ) -> None:
+    ) -> User:
         """
         Update a user in the server.
 
@@ -2901,7 +2982,7 @@ class TabsdataServer:
             APIServerError: If the user could not be updated.
         """
         user = User(self.connection, name)
-        user.update(
+        return user.update(
             full_name=full_name,
             email=email,
             enabled=enabled,

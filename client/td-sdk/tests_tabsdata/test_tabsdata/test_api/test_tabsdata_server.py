@@ -6,6 +6,7 @@ import datetime
 import logging
 import os
 import time
+import types
 import uuid
 
 import polars as pl
@@ -41,8 +42,6 @@ logger.setLevel(logging.DEBUG)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_create():
     tabsdata_server = TabsdataServer(APISERVER_URL, "admin", "tabsdata")
     real_url = f"http://{APISERVER_URL}{BASE_API_URL}"
@@ -51,8 +50,6 @@ def test_tabsdata_server_create():
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_users_list(tabsserver_connection):
     users = tabsserver_connection.users
     assert isinstance(users, list)
@@ -61,71 +58,137 @@ def test_tabsdata_server_users_list(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_tabsdata_server_user_create(tabsserver_connection):
+def test_tabsdata_server_create_user(tabsserver_connection):
     try:
-        tabsserver_connection.user_create(
+        tabsserver_connection.create_user(
             name="test_tabsdata_server_user_create",
             password="test_tabsdata_server_user_create_password",
             full_name="Test User",
-            email="test_tabsdata_server_user_create_email",
+            email="test_tabsdata_server_user_create_email@tabsdata.com",
         )
         users = tabsserver_connection.users
         assert any(user.name == "test_tabsdata_server_user_create" for user in users)
     finally:
-        tabsserver_connection.user_delete("test_tabsdata_server_user_create")
+        tabsserver_connection.delete_user(
+            "test_tabsdata_server_user_create", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_tabsdata_server_user_get(tabsserver_connection):
+@pytest.mark.slow
+def test_tabsdata_server_list_users(tabsserver_connection):
+    amount = 101
     try:
-        tabsserver_connection.user_create(
+        for i in range(amount):
+            tabsserver_connection.create_user(
+                name=f"test_tabsdata_server_list_users_no_generator_{i}",
+                password=f"test_tabsdata_server_list_users_no_generator_password_{i}",
+                full_name=f"Test User {i}",
+                email=(
+                    "test_tabsdata_server_list_users_no_generator_email"
+                    f"_{i}@tabsdata.com"
+                ),
+            )
+        users = tabsserver_connection.list_users(
+            filter="name:eq:test_tabsdata_server_list_users_no_generator_0"
+        )
+        assert len(users) == 1
+        users = tabsserver_connection.list_users(
+            filter="name:lk:test_tabsdata_server_list_users_no_generator_*"
+        )
+        assert len(users) == amount
+    finally:
+        for i in range(amount):
+            tabsserver_connection.delete_user(
+                f"test_tabsdata_server_list_users_no_generator_{i}",
+                raise_for_status=False,
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_tabsdata_server_list_users_generator(tabsserver_connection):
+    amount = 101
+    try:
+        for i in range(amount):
+            tabsserver_connection.create_user(
+                name=f"test_tabsdata_server_list_users_generator_{i}",
+                password=f"test_tabsdata_server_list_users_generator_password_{i}",
+                full_name=f"Test User {i}",
+                email=(
+                    f"test_tabsdata_server_list_users_generator_email_{i}@tabsdata.com"
+                ),
+            )
+        users = tabsserver_connection.list_users_generator(
+            filter="name:eq:test_tabsdata_server_list_users_generator_0"
+        )
+        assert isinstance(users, types.GeneratorType)
+        materialized_users = list(users)
+        assert len(materialized_users) == 1
+        users = tabsserver_connection.list_users_generator(
+            filter="name:lk:test_tabsdata_server_list_users_generator_*"
+        )
+        assert isinstance(users, types.GeneratorType)
+        materialized_users = list(users)
+        assert len(materialized_users) == amount
+    finally:
+        for i in range(amount):
+            tabsserver_connection.delete_user(
+                f"test_tabsdata_server_list_users_generator_{i}", raise_for_status=False
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_get_user(tabsserver_connection):
+    try:
+        tabsserver_connection.create_user(
             name="test_tabsdata_server_user_get",
             password="test_tabsdata_server_user_get_password",
             full_name="Test User",
-            email="test_tabsdata_server_user_get_email",
+            email="test_tabsdata_server_user_get_email@tabsdata.com",
         )
         users = tabsserver_connection.users
         assert any(user.name == "test_tabsdata_server_user_get" for user in users)
-        user = tabsserver_connection.user_get("test_tabsdata_server_user_get")
+        user = tabsserver_connection.get_user("test_tabsdata_server_user_get")
         assert user.name == "test_tabsdata_server_user_get"
     finally:
-        tabsserver_connection.user_delete("test_tabsdata_server_user_get")
+        tabsserver_connection.delete_user(
+            "test_tabsdata_server_user_get", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_tabsdata_server_user_update(tabsserver_connection):
+def test_tabsdata_server_update_user(tabsserver_connection):
     try:
-        tabsserver_connection.user_create(
+        tabsserver_connection.create_user(
             name="test_tabsdata_server_user_update",
             password="test_tabsdata_server_user_update_password",
             full_name="Test User",
-            email="test_tabsdata_server_user_update_email",
+            email="test_tabsdata_server_user_update_email@tabsdata.com",
         )
         users = tabsserver_connection.users
         assert any(user.name == "test_tabsdata_server_user_update" for user in users)
         new_full_name = "test_tabsdata_server_user_update_new"
-        new_email = "test_tabsdata_server_user_update_new_email"
-        tabsserver_connection.user_update(
+        new_email = "test_tabsdata_server_user_update_new_email@tabsdata.com"
+        tabsserver_connection.update_user(
             "test_tabsdata_server_user_update",
             full_name=new_full_name,
             email=new_email,
             enabled=False,
         )
-        user = tabsserver_connection.user_get("test_tabsdata_server_user_update")
+        user = tabsserver_connection.get_user("test_tabsdata_server_user_update")
         assert user.name == "test_tabsdata_server_user_update"
         assert user.full_name == new_full_name
         assert user.email == new_email
         assert user.enabled is False
     finally:
-        tabsserver_connection.user_delete("test_tabsdata_server_user_update")
+        tabsserver_connection.delete_user(
+            "test_tabsdata_server_user_update", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
@@ -134,7 +197,7 @@ def test_tabsdata_server_user_update(tabsserver_connection):
 @pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_get(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_function_get_collection",
             description="test_collection_description",
         )
@@ -164,7 +227,7 @@ def test_function_get(tabsserver_connection):
 @pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_list_history(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_function_list_history_collection",
             description="test_collection_description",
         )
@@ -195,7 +258,7 @@ def test_function_list_history(tabsserver_connection):
 @pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_function_trigger_collection",
             description="test_collection_description",
         )
@@ -225,7 +288,7 @@ def test_function_trigger(tabsserver_connection):
 @pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger_execution_plan_name(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_function_trigger_execution_plan_name_collection",
             description="test_collection_description",
         )
@@ -258,7 +321,7 @@ def test_function_trigger_execution_plan_name(tabsserver_connection):
 @pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_function_create_collection",
             description="test_collection_description",
         )
@@ -288,7 +351,7 @@ def test_function_create(tabsserver_connection):
 @pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_update(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_function_update_server_collection",
             description="test_collection_description",
         )
@@ -341,7 +404,7 @@ def test_function_update(tabsserver_connection):
 )
 def test_function_delete(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_function_delete_collection",
             description="test_collection_description",
         )
@@ -374,8 +437,6 @@ def test_function_delete(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_collection_list(tabsserver_connection):
     collections = tabsserver_connection.collections
     assert isinstance(collections, list)
@@ -384,11 +445,9 @@ def test_tabsdata_server_collection_list(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_collection_create(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_tabsdata_server_collection_create",
             description="test_tabsdata_server_collection_create_description",
         )
@@ -398,18 +457,16 @@ def test_tabsdata_server_collection_create(tabsserver_connection):
             for collection in collections
         )
     finally:
-        tabsserver_connection.collection_delete(
+        tabsserver_connection.delete_collection(
             "test_tabsdata_server_collection_create"
         )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_collection_get(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_tabsdata_server_collection_get",
             description="test_tabsdata_server_collection_get_description",
         )
@@ -418,21 +475,75 @@ def test_tabsdata_server_collection_get(tabsserver_connection):
             collection.name == "test_tabsdata_server_collection_get"
             for collection in collections
         )
-        collection = tabsserver_connection.collection_get(
+        collection = tabsserver_connection.get_collection(
             "test_tabsdata_server_collection_get"
         )
         assert collection.name == "test_tabsdata_server_collection_get"
     finally:
-        tabsserver_connection.collection_delete("test_tabsdata_server_collection_get")
+        tabsserver_connection.delete_collection("test_tabsdata_server_collection_get")
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
+@pytest.mark.slow
+def test_tabsdata_server_list_collections(tabsserver_connection):
+    amount = 101
+    try:
+        for i in range(amount):
+            tabsserver_connection.create_collection(
+                name=f"test_tabsdata_server_list_collections_no_generator_{i}"
+            ),
+        collections = tabsserver_connection.list_collections(
+            filter="name:eq:test_tabsdata_server_list_collections_no_generator_0"
+        )
+        assert len(collections) == 1
+        collections = tabsserver_connection.list_collections(
+            filter="name:lk:test_tabsdata_server_list_collections_no_generator_*"
+        )
+        assert len(collections) == amount
+    finally:
+        for i in range(amount):
+            tabsserver_connection.delete_collection(
+                f"test_tabsdata_server_list_collections_no_generator_{i}",
+                raise_for_status=False,
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_tabsdata_server_list_collections_generator(tabsserver_connection):
+    amount = 101
+    try:
+        for i in range(amount):
+            tabsserver_connection.create_collection(
+                name=f"test_tabsdata_server_list_collections_generator_{i}",
+            )
+        collections = tabsserver_connection.list_collections_generator(
+            filter="name:eq:test_tabsdata_server_list_collections_generator_0"
+        )
+        assert isinstance(collections, types.GeneratorType)
+        materialized_collections = list(collections)
+        assert len(materialized_collections) == 1
+        collections = tabsserver_connection.list_collections_generator(
+            filter="name:lk:test_tabsdata_server_list_collections_generator_*"
+        )
+        assert isinstance(collections, types.GeneratorType)
+        materialized_collections = list(collections)
+        assert len(materialized_collections) == amount
+    finally:
+        for i in range(amount):
+            tabsserver_connection.delete_collection(
+                f"test_tabsdata_server_list_collections_generator_{i}",
+                raise_for_status=False,
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
 def test_tabsdata_server_collection_update(tabsserver_connection):
     try:
-        tabsserver_connection.collection_create(
+        tabsserver_connection.create_collection(
             name="test_tabsdata_server_collection_update",
             description="test_tabsdata_server_collection_update_description",
         )
@@ -442,25 +553,23 @@ def test_tabsdata_server_collection_update(tabsserver_connection):
             for collection in collections
         )
         new_description = "test_tabsdata_server_collection_update_new_description"
-        tabsserver_connection.collection_update(
+        tabsserver_connection.update_collection(
             "test_tabsdata_server_collection_update",
             new_description=new_description,
         )
-        collection = tabsserver_connection.collection_get(
+        collection = tabsserver_connection.get_collection(
             "test_tabsdata_server_collection_update"
         )
         assert collection.name == "test_tabsdata_server_collection_update"
         assert collection.description == new_description
     finally:
-        tabsserver_connection.collection_delete(
+        tabsserver_connection.delete_collection(
             "test_tabsdata_server_collection_update"
         )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_tabsdata_server_status(tabsserver_connection):
     status = tabsserver_connection.status
     assert isinstance(status, ServerStatus)
@@ -1138,7 +1247,7 @@ def test_execution_plan_read(tabsserver_connection, testing_collection_with_tabl
 
 @pytest.mark.integration
 def test_tabsdata_server_class_read_run(tabsserver_connection):
-    collection = tabsserver_connection.collection_create(
+    collection = tabsserver_connection.create_collection(
         f"test_tabsdata_server_class_read_run_{uuid.uuid4().hex[:16]}"
     )
     file_path = os.path.join(

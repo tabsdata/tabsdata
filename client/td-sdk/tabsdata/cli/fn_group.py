@@ -357,6 +357,7 @@ def read_run(ctx: click.Context, name: str, collection: str, execution_id: str):
         triggered_by = data.get("triggered_by")
         table.add_row(
             status,
+            triggered_on,
             started_on,
             ended_on,
             triggered_by,

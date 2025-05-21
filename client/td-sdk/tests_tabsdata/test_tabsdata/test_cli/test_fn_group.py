@@ -537,7 +537,7 @@ def test_function_info_error(testing_collection):
 
 @pytest.mark.integration
 def test_function_cli_read_run(login, tabsserver_connection):
-    collection = tabsserver_connection.collection_create(
+    collection = tabsserver_connection.create_collection(
         f"test_function_class_read_run_{uuid.uuid4().hex[:16]}"
     )
     file_path = os.path.join(

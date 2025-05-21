@@ -45,7 +45,7 @@ def test_function_class(tabsserver_connection, testing_collection_with_table):
 def test_function_class_lazy_properties(
     tabsserver_connection, testing_collection_with_table
 ):
-    api_function = tabsserver_connection.collection_get(
+    api_function = tabsserver_connection.get_collection(
         testing_collection_with_table
     ).functions[0]
     function = Function(
@@ -333,7 +333,7 @@ def test_function_class_get_dataversions(
 
 @pytest.mark.integration
 def test_function_class_read_run(tabsserver_connection):
-    collection = tabsserver_connection.collection_create(
+    collection = tabsserver_connection.create_collection(
         f"test_function_class_read_run_{uuid.uuid4().hex[:16]}"
     )
     file_path = os.path.join(

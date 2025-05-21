@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+from typing import List
 from urllib.parse import urlparse
 
 import requests
@@ -385,6 +386,61 @@ class APIServer:
         else:
             raise APIServerError(response.json())
 
+    def collection_create(
+        self, name: str, description: str, raise_for_status: bool = True
+    ):
+        # Aleix: Updated
+        endpoint = "/collections"
+        data = {"name": name, "description": description}
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def collection_delete(self, collection_name: str, raise_for_status: bool = True):
+        # Aleix: Updated
+        endpoint = f"/collections/{collection_name}"
+        response = self.delete(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def collection_get_by_name(
+        self, collection_name: str, raise_for_status: bool = True
+    ):
+        # Aleix: Updated
+        endpoint = f"/collections/{collection_name}"
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def collection_list(
+        self,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = "/collections"
+        params = self.get_params_dict(
+            ["len", "filter", "order_by", "pagination_id", "next"],
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def collection_update(
+        self,
+        collection_name: str,
+        new_collection_name: str = None,
+        description: str = None,
+        raise_for_status: bool = True,
+    ):
+        # Aleix: Updated
+        endpoint = f"/collections/{collection_name}"
+        data = self.get_params_dict(
+            ["name", "description"], [new_collection_name, description]
+        )
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def commit_list(
         self,
         offset: int = None,
@@ -399,56 +455,6 @@ class APIServer:
             ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
         )
         response = self.get(endpoint, params)
-        return self.raise_for_status_or_return(raise_for_status, response)
-
-    def collection_create(
-        self, name: str, description: str, raise_for_status: bool = True
-    ):
-        endpoint = "/collections"
-        data = {"name": name, "description": description}
-        response = self.post(endpoint, json=data)
-        return self.raise_for_status_or_return(raise_for_status, response)
-
-    def collection_delete(self, collection_name: str, raise_for_status: bool = True):
-        endpoint = f"/collections/{collection_name}"
-        response = self.delete(endpoint)
-        return self.raise_for_status_or_return(raise_for_status, response)
-
-    def collection_get_by_name(
-        self, collection_name: str, raise_for_status: bool = True
-    ):
-        endpoint = f"/collections/{collection_name}"
-        response = self.get(endpoint)
-        return self.raise_for_status_or_return(raise_for_status, response)
-
-    def collection_list(
-        self,
-        offset: int = None,
-        len: int = None,
-        filter: str = None,
-        order_by: str = None,
-        raise_for_status: bool = True,
-    ):
-        endpoint = "/collections"
-
-        params = self.get_params_dict(
-            ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
-        )
-        response = self.get(endpoint, params=params)
-        return self.raise_for_status_or_return(raise_for_status, response)
-
-    def collection_update(
-        self,
-        collection_name: str,
-        new_collection_name: str = None,
-        description: str = None,
-        raise_for_status: bool = True,
-    ):
-        endpoint = f"/collections/{collection_name}"
-        data = self.get_params_dict(
-            ["name", "description"], [new_collection_name, description]
-        )
-        response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def dataversion_list(
@@ -778,6 +784,7 @@ class APIServer:
         enabled: bool,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = "/users"
 
         data = self.get_params_dict(
@@ -788,27 +795,31 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def users_delete(self, name: str, raise_for_status: bool = True):
+        # Aleix: Updated
         endpoint = f"/users/{name}"
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def users_get_by_name(self, name: str, raise_for_status: bool = True):
+        # Aleix: Updated
         endpoint = f"/users/{name}"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def users_list(
         self,
-        offset: int = None,
-        len: int = None,
-        filter: str = None,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
         order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = "/users"
-
         params = self.get_params_dict(
-            ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
+            ["len", "filter", "order_by", "pagination_id", "next"],
+            [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -822,6 +833,7 @@ class APIServer:
         enabled: bool = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = f"/users/{name}"
         data = self.get_params_dict(
             ["full_name", "email", "enabled", "password"],

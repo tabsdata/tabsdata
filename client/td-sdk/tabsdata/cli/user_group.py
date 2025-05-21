@@ -48,7 +48,7 @@ def create(
     )
     email = email or logical_prompt(ctx, "Email of the user", default_value="")
     try:
-        ctx.obj["tabsdataserver"].user_create(
+        ctx.obj["tabsdataserver"].create_user(
             name,
             password,
             full_name=full_name,
@@ -78,7 +78,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
             "Deletion not confirmed. The confirmation word is 'delete'."
         )
     try:
-        ctx.obj["tabsdataserver"].user_delete(name)
+        ctx.obj["tabsdataserver"].delete_user(name)
         click.echo("User deleted successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to delete user: {e}")
@@ -91,7 +91,7 @@ def info(ctx: click.Context, name: str):
     """Display a user by name"""
     verify_login_or_prompt(ctx)
     try:
-        user = ctx.obj["tabsdataserver"].user_get(name)
+        user = ctx.obj["tabsdataserver"].get_user(name)
 
         table = Table(title=f"User '{name}'")
         table.add_column("Name", style="cyan", no_wrap=True)
@@ -160,7 +160,7 @@ def update(
     click.echo(f"Updating user: {name}")
     click.echo("-" * 10)
     try:
-        ctx.obj["tabsdataserver"].user_update(
+        ctx.obj["tabsdataserver"].update_user(
             name,
             full_name=full_name,
             email=email,
