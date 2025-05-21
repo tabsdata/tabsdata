@@ -107,11 +107,6 @@ class InputYaml(ABC):
 
     @property
     @abstractmethod
-    def execution_plan_triggered_on(self) -> str:
-        """Timestamp of the trigger of the whole execution plan."""
-
-    @property
-    @abstractmethod
     def function_bundle_uri(self) -> str:
         """Return the function bundle URI."""
 
@@ -139,6 +134,11 @@ class InputYaml(ABC):
     @abstractmethod
     def output(self) -> list[Table]:
         """Return the output section of the YAML file."""
+
+    @property
+    @abstractmethod
+    def scheduled_on(self) -> str:
+        """Timestamp of the scheduling of the whole execution plan."""
 
     @property
     @abstractmethod
@@ -180,10 +180,6 @@ class V2(InputYaml):
         return self.info["execution_id"]
 
     @property
-    def execution_plan_triggered_on(self) -> str:
-        return self.info["execution_plan_triggered_on"]
-
-    @property
     def function_bundle(self):
         return self.info.get("function_bundle") if self.info else None
 
@@ -214,6 +210,10 @@ class V2(InputYaml):
     @property
     def output(self) -> list[Table]:
         return self.content.get("output")
+
+    @property
+    def scheduled_on(self) -> str:
+        return self.info["scheduled_on"]
 
     @property
     def system_input(self) -> list[Table]:

@@ -838,7 +838,7 @@ def write_v2_yaml_file(
             "execution_id": FAKE_EXECUTION_ID,
             "transaction_id": FAKE_TRANSACTION_ID,
             "triggered_on": FAKE_TRIGGERED_TIME,
-            "execution_plan_triggered_on": FAKE_SCHEDULED_TIME,
+            "scheduled_on": FAKE_SCHEDULED_TIME,
             "function_data": {
                 "uri": pathlib.Path(function_data_path).as_uri(),
                 "env_prefix": None,

@@ -147,7 +147,7 @@ def test_parse_minimal_input_yaml(tmp_path):
         "transaction_id": FAKE_TRANSACTION_ID,
         "function_run_id": FAKE_FUNCTION_RUN_ID,
         "triggered_on": FAKE_TRIGGERED_TIME,
-        "execution_plan_triggered_on": FAKE_SCHEDULED_TIME,
+        "scheduled_on": FAKE_SCHEDULED_TIME,
         "function_data": {
             "uri": pathlib.Path(function_data_folder).as_uri(),
             "env_prefix": None,

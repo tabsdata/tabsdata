@@ -121,7 +121,7 @@ def replace_placeholders_in_path(path: str, request: InputYaml) -> str:
     )
     new_path = new_path.replace(
         SCHEDULER_TIMESTAMP_PLACEHOLDER,
-        str(request.execution_plan_triggered_on),
+        str(request.scheduled_on),
     )
     new_path = new_path.replace(
         TRIGGER_TIMESTAMP_PLACEHOLDER, str(request.triggered_on)
