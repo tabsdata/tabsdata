@@ -14,7 +14,6 @@ pub mod cte;
 pub mod list;
 pub mod recursive;
 
-use crate::crudl::ListParams;
 use crate::sql::cte::LATEST_VERSIONS_CTE;
 use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
 use crate::sql::list::{ListError, ListQueryParams, Order, Pagination};
@@ -234,7 +233,7 @@ all_the_tuples!(impl_find_by);
 pub trait ListBy<'a, E> {
     fn list_by<T>(
         &self,
-        list_params: &ListParams,
+        list_query_params: &ListQueryParams<T>,
         e: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
@@ -242,7 +241,7 @@ pub trait ListBy<'a, E> {
 
     fn list_by_at<T>(
         &self,
-        list_params: &ListParams,
+        list_query_params: &ListQueryParams<T>,
         natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
         condition: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
         e: &'a E,
@@ -253,7 +252,7 @@ pub trait ListBy<'a, E> {
 
     fn list_versions_by_at<T>(
         &self,
-        list_params: &ListParams,
+        list_query_params: &ListQueryParams<T>,
         natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
         status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
         e: &'a E,
@@ -276,14 +275,12 @@ macro_rules! impl_list_by {
         {
             fn list_by<T>(
                 &self,
-                list_params: &ListParams,
+                query_params: &ListQueryParams<T>,
                 ($($E),*): &'a ($(&'a $E),*),
             ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
             where
                 T: ListQuery + 'a,
             {
-                let query_params = ListQueryParams::<T>::try_from(list_params)?;
-
                 let table = T::list_on();
                 let fields = T::fields();
                 let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
@@ -298,7 +295,7 @@ macro_rules! impl_list_by {
 
             fn list_by_at<T>(
                 &self,
-                list_params: &ListParams,
+                query_params: &ListQueryParams<T>,
                 natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
                 status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
                 ($($E),*): &'a ($(&'a $E),*),
@@ -307,8 +304,6 @@ macro_rules! impl_list_by {
                 T: ListQuery + 'a,
                 T::Dao: VersionedAt,
             {
-                let query_params = ListQueryParams::<T>::try_from(list_params)?;
-
                 let table = T::list_on();
                 let fields = T::fields();
                 let sql = format!("SELECT {} FROM {}", fields.join(", "), table);
@@ -348,7 +343,7 @@ macro_rules! impl_list_by {
                     query_builder.push(")");
                 }
 
-                first = query_params_where(first, query_params, &mut query_builder);
+                first = query_params_where(first, &query_params, &mut query_builder);
 
                 trace!("list_at_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
@@ -356,7 +351,7 @@ macro_rules! impl_list_by {
 
             fn list_versions_by_at<T>(
                 &self,
-                list_params: &ListParams,
+                query_params: &ListQueryParams<T>,
                 natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
                 status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
                 ($($E),*): &'a ($(&'a $E),*),
@@ -372,14 +367,13 @@ macro_rules! impl_list_by {
                 ranked_versions_at::<T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder, natural_order_by);
                 select_ranked_versions_at::<T::Dao>(LATEST_VERSIONS_CTE, &mut query_builder, status);
 
-                let query_params = ListQueryParams::<T>::try_from(list_params)?;
 
                 let fields = T::fields();
                 let select = format!("SELECT {} FROM {}", fields.join(", "), LATEST_VERSIONS_CTE);
                 query_builder.push(select);
 
                 let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
-                first = query_params_where(first, query_params, &mut query_builder);
+                first = query_params_where(first, &query_params, &mut query_builder);
 
                 trace!("list_versions_at_{}: sql: {}", T::list_on(), query_builder.sql());
                 Ok(query_builder)
@@ -390,7 +384,7 @@ macro_rules! impl_list_by {
 
 fn query_params_where<T>(
     first: bool,
-    query_params: ListQueryParams<T>,
+    query_params: &ListQueryParams<T>,
     query_builder: &mut sqlx::QueryBuilder<'_, sqlx::Sqlite>,
 ) -> bool
 where
@@ -581,6 +575,7 @@ all_the_tuples!(impl_delete_by);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crudl::ListParams;
     use lazy_static::lazy_static;
     use sqlx::Execute;
     use td_database::sql::DbPool;
@@ -1064,7 +1059,9 @@ mod tests {
                 .build()
                 .unwrap();
             let where_clause = &TestName::try_from("A")?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &where_clause)?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder =
+                TEST_QUERIES.list_by::<TestDto>(&list_query_params, &where_clause)?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1096,7 +1093,8 @@ mod tests {
             }
 
             let list_params = ListParams::default();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1123,7 +1121,8 @@ mod tests {
             }
 
             let list_params = ListParams::default();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1156,7 +1155,8 @@ mod tests {
                 .order_by("name".to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1189,7 +1189,8 @@ mod tests {
                 .filter(vec!["name:eq:A".to_string()])
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1222,7 +1223,8 @@ mod tests {
                 .filter(vec!["name:lk:A".to_string()])
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1255,7 +1257,8 @@ mod tests {
                 .filter(vec!["name:lk:*".to_string()])
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1282,7 +1285,8 @@ mod tests {
             }
 
             let list_params = ListParamsBuilder::default().len(1usize).build().unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1314,7 +1318,8 @@ mod tests {
                 .pagination_id(FIXTURE_DAOS[1].id().to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1346,7 +1351,8 @@ mod tests {
                 .pagination_id(FIXTURE_DAOS[2].id().to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1378,7 +1384,8 @@ mod tests {
                 .pagination_id(FIXTURE_DAOS[1].id().to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1410,7 +1417,8 @@ mod tests {
                 .pagination_id(FIXTURE_DAOS[2].id().to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1444,7 +1452,8 @@ mod tests {
                 .pagination_id(FIXTURE_DAOS[1].id().to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1480,7 +1489,8 @@ mod tests {
                 .pagination_id(FIXTURE_DAOS[1].id().to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1513,7 +1523,8 @@ mod tests {
                 .pagination_id(FIXTURE_DAOS[0].id().to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1550,7 +1561,8 @@ mod tests {
                 .pagination_id(FIXTURE_DAOS[0].id().to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1586,7 +1598,8 @@ mod tests {
                 ])
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1622,7 +1635,8 @@ mod tests {
                 .order_by("name-".to_string())
                 .build()
                 .unwrap();
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_params, &())?;
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();

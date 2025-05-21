@@ -293,8 +293,6 @@ pub enum CrudlErrorX {
 #[builder(pattern = "owned")]
 #[getset(get = "pub")]
 pub struct ListResponse<LL> {
-    // TODO: TD-259, see if necessary to handle offset differently for possible gaps due to
-    // TODO: data being changed while paginating
     /// The list parameters of the request.
     list_params: ListParams,
     /// The length of the result list.
@@ -304,15 +302,20 @@ pub struct ListResponse<LL> {
     data: Vec<LL>,
 
     // Pagination info to go to previous page
-    //TODO    #[builder(private)]
+
+    //#[builder(private)] NOTE: we cannot do set this because list_status! macro generates a
+    //                          concrete class and tries to define the builder with a pub setter.
+    //                          As we don't use the ListParam builder in the app code (use by the
+    //                          framework only) this is not an issue.
     previous: Option<String>,
-    //TODO    #[builder(private)]
+    //#[builder(private)] NOTE: same same
     previous_pagination_id: Option<String>,
 
     // Pagination info to go to next page
-    //TODO    #[builder(private)]
+
+    //#[builder(private)] NOTE: same same
     next: Option<String>,
-    //TODO    #[builder(private)]
+    //#[builder(private)] NOTE: same same
     next_pagination_id: Option<String>,
 }
 

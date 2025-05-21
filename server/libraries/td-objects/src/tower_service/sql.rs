@@ -3,6 +3,7 @@
 //
 
 use crate::crudl::{handle_sql_err, ListParams, ListRequest, ListResponse, ListResponseBuilder};
+use crate::sql::list::ListQueryParams;
 use crate::sql::{DeleteBy, DerefQueries, FindBy, Insert, ListBy, QueryError, SelectBy, UpdateBy};
 use crate::types::{DataAccessObject, IdOrName, ListQuery, PartitionBy, SqlEntity, VersionedAt};
 use async_trait::async_trait;
@@ -563,7 +564,7 @@ pub trait SqlListService<E> {
     where
         N: Send + Sync + Clone,
         Q: DerefQueries,
-        T: ListQuery;
+        T: ListQuery + Send + Sync;
 
     async fn list_at<N, Q, T>(
         connection: Connection,
@@ -576,7 +577,7 @@ pub trait SqlListService<E> {
     where
         N: Send + Sync + Clone,
         Q: DerefQueries,
-        T: ListQuery,
+        T: ListQuery + Send + Sync,
         T::Dao: VersionedAt;
 
     async fn list_versions_at<N, Q, T>(
@@ -590,7 +591,7 @@ pub trait SqlListService<E> {
     where
         N: Send + Sync + Clone,
         Q: DerefQueries,
-        T: ListQuery,
+        T: ListQuery + Send + Sync,
         T::Dao: PartitionBy + VersionedAt;
 }
 
@@ -613,14 +614,16 @@ macro_rules! impl_list {
             where
                 N: Send + Sync + Clone,
                 Q: DerefQueries,
-                T: ListQuery,
+                T: ListQuery + Send + Sync,
             {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
 
+                let query_params = ListQueryParams::<T>::try_from(request.list_params())?;
+
                 let ($($E),*) = by.deref();
                 let result: Vec<T::Dao> = queries
-                    .list_by::<T>(request.list_params(), &($($E),*))?
+                    .list_by::<T>(&query_params, &($($E),*))?
                     .build_query_as()
                     .persistent(true)
                     .fetch_all(&mut *conn)
@@ -636,8 +639,8 @@ macro_rules! impl_list {
                     .iter()
                     .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
 
-                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &result);
-                let (next, next_pagination_id) = compute_next(request.list_params(), &result);
+                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &query_params, &result);
+                let (next, next_pagination_id) = compute_next(request.list_params(), &query_params, &result);
 
                 let list_response = ListResponseBuilder::default()
                     .list_params(request.list_params().clone())
@@ -661,16 +664,18 @@ macro_rules! impl_list {
             where
                 N: Send + Sync + Clone,
                 Q: DerefQueries,
-                T: ListQuery,
+                T: ListQuery + Send + Sync,
                 T::Dao: VersionedAt,
             {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
 
+                let query_params = ListQueryParams::<T>::try_from(request.list_params())?;
+
                 let ($($E),*) = by.deref();
                 let result: Vec<T::Dao> = queries
                     .list_by_at::<T>(
-                        request.list_params(),
+                        &query_params,
                         Some(&*natural_order_by),
                         Some(&status.iter().collect::<Vec<_>>()[..]),
                         &($($E),*)
@@ -690,8 +695,8 @@ macro_rules! impl_list {
                     .iter()
                     .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
 
-                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &result);
-                let (next, next_pagination_id) = compute_next(request.list_params(), &result);
+                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &query_params, &result);
+                let (next, next_pagination_id) = compute_next(request.list_params(), &query_params, &result);
 
                 let list_response = ListResponseBuilder::default()
                     .list_params(request.list_params().clone())
@@ -715,16 +720,18 @@ macro_rules! impl_list {
             where
                 N: Send + Sync + Clone,
                 Q: DerefQueries,
-                T: ListQuery,
+                T: ListQuery + Send + Sync,
                 T::Dao: PartitionBy + VersionedAt,
             {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
 
+                let query_params = ListQueryParams::<T>::try_from(request.list_params())?;
+
                 let ($($E),*) = by.deref();
                 let result: Vec<T::Dao> = queries
                     .list_versions_by_at::<T>(
-                        request.list_params(),
+                        &query_params,
                         Some(&*natural_order_by),
                         Some(&status.iter().collect::<Vec<_>>()[..]),
                         &($($E),*)
@@ -744,8 +751,8 @@ macro_rules! impl_list {
                     .iter()
                     .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
 
-                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &result);
-                let (next, next_pagination_id) = compute_next(request.list_params(), &result);
+                let (previous, previous_pagination_id) = compute_previous(request.list_params(), &query_params, &result);
+                let (next, next_pagination_id) = compute_next(request.list_params(), &query_params, &result);
 
                 let list_response = ListResponseBuilder::default()
                     .list_params(request.list_params().clone())
@@ -764,26 +771,34 @@ macro_rules! impl_list {
 /// Determine previous info for listing pagination
 fn compute_previous<T: ListQuery>(
     list_params: &ListParams,
+    query_params: &ListQueryParams<T>,
     result: &[T],
 ) -> (Option<String>, Option<String>) {
     match (list_params.previous(), result.first()) {
-        // default list params, no data => no previous page
+        // no previous in list params, no data => no previous page
         (None, None) => (None, None),
-        // default list params, data => first page, no previous page
-        (None, Some(_)) => (None, None),
-        // previous list params, no data => before first page, no previous page
         (Some(_), None) => (None, None),
         // previous list params, data => use the first data item to get previous info
-        (Some(_), Some(first)) => (
-            first.order_by_str_value(list_params.order_by()),
-            Some(first.pagination_value()),
-        ),
+        (_, Some(first)) => {
+            let order = query_params
+                .order()
+                .as_ref()
+                .unwrap_or(query_params.natural_order())
+                .field()
+                .to_string();
+            let order = Some(order);
+            (
+                first.order_by_str_value(&order),
+                Some(first.pagination_value()),
+            )
+        }
     }
 }
 
 /// Determine next info for listing pagination
 fn compute_next<T: ListQuery>(
     list_params: &ListParams,
+    query_params: &ListQueryParams<T>,
     result: &[T],
 ) -> (Option<String>, Option<String>) {
     match (result.len() < *list_params.len(), result.last()) {
@@ -792,10 +807,19 @@ fn compute_next<T: ListQuery>(
         // not result data => no next page
         (false, None) => (None, None),
         // result length eq requested length and result data => use the last data item to get next info
-        (false, Some(last)) => (
-            last.order_by_str_value(list_params.order_by()),
-            Some(last.pagination_value()),
-        ),
+        (false, Some(last)) => {
+            let order = query_params
+                .order()
+                .as_ref()
+                .unwrap_or(query_params.natural_order())
+                .field()
+                .to_string();
+            let order = Some(order);
+            (
+                last.order_by_str_value(&order),
+                Some(last.pagination_value()),
+            )
+        }
     }
 }
 
@@ -1275,11 +1299,22 @@ mod tests {
 
         // default list params with no data
         let list_params = ListParams::builder().order_by("name").build().unwrap();
-        assert_eq!(compute_previous::<MyDto>(&list_params, &[]), (None, None));
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
+        assert_eq!(
+            compute_previous::<MyDto>(&list_params, &list_query_params, &[]),
+            (None, None)
+        );
 
         // default list params with data
         let list_params = ListParams::builder().order_by("name").build().unwrap();
-        assert_eq!(compute_previous::<MyDto>(&list_params, &data), (None, None));
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
+        assert_eq!(
+            compute_previous::<MyDto>(&list_params, &list_query_params, &data),
+            (
+                data[0].order_by_str_value(&Some("name".to_string())),
+                Some(data[0].pagination_value())
+            )
+        );
 
         // previous list params with no data
         let list_params = ListParams::builder()
@@ -1288,7 +1323,11 @@ mod tests {
             .pagination_id(data[0].pagination_value())
             .build()
             .unwrap();
-        assert_eq!(compute_previous::<MyDto>(&list_params, &[]), (None, None));
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
+        assert_eq!(
+            compute_previous::<MyDto>(&list_params, &list_query_params, &[]),
+            (None, None)
+        );
 
         // previous list params with data
         let list_params = ListParams::builder()
@@ -1297,8 +1336,9 @@ mod tests {
             .pagination_id(data[1].pagination_value())
             .build()
             .unwrap();
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
-            compute_previous::<MyDto>(&list_params, &data[0..1]),
+            compute_previous::<MyDto>(&list_params, &list_query_params, &data[0..1]),
             (
                 data[0].order_by_str_value(&Some("name".to_string())),
                 Some(data[0].pagination_value())
@@ -1330,7 +1370,11 @@ mod tests {
 
         // default list params with no data
         let list_params = ListParams::builder().order_by("name").build().unwrap();
-        assert_eq!(compute_next::<MyDto>(&list_params, &[]), (None, None));
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
+        assert_eq!(
+            compute_next::<MyDto>(&list_params, &list_query_params, &[]),
+            (None, None)
+        );
 
         // default list params with less data than requested
         let list_params = ListParams::builder()
@@ -1338,7 +1382,11 @@ mod tests {
             .order_by("name")
             .build()
             .unwrap();
-        assert_eq!(compute_next::<MyDto>(&list_params, &data), (None, None));
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
+        assert_eq!(
+            compute_next::<MyDto>(&list_params, &list_query_params, &data),
+            (None, None)
+        );
 
         // default list params with exact data
         let list_params = ListParams::builder()
@@ -1346,8 +1394,9 @@ mod tests {
             .order_by("name")
             .build()
             .unwrap();
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
-            compute_next::<MyDto>(&list_params, &data),
+            compute_next::<MyDto>(&list_params, &list_query_params, &data),
             (
                 data[3].order_by_str_value(&Some("name".to_string())),
                 Some(data[3].pagination_value())
@@ -1361,7 +1410,11 @@ mod tests {
             .pagination_id(data[3].pagination_value())
             .build()
             .unwrap();
-        assert_eq!(compute_next::<MyDto>(&list_params, &[]), (None, None));
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
+        assert_eq!(
+            compute_next::<MyDto>(&list_params, &list_query_params, &[]),
+            (None, None)
+        );
 
         // next list params with less data than requested
         let list_params = ListParams::builder()
@@ -1371,7 +1424,11 @@ mod tests {
             .pagination_id(data[3].pagination_value())
             .build()
             .unwrap();
-        assert_eq!(compute_next::<MyDto>(&list_params, &data), (None, None));
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
+        assert_eq!(
+            compute_next::<MyDto>(&list_params, &list_query_params, &data),
+            (None, None)
+        );
 
         // next list params with same amount of data than requested
         let list_params = ListParams::builder()
@@ -1381,8 +1438,9 @@ mod tests {
             .pagination_id(data[1].pagination_value())
             .build()
             .unwrap();
+        let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
-            compute_next::<MyDto>(&list_params, &data[2..]),
+            compute_next::<MyDto>(&list_params, &list_query_params, &data[2..]),
             (
                 data[3].order_by_str_value(&Some("name".to_string())),
                 Some(data[3].pagination_value())

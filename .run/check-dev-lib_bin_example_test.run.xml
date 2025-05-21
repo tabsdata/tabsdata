@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="check-dev-lib_bin_example_test" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Build">
-    <option name="buildProfileId" value="test" />
+    <option name="buildProfileId" value="dev" />
     <option name="command" value="check --profile dev --lib --bins --examples --tests" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
