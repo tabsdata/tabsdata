@@ -13,8 +13,9 @@ use crate::status::error_status::{
 };
 use crate::status::extractors::Json;
 use crate::status::DeleteStatus;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::Extension;
+use axum_extra::extract::Query;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};

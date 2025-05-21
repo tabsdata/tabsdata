@@ -7,9 +7,10 @@ use crate::router::state::{StorageRef, Tables};
 use crate::router::tables::TABLES_TAG;
 use crate::status::error_status::GetErrorStatus;
 use axum::body::Body;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::Extension;
+use axum_extra::extract::Query;
 #[allow(unused_imports)] // needed for response macro but rustc warns as unused
 use serde_json::json;
 use td_apiforge::{apiserver_path, apiserver_schema};
