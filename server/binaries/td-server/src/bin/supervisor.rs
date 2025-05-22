@@ -17,7 +17,10 @@ use tracing::{info, Level};
 #[attach(signal = "supervisor")]
 pub fn main() {
     let instance_path = Arguments::parse().instance_path();
-    set_var(INSTANCE_URI_ENV, prepend_slash(instance_path.clone()));
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(INSTANCE_URI_ENV, prepend_slash(instance_path.clone()));
+    }
     set_var(
         INSTANCE_PATH_ENV,
         OsString::from(

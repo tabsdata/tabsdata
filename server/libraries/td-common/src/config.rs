@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn test_load_config_no_files() {
-        let config = crate::config::load_config::<MyConfig>("my-config", None, false);
+        let config = load_config::<MyConfig>("my-config", None, false);
         assert_eq!(config.name(), "default_name");
         assert_eq!(config.port(), &1u16);
     }
@@ -289,8 +289,14 @@ mod tests {
             },
         );
 
-        std::env::set_var("MY_CONFIG_ENV_NAME", "env_config_name");
-        std::env::set_var("MY_CONFIG_ENV_PORT", "5");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            std::env::set_var("MY_CONFIG_ENV_NAME", "env_config_name");
+        }
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            std::env::set_var("MY_CONFIG_ENV_PORT", "5");
+        }
 
         let config = load_config::<MyConfig>("my-config-env", None, false);
 

@@ -103,6 +103,7 @@ pub const CONTROLLERS_ALIVE_CHECK_MILLISECONDS: u64 = 30000;
 
 pub const EPHEMERAL_WAIT_MILLISECONDS: u64 = 500;
 
+#[allow(unused_qualifications)]
 #[atomic_enum]
 enum ControllerState {
     NA,
@@ -1989,94 +1990,124 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
 
     // These environment variables are meant to be used as URI locations. Therefore, in Windows they will have a
     // leading slash (/), resulting in, for example, '/c:\folder\file' instead of 'c:\folder\file'
-    set_var(
-        INSTANCE_URI_ENV,
-        prepend_slash(instance_dir_absolute.clone()),
-    );
-    set_var(
-        REPOSITORY_URI_ENV,
-        prepend_slash(repository_dir_absolute.clone()),
-    );
-    set_var(
-        WORKSPACE_URI_ENV,
-        prepend_slash(workspace_dir_absolute.clone()),
-    );
-    set_var(CONFIG_URI_ENV, prepend_slash(config_dir_absolute.clone()));
-    set_var(WORK_URI_ENV, prepend_slash(work_dir_absolute.clone()));
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(
+            INSTANCE_URI_ENV,
+            prepend_slash(instance_dir_absolute.clone()),
+        );
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(
+            REPOSITORY_URI_ENV,
+            prepend_slash(repository_dir_absolute.clone()),
+        );
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(
+            WORKSPACE_URI_ENV,
+            prepend_slash(workspace_dir_absolute.clone()),
+        );
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(CONFIG_URI_ENV, prepend_slash(config_dir_absolute.clone()));
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(WORK_URI_ENV, prepend_slash(work_dir_absolute.clone()));
+    }
 
     // These environment variables are meant to be used as regular PATH locations.
-    set_var(
-        INSTANCE_PATH_ENV,
-        OsString::from(
-            instance_dir_absolute
-                .clone()
-                .to_slash()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Invalid characters in instance path: {:?}",
-                        instance_dir_absolute
-                    )
-                })
-                .into_owned(),
-        ),
-    );
-    set_var(
-        REPOSITORY_PATH_ENV,
-        OsString::from(
-            repository_dir_absolute
-                .clone()
-                .to_slash()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Invalid characters in repository path: {:?}",
-                        repository_dir_absolute
-                    )
-                })
-                .into_owned(),
-        ),
-    );
-    set_var(
-        WORKSPACE_PATH_ENV,
-        OsString::from(
-            workspace_dir_absolute
-                .clone()
-                .to_slash()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Invalid characters in workspace path: {:?}",
-                        work_dir_absolute
-                    )
-                })
-                .into_owned(),
-        ),
-    );
-    set_var(
-        CONFIG_PATH_ENV,
-        OsString::from(
-            config_dir_absolute
-                .clone()
-                .to_slash()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Invalid characters in config path: {:?}",
-                        config_dir_absolute
-                    )
-                })
-                .into_owned(),
-        ),
-    );
-    set_var(
-        WORK_PATH_ENV,
-        OsString::from(
-            work_dir_absolute
-                .clone()
-                .to_slash()
-                .unwrap_or_else(|| {
-                    panic!("Invalid characters in work path: {:?}", work_dir_absolute)
-                })
-                .into_owned(),
-        ),
-    );
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(
+            INSTANCE_PATH_ENV,
+            OsString::from(
+                instance_dir_absolute
+                    .clone()
+                    .to_slash()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Invalid characters in instance path: {:?}",
+                            instance_dir_absolute
+                        )
+                    })
+                    .into_owned(),
+            ),
+        );
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(
+            REPOSITORY_PATH_ENV,
+            OsString::from(
+                repository_dir_absolute
+                    .clone()
+                    .to_slash()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Invalid characters in repository path: {:?}",
+                            repository_dir_absolute
+                        )
+                    })
+                    .into_owned(),
+            ),
+        );
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(
+            WORKSPACE_PATH_ENV,
+            OsString::from(
+                workspace_dir_absolute
+                    .clone()
+                    .to_slash()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Invalid characters in workspace path: {:?}",
+                            work_dir_absolute
+                        )
+                    })
+                    .into_owned(),
+            ),
+        );
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(
+            CONFIG_PATH_ENV,
+            OsString::from(
+                config_dir_absolute
+                    .clone()
+                    .to_slash()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Invalid characters in config path: {:?}",
+                            config_dir_absolute
+                        )
+                    })
+                    .into_owned(),
+            ),
+        );
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        set_var(
+            WORK_PATH_ENV,
+            OsString::from(
+                work_dir_absolute
+                    .clone()
+                    .to_slash()
+                    .unwrap_or_else(|| {
+                        panic!("Invalid characters in work path: {:?}", work_dir_absolute)
+                    })
+                    .into_owned(),
+            ),
+        );
+    }
 
     prepare(&instance_dir_absolute);
 

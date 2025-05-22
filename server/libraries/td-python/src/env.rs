@@ -28,7 +28,10 @@ pub fn env_path() -> String {
 pub fn env_path() -> String {
     let env_path_name = env();
     if let Ok(env_path) = env::var(ENV_PATH) {
-        env::set_var(&env_path_name, env_path);
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var(&env_path_name, env_path);
+        }
     }
     env_path_name
 }
@@ -57,7 +60,10 @@ pub fn env() -> String {
 pub fn join(paths: Vec<String>, env: String) -> Result<OsString, TdError> {
     match env::join_paths(paths) {
         Ok(new_env_path) => {
-            env::set_var(env, &new_env_path);
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::set_var(env, &new_env_path);
+            }
             Ok(new_env_path)
         }
         Err(err) => Err(WrongEnvPath(err))?,
@@ -84,7 +90,10 @@ pub fn remove_from_path(path: &str, env: Option<String>) -> Result<OsString, TdE
     env_paths.retain(|p| p != normalized_path);
     match env::join_paths(env_paths) {
         Ok(new_env_path) => {
-            env::set_var(&env_path_name, &new_env_path);
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::set_var(&env_path_name, &new_env_path);
+            }
             Ok(new_env_path)
         }
         Err(err) => Err(WrongEnvPath(err))?,
@@ -102,10 +111,13 @@ mod tests {
         let env_path_name = env_path();
         let path = "/my/path";
         let old_path = env::var(&env_path_name).unwrap_or_default();
-        env::set_var(
-            &env_path_name,
-            format!("{}{}{}", path, PATH_SEPARATOR, old_path),
-        );
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var(
+                &env_path_name,
+                format!("{}{}{}", path, PATH_SEPARATOR, old_path),
+            );
+        }
         let result = prepend_in_path(path, Some(env_path_name.to_string())).unwrap();
         let new_path = env::var(&env_path_name).unwrap();
         assert!(new_path.starts_with(path));

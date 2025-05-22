@@ -107,13 +107,34 @@ pub fn activate(venv: &PathBuf) -> Result<(), TdError> {
             .unwrap(),
         None,
     )?;
-    env::remove_var(ENV_CONDA_PREFIX);
-    env::remove_var(ENV_PYENV_VERSION);
-    env::remove_var(ENV_PYTHONHOME);
-    env::remove_var(ENV_PYTHONPATH);
-    env::remove_var(ENV_UV_VENV);
-    env::set_var(ENV_VIRTUAL_ENV, venv);
-    env::set_var(ENV_VIRTUAL_ENV_PROMPT, format!("({})", instance));
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_CONDA_PREFIX);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_PYENV_VERSION);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_PYTHONHOME);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_PYTHONPATH);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_UV_VENV);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::set_var(ENV_VIRTUAL_ENV, venv);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::set_var(ENV_VIRTUAL_ENV_PROMPT, format!("({})", instance));
+    }
     Ok(())
 }
 
@@ -122,13 +143,34 @@ pub fn deactivate(venv: &PathBuf) -> Result<(), TdError> {
         Path::new(venv).join(PYTHON_BIN_FOLDER).to_str().unwrap(),
         None,
     )?;
-    env::remove_var(ENV_CONDA_PREFIX);
-    env::remove_var(ENV_PYENV_VERSION);
-    env::remove_var(ENV_PYTHONHOME);
-    env::remove_var(ENV_PYTHONPATH);
-    env::remove_var(ENV_UV_VENV);
-    env::remove_var(ENV_VIRTUAL_ENV);
-    env::remove_var(ENV_VIRTUAL_ENV_PROMPT);
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_CONDA_PREFIX);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_PYENV_VERSION);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_PYTHONHOME);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_PYTHONPATH);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_UV_VENV);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_VIRTUAL_ENV);
+    }
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::remove_var(ENV_VIRTUAL_ENV_PROMPT);
+    }
     Ok(())
 }
 

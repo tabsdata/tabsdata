@@ -45,8 +45,14 @@ mod tests {
 
     #[test]
     fn test_render_with_valid_env_variables() {
-        env::set_var("TD1_PERSON", "Doteki");
-        env::set_var("TD1_ACTIVITY", "Go Player");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var("TD1_PERSON", "Doteki");
+        }
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var("TD1_ACTIVITY", "Go Player");
+        }
         let input = "Fact: ${TD1_PERSON} was a ${TD1_ACTIVITY}...";
         let output = render(input);
         assert_eq!(output.unwrap(), "Fact: Doteki was a Go Player...");
@@ -54,7 +60,10 @@ mod tests {
 
     #[test]
     fn test_render_with_missing_env_variable() {
-        env::set_var("TD2_PERSON", "Frodo");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var("TD2_PERSON", "Frodo");
+        }
         let input = "Fact: ${TD2_PERSON} was a ${TD2_ACTIVITY}...";
         let output = render(input);
         match output {
@@ -74,8 +83,14 @@ mod tests {
 
     #[test]
     fn test_render_with_partial_placeholders() {
-        env::set_var("TD3_PERSON", "Euler");
-        env::set_var("TD3_ACTIVITY", "Mathematician");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var("TD3_PERSON", "Euler");
+        }
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var("TD3_ACTIVITY", "Mathematician");
+        }
         let input = "Fact: ${TD3_PERSON} was a ${TD3_LANGUAGE}...";
         let output = render(input);
         match output {
@@ -88,8 +103,14 @@ mod tests {
 
     #[test]
     fn test_render_with_adjacent_placeholders() {
-        env::set_var("TD4_PERSON", "Lowenheim");
-        env::set_var("TD4_ACTIVITY", "Logician");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var("TD4_PERSON", "Lowenheim");
+        }
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var("TD4_ACTIVITY", "Logician");
+        }
         let input = "...${TD4_PERSON}${TD4_ACTIVITY}...";
         let output = render(input);
         assert_eq!(output.unwrap(), "...LowenheimLogician...");
@@ -97,8 +118,14 @@ mod tests {
 
     #[test]
     fn test_render_with_nested_placeholders() {
-        env::set_var("TD5_OUTER", "${TD5_INNER}");
-        env::set_var("TD5_INNER", "inner");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var("TD5_OUTER", "${TD5_INNER}");
+        }
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            env::set_var("TD5_INNER", "inner");
+        }
         let input = "This is ${TD5_OUTER}.";
         let output = render(input);
         assert_eq!(output.unwrap(), "This is ${TD5_INNER}.");

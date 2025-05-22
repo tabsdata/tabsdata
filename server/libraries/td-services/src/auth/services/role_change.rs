@@ -183,7 +183,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
-    async fn test_role_change_ok(db: DbPool) -> Result<(), td_error::TdError> {
+    async fn test_role_change_ok(db: DbPool) -> Result<(), TdError> {
         let auth_services = auth_services(&db).await;
 
         let service = auth_services.login_service().await;
@@ -235,7 +235,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
-    async fn test_role_change_user_not_in_given_role(db: DbPool) -> Result<(), td_error::TdError> {
+    async fn test_role_change_user_not_in_given_role(db: DbPool) -> Result<(), TdError> {
         let auth_services = auth_services(&db).await;
 
         let service = auth_services.login_service().await;

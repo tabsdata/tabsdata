@@ -1260,13 +1260,13 @@ mod tests {
     #[td_type::typed(string)]
     struct Name;
 
-    #[td_type::Dao]
+    #[Dao]
     struct MyDao {
         id: Id,
         name: Name,
     }
 
-    #[td_type::Dto]
+    #[Dto]
     #[dto(list(on = MyDao))]
     #[td_type(builder(try_from = MyDao))]
     struct MyDto {

@@ -104,7 +104,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
-    async fn test_logout_ok(db: DbPool) -> Result<(), td_error::TdError> {
+    async fn test_logout_ok(db: DbPool) -> Result<(), TdError> {
         let auth_services = auth_services(&db).await;
 
         let service = auth_services.login_service().await;

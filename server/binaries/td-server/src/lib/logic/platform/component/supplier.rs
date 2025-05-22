@@ -109,15 +109,9 @@ impl WorkerSupplier for FunctionWorkerSupplier {
 #[derive(Debug, Error)]
 pub enum SupplierError {
     #[error("Error registering the config folder for '{describer}': {cause}")]
-    ConfigCreationError {
-        describer: String,
-        cause: std::io::Error,
-    },
+    ConfigCreationError { describer: String, cause: io::Error },
     #[error("Error registering the work folder for '{describer}': {cause}")]
-    WorkCreationError {
-        describer: String,
-        cause: std::io::Error,
-    },
+    WorkCreationError { describer: String, cause: io::Error },
     #[error("Unexpected response message received.")]
     InvalidMessageType,
     #[error("An IO error occurred serializing the inf file: {0}")]

@@ -534,7 +534,10 @@ mod tests {
         let value = super::Value::Literal("value".into());
         assert_eq!(value.value().unwrap(), "value");
 
-        std::env::set_var("TEST_VALUE_ENV_VAR", "env_value");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            std::env::set_var("TEST_VALUE_ENV_VAR", "env_value");
+        }
 
         let value = super::Value::Env("TEST_VALUE_ENV_VAR".into());
         assert_eq!(value.value().unwrap(), "env_value");
@@ -542,7 +545,10 @@ mod tests {
         let value = super::Value::Env("'TEST_VALUE_ENV_VAR'".into());
         assert_eq!(value.value().unwrap(), "env_value");
 
-        std::env::remove_var("TEST_VALUE_ENV_VAR");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            std::env::remove_var("TEST_VALUE_ENV_VAR");
+        }
     }
 
     #[test]

@@ -365,10 +365,16 @@ impl Params {
                 // We need to do this for Polars JSON reader to work with Azure.
                 // polars: crates/polars-plan/src/plans/conversion/dsl_to_ir.rs:165 does not propagate cloud_options
                 if let Some(account_name) = config.get(ACCOUNT_NAME_CONF) {
-                    std::env::set_var(ACCOUNT_NAME_ENV, account_name);
+                    // Setting env vars is not thread-safe; use with care.
+                    unsafe {
+                        std::env::set_var(ACCOUNT_NAME_ENV, account_name);
+                    }
                 }
                 if let Some(account_key) = config.get(ACCOUNT_KEY_CONF) {
-                    std::env::set_var(ACCOUNT_KEY_ENV, account_key);
+                    // Setting env vars is not thread-safe; use with care.
+                    unsafe {
+                        std::env::set_var(ACCOUNT_KEY_ENV, account_key);
+                    }
                 }
 
                 config
@@ -425,7 +431,7 @@ impl Params {
                 .await
                 .unwrap();
             if let Some(region) = res.headers().get("x-amz-bucket-region") {
-                let region = std::str::from_utf8(region.as_bytes()).unwrap();
+                let region = from_utf8(region.as_bytes()).unwrap();
                 ret = Some(region.to_string());
             }
         }
@@ -728,7 +734,10 @@ mod tests {
 
     #[test]
     fn test_merge_envs_into_configs() {
-        std::env::set_var("FOO_A", "aa");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            std::env::set_var("FOO_A", "aa");
+        }
 
         let mut configs = HashMap::new();
         configs.insert("a".to_string(), "a".to_string());
@@ -737,7 +746,10 @@ mod tests {
         let merged = super::merge_envs_into_configs("FOO_", configs.clone());
         assert_eq!(merged["a"], "aa".to_string());
         assert_eq!(merged["x"], "x".to_string());
-        std::env::remove_var("FOO_A");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            std::env::remove_var("FOO_A");
+        }
     }
 
     #[tokio::test]
@@ -822,7 +834,10 @@ mod tests {
         };
 
         let config = HashMap::from([("x".to_string(), "X".to_string())]);
-        std::env::set_var("FOO_B", "B");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            std::env::set_var("FOO_B", "B");
+        }
         let augmented = params
             .augment_object_store_config(&params.location, "FOO_", config)
             .await;
@@ -847,7 +862,10 @@ mod tests {
         };
 
         let config = HashMap::from([("x".to_string(), "X".to_string())]);
-        std::env::set_var("FOO_C", "C");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            std::env::set_var("FOO_C", "C");
+        }
         let augmented = params
             .augment_object_store_config(&params.location, "FOO_", config)
             .await;

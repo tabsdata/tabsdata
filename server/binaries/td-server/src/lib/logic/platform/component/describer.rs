@@ -197,16 +197,16 @@ impl WorkerDescriber for TabsDataWorkerDescriber {
         &self.program
     }
 
+    fn arguments(&self) -> &Vec<String> {
+        &self.arguments
+    }
+
     fn set_state(&self) -> &Option<SetState> {
         &self.set_state
     }
 
     fn get_states(&self) -> &Vec<GetState> {
         &self.get_states
-    }
-
-    fn arguments(&self) -> &Vec<String> {
-        &self.arguments
     }
 
     fn config(&self) -> &PathBuf {

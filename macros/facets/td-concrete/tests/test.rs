@@ -2,6 +2,7 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
+//noinspection RsUnresolvedPath
 #[cfg(test)]
 mod tests {
     use derive_builder::Builder;

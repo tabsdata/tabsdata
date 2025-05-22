@@ -92,7 +92,7 @@ pub enum QueueError {
     #[error("An IO error occurred serializing the message file: {0}")]
     SerdeError(#[from] serde_yaml::Error),
     #[error("An IO error occurred generating the message file: {0}")]
-    IOError(#[from] io::Error),
+    IOError(#[from] Error),
 }
 
 #[apiserver_schema]
@@ -376,7 +376,7 @@ impl<T> TryFrom<(PathBuf, PayloadType)> for SupervisorMessage<T>
 where
     T: Clone + DeserializeOwned,
 {
-    type Error = io::Error;
+    type Error = Error;
 
     fn try_from(parameters: (PathBuf, PayloadType)) -> Result<Self, Self::Error> {
         let (message, payload_type) = parameters;
@@ -442,7 +442,7 @@ impl FileWorkerMessageQueue {
         fn obtain_queue_location_from_info_file() -> Option<PathBuf> {
             let inf_path = get_current_dir().join(WORKER_INF_FILE);
             if inf_path.exists() {
-                if let Ok(inf_file) = std::fs::File::open(&inf_path) {
+                if let Ok(inf_file) = File::open(&inf_path) {
                     if let Ok(inf) = serde_yaml::from_reader::<_, Inf>(inf_file) {
                         return Some(inf.queue);
                     }

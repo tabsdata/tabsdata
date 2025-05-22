@@ -163,7 +163,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
-    async fn test_refresh_ok(db: DbPool) -> Result<(), td_error::TdError> {
+    async fn test_refresh_ok(db: DbPool) -> Result<(), TdError> {
         let auth_services = auth_services(&db).await;
 
         // doing a login before password change to verify it will be invalidated

@@ -137,15 +137,15 @@ pub enum DbError {
     #[error("Database location is missing in the given configuration")]
     MissingDatabaseLocation = 5000,
     #[error("Failed to database existence: {0}")]
-    FailedToCheckDatabaseExistence(#[source] sqlx::Error) = 5001,
+    FailedToCheckDatabaseExistence(#[source] Error) = 5001,
     #[error("Failed to database existence: {0}")]
-    FailedToCreateDatabase(#[source] sqlx::Error) = 5002,
+    FailedToCreateDatabase(#[source] Error) = 5002,
     #[error("Failed to connect to the database: {0}")]
-    FailedToConnectToDatabase(#[source] sqlx::Error) = 5003,
+    FailedToConnectToDatabase(#[source] Error) = 5003,
     #[error("Failed to connect to the database: {0}")]
     FailedToCreateOrUpdateDatabaseSchema(#[source] MigrateError) = 5004,
     #[error("Sql error: {0}")]
-    SqlError(#[source] sqlx::Error) = 5005,
+    SqlError(#[source] Error) = 5005,
     #[error("Database does not exist")]
     DatabaseDoesNotExist = 5006,
     #[error("Failed to create database directory {0}: {1}")]

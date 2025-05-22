@@ -277,7 +277,10 @@ mod tests {
         let instance = yaml(None, None);
 
         let result = panic::catch_unwind(|| {
-            env::set_var(INSTANCE_PATH_ENV, instance.to_string_lossy().to_string());
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::set_var(INSTANCE_PATH_ENV, instance.to_string_lossy().to_string());
+            }
 
             sleep(Duration::from_millis(SLEEP_TIME));
 
@@ -326,19 +329,25 @@ mod tests {
             settings_file.flush().expect("Failed to flush data to disk");
             sleep(Duration::from_millis(SLEEP_TIME));
 
-            env::set_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()), &value_env);
-            env::set_var(
-                format!(
-                    "TD__{}_{}",
-                    &instance
-                        .file_name()
-                        .unwrap()
-                        .to_string_lossy()
-                        .to_uppercase(),
-                    &ENV_LOG_MODE.to_uppercase()
-                ),
-                &value_env_ins,
-            );
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::set_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()), &value_env);
+            }
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::set_var(
+                    format!(
+                        "TD__{}_{}",
+                        &instance
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_uppercase(),
+                        &ENV_LOG_MODE.to_uppercase()
+                    ),
+                    &value_env_ins,
+                );
+            }
 
             let setting = MANAGER.get(ENV_LOG_MODE);
             assert_eq!(
@@ -349,7 +358,10 @@ mod tests {
                 setting
             );
 
-            env::remove_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()));
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::remove_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()));
+            }
 
             let setting = MANAGER.get(ENV_LOG_MODE);
             assert_eq!(
@@ -359,15 +371,18 @@ mod tests {
                 Some(value_env_ins.to_string()),
                 setting
             );
-            env::remove_var(format!(
-                "TD__{}_{}",
-                &instance
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_uppercase(),
-                ENV_LOG_MODE.to_uppercase()
-            ));
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::remove_var(format!(
+                    "TD__{}_{}",
+                    &instance
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_uppercase(),
+                    ENV_LOG_MODE.to_uppercase()
+                ));
+            }
 
             let setting = MANAGER.get(ENV_LOG_MODE);
             assert_eq!(
@@ -406,19 +421,25 @@ mod tests {
             .expect("Rename error");
             sleep(Duration::from_millis(SLEEP_TIME));
 
-            env::set_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()), &value_env);
-            env::set_var(
-                format!(
-                    "TD__{}_{}",
-                    &instance
-                        .file_name()
-                        .unwrap()
-                        .to_string_lossy()
-                        .to_uppercase(),
-                    &ENV_LOG_MODE.to_uppercase()
-                ),
-                &value_env_ins,
-            );
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::set_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()), &value_env);
+            }
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::set_var(
+                    format!(
+                        "TD__{}_{}",
+                        &instance
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_uppercase(),
+                        &ENV_LOG_MODE.to_uppercase()
+                    ),
+                    &value_env_ins,
+                );
+            }
             let settings_path = instance.join(SETTINGS_FILE);
             let mut settings_data = HashMap::new();
             settings_data.insert(ENV_LOG_MODE, &value_file_ins);
@@ -440,7 +461,10 @@ mod tests {
                 setting
             );
 
-            env::remove_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()));
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::remove_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()));
+            }
 
             let setting = MANAGER.get(ENV_LOG_MODE);
             assert_eq!(
@@ -451,15 +475,18 @@ mod tests {
                 setting
             );
 
-            env::remove_var(format!(
-                "TD__{}_{}",
-                &instance
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_uppercase(),
-                ENV_LOG_MODE.to_uppercase()
-            ));
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::remove_var(format!(
+                    "TD__{}_{}",
+                    &instance
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_uppercase(),
+                    ENV_LOG_MODE.to_uppercase()
+                ));
+            }
 
             let setting = MANAGER.get(ENV_LOG_MODE);
             assert_eq!(
@@ -525,17 +552,26 @@ mod tests {
                 );
             }
 
-            env::remove_var(INSTANCE_PATH_ENV);
-            env::remove_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()));
-            env::remove_var(format!(
-                "TD__{}_{}",
-                &instance
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_uppercase(),
-                ENV_LOG_MODE.to_uppercase()
-            ));
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::remove_var(INSTANCE_PATH_ENV);
+            }
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::remove_var(format!("TD_{}", ENV_LOG_MODE.to_uppercase()));
+            }
+            // Setting env vars is not thread-safe; use with care.
+            unsafe {
+                env::remove_var(format!(
+                    "TD__{}_{}",
+                    &instance
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_uppercase(),
+                    ENV_LOG_MODE.to_uppercase()
+                ));
+            }
         });
 
         if result.is_err() {

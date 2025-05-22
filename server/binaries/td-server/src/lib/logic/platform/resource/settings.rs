@@ -8,7 +8,6 @@ use crate::logic::platform::resource::instance::{
 };
 use include_dir::{include_dir, Dir, DirEntry};
 use std::fs::{create_dir_all, write, File};
-use std::io;
 use std::io::Result;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -101,7 +100,7 @@ fn extract_file<P: AsRef<Path>>(destination: P, resource: &Dir, target: &Path) -
 pub fn extract_default_settings<P: AsRef<Path>>(
     instance: Option<String>,
     destination: Option<P>,
-) -> io::Result<PathBuf> {
+) -> Result<PathBuf> {
     let root = dirs::home_dir().unwrap_or_else(|| PathBuf::from(ROOT));
     let folder = match destination.as_ref().map(|p| p.as_ref()) {
         None => root.join(TABSDATA_HOME_DIR),

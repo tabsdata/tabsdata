@@ -86,7 +86,6 @@ fn check_attach_config(filename: &str) -> bool {
 mod tests {
     use super::*;
     use lazy_static::lazy_static;
-    use std::env;
     use std::env::{remove_var, set_var};
     use std::sync::{Mutex, MutexGuard};
 
@@ -104,12 +103,18 @@ mod tests {
 
     fn setup_environment(value: &str) -> (MutexGuard<'static, ()>, EnvironmentGuard) {
         let guard = TEST_MUTEX.lock().unwrap();
-        set_var("TABSDATA_ATTACH", value);
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            set_var("TABSDATA_ATTACH", value);
+        }
         (guard, EnvironmentGuard)
     }
 
     fn teardown_environment() {
-        env::remove_var("TABSDATA_ATTACH");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            remove_var("TABSDATA_ATTACH");
+        }
     }
 
     #[test]
@@ -157,7 +162,10 @@ mod tests {
     #[test]
     fn test_check_attach_flag_not_set() {
         let (_guard, _env_guard) = setup_environment("");
-        remove_var("ATTACH");
+        // Setting env vars is not thread-safe; use with care.
+        unsafe {
+            remove_var("ATTACH");
+        }
         assert!(!check_attach_env());
     }
 }
