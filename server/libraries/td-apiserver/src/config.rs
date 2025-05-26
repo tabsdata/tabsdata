@@ -238,7 +238,13 @@ mod tests {
         let default_config = Config::default();
 
         let params = Params {
+            #[cfg(target_os = "windows")]
+            database_url: Some(String::from("file:///c:/test.db")),
+            #[cfg(not(target_os = "windows"))]
             database_url: Some(String::from("file:///test.db")),
+            #[cfg(target_os = "windows")]
+            storage_url: Some(String::from("file:///c:/storage")),
+            #[cfg(not(target_os = "windows"))]
             storage_url: Some(String::from("file:///storage")),
             address: Some(vec!["127.0.0.1:8080".parse().unwrap()]),
             jwt_secret: Some(String::from("NEW_SECRET")),
@@ -269,7 +275,13 @@ mod tests {
 
         // Test with some fields not set in Params
         let partial_params = Params {
+            #[cfg(target_os = "windows")]
+            database_url: Some(String::from("file:///c:/test.db")),
+            #[cfg(not(target_os = "windows"))]
             database_url: Some(String::from("file:///test.db")),
+            #[cfg(target_os = "windows")]
+            storage_url: Some(String::from("file:///c:/storage")),
+            #[cfg(not(target_os = "windows"))]
             storage_url: Some(String::from("file:///storage")),
             address: None,
             jwt_secret: Some(String::from("NEW_SECRET")),
