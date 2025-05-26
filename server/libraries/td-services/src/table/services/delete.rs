@@ -68,7 +68,6 @@ impl TableDeleteService {
                 from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<CollAdmin, CollDev>::check),
 
-
                 // Get table. Extract table id, table version id, function id and function version id.
                 from_fn(combine::<CollectionIdName, TableIdName>),
                 from_fn(By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableDBWithNames>),
@@ -118,8 +117,8 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependency,
-        TableName, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependencyDto,
+        TableName, TableNameDto, UserId,
     };
     use td_objects::types::function::{FunctionRegister, FunctionUpdate};
     use td_tower::ctx_service::RawOneshot;
@@ -196,8 +195,8 @@ mod tests {
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
-                TableName::try_from("super_table")?,
-                TableName::try_from("keep_this_one")?,
+                TableNameDto::try_from("super_table")?,
+                TableNameDto::try_from("keep_this_one")?,
             ]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -214,7 +213,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("keep_this_one")?]))
+            .tables(Some(vec![TableNameDto::try_from("keep_this_one")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -282,8 +281,8 @@ mod tests {
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
-                TableName::try_from("super_table")?,
-                TableName::try_from("keep_this_one")?,
+                TableNameDto::try_from("super_table")?,
+                TableNameDto::try_from("keep_this_one")?,
             ]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -298,7 +297,7 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("joaquin_dependant_function snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependency::try_from("super_table")?]))
+            .dependencies(Some(vec![TableDependencyDto::try_from("super_table")?]))
             .triggers(None)
             .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
@@ -316,7 +315,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("keep_this_one")?]))
+            .tables(Some(vec![TableNameDto::try_from("keep_this_one")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;

@@ -98,9 +98,9 @@ mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::types::basic::{AccessTokenId, Decorator, TransactionKey};
     use td_objects::types::basic::{
-        BundleId, CollectionName, FunctionRuntimeValues, TableDependency, TableName, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
+        TableDependencyDto, TableName, TableNameDto, TransactionKey, UserId,
     };
     use td_objects::types::basic::{DependencyPos, RoleId, VersionPos};
     use td_objects::types::collection::CollectionDB;
@@ -274,11 +274,11 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependency::try_from("table_1")?])
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
             .triggers(None)
             .tables(vec![
-                TableName::try_from("table_1")?,
-                TableName::try_from("table_2")?,
+                TableNameDto::try_from("table_1")?,
+                TableNameDto::try_from("table_2")?,
             ])
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
@@ -402,11 +402,11 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependency::try_from("table_1")?])
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
             .triggers(None)
             .tables(vec![
-                TableName::try_from("table_1")?,
-                TableName::try_from("table_2")?,
+                TableNameDto::try_from("table_1")?,
+                TableNameDto::try_from("table_2")?,
             ])
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
@@ -572,11 +572,11 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependency::try_from("table_1")?])
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
             .triggers(None)
             .tables(vec![
-                TableName::try_from("table_1")?,
-                TableName::try_from("table_2")?,
+                TableNameDto::try_from("table_1")?,
+                TableNameDto::try_from("table_2")?,
             ])
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
@@ -741,9 +741,9 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependency::try_from("table_1")?])
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
             .triggers(None)
-            .tables(vec![TableName::try_from("table_1")?])
+            .tables(vec![TableNameDto::try_from("table_1")?])
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -801,9 +801,9 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependency::try_from("table_1")?])
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
             .triggers(None)
-            .tables(vec![TableName::try_from("table_2")?])
+            .tables(vec![TableNameDto::try_from("table_2")?])
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -1062,11 +1062,11 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependency::try_from("table_1")?])
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
             .triggers(None)
             .tables(vec![
-                TableName::try_from("table_1")?,
-                TableName::try_from("table_2")?,
+                TableNameDto::try_from("table_1")?,
+                TableNameDto::try_from("table_2")?,
             ])
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)

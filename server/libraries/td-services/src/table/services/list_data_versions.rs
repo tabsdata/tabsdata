@@ -98,7 +98,7 @@ mod tests {
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, RoleId, TableName,
-        TransactionKey, UserId,
+        TableNameDto, TransactionKey, UserId,
     };
     use td_objects::types::execution::FunctionRunStatus;
     use td_objects::types::function::FunctionRegister;
@@ -155,7 +155,7 @@ mod tests {
 
         let dependencies = None;
         let triggers = None;
-        let tables = vec![TableName::try_from("table_version")?];
+        let tables = vec![TableNameDto::try_from("table_version")?];
         let create = FunctionRegister::builder()
             .try_name("joaquin")?
             .try_description("function_foo description")?
@@ -189,7 +189,10 @@ mod tests {
         let t1 = AtTime::now().await;
 
         let table_version = DaoQueries::default()
-            .select_by::<TableVersionDB>(&(collection.id(), &tables[0]))?
+            .select_by::<TableVersionDB>(&(
+                collection.id(),
+                &TableName::try_from(tables[0].clone())?,
+            ))?
             .build_query_as()
             .fetch_one(&db)
             .await

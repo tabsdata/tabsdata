@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::{CollectionName, TableName};
+use crate::types::basic::CollectionName;
 use crate::types::table_ref::{TableRef, Version, VersionedTableRef, Versions};
 use constcat::concat;
 use lazy_static::lazy_static;
@@ -36,16 +36,18 @@ pub fn parser(
 
 const VERSIONS_MARKER_REGEX: &str = "[^/@]+";
 const VERSIONED_TABLE_PATTERN: &str = concat!(
-    "^((?P<collection>",
-    IDENTIFIER_PATTERN,
-    ")/)?(?P<table>",
-    IDENTIFIER_PATTERN,
-    ")(@(?P<versions>",
+    "^((?P<collection>[^/]+)/)?(?P<table>[^@]+)(@(?P<versions>",
     VERSIONS_MARKER_REGEX,
     "))?$"
 );
 
-pub fn parse_versioned_table_ref(s: impl Into<String>) -> Result<VersionedTableRef, TdError> {
+pub fn parse_versioned_table_ref<T, E>(
+    s: impl Into<String>,
+) -> Result<VersionedTableRef<T>, TdError>
+where
+    T: TryFrom<String, Error = E>,
+    E: Into<TdError>,
+{
     lazy_static! {
         static ref VERSIONED_TABLE_REGEX: Regex = Regex::new(VERSIONED_TABLE_PATTERN).unwrap();
     }
@@ -72,19 +74,17 @@ and <VERSIONS> being a single version, a range of versions or a list of versions
         ))?,
     };
     let collection = collection.map(CollectionName::try_from).transpose()?;
-    let table = TableName::try_from(table)?;
+    let table = T::try_from(table.to_string()).map_err(Into::into)?;
     Ok(VersionedTableRef::new(collection, table, versions))
 }
 
-const TABLE_PATTERN: &str = concat!(
-    "^((?P<collection>",
-    IDENTIFIER_PATTERN,
-    ")/)?(?P<table>",
-    IDENTIFIER_PATTERN,
-    ")$"
-);
+const TABLE_PATTERN: &str = "^((?P<collection>[^/]+)/)?(?P<table>[^/]+)$";
 
-pub fn parse_table_ref(s: impl Into<String>) -> Result<TableRef, TdError> {
+pub fn parse_table_ref<T, E>(s: impl Into<String>) -> Result<TableRef<T>, TdError>
+where
+    T: TryFrom<String, Error = E>,
+    E: Into<TdError>,
+{
     lazy_static! {
         static ref TABLE_REGEX: Regex = Regex::new(TABLE_PATTERN).unwrap();
     }
@@ -104,7 +104,7 @@ being a [_A-Za-z0-9] word of up to 100 characters each"
         ))?,
     };
     let collection = collection.map(CollectionName::try_from).transpose()?;
-    let table = TableName::try_from(table)?;
+    let table = T::try_from(table.to_string()).map_err(Into::into)?;
     Ok(TableRef::new(collection, table))
 }
 
@@ -272,6 +272,7 @@ pub fn parse_email(s: impl Into<String>) -> Result<String, TdError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::basic::TableNameDto;
     use crate::types::table_ref::Version;
     use td_common::id;
 
@@ -308,37 +309,53 @@ mod tests {
 
     #[test]
     fn test_parse_table_ref() {
-        assert!(parse_table_ref("abc ".to_string()).is_err());
-        assert!(parse_table_ref(" abc ".to_string()).is_err());
-        assert!(parse_table_ref("abc/".to_string()).is_err());
-        assert!(parse_table_ref("/abc".to_string()).is_err());
-        assert!(parse_table_ref("@/a".to_string()).is_err());
+        assert!(parse_table_ref::<TableNameDto, _>("abc ".to_string()).is_err());
+        assert!(parse_table_ref::<TableNameDto, _>(" abc ".to_string()).is_err());
+        assert!(parse_table_ref::<TableNameDto, _>("abc/".to_string()).is_err());
+        assert!(parse_table_ref::<TableNameDto, _>("/abc".to_string()).is_err());
+        assert!(parse_table_ref::<TableNameDto, _>("@/a".to_string()).is_err());
 
-        assert!(parse_table_ref("abc".to_string()).is_ok());
-        assert!(parse_table_ref("xyz/abc".to_string()).is_ok());
+        assert!(parse_table_ref::<TableNameDto, _>("abc".to_string()).is_ok());
+        assert!(parse_table_ref::<TableNameDto, _>("xyz/abc".to_string()).is_ok());
     }
 
     #[test]
     fn test_parse_versioned_table_ref() {
-        assert!(parse_versioned_table_ref(" abc".to_string()).is_err());
-        assert!(parse_versioned_table_ref("abc ".to_string()).is_err());
-        assert!(parse_versioned_table_ref("abc/abc ".to_string()).is_err());
-        assert!(parse_versioned_table_ref(" abc/abc".to_string()).is_err());
-        assert!(parse_versioned_table_ref("abc/abc@".to_string()).is_err());
-        assert!(parse_versioned_table_ref("@abc".to_string()).is_err());
-        assert!(parse_versioned_table_ref("abc/abc@HEAD..HEAD,HEAD".to_string()).is_err());
-        assert!(parse_versioned_table_ref("abc/abc@HEAD..HEAD..HEAD".to_string()).is_err());
-        assert!(parse_versioned_table_ref("abc/abc@HEAD~".to_string()).is_err());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>(" abc".to_string()).is_err());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("abc ".to_string()).is_err());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("abc/abc ".to_string()).is_err());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>(" abc/abc".to_string()).is_err());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("abc/abc@".to_string()).is_err());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("@abc".to_string()).is_err());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>(
+            "abc/abc@HEAD..HEAD,HEAD".to_string()
+        )
+        .is_err());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>(
+            "abc/abc@HEAD..HEAD..HEAD".to_string()
+        )
+        .is_err());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("abc/abc@HEAD~".to_string()).is_err());
 
-        assert!(parse_versioned_table_ref("abc".to_string()).is_ok());
-        assert!(parse_versioned_table_ref("xyz/abc".to_string()).is_ok());
-        assert!(parse_versioned_table_ref("xyz/abc@HEAD".to_string()).is_ok());
-        assert!(parse_versioned_table_ref("xyz/abc@HEAD^^".to_string()).is_ok());
-        assert!(parse_versioned_table_ref("xyz/abc@HEAD^,HEAD".to_string()).is_ok());
-        assert!(parse_versioned_table_ref("xyz/abc@HEAD^..HEAD".to_string()).is_ok());
-        assert!(parse_versioned_table_ref("xyz/abc@HEAD~1".to_string()).is_ok());
-        assert!(parse_versioned_table_ref("xyz/abc@HEAD~10,HEAD".to_string()).is_ok());
-        assert!(parse_versioned_table_ref("xyz/abc@HEAD~10..HEAD".to_string()).is_ok());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("abc".to_string()).is_ok());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("xyz/abc".to_string()).is_ok());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("xyz/abc@HEAD".to_string()).is_ok());
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("xyz/abc@HEAD^^".to_string()).is_ok());
+        assert!(
+            parse_versioned_table_ref::<TableNameDto, _>("xyz/abc@HEAD^,HEAD".to_string()).is_ok()
+        );
+        assert!(
+            parse_versioned_table_ref::<TableNameDto, _>("xyz/abc@HEAD^..HEAD".to_string()).is_ok()
+        );
+        assert!(parse_versioned_table_ref::<TableNameDto, _>("xyz/abc@HEAD~1".to_string()).is_ok());
+        assert!(
+            parse_versioned_table_ref::<TableNameDto, _>("xyz/abc@HEAD~10,HEAD".to_string())
+                .is_ok()
+        );
+        assert!(
+            parse_versioned_table_ref::<TableNameDto, _>("xyz/abc@HEAD~10..HEAD".to_string())
+                .is_ok()
+        );
     }
 
     #[test]
@@ -405,7 +422,7 @@ mod tests {
             valid_table_with_id.as_str(),
         ];
         valid_tables.into_iter().for_each(|table| {
-            let parsed = parse_versioned_table_ref(table.to_string()).unwrap();
+            let parsed = parse_versioned_table_ref::<TableNameDto, _>(table).unwrap();
             println!("{} -> {} - {}", table, parsed, parsed.versions());
         });
     }
@@ -414,7 +431,7 @@ mod tests {
     fn test_parse_valid_table_refs() {
         let valid_tables = vec!["table", "collection/table"];
         valid_tables.into_iter().for_each(|table| {
-            let parsed = parse_table_ref(table.to_string()).unwrap();
+            let parsed = parse_table_ref::<TableNameDto, _>(table.to_string()).unwrap();
             println!("{} -> {}", table, parsed);
         });
     }
@@ -443,7 +460,7 @@ mod tests {
             "collection/table@HEAD^^..HEAD",
         ];
         invalid_table_refs.into_iter().for_each(|table| {
-            let parsed = parse_table_ref(table.to_string());
+            let parsed = parse_table_ref::<TableNameDto, _>(table);
             assert!(parsed.is_err());
         });
     }

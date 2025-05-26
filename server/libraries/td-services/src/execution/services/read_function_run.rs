@@ -102,7 +102,7 @@ mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, RoleId, TableName,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, RoleId, TableNameDto,
         TransactionKey, UserId, UserName,
     };
     use td_objects::types::execution::FunctionRunStatus;
@@ -161,7 +161,7 @@ mod tests {
 
         let dependencies = None;
         let triggers = None;
-        let tables = vec![TableName::try_from("table_version")?];
+        let tables = vec![TableNameDto::try_from("table_version")?];
         let create = FunctionRegister::builder()
             .try_name("joaquin")?
             .try_description("function_foo description")?

@@ -54,7 +54,7 @@ mod tests {
     use crate::test_utils::seed_function_run::seed_function_run;
     use crate::test_utils::seed_transaction::seed_transaction;
     use crate::types::basic::{
-        BundleId, CollectionName, Decorator, TableName, TransactionKey, UserId,
+        BundleId, CollectionName, Decorator, TableName, TableNameDto, TransactionKey, UserId,
     };
     use crate::types::execution::FunctionRunStatus;
     use crate::types::function::FunctionRegister;
@@ -70,7 +70,7 @@ mod tests {
         )
         .await;
 
-        let table_name = TableName::try_from("table_version").unwrap();
+        let table_name = TableNameDto::try_from("table_version").unwrap();
 
         let dependencies = None;
         let triggers = None;
@@ -112,7 +112,10 @@ mod tests {
         .await;
 
         let table_version = DaoQueries::default()
-            .select_by::<TableVersionDB>(&(collection.id(), &table_name))
+            .select_by::<TableVersionDB>(&(
+                collection.id(),
+                &TableName::try_from(table_name).unwrap(),
+            ))
             .unwrap()
             .build_query_as()
             .fetch_one(&db)

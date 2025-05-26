@@ -9,7 +9,7 @@ use quote::{format_ident, quote, ToTokens};
 use std::any::type_name;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use syn::{parse_macro_input, ItemEnum, ItemStruct};
+use syn::{parse_macro_input, ItemEnum, ItemStruct, Type};
 use td_shared::meta_parser::{some_or_none, OptionWrapper, SynMetaOrLit};
 use td_shared::{downcast_option, parse_meta};
 
@@ -1095,7 +1095,7 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
 
 #[derive(Debug, FromMeta)]
 pub struct ComposedTyped {
-    inner: Ident,
+    inner: Type,
 }
 
 pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::TokenStream {

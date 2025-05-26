@@ -6,7 +6,7 @@ use crate::crudl::{ReadRequest, RequestContext};
 use crate::sql::{DaoQueries, Insert, SelectBy, UpdateBy};
 use crate::types::basic::{
     AccessTokenId, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
-    TableFunctionParamPos, TableId, TableStatus, TriggerStatus, UserId,
+    TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
 };
 use crate::types::collection::CollectionDB;
 use crate::types::dependency::{DependencyDBBuilder, DependencyVersionDBBuilder};
@@ -107,7 +107,7 @@ pub async fn seed_function(
             let table_version = builder
                 .clone()
                 .table_id(TableId::default())
-                .name(table_name)
+                .name(TableName::try_from(table_name).unwrap())
                 .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i32).unwrap()))
                 .status(TableStatus::Active)
                 .build()
@@ -167,11 +167,14 @@ pub async fn seed_function(
                     .collection()
                     .as_ref()
                     .unwrap_or(collection.name());
-                (collection, dependency_table.table())
+                (
+                    collection,
+                    TableName::try_from(dependency_table.table()).unwrap(),
+                )
             };
 
             let table_db: TableDBWithNames = queries
-                .select_by::<TableDBWithNames>(&(table_collection, table_name))
+                .select_by::<TableDBWithNames>(&(table_collection, &table_name))
                 .unwrap()
                 .build_query_as()
                 .fetch_one(db)
@@ -223,11 +226,14 @@ pub async fn seed_function(
                     .collection()
                     .as_ref()
                     .unwrap_or(collection.name());
-                (collection, trigger_table.table())
+                (
+                    collection,
+                    TableName::try_from(trigger_table.table()).unwrap(),
+                )
             };
 
             let table_db: TableDBWithNames = queries
-                .select_by::<TableDBWithNames>(&(table_collection, table_name))
+                .select_by::<TableDBWithNames>(&(table_collection, &table_name))
                 .unwrap()
                 .build_query_as()
                 .fetch_one(db)

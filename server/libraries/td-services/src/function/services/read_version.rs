@@ -116,7 +116,7 @@ mod tests {
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
-        TableDependency, TableName, UserId, UserName,
+        TableDependencyDto, TableName, TableNameDto, UserId, UserName,
     };
     use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
@@ -191,9 +191,9 @@ mod tests {
         let collection =
             seed_collection(&db, &CollectionName::try_from("cofnig")?, &UserId::admin()).await;
 
-        let dependencies = Some(vec![TableDependency::try_from("cofnig/table@HEAD~2")?]);
+        let dependencies = Some(vec![TableDependencyDto::try_from("cofnig/table@HEAD~2")?]);
         let triggers = None;
-        let tables = Some(vec![TableName::try_from("table")?]);
+        let tables = Some(vec![TableNameDto::try_from("table")?]);
 
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
@@ -246,9 +246,30 @@ mod tests {
         assert_eq!(*version.collection(), CollectionName::try_from("cofnig")?);
         assert_eq!(*version.defined_by(), UserName::try_from("admin")?);
 
-        assert_eq!(*response.dependencies(), dependencies.unwrap_or(vec![]));
-        assert_eq!(*response.triggers(), triggers.unwrap_or(vec![]));
-        assert_eq!(*response.tables(), tables.unwrap_or(vec![]));
+        assert_eq!(
+            *response.dependencies(),
+            dependencies
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(TableDependency::try_from)
+                .collect::<Result<Vec<_>, _>>()?
+        );
+        assert_eq!(
+            *response.triggers(),
+            triggers
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(TableTrigger::try_from)
+                .collect::<Result<Vec<_>, _>>()?
+        );
+        assert_eq!(
+            *response.tables(),
+            tables
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(TableName::try_from)
+                .collect::<Result<Vec<_>, _>>()?
+        );
         Ok(())
     }
 }

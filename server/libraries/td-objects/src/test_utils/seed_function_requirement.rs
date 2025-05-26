@@ -62,7 +62,7 @@ mod tests {
     use crate::test_utils::seed_table_data_version::seed_table_data_version;
     use crate::test_utils::seed_transaction::seed_transaction;
     use crate::types::basic::{
-        BundleId, CollectionName, Decorator, TableName, TransactionKey, UserId,
+        BundleId, CollectionName, Decorator, TableNameDto, TransactionKey, UserId,
     };
     use crate::types::execution::FunctionRunStatus;
     use crate::types::function::FunctionRegister;
@@ -91,7 +91,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(vec![TableName::try_from("table_1").unwrap()])
+            .tables(vec![TableNameDto::try_from("table_1").unwrap()])
             .try_runtime_values("mock runtime values")
             .unwrap()
             .reuse_frozen_tables(false)

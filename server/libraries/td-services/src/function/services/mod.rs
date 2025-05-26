@@ -94,7 +94,8 @@ pub(crate) mod tests {
     use td_objects::crudl::handle_sql_err;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::types::basic::{
-        DependencyStatus, Frozen, FunctionStatus, TableStatus, TriggerStatus, UserId,
+        DependencyStatus, Frozen, FunctionStatus, TableDependency, TableName, TableStatus,
+        TableTrigger, TriggerStatus, UserId,
     };
     use td_objects::types::collection::CollectionDB;
     use td_objects::types::dependency::{DependencyDBWithNames, DependencyVersionDBWithNames};
@@ -181,10 +182,10 @@ pub(crate) mod tests {
         for table in req_tables {
             let found = table_versions
                 .iter()
-                .find(|t| t.name() == table)
+                .find(|t| **t.name() == **table)
                 .expect("table version not found");
             assert_eq!(found.collection_id(), function.collection_id());
-            assert_eq!(found.name(), table);
+            assert_eq!(**found.name(), **table);
             assert_eq!(found.function_version_id(), function.function_version_id());
             assert!(found.function_param_pos().is_some());
             assert_eq!(found.defined_on(), function.created_on());
@@ -205,10 +206,10 @@ pub(crate) mod tests {
         for table in req_tables {
             let found = tables
                 .iter()
-                .find(|t| t.name() == table)
+                .find(|t| **t.name() == **table)
                 .expect("table not found");
             assert_eq!(found.collection_id(), function.collection_id());
-            assert_eq!(found.name(), table);
+            assert_eq!(**found.name(), **table);
             assert_eq!(found.function_id(), function.id());
             assert_eq!(found.function_version_id(), function.function_version_id());
             assert_eq!(*found.frozen(), Frozen::from(false));
@@ -232,7 +233,7 @@ pub(crate) mod tests {
         for dependency in req_dependencies {
             let found = dependency_versions
                 .iter()
-                .find(|d| d.table_name() == dependency.table())
+                .find(|d| **d.table_name() == **dependency.table())
                 .expect("dependency version not found");
             assert_eq!(found.collection_id(), function.collection_id());
             assert_eq!(found.function_id(), function.id());
@@ -244,7 +245,7 @@ pub(crate) mod tests {
                     .as_ref()
                     .unwrap_or(collection.name())
             );
-            assert_eq!(found.table_name(), dependency.table());
+            assert_eq!(**found.table_name(), **dependency.table());
             assert_eq!(*found.table_versions(), dependency.versions().into());
             assert_eq!(found.defined_on(), function.created_on());
             assert_eq!(found.defined_by_id(), function.created_by_id());
@@ -265,7 +266,7 @@ pub(crate) mod tests {
         for dependency in req_dependencies {
             let found = dependencies
                 .iter()
-                .find(|d| d.table_name() == dependency.table())
+                .find(|d| **d.table_name() == **dependency.table())
                 .expect("dependency not found");
             assert_eq!(found.collection_id(), function.collection_id());
             assert_eq!(found.function_id(), function.id());
@@ -276,7 +277,7 @@ pub(crate) mod tests {
                     .as_ref()
                     .unwrap_or(collection.name())
             );
-            assert_eq!(found.table_name(), dependency.table());
+            assert_eq!(**found.table_name(), **dependency.table());
             assert_eq!(*found.table_versions(), dependency.versions().into());
         }
 
@@ -291,7 +292,7 @@ pub(crate) mod tests {
         for trigger in req_triggers {
             let found = trigger_versions
                 .iter()
-                .find(|d| d.trigger_by_table_name() == trigger.table())
+                .find(|d| **d.trigger_by_table_name() == **trigger.table())
                 .expect("trigger version not found");
             assert_eq!(found.collection_id(), function.collection_id());
             assert_eq!(found.function_id(), function.id());
@@ -300,7 +301,7 @@ pub(crate) mod tests {
                 found.trigger_by_collection(),
                 trigger.collection().as_ref().unwrap_or(collection.name())
             );
-            assert_eq!(found.trigger_by_table_name(), trigger.table());
+            assert_eq!(**found.trigger_by_table_name(), **trigger.table());
             assert_eq!(*found.status(), TriggerStatus::Active);
         }
 
@@ -315,7 +316,7 @@ pub(crate) mod tests {
         for trigger in req_triggers {
             let found = triggers
                 .iter()
-                .find(|d| d.trigger_by_table_name() == trigger.table())
+                .find(|d| **d.trigger_by_table_name() == **trigger.table())
                 .expect("trigger not found");
             assert_eq!(found.collection_id(), function.collection_id());
             assert_eq!(found.function_id(), function.id());
@@ -323,7 +324,7 @@ pub(crate) mod tests {
                 found.trigger_by_collection(),
                 trigger.collection().as_ref().unwrap_or(collection.name())
             );
-            assert_eq!(found.trigger_by_table_name(), trigger.table());
+            assert_eq!(**found.trigger_by_table_name(), **trigger.table());
         }
 
         Ok(())
@@ -372,7 +373,8 @@ pub(crate) mod tests {
         assert!(tables.is_empty());
 
         // Assert tables
-        for table in create.tables().as_deref().unwrap_or(&[]) {
+        for table_dto in create.tables().as_deref().unwrap_or(&[]) {
+            let table = &TableName::try_from(table_dto)?;
             // We will always have the old active version
             let old_version: Vec<TableVersionDB> = queries
                 .select_by::<TableVersionDB>(&(
@@ -395,7 +397,12 @@ pub(crate) mod tests {
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(new_version.len(), 1);
-            let new_status = if update.tables().as_deref().unwrap_or(&[]).contains(table) {
+            let new_status = if update
+                .tables()
+                .as_deref()
+                .unwrap_or(&[])
+                .contains(table_dto)
+            {
                 TableStatus::Active
             } else {
                 TableStatus::Frozen
@@ -407,7 +414,8 @@ pub(crate) mod tests {
         }
 
         // Assert dependencies
-        for dependency in create.dependencies().as_deref().unwrap_or(&[]) {
+        for dependency_dto in create.dependencies().as_deref().unwrap_or(&[]) {
+            let dependency = &TableDependency::try_from(dependency_dto)?;
             // We will always have the old active version
             let old_version: Vec<DependencyVersionDBWithNames> = queries
                 .select_by::<DependencyVersionDBWithNames>(&(
@@ -445,7 +453,7 @@ pub(crate) mod tests {
                 .dependencies()
                 .as_deref()
                 .unwrap_or(&[])
-                .contains(dependency)
+                .contains(dependency_dto)
             {
                 DependencyStatus::Active
             } else {
@@ -461,7 +469,8 @@ pub(crate) mod tests {
         }
 
         // Assert triggers
-        for trigger in create.triggers().as_deref().unwrap_or(&[]) {
+        for trigger_dto in create.triggers().as_deref().unwrap_or(&[]) {
+            let trigger = TableTrigger::try_from(trigger_dto)?;
             // We will always have the old active version
             let old_version: Vec<TriggerVersionDBWithNames> = queries
                 .select_by::<TriggerVersionDBWithNames>(&(
@@ -493,7 +502,7 @@ pub(crate) mod tests {
                 .triggers()
                 .as_deref()
                 .unwrap_or(&[])
-                .contains(trigger)
+                .contains(trigger_dto)
             {
                 TriggerStatus::Active
             } else {
@@ -550,7 +559,8 @@ pub(crate) mod tests {
         assert!(tables.is_empty());
 
         // Assert tables
-        for table in create.tables().as_deref().unwrap_or(&[]) {
+        for table_dto in create.tables().as_deref().unwrap_or(&[]) {
+            let table = &TableName::try_from(table_dto)?;
             // We will always have the old active version
             let old_version: Vec<TableVersionDB> = queries
                 .select_by::<TableVersionDB>(&(
@@ -568,6 +578,7 @@ pub(crate) mod tests {
 
         // Assert dependencies
         for dependency in create.dependencies().as_deref().unwrap_or(&[]) {
+            let dependency = &TableDependency::try_from(dependency)?;
             // We will always have the old active version
             let old_version: Vec<DependencyVersionDBWithNames> = queries
                 .select_by::<DependencyVersionDBWithNames>(&(
@@ -587,7 +598,8 @@ pub(crate) mod tests {
         }
 
         // Assert triggers
-        for trigger in create.triggers().as_deref().unwrap_or(&[]) {
+        for trigger_dto in create.triggers().as_deref().unwrap_or(&[]) {
+            let trigger = &TableTrigger::try_from(trigger_dto)?;
             // We will always have the old active version
             let old_version: Vec<TriggerVersionDBWithNames> = queries
                 .select_by::<TriggerVersionDBWithNames>(&(

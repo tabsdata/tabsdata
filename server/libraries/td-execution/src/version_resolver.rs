@@ -319,7 +319,8 @@ mod tests {
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, TableDataVersionId, TableName, TransactionKey, UserId,
+        BundleId, CollectionName, Decorator, TableDataVersionId, TableName, TableNameDto,
+        TransactionKey, UserId,
     };
     use td_objects::types::execution::FunctionRunStatus;
     use td_objects::types::function::FunctionRegister;
@@ -330,8 +331,8 @@ mod tests {
     // the table data versions created, also ordered in ASC order.
     async fn seed_table_data_versions<'a>(
         db: &DbPool,
-        tables: HashMap<&'a TableName, usize>,
-    ) -> HashMap<&'a TableName, Vec<ActiveTableDataVersionDB>> {
+        tables: HashMap<&'a TableNameDto, usize>,
+    ) -> HashMap<&'a TableNameDto, Vec<ActiveTableDataVersionDB>> {
         let collection = seed_collection(
             db,
             &CollectionName::try_from("collection").unwrap(),
@@ -364,7 +365,8 @@ mod tests {
         let (_, function_version) = seed_function(db, &collection, &create).await;
 
         let mut table_versions_map = HashMap::new();
-        for (table_name, number_of_versions) in tables {
+        for (table_name_dto, number_of_versions) in tables {
+            let table_name = TableName::try_from(table_name_dto).unwrap();
             let mut table_versions = vec![];
             for _ in 0..number_of_versions {
                 let execution = seed_execution(db, &collection, &function_version).await;
@@ -383,7 +385,7 @@ mod tests {
                 .await;
 
                 let table_version = DaoQueries::default()
-                    .select_by::<TableVersionDB>(&(collection.id(), table_name))
+                    .select_by::<TableVersionDB>(&(collection.id(), &table_name))
                     .unwrap()
                     .build_query_as()
                     .fetch_one(db)
@@ -408,14 +410,14 @@ mod tests {
                     .unwrap();
                 table_versions.push(table_data_version);
             }
-            table_versions_map.insert(table_name, table_versions);
+            table_versions_map.insert(table_name_dto, table_versions);
         }
         table_versions_map
     }
 
     #[td_test::test(sqlx)]
     async fn test_resolve_none(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 1)])).await;
 
@@ -438,9 +440,9 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_none_multiple_tables(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
-        let extra_table_name_1 = TableName::try_from("should_not_be_found_1")?;
-        let extra_table_name_2 = TableName::try_from("should_not_be_found_2")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let extra_table_name_1 = TableNameDto::try_from("should_not_be_found_1")?;
+        let extra_table_name_2 = TableNameDto::try_from("should_not_be_found_2")?;
         let table_data_versions = seed_table_data_versions(
             &db,
             HashMap::from([
@@ -470,7 +472,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_none_triggered_on(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -521,7 +523,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_single_head(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
 
@@ -606,7 +608,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_single_fixed(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -674,7 +676,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_list_head(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -714,7 +716,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_list_fixed(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -755,7 +757,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_list_mixed(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -801,7 +803,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_list_fixed_not_found(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -850,7 +852,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_head(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
 
@@ -897,7 +899,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_head_incomplete(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -937,7 +939,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_inverse_head(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -978,7 +980,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_fixed(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
 
@@ -1028,7 +1030,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_inverse_fixed(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
 
@@ -1077,7 +1079,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_same_head(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -1110,7 +1112,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_same_head_not_found(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -1141,7 +1143,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_same_fixed(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -1177,7 +1179,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_mixed(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -1215,7 +1217,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_mixed_same(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
@@ -1249,7 +1251,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_resolve_range_mixed_head_bound(db: DbPool) -> Result<(), TdError> {
-        let table_name = TableName::try_from("joaquin")?;
+        let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 

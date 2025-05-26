@@ -2,7 +2,7 @@
 // Copyright 202∞ Tabs Data Inc.
 //
 
-use crate::types::basic::{CollectionName, TableDataVersionId, TableName};
+use crate::types::basic::{CollectionName, TableDataVersionId};
 use crate::types::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};
 use crate::types::ComposedString;
 use derive_new::new;
@@ -118,13 +118,17 @@ impl From<&Versions> for Versions {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, new, getset::Getters)]
 #[getset(get = "pub")]
-pub struct VersionedTableRef {
+pub struct VersionedTableRef<T> {
     collection: Option<CollectionName>,
-    table: TableName,
+    table: T,
     versions: Versions,
 }
 
-impl ComposedString for VersionedTableRef {
+impl<T, E> ComposedString for VersionedTableRef<T>
+where
+    T: Display + TryFrom<String, Error = E>,
+    E: Into<TdError>,
+{
     fn parse(s: impl Into<String>) -> Result<Self, TdError>
     where
         Self: Sized,
@@ -137,7 +141,19 @@ impl ComposedString for VersionedTableRef {
     }
 }
 
-impl Display for VersionedTableRef {
+impl<T> From<VersionedTableRef<T>> for String
+where
+    T: Display,
+{
+    fn from(value: VersionedTableRef<T>) -> Self {
+        value.to_string()
+    }
+}
+
+impl<T> Display for VersionedTableRef<T>
+where
+    T: Display,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match (&self.collection, &self.versions) {
             (Some(collection), Versions::None) => write!(f, "{}/{}", collection, &self.table),
@@ -152,12 +168,16 @@ impl Display for VersionedTableRef {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, new, getset::Getters)]
 #[getset(get = "pub")]
-pub struct TableRef {
+pub struct TableRef<T> {
     collection: Option<CollectionName>,
-    table: TableName,
+    table: T,
 }
 
-impl ComposedString for TableRef {
+impl<T, E> ComposedString for TableRef<T>
+where
+    T: Display + TryFrom<String, Error = E>,
+    E: Into<TdError>,
+{
     fn parse(s: impl Into<String>) -> Result<Self, TdError>
     where
         Self: Sized,
@@ -170,7 +190,19 @@ impl ComposedString for TableRef {
     }
 }
 
-impl Display for TableRef {
+impl<T> From<TableRef<T>> for String
+where
+    T: Display,
+{
+    fn from(value: TableRef<T>) -> Self {
+        value.to_string()
+    }
+}
+
+impl<T> Display for TableRef<T>
+where
+    T: Display,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(collection) = &self.collection {
             write!(f, "{}/{}", collection, self.table)
@@ -183,19 +215,20 @@ impl Display for TableRef {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::basic::TableName;
     use td_common::id;
 
     #[test]
     fn test_versioned_table_ref_to_string() {
-        let table = VersionedTableRef::parse("table").unwrap();
+        let table = VersionedTableRef::<TableName>::parse("table").unwrap();
         assert_eq!(table.to_string(), "table");
-        let table = VersionedTableRef::parse("collection/table").unwrap();
+        let table = VersionedTableRef::<TableName>::parse("collection/table").unwrap();
         assert_eq!(table.to_string(), "collection/table");
-        let table = VersionedTableRef::parse("collection/table@HEAD^^").unwrap();
+        let table = VersionedTableRef::<TableName>::parse("collection/table@HEAD^^").unwrap();
         assert_eq!(table.to_string(), "collection/table@HEAD~2");
-        let table = VersionedTableRef::parse("collection/table@HEAD^^..HEAD").unwrap();
+        let table = VersionedTableRef::<TableName>::parse("collection/table@HEAD^^..HEAD").unwrap();
         assert_eq!(table.to_string(), "collection/table@HEAD~2..HEAD");
-        let table = VersionedTableRef::parse("collection/table@HEAD^^,HEAD").unwrap();
+        let table = VersionedTableRef::<TableName>::parse("collection/table@HEAD^^,HEAD").unwrap();
         assert_eq!(table.to_string(), "collection/table@HEAD~2,HEAD");
         let table = format!("collection/table@{}", id::id());
         assert_eq!(table.to_string(), table);
@@ -203,9 +236,9 @@ mod tests {
 
     #[test]
     fn test_table_ref_to_string() {
-        let table = TableRef::parse("table").unwrap();
+        let table = TableRef::<TableName>::parse("table").unwrap();
         assert_eq!(table.to_string(), "table");
-        let table = TableRef::parse("collection/table").unwrap();
+        let table = TableRef::<TableName>::parse("collection/table").unwrap();
         assert_eq!(table.to_string(), "collection/table");
     }
 

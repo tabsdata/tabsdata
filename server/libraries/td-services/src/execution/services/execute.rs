@@ -131,11 +131,13 @@ mod tests {
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::RoleId;
     use td_objects::types::basic::{
+        AccessTokenId, TableDependencyDto, TableNameDto, TableTriggerDto,
+    };
+    use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, ExecutionName, FunctionName, FunctionRuntimeValues,
-        TableDependency, TableName, TableTrigger, TriggeredOn, UserId,
+        TableName, TriggeredOn, UserId,
     };
     use td_objects::types::execution::{
         ExecutionDBWithStatus, ExecutionStatus, FunctionRequirementDBWithNames, FunctionRunStatus,
@@ -239,8 +241,8 @@ mod tests {
             .dependencies(None)
             .triggers(None)
             .tables(vec![
-                TableName::try_from("table_1")?,
-                TableName::try_from("table_2")?,
+                TableNameDto::try_from("table_1")?,
+                TableNameDto::try_from("table_2")?,
             ])
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
@@ -255,14 +257,14 @@ mod tests {
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
             .dependencies(vec![
-                TableDependency::try_from("table_1")?,
-                TableDependency::try_from("table_2")?,
-                TableDependency::try_from("table_3")?,
+                TableDependencyDto::try_from("table_1")?,
+                TableDependencyDto::try_from("table_2")?,
+                TableDependencyDto::try_from("table_3")?,
             ])
-            .triggers(vec![TableTrigger::try_from("table_1")?])
+            .triggers(vec![TableTriggerDto::try_from("table_1")?])
             .tables(vec![
-                TableName::try_from("table_3")?,
-                TableName::try_from("table_4")?,
+                TableNameDto::try_from("table_3")?,
+                TableNameDto::try_from("table_4")?,
             ])
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)

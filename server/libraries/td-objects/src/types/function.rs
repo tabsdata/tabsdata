@@ -6,8 +6,8 @@ use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, BundleHash, BundleId, CollectionId, CollectionName, DataLocation, Decorator,
     Description, Frozen, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
-    FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableDependency, TableName,
-    TableTrigger, UserId, UserName,
+    FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableDependency, TableDependencyDto,
+    TableName, TableNameDto, TableTrigger, TableTriggerDto, UserId, UserName,
 };
 use axum::body::BodyDataStream;
 use axum::extract::Request;
@@ -79,11 +79,11 @@ pub struct FunctionRegister {
     snippet: Snippet,
     decorator: Decorator,
     #[td_type(extractor)]
-    dependencies: Option<Vec<TableDependency>>,
+    dependencies: Option<Vec<TableDependencyDto>>,
     #[td_type(extractor)]
-    triggers: Option<Vec<TableTrigger>>,
+    triggers: Option<Vec<TableTriggerDto>>,
     #[td_type(extractor)]
-    tables: Option<Vec<TableName>>,
+    tables: Option<Vec<TableNameDto>>,
     #[serde(default)]
     runtime_values: FunctionRuntimeValues,
     #[td_type(extractor)]

@@ -86,7 +86,8 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, RoleId, TableName, UserId,
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, RoleId, TableName,
+        TableNameDto, UserId,
     };
     use td_objects::types::function::{FunctionRegister, FunctionUpdate};
     use td_tower::ctx_service::RawOneshot;
@@ -136,8 +137,8 @@ mod tests {
 
         // Create function with table_1 and table_2 tables
         let tables = vec![
-            TableName::try_from("table_1")?,
-            TableName::try_from("table_2")?,
+            TableNameDto::try_from("table_1")?,
+            TableNameDto::try_from("table_2")?,
         ];
         let create = FunctionRegister::builder()
             .try_name("joaquin")?
@@ -156,7 +157,7 @@ mod tests {
         let t1 = AtTime::now().await;
 
         // Update function with table_1 table (remove table_2)
-        let tables = vec![TableName::try_from("table_1")?];
+        let tables = vec![TableNameDto::try_from("table_1")?];
         let update = FunctionUpdate::builder()
             .try_name("joaquin")?
             .try_description("function_foo description")?

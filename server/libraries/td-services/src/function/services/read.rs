@@ -88,7 +88,7 @@ mod tests {
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
-        TableName, UserId, UserName,
+        TableDependency, TableName, TableNameDto, TableTrigger, UserId, UserName,
     };
     use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
@@ -230,9 +230,30 @@ mod tests {
         assert_eq!(*version.collection(), CollectionName::try_from("cofnig")?);
         assert_eq!(*version.defined_by(), UserName::try_from("admin")?);
 
-        assert_eq!(*current.dependencies(), dependencies.unwrap_or(vec![]));
-        assert_eq!(*current.triggers(), triggers.unwrap_or(vec![]));
-        assert_eq!(*current.tables(), tables.unwrap_or(vec![]));
+        assert_eq!(
+            *current.dependencies(),
+            dependencies
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(TableDependency::try_from)
+                .collect::<Result<Vec<_>, _>>()?
+        );
+        assert_eq!(
+            *current.triggers(),
+            triggers
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(TableTrigger::try_from)
+                .collect::<Result<Vec<_>, _>>()?
+        );
+        assert_eq!(
+            *current.tables(),
+            tables
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(TableName::try_from)
+                .collect::<Result<Vec<_>, _>>()?
+        );
 
         let all = response.all();
         assert_eq!(all.len(), 1);
@@ -247,7 +268,7 @@ mod tests {
 
         let dependencies = None;
         let triggers = None;
-        let tables = Some(vec![TableName::try_from("table1")?]);
+        let tables = Some(vec![TableNameDto::try_from("table1")?]);
 
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
@@ -264,8 +285,8 @@ mod tests {
         let (function_1, _) = seed_function(&db, &collection, &create).await;
 
         let tables = Some(vec![
-            TableName::try_from("table1")?,
-            TableName::try_from("table2")?,
+            TableNameDto::try_from("table1")?,
+            TableNameDto::try_from("table2")?,
         ]);
 
         // Just add an output table.
@@ -312,9 +333,30 @@ mod tests {
         assert_eq!(*version.collection(), CollectionName::try_from("cofnig")?);
         assert_eq!(*version.defined_by(), UserName::try_from("admin")?);
 
-        assert_eq!(*current.dependencies(), dependencies.unwrap_or(vec![]));
-        assert_eq!(*current.triggers(), triggers.unwrap_or(vec![]));
-        assert_eq!(*current.tables(), tables.unwrap_or(vec![]));
+        assert_eq!(
+            *current.dependencies(),
+            dependencies
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(TableDependency::try_from)
+                .collect::<Result<Vec<_>, _>>()?
+        );
+        assert_eq!(
+            *current.triggers(),
+            triggers
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(TableTrigger::try_from)
+                .collect::<Result<Vec<_>, _>>()?
+        );
+        assert_eq!(
+            *current.tables(),
+            tables
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(TableName::try_from)
+                .collect::<Result<Vec<_>, _>>()?
+        );
 
         let all = response.all();
         assert_eq!(all.len(), 2);

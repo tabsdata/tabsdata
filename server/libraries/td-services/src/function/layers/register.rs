@@ -9,8 +9,8 @@ use td_objects::crudl::handle_sql_err;
 use td_objects::sql::{DeleteBy, DerefQueries, FindBy, Insert, UpdateBy};
 use td_objects::types::basic::{
     CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos, DependencyStatus,
-    FunctionId, ReuseFrozen, TableDependency, TableFunctionParamPos, TableId, TableName,
-    TableStatus, TableTrigger, TriggerId, TriggerStatus,
+    FunctionId, ReuseFrozen, TableDependency, TableDependencyDto, TableFunctionParamPos, TableId,
+    TableName, TableNameDto, TableStatus, TableTrigger, TableTriggerDto, TriggerId, TriggerStatus,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::{
@@ -48,8 +48,8 @@ pub async fn data_location(
     Ok(DataLocation::default())
 }
 
-pub const SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES: [&str; 1] = ["td_fn_state"];
-pub const SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES: [&str; 1] = ["td_fn_state"];
+pub const SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES: [&str; 1] = ["td.fn_state"];
+pub const SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES: [&str; 1] = ["td.fn_state"];
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_table_versions(
@@ -58,7 +58,7 @@ pub async fn build_table_versions(
     Input(collection_name): Input<CollectionName>,
     Input(function_id): Input<FunctionId>,
     Input(existing_versions): Input<Vec<TableVersionDB>>,
-    Input(new_tables): Input<Option<Vec<TableName>>>,
+    Input(new_tables): Input<Option<Vec<TableNameDto>>>,
     Input(table_version_builder): Input<TableVersionDBBuilder>,
     Input(reuse_frozen): Input<ReuseFrozen>,
 ) -> Result<Vec<TableVersionDB>, TdError> {
@@ -70,7 +70,18 @@ pub async fn build_table_versions(
         .map(|t| ((t.collection_id(), t.name()), t))
         .collect();
 
-    // System output tables
+    // Add iterators of new tables (system tables with negative pos)
+    let user_tables = new_tables
+        .as_deref()
+        .unwrap_or(Default::default())
+        .iter()
+        .map(TableName::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+    let user_tables = user_tables
+        .iter()
+        .enumerate()
+        .map(|(pos, table_name)| (pos as i32, table_name));
+
     let new_system_tables = SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES
         .iter()
         .map(|prefix| {
@@ -80,21 +91,12 @@ pub async fn build_table_versions(
             TableName::try_from(table_name)
         })
         .collect::<Result<Vec<_>, _>>()?;
-
-    // Add iterators of new tables (system tables with negative pos)
-    let new_tables = new_tables
-        .as_deref()
-        .unwrap_or(Default::default())
+    let system_tables = new_system_tables
         .iter()
         .enumerate()
-        .map(|(pos, table_name)| (pos as i32, table_name))
-        .chain(
-            new_system_tables
-                .iter()
-                .enumerate()
-                .map(|(pos, prefix)| (-(pos as i32 + 1), prefix)),
-        )
-        .collect::<Vec<_>>();
+        .map(|(pos, table_name)| (-(pos as i32 + 1), table_name));
+
+    let new_tables = user_tables.chain(system_tables).collect::<Vec<_>>();
 
     // Create new table versions
     for (pos, table_name) in new_tables {
@@ -206,7 +208,7 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<Q>,
     Input(existing_versions): Input<Vec<DependencyVersionDB>>,
-    Input(new_dependencies): Input<Option<Vec<TableDependency>>>,
+    Input(new_dependencies): Input<Option<Vec<TableDependencyDto>>>,
     Input(collection_in_context): Input<CollectionName>,
     Input(function_id): Input<FunctionId>,
     Input(dependency_version_builder): Input<DependencyVersionDBBuilder>,
@@ -232,8 +234,19 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
         })
         .collect();
 
-    // System dependencies
-    let new_system_dependencies = SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES
+    // Add iterators of new dependencies (dependency tables with negative pos)
+    let user_dependencies = new_dependencies
+        .as_deref()
+        .unwrap_or(Default::default())
+        .iter()
+        .map(TableDependency::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+    let user_dependencies = user_dependencies
+        .iter()
+        .enumerate()
+        .map(|(pos, table_name)| (pos as i32, table_name));
+
+    let system_dependencies = SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES
         .iter()
         .map(|prefix| {
             // system tables are the same for the same function
@@ -242,20 +255,13 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
             TableDependency::try_from(table_name)
         })
         .collect::<Result<Vec<_>, _>>()?;
-
-    // Add iterators of new dependencies (dependency tables with negative pos)
-    let new_dependencies = new_dependencies
-        .as_deref()
-        .unwrap_or(Default::default())
+    let system_dependencies = system_dependencies
         .iter()
         .enumerate()
-        .map(|(pos, table_name)| (pos as i32, table_name))
-        .chain(
-            new_system_dependencies
-                .iter()
-                .enumerate()
-                .map(|(pos, prefix)| (-(pos as i32 + 1), prefix)),
-        )
+        .map(|(pos, table_name)| (-(pos as i32 + 1), table_name));
+
+    let new_dependencies = user_dependencies
+        .chain(system_dependencies)
         .collect::<Vec<_>>();
 
     // Create new dependency versions
@@ -419,8 +425,8 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<Q>,
     Input(existing_versions): Input<Vec<TriggerVersionDBWithNames>>,
-    Input(new_tables): Input<Option<Vec<TableName>>>,
-    Input(new_triggers): Input<Option<Vec<TableTrigger>>>,
+    Input(new_tables): Input<Option<Vec<TableNameDto>>>,
+    Input(new_triggers): Input<Option<Vec<TableTriggerDto>>>,
     Input(collection_in_context): Input<CollectionName>,
     Input(trigger_version_builder): Input<TriggerVersionDBBuilder>,
 ) -> Result<Vec<TriggerVersionDB>, TdError> {
@@ -435,7 +441,12 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
         .map(|t| ((t.trigger_by_collection_id(), t.trigger_by_table_name()), t))
         .collect();
 
-    let new_triggers = new_triggers.as_deref().unwrap_or(&[]);
+    let new_triggers = new_triggers
+        .as_deref()
+        .unwrap_or(Default::default())
+        .iter()
+        .map(TableTrigger::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Create new trigger versions
     let tables_found = if new_triggers.is_empty() {
@@ -484,7 +495,7 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
                 if table_db.collection() == &*collection_in_context
                     && new_tables
                         .as_deref()
-                        .is_some_and(|t| t.iter().any(|t| t == table_db.name())) =>
+                        .is_some_and(|t| t.iter().any(|t| **t == **table_db.name())) =>
             {
                 Err(RegisterFunctionError::SelfTrigger(trigger_table.clone()))
             }

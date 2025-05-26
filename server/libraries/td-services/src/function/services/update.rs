@@ -20,8 +20,8 @@ use td_objects::tower_service::sql::{
 };
 use td_objects::types::basic::{
     BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
-    FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableDependency, TableName,
-    TableTrigger,
+    FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableDependencyDto,
+    TableNameDto, TableTriggerDto,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::DependencyVersionDB;
@@ -115,9 +115,9 @@ impl UpdateFunctionService {
                 from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyVersionDB>),
                 from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerVersionDBWithNames>),
                 // Extract new associations
-                from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableName>>>),
-                from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependency>>>),
-                from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableTrigger>>>),
+                from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
+                from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
+                from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
                 // Extract reuse frozen
                 from_fn(With::<FunctionUpdate>::extract::<ReuseFrozen>),
                 // And register new ones
@@ -150,7 +150,8 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, Frozen, FunctionRuntimeValues, RoleId, UserId,
+        AccessTokenId, BundleId, Decorator, Frozen, FunctionRuntimeValues, RoleId,
+        TableDependencyDto, TableName, TableNameDto, UserId,
     };
     use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
@@ -237,9 +238,9 @@ mod tests {
                     &By::<FunctionVersionId>::select_all::<DaoQueries, TriggerVersionDBWithNames>,
                 ),
                 // Extract new associations
-                type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableName>>>),
-                type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableDependency>>>),
-                type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableTrigger>>>),
+                type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
+                type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
+                type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
                 // Extract reuse frozen
                 type_of_val(&With::<FunctionUpdate>::extract::<ReuseFrozen>),
                 // And register new ones
@@ -376,7 +377,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -425,7 +426,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -490,7 +491,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -506,7 +507,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -555,7 +556,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -569,9 +570,9 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
             .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependency::try_from("new_table")?]))
+            .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -618,9 +619,9 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependency::try_from("new_table")?]))
+            .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -636,7 +637,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -683,9 +684,9 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependency::try_from("new_table")?]))
+            .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -699,9 +700,9 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet updated")?
             .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependency::try_from("new_table")?]))
+            .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("new_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -750,7 +751,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("trigger_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -781,7 +782,7 @@ mod tests {
             .try_snippet("function_foo snippet updated")?
             .decorator(Decorator::Publisher)
             .dependencies(None)
-            .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
+            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -831,7 +832,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("trigger_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -846,7 +847,7 @@ mod tests {
             .try_snippet("function_foo snippet")?
             .decorator(Decorator::Publisher)
             .dependencies(None)
-            .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
+            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -912,7 +913,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("trigger_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -927,7 +928,7 @@ mod tests {
             .try_snippet("function_foo snippet")?
             .decorator(Decorator::Publisher)
             .dependencies(None)
-            .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
+            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -943,7 +944,7 @@ mod tests {
             .try_snippet("function_foo snippet updated")?
             .decorator(Decorator::Publisher)
             .dependencies(None)
-            .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
+            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -994,8 +995,8 @@ mod tests {
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
-                TableName::try_from("trigger_table")?,
-                TableName::try_from("trigger_table_2")?,
+                TableNameDto::try_from("trigger_table")?,
+                TableNameDto::try_from("trigger_table_2")?,
             ]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -1010,11 +1011,11 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependency::try_from("trigger_table")?]))
-            .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
+            .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
+            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(Some(vec![
-                TableName::try_from("joaquin_table")?,
-                TableName::try_from("joaquin_table_2")?,
+                TableNameDto::try_from("joaquin_table")?,
+                TableNameDto::try_from("joaquin_table_2")?,
             ]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -1030,13 +1031,13 @@ mod tests {
             .try_snippet("function_foo snippet updated")?
             .decorator(Decorator::Publisher)
             .dependencies(Some(vec![
-                TableDependency::try_from("trigger_table")?,
-                TableDependency::try_from("trigger_table_2")?,
+                TableDependencyDto::try_from("trigger_table")?,
+                TableDependencyDto::try_from("trigger_table_2")?,
             ]))
-            .triggers(Some(vec![TableTrigger::try_from("trigger_table_2")?]))
+            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table_2")?]))
             .tables(Some(vec![
-                TableName::try_from("joaquin_table")?,
-                TableName::try_from("joaquin_table_3")?,
+                TableNameDto::try_from("joaquin_table")?,
+                TableNameDto::try_from("joaquin_table_3")?,
             ]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -1087,7 +1088,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("joaquin_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -1143,7 +1144,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("joaquin_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -1182,7 +1183,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("joaquin_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(true)
             .build()?;

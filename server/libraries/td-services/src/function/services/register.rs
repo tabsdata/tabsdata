@@ -25,7 +25,7 @@ use td_objects::tower_service::sql::{
 use td_objects::tower_service::sql::{SqlAssertNotExistsService, SqlSelectIdOrNameService};
 use td_objects::types::basic::{
     BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
-    FunctionName, ReuseFrozen, StorageVersion, TableDependency, TableName, TableTrigger,
+    FunctionName, ReuseFrozen, StorageVersion, TableDependencyDto, TableNameDto, TableTriggerDto,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::{
@@ -114,9 +114,9 @@ impl RegisterFunctionService {
                 from_fn(With::<DependencyVersionDB>::empty_vec),
                 from_fn(With::<TriggerVersionDBWithNames>::empty_vec),
                 // Extract new associations
-                from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableName>>>),
-                from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableDependency>>>),
-                from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableTrigger>>>),
+                from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
+                from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
+                from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
                 // Extract reuse frozen
                 from_fn(With::<FunctionRegister>::extract::<ReuseFrozen>),
                 // And register new ones
@@ -253,9 +253,9 @@ mod tests {
                 type_of_val(&With::<DependencyVersionDB>::empty_vec),
                 type_of_val(&With::<TriggerVersionDBWithNames>::empty_vec),
                 // Extract new associations
-                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableName>>>),
-                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableDependency>>>),
-                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableTrigger>>>),
+                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
+                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
+                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
                 // Extract reuse frozen
                 type_of_val(&With::<FunctionRegister>::extract::<ReuseFrozen>),
                 // And register new ones
@@ -387,7 +387,7 @@ mod tests {
 
         let dependencies = None;
         let triggers = None;
-        let tables = Some(vec![TableName::try_from("table_foo")?]);
+        let tables = Some(vec![TableNameDto::try_from("table_foo")?]);
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
@@ -428,9 +428,9 @@ mod tests {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
-        let dependencies = Some(vec![TableDependency::try_from("table_foo")?]);
+        let dependencies = Some(vec![TableDependencyDto::try_from("table_foo")?]);
         let triggers = None;
-        let tables = Some(vec![TableName::try_from("table_foo")?]);
+        let tables = Some(vec![TableNameDto::try_from("table_foo")?]);
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
@@ -473,7 +473,7 @@ mod tests {
 
         let dependencies = None;
         let triggers = None;
-        let tables = Some(vec![TableName::try_from("foo")?]);
+        let tables = Some(vec![TableNameDto::try_from("foo")?]);
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
@@ -507,7 +507,7 @@ mod tests {
 
         // Actual test
         let dependencies = None;
-        let triggers = Some(vec![TableTrigger::try_from("foo")?]);
+        let triggers = Some(vec![TableTriggerDto::try_from("foo")?]);
         let tables = None;
 
         let bundle_id = BundleId::default();
@@ -552,8 +552,8 @@ mod tests {
         let dependencies = None;
         let triggers = None;
         let tables = Some(vec![
-            TableName::try_from("table_1")?,
-            TableName::try_from("table_2")?,
+            TableNameDto::try_from("table_1")?,
+            TableNameDto::try_from("table_2")?,
         ]);
 
         let bundle_id = BundleId::default();
@@ -588,16 +588,16 @@ mod tests {
 
         // Actual test
         let dependencies = Some(vec![
-            TableDependency::try_from("table_1")?,
-            TableDependency::try_from("table_2")?,
+            TableDependencyDto::try_from("table_1")?,
+            TableDependencyDto::try_from("table_2")?,
         ]);
         let triggers = Some(vec![
-            TableTrigger::try_from("table_1")?,
-            TableTrigger::try_from("table_2")?,
+            TableTriggerDto::try_from("table_1")?,
+            TableTriggerDto::try_from("table_2")?,
         ]);
         let tables = Some(vec![
-            TableName::try_from("output_1")?,
-            TableName::try_from("output_2")?,
+            TableNameDto::try_from("output_1")?,
+            TableNameDto::try_from("output_2")?,
         ]);
 
         let bundle_id = BundleId::default();
@@ -644,8 +644,8 @@ mod tests {
         let dependencies = None;
         let triggers = None;
         let tables = Some(vec![
-            TableName::try_from("table_1")?,
-            TableName::try_from("table_2")?,
+            TableNameDto::try_from("table_1")?,
+            TableNameDto::try_from("table_2")?,
         ]);
 
         let bundle_id = BundleId::default();
@@ -683,18 +683,18 @@ mod tests {
         let collection_2 = seed_collection(&db, &collection_name_2, &UserId::admin()).await;
 
         let dependencies = Some(vec![
-            TableDependency::try_from("collection_1/table_1")?,
-            TableDependency::try_from("collection_1/table_2")?,
-            TableDependency::try_from("collection_2/output_1")?,
-            TableDependency::try_from("output_2")?,
+            TableDependencyDto::try_from("collection_1/table_1")?,
+            TableDependencyDto::try_from("collection_1/table_2")?,
+            TableDependencyDto::try_from("collection_2/output_1")?,
+            TableDependencyDto::try_from("output_2")?,
         ]);
         let triggers = Some(vec![
-            TableTrigger::try_from("collection_1/table_1")?,
-            TableTrigger::try_from("collection_1/table_2")?,
+            TableTriggerDto::try_from("collection_1/table_1")?,
+            TableTriggerDto::try_from("collection_1/table_2")?,
         ]);
         let tables = Some(vec![
-            TableName::try_from("output_1")?,
-            TableName::try_from("output_2")?,
+            TableNameDto::try_from("output_1")?,
+            TableNameDto::try_from("output_2")?,
         ]);
 
         let bundle_id = BundleId::default();

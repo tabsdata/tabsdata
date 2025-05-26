@@ -17,7 +17,7 @@ use td_objects::tower_service::sql::{
 };
 use td_objects::types::basic::{
     CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName, FunctionVersionId,
-    ReuseFrozen, TableDependency, TableName, TableTrigger,
+    ReuseFrozen, TableDependencyDto, TableNameDto, TableTriggerDto,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::DependencyVersionDB;
@@ -82,9 +82,9 @@ impl DeleteFunctionService {
                 from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyVersionDB>),
                 from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerVersionDBWithNames>),
                 // Extract new associations (empty because it is a delete operation).
-                from_fn(With::<Option<Vec<TableName>>>::default),
-                from_fn(With::<Option<Vec<TableDependency>>>::default),
-                from_fn(With::<Option<Vec<TableTrigger>>>::default),
+                from_fn(With::<Option<Vec<TableNameDto>>>::default),
+                from_fn(With::<Option<Vec<TableDependencyDto>>>::default),
+                from_fn(With::<Option<Vec<TableTriggerDto>>>::default),
                 // Extract reuse frozen (default as deletes are not creating reusing anything)
                 from_fn(With::<ReuseFrozen>::default),
                 // And register new ones
@@ -110,7 +110,8 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependencyDto,
+        TableNameDto, TableTriggerDto, UserId,
     };
     use td_objects::types::function::{
         FunctionRegister, FunctionVersionBuilder, FunctionVersionDBWithNames,
@@ -169,9 +170,9 @@ mod tests {
                 type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, DependencyVersionDB>),
                 type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TriggerVersionDBWithNames>),
                 // Extract new associations (empty because it is a delete operation).
-                type_of_val(&With::<Option<Vec<TableName>>>::default),
-                type_of_val(&With::<Option<Vec<TableDependency>>>::default),
-                type_of_val(&With::<Option<Vec<TableTrigger>>>::default),
+                type_of_val(&With::<Option<Vec<TableNameDto>>>::default),
+                type_of_val(&With::<Option<Vec<TableDependencyDto>>>::default),
+                type_of_val(&With::<Option<Vec<TableTriggerDto>>>::default),
                 // Extract reuse frozen (default as deletes are not creating reusing anything)
                 type_of_val(&With::<ReuseFrozen>::default),
                 // And register new ones
@@ -265,8 +266,8 @@ mod tests {
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
-                TableName::try_from("table1")?,
-                TableName::try_from("table2")?,
+                TableNameDto::try_from("table1")?,
+                TableNameDto::try_from("table2")?,
             ]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -315,7 +316,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("trigger_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -328,7 +329,7 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependency::try_from("trigger_table")?]))
+            .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
             .triggers(None)
             .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
@@ -378,7 +379,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("trigger_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -392,7 +393,7 @@ mod tests {
             .try_snippet("function_foo snippet")?
             .decorator(Decorator::Publisher)
             .dependencies(None)
-            .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
+            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
@@ -441,7 +442,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(Some(vec![TableName::try_from("trigger_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -454,9 +455,9 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependency::try_from("trigger_table")?]))
-            .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
-            .tables(Some(vec![TableName::try_from("workout_1")?]))
+            .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
+            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("workout_1")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -484,9 +485,9 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(Some(vec![TableDependency::try_from("trigger_table")?]))
-            .triggers(Some(vec![TableTrigger::try_from("trigger_table")?]))
-            .tables(Some(vec![TableName::try_from("workout_2")?]))
+            .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
+            .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
+            .tables(Some(vec![TableNameDto::try_from("workout_2")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;

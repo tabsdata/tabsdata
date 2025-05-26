@@ -74,7 +74,7 @@ mod tests {
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionRuntimeValues,
-        RoleId, TableDependency, TableName, UserId, WorkerMessageId,
+        RoleId, TableDependencyDto, TableNameDto, UserId, WorkerMessageId,
     };
     use td_objects::types::execution::{ExecutionRequest, WorkerMessageDB, WorkerMessageStatus};
     use td_objects::types::function::FunctionRegister;
@@ -117,11 +117,11 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
-            .dependencies(vec![TableDependency::try_from("table_1")?])
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
             .triggers(None)
             .tables(vec![
-                TableName::try_from("table_1")?,
-                TableName::try_from("table_2")?,
+                TableNameDto::try_from("table_1")?,
+                TableNameDto::try_from("table_2")?,
             ])
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)

@@ -10,6 +10,7 @@ use crate::types::parse::{
 use crate::types::table::TableVersionDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::trigger::TriggerVersionDBWithNames;
+use crate::types::ComposedString;
 use td_common::id::Id;
 use td_error::TdError;
 use td_security::{
@@ -344,7 +345,7 @@ pub struct TableDataId;
 #[td_type::typed(id)]
 pub struct TableDataVersionId;
 
-#[td_type::typed(composed(inner = VersionedTableRef))]
+#[td_type::typed(composed(inner = "VersionedTableRef::<TableName>"), try_from = TableDependencyDto)]
 pub struct TableDependency;
 
 impl TryFrom<&DependencyVersionDBWithNames> for TableDependency {
@@ -361,6 +362,9 @@ impl TryFrom<&DependencyVersionDBWithNames> for TableDependency {
     }
 }
 
+#[td_type::typed(composed(inner = "VersionedTableRef::<TableNameDto>"))]
+pub struct TableDependencyDto;
+
 #[td_type::typed(i32)]
 pub struct TableFunctionParamPos;
 
@@ -370,7 +374,7 @@ pub struct TableId;
 #[td_type::typed(id_name(id = TableId, name = TableName))]
 pub struct TableIdName;
 
-#[td_type::typed(string(parser = parse_table))]
+#[td_type::typed(string, try_from = TableNameDto)]
 pub struct TableName;
 
 impl TryFrom<&TableVersionDBWithNames> for TableName {
@@ -382,6 +386,9 @@ impl TryFrom<&TableVersionDBWithNames> for TableName {
     }
 }
 
+#[td_type::typed(string(parser = parse_table))]
+pub struct TableNameDto;
+
 #[td_type::typed_enum]
 pub enum TableStatus {
     #[strum(to_string = "A")]
@@ -392,7 +399,7 @@ pub enum TableStatus {
     Deleted,
 }
 
-#[td_type::typed(composed(inner = TableRef))]
+#[td_type::typed(composed(inner = "TableRef::<TableName>"), try_from = TableTriggerDto)]
 pub struct TableTrigger;
 
 impl TryFrom<&TriggerVersionDBWithNames> for TableTrigger {
@@ -407,10 +414,13 @@ impl TryFrom<&TriggerVersionDBWithNames> for TableTrigger {
     }
 }
 
+#[td_type::typed(composed(inner = "TableRef::<TableNameDto>"))]
+pub struct TableTriggerDto;
+
 #[td_type::typed(id)]
 pub struct TableVersionId;
 
-#[td_type::typed(composed(inner = Versions))]
+#[td_type::typed(composed(inner = "Versions"))]
 pub struct TableVersions;
 
 #[td_type::typed(id, try_from = CollectionId)]
