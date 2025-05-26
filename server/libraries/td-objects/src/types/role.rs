@@ -34,6 +34,7 @@ pub struct RoleDB {
 #[td_type::Dto]
 pub struct RoleCreate {
     name: RoleName,
+    #[serde(default)]
     description: Description,
 }
 
@@ -43,16 +44,20 @@ pub struct RoleCreate {
 #[td_type(updater(try_from = RequestContext, skip_all))]
 pub struct RoleDBUpdate {
     #[td_type(builder(include))]
-    name: RoleName,
+    name: Option<RoleName>,
     #[td_type(builder(include))]
-    description: Description,
+    description: Option<Description>,
     #[td_type(updater(include, field = "time"))]
     modified_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
     modified_by_id: UserId,
 }
 
-pub type RoleUpdate = RoleCreate;
+#[td_type::Dto]
+pub struct RoleUpdate {
+    name: Option<RoleName>,
+    description: Option<Description>,
+}
 
 #[td_type::Dao]
 #[dao(sql_table = "roles__with_names")]

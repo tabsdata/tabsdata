@@ -832,7 +832,7 @@ mod tests {
             let query = query_builder.build();
 
             let query_str = query.sql();
-            assert_eq!(query_str, "UPDATE test_table SET name = ?");
+            assert_eq!(query_str, "UPDATE test_table SET name = COALESCE(?, name)");
 
             let result = query.execute(&db).await.unwrap();
             assert_eq!(result.rows_affected(), 2);
@@ -862,7 +862,10 @@ mod tests {
             let query = query_builder.build();
 
             let query_str = query.sql();
-            assert_eq!(query_str, "UPDATE test_table SET name = ? WHERE name = ?");
+            assert_eq!(
+                query_str,
+                "UPDATE test_table SET name = COALESCE(?, name) WHERE name = ?"
+            );
 
             let result = query.execute(&db).await.unwrap();
             assert_eq!(result.rows_affected(), 1);
@@ -897,7 +900,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "UPDATE test_table SET name = ? WHERE id = ? AND name = ?"
+                "UPDATE test_table SET name = COALESCE(?, name) WHERE id = ? AND name = ?"
             );
 
             let result = query.execute(&db).await.unwrap();

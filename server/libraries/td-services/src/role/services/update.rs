@@ -125,8 +125,8 @@ mod tests {
         .await;
 
         let update = RoleUpdate::builder()
-            .try_name("not_joaquin_anymore")?
-            .try_description("new desc")?
+            .name(RoleName::try_from("not_joaquin_anymore")?)
+            .description(Description::try_from("new desc")?)
             .build()?;
 
         let request = RequestContext::with(

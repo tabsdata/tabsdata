@@ -216,8 +216,9 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                             separated.push_bind_unseparated(&self.#field_names);
                             separated.push_unseparated(format!(r" ELSE {v} END", v = field_name));
                         } else {
-                            separated.push(format!("{v} = ", v = field_name));
+                            separated.push(format!("{v} = COALESCE(", v = field_name));
                             separated.push_bind_unseparated(&self.#field_names);
+                            separated.push_unseparated(format!(", {v})", v = field_name));
                         }
                     }
                 )*
