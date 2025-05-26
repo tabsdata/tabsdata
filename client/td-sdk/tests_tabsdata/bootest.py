@@ -230,11 +230,11 @@ def enrich_sys_path():
             shiny_entries.append(path)
     sys.path[:] = shiny_entries
 
-    logger.info("")
-    logger.info("Using sys.path entries for td-sdk tests...:")
+    logger.debug("")
+    logger.debug("Using sys.path entries for td-sdk tests...:")
     for path in sys.path:
-        logger.info(f"   - {path}")
-    logger.info("")
+        logger.debug(f"   - {path}")
+    logger.debug("")
 
 
 def check_assets():

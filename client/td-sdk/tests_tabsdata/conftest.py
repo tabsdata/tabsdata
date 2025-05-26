@@ -25,13 +25,18 @@ import yaml
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
 
+from tabsdata.utils.logging import setup_tests_logging
+
 # The following non-import code must execute early to set up the environment correctly.
 # Suppressing E402 to allow imports after this setup.
 # flake8: noqa: E402
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logging.getLogger("filelock").setLevel(logging.INFO)
+
+
+def pytest_configure():
+    setup_tests_logging()
+
 
 TESTS_ROOT_FOLDER = os.path.dirname(__file__)
 
@@ -743,8 +748,12 @@ def pytest_sessionfinish(session, exitstatus):
 
 def clean_python_virtual_environments():
     try:
-        existing_virtual_environments = os.listdir(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER)
-        logger.info(f"Existing virtual environments: {existing_virtual_environments}")
+        existing_virtual_environments = sorted(
+            os.listdir(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER)
+        )
+        logger.debug("Existing virtual environments:")
+        for environment in existing_virtual_environments:
+            logger.debug(f"· {environment}")
         for environment in existing_virtual_environments:
             if PYTEST_DEFAULT_ENVIRONMENT_PREFIX in environment:
                 with open(

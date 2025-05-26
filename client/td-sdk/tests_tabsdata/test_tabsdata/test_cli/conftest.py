@@ -11,11 +11,14 @@ from filelock import FileLock
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, APISERVER_URL
 
 from tabsdata.cli.cli import cli
+from tabsdata.utils.logging import setup_tests_logging
 from tabsdata.utils.tableframe._generators import _id
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logging.getLogger("filelock").setLevel(logging.INFO)
+
+
+def pytest_configure():
+    setup_tests_logging()
 
 
 @pytest.fixture(scope="module")

@@ -57,6 +57,14 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/libraries/log.ds
+    ''']
+
+[tasks.env]
+cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
 
     env_keys = array
     array_push ${env_keys} CARGO_MAKE
@@ -497,7 +505,7 @@ run_task = [
 private = true
 run_task = [
     { name = [
-        "license_check_list_rs_macros",
+        # "license_check_list_rs_macros",
         "license_check_deny_rs_macros"
     ] }
 ]
@@ -506,7 +514,7 @@ run_task = [
 private = true
 run_task = [
     { name = [
-        "license_check_list_rs_modules",
+        # "license_check_list_rs_modules",
         "license_check_deny_rs_modules"
     ] }
 ]
@@ -637,12 +645,12 @@ run_task = [
 [tasks.upgrade_rs_macros]
 private = true
 command = "cargo"
-args = ["upgrade", "--dry-run", "--verbose", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}"]
+args = ["upgrade", "--dry-run", "--compatible", "allow", "--incompatible", "allow", "--pinned", "allow", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}"]
 
 [tasks.upgrade_rs_modules]
 private = true
 command = "cargo"
-args = ["upgrade", "--dry-run", "--verbose", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}"]
+args = ["upgrade", "--dry-run", "--compatible", "allow", "--incompatible", "allow", "--pinned", "allow", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}"]
 
 [tasks.deny]
     run_task = [

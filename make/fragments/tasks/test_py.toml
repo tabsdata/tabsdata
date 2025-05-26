@@ -57,11 +57,11 @@ script = [
     cd "${PROJECT_PY_TA_FEATURES_FOLDER}"
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
 
     is_zero = eq ${exit_code} "0"
@@ -96,11 +96,11 @@ script = [
     cd "${PROJECT_PY_TA_TABLEFRAME_FOLDER}"
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -134,11 +134,11 @@ script = [
     cd ${PROJECT_PY_TE_TABLEFRAME_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -172,11 +172,11 @@ script = [
     cd ${PROJECT_PY_TD_SDK_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -210,11 +210,11 @@ script = [
     cd ${PROJECT_PY_TABSDATA_MONGODB_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -248,11 +248,11 @@ script = [
     cd ${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -286,11 +286,11 @@ script = [
     cd ${PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov -m "${MARKERS}"
+        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -523,7 +523,7 @@ script = [
     TDX = get_env TDX
     debug "🔅 The tdserver process will use TDX location: '${TDX}'"
     debug "🚀 ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467"
-    exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467
+    output = exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467
     ''']
 
 [tasks.status_pytest_tabsdata]
@@ -568,14 +568,13 @@ script = [
     status_running = set true
 
     while ${status_running}
-        exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
         output = exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
         status_started = contains ${output.stdout} "apiserver"
         if ${status_started}
             debug "🔅 Verified supervisor & apiserver are running"
-            exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} status --instance pytest
             status_running = set false
         else
+            debug ". ${status_attempt}"
             status_attempt = calc ${status_attempt} + 1
             status_exhausted = eq ${status_attempt} ${status_attempts}
             if ${status_exhausted}
@@ -618,7 +617,7 @@ script = [
     end
     debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
     debug "🚀 ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest"
-    exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
+    output = exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} stop --instance pytest
     ''']
 
 [tasks.remove_pytest_tabsdata]

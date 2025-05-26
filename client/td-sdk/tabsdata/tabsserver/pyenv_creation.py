@@ -56,6 +56,7 @@ from tabsdata.utils.constants import (
 from tabsdata.utils.debug import debug_enabled
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 time_block = TimeBlock()
 
 FILE_PROTOCOL = "file://"
@@ -183,8 +184,10 @@ def list_folders(directory: str) -> list:
 
 
 def get_existing_virtual_environments():
-    existing_virtual_environments = list_folders(DEFAULT_ENVIRONMENT_FOLDER)
-    logger.info(f"Existing virtual environments: {existing_virtual_environments}")
+    existing_virtual_environments = sorted(list_folders(DEFAULT_ENVIRONMENT_FOLDER))
+    logger.debug("Existing virtual environments:")
+    for environment in existing_virtual_environments:
+        logger.debug(f"· {environment}")
     return existing_virtual_environments
 
 
@@ -611,9 +614,10 @@ def testimony_exists(environment_name) -> bool:
     )
     logger.info(f"Checking if testimony file '{testimony_file}' exists.")
     try:
-        logger.info(
-            f"Existing testimonies: {os.listdir(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER)}"
-        )
+        existing_testimonies = sorted(os.listdir(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER))
+        logger.debug("Existing testimonies:")
+        for testimony in existing_testimonies:
+            logger.debug(f"· {testimony}")
     except FileNotFoundError:
         logger.warning(
             f"Testimony folder '{DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER}' not found."

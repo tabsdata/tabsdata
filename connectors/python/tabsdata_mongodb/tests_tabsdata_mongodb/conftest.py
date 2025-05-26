@@ -1,9 +1,10 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-
 from tests_tabsdata.bootest import enrich_sys_path
 from tests_tabsdata_mongodb.bootest import TESTING_RESOURCES_PATH
+
+from tabsdata.utils.logging import setup_tests_logging
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
@@ -30,8 +31,11 @@ from tests_tabsdata.conftest import (
 )
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logging.getLogger("filelock").setLevel(logging.INFO)
+
+
+def pytest_configure():
+    setup_tests_logging()
+
 
 DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME = "pytest_exclusive_mongodb_container"
 MONGODB_PORT = 27018

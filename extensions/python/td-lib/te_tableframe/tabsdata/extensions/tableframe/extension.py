@@ -16,6 +16,7 @@ from tabsdata.extensions.tableframe.api.api import Extension
 from tabsdata.extensions.tableframe.version import version
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class ExtendedSystemColumns(Enum):
@@ -57,7 +58,7 @@ class TableFrameExtension(Extension, ABC):
 
     def __init__(self) -> None:
         FeaturesManager.instance().disable(Feature.ENTERPRISE)
-        logger.info(
+        logger.debug(
             f"Single instance of {Extension.__name__}: {TableFrameExtension.name} -"
             f" {TableFrameExtension.version}"
         )
