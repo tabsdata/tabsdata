@@ -1343,6 +1343,209 @@ class Function:
         return string_representation
 
 
+class Role:
+    def __init__(
+        self,
+        connection: APIServer,
+        name: str,
+        **kwargs,
+    ):
+        """
+        Initialize the Role object.
+
+        Args:
+            id (str): The ID of the role.
+            name (str): The name of the role.
+            **kwargs: Additional keyword arguments.
+        """
+
+        self.connection = connection
+        self.name = name
+
+        self.created_by = kwargs.get("created_by")
+        self.created_on = kwargs.get("created_on")
+        self.created_on_string = None
+        self.description = kwargs.get("description")
+        self.fixed = kwargs.get("fixed")
+        self.id = kwargs.get("id")
+        self.modified_by = kwargs.get("modified_by")
+        self.modified_by_id = kwargs.get("modified_by_id")
+        self.modified_on = kwargs.get("modified_on")
+        self.modified_on_string = None
+
+        self.kwargs = kwargs
+        self._data = None
+
+    @property
+    def _data(self) -> dict:
+        if self._data_dict is None:
+            self._data = self.connection.role_get_by_name(self.name).json().get("data")
+        return self._data_dict
+
+    @_data.setter
+    def _data(self, data_dict: dict | None):
+        self._data_dict = data_dict
+
+    @property
+    def created_by(self) -> str:
+        if self._created_by is None:
+            self.created_by = self._data.get("created_by")
+        return self._created_by
+
+    @created_by.setter
+    def created_by(self, created_by: str | None):
+        self._created_by = created_by
+
+    @property
+    def created_on(self) -> int:
+        if self._created_on is None:
+            self.created_on = self._data.get("created_on")
+        return self._created_on
+
+    @created_on.setter
+    def created_on(self, created_on: int | None):
+        self._created_on = created_on
+
+    @property
+    def created_on_string(self) -> str:
+        if self._created_on_string is None:
+            self._created_on_string = convert_timestamp_to_string(self.created_on)
+        return self._created_on_string
+
+    @created_on_string.setter
+    def created_on_string(self, created_on_string: str | None):
+        self._created_on_string = created_on_string
+
+    @property
+    def description(self) -> str:
+        if self._description is None:
+            self.description = self._data.get("description")
+        return self._description
+
+    @description.setter
+    def description(self, description: str | None):
+        self._description = description
+
+    @property
+    def fixed(self) -> bool:
+        if self._fixed is None:
+            self.fixed = self._data.get("fixed")
+        return self._fixed
+
+    @fixed.setter
+    def fixed(self, fixed: bool | None):
+        self._fixed = fixed
+
+    @property
+    def id(self) -> str:
+        if self._id is None:
+            self._id = self._data.get("id")
+        return self._id
+
+    @id.setter
+    def id(self, id: str | None):
+        self._id = id
+
+    @property
+    def modified_by(self) -> str:
+        if self._modified_by is None:
+            self.modified_by = self._data.get("modified_by")
+        return self._modified_by
+
+    @modified_by.setter
+    def modified_by(self, modified_by: str | None):
+        self._modified_by = modified_by
+
+    @property
+    def modified_by_id(self) -> str:
+        if self._modified_by_id is None:
+            self.modified_by_id = self._data.get("modified_by_id")
+        return self._modified_by_id
+
+    @modified_by_id.setter
+    def modified_by_id(self, modified_by_id: str | None):
+        self._modified_by_id = modified_by_id
+
+    @property
+    def modified_on(self) -> int:
+        if self._modified_on is None:
+            self.modified_on = self._data.get("modified_on")
+        return self._modified_on
+
+    @modified_on.setter
+    def modified_on(self, modified_on: int | None):
+        self._modified_on = modified_on
+
+    @property
+    def modified_on_string(self) -> str:
+        if self._modified_on_string is None:
+            self._modified_on_string = convert_timestamp_to_string(self.modified_on)
+        return self._modified_on_string
+
+    @modified_on_string.setter
+    def modified_on_string(self, modified_on_string: str | None):
+        self._modified_on_string = modified_on_string
+
+    def create(self, raise_for_status=True) -> Role:
+        name = self.name
+        description = self._description
+        response = self.connection.role_create(
+            name,
+            description,
+            raise_for_status=raise_for_status,
+        )
+        self.refresh()
+        self._data = response.json().get("data")
+        return self
+
+    def delete(self, raise_for_status: bool = True) -> None:
+        self.connection.role_delete(self.name, raise_for_status=raise_for_status)
+
+    def refresh(self) -> Role:
+        self.created_by = None
+        self.created_on = None
+        self.created_on_string = None
+        self.description = None
+        self.id = None
+        self.fixed = None
+        self.modified_by = None
+        self.modified_by_id = None
+        self.modified_on = None
+        self.modified_on_string = None
+        self.kwargs = None
+        self._data = None
+        return self
+
+    def update(
+        self,
+        name: str = None,
+        description: str = None,
+        raise_for_status: bool = True,
+    ) -> Role:
+        response = self.connection.role_update(
+            self.name,
+            new_name=name,
+            new_description=description,
+            raise_for_status=raise_for_status,
+        )
+        self.refresh()
+        self.name = response.json().get("data").get("name")
+        return self
+
+    def __eq__(self, other):
+        if not isinstance(other, Role):
+            return False
+        return self.name == other.name
+
+    def __repr__(self) -> str:
+        representation = f"{self.__class__.__name__}(name={self.name!r})"
+        return representation
+
+    def __str__(self) -> str:
+        string_representation = f"Name: {self.name!s}"
+        return string_representation
+
+
 class ServerStatus:
     """
     This class represents the status of the TabsdataServer.
@@ -2242,6 +2445,18 @@ class TabsdataServer:
         ]
 
     @property
+    def roles(self) -> List[Role]:
+        """
+        Get the list of roles in the server. This list is obtained every time the
+            property is accessed, so sequential accesses to this property in the same
+            object might yield different results.
+
+        Returns:
+            List[Role]: The list of roles in the server.
+        """
+        return self.list_roles()
+
+    @property
     def status(self) -> ServerStatus:
         """
         Get the status of the server. This status is obtained every time the property is
@@ -2705,6 +2920,132 @@ class TabsdataServer:
             "roles": roles_by_name,
         }
         return info
+
+    def create_role(
+        self, name: str, description: str = None, raise_for_status: bool = True
+    ) -> Role:
+        """
+        Create a role in the server.
+
+        Args:
+            name (str): The name of the role.
+            description (str, optional): The description of the role.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the collection could not be created.
+        """
+        role = Role(self.connection, name, description=description)
+        role.create(raise_for_status=raise_for_status)
+        return role
+
+    def delete_role(self, name: str, raise_for_status: bool = True) -> None:
+        """
+        Delete a role in the server.
+
+        Args:
+            name (str): The name of the role.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the collection could not be deleted.
+        """
+        role = Role(self.connection, name)
+        role.delete(raise_for_status=raise_for_status)
+
+    def get_role(self, name: str) -> Role:
+        """
+        Get a role in the server.
+
+        Args:
+            name (str): The name of the role.
+
+        Returns:
+            Role: The role.
+
+        Raises:
+            APIServerError: If the collection could not be obtained.
+        """
+        role_definition = self.connection.role_get_by_name(name)
+        return Role(
+            self.connection,
+            **role_definition.json().get("data"),
+        )
+
+    def list_roles(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Role]:
+        """
+        List the roles in the server.
+
+        Returns:
+            List[Role]: The list of roles in the server.
+        """
+        return list(self.list_roles_generator(filter, order_by, raise_for_status))
+
+    def list_roles_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Role]:
+        """
+        List the roles in the server.
+
+        Returns:
+            List[Role]: The list of roles in the server.
+        """
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.role_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_roles = data.get("data")
+            for raw_role in raw_roles:
+                built_role = Role(self.connection, **raw_role)
+                yield built_role
+            first_page = False
+
+    def update_role(
+        self,
+        name: str,
+        new_name: str = None,
+        new_description: str = None,
+        raise_for_status: bool = True,
+    ) -> Role:
+        """
+        Update a role in the server.
+
+        Args:
+            name (str): The name of the role.
+            new_name (str, optional): The new name of the role.
+            new_description (str, optional): The new description of the role.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the collection could not be updated.
+        """
+        role = Role(self.connection, name)
+        return role.update(
+            name=new_name,
+            description=new_description,
+            raise_for_status=raise_for_status,
+        )
 
     def table_download(
         self,

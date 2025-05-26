@@ -24,6 +24,7 @@ from tabsdata.api.tabsdata_server import (
     DataVersion,
     ExecutionPlan,
     Function,
+    Role,
     ServerStatus,
     Table,
     TabsdataServer,
@@ -497,10 +498,12 @@ def test_tabsdata_server_list_collections(tabsserver_connection):
             filter="name:eq:test_tabsdata_server_list_collections_no_generator_0"
         )
         assert len(collections) == 1
+        assert all(isinstance(collection, Collection) for collection in collections)
         collections = tabsserver_connection.list_collections(
             filter="name:lk:test_tabsdata_server_list_collections_no_generator_*"
         )
         assert len(collections) == amount
+        assert all(isinstance(collection, Collection) for collection in collections)
     finally:
         for i in range(amount):
             tabsserver_connection.delete_collection(
@@ -525,12 +528,20 @@ def test_tabsdata_server_list_collections_generator(tabsserver_connection):
         assert isinstance(collections, types.GeneratorType)
         materialized_collections = list(collections)
         assert len(materialized_collections) == 1
+        assert all(
+            isinstance(collection, Collection)
+            for collection in materialized_collections
+        )
         collections = tabsserver_connection.list_collections_generator(
             filter="name:lk:test_tabsdata_server_list_collections_generator_*"
         )
         assert isinstance(collections, types.GeneratorType)
         materialized_collections = list(collections)
         assert len(materialized_collections) == amount
+        assert all(
+            isinstance(collection, Collection)
+            for collection in materialized_collections
+        )
     finally:
         for i in range(amount):
             tabsserver_connection.delete_collection(
@@ -565,6 +576,159 @@ def test_tabsdata_server_collection_update(tabsserver_connection):
     finally:
         tabsserver_connection.delete_collection(
             "test_tabsdata_server_collection_update"
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_role_list(tabsserver_connection):
+    roles = tabsserver_connection.roles
+    assert isinstance(roles, list)
+    assert all(isinstance(role, Role) for role in roles)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_role_create(tabsserver_connection):
+    try:
+        tabsserver_connection.create_role(
+            name="test_tabsdata_server_role_create",
+            description="test_tabsdata_server_role_create_description",
+        )
+        roles = tabsserver_connection.roles
+        assert any(role.name == "test_tabsdata_server_role_create" for role in roles)
+    finally:
+        tabsserver_connection.delete_role(
+            "test_tabsdata_server_role_create",
+            raise_for_status=False,
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_role_delete(tabsserver_connection):
+    try:
+        tabsserver_connection.create_role(
+            name="test_tabsdata_server_role_delete",
+            description="test_tabsdata_server_role_delete_description",
+        )
+        roles = tabsserver_connection.roles
+        assert any(role.name == "test_tabsdata_server_role_delete" for role in roles)
+        tabsserver_connection.delete_role(
+            "test_tabsdata_server_role_delete",
+            raise_for_status=True,
+        )
+        roles = tabsserver_connection.roles
+        assert not any(
+            role.name == "test_tabsdata_server_role_delete" for role in roles
+        )
+    finally:
+        tabsserver_connection.delete_role(
+            "test_tabsdata_server_role_delete",
+            raise_for_status=False,
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_role_get(tabsserver_connection):
+    try:
+        tabsserver_connection.create_role(
+            name="test_tabsdata_server_role_get",
+            description="test_tabsdata_server_role_get_description",
+        )
+        roles = tabsserver_connection.roles
+        assert any(role.name == "test_tabsdata_server_role_get" for role in roles)
+        role = tabsserver_connection.get_role("test_tabsdata_server_role_get")
+        assert role.name == "test_tabsdata_server_role_get"
+    finally:
+        tabsserver_connection.delete_role(
+            "test_tabsdata_server_role_get", raise_for_status=False
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_tabsdata_server_list_roles(tabsserver_connection):
+    amount = 101
+    try:
+        for i in range(amount):
+            tabsserver_connection.create_role(
+                name=f"test_tabsdata_server_list_roles_no_generator_{i}"
+            ),
+        roles = tabsserver_connection.list_roles(
+            filter="name:eq:test_tabsdata_server_list_roles_no_generator_0"
+        )
+        assert len(roles) == 1
+        assert all(isinstance(role, Role) for role in roles)
+        roles = tabsserver_connection.list_roles(
+            filter="name:lk:test_tabsdata_server_list_roles_no_generator_*"
+        )
+        assert len(roles) == amount
+        assert all(isinstance(role, Role) for role in roles)
+    finally:
+        for i in range(amount):
+            tabsserver_connection.delete_role(
+                f"test_tabsdata_server_list_roles_no_generator_{i}",
+                raise_for_status=False,
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_tabsdata_server_list_roles_generator(tabsserver_connection):
+    amount = 101
+    try:
+        for i in range(amount):
+            tabsserver_connection.create_role(
+                name=f"test_tabsdata_server_list_roles_generator_{i}",
+            )
+        roles = tabsserver_connection.list_roles_generator(
+            filter="name:eq:test_tabsdata_server_list_roles_generator_0"
+        )
+        assert isinstance(roles, types.GeneratorType)
+        materialized_roles = list(roles)
+        assert len(materialized_roles) == 1
+        assert all(isinstance(role, Role) for role in materialized_roles)
+        roles = tabsserver_connection.list_roles_generator(
+            filter="name:lk:test_tabsdata_server_list_roles_generator_*"
+        )
+        assert isinstance(roles, types.GeneratorType)
+        materialized_roles = list(roles)
+        assert len(materialized_roles) == amount
+        assert all(isinstance(role, Role) for role in materialized_roles)
+    finally:
+        for i in range(amount):
+            tabsserver_connection.delete_role(
+                f"test_tabsdata_server_list_roles_generator_{i}",
+                raise_for_status=False,
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_role_update(tabsserver_connection):
+    try:
+        tabsserver_connection.create_role(
+            name="test_tabsdata_server_role_update",
+            description="test_tabsdata_server_role_update_description",
+        )
+        roles = tabsserver_connection.roles
+        assert any(role.name == "test_tabsdata_server_role_update" for role in roles)
+        new_description = "test_tabsdata_server_role_update_new_description"
+        tabsserver_connection.update_role(
+            "test_tabsdata_server_role_update",
+            new_description=new_description,
+        )
+        role = tabsserver_connection.get_role("test_tabsdata_server_role_update")
+        assert role.name == "test_tabsdata_server_role_update"
+        assert role.description == new_description
+    finally:
+        tabsserver_connection.delete_role(
+            "test_tabsdata_server_role_update",
+            raise_for_status=False,
         )
 
 

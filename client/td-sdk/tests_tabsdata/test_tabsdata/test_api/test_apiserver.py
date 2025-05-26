@@ -242,7 +242,139 @@ def test_collection_update_new_name(apiserver_connection):
         assert response_json.get("name") == "test_collection_update_new_name_new_name"
     finally:
         apiserver_connection.collection_delete(
-            "test_collection_update", raise_for_status=False
+            "test_collection_update_new_name", raise_for_status=False
+        )
+        apiserver_connection.collection_delete(
+            "test_collection_update_new_name_new_name", raise_for_status=False
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_list(apiserver_connection):
+    response = apiserver_connection.role_list()
+    assert response.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_list_with_params(apiserver_connection):
+    response = apiserver_connection.role_list(
+        order_by="name", request_len=42, request_filter="name:eq:invent"
+    )
+    assert response.status_code == 200
+    list_params = response.json().get("data").get("list_params")
+    assert list_params is not None
+    assert list_params.get("len") == 42
+    assert list_params.get("filter") == ["name:eq:invent"]
+    assert list_params.get("order_by") == "name"
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_create_api(apiserver_connection):
+    apiserver_connection.role_delete("test_role_create_api", raise_for_status=False)
+    try:
+        response = apiserver_connection.role_create(
+            "test_role_create_api", "test_role_create_api_description"
+        )
+        assert response.status_code == 201
+        response_json = response.json().get("data")
+        assert response_json.get("name") == "test_role_create_api"
+        assert response_json.get("description") == "test_role_create_api_description"
+    finally:
+        apiserver_connection.role_delete("test_role_create_api", raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_delete_api(apiserver_connection):
+    apiserver_connection.role_create(
+        "test_role_delete_api",
+        "test_role_delete_api_description",
+        raise_for_status=False,
+    )
+    response = apiserver_connection.role_delete("test_role_delete_api")
+    assert response.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_delete_no_exists_raises_error(apiserver_connection):
+    with pytest.raises(APIServerError):
+        apiserver_connection.role_delete("test_role_delete_no_exists")
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_get(apiserver_connection):
+    apiserver_connection.role_create(
+        "test_role_get", "test_role_get_description", raise_for_status=False
+    )
+    try:
+        response = apiserver_connection.role_get_by_name("test_role_get")
+        assert response.status_code == 200
+        response_json = response.json().get("data")
+        assert response_json.get("name") == "test_role_get"
+        assert response_json.get("description") == "test_role_get_description"
+    finally:
+        apiserver_connection.role_delete("test_role_get", raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_get_no_exists_raises_error(apiserver_connection):
+    with pytest.raises(APIServerError):
+        apiserver_connection.role_get_by_name("test_role_get_no_exists_raises_error")
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_update_new_description(apiserver_connection):
+    apiserver_connection.role_create(
+        "test_role_update_new_description",
+        "test_role_update_new_description_description",
+        raise_for_status=False,
+    )
+    try:
+        response = apiserver_connection.role_update(
+            "test_role_update_new_description",
+            new_description="test_role_update_new_description_new_description",
+        )
+        assert response.status_code == 200
+        response_json = response.json().get("data")
+        assert (
+            response_json.get("description")
+            == "test_role_update_new_description_new_description"
+        )
+    finally:
+        apiserver_connection.role_delete(
+            "test_role_update_new_description", raise_for_status=False
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_update_new_name(apiserver_connection):
+    apiserver_connection.role_create(
+        "test_role_update_new_name",
+        "test_role_update_new_name_description",
+        raise_for_status=False,
+    )
+    try:
+        response = apiserver_connection.role_update(
+            "test_role_update_new_name",
+            new_name="test_role_update_new_name_new_name",
+        )
+        assert response.status_code == 200
+        response_json = response.json().get("data")
+        assert response_json.get("name") == "test_role_update_new_name_new_name"
+    finally:
+        apiserver_connection.role_delete(
+            "test_role_update_new_name", raise_for_status=False
+        )
+        apiserver_connection.role_delete(
+            "test_role_update_new_name_new_name", raise_for_status=False
         )
 
 
