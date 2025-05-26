@@ -121,7 +121,7 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
                     str(function.id),
                     function.name,
                     function.description,
-                    function.created_on_string,
+                    function.created_on_str,
                     function.created_by,
                     beautify_list(function.dependencies_with_names),
                     beautify_list(function.trigger_with_names),
@@ -149,7 +149,7 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
             table.add_row(
                 str(function.id),
                 function.description,
-                function.created_on_string,
+                function.created_on_str,
                 function.created_by,
                 beautify_list(function.dependencies_with_names),
                 beautify_list(function.trigger_with_names),
@@ -195,7 +195,7 @@ def list(ctx: click.Context, collection: str):
             table.add_row(
                 function.name,
                 function.description,
-                function.created_on_string,
+                function.created_on_str,
                 function.created_by,
             )
 

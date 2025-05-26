@@ -83,7 +83,7 @@ def info(ctx: click.Context, name: str):
         table.add_row(
             collection.name,
             collection.description,
-            collection.created_on_string,
+            collection.created_on_str,
             collection.created_by,
         )
 
@@ -113,7 +113,7 @@ def list(ctx: click.Context):
             table.add_row(
                 collection.name,
                 collection.description,
-                collection.created_on_string,
+                collection.created_on_str,
                 collection.created_by,
             )
 

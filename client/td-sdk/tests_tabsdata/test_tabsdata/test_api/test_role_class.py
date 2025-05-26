@@ -29,7 +29,7 @@ def test_role_class(tabsserver_connection):
     assert role.name == "test_role_class"
     assert role.description == "test_role_class_description"
     assert role.created_on == created_time
-    assert role.created_on_string == convert_timestamp_to_string(created_time)
+    assert role.created_on_str == convert_timestamp_to_string(created_time)
     assert role.created_by == "test"
     assert role.kwargs == {
         "example_kwarg": "example",
@@ -63,7 +63,7 @@ def test_role_class_lazy_properties(tabsserver_connection):
         assert lazy_role.name == example_role.name
         assert lazy_role.description == example_role.description
         assert lazy_role.created_on == example_role.created_on
-        assert lazy_role.created_on_string == example_role.created_on_string
+        assert lazy_role.created_on_str == example_role.created_on_str
         assert lazy_role.created_by == example_role.created_by
         assert lazy_role._data
         assert lazy_role.__repr__()

@@ -34,7 +34,7 @@ def test_collection_class(tabsserver_connection):
     assert collection.name == "test_collection_class"
     assert collection.description == "test_collection_class_description"
     assert collection.created_on == created_time
-    assert collection.created_on_string == convert_timestamp_to_string(created_time)
+    assert collection.created_on_str == convert_timestamp_to_string(created_time)
     assert collection.created_by == "test"
     assert collection.kwargs == {
         "example_kwarg": "example",
@@ -71,7 +71,7 @@ def test_collection_class_lazy_properties(tabsserver_connection):
         assert lazy_collection.name == example_collection.name
         assert lazy_collection.description == example_collection.description
         assert lazy_collection.created_on == example_collection.created_on
-        assert lazy_collection.created_on_string == example_collection.created_on_string
+        assert lazy_collection.created_on_str == example_collection.created_on_str
         assert lazy_collection.created_by == example_collection.created_by
         assert lazy_collection._data
         assert lazy_collection.__repr__()

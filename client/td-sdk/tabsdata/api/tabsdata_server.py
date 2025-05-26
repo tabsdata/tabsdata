@@ -58,6 +58,30 @@ def status_to_mapping(status: str) -> str:
     return STATUS_MAPPING.get(status, status)
 
 
+class LazyProperty:
+    def __init__(self, data_key, attr_name=None, subordinate_time_string: bool = False):
+        self.data_key = data_key
+        self.attr_name = attr_name or "_" + data_key
+        self.subordinate_time_string = subordinate_time_string
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        value = getattr(instance, self.attr_name, None)
+        if value is None:
+            if not self.subordinate_time_string:
+                value = instance._data.get(self.data_key)
+            else:
+                value = convert_timestamp_to_string(
+                    getattr(instance, self.data_key[: -len("_str")])
+                )
+            setattr(instance, self.attr_name, value)
+        return value
+
+    def __set__(self, instance, value):
+        setattr(instance, self.attr_name, value)
+
+
 class Collection:
     """
     This class represents a collection in the TabsdataServer.
@@ -68,9 +92,14 @@ class Collection:
         **kwargs: Additional keyword
 
     Attributes:
-        created_on_string (str): The timestamp when the collection was created as a
+        created_on_str (str): The timestamp when the collection was created as a
             string.
     """
+
+    created_by = LazyProperty("created_by")
+    created_on = LazyProperty("created_on")
+    created_on_str = LazyProperty("created_on_str", subordinate_time_string=True)
+    description = LazyProperty("description")
 
     def __init__(
         self,
@@ -94,9 +123,9 @@ class Collection:
         self.description = description
         self.created_on = created_on
         if created_on:
-            self.created_on_string = convert_timestamp_to_string(created_on)
+            self.created_on_str = convert_timestamp_to_string(created_on)
         else:
-            self.created_on_string = None
+            self.created_on_str = None
         self.created_by = created_by
         self._data = None
         self.kwargs = kwargs
@@ -112,46 +141,6 @@ class Collection:
     @_data.setter
     def _data(self, data_dict):
         self._data_dict = data_dict
-
-    @property
-    def created_by(self) -> str:
-        if self._created_by is None:
-            self.created_by = self._data.get("created_by")
-        return self._created_by
-
-    @created_by.setter
-    def created_by(self, created_by: str | None):
-        self._created_by = created_by
-
-    @property
-    def created_on(self) -> int:
-        if self._created_on is None:
-            self.created_on = self._data.get("created_on")
-        return self._created_on
-
-    @created_on.setter
-    def created_on(self, created_on: int | None):
-        self._created_on = created_on
-
-    @property
-    def created_on_string(self) -> str:
-        if self._created_on_string is None:
-            self._created_on_string = convert_timestamp_to_string(self.created_on)
-        return self._created_on_string
-
-    @created_on_string.setter
-    def created_on_string(self, created_on_string: str | None):
-        self._created_on_string = created_on_string
-
-    @property
-    def description(self) -> str:
-        if self._description is None:
-            self.description = self._data.get("description")
-        return self._description
-
-    @description.setter
-    def description(self, description: str | None):
-        self._description = description
 
     @property
     def functions(self) -> List[Function]:
@@ -250,7 +239,7 @@ class Collection:
         self._data = None
         self.created_by = None
         self.created_on = None
-        self.created_on_string = None
+        self.created_on_str = None
         self.kwargs = None
         return self
 
@@ -670,6 +659,16 @@ class ExecutionPlan:
 
     """
 
+    dot = LazyProperty("dot")
+    ended_on = LazyProperty("ended_on")
+    ended_on_str = LazyProperty("ended_on_str", subordinate_time_string=True)
+    name = LazyProperty("name")
+    started_on = LazyProperty("started_on")
+    started_on_str = LazyProperty("started_on_str", subordinate_time_string=True)
+    triggered_by = LazyProperty("triggered_by")
+    triggered_on = LazyProperty("triggered_on")
+    triggered_on_str = LazyProperty("triggered_on_str", subordinate_time_string=True)
+
     def __init__(
         self,
         connection: APIServer,
@@ -759,36 +758,6 @@ class ExecutionPlan:
             )
 
     @property
-    def dot(self) -> str:
-        if self._dot is None:
-            self.dot = self._data.get("dot")
-        return self._dot
-
-    @dot.setter
-    def dot(self, dot: str | None):
-        self._dot = dot
-
-    @property
-    def ended_on(self) -> int:
-        if self._ended_on is None:
-            self.ended_on = self._data.get("ended_on")
-        return self._ended_on
-
-    @ended_on.setter
-    def ended_on(self, ended_on: int | None):
-        self._ended_on = ended_on
-
-    @property
-    def ended_on_str(self) -> str:
-        if self._ended_on_str is None:
-            self._ended_on_str = convert_timestamp_to_string(self.ended_on)
-        return self._ended_on_str
-
-    @ended_on_str.setter
-    def ended_on_str(self, ended_on_str: str | None):
-        self._ended_on_str = ended_on_str
-
-    @property
     def function(self) -> Function | None:
         if self._function is None:
             # TODO: Eventually this will be .get("function")
@@ -810,36 +779,6 @@ class ExecutionPlan:
             )
 
     @property
-    def name(self) -> str:
-        if self._name is None:
-            self.name = self._data.get("name")
-        return self._name
-
-    @name.setter
-    def name(self, name: str | None):
-        self._name = name
-
-    @property
-    def started_on(self) -> int:
-        if self._started_on is None:
-            self.started_on = self._data.get("started_on")
-        return self._started_on
-
-    @started_on.setter
-    def started_on(self, started_on: int | None):
-        self._started_on = started_on
-
-    @property
-    def started_on_str(self) -> str:
-        if self._started_on_str is None:
-            self._started_on_str = convert_timestamp_to_string(self.started_on)
-        return self._started_on_str
-
-    @started_on_str.setter
-    def started_on_str(self, started_on_str: str | None):
-        self._started_on_str = started_on_str
-
-    @property
     def status(self) -> str:
         if self._status is None:
             self.status = self._data.get("status")
@@ -851,36 +790,6 @@ class ExecutionPlan:
             self._status = status
         else:
             self._status = status_to_mapping(status)
-
-    @property
-    def triggered_by(self) -> str:
-        if self._triggered_by is None:
-            self.triggered_by = self._data.get("triggered_by")
-        return self._triggered_by
-
-    @triggered_by.setter
-    def triggered_by(self, triggered_by: str | None):
-        self._triggered_by = triggered_by
-
-    @property
-    def triggered_on(self) -> int:
-        if self._triggered_on is None:
-            self.triggered_on = self._data.get("triggered_on")
-        return self._triggered_on
-
-    @triggered_on.setter
-    def triggered_on(self, triggered_on: int | None):
-        self._triggered_on = triggered_on
-
-    @property
-    def triggered_on_str(self) -> str:
-        if self._triggered_on_str is None:
-            self._triggered_on_str = convert_timestamp_to_string(self.triggered_on)
-        return self._triggered_on_str
-
-    @triggered_on_str.setter
-    def triggered_on_str(self, triggered_on_str: str | None):
-        self._triggered_on_str = triggered_on_str
 
     @property
     def workers(self):
@@ -949,9 +858,15 @@ class Function:
         **kwargs: Additional keyword arguments.
 
     Attributes:
-        created_on_string (str): The timestamp when the function was created as a
+        created_on_str (str): The timestamp when the function was created as a
             string.
     """
+
+    created_by = LazyProperty("created_by")
+    created_on = LazyProperty("created_on")
+    created_on_str = LazyProperty("created_on_str", subordinate_time_string=True)
+    description = LazyProperty("description")
+    id = LazyProperty("id")
 
     def __init__(
         self,
@@ -985,7 +900,7 @@ class Function:
         self.dependencies_with_names = kwargs.get("dependencies_with_names")
         self.description = kwargs.get("description")
         self.created_on = kwargs.get("created_on")
-        self.created_on_string = None
+        self.created_on_str = None
         self.created_by = kwargs.get("created_by")
         self.kwargs = kwargs
         self._data = None
@@ -1021,36 +936,6 @@ class Function:
             )
 
     @property
-    def created_by(self) -> str:
-        if self._created_by is None:
-            self.created_by = self._data.get("created_by")
-        return self._created_by
-
-    @created_by.setter
-    def created_by(self, created_by: str | None):
-        self._created_by = created_by
-
-    @property
-    def created_on(self) -> int:
-        if self._created_on is None:
-            self.created_on = self._data.get("created_on")
-        return self._created_on
-
-    @created_on.setter
-    def created_on(self, created_on: int | None):
-        self._created_on = created_on
-
-    @property
-    def created_on_string(self) -> str:
-        if self._created_on_string is None:
-            self._created_on_string = convert_timestamp_to_string(self.created_on)
-        return self._created_on_string
-
-    @created_on_string.setter
-    def created_on_string(self, created_on_string: str | None):
-        self._created_on_string = created_on_string
-
-    @property
     def data_versions(self) -> List[DataVersion]:
         return self.get_dataversions()
 
@@ -1064,16 +949,6 @@ class Function:
     @dependencies_with_names.setter
     def dependencies_with_names(self, dependencies_with_names: List[str] | None):
         self._dependencies_with_names = dependencies_with_names
-
-    @property
-    def description(self) -> str:
-        if self._description is None:
-            self.description = self._data.get("description")
-        return self._description
-
-    @description.setter
-    def description(self, description: str | None):
-        self._description = description
 
     @property
     def history(self) -> List[Function]:
@@ -1093,16 +968,6 @@ class Function:
             )
             for function in raw_list_of_functions
         ]
-
-    @property
-    def id(self) -> str:
-        if self._id is None:
-            self.id = self._data.get("id")
-        return self._id
-
-    @id.setter
-    def id(self, id: str | None):
-        self._id = id
 
     @property
     def tables(self) -> List[Table]:
@@ -1235,7 +1100,7 @@ class Function:
         self.dependencies_with_names = None
         self.description = None
         self.created_on = None
-        self.created_on_string = None
+        self.created_on_str = None
         self.created_by = None
         self.kwargs = None
         self._data = None
@@ -1344,6 +1209,18 @@ class Function:
 
 
 class Role:
+
+    created_by = LazyProperty("created_by")
+    created_on = LazyProperty("created_on")
+    created_on_str = LazyProperty("created_on_str", subordinate_time_string=True)
+    description = LazyProperty("description")
+    fixed = LazyProperty("fixed")
+    id = LazyProperty("id")
+    modified_by = LazyProperty("modified_by")
+    modified_by_id = LazyProperty("modified_by_id")
+    modified_on = LazyProperty("modified_on")
+    modified_on_str = LazyProperty("modified_on_str", subordinate_time_string=True)
+
     def __init__(
         self,
         connection: APIServer,
@@ -1364,14 +1241,14 @@ class Role:
 
         self.created_by = kwargs.get("created_by")
         self.created_on = kwargs.get("created_on")
-        self.created_on_string = None
+        self.created_on_str = None
         self.description = kwargs.get("description")
         self.fixed = kwargs.get("fixed")
         self.id = kwargs.get("id")
         self.modified_by = kwargs.get("modified_by")
         self.modified_by_id = kwargs.get("modified_by_id")
         self.modified_on = kwargs.get("modified_on")
-        self.modified_on_string = None
+        self.modified_on_str = None
 
         self.kwargs = kwargs
         self._data = None
@@ -1385,106 +1262,6 @@ class Role:
     @_data.setter
     def _data(self, data_dict: dict | None):
         self._data_dict = data_dict
-
-    @property
-    def created_by(self) -> str:
-        if self._created_by is None:
-            self.created_by = self._data.get("created_by")
-        return self._created_by
-
-    @created_by.setter
-    def created_by(self, created_by: str | None):
-        self._created_by = created_by
-
-    @property
-    def created_on(self) -> int:
-        if self._created_on is None:
-            self.created_on = self._data.get("created_on")
-        return self._created_on
-
-    @created_on.setter
-    def created_on(self, created_on: int | None):
-        self._created_on = created_on
-
-    @property
-    def created_on_string(self) -> str:
-        if self._created_on_string is None:
-            self._created_on_string = convert_timestamp_to_string(self.created_on)
-        return self._created_on_string
-
-    @created_on_string.setter
-    def created_on_string(self, created_on_string: str | None):
-        self._created_on_string = created_on_string
-
-    @property
-    def description(self) -> str:
-        if self._description is None:
-            self.description = self._data.get("description")
-        return self._description
-
-    @description.setter
-    def description(self, description: str | None):
-        self._description = description
-
-    @property
-    def fixed(self) -> bool:
-        if self._fixed is None:
-            self.fixed = self._data.get("fixed")
-        return self._fixed
-
-    @fixed.setter
-    def fixed(self, fixed: bool | None):
-        self._fixed = fixed
-
-    @property
-    def id(self) -> str:
-        if self._id is None:
-            self._id = self._data.get("id")
-        return self._id
-
-    @id.setter
-    def id(self, id: str | None):
-        self._id = id
-
-    @property
-    def modified_by(self) -> str:
-        if self._modified_by is None:
-            self.modified_by = self._data.get("modified_by")
-        return self._modified_by
-
-    @modified_by.setter
-    def modified_by(self, modified_by: str | None):
-        self._modified_by = modified_by
-
-    @property
-    def modified_by_id(self) -> str:
-        if self._modified_by_id is None:
-            self.modified_by_id = self._data.get("modified_by_id")
-        return self._modified_by_id
-
-    @modified_by_id.setter
-    def modified_by_id(self, modified_by_id: str | None):
-        self._modified_by_id = modified_by_id
-
-    @property
-    def modified_on(self) -> int:
-        if self._modified_on is None:
-            self.modified_on = self._data.get("modified_on")
-        return self._modified_on
-
-    @modified_on.setter
-    def modified_on(self, modified_on: int | None):
-        self._modified_on = modified_on
-
-    @property
-    def modified_on_string(self) -> str:
-        if self._modified_on_string is None:
-            self._modified_on_string = convert_timestamp_to_string(self.modified_on)
-        return self._modified_on_string
-
-    @modified_on_string.setter
-    def modified_on_string(self, modified_on_string: str | None):
-        self._modified_on_string = modified_on_string
 
     def create(self, raise_for_status=True) -> Role:
         name = self.name
@@ -1504,14 +1281,14 @@ class Role:
     def refresh(self) -> Role:
         self.created_by = None
         self.created_on = None
-        self.created_on_string = None
+        self.created_on_str = None
         self.description = None
         self.id = None
         self.fixed = None
         self.modified_by = None
         self.modified_by_id = None
         self.modified_on = None
-        self.modified_on_string = None
+        self.modified_on_str = None
         self.kwargs = None
         self._data = None
         return self
@@ -1812,6 +1589,13 @@ class Transaction:
         started_on_str (str): The timestamp when the transaction started as a string.
     """
 
+    ended_on = LazyProperty("ended_on")
+    ended_on_str = LazyProperty("ended_on_str", subordinate_time_string=True)
+    started_on = LazyProperty("started_on")
+    started_on_str = LazyProperty("started_on_str", subordinate_time_string=True)
+    triggered_on = LazyProperty("triggered_on")
+    triggered_on_str = LazyProperty("triggered_on_str", subordinate_time_string=True)
+
     def __init__(
         self,
         connection: APIServer,
@@ -1848,26 +1632,6 @@ class Transaction:
         self._data_dict = data_dict
 
     @property
-    def ended_on(self) -> int:
-        if self._ended_on is None:
-            self.ended_on = self._data.get("ended_on")
-        return self._ended_on
-
-    @ended_on.setter
-    def ended_on(self, ended_on: int | None):
-        self._ended_on = ended_on
-
-    @property
-    def ended_on_str(self) -> str:
-        if self._ended_on_str is None:
-            self._ended_on_str = convert_timestamp_to_string(self.ended_on)
-        return self._ended_on_str
-
-    @ended_on_str.setter
-    def ended_on_str(self, ended_on_str: str | None):
-        self._ended_on_str = ended_on_str
-
-    @property
     def execution_plan(self) -> ExecutionPlan:
         if self._execution_plan is None:
             self.execution_plan = self._data.get("execution_plan_id")
@@ -1888,26 +1652,6 @@ class Transaction:
             )
 
     @property
-    def started_on(self) -> int:
-        if self._started_on is None:
-            self.started_on = self._data.get("started_on")
-        return self._started_on
-
-    @started_on.setter
-    def started_on(self, started_on: int | None):
-        self._started_on = started_on
-
-    @property
-    def started_on_str(self) -> str:
-        if self._started_on_str is None:
-            self._started_on_str = convert_timestamp_to_string(self.started_on)
-        return self._started_on_str
-
-    @started_on_str.setter
-    def started_on_str(self, started_on_str: str | None):
-        self._started_on_str = started_on_str
-
-    @property
     def status(self) -> str:
         if self._status is None:
             self.status = self._data.get("status")
@@ -1919,26 +1663,6 @@ class Transaction:
             self._status = status
         else:
             self._status = status_to_mapping(status)
-
-    @property
-    def triggered_on(self) -> int:
-        if self._triggered_on is None:
-            self.triggered_on = self._data.get("triggered_on")
-        return self._triggered_on
-
-    @triggered_on.setter
-    def triggered_on(self, triggered_on: int | None):
-        self._triggered_on = triggered_on
-
-    @property
-    def triggered_on_str(self) -> str:
-        if self._triggered_on_str is None:
-            self._triggered_on_str = convert_timestamp_to_string(self.triggered_on)
-        return self._triggered_on_str
-
-    @triggered_on_str.setter
-    def triggered_on_str(self, triggered_on_str: str | None):
-        self._triggered_on_str = triggered_on_str
 
     @property
     def workers(self):
@@ -1986,7 +1710,7 @@ class Transaction:
         return self.connection.transaction_recover(self.id)
 
     def refresh(self) -> Transaction:
-        self.execution_plan_id = None
+        self.execution_plan = None
         self.status = None
         self.triggered_on = None
         self.triggered_on_str = None
@@ -2020,6 +1744,10 @@ class User:
         enabled (bool): Whether the user is enabled or not.
         **kwargs: Additional keyword arguments.
     """
+
+    email = LazyProperty("email")
+    enabled = LazyProperty("enabled")
+    full_name = LazyProperty("full_name")
 
     def __init__(
         self,
@@ -2057,36 +1785,6 @@ class User:
     @_data.setter
     def _data(self, data_dict: dict | None):
         self._data_dict = data_dict
-
-    @property
-    def email(self) -> str:
-        if self._email is None:
-            self.email = self._data.get("email")
-        return self._email
-
-    @email.setter
-    def email(self, email: str | None):
-        self._email = email
-
-    @property
-    def enabled(self) -> bool:
-        if self._enabled is None:
-            self.enabled = self._data.get("enabled")
-        return self._enabled
-
-    @enabled.setter
-    def enabled(self, enabled: bool | None):
-        self._enabled = enabled
-
-    @property
-    def full_name(self) -> str:
-        if self._full_name is None:
-            self.full_name = self._data.get("full_name")
-        return self._full_name
-
-    @full_name.setter
-    def full_name(self, full_name: str | None):
-        self._full_name = full_name
 
     def create(self, password: str, raise_for_status=True) -> User:
         full_name = self._full_name or self.name
@@ -2168,6 +1866,9 @@ class Worker:
         status (str): The status of the associated data version.
         **kwargs: Additional keyword arguments.
     """
+
+    started_on = LazyProperty("started_on")
+    started_on_str = LazyProperty("started_on_str", subordinate_time_string=True)
 
     def __init__(
         self,
@@ -2311,26 +2012,6 @@ class Worker:
             str: The worker logs.
         """
         return self.connection.worker_log(self.id).text
-
-    @property
-    def started_on(self) -> int:
-        if self._started_on is None:
-            self.started_on = self._data.get("started_on")
-        return self._started_on
-
-    @started_on.setter
-    def started_on(self, started_on: int | None):
-        self._started_on = started_on
-
-    @property
-    def started_on_str(self) -> str:
-        if self._started_on_str is None:
-            self._started_on_str = convert_timestamp_to_string(self.started_on)
-        return self._started_on_str
-
-    @started_on_str.setter
-    def started_on_str(self, started_on_str: str | None):
-        self._started_on_str = started_on_str
 
     @property
     def status(self) -> str:

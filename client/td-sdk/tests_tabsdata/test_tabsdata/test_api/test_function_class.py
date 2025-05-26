@@ -71,7 +71,7 @@ def test_function_class_lazy_properties(
     assert function.description == api_function.description
     assert function.created_on == api_function.created_on
     assert function.created_by == api_function.created_by
-    assert function.created_on_string == api_function.created_on_string
+    assert function.created_on_str == api_function.created_on_str
     assert function.__repr__()
     assert function.__str__()
     second_function = Function(
