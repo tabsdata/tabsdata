@@ -3,14 +3,13 @@
 //
 
 use crate::crudl::RequestContext;
-use crate::rest_urls::{AtMultiParam, CollectionParam, SampleOffsetLenParam, TableParam};
+use crate::rest_urls::{AtTimeParam, CollectionParam, SampleOffsetLenParam, TableParam};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, DataChanged, ExecutionId, FunctionId,
-    FunctionName, FunctionVersionId, Partitioned, Private, SampleLen, SampleOffset,
-    SchemaFieldName, SchemaFieldType, TableDataVersionId, TableFunctionParamPos, TableId,
-    TableIdName, TableName, TableStatus, TableVersionId, TransactionId, UserId, UserName,
+    AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName,
+    FunctionVersionId, Partitioned, Private, SampleLen, SampleOffset, SchemaFieldName,
+    SchemaFieldType, TableDataVersionId, TableFunctionParamPos, TableId, TableIdName, TableName,
+    TableStatus, TableVersionId, UserId, UserName,
 };
-use crate::types::execution::TransactionStatus;
 use crate::types::function::FunctionDB;
 use polars::prelude::Field;
 use td_error::TdError;
@@ -90,7 +89,7 @@ pub struct CollectionAtName {
 }
 
 impl CollectionAtName {
-    pub fn new(collection: CollectionParam, at: AtMultiParam) -> Self {
+    pub fn new(collection: CollectionParam, at: AtTimeParam) -> Self {
         Self {
             collection: collection.collection().clone(),
             at: at.at().clone(),
@@ -109,7 +108,7 @@ pub struct TableAtName {
 }
 
 impl TableAtName {
-    pub fn new(table: TableParam, at: AtMultiParam) -> Self {
+    pub fn new(table: TableParam, at: AtTimeParam) -> Self {
         Self {
             collection: table.collection().clone(),
             table: table.table().clone(),
@@ -133,7 +132,7 @@ pub struct TableSampleAtName {
 }
 
 impl TableSampleAtName {
-    pub fn new(table: TableParam, at: AtMultiParam, offset_len: SampleOffsetLenParam) -> Self {
+    pub fn new(table: TableParam, at: AtTimeParam, offset_len: SampleOffsetLenParam) -> Self {
         Self {
             collection: table.collection().clone(),
             table: table.table().clone(),
@@ -182,46 +181,6 @@ pub struct Table {
     defined_on: AtTime,
 }
 
-#[td_type::Dao]
-#[dao(
-    sql_table = "table_data_versions__read",
-    versioned_at(order_by = "created_at", condition_by = "transaction_status")
-)]
-pub struct TableDataVersionDBRead {
-    id: TableDataVersionId,
-    collection_id: CollectionId,
-    collection_name: CollectionName,
-    table_id: TableId,
-    table_version_id: TableVersionId,
-    table_name: TableName,
-    function_version_id: FunctionVersionId,
-    function_name: FunctionName,
-    execution_id: ExecutionId,
-    transaction_id: TransactionId,
-    data_changed: DataChanged,
-    created_at: AtTime,
-    transaction_status: TransactionStatus,
-}
-
-#[td_type::Dto]
-#[dto(list(on = TableDataVersionDBRead))]
-#[td_type(builder(try_from = TableDataVersionDBRead))]
-pub struct TableDataVersion {
-    #[dto(list(pagination_by = "+"))]
-    id: TableDataVersionId,
-    collection_id: CollectionId,
-    collection_name: CollectionName,
-    table_version_id: TableVersionId,
-    table_name: TableName,
-    function_version_id: FunctionVersionId,
-    function_name: FunctionName,
-    execution_id: ExecutionId,
-    transaction_id: TransactionId,
-    data_changed: DataChanged,
-    created_at: AtTime,
-    transaction_status: TransactionStatus,
-}
-
 #[td_type::Dto(
     //TODO
 )]
@@ -242,9 +201,7 @@ impl TryFrom<Field> for SchemaField {
     }
 }
 
-#[td_type::Dto(
-    //TODO
-)]
+#[td_type::Dto]
 pub struct TableSchema {
     fields: Vec<SchemaField>,
 }

@@ -99,7 +99,7 @@ mod tests {
 
         let function = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(&db, &collection, &function).await;
+        let execution = seed_execution(&db, &function).await;
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;
@@ -154,7 +154,7 @@ mod tests {
 
         let function = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(&db, &collection, &function).await;
+        let execution = seed_execution(&db, &function).await;
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;

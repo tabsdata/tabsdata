@@ -188,7 +188,7 @@ mod tests {
         let function_version = seed_function(&db, &collection, &create).await;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
-        let execution = seed_execution(&db, &collection, &function_version).await;
+        let execution = seed_execution(&db, &function_version).await;
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;
         let function_run = seed_function_run(
             &db,

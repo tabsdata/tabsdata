@@ -17,8 +17,9 @@ use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TableStatus,
 };
 use td_objects::types::collection::CollectionDB;
+use td_objects::types::execution::TableDataVersion;
 use td_objects::types::execution::TransactionStatus;
-use td_objects::types::table::{TableAtName, TableDB, TableDataVersion};
+use td_objects::types::table::{TableAtName, TableDB, TableDBWithNames};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
@@ -64,8 +65,8 @@ impl TableListDataVersionsService {
                 from_fn(With::<TableAtName>::extract::<TableIdName>),
                 from_fn(combine::<CollectionIdName, TableIdName>),
                 from_fn(TableStatus::active_or_frozen),
-                from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDB>),
-                from_fn(With::<TableDB>::extract::<TableId>),
+                from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDBWithNames>),
+                from_fn(With::<TableDBWithNames>::extract::<TableId>),
 
                 // list
                 from_fn(TransactionStatus::published),
@@ -130,7 +131,10 @@ mod tests {
             type_of_val(&combine::<CollectionIdName, TableIdName>),
             type_of_val(&TableStatus::active_or_frozen),
             type_of_val(
-                &By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDB>,
+                &By::<(CollectionIdName, TableIdName)>::select_version::<
+                    DaoQueries,
+                    TableDBWithNames,
+                >,
             ),
             type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
             // list
@@ -169,7 +173,7 @@ mod tests {
         // First data_version
         let t0 = AtTime::now().await;
 
-        let execution = seed_execution(&db, &collection, &function_version).await;
+        let execution = seed_execution(&db, &function_version).await;
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;
         let function_run = seed_function_run(
             &db,
@@ -201,7 +205,7 @@ mod tests {
         .await;
 
         // Second data_version
-        let execution = seed_execution(&db, &collection, &function_version).await;
+        let execution = seed_execution(&db, &function_version).await;
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;
         let function_run = seed_function_run(
             &db,

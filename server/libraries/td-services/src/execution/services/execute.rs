@@ -347,7 +347,6 @@ mod tests {
         assert_eq!(executions.len(), 1);
         assert_eq!(executions[0].id(), response.id());
         assert_eq!(executions[0].name(), response.name());
-        assert_eq!(executions[0].collection_id(), collection.id());
         assert_eq!(*executions[0].status(), ExecutionStatus::Scheduled);
 
         // Transaction

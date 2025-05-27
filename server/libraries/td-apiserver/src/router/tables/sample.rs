@@ -13,7 +13,7 @@ use axum::Extension;
 use axum_extra::extract::Query;
 use td_apiforge::{apiserver_path, apiserver_schema};
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{AtMultiParam, SampleOffsetLenParam, TableParam, SAMPLE_TABLE};
+use td_objects::rest_urls::{AtTimeParam, SampleOffsetLenParam, TableParam, SAMPLE_TABLE};
 use td_objects::types::table::TableSampleAtName;
 use td_tower::ctx_service::IntoData;
 use tower::ServiceExt;
@@ -38,7 +38,7 @@ pub async fn sample(
     State(tables): State<Tables>,
     Extension(context): Extension<RequestContext>,
     Path(table_param): Path<TableParam>,
-    Query(at_param): Query<AtMultiParam>,
+    Query(at_param): Query<AtTimeParam>,
     Query(offset_len_param): Query<SampleOffsetLenParam>,
 ) -> Result<impl IntoResponse, GetErrorStatus> {
     let name = TableSampleAtName::new(table_param, at_param, offset_len_param);

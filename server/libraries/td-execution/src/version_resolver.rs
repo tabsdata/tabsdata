@@ -369,7 +369,7 @@ mod tests {
             let table_name = TableName::try_from(table_name_dto).unwrap();
             let mut table_versions = vec![];
             for _ in 0..number_of_versions {
-                let execution = seed_execution(db, &collection, &function_version).await;
+                let execution = seed_execution(db, &function_version).await;
 
                 let transaction_key = TransactionKey::try_from("ANY").unwrap();
                 let transaction = seed_transaction(db, &execution, &transaction_key).await;

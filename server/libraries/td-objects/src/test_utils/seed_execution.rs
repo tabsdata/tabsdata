@@ -4,19 +4,13 @@
 
 use crate::sql::{DaoQueries, Insert};
 use crate::types::basic::{ExecutionName, TriggeredOn, UserId};
-use crate::types::collection::CollectionDB;
 use crate::types::execution::ExecutionDB;
 use crate::types::function::FunctionDB;
 use td_database::sql::DbPool;
 
-pub async fn seed_execution(
-    db: &DbPool,
-    collection: &CollectionDB,
-    function_version: &FunctionDB,
-) -> ExecutionDB {
+pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> ExecutionDB {
     let execution_db = ExecutionDB::builder()
         .name(ExecutionName::try_from("test_execution").unwrap())
-        .collection_id(collection.id())
         .function_version_id(function_version.id())
         .triggered_on(TriggeredOn::now().await)
         .triggered_by_id(UserId::admin())
@@ -78,7 +72,7 @@ mod tests {
 
         let function_version = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(&db, &collection, &function_version).await;
+        let execution = seed_execution(&db, &function_version).await;
         assert_eq!(
             *execution.name(),
             Some(ExecutionName::try_from("test_execution").unwrap())

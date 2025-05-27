@@ -16,7 +16,7 @@ use serde::Serialize;
 use td_apiforge::{apiserver_path, list_status};
 use td_objects::crudl::ListResponseBuilder;
 use td_objects::crudl::{ListParams, ListResponse, RequestContext};
-use td_objects::rest_urls::{AtMultiParam, CollectionParam, LIST_TABLES};
+use td_objects::rest_urls::{AtTimeParam, CollectionParam, LIST_TABLES};
 use td_objects::types::table::{CollectionAtName, Table};
 use td_tower::ctx_service::CtxMap;
 use td_tower::ctx_service::CtxResponse;
@@ -37,7 +37,7 @@ pub async fn list_table(
     Extension(context): Extension<RequestContext>,
     Path(collection_param): Path<CollectionParam>,
     Query(query_params): Query<ListParams>,
-    Query(at_param): Query<AtMultiParam>,
+    Query(at_param): Query<AtTimeParam>,
 ) -> Result<ListStatus, GetErrorStatus> {
     let name = CollectionAtName::new(collection_param, at_param);
     let request = context.list(name, query_params);

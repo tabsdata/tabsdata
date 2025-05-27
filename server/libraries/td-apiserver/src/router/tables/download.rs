@@ -16,7 +16,7 @@ use serde_json::json;
 use td_apiforge::{apiserver_path, apiserver_schema};
 use td_error::TdError;
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{AtMultiParam, TableParam, DOWNLOAD_TABLE};
+use td_objects::rest_urls::{AtTimeParam, TableParam, DOWNLOAD_TABLE};
 use td_objects::types::table::TableAtName;
 use tower::ServiceExt;
 use utoipa::IntoResponses;
@@ -45,7 +45,7 @@ pub async fn download(
     State((tables, storage)): State<(Tables, StorageRef)>,
     Extension(context): Extension<RequestContext>,
     Path(table_param): Path<TableParam>,
-    Query(at_param): Query<AtMultiParam>,
+    Query(at_param): Query<AtTimeParam>,
 ) -> Result<impl IntoResponse, GetErrorStatus> {
     let name = TableAtName::new(table_param, at_param);
     let request = context.read(name);

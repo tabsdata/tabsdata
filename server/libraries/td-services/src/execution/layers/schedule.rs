@@ -162,13 +162,13 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
 
                                 let data_version = match found_data_version.has_data() {
                                     // We can use the data version if it has data, otherwise we need to
-                                    // find the first version with data, in the same table version id, if any.
+                                    // find the first version with data, in the same table id, if any.
                                     Some(has_data) if **has_data => Some(found_data_version),
                                     _ => queries
                                         .select_versions_at::<TableDataVersionDBWithNames>(
                                             Some(f.triggered_on()),
                                             Some(&[&HasData::from(true)]),
-                                            &(req.requirement_table_version_id()),
+                                            &(req.requirement_table_id()),
                                         )?
                                         .build_query_as()
                                         .fetch_optional(&mut *conn)

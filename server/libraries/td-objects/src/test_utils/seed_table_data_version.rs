@@ -3,11 +3,31 @@
 //
 
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::TableFunctionParamPos;
+use crate::types::basic::{HasData, TableFunctionParamPos};
 use crate::types::collection::CollectionDB;
 use crate::types::execution::{ExecutionDB, FunctionRunDB, TableDataVersionDB, TransactionDB};
 use crate::types::table::TableDB;
 use td_database::sql::DbPool;
+
+pub async fn seed_table_data_version_with_data(
+    db: &DbPool,
+    collection: &CollectionDB,
+    execution: &ExecutionDB,
+    transaction: &TransactionDB,
+    function_run: &FunctionRunDB,
+    table: &TableDB,
+) -> TableDataVersionDB {
+    _seed_table_data_version(
+        db,
+        collection,
+        execution,
+        transaction,
+        function_run,
+        table,
+        Some(&HasData::from(true)),
+    )
+    .await
+}
 
 pub async fn seed_table_data_version(
     db: &DbPool,
@@ -17,6 +37,27 @@ pub async fn seed_table_data_version(
     function_run: &FunctionRunDB,
     table: &TableDB,
 ) -> TableDataVersionDB {
+    _seed_table_data_version(
+        db,
+        collection,
+        execution,
+        transaction,
+        function_run,
+        table,
+        None,
+    )
+    .await
+}
+
+pub async fn _seed_table_data_version(
+    db: &DbPool,
+    collection: &CollectionDB,
+    execution: &ExecutionDB,
+    transaction: &TransactionDB,
+    function_run: &FunctionRunDB,
+    table: &TableDB,
+    has_data: Option<&HasData>,
+) -> TableDataVersionDB {
     let queries = DaoQueries::default();
 
     let table_data_version_db = TableDataVersionDB::builder()
@@ -25,7 +66,7 @@ pub async fn seed_table_data_version(
         .name(table.name())
         .table_version_id(table.id())
         .function_version_id(table.function_version_id())
-        .has_data(None)
+        .has_data(has_data.cloned())
         .execution_id(execution.id())
         .transaction_id(transaction.id())
         .function_run_id(function_run.id())
@@ -96,7 +137,7 @@ mod tests {
 
         let function_version = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(&db, &collection, &function_version).await;
+        let execution = seed_execution(&db, &function_version).await;
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;

@@ -193,7 +193,7 @@ mod tests {
         let function_version_100 = seed_function(&db, &collection, &create).await;
 
         // Create execution
-        let execution = seed_execution(&db, &collection, &function_version_1).await;
+        let execution = seed_execution(&db, &function_version_1).await;
         let transaction = seed_transaction(&db, &execution, &TransactionKey::try_from("S")?).await;
 
         let function_versions = vec![
@@ -276,7 +276,7 @@ mod tests {
         service.raw_oneshot(request).await?;
 
         // Create another execution that won't be cancelled
-        let uncancelled_execution = seed_execution(&db, &collection, &function_version_1).await;
+        let uncancelled_execution = seed_execution(&db, &function_version_1).await;
         let uncancelled_transaction =
             seed_transaction(&db, &uncancelled_execution, &TransactionKey::try_from("S")?).await;
 

@@ -4,11 +4,12 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionName, DataLocation, DependencyPos, Dot, ExecutionId,
-    ExecutionName, FunctionName, FunctionRunId, FunctionVersionId, HasData, InputIdx, Partitioned,
-    RequirementId, SelfDependency, StorageVersion, TableDataVersionId, TableFunctionParamPos,
-    TableId, TableName, TableVersionId, TableVersions, TransactionByStr, TransactionId,
-    TransactionKey, Trigger, TriggeredOn, UserId, UserName, VersionPos, WorkerMessageId,
+    AtTime, BundleId, CollectionId, CollectionName, DataChanged, DataLocation, DependencyPos, Dot,
+    ExecutionId, ExecutionName, FunctionName, FunctionRunId, FunctionVersionId, HasData, InputIdx,
+    Partitioned, RequirementId, SelfDependency, StorageVersion, TableDataVersionId,
+    TableFunctionParamPos, TableId, TableName, TableVersionId, TableVersions, TransactionByStr,
+    TransactionId, TransactionKey, Trigger, TriggeredOn, UserId, UserName, VersionPos,
+    WorkerMessageId,
 };
 use crate::types::dependency::DependencyDBWithNames;
 use crate::types::function::FunctionDBWithNames;
@@ -38,8 +39,6 @@ pub struct ExecutionDB {
     id: ExecutionId,
     #[td_type(updater(try_from = ExecutionRequest, include))]
     name: Option<ExecutionName>,
-    #[td_type(builder(include))]
-    collection_id: CollectionId,
     #[td_type(builder(field = "id"))]
     function_version_id: FunctionVersionId,
     #[td_type(updater(try_from = RequestContext, include, field = "time"))]
@@ -53,7 +52,6 @@ pub struct ExecutionDB {
 pub struct ExecutionDBWithStatus {
     id: ExecutionId,
     name: Option<ExecutionName>,
-    collection_id: CollectionId,
     function_version_id: FunctionVersionId,
     triggered_on: TriggeredOn,
     triggered_by_id: UserId,
@@ -238,9 +236,10 @@ pub struct TableDataVersionDBWithStatus {
 }
 
 #[td_type::Dao]
+// partitioned to find latest version that has_data
 #[dao(
     sql_table = "table_data_versions__with_names",
-    partition_by = "table_version_id",
+    partition_by = "table_id",
     versioned_at(order_by = "triggered_on", condition_by = "has_data")
 )]
 pub struct TableDataVersionDBWithNames {
@@ -264,6 +263,50 @@ pub struct TableDataVersionDBWithNames {
     collection: CollectionName,
     function: FunctionName,
     triggered_by: UserName,
+}
+
+#[td_type::Dao]
+#[dao(
+    sql_table = "table_data_versions__read",
+    partition_by = "table_id",
+    versioned_at(order_by = "created_at", condition_by = "transaction_status")
+)]
+pub struct TableDataVersionDBRead {
+    id: TableDataVersionId,
+    collection_id: CollectionId,
+    collection_name: CollectionName,
+    table_id: TableId,
+    table_version_id: TableVersionId,
+    table_name: TableName,
+    function_version_id: FunctionVersionId,
+    function_name: FunctionName,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    data_changed: DataChanged,
+    created_at: AtTime,
+    transaction_status: TransactionStatus,
+    data_location: DataLocation,
+    storage_version: StorageVersion,
+    with_data_table_data_version_id: Option<TableDataVersionId>,
+}
+
+#[td_type::Dto]
+#[dto(list(on = TableDataVersionDBRead))]
+#[td_type(builder(try_from = TableDataVersionDBRead))]
+pub struct TableDataVersion {
+    #[dto(list(pagination_by = "+"))]
+    id: TableDataVersionId,
+    collection_id: CollectionId,
+    collection_name: CollectionName,
+    table_version_id: TableVersionId,
+    table_name: TableName,
+    function_version_id: FunctionVersionId,
+    function_name: FunctionName,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    data_changed: DataChanged,
+    created_at: AtTime,
+    transaction_status: TransactionStatus,
 }
 
 #[td_type::Dao]
