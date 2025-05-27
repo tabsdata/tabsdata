@@ -13,7 +13,7 @@ use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{
     BuildService, ExtractNameService, ExtractService, TryIntoService, With,
 };
-use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService};
+use td_objects::tower_service::sql::{By, SqlSelectService};
 use td_objects::types::basic::RoleIdName;
 use td_objects::types::role::{Role, RoleBuilder, RoleDBWithNames};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;

@@ -17,14 +17,14 @@ use td_objects::tower_service::from::{
     combine, BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
     UpdateService, With,
 };
-use td_objects::tower_service::sql::{insert, insert_vec, By, SqlSelectIdOrNameService};
+use td_objects::tower_service::sql::{insert, insert_vec, By, SqlSelectService};
 use td_objects::types::basic::{AtTime, CollectionIdName, FunctionId, FunctionIdName};
 use td_objects::types::execution::{
     ExecutionDB, ExecutionDBBuilder, ExecutionRequest, ExecutionResponse, FunctionRequirementDB,
     FunctionRunDB, FunctionRunDBBuilder, TableDataVersionDB, TransactionDB, TransactionDBBuilder,
 };
-use td_objects::types::function::FunctionVersionDBWithNames;
-use td_objects::types::trigger::TriggerVersionDBWithNames;
+use td_objects::types::function::FunctionDBWithNames;
+use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
@@ -68,18 +68,18 @@ impl ExecuteFunctionService {
                 TransactionProvider::new(db),
 
                 // Select trigger function.
-                from_fn(By::<(CollectionIdName, FunctionIdName)>::select::<DaoQueries, FunctionVersionDBWithNames>),
-                from_fn(With::<FunctionVersionDBWithNames>::extract::<FunctionId>),
+                from_fn(By::<(CollectionIdName, FunctionIdName)>::select::<DaoQueries, FunctionDBWithNames>),
+                from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
 
                 // Create execution template.
                 // Find trigger graph
-                from_fn(version_graph::<DaoQueries, TriggerVersionDBWithNames>),
+                from_fn(version_graph::<DaoQueries, TriggerDBWithNames>),
                 // Create execution template
                 from_fn(build_execution_template::<DaoQueries>),
 
                 // Create execution plan.
                 // Build execution
-                from_fn(With::<FunctionVersionDBWithNames>::convert_to::<ExecutionDBBuilder, _>),
+                from_fn(With::<FunctionDBWithNames>::convert_to::<ExecutionDBBuilder, _>),
                 from_fn(With::<RequestContext>::update::<ExecutionDBBuilder, _>),
                 from_fn(With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
                 from_fn(With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
@@ -186,20 +186,18 @@ mod tests {
                     type_of_val(
                         &By::<(CollectionIdName, FunctionIdName)>::select::<
                             DaoQueries,
-                            FunctionVersionDBWithNames,
+                            FunctionDBWithNames,
                         >,
                     ),
-                    type_of_val(&With::<FunctionVersionDBWithNames>::extract::<FunctionId>),
+                    type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                     // Create execution template.
                     // Find trigger graph
-                    type_of_val(&version_graph::<DaoQueries, TriggerVersionDBWithNames>),
+                    type_of_val(&version_graph::<DaoQueries, TriggerDBWithNames>),
                     // Create execution template
                     type_of_val(&build_execution_template::<DaoQueries>),
                     // Create execution plan.
                     // Build execution
-                    type_of_val(
-                        &With::<FunctionVersionDBWithNames>::convert_to::<ExecutionDBBuilder, _>,
-                    ),
+                    type_of_val(&With::<FunctionDBWithNames>::convert_to::<ExecutionDBBuilder, _>),
                     type_of_val(&With::<RequestContext>::update::<ExecutionDBBuilder, _>),
                     type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
                     type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
@@ -373,7 +371,7 @@ mod tests {
             .await
             .map_err(handle_sql_err)?;
         let function_runs: Vec<FunctionRunDB> = queries
-            .select_by::<FunctionRunDB>(&(function.function_version_id()))?
+            .select_by::<FunctionRunDB>(&(function.id()))?
             .build_query_as()
             .fetch_all(&db)
             .await
@@ -390,7 +388,7 @@ mod tests {
             .await
             .map_err(handle_sql_err)?;
         let function_runs: Vec<FunctionRunDB> = queries
-            .select_by::<FunctionRunDB>(&(function.function_version_id()))?
+            .select_by::<FunctionRunDB>(&(function.id()))?
             .build_query_as()
             .fetch_all(&db)
             .await

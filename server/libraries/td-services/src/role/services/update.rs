@@ -14,9 +14,7 @@ use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
     UpdateService, With,
 };
-use td_objects::tower_service::sql::{
-    By, SqlSelectIdOrNameService, SqlSelectService, SqlUpdateService,
-};
+use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
 use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::role::{
     Role, RoleBuilder, RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleDBWithNames, RoleUpdate,

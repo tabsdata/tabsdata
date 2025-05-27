@@ -32,7 +32,7 @@ pub trait RecursiveQueries {
     /// - `SELECT`: to select the data from the `recursive_versions` CTE.
     ///
     /// Example query for
-    ///   D: DependencyVersionsDB, R: FunctionVersionDB, I: FunctionVersionId, E: FunctionId:
+    ///   D: DependencyVersionsDB, R: FunctionDB, I: FunctionId, E: FunctionId:
     /// ```sql
     /// WITH
     /// ranked_function_versions AS (
@@ -165,14 +165,20 @@ where
     E: SqlEntity, // has to be in R
 {
     // Starting point to find recursive versions
-    let starting_at = R::sql_field_for_type::<E>().ok_or(QueryError::TypeNotFound(
-        std::any::type_name::<E>().to_string(),
-    ))?;
+    let starting_at = R::sql_field_for_type(direct_reference_entity.type_name()).ok_or(
+        QueryError::TypeNotFound(
+            direct_reference_entity.type_name().to_string(),
+            R::sql_table().to_string(),
+        ),
+    )?;
 
     // Baseline to find initial versions
-    let recursion_ref = R::sql_field_for_type::<D::Recursive>().ok_or(QueryError::TypeNotFound(
-        std::any::type_name::<D::Recursive>().to_string(),
-    ))?;
+    let recursion_ref = R::sql_field_for_type(std::any::type_name::<D::Recursive>()).ok_or(
+        QueryError::TypeNotFound(
+            std::any::type_name::<D::Recursive>().to_string(),
+            R::sql_table().to_string(),
+        ),
+    )?;
 
     // And columns to recurse on the initial found versions
     let recurse_up = D::recurse_up();
@@ -191,7 +197,7 @@ where
         "#
     ));
     query_builder.push(format!("WHERE fv.{starting_at} = "));
-    query_builder.push_bind(direct_reference_entity.value());
+    direct_reference_entity.push_bind(query_builder);
 
     query_builder.push(" UNION ALL ");
 
@@ -207,7 +213,7 @@ where
         "#
     ));
     query_builder.push(format!("WHERE fv.{starting_at} = "));
-    query_builder.push_bind(direct_reference_entity.value());
+    direct_reference_entity.push_bind(query_builder);
 
     query_builder.push(" UNION ALL ");
 
@@ -234,9 +240,9 @@ mod tests {
     use crate::sql::{DaoQueries, Insert};
     use crate::types::basic::AtTime;
     use crate::types::basic::{CollectionId, FunctionId};
-    use crate::types::dependency::{DependencyVersionDB, DependencyVersionDBWithNames};
-    use crate::types::function::FunctionVersionDB;
-    use crate::types::trigger::{TriggerVersionDB, TriggerVersionDBWithNames};
+    use crate::types::dependency::{DependencyDB, DependencyDBWithNames};
+    use crate::types::function::FunctionDB;
+    use crate::types::trigger::{TriggerDB, TriggerDBWithNames};
     use chrono::DateTime;
     use chrono::Utc;
     use lazy_static::lazy_static;
@@ -712,30 +718,15 @@ mod tests {
             Ok(())
         }
 
-        test_query::<DependencyVersionDB, FunctionVersionDB, _>(&db, &FunctionId::default())
-            .await?;
-        test_query::<DependencyVersionDB, FunctionVersionDB, _>(&db, &CollectionId::default())
-            .await?;
-        test_query::<DependencyVersionDBWithNames, FunctionVersionDB, _>(
-            &db,
-            &FunctionId::default(),
-        )
-        .await?;
-        test_query::<DependencyVersionDBWithNames, FunctionVersionDB, _>(
-            &db,
-            &CollectionId::default(),
-        )
-        .await?;
+        test_query::<DependencyDB, FunctionDB, _>(&db, &FunctionId::default()).await?;
+        test_query::<DependencyDB, FunctionDB, _>(&db, &CollectionId::default()).await?;
+        test_query::<DependencyDBWithNames, FunctionDB, _>(&db, &FunctionId::default()).await?;
+        test_query::<DependencyDBWithNames, FunctionDB, _>(&db, &CollectionId::default()).await?;
 
-        test_query::<TriggerVersionDB, FunctionVersionDB, _>(&db, &FunctionId::default()).await?;
-        test_query::<TriggerVersionDB, FunctionVersionDB, _>(&db, &CollectionId::default()).await?;
-        test_query::<TriggerVersionDBWithNames, FunctionVersionDB, _>(&db, &FunctionId::default())
-            .await?;
-        test_query::<TriggerVersionDBWithNames, FunctionVersionDB, _>(
-            &db,
-            &CollectionId::default(),
-        )
-        .await?;
+        test_query::<TriggerDB, FunctionDB, _>(&db, &FunctionId::default()).await?;
+        test_query::<TriggerDB, FunctionDB, _>(&db, &CollectionId::default()).await?;
+        test_query::<TriggerDBWithNames, FunctionDB, _>(&db, &FunctionId::default()).await?;
+        test_query::<TriggerDBWithNames, FunctionDB, _>(&db, &CollectionId::default()).await?;
 
         Ok(())
     }

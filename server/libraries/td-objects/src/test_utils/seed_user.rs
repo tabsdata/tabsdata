@@ -62,7 +62,10 @@ pub async fn seed_user(db: &DbPool, name: &UserName, enabled: &UserEnabled) -> U
     user_db
 }
 
-pub async fn get_user<E: SqlEntity>(db: &DbPool, by: &E) -> Result<UserDB, TdError> {
+pub async fn get_user<E>(db: &DbPool, by: &E) -> Result<UserDB, TdError>
+where
+    E: SqlEntity,
+{
     let queries = DaoQueries::default();
     queries
         .select_by::<UserDB>(&by)?

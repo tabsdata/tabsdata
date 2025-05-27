@@ -11,7 +11,7 @@ use td_objects::rest_urls::RoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlListService, SqlSelectIdOrNameService};
+use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::role::RoleDB;
 use td_objects::types::role::UserRole;

@@ -324,7 +324,7 @@ mod tests {
     };
     use td_objects::types::execution::FunctionRunStatus;
     use td_objects::types::function::FunctionRegister;
-    use td_objects::types::table::TableVersionDB;
+    use td_objects::types::table::TableDB;
     use td_security::ENCODED_ID_SYSTEM;
 
     // Tables create N times, where N is the number of versions. Returning a map of table name to
@@ -362,7 +362,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let (_, function_version) = seed_function(db, &collection, &create).await;
+        let function_version = seed_function(db, &collection, &create).await;
 
         let mut table_versions_map = HashMap::new();
         for (table_name_dto, number_of_versions) in tables {
@@ -385,7 +385,7 @@ mod tests {
                 .await;
 
                 let table_version = DaoQueries::default()
-                    .select_by::<TableVersionDB>(&(collection.id(), &table_name))
+                    .select_by::<TableDB>(&(collection.id(), &table_name))
                     .unwrap()
                     .build_query_as()
                     .fetch_one(db)

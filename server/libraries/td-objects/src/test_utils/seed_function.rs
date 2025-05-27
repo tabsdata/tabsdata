@@ -3,25 +3,23 @@
 //
 
 use crate::crudl::{ReadRequest, RequestContext};
-use crate::sql::{DaoQueries, Insert, SelectBy, UpdateBy};
+use crate::sql::{DaoQueries, Insert, SelectBy};
 use crate::types::basic::{
     AccessTokenId, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
     TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
 };
 use crate::types::collection::CollectionDB;
-use crate::types::dependency::{DependencyDBBuilder, DependencyVersionDBBuilder};
-use crate::types::function::{
-    FunctionDB, FunctionDBBuilder, FunctionRegister, FunctionVersionDB, FunctionVersionDBBuilder,
-};
-use crate::types::table::{TableDB, TableDBBuilder, TableDBWithNames, TableVersionDBBuilder};
-use crate::types::trigger::{TriggerDBBuilder, TriggerVersionDBBuilder};
+use crate::types::dependency::DependencyDBBuilder;
+use crate::types::function::{FunctionDB, FunctionDBBuilder, FunctionRegister};
+use crate::types::table::{TableDBBuilder, TableDBWithNames};
+use crate::types::trigger::TriggerDBBuilder;
 use td_database::sql::DbPool;
 
 pub async fn seed_function(
     db: &DbPool,
     collection: &CollectionDB,
     function_create: &FunctionRegister,
-) -> (FunctionDB, FunctionVersionDB) {
+) -> FunctionDB {
     let request_context: ReadRequest<String> = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
@@ -34,63 +32,18 @@ pub async fn seed_function(
     let queries = DaoQueries::default();
 
     // Function version builder
-    let builder = FunctionVersionDBBuilder::try_from(function_create).unwrap();
-    let builder = FunctionVersionDBBuilder::try_from((request_context, builder)).unwrap();
-    let mut builder = FunctionVersionDBBuilder::from((collection.id(), builder));
-    let function_db_version = builder
+    let builder = FunctionDBBuilder::try_from(function_create).unwrap();
+    let builder = FunctionDBBuilder::try_from((request_context, builder)).unwrap();
+    let mut builder = FunctionDBBuilder::from((collection.id(), builder));
+    let function_db = builder
         .data_location(DataLocation::default())
         .storage_version(StorageVersion::default())
         .build()
         .unwrap();
 
-    // Create function if non-existent, and update if existent.
-    let builder = FunctionDBBuilder::try_from(&function_db_version).unwrap();
-    let function_db = builder.build().unwrap();
-
-    let (function_db, function_db_version) = match queries
-        .select_by::<FunctionDB>(&(
-            function_db_version.collection_id(),
-            function_db_version.name(),
-        ))
-        .unwrap()
-        .build_query_as::<FunctionDB>()
-        .fetch_optional(db)
-        .await
-        .unwrap()
-    {
-        Some(updated) => {
-            let function_db = function_db.to_builder().id(updated.id()).build().unwrap();
-            queries
-                .update_by::<_, FunctionDB>(&function_db, &updated.id())
-                .unwrap()
-                .build()
-                .execute(db)
-                .await
-                .unwrap();
-
-            let function_db_version = function_db_version
-                .to_builder()
-                .function_id(function_db.id())
-                .build()
-                .unwrap();
-
-            (function_db, function_db_version)
-        }
-        None => {
-            queries
-                .insert(&function_db)
-                .unwrap()
-                .build()
-                .execute(db)
-                .await
-                .unwrap();
-            (function_db, function_db_version)
-        }
-    };
-
     // Insert function version
     queries
-        .insert(&function_db_version)
+        .insert(&function_db)
         .unwrap()
         .build()
         .execute(db)
@@ -100,11 +53,11 @@ pub async fn seed_function(
     // Dependencies, tables, triggers
     // Very similar to build_table_versions
     if let Some(tables) = function_create.tables() {
-        let builder = TableVersionDBBuilder::try_from(&function_db_version).unwrap();
-        let builder = TableVersionDBBuilder::try_from((request_context, builder)).unwrap();
+        let builder = TableDBBuilder::try_from(&function_db).unwrap();
+        let builder = TableDBBuilder::try_from((request_context, builder)).unwrap();
 
         for (pos, table_name) in tables.iter().enumerate() {
-            let table_version = builder
+            let table = builder
                 .clone()
                 .table_id(TableId::default())
                 .name(TableName::try_from(table_name).unwrap())
@@ -114,52 +67,19 @@ pub async fn seed_function(
                 .unwrap();
 
             queries
-                .insert(&table_version)
+                .insert(&table)
                 .unwrap()
                 .build()
                 .execute(db)
                 .await
                 .unwrap();
-
-            // Create table if non-existent, and update if existent.
-            let builder = TableDBBuilder::try_from(&table_version).unwrap();
-            let builder = TableDBBuilder::try_from((&function_db, builder)).unwrap();
-            let table = builder.build().unwrap();
-
-            match queries
-                .select_by::<TableDB>(&(table_version.collection_id(), table_version.name()))
-                .unwrap()
-                .build_query_as::<TableDB>()
-                .fetch_optional(db)
-                .await
-                .unwrap()
-            {
-                Some(updated) => {
-                    queries
-                        .update_by::<_, TableDB>(&table, &updated.id())
-                        .unwrap()
-                        .build()
-                        .execute(db)
-                        .await
-                        .unwrap();
-                }
-                None => {
-                    queries
-                        .insert(&table)
-                        .unwrap()
-                        .build()
-                        .execute(db)
-                        .await
-                        .unwrap();
-                }
-            };
         }
     }
 
     // Very similar to build_dependency_versions
     if let Some(dependency_tables) = function_create.dependencies() {
-        let builder = DependencyVersionDBBuilder::try_from(&function_db_version).unwrap();
-        let builder = DependencyVersionDBBuilder::try_from((request_context, builder)).unwrap();
+        let builder = DependencyDBBuilder::try_from(&function_db).unwrap();
+        let builder = DependencyDBBuilder::try_from((request_context, builder)).unwrap();
 
         for (pos, dependency_table) in dependency_tables.iter().enumerate() {
             let (table_collection, table_name) = {
@@ -181,29 +101,18 @@ pub async fn seed_function(
                 .await
                 .unwrap();
 
-            let dependency_version = builder
+            let dependency = builder
                 .clone()
                 .table_collection_id(table_db.collection_id())
                 .table_function_version_id(table_db.function_version_id())
-                .table_id(table_db.id())
-                .table_version_id(table_db.table_version_id())
+                .table_id(table_db.table_id())
+                .table_version_id(table_db.id())
                 .table_name(table_db.name())
                 .table_versions(dependency_table.versions())
                 .dep_pos(DependencyPos::try_from(pos as i32).unwrap())
                 .status(DependencyStatus::Active)
                 .build()
                 .unwrap();
-
-            queries
-                .insert(&dependency_version)
-                .unwrap()
-                .build()
-                .execute(db)
-                .await
-                .unwrap();
-
-            let builder = DependencyDBBuilder::try_from(&dependency_version).unwrap();
-            let dependency = builder.build().unwrap();
 
             queries
                 .insert(&dependency)
@@ -217,8 +126,8 @@ pub async fn seed_function(
 
     // Very similar to build_trigger_versions
     if let Some(trigger_tables) = function_create.triggers() {
-        let builder = TriggerVersionDBBuilder::try_from(&function_db_version).unwrap();
-        let builder = TriggerVersionDBBuilder::try_from((request_context, builder)).unwrap();
+        let builder = TriggerDBBuilder::try_from(&function_db).unwrap();
+        let builder = TriggerDBBuilder::try_from((request_context, builder)).unwrap();
 
         for trigger_table in trigger_tables {
             let (table_collection, table_name) = {
@@ -240,27 +149,16 @@ pub async fn seed_function(
                 .await
                 .unwrap();
 
-            let dependency_version = builder
+            let trigger = builder
                 .clone()
                 .trigger_by_collection_id(table_db.collection_id())
                 .trigger_by_function_id(table_db.function_id())
                 .trigger_by_function_version_id(table_db.function_version_id())
-                .trigger_by_table_id(table_db.id())
-                .trigger_by_table_version_id(table_db.table_version_id())
+                .trigger_by_table_id(table_db.table_id())
+                .trigger_by_table_version_id(table_db.id())
                 .status(TriggerStatus::Active)
                 .build()
                 .unwrap();
-
-            queries
-                .insert(&dependency_version)
-                .unwrap()
-                .build()
-                .execute(db)
-                .await
-                .unwrap();
-
-            let builder = TriggerDBBuilder::try_from(&dependency_version).unwrap();
-            let trigger = builder.build().unwrap();
 
             queries
                 .insert(&trigger)
@@ -272,7 +170,7 @@ pub async fn seed_function(
         }
     }
 
-    (function_db, function_db_version)
+    function_db
 }
 
 #[cfg(test)]
@@ -314,7 +212,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let (function, function_version) = seed_function(&db, &collection, &create).await;
+        let function = seed_function(&db, &collection, &create).await;
 
         let found: FunctionDB = DaoQueries::default()
             .select_by::<FunctionDB>(&(function.id()))
@@ -326,30 +224,15 @@ mod tests {
         assert_eq!(function.id(), found.id());
         assert_eq!(function.collection_id(), found.collection_id());
         assert_eq!(function.name(), found.name());
-        assert_eq!(function.function_version_id(), found.function_version_id());
-        assert_eq!(function.frozen(), found.frozen());
-        assert_eq!(function.created_on(), found.created_on());
-        assert_eq!(function.created_by_id(), found.created_by_id());
-
-        let found: FunctionVersionDB = DaoQueries::default()
-            .select_by::<FunctionVersionDB>(&(function_version.id()))
-            .unwrap()
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .unwrap();
-        assert_eq!(function_version.id(), found.id());
-        assert_eq!(function_version.collection_id(), found.collection_id());
-        assert_eq!(function_version.name(), found.name());
-        assert_eq!(function_version.description(), found.description());
-        assert_eq!(function_version.runtime_values(), found.runtime_values());
-        assert_eq!(function_version.function_id(), found.function_id());
-        assert_eq!(function_version.data_location(), found.data_location());
-        assert_eq!(function_version.storage_version(), found.storage_version());
-        assert_eq!(function_version.bundle_id(), found.bundle_id());
-        assert_eq!(function_version.snippet(), found.snippet());
-        assert_eq!(function_version.defined_on(), found.defined_on());
-        assert_eq!(function_version.defined_by_id(), found.defined_by_id());
-        assert_eq!(function_version.status(), found.status());
+        assert_eq!(function.description(), found.description());
+        assert_eq!(function.runtime_values(), found.runtime_values());
+        assert_eq!(function.function_id(), found.function_id());
+        assert_eq!(function.data_location(), found.data_location());
+        assert_eq!(function.storage_version(), found.storage_version());
+        assert_eq!(function.bundle_id(), found.bundle_id());
+        assert_eq!(function.snippet(), found.snippet());
+        assert_eq!(function.defined_on(), found.defined_on());
+        assert_eq!(function.defined_by_id(), found.defined_by_id());
+        assert_eq!(function.status(), found.status());
     }
 }

@@ -6,7 +6,7 @@ use crate::sql::{DaoQueries, Insert};
 use crate::types::basic::TableFunctionParamPos;
 use crate::types::collection::CollectionDB;
 use crate::types::execution::{ExecutionDB, FunctionRunDB, TableDataVersionDB, TransactionDB};
-use crate::types::table::TableVersionDB;
+use crate::types::table::TableDB;
 use td_database::sql::DbPool;
 
 pub async fn seed_table_data_version(
@@ -15,7 +15,7 @@ pub async fn seed_table_data_version(
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     function_run: &FunctionRunDB,
-    table: &TableVersionDB,
+    table: &TableDB,
 ) -> TableDataVersionDB {
     let queries = DaoQueries::default();
 
@@ -94,7 +94,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let (_, function_version) = seed_function(&db, &collection, &create).await;
+        let function_version = seed_function(&db, &collection, &create).await;
 
         let execution = seed_execution(&db, &collection, &function_version).await;
 
@@ -112,10 +112,7 @@ mod tests {
         .await;
 
         let table_version = DaoQueries::default()
-            .select_by::<TableVersionDB>(&(
-                collection.id(),
-                &TableName::try_from(table_name).unwrap(),
-            ))
+            .select_by::<TableDB>(&(collection.id(), &TableName::try_from(table_name).unwrap()))
             .unwrap()
             .build_query_as()
             .fetch_one(&db)
@@ -133,7 +130,6 @@ mod tests {
         .await;
 
         assert_eq!(table_data_version.collection_id(), collection.id());
-        assert_eq!(table_data_version.table_id(), table_version.table_id());
         assert_eq!(table_data_version.table_version_id(), table_version.id());
         assert_eq!(
             table_data_version.function_version_id(),

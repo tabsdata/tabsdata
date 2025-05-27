@@ -12,8 +12,7 @@ use td_objects::rest_urls::InterCollectionPermissionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::SqlSelectIdOrNameService;
-use td_objects::tower_service::sql::{By, SqlDeleteService};
+use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
 use td_objects::types::basic::{
     CollectionId, CollectionIdName, InterCollectionPermissionId, InterCollectionPermissionIdName,
 };

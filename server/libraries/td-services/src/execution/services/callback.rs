@@ -110,7 +110,7 @@ mod tests {
         TransactionDB, TransactionDBWithStatus, TransactionStatus,
     };
     use td_objects::types::function::FunctionRegister;
-    use td_objects::types::table::{TableDB, TableVersionDB};
+    use td_objects::types::table::TableDB;
     use td_objects::types::worker::v2::{FunctionOutputV2, WrittenTableV2};
     use td_objects::types::worker::FunctionOutput;
     use td_tower::ctx_service::RawOneshot;
@@ -162,7 +162,7 @@ mod tests {
         let queries = DaoQueries::default();
 
         // Create function
-        let (_, function_version) = seed_function(db, collection, function_create).await;
+        let function_version = seed_function(db, collection, function_create).await;
 
         // Create execution
         let execution = seed_execution(db, collection, &function_version).await;
@@ -177,8 +177,8 @@ mod tests {
         )
         .await;
 
-        let tables: Vec<TableVersionDB> = queries
-            .select_by::<TableVersionDB>(&(function_version.id()))?
+        let tables: Vec<TableDB> = queries
+            .select_by::<TableDB>(&(function_version.id()))?
             .build_query_as()
             .fetch_all(db)
             .await
@@ -777,15 +777,6 @@ mod tests {
         assert_eq!(requirement_tables.len(), 1);
         let requirement_table = &requirement_tables[0];
 
-        let requirement_table_versions: Vec<TableVersionDB> = queries
-            .select_by::<TableVersionDB>(&(requirement_function_run.function_version_id()))?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
-        assert_eq!(requirement_table_versions.len(), 1);
-        let requirement_table_version = &requirement_table_versions[0];
-
         let requirement_table_data_versions: Vec<TableDataVersionDB> = queries
             .select_by::<TableDataVersionDB>(&(requirement_function_run.function_version_id()))?
             .build_query_as()
@@ -834,7 +825,6 @@ mod tests {
             transaction,
             &function_run,
             requirement_table,
-            requirement_table_version,
             Some(&requirement_function_run),
             Some(requirement_table_data_version),
             Some(&DependencyPos::try_from(0)?),

@@ -176,10 +176,10 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                 &[#(stringify!(#immutable_field_names)),*]
             }
 
-            fn sql_field_for_type<E: crate::types::SqlEntity>() -> Option<&'static str> {
-                match std::any::type_name::<E>() {
+            fn sql_field_for_type(val: &str) -> Option<&'static str> {
+                match val {
                     #(
-                        id if id == std::any::type_name::<#field_types>() => Some(stringify!(#field_names)),
+                        v if v == std::any::type_name::<#field_types>() => Some(stringify!(#field_names)),
                     )*
                     _ => None,
                 }

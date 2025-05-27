@@ -10,10 +10,10 @@ use crate::types::basic::{
     TableId, TableName, TableVersionId, TableVersions, TransactionByStr, TransactionId,
     TransactionKey, Trigger, TriggeredOn, UserId, UserName, VersionPos, WorkerMessageId,
 };
-use crate::types::dependency::DependencyVersionDBWithNames;
-use crate::types::function::FunctionVersionDBWithNames;
-use crate::types::table::TableVersionDBWithNames;
-use crate::types::trigger::TriggerVersionDBWithNames;
+use crate::types::dependency::DependencyDBWithNames;
+use crate::types::function::FunctionDBWithNames;
+use crate::types::table::TableDBWithNames;
+use crate::types::trigger::TriggerDBWithNames;
 use crate::types::worker::FunctionOutput;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -28,7 +28,7 @@ use td_error::TdError;
 #[td_type::Dao]
 #[dao(sql_table = "executions")]
 #[td_type(
-    builder(try_from = FunctionVersionDBWithNames, skip_all),
+    builder(try_from = FunctionDBWithNames, skip_all),
     updater(try_from = RequestContext, skip_all),
     updater(try_from = ExecutionRequest, skip_all)
 )]
@@ -122,7 +122,11 @@ pub struct FunctionRunDB {
 }
 
 #[td_type::Dao]
-#[dao(sql_table = "function_runs__with_names")]
+#[dao(
+    sql_table = "function_runs__with_names",
+    partition_by = "id",
+    versioned_at(order_by = "triggered_on", condition_by = "status")
+)]
 pub struct FunctionRunDBWithNames {
     id: FunctionRunId,
     collection_id: CollectionId,
@@ -218,7 +222,6 @@ pub struct TableDataVersionDB {
 pub struct TableDataVersionDBWithStatus {
     id: TableDataVersionId,
     collection_id: CollectionId,
-    table_id: TableId,
     name: TableName,
     table_version_id: TableVersionId,
     function_version_id: FunctionVersionId,
@@ -427,6 +430,12 @@ pub enum TransactionStatus {
     Published,
 }
 
+impl TransactionStatus {
+    pub async fn published() -> Result<Vec<TransactionStatus>, TdError> {
+        Ok(vec![TransactionStatus::Published])
+    }
+}
+
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// Represents the state of a function run.
 ///
@@ -451,7 +460,6 @@ pub enum TransactionStatus {
 ///     Error --> Canceled
 ///     Failed --> Scheduled
 ///     Failed --> Canceled
-///     Done --> Published
 ///     Done --> Canceled
 /// ```
 #[td_type::typed_enum]
@@ -625,7 +633,7 @@ pub type CallbackRequest = ResponseMessagePayload<FunctionOutput>;
 /// Represents a function version to perform graph resolution.
 #[td_type::Dlo]
 #[derive(Hash)]
-#[td_type(builder(try_from = FunctionVersionDBWithNames))]
+#[td_type(builder(try_from = FunctionDBWithNames))]
 pub struct FunctionVersionNode {
     collection_id: CollectionId,
     collection: CollectionName,
@@ -637,7 +645,7 @@ pub struct FunctionVersionNode {
 /// Represents a table version to perform graph resolution.
 #[td_type::Dlo]
 #[derive(Hash)]
-#[td_type(builder(try_from = TableVersionDBWithNames))]
+#[td_type(builder(try_from = TableDBWithNames))]
 pub struct TableVersionNode {
     collection_id: CollectionId,
     collection: CollectionName,
@@ -783,7 +791,7 @@ impl Display for GraphNode {
 }
 
 impl GraphNode {
-    pub fn from_table(table: &TableVersionDBWithNames) -> Result<(Self, Self), TdError> {
+    pub fn from_table(table: &TableDBWithNames) -> Result<(Self, Self), TdError> {
         Ok((
             GraphNode::Function(
                 FunctionVersionNode::builder()
@@ -806,7 +814,7 @@ impl GraphNode {
         ))
     }
 
-    pub fn from_dependency(dep: &DependencyVersionDBWithNames) -> Result<(Self, Self), TdError> {
+    pub fn from_dependency(dep: &DependencyDBWithNames) -> Result<(Self, Self), TdError> {
         Ok((
             GraphNode::Table(
                 TableVersionNode::builder()
@@ -829,7 +837,7 @@ impl GraphNode {
         ))
     }
 
-    pub fn from_trigger(trigger: &TriggerVersionDBWithNames) -> Result<(Self, Self), TdError> {
+    pub fn from_trigger(trigger: &TriggerDBWithNames) -> Result<(Self, Self), TdError> {
         Ok((
             GraphNode::Table(
                 TableVersionNode::builder()
@@ -881,7 +889,6 @@ mod tests {
                 table_node.function_version_id(),
                 table.function_version_id()
             );
-            assert_eq!(table_node.table_id(), table.table_id());
             assert_eq!(table_node.table_version_id(), table.id());
             assert_eq!(table_node.name(), table.name());
         } else {
@@ -902,7 +909,6 @@ mod tests {
                 table.function_version_id(),
                 dependency.table_function_version_id()
             );
-            assert_eq!(table.table_id(), dependency.table_id());
             assert_eq!(table.table_version_id(), dependency.table_version_id());
             assert_eq!(table.name(), dependency.table_name());
         } else {
@@ -935,7 +941,6 @@ mod tests {
                 table.function_version_id(),
                 trigger.trigger_by_function_version_id()
             );
-            assert_eq!(table.table_id(), trigger.trigger_by_table_id());
             assert_eq!(
                 table.table_version_id(),
                 trigger.trigger_by_table_version_id()

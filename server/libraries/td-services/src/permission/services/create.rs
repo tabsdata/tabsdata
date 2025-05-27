@@ -15,7 +15,6 @@ use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
     UnwrapService, UpdateService, With,
 };
-use td_objects::tower_service::sql::SqlSelectIdOrNameService;
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
 use td_objects::types::basic::{CollectionId, EntityId, PermissionId, RoleIdName};
 use td_objects::types::permission::{

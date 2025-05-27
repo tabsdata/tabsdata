@@ -3,9 +3,10 @@
 //
 
 use crate::crudl::{handle_sql_err, ListParams, ListRequest, ListResponse, ListResponseBuilder};
+use crate::sql::cte::CteQueries;
 use crate::sql::list::ListQueryParams;
 use crate::sql::{DeleteBy, DerefQueries, FindBy, Insert, ListBy, QueryError, SelectBy, UpdateBy};
-use crate::types::{DataAccessObject, IdOrName, ListQuery, PartitionBy, SqlEntity, VersionedAt};
+use crate::types::{DataAccessObject, ListQuery, PartitionBy, SqlEntity, VersionedAt};
 use async_trait::async_trait;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -45,14 +46,15 @@ macro_rules! formatted_entity {
     }};
     ($D:ty; $(( $E:ident, $E_ty:ty )),* $(,)?) => {{
         let columns: Vec<&str> = vec![$(
-            <$D>::sql_field_for_type::<$E_ty>()
+            <$D>::sql_field_for_type($E.type_name())
                 .ok_or(QueryError::TypeNotFound(
-                    std::any::type_name::<$E>().to_string(),
+                    $E.type_name().to_string(),
+                    <$D>::sql_table().to_string(),
                 ))?,
         )*];
         let columns = columns.join(", ");
         let values: Vec<String> = vec![$(
-            format!("{}", $E.deref().value()),
+            format!("{}", $E),
         )*];
         let values = values.join(", ");
         let table = <$D>::sql_table().to_string();
@@ -118,6 +120,17 @@ pub trait SqlSelectService<E> {
     where
         Q: DerefQueries,
         D: DataAccessObject;
+
+    async fn select_version<Q, D>(
+        connection: Connection,
+        queries: SrvCtx<Q>,
+        natural_order_by: Input<D::Order>,
+        status: Input<Vec<D::Condition>>,
+        by: Input<E>,
+    ) -> Result<D, TdError>
+    where
+        Q: DerefQueries,
+        D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
 macro_rules! impl_select {
@@ -128,7 +141,7 @@ macro_rules! impl_select {
         #[async_trait]
         impl<$($E),*> SqlSelectService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity),*
+            $(for<'a> $E: SqlEntity + 'a),*
         {
             async fn select<Q, D>(
                 Connection(connection): Connection,
@@ -157,6 +170,40 @@ macro_rules! impl_select {
 
                 Ok(result)
             }
+
+            async fn select_version<Q, D>(
+                Connection(connection): Connection,
+                SrvCtx(queries): SrvCtx<Q>,
+                Input(natural_order_by): Input<D::Order>,
+                Input(status): Input<Vec<D::Condition>>,
+                Input(by): Input<($($E),*)>,
+            ) -> Result<D, TdError>
+            where
+                Q: DerefQueries,
+                D: DataAccessObject + PartitionBy + VersionedAt,
+            {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
+
+                let ($($E),*) = by.deref();
+                let result = queries
+                    .select_versions_at::<D>(
+                        Some(&*natural_order_by),
+                        Some(&status.iter().collect::<Vec<_>>()[..]),
+                        &($($E),*)
+                    )?
+                    .build_query_as()
+                    .fetch_one(&mut *conn)
+                    .await
+                    .map_err(|e| {
+                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
+                            TdError::from(SqlError::SelectError(columns, values, table, e))
+                        })
+                    })
+                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+                Ok(result)
+            }
         }
     };
 }
@@ -173,6 +220,17 @@ pub trait SqlSelectAllService<E> {
     where
         Q: DerefQueries,
         D: DataAccessObject;
+
+    async fn select_all_versions<Q, D>(
+        connection: Connection,
+        queries: SrvCtx<Q>,
+        natural_order_by: Input<D::Order>,
+        status: Input<Vec<D::Condition>>,
+        by: Input<E>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        Q: DerefQueries,
+        D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
 macro_rules! impl_select_all {
@@ -183,7 +241,7 @@ macro_rules! impl_select_all {
         #[async_trait]
         impl<$($E),*> SqlSelectAllService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity),*
+            $(for<'a> $E: SqlEntity + 'a),*
         {
             async fn select_all<Q, D>(
                 Connection(connection): Connection,
@@ -200,6 +258,40 @@ macro_rules! impl_select_all {
                 let ($($E),*) = by.deref();
                 let result = queries
                     .select_by::<D>(&($($E),*))?
+                    .build_query_as()
+                    .fetch_all(&mut *conn)
+                    .await
+                    .map_err(|e| {
+                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
+                            TdError::from(SqlError::SelectError(columns, values, table, e))
+                        })
+                    })
+                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+                Ok(result)
+            }
+
+            async fn select_all_versions<Q, D>(
+                Connection(connection): Connection,
+                SrvCtx(queries): SrvCtx<Q>,
+                Input(natural_order_by): Input<D::Order>,
+                Input(status): Input<Vec<D::Condition>>,
+                Input(by): Input<($($E),*)>,
+            ) -> Result<Vec<D>, TdError>
+            where
+                Q: DerefQueries,
+                D: DataAccessObject + PartitionBy + VersionedAt,
+            {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
+
+                let ($($E),*) = by.deref();
+                let result = queries
+                    .select_versions_at::<D>(
+                        Some(&*natural_order_by),
+                        Some(&status.iter().collect::<Vec<_>>()[..]),
+                        &($($E),*)
+                    )?
                     .build_query_as()
                     .fetch_all(&mut *conn)
                     .await
@@ -233,7 +325,7 @@ pub trait SqlFindService<E> {
 #[async_trait]
 impl<E> SqlFindService<E> for By<E>
 where
-    E: SqlEntity,
+    for<'a> E: SqlEntity + 'a,
 {
     async fn find<Q, D>(
         Connection(connection): Connection,
@@ -259,84 +351,128 @@ where
     }
 }
 
-#[async_trait]
-pub trait SqlSelectIdOrNameService<T> {
-    async fn select<Q, D>(
-        connection: Connection,
-        queries: SrvCtx<Q>,
-        by: Input<T>,
-    ) -> Result<D, TdError>
-    where
-        Q: DerefQueries,
-        D: DataAccessObject;
-}
+// #[async_trait]
+// pub trait SqlSelectIdOrNameService<T> {
+//     async fn select<Q, D>(
+//         connection: Connection,
+//         queries: SrvCtx<Q>,
+//         by: Input<T>,
+//     ) -> Result<D, TdError>
+//     where
+//         Q: DerefQueries,
+//         D: DataAccessObject;
+//
+//     async fn select_version<Q, D>(
+//         connection: Connection,
+//         queries: SrvCtx<Q>,
+//         natural_order_by: Input<D::Order>,
+//         status: Input<Vec<D::Condition>>,
+//         by: Input<T>,
+//     ) -> Result<D, TdError>
+//     where
+//         Q: DerefQueries,
+//         D: DataAccessObject + PartitionBy + VersionedAt;
+// }
 
-macro_rules! impl_select_id_or_name {
-    (
-    [$($E:ident),*]
-    ) => {
-        #[allow(non_snake_case, unused_parens)]
-        #[async_trait]
-        impl<$($E),*> SqlSelectIdOrNameService<($($E),*)> for By<($($E),*)>
-        where
-            $( for<'a> $E: IdOrName + 'a ),*
-        {
-            #[allow(non_snake_case)]
-            async fn select<Q, D>(
-                Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
-                Input(by): Input<($($E),*)>,
-            ) -> Result<D, TdError>
-            where
-                Q: DerefQueries,
-                D: DataAccessObject,
-            {
-                let mut conn = connection.lock().await;
-                let conn = conn.get_mut_connection()?;
-                let queries = queries.deref();
-
-                let ($($E),*) = by.deref();
-
-                impl_select_id_or_name!(@recurse (queries, conn, D) ($($E),*) () ());
-            }
-        }
-    };
-
-    // Recursive case: build nested matches
-    (@recurse ($queries:ident, $conn:ident, $D:ident) ($head:ident $(, $rest:ident)*) ($($acc:tt)*) ($($meta:tt)*)) => {
-        match ($head.id(), $head.name()) {
-            (Some($head), None) => {
-                impl_select_id_or_name!(@recurse ($queries, $conn, $D) ($($rest),*)
-                    ($($acc)* $head)
-                    ($($meta)* ($head, $head::Id),));
-            },
-            (None, Some($head)) => {
-                impl_select_id_or_name!(@recurse ($queries, $conn, $D) ($($rest),*)
-                    ($($acc)* $head)
-                    ($($meta)* ($head, $head::Name),));
-            },
-            _ => unreachable!("id or name must be provided for each element"),
-        }
-    };
-
-    // Base case: no more elements, call select_by
-    (@recurse ($queries:ident, $conn:ident, $D:ident) () ($($values:tt)*) ($($meta:tt)*)) => {
-        let result = $queries
-            .select_by::<$D>(&($($values),*))?
-            .build_query_as()
-            .fetch_one(&mut *$conn)
-            .await
-            .map_err(|e| {
-                formatted_entity!($D; $($meta)*).map(|(columns, values, table)| {
-                    TdError::from(SqlError::SelectError(columns, values, table, e))
-                })
-            })
-            .map_err(|e| e.unwrap_or_else(|e| e))?;
-        return Ok(result);
-    };
-}
-
-all_the_tuples!(impl_select_id_or_name);
+// macro_rules! impl_select_id_or_name {
+//     (
+//     [$($E:ident),*]
+//     ) => {
+//         #[allow(non_snake_case, unused_parens)]
+//         #[async_trait]
+//         impl<$($E),*> SqlSelectIdOrNameService<($($E),*)> for By<($($E),*)>
+//         where
+//             $( for<'a> $E: IdOrName + 'a ),*
+//         {
+//             #[allow(non_snake_case)]
+//             async fn select<Q, D>(
+//                 Connection(connection): Connection,
+//                 SrvCtx(queries): SrvCtx<Q>,
+//                 Input(by): Input<($($E),*)>,
+//             ) -> Result<D, TdError>
+//             where
+//                 Q: DerefQueries,
+//                 D: DataAccessObject,
+//             {
+//                 let mut conn = connection.lock().await;
+//                 let conn = conn.get_mut_connection()?;
+//                 let queries = queries.deref();
+//
+//                 let ($($E),*) = by.deref();
+//                 impl_select_id_or_name!(@recurse (false) (queries, conn, D) ($($E),*) () ());
+//             }
+//
+//             #[allow(non_snake_case)]
+//             async fn select_version<Q, D>(
+//                 Connection(connection): Connection,
+//                 SrvCtx(queries): SrvCtx<Q>,
+//                 Input(natural_order_by): Input<D::Order>,
+//                 Input(status): Input<Vec<D::Condition>>,
+//                 Input(by): Input<($($E),*)>,
+//             ) -> Result<D, TdError>
+//             where
+//                 Q: DerefQueries,
+//                 D: DataAccessObject + PartitionBy + VersionedAt,
+//             {
+//                 let mut conn = connection.lock().await;
+//                 let conn = conn.get_mut_connection()?;
+//                 let queries = queries.deref();
+//
+//                 let ($($E),*) = by.deref();
+//                 impl_select_id_or_name!(@recurse (true) (queries, conn, D) ($($E),*) () ());
+//             }
+//         }
+//     };
+//
+//     // Recursive case: build nested matches
+//     (@recurse ($versioned:tt) ($queries:ident, $conn:ident, $D:ident) ($head:ident $(, $rest:ident)*) ($($acc:tt)*) ($($meta:tt)*)) => {
+//         match ($head.id(), $head.name()) {
+//             (Some($head), None) => {
+//                 impl_select_id_or_name!(@recurse ($versioned) ($queries, $conn, $D) ($($rest),*)
+//                     ($($acc)* $head)
+//                     ($($meta)* ($head, $head::Id),));
+//             },
+//             (None, Some($head)) => {
+//                 impl_select_id_or_name!(@recurse ($versioned) ($queries, $conn, $D) ($($rest),*)
+//                     ($($acc)* $head)
+//                     ($($meta)* ($head, $head::Name),));
+//             },
+//             _ => unreachable!("id or name must be provided for each element"),
+//         }
+//     };
+//
+//     // Base case: no more elements, call select_by
+//     (@recurse ($versioned:tt) ($queries:ident, $conn:ident, $D:ident) () ($($values:tt)*) ($($meta:tt)*)) => {
+//         let result = impl_select_id_or_name!(@select_query ($versioned) ($queries, $D) ($($values),*))
+//             .fetch_one(&mut *$conn)
+//             .await
+//             .map_err(|e| {
+//                 formatted_entity!($D; $($meta)*).map(|(columns, values, table)| {
+//                     TdError::from(SqlError::SelectError(columns, values, table, e))
+//                 })
+//             })
+//             .map_err(|e| e.unwrap_or_else(|e| e))?;
+//         return Ok(result);
+//     };
+//
+//     // Helper macro to select the appropriate query
+//     (@select_query (true) ($queries:ident, $D:ident) ($($values:tt),*)) => {
+//         $queries
+//             .select_versions_at::<D>(
+//                 Some(&*natural_order_by),
+//                 Some(&status.iter().collect::<Vec<_>>()[..]),
+//                 &($($values),*)
+//             )?
+//             .build_query_as()
+//     };
+//     (@select_query (false) ($queries:ident, $D:ident) ($($values:tt),*)) => {
+//         $queries
+//             .select_by::<$D>(&($($values),*))?
+//             .build_query_as()
+//     };
+// }
+//
+// all_the_tuples!(impl_select_id_or_name);
 
 #[async_trait]
 pub trait SqlAssertExistsService<E> {
@@ -358,7 +494,7 @@ macro_rules! impl_assert_exists {
         #[async_trait]
         impl<$($E),*> SqlAssertExistsService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity),*
+            $(for<'a> $E: SqlEntity + 'a),*
         {
             async fn assert_exists<Q, D>(
                 Connection(connection): Connection,
@@ -416,7 +552,7 @@ macro_rules! impl_assert_not_exists {
         #[async_trait]
         impl<$($E),*> SqlAssertNotExistsService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity),*
+            $(for<'a> $E: SqlEntity + 'a),*
         {
             async fn assert_not_exists<Q, D>(
                 Connection(connection): Connection,
@@ -487,7 +623,7 @@ macro_rules! impl_update {
         #[async_trait]
         impl<$($E),*> SqlUpdateService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity),*
+            $(for<'a> $E: SqlEntity + 'a),*
         {
             async fn update<Q, U, D>(
                 Connection(connection): Connection,
@@ -533,7 +669,6 @@ macro_rules! impl_update {
                 let conn = conn.get_mut_connection()?;
 
                 // TODO this is not getting chunked. If there are too many we can have issues.
-                // TODO care, if lookup is empty it gets everything
                 let lookup: Vec<_> = by.iter().map(|($($E),*)| ($($E),*)).collect();
                 queries
                     .update_all_by::<U, D>(update.deref(), &lookup)?
@@ -603,7 +738,7 @@ macro_rules! impl_list {
         #[async_trait]
         impl<$($E),*> SqlListService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity),*
+            $(for<'a> $E: SqlEntity + 'a),*
         {
             async fn list<N, Q, T>(
                 Connection(connection): Connection,
@@ -845,7 +980,7 @@ macro_rules! impl_delete {
         #[async_trait]
         impl<$($E),*> SqlDeleteService<($($E),*)> for By<($($E),*)>
         where
-            $($E: SqlEntity),*
+            $(for<'a> $E: SqlEntity + 'a),*
         {
             async fn delete<Q, D>(
                 Connection(connection): Connection,

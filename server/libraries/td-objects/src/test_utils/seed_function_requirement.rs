@@ -8,7 +8,7 @@ use crate::types::collection::CollectionDB;
 use crate::types::execution::{
     ExecutionDB, FunctionRequirementDB, FunctionRunDB, TableDataVersionDB, TransactionDB,
 };
-use crate::types::table::{TableDB, TableVersionDB};
+use crate::types::table::TableDB;
 use td_database::sql::DbPool;
 
 #[allow(clippy::too_many_arguments)]
@@ -19,7 +19,6 @@ pub async fn seed_function_requirement(
     transaction: &TransactionDB,
     function_run: &FunctionRunDB,
     requirement_table: &TableDB,
-    requirement_table_version: &TableVersionDB,
     requirement_function_run: Option<&FunctionRunDB>,
     requirement_table_data_version: Option<&TableDataVersionDB>,
     requirement_dependency_pos: Option<&DependencyPos>,
@@ -30,8 +29,8 @@ pub async fn seed_function_requirement(
         .execution_id(execution.id())
         .transaction_id(transaction.id())
         .function_run_id(function_run.id())
-        .requirement_table_id(requirement_table.id())
-        .requirement_table_version_id(requirement_table_version.id())
+        .requirement_table_id(requirement_table.table_id())
+        .requirement_table_version_id(requirement_table.id())
         .requirement_function_run_id(requirement_function_run.map(|f| *f.id()))
         .requirement_table_data_version_id(requirement_table_data_version.map(|f| *f.id()))
         .requirement_dependency_pos(requirement_dependency_pos.cloned())
@@ -98,9 +97,9 @@ mod tests {
             .build()
             .unwrap();
 
-        let (_, function_version) = seed_function(&db, &collection, &create).await;
+        let function = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(&db, &collection, &function_version).await;
+        let execution = seed_execution(&db, &collection, &function).await;
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;
@@ -108,7 +107,7 @@ mod tests {
         let function_run = seed_function_run(
             &db,
             &collection,
-            &function_version,
+            &function,
             &execution,
             &transaction,
             &FunctionRunStatus::Scheduled,
@@ -116,7 +115,7 @@ mod tests {
         .await;
 
         let requirement_tables = queries
-            .select_by::<TableDB>(&(function_version.id()))
+            .select_by::<TableDB>(&(function.id()))
             .unwrap()
             .build_query_as()
             .fetch_all(&db)
@@ -125,23 +124,13 @@ mod tests {
         assert_eq!(requirement_tables.len(), 1);
         let requirement_table = &requirement_tables[0];
 
-        let requirement_table_versions = queries
-            .select_by::<TableVersionDB>(&(function_version.id()))
-            .unwrap()
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .unwrap();
-        assert_eq!(requirement_table_versions.len(), 1);
-        let requirement_table_version = &requirement_table_versions[0];
-
         let requirement_table_data_version = seed_table_data_version(
             &db,
             &collection,
             &execution,
             &transaction,
             &function_run,
-            requirement_table_version,
+            requirement_table,
         )
         .await;
 
@@ -163,9 +152,9 @@ mod tests {
             .build()
             .unwrap();
 
-        let (_, function_version) = seed_function(&db, &collection, &create).await;
+        let function = seed_function(&db, &collection, &create).await;
 
-        let execution = seed_execution(&db, &collection, &function_version).await;
+        let execution = seed_execution(&db, &collection, &function).await;
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;
@@ -173,7 +162,7 @@ mod tests {
         let requirement_function_run = seed_function_run(
             &db,
             &collection,
-            &function_version,
+            &function,
             &execution,
             &transaction,
             &FunctionRunStatus::Scheduled,
@@ -187,7 +176,6 @@ mod tests {
             &transaction,
             &function_run,
             requirement_table,
-            requirement_table_version,
             Some(&requirement_function_run),
             Some(&requirement_table_data_version),
             Some(&DependencyPos::try_from(0).unwrap()),
@@ -199,10 +187,13 @@ mod tests {
         assert_eq!(requirement.execution_id(), execution.id());
         assert_eq!(requirement.transaction_id(), transaction.id());
         assert_eq!(requirement.function_run_id(), function_run.id());
-        assert_eq!(requirement.requirement_table_id(), requirement_table.id());
+        assert_eq!(
+            requirement.requirement_table_id(),
+            requirement_table.table_id()
+        );
         assert_eq!(
             requirement.requirement_table_version_id(),
-            requirement_table_version.id()
+            requirement_table.id()
         );
         assert_eq!(
             *requirement.requirement_function_run_id(),

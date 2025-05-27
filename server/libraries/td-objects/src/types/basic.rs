@@ -2,14 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::dependency::DependencyVersionDBWithNames;
+use crate::types::dependency::DependencyDBWithNames;
 use crate::types::parse::{
     parse_collection, parse_email, parse_entity, parse_execution, parse_function, parse_role,
     parse_table, parse_user, DATA_LOCATION_REGEX,
 };
-use crate::types::table::TableVersionDBWithNames;
+use crate::types::table::TableDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
-use crate::types::trigger::TriggerVersionDBWithNames;
+use crate::types::trigger::TriggerDBWithNames;
 use crate::types::ComposedString;
 use td_common::id::Id;
 use td_error::TdError;
@@ -75,6 +75,12 @@ pub enum DependencyStatus {
     Deleted,
 }
 
+impl DependencyStatus {
+    pub async fn active() -> Result<Vec<DependencyStatus>, TdError> {
+        Ok(vec![DependencyStatus::Active])
+    }
+}
+
 #[td_type::typed(id)]
 pub struct DependencyVersionId;
 
@@ -121,9 +127,6 @@ pub struct FixedRole;
 #[td_type::typed(id, try_from = CollectionId)]
 pub struct FromCollectionId;
 
-#[td_type::typed(bool(default = false))]
-pub struct Frozen;
-
 #[td_type::typed(string)]
 pub struct FullName;
 
@@ -154,11 +157,14 @@ pub enum FunctionStatus {
     Deleted,
 }
 
+impl FunctionStatus {
+    pub async fn active() -> Result<Vec<FunctionStatus>, TdError> {
+        Ok(vec![FunctionStatus::Active])
+    }
+}
+
 #[td_type::typed(id)]
 pub struct FunctionVersionId;
-
-#[td_type::typed(id_name(id = FunctionVersionId, name = FunctionName))]
-pub struct FunctionVersionIdName;
 
 #[td_type::typed_enum]
 pub enum GrantType {
@@ -348,10 +354,10 @@ pub struct TableDataVersionId;
 #[td_type::typed(composed(inner = "VersionedTableRef::<TableName>"), try_from = TableDependencyDto)]
 pub struct TableDependency;
 
-impl TryFrom<&DependencyVersionDBWithNames> for TableDependency {
+impl TryFrom<&DependencyDBWithNames> for TableDependency {
     type Error = TdError;
 
-    fn try_from(v: &DependencyVersionDBWithNames) -> Result<Self, Self::Error> {
+    fn try_from(v: &DependencyDBWithNames) -> Result<Self, Self::Error> {
         let versions = &**v.table_versions();
         let table_dep = TableDependency::new(VersionedTableRef::new(
             Some(v.collection().clone()),
@@ -377,10 +383,10 @@ pub struct TableIdName;
 #[td_type::typed(string, try_from = TableNameDto)]
 pub struct TableName;
 
-impl TryFrom<&TableVersionDBWithNames> for TableName {
+impl TryFrom<&TableDBWithNames> for TableName {
     type Error = TdError;
 
-    fn try_from(v: &TableVersionDBWithNames) -> Result<Self, Self::Error> {
+    fn try_from(v: &TableDBWithNames) -> Result<Self, Self::Error> {
         let table = v.name().clone();
         Ok(table)
     }
@@ -399,13 +405,27 @@ pub enum TableStatus {
     Deleted,
 }
 
+impl TableStatus {
+    pub async fn active() -> Result<Vec<TableStatus>, TdError> {
+        Ok(vec![TableStatus::Active])
+    }
+
+    pub async fn frozen() -> Result<Vec<TableStatus>, TdError> {
+        Ok(vec![TableStatus::Frozen])
+    }
+
+    pub async fn active_or_frozen() -> Result<Vec<TableStatus>, TdError> {
+        Ok(vec![TableStatus::Active, TableStatus::Frozen])
+    }
+}
+
 #[td_type::typed(composed(inner = "TableRef::<TableName>"), try_from = TableTriggerDto)]
 pub struct TableTrigger;
 
-impl TryFrom<&TriggerVersionDBWithNames> for TableTrigger {
+impl TryFrom<&TriggerDBWithNames> for TableTrigger {
     type Error = TdError;
 
-    fn try_from(v: &TriggerVersionDBWithNames) -> Result<Self, Self::Error> {
+    fn try_from(v: &TriggerDBWithNames) -> Result<Self, Self::Error> {
         let table = TableTrigger::new(TableRef::new(
             Some(v.collection().clone()),
             v.trigger_by_table_name().clone(),

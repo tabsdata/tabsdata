@@ -6,7 +6,7 @@ use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{Field, LazyFrame, PolarsError, ScanArgsParquet, SchemaExt};
 use td_error::{td_error, TdError};
 use td_objects::types::execution::TableDataVersionDB;
-use td_objects::types::function::FunctionVersionDB;
+use td_objects::types::function::FunctionDB;
 use td_objects::types::table::SchemaField;
 use td_storage::location::StorageLocation;
 use td_storage::{SPath, Storage};
@@ -24,7 +24,7 @@ enum SchemaError {
 }
 
 pub async fn resolve_table_location(
-    Input(function): Input<FunctionVersionDB>,
+    Input(function): Input<FunctionDB>,
     Input(table): Input<TableDataVersionDB>,
 ) -> Result<SPath, TdError> {
     let storage_location = function.storage_version();

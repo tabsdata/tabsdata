@@ -15,7 +15,7 @@ use serde::Serialize;
 use td_apiforge::{apiserver_path, create_status};
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{CollectionParam, FUNCTION_CREATE};
-use td_objects::types::function::{FunctionRegister, FunctionVersion};
+use td_objects::types::function::{Function, FunctionRegister};
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
@@ -24,7 +24,7 @@ router! {
     routes => { register }
 }
 
-create_status!(FunctionVersion);
+create_status!(Function);
 
 #[apiserver_path(method = post, path = FUNCTION_CREATE, tag = FUNCTIONS_TAG)]
 #[doc = "Register a function"]

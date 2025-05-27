@@ -5,88 +5,40 @@
 use crate::crudl::RequestContext;
 use crate::rest_urls::{AtMultiParam, CollectionParam, SampleOffsetLenParam, TableParam};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, DataChanged, ExecutionId, Frozen,
-    FunctionId, FunctionName, FunctionVersionId, Partitioned, Private, SampleLen, SampleOffset,
+    AtTime, CollectionId, CollectionIdName, CollectionName, DataChanged, ExecutionId, FunctionId,
+    FunctionName, FunctionVersionId, Partitioned, Private, SampleLen, SampleOffset,
     SchemaFieldName, SchemaFieldType, TableDataVersionId, TableFunctionParamPos, TableId,
     TableIdName, TableName, TableStatus, TableVersionId, TransactionId, UserId, UserName,
 };
 use crate::types::execution::TransactionStatus;
-use crate::types::function::{FunctionDB, FunctionVersionDB};
+use crate::types::function::FunctionDB;
 use polars::prelude::Field;
 use td_error::TdError;
 
 #[td_type::Dao]
-#[dao(sql_table = "tables")]
-#[td_type(builder(try_from = TableVersionDB, skip_all))]
-#[td_type(updater(try_from = FunctionDB, skip_all))]
-pub struct TableDB {
-    #[td_type(builder(include, field = "table_id"))]
-    id: TableId,
-    #[td_type(builder(include))]
-    collection_id: CollectionId,
-    #[td_type(builder(include))]
-    name: TableName,
-    #[td_type(updater(include, field = "id"))]
-    function_id: FunctionId,
-    #[td_type(builder(include))]
-    function_version_id: FunctionVersionId,
-    #[td_type(builder(include, field = "id"))]
-    table_version_id: TableVersionId,
-    #[builder(default = "Frozen::from(false)")]
-    frozen: Frozen,
-    #[td_type(builder(include))]
-    private: Private,
-    #[td_type(builder(include))]
-    partitioned: Partitioned,
-    #[td_type(builder(include, field = "defined_on"))]
-    created_on: AtTime,
-    #[td_type(builder(include, field = "defined_by_id"))]
-    created_by_id: UserId,
-}
-
-#[td_type::Dao]
-#[dao(sql_table = "tables__with_names")]
-pub struct TableDBWithNames {
-    #[td_type(extractor)]
-    id: TableId,
-    collection_id: CollectionId,
-    name: TableName,
-    #[td_type(extractor)]
-    function_id: FunctionId,
-    #[td_type(extractor)]
-    function_version_id: FunctionVersionId,
-    #[td_type(extractor)]
-    table_version_id: TableVersionId,
-    frozen: Frozen,
-    private: Private,
-    partitioned: Partitioned,
-    created_on: AtTime,
-    created_by_id: UserId,
-
-    created_by: UserName,
-    collection: CollectionName,
-}
-
-#[td_type::Dao]
 #[dao(
-    sql_table = "table_versions",
+    sql_table = "tables",
     partition_by = "table_id",
     versioned_at(order_by = "defined_on", condition_by = "status")
 )]
 #[td_type(
-    builder(try_from = FunctionVersionDB, skip_all),
+    builder(try_from = TableDB),
+    builder(try_from = FunctionDB, skip_all),
     updater(try_from = RequestContext, skip_all)
 )]
-pub struct TableVersionDB {
+pub struct TableDB {
     #[builder(default)]
     #[td_type(extractor)]
     id: TableVersionId,
     #[td_type(extractor, builder(include))]
     collection_id: CollectionId,
+    #[td_type(extractor)]
     table_id: TableId,
     #[td_type(extractor)]
     name: TableName,
-    #[td_type(builder(include, field = "id"))]
+    #[td_type(builder(include, try_from = FunctionDB, field = "function_id"))]
+    function_id: FunctionId,
+    #[td_type(builder(include, try_from = FunctionDB, field = "id"))]
     function_version_id: FunctionVersionId,
     function_param_pos: Option<TableFunctionParamPos>,
     #[builder(default = "Private::from(false)")]
@@ -102,16 +54,20 @@ pub struct TableVersionDB {
 
 #[td_type::Dao]
 #[dao(
-    sql_table = "table_versions__with_names",
+    sql_table = "tables__with_names",
     order_by = "function_param_pos",
     partition_by = "table_id",
     versioned_at(order_by = "defined_on", condition_by = "status")
 )]
-pub struct TableVersionDBWithNames {
+pub struct TableDBWithNames {
+    #[td_type(extractor)]
     id: TableVersionId,
     collection_id: CollectionId,
+    #[td_type(extractor)]
     table_id: TableId,
     name: TableName,
+    function_id: FunctionId,
+    #[td_type(extractor)]
     function_version_id: FunctionVersionId,
     function_param_pos: Option<TableFunctionParamPos>,
     private: Private,
@@ -190,11 +146,11 @@ impl TableSampleAtName {
 
 #[td_type::Dao]
 #[dao(
-    sql_table = "table_versions__read",
+    sql_table = "tables__read",
     partition_by = "table_id",
     versioned_at(order_by = "defined_on", condition_by = "status")
 )]
-pub struct TableVersionDBRead {
+pub struct TableDBRead {
     id: TableVersionId,
     name: TableName,
     table_id: TableId,
@@ -209,8 +165,8 @@ pub struct TableVersionDBRead {
 }
 
 #[td_type::Dto]
-#[dto(list(on = TableVersionDBRead))]
-#[td_type(builder(try_from = TableVersionDBRead))]
+#[dto(list(on = TableDBRead))]
+#[td_type(builder(try_from = TableDBRead))]
 pub struct Table {
     #[dto(list(pagination_by = "+"))]
     id: TableVersionId,
@@ -235,6 +191,7 @@ pub struct TableDataVersionDBRead {
     id: TableDataVersionId,
     collection_id: CollectionId,
     collection_name: CollectionName,
+    table_id: TableId,
     table_version_id: TableVersionId,
     table_name: TableName,
     function_version_id: FunctionVersionId,

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::fmt::Debug;
+use std::fmt::Display;
 
 pub mod basic;
 
@@ -26,29 +26,61 @@ mod tests;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 
-pub trait SqlEntity: Send + Sync + 'static {
-    type Type: for<'a> sqlx::Encode<'a, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + std::fmt::Display;
-    fn value(&self) -> &Self::Type;
-}
-
-impl<E> SqlEntity for Option<E>
+/// A trait for types that can be used as SQL entities.
+pub trait SqlEntity: Send + Sync + Display + Sized
 where
-    E: Send
-        + Sync
-        + 'static
-        + for<'a> sqlx::Encode<'a, sqlx::Sqlite>
-        + sqlx::Type<sqlx::Sqlite>
-        + std::fmt::Display,
+    Self: 'static,
 {
-    type Type = E;
+    fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>);
+    fn push_bind_unseparated<'a, S: Display>(
+        &'a self,
+        builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+    );
 
-    // Useful to query values that are Optional, by passing Some(value)
-    fn value(&self) -> &Self::Type {
-        self.as_ref().expect("Expected Some value to be present")
+    fn type_name(&self) -> &str {
+        std::any::type_name::<Self>()
     }
 }
 
-pub trait IdOrName: Send + Sync {
+impl<T> SqlEntity for T
+where
+    T: IdOrName + Display + 'static,
+{
+    fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+        if let Some(id) = self.id() {
+            id.push_bind(builder);
+        } else if let Some(name) = self.name() {
+            name.push_bind(builder);
+        } else {
+            panic!("No ID or Name found");
+        }
+    }
+
+    fn push_bind_unseparated<'a, S: Display>(
+        &'a self,
+        builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+    ) {
+        if let Some(id) = self.id() {
+            id.push_bind_unseparated(builder);
+        } else if let Some(name) = self.name() {
+            name.push_bind_unseparated(builder);
+        } else {
+            panic!("No ID or Name found");
+        }
+    }
+
+    fn type_name(&self) -> &str {
+        if let Some(id) = self.id() {
+            std::any::type_name_of_val(id)
+        } else if let Some(name) = self.name() {
+            std::any::type_name_of_val(name)
+        } else {
+            panic!("No ID or Name found");
+        }
+    }
+}
+
+pub trait IdOrName: SqlEntity + Display + Send + Sync {
     type Id: SqlEntity;
     fn id(&self) -> Option<&Self::Id>;
 
@@ -57,7 +89,7 @@ pub trait IdOrName: Send + Sync {
 }
 
 pub trait DataAccessObject:
-    for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin + Debug
+    for<'a> sqlx::FromRow<'a, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin + std::fmt::Debug
 {
     type Builder;
 
@@ -65,7 +97,7 @@ pub trait DataAccessObject:
     fn order_by() -> &'static str;
     fn fields() -> &'static [&'static str];
     fn immutable_fields() -> &'static [&'static str];
-    fn sql_field_for_type<E: SqlEntity>() -> Option<&'static str>;
+    fn sql_field_for_type(val: &str) -> Option<&'static str>;
     fn values_query_builder(
         &self,
         sql: String,

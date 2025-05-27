@@ -148,7 +148,7 @@ pub(crate) fn ranked_versions_at<'a, D>(
     ));
     if let Some(natural_order_by) = natural_order_by {
         query_builder.push(format!("WHERE v.{natural_order_field} <= "));
-        query_builder.push_bind(natural_order_by.value());
+        natural_order_by.push_bind(query_builder);
     }
     query_builder.push(" ),");
 }
@@ -295,7 +295,7 @@ fn select_table_data_versions_at<'a, D>(
 
     query_builder.push(" WHERE ");
     query_builder.push(format!("rv.{table_id_field} = "));
-    query_builder.push_bind(table_id.value());
+    table_id.push_bind(query_builder);
 
     // Build the where clause for the versions
     match versions {
@@ -375,7 +375,7 @@ fn status_where<'a, D: DataAccessObject + VersionedAt>(
         let mut separated = query_builder.separated(" OR ");
         for status in status {
             separated.push(format!("rv.{status_field} = "));
-            separated.push_bind_unseparated(status.value());
+            status.push_bind_unseparated(&mut separated);
         }
         query_builder.push(")");
     }
@@ -389,10 +389,10 @@ mod tests {
     use crate::types::basic::{
         AtTime, DependencyStatus, FunctionStatus, TableStatus, TriggerStatus,
     };
-    use crate::types::dependency::{DependencyVersionDB, DependencyVersionDBWithNames};
-    use crate::types::function::{FunctionVersionDB, FunctionVersionDBWithNames};
-    use crate::types::table::{TableVersionDB, TableVersionDBWithNames};
-    use crate::types::trigger::{TriggerVersionDB, TriggerVersionDBWithNames};
+    use crate::types::dependency::{DependencyDB, DependencyDBWithNames};
+    use crate::types::function::{FunctionDB, FunctionDBWithNames};
+    use crate::types::table::{TableDB, TableDBWithNames};
+    use crate::types::trigger::{TriggerDB, TriggerDBWithNames};
     use chrono::DateTime;
     use chrono::Utc;
     use lazy_static::lazy_static;
@@ -522,96 +522,72 @@ mod tests {
     #[test]
     fn test_versions_defined_on_dao_partition_by() {
         let mut query_builder = sqlx::QueryBuilder::default();
-        ranked_versions_at::<FunctionVersionDB>("test", &mut query_builder, None);
+        ranked_versions_at::<FunctionDB>("test", &mut query_builder, None);
         let status = [&FunctionStatus::Active];
-        select_ranked_versions_at::<FunctionVersionDB>("test", &mut query_builder, Some(&status));
+        select_ranked_versions_at::<FunctionDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
-        assert!(query.sql().contains(FunctionVersionDB::sql_table()));
-        assert!(query.sql().contains(FunctionVersionDB::partition_by()));
+        assert!(query.sql().contains(FunctionDB::sql_table()));
+        assert!(query.sql().contains(FunctionDB::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        ranked_versions_at::<FunctionVersionDBWithNames>("test", &mut query_builder, None);
+        ranked_versions_at::<FunctionDBWithNames>("test", &mut query_builder, None);
         let status = [&FunctionStatus::Active];
-        select_ranked_versions_at::<FunctionVersionDBWithNames>(
-            "test",
-            &mut query_builder,
-            Some(&status),
-        );
+        select_ranked_versions_at::<FunctionDBWithNames>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
-        assert!(query
-            .sql()
-            .contains(FunctionVersionDBWithNames::sql_table()));
-        assert!(query
-            .sql()
-            .contains(FunctionVersionDBWithNames::partition_by()));
+        assert!(query.sql().contains(FunctionDBWithNames::sql_table()));
+        assert!(query.sql().contains(FunctionDBWithNames::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        ranked_versions_at::<TableVersionDB>("test", &mut query_builder, None);
+        ranked_versions_at::<TableDB>("test", &mut query_builder, None);
         let status = [&TableStatus::Active];
-        select_ranked_versions_at::<TableVersionDB>("test", &mut query_builder, Some(&status));
+        select_ranked_versions_at::<TableDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
-        assert!(query.sql().contains(TableVersionDB::sql_table()));
-        assert!(query.sql().contains(TableVersionDB::partition_by()));
+        assert!(query.sql().contains(TableDB::sql_table()));
+        assert!(query.sql().contains(TableDB::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        ranked_versions_at::<TableVersionDBWithNames>("test", &mut query_builder, None);
+        ranked_versions_at::<TableDBWithNames>("test", &mut query_builder, None);
         let status = [&TableStatus::Active];
-        select_ranked_versions_at::<TableVersionDBWithNames>(
-            "test",
-            &mut query_builder,
-            Some(&status),
-        );
+        select_ranked_versions_at::<TableDBWithNames>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
-        assert!(query.sql().contains(TableVersionDBWithNames::sql_table()));
-        assert!(query
-            .sql()
-            .contains(TableVersionDBWithNames::partition_by()));
+        assert!(query.sql().contains(TableDBWithNames::sql_table()));
+        assert!(query.sql().contains(TableDBWithNames::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        ranked_versions_at::<DependencyVersionDB>("test", &mut query_builder, None);
+        ranked_versions_at::<DependencyDB>("test", &mut query_builder, None);
         let status = [&DependencyStatus::Active];
-        select_ranked_versions_at::<DependencyVersionDB>("test", &mut query_builder, Some(&status));
+        select_ranked_versions_at::<DependencyDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
-        assert!(query.sql().contains(DependencyVersionDB::sql_table()));
-        assert!(query.sql().contains(DependencyVersionDB::partition_by()));
+        assert!(query.sql().contains(DependencyDB::sql_table()));
+        assert!(query.sql().contains(DependencyDB::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        ranked_versions_at::<DependencyVersionDBWithNames>("test", &mut query_builder, None);
+        ranked_versions_at::<DependencyDBWithNames>("test", &mut query_builder, None);
         let status = [&DependencyStatus::Active];
-        select_ranked_versions_at::<DependencyVersionDBWithNames>(
+        select_ranked_versions_at::<DependencyDBWithNames>(
             "test",
             &mut query_builder,
             Some(&status),
         );
         let query = query_builder.build();
-        assert!(query
-            .sql()
-            .contains(DependencyVersionDBWithNames::sql_table()));
-        assert!(query
-            .sql()
-            .contains(DependencyVersionDBWithNames::partition_by()));
+        assert!(query.sql().contains(DependencyDBWithNames::sql_table()));
+        assert!(query.sql().contains(DependencyDBWithNames::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        ranked_versions_at::<TriggerVersionDB>("test", &mut query_builder, None);
+        ranked_versions_at::<TriggerDB>("test", &mut query_builder, None);
         let status = [&TriggerStatus::Active];
-        select_ranked_versions_at::<TriggerVersionDB>("test", &mut query_builder, Some(&status));
+        select_ranked_versions_at::<TriggerDB>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
-        assert!(query.sql().contains(TriggerVersionDB::sql_table()));
-        assert!(query.sql().contains(TriggerVersionDB::partition_by()));
+        assert!(query.sql().contains(TriggerDB::sql_table()));
+        assert!(query.sql().contains(TriggerDB::partition_by()));
 
         let mut query_builder = sqlx::QueryBuilder::default();
-        ranked_versions_at::<TriggerVersionDBWithNames>("test", &mut query_builder, None);
+        ranked_versions_at::<TriggerDBWithNames>("test", &mut query_builder, None);
         let status = [&TriggerStatus::Active];
-        select_ranked_versions_at::<TriggerVersionDBWithNames>(
-            "test",
-            &mut query_builder,
-            Some(&status),
-        );
+        select_ranked_versions_at::<TriggerDBWithNames>("test", &mut query_builder, Some(&status));
         let query = query_builder.build();
-        assert!(query.sql().contains(TriggerVersionDBWithNames::sql_table()));
-        assert!(query
-            .sql()
-            .contains(TriggerVersionDBWithNames::partition_by()));
+        assert!(query.sql().contains(TriggerDBWithNames::sql_table()));
+        assert!(query.sql().contains(TriggerDBWithNames::partition_by()));
     }
 
     #[test]
@@ -796,14 +772,14 @@ mod tests {
             Ok(())
         }
 
-        test_query::<FunctionVersionDB>(&db).await?;
-        test_query::<FunctionVersionDBWithNames>(&db).await?;
-        test_query::<TableVersionDB>(&db).await?;
-        test_query::<TableVersionDBWithNames>(&db).await?;
-        test_query::<DependencyVersionDB>(&db).await?;
-        test_query::<DependencyVersionDBWithNames>(&db).await?;
-        test_query::<TriggerVersionDB>(&db).await?;
-        test_query::<TriggerVersionDBWithNames>(&db).await?;
+        test_query::<FunctionDB>(&db).await?;
+        test_query::<FunctionDBWithNames>(&db).await?;
+        test_query::<TableDB>(&db).await?;
+        test_query::<TableDBWithNames>(&db).await?;
+        test_query::<DependencyDB>(&db).await?;
+        test_query::<DependencyDBWithNames>(&db).await?;
+        test_query::<TriggerDB>(&db).await?;
+        test_query::<TriggerDBWithNames>(&db).await?;
 
         Ok(())
     }

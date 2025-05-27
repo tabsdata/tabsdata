@@ -208,7 +208,8 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
     let expanded = quote! {
         #(#attrs)*
         #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[sqlx(transparent)]
         pub struct #name(String);
 
         #[td_error::td_error]
@@ -320,21 +321,16 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
             }
         }
 
-        impl sqlx::Type<sqlx::Sqlite> for #name {
-
-            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
-                <String as sqlx::Type<sqlx::Sqlite>>::type_info()
-            }
-
-            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
-                <String as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
-            }
-        }
-
         impl crate::types::SqlEntity for #name {
-            type Type = #name;
-            fn value(&self) -> &Self::Type {
-                &self
+            fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+                builder.push_bind(self);
+            }
+
+            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+                &'a self,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+            ) {
+                builder.push_bind_unseparated(self);
             }
         }
     };
@@ -359,7 +355,8 @@ pub fn typed_int<T: FromStr + ToTokens + PartialOrd>(
 
     let expanded = quote! {
         #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[sqlx(transparent)]
         #expanded
     };
 
@@ -374,7 +371,8 @@ pub fn typed_float<T: FromStr + ToTokens + PartialOrd>(
 
     let expanded = quote! {
         #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Clone, PartialEq, PartialOrd, sqlx::Decode, sqlx::Encode)]
+        #[derive(Debug, Clone, PartialEq, PartialOrd, sqlx::Type)]
+        #[sqlx(transparent)]
         #expanded
     };
 
@@ -512,21 +510,16 @@ pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
             }
         }
 
-        impl sqlx::Type<sqlx::Sqlite> for #name {
-
-            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
-                <#int_type as sqlx::Type<sqlx::Sqlite>>::type_info()
-            }
-
-            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
-                <#int_type as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
-            }
-        }
-
         impl crate::types::SqlEntity for #name {
-            type Type = #name;
-            fn value(&self) -> &Self::Type {
-                &self
+            fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+                builder.push_bind(self);
+            }
+
+            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+                &'a self,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+            ) {
+                builder.push_bind_unseparated(self);
             }
         }
     };
@@ -558,7 +551,8 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
     let expanded = quote! {
         #(#attrs)*
         #[td_apiforge::apiserver_schema]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[sqlx(transparent)]
         pub struct #name(bool);
 
         impl Default for #name {
@@ -618,21 +612,16 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
             }
         }
 
-        impl sqlx::Type<sqlx::Sqlite> for #name {
-
-            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
-                <bool as sqlx::Type<sqlx::Sqlite>>::type_info()
-            }
-
-            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
-                <bool as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
-            }
-        }
-
         impl crate::types::SqlEntity for #name {
-            type Type = #name;
-            fn value(&self) -> &Self::Type {
-                &self
+            fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+                builder.push_bind(self);
+            }
+
+            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+                &'a self,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+            ) {
+                builder.push_bind_unseparated(self);
             }
         }
     };
@@ -664,7 +653,8 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
 
     let expanded = quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[sqlx(transparent)]
         pub struct #name(td_common::id::Id);
 
         impl Default for #name {
@@ -780,21 +770,16 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
             }
         }
 
-        impl sqlx::Type<sqlx::Sqlite> for #name {
-
-            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
-                <String as sqlx::Type<sqlx::Sqlite>>::type_info()
-            }
-
-            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
-                <String as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
-            }
-        }
-
         impl crate::types::SqlEntity for #name {
-            type Type = #name;
-            fn value(&self) -> &Self::Type {
-                &self
+            fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+                builder.push_bind(self);
+            }
+
+            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+                &'a self,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+            ) {
+                builder.push_bind_unseparated(self);
             }
         }
     };
@@ -833,7 +818,8 @@ pub fn typed_timestamp(
 
     let expanded = quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Decode, sqlx::Encode)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, sqlx::Type)]
+        #[sqlx(transparent)]
         pub struct #name(chrono::DateTime<chrono::Utc>);
 
         #[td_error::td_error]
@@ -964,21 +950,16 @@ pub fn typed_timestamp(
             }
         }
 
-        impl sqlx::Type<sqlx::Sqlite> for #name {
-
-            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
-                <chrono::DateTime<chrono::Utc> as sqlx::Type<sqlx::Sqlite>>::type_info()
-            }
-
-            fn compatible(ty: &<sqlx::Sqlite as sqlx::Database>::TypeInfo) -> bool {
-                <chrono::DateTime<chrono::Utc> as sqlx::Type<sqlx::Sqlite>>::compatible(ty)
-            }
-        }
-
         impl crate::types::SqlEntity for #name {
-            type Type = #name;
-            fn value(&self) -> &Self::Type {
-                &self
+            fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+                builder.push_bind(self);
+            }
+
+            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+                &'a self,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+            ) {
+                builder.push_bind_unseparated(self);
             }
         }
     };
@@ -1008,7 +989,6 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
         }
 
         impl #ident {
-
             pub fn from_id(id: impl Into<#id>) -> Self {
                 Self { id: Some(id.into()), name: None }
             }
@@ -1044,11 +1024,18 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
 
         impl From<#ident> for String {
             fn from(value: #ident) -> String {
-                match (&value.id, &value.name) {
-                    (Some(id), None) => format!("~{}", id),
-                    (None, Some(name)) => name.to_string(),
+                value.to_string()
+            }
+        }
+
+        impl std::fmt::Display for #ident {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match (&self.id, &self.name) {
+                    (Some(id), None) => write!(f, "~{}", id),
+                    (None, Some(name)) => write!(f, "{}", name),
                     _ => unreachable!(),
                 }
+
             }
         }
 
@@ -1255,9 +1242,15 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
         }
 
         impl crate::types::SqlEntity for #name {
-            type Type = #name;
-            fn value(&self) -> &Self::Type {
-                &self
+            fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+                builder.push_bind(self);
+            }
+
+            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+                &'a self,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+            ) {
+                builder.push_bind_unseparated(self);
             }
         }
     };
@@ -1351,9 +1344,15 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl crate::types::SqlEntity for #name {
-            type Type = #name;
-            fn value(&self) -> &Self::Type {
-                &self
+            fn push_bind<'a>(&'a self, builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+                builder.push_bind(self);
+            }
+
+            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+                &'a self,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+            ) {
+                builder.push_bind_unseparated(self);
             }
         }
     };

@@ -12,9 +12,7 @@ use td_objects::rest_urls::UserRoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{
-    By, SqlDeleteService, SqlSelectIdOrNameService, SqlSelectService,
-};
+use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
 use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserIdName};
 use td_objects::types::role::{RoleDB, UserRoleDB, UserRoleDBWithNames};
 use td_objects::types::user::UserDB;

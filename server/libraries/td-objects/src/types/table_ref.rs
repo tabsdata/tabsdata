@@ -6,6 +6,7 @@ use crate::types::basic::{CollectionName, TableDataVersionId};
 use crate::types::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};
 use crate::types::ComposedString;
 use derive_new::new;
+use getset::Getters;
 use std::fmt::{Display, Formatter};
 use td_error::TdError;
 
@@ -116,7 +117,7 @@ impl From<&Versions> for Versions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, new, getset::Getters)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, new, Getters)]
 #[getset(get = "pub")]
 pub struct VersionedTableRef<T> {
     collection: Option<CollectionName>,

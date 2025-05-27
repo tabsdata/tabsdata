@@ -7,51 +7,20 @@ use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, TableId,
     TableName, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
 };
-use crate::types::function::FunctionVersionDB;
-
-#[td_type::Dao]
-#[dao(sql_table = "triggers")]
-#[td_type(builder(try_from = TriggerVersionDB))]
-pub struct TriggerDB {
-    #[td_type(builder(field = "trigger_id"))]
-    id: TriggerId,
-    collection_id: CollectionId,
-    function_id: FunctionId,
-    #[td_type(builder(field = "id"))]
-    trigger_version_id: TriggerVersionId,
-    trigger_by_collection_id: CollectionId,
-    trigger_by_function_id: FunctionId,
-    trigger_by_table_id: TableId,
-}
-
-#[td_type::Dao]
-#[dao(sql_table = "triggers__with_names")]
-pub struct TriggerDBWithNames {
-    id: TriggerId,
-    collection_id: CollectionId,
-    function_id: FunctionId,
-    trigger_version_id: TriggerVersionId,
-    trigger_by_collection_id: CollectionId,
-    trigger_by_function_id: FunctionId,
-    trigger_by_table_id: TableId,
-
-    collection: CollectionName,
-    trigger_by_collection: CollectionName,
-    trigger_by_table_name: TableName,
-}
+use crate::types::function::FunctionDB;
 
 #[td_type::Dao]
 #[dao(
-    sql_table = "trigger_versions",
-    partition_by = "trigger_id",
+    sql_table = "triggers",
+    partition_by = "function_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "trigger_by_function_version_id", down = "function_version_id")
 )]
 #[td_type(
-    builder(try_from = FunctionVersionDB, skip_all),
+    builder(try_from = FunctionDB, skip_all),
     updater(try_from = RequestContext, skip_all)
 )]
-pub struct TriggerVersionDB {
+pub struct TriggerDB {
     #[builder(default)]
     id: TriggerVersionId,
     #[td_type(builder(include))]
@@ -76,12 +45,12 @@ pub struct TriggerVersionDB {
 
 #[td_type::Dao]
 #[dao(
-    sql_table = "trigger_versions__with_names",
-    partition_by = "trigger_id",
+    sql_table = "triggers__with_names",
+    partition_by = "function_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "trigger_by_function_version_id", down = "function_version_id")
 )]
-pub struct TriggerVersionDBWithNames {
+pub struct TriggerDBWithNames {
     id: TriggerVersionId,
     collection_id: CollectionId,
     trigger_id: TriggerId,
@@ -105,8 +74,8 @@ pub struct TriggerVersionDBWithNames {
 }
 
 #[td_type::Dto]
-#[td_type(builder(try_from = TriggerVersionDBWithNames))]
-pub struct TriggerVersionRead {
+#[td_type(builder(try_from = TriggerDBWithNames))]
+pub struct TriggerRead {
     id: TriggerVersionId,
     collection_id: CollectionId,
     trigger_id: TriggerId,
@@ -125,7 +94,3 @@ pub struct TriggerVersionRead {
     trigger_by_function: FunctionName,
     defined_by: UserName,
 }
-
-pub type TriggerVersionDBWithNamesList = TriggerVersionDBWithNames;
-
-pub type TriggerVersionList = TriggerVersionRead;

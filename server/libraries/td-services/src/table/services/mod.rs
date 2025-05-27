@@ -87,12 +87,13 @@ pub(crate) mod tests {
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::handle_sql_err;
+    use td_objects::sql::cte::CteQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
-    use td_objects::types::basic::{Frozen, FunctionStatus, TableName, TableStatus, UserId};
+    use td_objects::types::basic::{FunctionStatus, TableName, TableStatus, UserId};
     use td_objects::types::collection::CollectionDB;
-    use td_objects::types::dependency::DependencyVersionDB;
-    use td_objects::types::function::{FunctionDB, FunctionVersionDB};
-    use td_objects::types::table::{TableDB, TableVersionDB};
+    use td_objects::types::dependency::DependencyDB;
+    use td_objects::types::function::FunctionDB;
+    use td_objects::types::table::TableDB;
 
     pub async fn assert_delete(
         db: &DbPool,
@@ -102,18 +103,24 @@ pub(crate) mod tests {
     ) -> Result<(), TdError> {
         let queries = DaoQueries::default();
 
-        // Assert table does not exist
-        let table: Option<TableDB> = queries
-            .select_by::<TableDB>(&table_name)?
+        // Assert current table version is deleted
+        let table_versions: Vec<TableDB> = queries
+            .select_versions_at::<TableDB>(None, None, &table_name)?
             .build_query_as()
-            .fetch_optional(db)
+            .fetch_all(db)
             .await
             .map_err(handle_sql_err)?;
-        assert!(table.is_none());
+        assert_eq!(table_versions.len(), 1);
+        assert_eq!(table_versions[0].name(), table_name);
+        assert_eq!(table_versions[0].collection_id(), collection.id());
+        assert_eq!(table_versions[0].defined_by_id(), user_id);
+        assert_eq!(*table_versions[0].status(), TableStatus::Deleted);
+
+        let deleted_table = &table_versions[0];
 
         // Assert previous table versions exists (first active, then frozen, then deleted)
-        let table_versions: Vec<TableVersionDB> = queries
-            .select_by::<TableVersionDB>(&table_name)?
+        let table_versions: Vec<TableDB> = queries
+            .select_by::<TableDB>(&table_name)?
             .build_query_as()
             .fetch_all(db)
             .await
@@ -132,33 +139,18 @@ pub(crate) mod tests {
         assert_eq!(table_versions[0].table_id(), table_versions[1].table_id());
         assert_eq!(table_versions[0].table_id(), table_versions[2].table_id());
 
-        // First one because of default ASC order by.
-        let deleted_table_version = &table_versions[0];
-
-        // Assert there is a new function version for the deleted table, in frozen state
-        let deleted_table_function_version: FunctionVersionDB = queries
-            .select_by::<FunctionVersionDB>(&deleted_table_version.function_version_id())?
-            .build_query_as()
-            .fetch_one(db)
-            .await
-            .map_err(handle_sql_err)?;
-        assert_eq!(
-            *deleted_table_function_version.status(),
-            FunctionStatus::Frozen
-        );
-
-        // And that the function is also frozen
+        // And that the function version is still active
         let function: FunctionDB = queries
-            .select_by::<FunctionDB>(&deleted_table_function_version.function_id())?
+            .select_versions_at::<FunctionDB>(None, None, &deleted_table.function_id())?
             .build_query_as()
             .fetch_one(db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(*function.frozen(), Frozen::from(true));
+        assert_eq!(*function.status(), FunctionStatus::Active);
 
-        // And assert that all dependant functions and function versions are also frozen
-        let dependency_versions: Vec<DependencyVersionDB> = queries
-            .select_by::<DependencyVersionDB>(&table_name)?
+        // And assert that all dependant function versions are also frozen
+        let dependency_versions: Vec<DependencyDB> = queries
+            .select_versions_at::<DependencyDB>(None, None, &table_name)?
             .build_query_as()
             .fetch_all(db)
             .await
@@ -166,17 +158,17 @@ pub(crate) mod tests {
 
         for dependency_version in &dependency_versions {
             let function: FunctionDB = queries
-                .select_by::<FunctionDB>(&dependency_version.function_id())?
+                .select_versions_at::<FunctionDB>(None, None, &dependency_version.function_id())?
                 .build_query_as()
                 .fetch_one(db)
                 .await
                 .map_err(handle_sql_err)?;
-            assert_eq!(*function.frozen(), Frozen::from(true));
+            assert_eq!(*function.status(), FunctionStatus::Frozen);
 
             // Note that the function version in the dependency still points to the active function version
             // thus being active itself.
-            let function_version: FunctionVersionDB = queries
-                .select_by::<FunctionVersionDB>(&function.function_version_id())?
+            let function_version: FunctionDB = queries
+                .select_by::<FunctionDB>(&function.id())?
                 .build_query_as()
                 .fetch_one(db)
                 .await
@@ -198,7 +190,7 @@ pub(crate) mod tests {
 
         // Assert table does exist
         let table: Option<TableDB> = queries
-            .select_by::<TableDB>(&table_name)?
+            .select_versions_at::<TableDB>(None, None, &table_name)?
             .build_query_as()
             .fetch_optional(db)
             .await
@@ -206,8 +198,8 @@ pub(crate) mod tests {
         assert!(table.is_some());
 
         // Assert previous table versions exists, always active
-        let table_versions: Vec<TableVersionDB> = queries
-            .select_by::<TableVersionDB>(&table_name)?
+        let table_versions: Vec<TableDB> = queries
+            .select_by::<TableDB>(&table_name)?
             .build_query_as()
             .fetch_all(db)
             .await

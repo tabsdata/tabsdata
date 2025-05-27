@@ -42,7 +42,10 @@ pub async fn seed_role(db: &DbPool, name: RoleName, description: Description) ->
     role_db
 }
 
-pub async fn get_role<E: SqlEntity>(db: &DbPool, by: &E) -> Result<RoleDB, TdError> {
+pub async fn get_role<E>(db: &DbPool, by: &E) -> Result<RoleDB, TdError>
+where
+    E: SqlEntity,
+{
     let queries = DaoQueries::default();
     queries
         .select_by::<RoleDB>(&by)?

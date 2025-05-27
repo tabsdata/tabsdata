@@ -4,8 +4,8 @@
 
 use crate::types::basic::{
     AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
-    FunctionVersionIdName, InterCollectionPermissionIdName, PermissionIdName, RoleIdName,
-    SampleLen, SampleOffset, TableIdName, TransactionIdName, UserIdName,
+    InterCollectionPermissionIdName, PermissionIdName, RoleIdName, SampleLen, SampleOffset,
+    TableIdName, TransactionIdName, UserIdName,
 };
 use constcat::concat;
 
@@ -161,19 +161,6 @@ pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
 pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
 
 // Function versions
-pub const FUNCTION_VERSIONS: &str = url!(COLLECTION, "/function_versions");
-pub const FUNCTION_VERSION: &str = url!(FUNCTION_VERSIONS, "/{function_version}");
-
-#[td_type::UrlParam]
-pub struct FunctionVersionParam {
-    #[td_type(extractor)]
-    collection: CollectionIdName,
-    #[td_type(extractor)]
-    function_version: FunctionVersionIdName,
-}
-
-pub const FUNCTION_VERSION_GET: &str = url!(FUNCTION_VERSION);
-
 #[td_type::QueryParam]
 pub struct AtMultiParam {
     #[td_type(extractor)]
@@ -192,7 +179,7 @@ pub struct SampleOffsetLenParam {
 }
 
 // Function runs
-pub const FUNCTION_RUNS: &str = url!(FUNCTION_VERSION, "/executions");
+pub const FUNCTION_RUNS: &str = url!(FUNCTION, "/executions");
 pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{execution}");
 
 #[td_type::UrlParam]
@@ -200,7 +187,7 @@ pub struct FunctionRunParam {
     #[td_type(extractor)]
     collection: CollectionIdName,
     #[td_type(extractor)]
-    function_version: FunctionVersionIdName,
+    function: FunctionIdName,
     #[td_type(extractor)]
     execution: ExecutionIdName,
 }

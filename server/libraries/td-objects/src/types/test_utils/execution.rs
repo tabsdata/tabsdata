@@ -8,10 +8,10 @@ use crate::types::basic::{
     TableStatus, TableVersionId, TableVersions, TriggerId, TriggerStatus, TriggerVersionId, UserId,
     UserName,
 };
-use crate::types::dependency::DependencyVersionDBWithNames;
+use crate::types::dependency::DependencyDBWithNames;
 use crate::types::execution::{FunctionVersionNode, TableVersionNode};
-use crate::types::table::TableVersionDBWithNames;
-use crate::types::trigger::TriggerVersionDBWithNames;
+use crate::types::table::TableDBWithNames;
+use crate::types::trigger::TriggerDBWithNames;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -96,12 +96,13 @@ pub fn table_node(table: &TableName) -> TableVersionNode {
         .unwrap()
 }
 
-pub async fn table(function: &FunctionName, table: &TableName) -> TableVersionDBWithNames {
-    TableVersionDBWithNames::builder()
+pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
+    TableDBWithNames::builder()
         .id(TABLE_VERSION_IDS.get(table).unwrap())
         .collection_id(*COLLECTION_ID)
         .table_id(TABLE_IDS.get(table).unwrap())
         .name(table)
+        .function_id(FunctionId::default())
         .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
         .function_param_pos(None)
         .private(false)
@@ -116,16 +117,13 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableVersionDB
         .unwrap()
 }
 
-pub async fn dependency(
-    table: &TableName,
-    function: &FunctionName,
-) -> DependencyVersionDBWithNames {
+pub async fn dependency(table: &TableName, function: &FunctionName) -> DependencyDBWithNames {
     let table_function = FUNCTIONS
         .iter()
         .find(|(_, tables)| tables.contains(table))
         .map(|(function, _)| function)
         .unwrap();
-    DependencyVersionDBWithNames::builder()
+    DependencyDBWithNames::builder()
         .id(DependencyVersionId::default())
         .collection_id(*COLLECTION_ID)
         .dependency_id(DependencyId::default())
@@ -151,13 +149,13 @@ pub async fn dependency(
         .unwrap()
 }
 
-pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerVersionDBWithNames {
+pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWithNames {
     let table_function = FUNCTIONS
         .iter()
         .find(|(_, tables)| tables.contains(table))
         .map(|(function, _)| function)
         .unwrap();
-    TriggerVersionDBWithNames::builder()
+    TriggerDBWithNames::builder()
         .id(TriggerVersionId::default())
         .collection_id(*COLLECTION_ID)
         .trigger_id(TriggerId::default())

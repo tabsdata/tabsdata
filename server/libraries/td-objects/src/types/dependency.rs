@@ -8,53 +8,20 @@ use crate::types::basic::{
     DependencyVersionId, FunctionId, FunctionName, FunctionVersionId, TableId, TableName,
     TableVersionId, TableVersions, UserId, UserName,
 };
-use crate::types::function::FunctionVersionDB;
-
-#[td_type::Dao]
-#[dao(sql_table = "dependencies")]
-#[td_type(builder(try_from = DependencyVersionDB))]
-pub struct DependencyDB {
-    #[td_type(builder(field = "dependency_id"))]
-    id: DependencyId,
-    collection_id: CollectionId,
-    function_id: FunctionId,
-    function_version_id: FunctionVersionId,
-    #[td_type(builder(field = "id"))]
-    dependency_version_id: DependencyVersionId,
-    table_collection_id: CollectionId,
-    table_id: TableId,
-    table_name: TableName,
-    table_versions: TableVersions,
-}
-
-#[td_type::Dao]
-#[dao(sql_table = "dependencies__with_names")]
-pub struct DependencyDBWithNames {
-    id: DependencyId,
-    collection_id: CollectionId,
-    function_id: FunctionId,
-    dependency_version_id: DependencyVersionId,
-    table_collection_id: CollectionId,
-    table_id: TableId,
-    table_name: TableName,
-    table_versions: TableVersions,
-
-    collection: CollectionName,
-    table_collection: CollectionName,
-}
+use crate::types::function::FunctionDB;
 
 #[td_type::Dao]
 #[dao(
-    sql_table = "dependency_versions",
-    partition_by = "dependency_id",
+    sql_table = "dependencies",
+    partition_by = "table_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "function_version_id", down = "table_function_version_id")
 )]
 #[td_type(
-    builder(try_from = FunctionVersionDB, skip_all),
+    builder(try_from = FunctionDB, skip_all),
     updater(try_from = RequestContext, skip_all)
 )]
-pub struct DependencyVersionDB {
+pub struct DependencyDB {
     #[builder(default)]
     id: DependencyVersionId,
     #[td_type(builder(include))]
@@ -81,13 +48,13 @@ pub struct DependencyVersionDB {
 
 #[td_type::Dao]
 #[dao(
-    sql_table = "dependency_versions__with_names",
+    sql_table = "dependencies__with_names",
     order_by = "dep_pos",
-    partition_by = "dependency_id",
+    partition_by = "table_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "function_version_id", down = "table_function_version_id")
 )]
-pub struct DependencyVersionDBWithNames {
+pub struct DependencyDBWithNames {
     id: DependencyVersionId,
     collection_id: CollectionId,
     dependency_id: DependencyId,
@@ -113,8 +80,8 @@ pub struct DependencyVersionDBWithNames {
 }
 
 #[td_type::Dto]
-#[td_type(builder(try_from = DependencyVersionDBWithNames))]
-pub struct DependencyVersionRead {
+#[td_type(builder(try_from = DependencyDBWithNames))]
+pub struct DependencyRead {
     id: DependencyVersionId,
     collection_id: CollectionId,
     dependency_id: DependencyId,
@@ -132,7 +99,3 @@ pub struct DependencyVersionRead {
     function: FunctionName,
     defined_by: UserName,
 }
-
-pub type DependencyVersionDBWithNamesList = DependencyVersionDBWithNames;
-
-pub type DependencyVersionList = DependencyVersionRead;

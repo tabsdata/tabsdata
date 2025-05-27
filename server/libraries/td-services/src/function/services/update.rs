@@ -15,23 +15,21 @@ use td_objects::tower_service::from::{
     SetService, TryIntoService, UpdateService, With,
 };
 use td_objects::tower_service::sql::{
-    insert, By, SqlDeleteService, SqlSelectAllService, SqlSelectIdOrNameService, SqlSelectService,
-    SqlUpdateService,
+    insert, By, SqlDeleteService, SqlSelectAllService, SqlSelectService,
 };
 use td_objects::types::basic::{
-    BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
-    FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableDependencyDto,
-    TableNameDto, TableTriggerDto,
+    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
+    FunctionIdName, FunctionStatus, FunctionVersionId, ReuseFrozen, StorageVersion,
+    TableDependencyDto, TableNameDto, TableTriggerDto,
 };
 use td_objects::types::collection::CollectionDB;
-use td_objects::types::dependency::DependencyVersionDB;
+use td_objects::types::dependency::DependencyDB;
 use td_objects::types::function::{
-    BundleDB, FunctionDB, FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate, FunctionVersion,
-    FunctionVersionBuilder, FunctionVersionDB, FunctionVersionDBBuilder,
-    FunctionVersionDBWithNames,
+    BundleDB, Function, FunctionBuilder, FunctionDB, FunctionDBBuilder, FunctionDBWithNames,
+    FunctionUpdate,
 };
-use td_objects::types::table::TableVersionDB;
-use td_objects::types::trigger::TriggerVersionDBWithNames;
+use td_objects::types::table::TableDB;
+use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
@@ -41,8 +39,7 @@ use td_tower::{layers, p, service_provider};
 use super::register::RegisterFunctionService;
 
 pub struct UpdateFunctionService {
-    provider:
-        ServiceProvider<UpdateRequest<FunctionParam, FunctionUpdate>, FunctionVersion, TdError>,
+    provider: ServiceProvider<UpdateRequest<FunctionParam, FunctionUpdate>, Function, TdError>,
 }
 
 impl UpdateFunctionService {
@@ -74,7 +71,9 @@ impl UpdateFunctionService {
 
                 // Get function. Extract function id and name.
                 from_fn(combine::<CollectionIdName, FunctionIdName>),
-                from_fn(By::<(CollectionIdName, FunctionIdName)>::select::<DaoQueries, FunctionDBWithNames>),
+                from_fn(With::<RequestContext>::extract::<AtTime>),
+                from_fn(FunctionStatus::active),
+                from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>),
                 // This is, before update function id and function version id. Function id does
                 // not change, but function version id does.
                 from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
@@ -88,32 +87,25 @@ impl UpdateFunctionService {
                 from_fn(data_location),
 
                 // Insert into function_versions(sql) status=Active.
-                from_fn(With::<FunctionUpdate>::convert_to::<FunctionVersionDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<FunctionVersionDBBuilder, _>),
-                from_fn(With::<CollectionId>::set::<FunctionVersionDBBuilder>),
+                from_fn(With::<FunctionUpdate>::convert_to::<FunctionDBBuilder, _>),
+                from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
+                from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
                 // We maintain the same function id
-                from_fn(With::<FunctionId>::set::<FunctionVersionDBBuilder>),
-                from_fn(With::<StorageVersion>::set::<FunctionVersionDBBuilder>),
-                from_fn(With::<DataLocation>::set::<FunctionVersionDBBuilder>),
-                from_fn(With::<FunctionVersionDBBuilder>::build::<FunctionVersionDB, _>),
-                from_fn(insert::<DaoQueries, FunctionVersionDB>),
+                from_fn(With::<FunctionId>::set::<FunctionDBBuilder>),
+                from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
+                from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
+                from_fn(With::<FunctionDBBuilder>::build::<FunctionDB, _>),
+                from_fn(insert::<DaoQueries, FunctionDB>),
 
                 // Remove from bundles
-                from_fn(With::<FunctionVersionDB>::extract::<BundleId>),
+                from_fn(With::<FunctionDB>::extract::<BundleId>),
                 from_fn(By::<BundleId>::delete::<DaoQueries, BundleDB>),
 
-                // Update functions(sql) table.
-                from_fn(With::<FunctionVersionDB>::convert_to::<FunctionDBBuilder, _>),
-                from_fn(With::<FunctionDBBuilder>::build::<FunctionDB, _>),
-                from_fn(By::<FunctionId>::update::<DaoQueries, FunctionDB, FunctionDB>),
-
                 // Register associations
-                // Extract new function id
-                from_fn(With::<FunctionDB>::extract::<FunctionId>),
                 // Find previous versions
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableVersionDB>),
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyVersionDB>),
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerVersionDBWithNames>),
+                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
+                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
+                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
                 // Extract new associations
                 from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
                 from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
@@ -126,16 +118,18 @@ impl UpdateFunctionService {
                 RegisterFunctionService::register_triggers(),
 
                 // Response
-                from_fn(By::<FunctionId>::select::<DaoQueries, FunctionVersionDBWithNames>),
-                from_fn(With::<FunctionVersionDBWithNames>::convert_to::<FunctionVersionBuilder, _>),
-                from_fn(With::<FunctionVersionBuilder>::build::<FunctionVersion, _>),
+                // Extract new function version id
+                from_fn(With::<FunctionDB>::extract::<FunctionVersionId>),
+                from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionDBWithNames>),
+                from_fn(With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+                from_fn(With::<FunctionBuilder>::build::<Function, _>),
             ))
         }
     }
 
     pub async fn service(
         &self,
-    ) -> TdBoxService<UpdateRequest<FunctionParam, FunctionUpdate>, FunctionVersion, TdError> {
+    ) -> TdBoxService<UpdateRequest<FunctionParam, FunctionUpdate>, Function, TdError> {
         self.provider.make().await
     }
 }
@@ -150,8 +144,8 @@ mod tests {
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, Frozen, FunctionRuntimeValues, RoleId,
-        TableDependencyDto, TableName, TableNameDto, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependencyDto,
+        TableName, TableNameDto, TableStatus, UserId,
     };
     use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
@@ -163,15 +157,12 @@ mod tests {
 
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_trigger_versions,
-            insert_and_update_dependencies, insert_and_update_tables, insert_and_update_triggers,
         };
         use td_objects::tower_service::sql::insert_vec;
         use td_objects::types::basic::ReuseFrozen;
-        use td_objects::types::dependency::{DependencyDBWithNames, DependencyVersionDBBuilder};
-        use td_objects::types::table::{TableDBWithNames, TableVersionDBBuilder};
-        use td_objects::types::trigger::{
-            TriggerDBWithNames, TriggerVersionDB, TriggerVersionDBBuilder,
-        };
+        use td_objects::types::dependency::DependencyDBBuilder;
+        use td_objects::types::table::TableDBBuilder;
+        use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 
         let queries = Arc::new(DaoQueries::default());
         let provider = UpdateFunctionService::provider(db, queries);
@@ -180,7 +171,7 @@ mod tests {
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<UpdateRequest<FunctionParam, FunctionUpdate>, FunctionVersion>(
+        metadata.assert_service::<UpdateRequest<FunctionParam, FunctionUpdate>, Function>(
             &[
                 type_of_val(&With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract::<RequestContext>),
                 type_of_val(&With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_name::<FunctionParam>),
@@ -194,12 +185,9 @@ mod tests {
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
                 // Get function. Extract function id and name.
                 type_of_val(&combine::<CollectionIdName, FunctionIdName>),
-                type_of_val(
-                    &By::<(CollectionIdName, FunctionIdName)>::select::<
-                        DaoQueries,
-                        FunctionDBWithNames,
-                    >,
-                ),
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
+                type_of_val(&FunctionStatus::active),
+                type_of_val(&By::<(CollectionIdName, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>),
                 // This is, before update function id and function version id. Function id does
                 // not change, but function version id does.
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
@@ -210,33 +198,23 @@ mod tests {
                 type_of_val(&With::<StorageVersion>::default),
                 type_of_val(&data_location),
                 // Insert into function_versions(sql) status=Active.
-                type_of_val(&With::<FunctionUpdate>::convert_to::<FunctionVersionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<FunctionVersionDBBuilder, _>),
-                type_of_val(&With::<CollectionId>::set::<FunctionVersionDBBuilder>),
+                type_of_val(&With::<FunctionUpdate>::convert_to::<FunctionDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
+                type_of_val(&With::<CollectionId>::set::<FunctionDBBuilder>),
                 // We maintain the same function id
-                type_of_val(&With::<FunctionId>::set::<FunctionVersionDBBuilder>),
-                type_of_val(&With::<StorageVersion>::set::<FunctionVersionDBBuilder>),
-                type_of_val(&With::<DataLocation>::set::<FunctionVersionDBBuilder>),
-                type_of_val(&With::<FunctionVersionDBBuilder>::build::<FunctionVersionDB, _>),
-                type_of_val(&insert::<DaoQueries, FunctionVersionDB>),
-                // Remove from bundles
-                type_of_val(&With::<FunctionVersionDB>::extract::<BundleId>),
-                type_of_val(&By::<BundleId>::delete::<DaoQueries, BundleDB>),
-                // Update functions(sql) table.
-                type_of_val(&With::<FunctionVersionDB>::convert_to::<FunctionDBBuilder, _>),
+                type_of_val(&With::<FunctionId>::set::<FunctionDBBuilder>),
+                type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
+                type_of_val(&With::<DataLocation>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB, _>),
-                type_of_val(&By::<FunctionId>::update::<DaoQueries, FunctionDB, FunctionDB>),
+                type_of_val(&insert::<DaoQueries, FunctionDB>),
+                // Remove from bundles
+                type_of_val(&With::<FunctionDB>::extract::<BundleId>),
+                type_of_val(&By::<BundleId>::delete::<DaoQueries, BundleDB>),
                 // Register associations
-                // Extract new function id
-                type_of_val(&With::<FunctionDB>::extract::<FunctionId>),
                 // Find previous versions
-                type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TableVersionDB>),
-                type_of_val(
-                    &By::<FunctionVersionId>::select_all::<DaoQueries, DependencyVersionDB>,
-                ),
-                type_of_val(
-                    &By::<FunctionVersionId>::select_all::<DaoQueries, TriggerVersionDBWithNames>,
-                ),
+                type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
+                type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
+                type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
                 // Extract new associations
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
@@ -246,37 +224,26 @@ mod tests {
                 // And register new ones
                 // Insert into table_versions(sql) current function tables status=Active.
                 // Reuse table_id for tables that existed (had status=Frozen)
-                type_of_val(&With::<FunctionVersionDB>::convert_to::<TableVersionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<TableVersionDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::convert_to::<TableDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
                 type_of_val(&build_table_versions),
-                type_of_val(&insert_vec::<DaoQueries, TableVersionDB>),
-                // Insert into tables(sql) function tables info and update already existing tables (frozen tables).
-                type_of_val(&By::<FunctionId>::select_all::<DaoQueries, TableDBWithNames>),
-                type_of_val(&insert_and_update_tables::<DaoQueries>),
+                type_of_val(&insert_vec::<DaoQueries, TableDB>),
                 // Insert into dependency_versions(sql) current function table dependencies status=Active.
-                type_of_val(
-                    &With::<FunctionVersionDB>::convert_to::<DependencyVersionDBBuilder, _>,
-                ),
-                type_of_val(&With::<RequestContext>::update::<DependencyVersionDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
                 type_of_val(&build_dependency_versions::<DaoQueries>),
-                type_of_val(&insert_vec::<DaoQueries, DependencyVersionDB>),
-                // Insert into dependencies(sql) function dependencies info.
-                type_of_val(&By::<FunctionId>::select_all::<DaoQueries, DependencyDBWithNames>),
-                type_of_val(&insert_and_update_dependencies::<DaoQueries>),
+                type_of_val(&insert_vec::<DaoQueries, DependencyDB>),
                 // Insert into trigger_versions(sql) current function trigger status=Active.
-                type_of_val(&With::<FunctionVersionDB>::convert_to::<TriggerVersionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<TriggerVersionDBBuilder, _>),
+                type_of_val(&With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
                 type_of_val(&build_trigger_versions::<DaoQueries>),
-                type_of_val(&insert_vec::<DaoQueries, TriggerVersionDB>),
-                // Insert into triggers(sql) function trigger info.
-                type_of_val(&By::<FunctionId>::select_all::<DaoQueries, TriggerDBWithNames>),
-                type_of_val(&insert_and_update_triggers::<DaoQueries>),
+                type_of_val(&insert_vec::<DaoQueries, TriggerDB>),
                 // Response
-                type_of_val(&By::<FunctionId>::select::<DaoQueries, FunctionVersionDBWithNames>),
-                type_of_val(
-                    &With::<FunctionVersionDBWithNames>::convert_to::<FunctionVersionBuilder, _>,
-                ),
-                type_of_val(&With::<FunctionVersionBuilder>::build::<FunctionVersion, _>),
+                // Extract new function version id
+                type_of_val(&With::<FunctionDB>::extract::<FunctionVersionId>),
+                type_of_val(&By::<FunctionVersionId>::select::<DaoQueries, FunctionDBWithNames>),
+                type_of_val(&With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+                type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
             ],
         );
     }
@@ -299,8 +266,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("foo_updated")?
@@ -341,7 +307,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -366,8 +331,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -406,7 +370,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -431,8 +394,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -471,7 +433,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -496,8 +457,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -536,7 +496,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -561,8 +520,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -601,7 +559,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -626,8 +583,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -666,7 +622,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -691,8 +646,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -731,7 +685,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -772,8 +725,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -812,7 +764,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -853,8 +804,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -893,7 +843,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -934,8 +883,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -974,7 +922,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -1021,8 +968,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout_updated")?
@@ -1067,7 +1013,6 @@ mod tests {
             &collection,
             &create,
             &created_function,
-            &created_function_version,
             &update,
             &response,
         )
@@ -1093,8 +1038,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (created_function, created_function_version) =
-            seed_function(&db, &collection, &create).await;
+        let _created_function = seed_function(&db, &collection, &create).await;
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout")?
@@ -1128,13 +1072,12 @@ mod tests {
         let _response = response?;
 
         let tables: Vec<TableDB> = queries
-            .select_by::<TableDB>(&(&TableName::try_from("joaquin_table")?))?
+            .select_by::<TableDB>(&(&TableName::try_from("joaquin_table")?, &TableStatus::Frozen))?
             .build_query_as()
             .fetch_all(&db)
             .await
             .map_err(handle_sql_err)?;
         assert_eq!(tables.len(), 1);
-        assert_eq!(*tables[0].frozen(), Frozen::from(true));
 
         let update = FunctionUpdate::builder()
             .try_name("joaquin_workout")?
@@ -1204,7 +1147,7 @@ mod tests {
 
         let service = UpdateFunctionService::new(db.clone()).service().await;
         let response = service.raw_oneshot(request).await;
-        let response = response?;
+        let _response = response?;
         // But with reuse_frozen, we get the expected response
 
         let tables: Vec<TableDB> = queries
@@ -1213,19 +1156,12 @@ mod tests {
             .fetch_all(&db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(tables.len(), 1);
-        assert_eq!(*tables[0].frozen(), Frozen::from(false));
-
-        assert_update(
-            &db,
-            &UserId::admin(),
-            &collection,
-            &create,
-            &created_function,
-            &created_function_version,
-            &update,
-            &response,
-        )
-        .await
+        assert_eq!(tables.len(), 3);
+        assert_eq!(*tables[0].status(), TableStatus::Active);
+        assert_eq!(*tables[1].status(), TableStatus::Frozen);
+        assert_eq!(*tables[2].status(), TableStatus::Active);
+        assert_eq!(tables[0].table_id(), tables[1].table_id());
+        assert_eq!(tables[1].table_id(), tables[2].table_id());
+        Ok(())
     }
 }

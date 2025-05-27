@@ -462,8 +462,8 @@ mod tests {
     use super::*;
     use td_error::TdError;
     use td_objects::types::basic::{
-        BundleId, CollectionId, DataLocation, FunctionVersionId, Partition, TableDataVersionId,
-        TableId, TableVersionId, TransactionId,
+        BundleId, CollectionId, DataLocation, Partition, TableDataVersionId, TableId,
+        TableVersionId, TransactionId,
     };
 
     #[test]

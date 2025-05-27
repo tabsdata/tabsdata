@@ -77,7 +77,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let (_, function_version) = seed_function(&db, &collection, &create).await;
+        let function_version = seed_function(&db, &collection, &create).await;
 
         let execution = seed_execution(&db, &collection, &function_version).await;
 

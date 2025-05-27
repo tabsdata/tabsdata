@@ -10,7 +10,7 @@ use td_objects::crudl::UpdateRequest;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectIdOrNameService};
+use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
 use td_objects::types::basic::{ExecutionId, ExecutionIdName};
 use td_objects::types::execution::{ExecutionDB, FunctionRunDB, UpdateFunctionRunDB};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
@@ -95,7 +95,7 @@ mod tests {
         TableDataVersionDBWithStatus, TransactionDBWithStatus, TransactionStatus,
     };
     use td_objects::types::function::FunctionRegister;
-    use td_objects::types::table::TableVersionDB;
+    use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -152,7 +152,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (_, function_version_1) = seed_function(&db, &collection, &create).await;
+        let function_version_1 = seed_function(&db, &collection, &create).await;
 
         // Create function_10
         let create = FunctionRegister::builder()
@@ -171,7 +171,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (_, function_version_10) = seed_function(&db, &collection, &create).await;
+        let function_version_10 = seed_function(&db, &collection, &create).await;
 
         // Create function_100
         let create = FunctionRegister::builder()
@@ -190,7 +190,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let (_, function_version_100) = seed_function(&db, &collection, &create).await;
+        let function_version_100 = seed_function(&db, &collection, &create).await;
 
         // Create execution
         let execution = seed_execution(&db, &collection, &function_version_1).await;
@@ -216,8 +216,8 @@ mod tests {
             function_runs.push(function_run);
         }
 
-        let tables: Vec<TableVersionDB> = queries
-            .select_by::<TableVersionDB>(&())?
+        let tables: Vec<TableDB> = queries
+            .select_by::<TableDB>(&())?
             .build_query_as()
             .fetch_all(&db)
             .await

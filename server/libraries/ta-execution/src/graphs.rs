@@ -14,13 +14,13 @@ use std::hash::Hash;
 use std::ops::Deref;
 use td_error::{td_error, TdError};
 use td_objects::types::basic::{FunctionName, TransactionByStr, TransactionKey};
-use td_objects::types::dependency::DependencyVersionDBWithNames;
+use td_objects::types::dependency::DependencyDBWithNames;
 use td_objects::types::execution::{
     FunctionVersionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput,
 };
-use td_objects::types::table::TableVersionDBWithNames;
+use td_objects::types::table::TableDBWithNames;
 use td_objects::types::table_ref::Versions;
-use td_objects::types::trigger::TriggerVersionDBWithNames;
+use td_objects::types::trigger::TriggerDBWithNames;
 
 #[td_error]
 enum GraphError {
@@ -33,9 +33,9 @@ enum GraphError {
 
 /// Builder for creating am `ExecutionGraph`.
 pub struct GraphBuilder<'a> {
-    trigger_graph: &'a Vec<TriggerVersionDBWithNames>,
-    output_tables: &'a Vec<TableVersionDBWithNames>,
-    input_tables: &'a Vec<DependencyVersionDBWithNames>,
+    trigger_graph: &'a Vec<TriggerDBWithNames>,
+    output_tables: &'a Vec<TableDBWithNames>,
+    input_tables: &'a Vec<DependencyDBWithNames>,
 }
 
 /// Adds a node to the graph if it does not exist.
@@ -55,9 +55,9 @@ where
 impl<'a> GraphBuilder<'a> {
     /// Creates a new `GraphBuilder` from a data and trigger graph.
     pub fn new(
-        trigger_graph: &'a Vec<TriggerVersionDBWithNames>,
-        output_tables: &'a Vec<TableVersionDBWithNames>,
-        input_tables: &'a Vec<DependencyVersionDBWithNames>,
+        trigger_graph: &'a Vec<TriggerDBWithNames>,
+        output_tables: &'a Vec<TableDBWithNames>,
+        input_tables: &'a Vec<DependencyDBWithNames>,
     ) -> Self {
         Self {
             trigger_graph,

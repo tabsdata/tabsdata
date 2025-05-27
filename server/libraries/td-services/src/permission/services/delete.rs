@@ -17,7 +17,7 @@ use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{
     ExtractNameService, ExtractService, TryIntoService, UnwrapService, With,
 };
-use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectIdOrNameService};
+use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
 use td_objects::types::basic::{
     CollectionId, EntityId, PermissionId, PermissionIdName, RoleIdName,
 };

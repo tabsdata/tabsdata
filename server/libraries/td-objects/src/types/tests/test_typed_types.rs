@@ -5,7 +5,6 @@
 #[cfg(test)]
 mod tests {
     use crate::types::SqlEntity;
-    use sqlx::Type;
     use td_common::id::{id, Id};
     use td_common::time::UniqueUtc;
     use td_error::td_error;
@@ -433,11 +432,5 @@ mod tests {
 
         fn assert_sql_entity<T: SqlEntity>() {}
         assert_sql_entity::<TypedType>();
-
-        assert_eq!(
-            TypedType::type_info(),
-            <String as sqlx::Type<sqlx::Sqlite>>::type_info()
-        );
-        assert!(TypedType::compatible(&TypedType::type_info()));
     }
 }

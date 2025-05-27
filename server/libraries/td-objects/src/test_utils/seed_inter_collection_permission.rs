@@ -45,10 +45,13 @@ pub async fn seed_inter_collection_permission(
     permission_db
 }
 
-pub async fn get_inter_collection_permissions<E: SqlEntity>(
+pub async fn get_inter_collection_permissions<E>(
     db: &DbPool,
     by: &E,
-) -> Result<Vec<InterCollectionPermissionDB>, TdError> {
+) -> Result<Vec<InterCollectionPermissionDB>, TdError>
+where
+    E: SqlEntity,
+{
     let queries = DaoQueries::default();
     queries
         .select_by::<InterCollectionPermissionDB>(&by)?

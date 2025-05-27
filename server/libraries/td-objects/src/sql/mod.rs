@@ -27,8 +27,8 @@ pub enum QueryError {
     #[error("List query error: {0:?}")]
     ListQueryError(#[from] ListError) = 0,
 
-    #[error("Type not found: {0:?}")]
-    TypeNotFound(String) = 5000,
+    #[error("Type [{0:?}] not found in [{1:?}] ")]
+    TypeNotFound(String, String) = 5000,
 }
 
 /// Struct holding the Queries.
@@ -115,11 +115,12 @@ macro_rules! gen_where_clause {
 
     // Binding
     (@bind $query_builder:expr, $D:ty, $E:ident) => {{
-        let column = <$D>::sql_field_for_type::<$E>()
-            .ok_or(QueryError::TypeNotFound(std::any::type_name::<$E>().to_string()))?;
-        $query_builder
-            .push(format!("{} = ", column))
-            .push_bind($E.value());
+        let column = <$D>::sql_field_for_type($E.type_name())
+            .ok_or(QueryError::TypeNotFound(
+                std::any::type_name::<$E>().to_string(),
+                <$D>::sql_table().to_string(),
+            ))?;
+        $E.push_bind($query_builder.push(format!("{} = ", column)));
     }};
 
     // Base case: nothing to do here
@@ -323,7 +324,7 @@ macro_rules! impl_list_by {
                         "{} <= ",
                         <T::Dao as VersionedAt>::order_by()
                     ));
-                    query_builder.push_bind(natural_order_by.value());
+                    natural_order_by.push_bind(&mut query_builder);
                 }
 
                 if let Some(status) = status {
@@ -338,7 +339,7 @@ macro_rules! impl_list_by {
                     let mut separated = query_builder.separated(" OR ");
                     for status in status {
                         separated.push(format!("{} = ", T::Dao::condition_by()));
-                        separated.push_bind_unseparated(status.value());
+                        status.push_bind_unseparated(&mut separated);
                     }
                     query_builder.push(")");
                 }

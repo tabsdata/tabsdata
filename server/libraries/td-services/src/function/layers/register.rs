@@ -6,24 +6,16 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
-use td_objects::sql::{DeleteBy, DerefQueries, FindBy, Insert, UpdateBy};
+use td_objects::sql::{DerefQueries, FindBy};
 use td_objects::types::basic::{
     CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos, DependencyStatus,
     FunctionId, ReuseFrozen, TableDependency, TableDependencyDto, TableFunctionParamPos, TableId,
     TableName, TableNameDto, TableStatus, TableTrigger, TableTriggerDto, TriggerId, TriggerStatus,
 };
 use td_objects::types::collection::CollectionDB;
-use td_objects::types::dependency::{
-    DependencyDB, DependencyDBBuilder, DependencyDBWithNames, DependencyVersionDB,
-    DependencyVersionDBBuilder,
-};
-use td_objects::types::table::{
-    TableDB, TableDBBuilder, TableDBWithNames, TableVersionDB, TableVersionDBBuilder,
-};
-use td_objects::types::trigger::{
-    TriggerDB, TriggerDBBuilder, TriggerDBWithNames, TriggerVersionDB, TriggerVersionDBBuilder,
-    TriggerVersionDBWithNames,
-};
+use td_objects::types::dependency::{DependencyDB, DependencyDBBuilder};
+use td_objects::types::table::{TableDB, TableDBBuilder, TableDBWithNames};
+use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 #[td_error]
@@ -57,11 +49,11 @@ pub async fn build_table_versions(
     Input(collection_id): Input<CollectionId>,
     Input(collection_name): Input<CollectionName>,
     Input(function_id): Input<FunctionId>,
-    Input(existing_versions): Input<Vec<TableVersionDB>>,
+    Input(existing_versions): Input<Vec<TableDB>>,
     Input(new_tables): Input<Option<Vec<TableNameDto>>>,
-    Input(table_version_builder): Input<TableVersionDBBuilder>,
+    Input(table_version_builder): Input<TableDBBuilder>,
     Input(reuse_frozen): Input<ReuseFrozen>,
-) -> Result<Vec<TableVersionDB>, TdError> {
+) -> Result<Vec<TableDB>, TdError> {
     let mut new_table_versions = HashMap::new();
 
     // Existing versions
@@ -166,53 +158,15 @@ pub async fn build_table_versions(
     Ok(new_table_versions)
 }
 
-pub async fn insert_and_update_tables<Q: DerefQueries>(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
-    Input(function_id): Input<FunctionId>,
-    Input(table_versions): Input<Vec<TableVersionDB>>,
-    Input(existing_tables): Input<Vec<TableDBWithNames>>,
-) -> Result<(), TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
-
-    let existing_tables: HashMap<_, _> = existing_tables.iter().map(|t| (t.id(), t)).collect();
-    for table_version in &*table_versions {
-        let frozen = !matches!(table_version.status(), TableStatus::Active);
-        let new_table_db = TableDBBuilder::try_from(table_version)?
-            .function_id(*function_id)
-            .frozen(frozen)
-            .build()?;
-
-        if let Some(existing_table) = existing_tables.get(table_version.table_id()) {
-            queries
-                .update_by::<_, TableDB>(&new_table_db, &(existing_table.id()))?
-                .build()
-                .execute(&mut *conn)
-                .await
-                .map_err(handle_sql_err)?;
-        } else {
-            queries
-                .insert(&new_table_db)?
-                .build()
-                .execute(&mut *conn)
-                .await
-                .map_err(handle_sql_err)?;
-        }
-    }
-
-    Ok(())
-}
-
 pub async fn build_dependency_versions<Q: DerefQueries>(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<Q>,
-    Input(existing_versions): Input<Vec<DependencyVersionDB>>,
+    Input(existing_versions): Input<Vec<DependencyDB>>,
     Input(new_dependencies): Input<Option<Vec<TableDependencyDto>>>,
     Input(collection_in_context): Input<CollectionName>,
     Input(function_id): Input<FunctionId>,
-    Input(dependency_version_builder): Input<DependencyVersionDBBuilder>,
-) -> Result<Vec<DependencyVersionDB>, TdError> {
+    Input(dependency_version_builder): Input<DependencyDBBuilder>,
+) -> Result<Vec<DependencyDB>, TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
@@ -325,8 +279,8 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
             .clone()
             .dependency_id(dependency_id)
             .table_collection_id(table_db.collection_id())
-            .table_id(table_db.id())
-            .table_version_id(table_db.table_version_id())
+            .table_id(table_db.table_id())
+            .table_version_id(table_db.id())
             .table_function_version_id(table_db.function_version_id())
             .table_name(table_db.name())
             .table_versions(dependency_table.versions())
@@ -376,60 +330,15 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
     Ok(new_dependency_versions)
 }
 
-pub async fn insert_and_update_dependencies<Q: DerefQueries>(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
-    Input(dependency_versions): Input<Vec<DependencyVersionDB>>,
-    Input(existing_dependencies): Input<Vec<DependencyDBWithNames>>,
-) -> Result<(), TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
-
-    let existing_dependencies: HashMap<_, _> =
-        existing_dependencies.iter().map(|t| (t.id(), t)).collect();
-    for dependency_version in &*dependency_versions {
-        let new_dependency_db = DependencyDBBuilder::try_from(dependency_version)?.build()?;
-
-        if let Some(existing_dependency) =
-            existing_dependencies.get(dependency_version.dependency_id())
-        {
-            if matches!(dependency_version.status(), DependencyStatus::Deleted) {
-                queries
-                    .delete_by::<DependencyDB>(&(existing_dependency.id()))?
-                    .build()
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
-            } else {
-                queries
-                    .update_by::<_, DependencyDB>(&new_dependency_db, &(existing_dependency.id()))?
-                    .build()
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
-            }
-        } else {
-            queries
-                .insert(&new_dependency_db)?
-                .build()
-                .execute(&mut *conn)
-                .await
-                .map_err(handle_sql_err)?;
-        }
-    }
-
-    Ok(())
-}
-
 pub async fn build_trigger_versions<Q: DerefQueries>(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<Q>,
-    Input(existing_versions): Input<Vec<TriggerVersionDBWithNames>>,
+    Input(existing_versions): Input<Vec<TriggerDBWithNames>>,
     Input(new_tables): Input<Option<Vec<TableNameDto>>>,
     Input(new_triggers): Input<Option<Vec<TableTriggerDto>>>,
     Input(collection_in_context): Input<CollectionName>,
-    Input(trigger_version_builder): Input<TriggerVersionDBBuilder>,
-) -> Result<Vec<TriggerVersionDB>, TdError> {
+    Input(trigger_version_builder): Input<TriggerDBBuilder>,
+) -> Result<Vec<TriggerDB>, TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
@@ -517,8 +426,8 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
             .trigger_by_collection_id(table_db.collection_id())
             .trigger_by_function_id(table_db.function_id())
             .trigger_by_function_version_id(table_db.function_version_id())
-            .trigger_by_table_id(table_db.id())
-            .trigger_by_table_version_id(table_db.table_version_id())
+            .trigger_by_table_id(table_db.table_id())
+            .trigger_by_table_version_id(table_db.id())
             .status(TriggerStatus::Active)
             .build()?;
 
@@ -552,46 +461,4 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
 
     let new_trigger_versions = new_trigger_versions.into_values().collect();
     Ok(new_trigger_versions)
-}
-
-pub async fn insert_and_update_triggers<Q: DerefQueries>(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
-    Input(trigger_versions): Input<Vec<TriggerVersionDB>>,
-    Input(existing_triggers): Input<Vec<TriggerDBWithNames>>,
-) -> Result<(), TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
-
-    let existing_triggers: HashMap<_, _> = existing_triggers.iter().map(|t| (t.id(), t)).collect();
-    for trigger_version in &*trigger_versions {
-        let new_trigger_db = TriggerDBBuilder::try_from(trigger_version)?.build()?;
-
-        if let Some(existing_trigger) = existing_triggers.get(trigger_version.trigger_id()) {
-            if matches!(trigger_version.status(), TriggerStatus::Deleted) {
-                queries
-                    .delete_by::<TriggerDB>(&(existing_trigger.id()))?
-                    .build()
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
-            } else {
-                queries
-                    .update_by::<_, TriggerDB>(&new_trigger_db, &(existing_trigger.id()))?
-                    .build()
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
-            }
-        } else {
-            queries
-                .insert(&new_trigger_db)?
-                .build()
-                .execute(&mut *conn)
-                .await
-                .map_err(handle_sql_err)?;
-        }
-    }
-
-    Ok(())
 }

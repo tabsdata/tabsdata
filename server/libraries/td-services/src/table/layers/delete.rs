@@ -4,14 +4,14 @@
 
 use std::ops::Deref;
 use td_error::{td_error, TdError};
-use td_objects::crudl::handle_sql_err;
-use td_objects::sql::{DerefQueries, FindBy, UpdateBy};
+use td_objects::crudl::{handle_sql_err, RequestContext};
+use td_objects::sql::{DerefQueries, FindBy};
 use td_objects::types::basic::{
     CollectionName, FunctionStatus, FunctionVersionId, TableName, TableStatus, TableVersionId,
 };
 use td_objects::types::dependency::DependencyDB;
-use td_objects::types::function::{FunctionDB, FunctionDBBuilder, FunctionVersionDB};
-use td_objects::types::table::TableVersionDB;
+use td_objects::types::function::{FunctionDB, FunctionDBBuilder};
+use td_objects::types::table::{TableDB, TableDBBuilder};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[td_error]
@@ -20,22 +20,12 @@ enum DeleteTableError {
     TableNotFrozen(TableName, CollectionName, String) = 0,
 }
 
-pub async fn build_frozen_function_version_table(
-    Input(function_version): Input<FunctionVersionDB>,
-) -> Result<FunctionVersionDB, TdError> {
-    let frozen = function_version
-        .to_builder()
-        .id(FunctionVersionId::default())
-        .status(FunctionStatus::Frozen)
-        .build()?;
-    Ok(frozen)
-}
-
 pub async fn build_frozen_function_versions_dependencies<Q: DerefQueries>(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<Q>,
+    Input(request_context): Input<RequestContext>,
     Input(dependencies): Input<Vec<DependencyDB>>,
-) -> Result<Vec<FunctionVersionDB>, TdError> {
+) -> Result<Vec<FunctionDB>, TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
@@ -49,8 +39,8 @@ pub async fn build_frozen_function_versions_dependencies<Q: DerefQueries>(
             .iter()
             .map(|d| (d.function_version_id(), &FunctionStatus::Active))
             .collect();
-        let function_versions_found: Vec<FunctionVersionDB> = queries
-            .find_by::<FunctionVersionDB>(&function_versions_lookup)?
+        let function_versions_found: Vec<FunctionDB> = queries
+            .find_by::<FunctionDB>(&function_versions_lookup)?
             .build_query_as()
             .fetch_all(&mut *conn)
             .await
@@ -61,7 +51,7 @@ pub async fn build_frozen_function_versions_dependencies<Q: DerefQueries>(
     let frozen_versions = dependant_versions_found
         .iter()
         .map(|v| {
-            v.to_builder()
+            FunctionDBBuilder::try_from((request_context.deref(), v.to_builder()))?
                 .id(FunctionVersionId::default())
                 .status(FunctionStatus::Frozen)
                 .build()
@@ -70,38 +60,11 @@ pub async fn build_frozen_function_versions_dependencies<Q: DerefQueries>(
     Ok(frozen_versions)
 }
 
-pub async fn update_frozen_functions<Q: DerefQueries>(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
-    Input(output_function_version): Input<FunctionVersionDB>,
-    Input(dependant_function_versions): Input<Vec<FunctionVersionDB>>,
-) -> Result<(), TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
-
-    let to_freeze = dependant_function_versions
-        .deref()
-        .iter()
-        .chain([output_function_version.deref()]);
-    for function_version in to_freeze {
-        let function = FunctionDBBuilder::try_from(function_version)?
-            .frozen(true)
-            .build()?;
-        queries
-            .update_by::<_, FunctionDB>(&function, &(function.id()))?
-            .build()
-            .execute(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
-    }
-    Ok(())
-}
-
 pub async fn build_deleted_table_version(
     Input(collection_name): Input<CollectionName>,
-    Input(function_version): Input<FunctionVersionDB>,
-    Input(existing_table_version): Input<TableVersionDB>,
-) -> Result<TableVersionDB, TdError> {
+    Input(existing_table_version): Input<TableDB>,
+    Input(builder): Input<TableDBBuilder>,
+) -> Result<TableDB, TdError> {
     if !matches!(existing_table_version.status(), TableStatus::Frozen) {
         Err(DeleteTableError::TableNotFrozen(
             existing_table_version.name().clone(),
@@ -110,12 +73,12 @@ pub async fn build_deleted_table_version(
         ))?
     }
 
-    let deleted_version = existing_table_version
-        .to_builder()
+    let deleted_version = builder
+        .deref()
+        .clone()
         .id(TableVersionId::default())
         // We use the function version id of the function that was generated when deleting the table
         // for all deleted tables.
-        .function_version_id(function_version.id())
         .status(TableStatus::Deleted)
         .build()?;
     Ok(deleted_version)

@@ -3,8 +3,7 @@
 //
 
 use crate::table::layers::delete::{
-    build_deleted_table_version, build_frozen_function_version_table,
-    build_frozen_function_versions_dependencies, update_frozen_functions,
+    build_deleted_table_version, build_frozen_function_versions_dependencies,
 };
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
@@ -14,19 +13,20 @@ use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::TableParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
-use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
+use td_objects::tower_service::from::{
+    combine, ExtractNameService, ExtractService, TryIntoService, UpdateService, With,
+};
 use td_objects::tower_service::sql::{
-    insert, insert_vec, By, SqlDeleteService, SqlSelectAllService, SqlSelectIdOrNameService,
-    SqlSelectService,
+    insert, insert_vec, By, SqlSelectAllService, SqlSelectService,
 };
 use td_objects::types::basic::{
-    CollectionId, CollectionIdName, CollectionName, FunctionVersionId, TableId, TableIdName,
-    TableVersionId,
+    AtTime, CollectionId, CollectionIdName, CollectionName, DependencyStatus, TableId, TableIdName,
+    TableStatus, TableVersionId,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::DependencyDB;
-use td_objects::types::function::FunctionVersionDB;
-use td_objects::types::table::{TableDB, TableDBWithNames, TableVersionDB};
+use td_objects::types::function::FunctionDB;
+use td_objects::types::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
@@ -70,34 +70,26 @@ impl TableDeleteService {
 
                 // Get table. Extract table id, table version id, function id and function version id.
                 from_fn(combine::<CollectionIdName, TableIdName>),
-                from_fn(By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableDBWithNames>),
+                from_fn(With::<RequestContext>::extract::<AtTime>),
+                from_fn(TableStatus::frozen),
+                from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDBWithNames>),
                 from_fn(With::<TableDBWithNames>::extract::<TableId>),
                 from_fn(With::<TableDBWithNames>::extract::<TableVersionId>),
-                from_fn(With::<TableDBWithNames>::extract::<FunctionVersionId>),
-
-                // Insert into function_versions(sql) entries with status=Frozen, for the function
-                // generating the table.
-                from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionVersionDB>),
-                from_fn(build_frozen_function_version_table),
-                from_fn(insert::<DaoQueries, FunctionVersionDB>),
 
                 // Insert into function_versions(sql) entries with status=Frozen,
-                // for all functions with status=Active that have the table as dependency.
-                from_fn(By::<TableId>::select_all::<DaoQueries, DependencyDB>),
+                // for all functions with status=Active that have the table as dependency
+                // at the current time.
+                from_fn(DependencyStatus::active),
+                from_fn(By::<TableId>::select_all_versions::<DaoQueries, DependencyDB>),
                 from_fn(build_frozen_function_versions_dependencies::<DaoQueries>),
-                from_fn(insert_vec::<DaoQueries, FunctionVersionDB>),
-
-                // Update functions(sql) with status=Frozen, for the previous function versions.
-                // Both table generating function and dependant functions.
-                from_fn(update_frozen_functions::<DaoQueries>),
+                from_fn(insert_vec::<DaoQueries, FunctionDB>),
 
                 // Insert into table_versions(sql) status=Deleted.
-                from_fn(By::<TableVersionId>::select::<DaoQueries, TableVersionDB>),
+                from_fn(By::<TableVersionId>::select::<DaoQueries, TableDB>),
+                from_fn(With::<TableDB>::convert_to::<TableDBBuilder, _>),
+                from_fn(With::<RequestContext>::update::<TableDBBuilder, _>),
                 from_fn(build_deleted_table_version),
-                from_fn(insert::<DaoQueries, TableVersionDB>),
-
-                // Delete tables(sql) table.
-                from_fn(By::<TableId>::delete::<DaoQueries, TableDB>),
+                from_fn(insert::<DaoQueries, TableDB>),
             ))
         }
     }
@@ -152,31 +144,29 @@ mod tests {
             type_of_val(&Authz::<CollAdmin, CollDev>::check),
             // Get table. Extract table id, table version id, function id and function version id.
             type_of_val(&combine::<CollectionIdName, TableIdName>),
+            type_of_val(&With::<RequestContext>::extract::<AtTime>),
+            type_of_val(&TableStatus::frozen),
             type_of_val(
-                &By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableDBWithNames>,
+                &By::<(CollectionIdName, TableIdName)>::select_version::<
+                    DaoQueries,
+                    TableDBWithNames,
+                >,
             ),
             type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
             type_of_val(&With::<TableDBWithNames>::extract::<TableVersionId>),
-            type_of_val(&With::<TableDBWithNames>::extract::<FunctionVersionId>),
-            // Insert into function_versions(sql) entries with status=Frozen, for the function
-            // generating the table.
-            type_of_val(&By::<FunctionVersionId>::select::<DaoQueries, FunctionVersionDB>),
-            type_of_val(&build_frozen_function_version_table),
-            type_of_val(&insert::<DaoQueries, FunctionVersionDB>),
             // Insert into function_versions(sql) entries with status=Frozen,
-            // for all functions with status=Active that have the table as dependency.
-            type_of_val(&By::<TableId>::select_all::<DaoQueries, DependencyDB>),
+            // for all functions with status=Active that have the table as dependency
+            // at the current time.
+            type_of_val(&DependencyStatus::active),
+            type_of_val(&By::<TableId>::select_all_versions::<DaoQueries, DependencyDB>),
             type_of_val(&build_frozen_function_versions_dependencies::<DaoQueries>),
-            type_of_val(&insert_vec::<DaoQueries, FunctionVersionDB>),
-            // Update functions(sql) with status=Frozen, for the previous function versions.
-            // Both table generating function and dependant functions.
-            type_of_val(&update_frozen_functions::<DaoQueries>),
+            type_of_val(&insert_vec::<DaoQueries, FunctionDB>),
             // Insert into table_versions(sql) status=Deleted.
-            type_of_val(&By::<TableVersionId>::select::<DaoQueries, TableVersionDB>),
+            type_of_val(&By::<TableVersionId>::select::<DaoQueries, TableDB>),
+            type_of_val(&With::<TableDB>::convert_to::<TableDBBuilder, _>),
+            type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
             type_of_val(&build_deleted_table_version),
-            type_of_val(&insert::<DaoQueries, TableVersionDB>),
-            // Delete tables(sql) table.
-            type_of_val(&By::<TableId>::delete::<DaoQueries, TableDB>),
+            type_of_val(&insert::<DaoQueries, TableDB>),
         ]);
     }
 

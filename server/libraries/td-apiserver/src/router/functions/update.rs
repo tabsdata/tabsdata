@@ -15,7 +15,7 @@ use serde::Serialize;
 use td_apiforge::{apiserver_path, update_status};
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{FunctionParam, FUNCTION_UPDATE};
-use td_objects::types::function::{FunctionUpdate, FunctionVersion};
+use td_objects::types::function::{Function, FunctionUpdate};
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
@@ -24,7 +24,7 @@ router! {
     routes => { update }
 }
 
-update_status!(FunctionVersion);
+update_status!(Function);
 
 #[apiserver_path(method = post, path = FUNCTION_UPDATE, tag = FUNCTIONS_TAG)]
 #[doc = "Update a function"]

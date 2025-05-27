@@ -6,13 +6,13 @@ use crate::sql::{DaoQueries, Insert};
 use crate::types::basic::Trigger;
 use crate::types::collection::CollectionDB;
 use crate::types::execution::{ExecutionDB, FunctionRunDB, FunctionRunStatus, TransactionDB};
-use crate::types::function::FunctionVersionDB;
+use crate::types::function::FunctionDB;
 use td_database::sql::DbPool;
 
 pub async fn seed_function_run(
     db: &DbPool,
     collection: &CollectionDB,
-    function_version: &FunctionVersionDB,
+    function_version: &FunctionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     status: &FunctionRunStatus,
@@ -84,7 +84,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let (_, function_version) = seed_function(&db, &collection, &create).await;
+        let function_version = seed_function(&db, &collection, &create).await;
 
         let execution = seed_execution(&db, &collection, &function_version).await;
 

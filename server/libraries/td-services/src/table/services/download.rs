@@ -12,7 +12,7 @@ use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
 };
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService};
+use td_objects::tower_service::sql::{By, SqlSelectService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::table::TableAtName;

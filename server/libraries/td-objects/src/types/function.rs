@@ -5,7 +5,7 @@
 use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, BundleHash, BundleId, CollectionId, CollectionName, DataLocation, Decorator,
-    Description, Frozen, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
+    Description, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
     FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableDependency, TableDependencyDto,
     TableName, TableNameDto, TableTrigger, TableTriggerDto, UserId, UserName,
 };
@@ -13,62 +13,6 @@ use axum::body::BodyDataStream;
 use axum::extract::Request;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
-#[td_type::Dao]
-#[dao(sql_table = "functions")]
-#[td_type(builder(try_from = FunctionVersionDB, skip_all))]
-pub struct FunctionDB {
-    #[td_type(extractor, builder(include, field = "function_id"))]
-    id: FunctionId,
-    #[td_type(builder(include))]
-    collection_id: CollectionId,
-    #[td_type(builder(include))]
-    name: FunctionName,
-    #[td_type(builder(include))]
-    decorator: Decorator,
-    #[td_type(extractor, builder(include, field = "id"))]
-    function_version_id: FunctionVersionId,
-    #[builder(default)]
-    frozen: Frozen,
-    #[td_type(builder(include, field = "defined_on"))]
-    created_on: AtTime,
-    #[td_type(builder(include, field = "defined_by_id"))]
-    created_by_id: UserId,
-}
-
-#[td_type::Dao]
-#[dao(sql_table = "functions__with_names")]
-pub struct FunctionDBWithNames {
-    #[td_type(extractor)]
-    id: FunctionId,
-    collection_id: CollectionId,
-    name: FunctionName,
-    decorator: Decorator,
-    #[td_type(extractor)]
-    function_version_id: FunctionVersionId,
-    frozen: Frozen,
-    created_on: AtTime,
-    created_by_id: UserId,
-
-    collection: CollectionName,
-    created_by: UserName,
-}
-
-#[td_type::Dto]
-#[td_type(builder(try_from = FunctionDBWithNames))]
-pub struct Function {
-    id: FunctionId,
-    collection_id: CollectionId,
-    name: FunctionName,
-    decorator: Decorator,
-    function_version_id: FunctionVersionId,
-    frozen: Frozen,
-    created_on: AtTime,
-    created_by_id: UserId,
-
-    collection: CollectionName,
-    created_by: UserName,
-}
 
 #[td_type::Dto]
 pub struct FunctionRegister {
@@ -138,15 +82,16 @@ pub struct Bundle {
 
 #[td_type::Dao]
 #[dao(
-    sql_table = "function_versions",
+    sql_table = "functions",
     partition_by = "function_id",
     versioned_at(order_by = "defined_on", condition_by = "status")
 )]
 #[td_type(
+    builder(try_from = FunctionDB),
     builder(try_from = FunctionRegister, skip_all),
     updater(try_from = RequestContext, skip_all)
 )]
-pub struct FunctionVersionDB {
+pub struct FunctionDB {
     #[builder(default)]
     #[td_type(extractor)]
     id: FunctionVersionId,
@@ -161,7 +106,7 @@ pub struct FunctionVersionDB {
     #[td_type(builder(include))]
     runtime_values: FunctionRuntimeValues,
     #[builder(default)]
-    #[td_type(setter)]
+    #[td_type(setter, extractor)]
     function_id: FunctionId,
     #[td_type(setter)]
     data_location: DataLocation,
@@ -181,11 +126,11 @@ pub struct FunctionVersionDB {
 
 #[td_type::Dao]
 #[dao(
-    sql_table = "function_versions__with_names",
+    sql_table = "functions__with_names",
     partition_by = "function_id",
     versioned_at(order_by = "defined_on", condition_by = "status")
 )]
-pub struct FunctionVersionDBWithNames {
+pub struct FunctionDBWithNames {
     #[td_type(extractor)]
     id: FunctionVersionId,
     collection_id: CollectionId,
@@ -207,8 +152,8 @@ pub struct FunctionVersionDBWithNames {
 }
 
 #[td_type::Dto]
-#[td_type(builder(try_from = FunctionVersionDBWithNames))]
-pub struct FunctionVersion {
+#[td_type(builder(try_from = FunctionDBWithNames))]
+pub struct Function {
     id: FunctionVersionId,
     collection_id: CollectionId,
     name: FunctionName,
@@ -228,10 +173,10 @@ pub struct FunctionVersion {
 }
 
 #[td_type::Dto]
-pub struct FunctionVersionWithTables {
+pub struct FunctionWithTables {
     #[serde(flatten)]
     #[td_type(setter)]
-    function_version: FunctionVersion,
+    function_version: Function,
 
     #[td_type(setter)]
     dependencies: Vec<TableDependency>,
@@ -242,10 +187,10 @@ pub struct FunctionVersionWithTables {
 }
 
 #[td_type::Dto]
-pub struct FunctionVersionWithAllVersions {
+pub struct FunctionWithAllVersions {
     #[serde(flatten)]
     #[td_type(setter)]
-    current: FunctionVersionWithTables,
+    current: FunctionWithTables,
     #[td_type(setter)]
-    all: Vec<FunctionVersion>,
+    all: Vec<Function>,
 }

@@ -13,10 +13,9 @@ use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
 };
 use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService};
-use td_objects::types::basic::{CollectionId, CollectionIdName, FunctionVersionId, TableIdName};
+use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::types::basic::{CollectionId, CollectionIdName, TableIdName};
 use td_objects::types::collection::CollectionDB;
-use td_objects::types::execution::TableDataVersionDB;
 use td_objects::types::table::{TableAtName, TableSchema};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
@@ -61,11 +60,11 @@ impl TableSchemaService {
                 // TODO At is not yet used (using current time for now)
                 from_fn(With::<TableAtName>::extract::<TableIdName>),
                 from_fn(combine::<CollectionIdName, TableIdName>),
-                from_fn(By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableDataVersionDB>),
-                from_fn(With::<TableDataVersionDB>::extract::<FunctionVersionId>),
+                // from_fn(By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableDataVersionDB>),
+                // from_fn(With::<TableDataVersionDB>::extract::<FunctionId>),
 
                 // find function version
-                // from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionVersionDB>),
+                // from_fn(By::<FunctionId>::select::<DaoQueries, FunctionDB>),
 
                 // get schema
                 // TODO storage is missing, we need it in the service

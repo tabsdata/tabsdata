@@ -13,7 +13,7 @@ use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
 use td_objects::tower_service::from::{
     builder, BuildService, ExtractNameService, ExtractService, UpdateService, With,
 };
-use td_objects::tower_service::sql::{By, SqlSelectIdOrNameService, SqlUpdateService};
+use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::{CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;

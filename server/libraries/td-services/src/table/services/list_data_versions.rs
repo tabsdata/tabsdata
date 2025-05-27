@@ -12,14 +12,13 @@ use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
 };
 use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::SqlSelectIdOrNameService;
-use td_objects::tower_service::sql::{By, SqlListService};
+use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, TableIdName, TableVersionId,
+    AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TableStatus,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::execution::TransactionStatus;
-use td_objects::types::table::{TableAtName, TableDataVersion, TableVersionDB};
+use td_objects::types::table::{TableAtName, TableDB, TableDataVersion};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
@@ -58,24 +57,21 @@ impl TableListDataVersionsService {
                 from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
 
-                // find table ID
-                from_fn(With::<TableAtName>::extract::<TableIdName>),
-                from_fn(combine::<CollectionIdName, TableIdName>),
-                from_fn(By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableVersionDB>),
-                from_fn(With::<TableVersionDB>::extract::<TableVersionId>),
-
                 // extract attime
                 from_fn(With::<TableAtName>::extract::<AtTime>),
 
+                // find table ID
+                from_fn(With::<TableAtName>::extract::<TableIdName>),
+                from_fn(combine::<CollectionIdName, TableIdName>),
+                from_fn(TableStatus::active_or_frozen),
+                from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDB>),
+                from_fn(With::<TableDB>::extract::<TableId>),
+
                 // list
-                from_fn(Self::transaction_status),
-                from_fn(By::<TableVersionId>::list_at::<TableAtName, DaoQueries, TableDataVersion>),
+                from_fn(TransactionStatus::published),
+                from_fn(By::<TableId>::list_at::<TableAtName, DaoQueries, TableDataVersion>),
             ))
         }
-    }
-
-    async fn transaction_status() -> Result<Vec<TransactionStatus>, TdError> {
-        Ok(vec![TransactionStatus::Published])
     }
 
     pub async fn service(
@@ -127,20 +123,19 @@ mod tests {
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
+            // extract attime
+            type_of_val(&With::<TableAtName>::extract::<AtTime>),
             // find table ID
             type_of_val(&With::<TableAtName>::extract::<TableIdName>),
             type_of_val(&combine::<CollectionIdName, TableIdName>),
+            type_of_val(&TableStatus::active_or_frozen),
             type_of_val(
-                &By::<(CollectionIdName, TableIdName)>::select::<DaoQueries, TableVersionDB>,
+                &By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDB>,
             ),
-            type_of_val(&With::<TableVersionDB>::extract::<TableVersionId>),
-            // extract attime
-            type_of_val(&With::<TableAtName>::extract::<AtTime>),
+            type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
             // list
-            type_of_val(&TableListDataVersionsService::transaction_status),
-            type_of_val(
-                &By::<TableVersionId>::list_at::<TableAtName, DaoQueries, TableDataVersion>,
-            ),
+            type_of_val(&TransactionStatus::published),
+            type_of_val(&By::<TableId>::list_at::<TableAtName, DaoQueries, TableDataVersion>),
         ]);
     }
 
@@ -168,7 +163,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let (_, function_version) = seed_function(&db, &collection, &create).await;
+        let function_version = seed_function(&db, &collection, &create).await;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
         // First data_version
@@ -189,10 +184,7 @@ mod tests {
         let t1 = AtTime::now().await;
 
         let table_version = DaoQueries::default()
-            .select_by::<TableVersionDB>(&(
-                collection.id(),
-                &TableName::try_from(tables[0].clone())?,
-            ))?
+            .select_by::<TableDB>(&(collection.id(), &TableName::try_from(tables[0].clone())?))?
             .build_query_as()
             .fetch_one(&db)
             .await

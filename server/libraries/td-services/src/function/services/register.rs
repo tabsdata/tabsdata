@@ -2,13 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::function::layers::register::{
-    build_dependency_versions, build_table_versions, insert_and_update_tables,
-};
-use crate::function::layers::register::{
-    build_trigger_versions, data_location, insert_and_update_dependencies,
-    insert_and_update_triggers,
-};
+use crate::function::layers::register::{build_dependency_versions, build_table_versions};
+use crate::function::layers::register::{build_trigger_versions, data_location};
 use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
@@ -19,27 +14,20 @@ use td_objects::tower_service::from::{
     combine, BuildService, DefaultService, EmptyVecService, ExtractDataService, ExtractNameService,
     ExtractService, SetService, TryIntoService, UpdateService, With,
 };
-use td_objects::tower_service::sql::{
-    insert, insert_vec, By, SqlDeleteService, SqlSelectAllService, SqlSelectService,
-};
-use td_objects::tower_service::sql::{SqlAssertNotExistsService, SqlSelectIdOrNameService};
+use td_objects::tower_service::sql::SqlAssertNotExistsService;
+use td_objects::tower_service::sql::{insert, insert_vec, By, SqlDeleteService, SqlSelectService};
 use td_objects::types::basic::{
     BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
     FunctionName, ReuseFrozen, StorageVersion, TableDependencyDto, TableNameDto, TableTriggerDto,
 };
 use td_objects::types::collection::CollectionDB;
-use td_objects::types::dependency::{
-    DependencyDBWithNames, DependencyVersionDB, DependencyVersionDBBuilder,
-};
+use td_objects::types::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::types::function::{
-    BundleDB, FunctionDB, FunctionDBBuilder, FunctionDBWithNames, FunctionRegister,
-    FunctionVersion, FunctionVersionBuilder, FunctionVersionDB, FunctionVersionDBBuilder,
-    FunctionVersionDBWithNames,
+    BundleDB, Function, FunctionBuilder, FunctionDB, FunctionDBBuilder, FunctionDBWithNames,
+    FunctionRegister,
 };
-use td_objects::types::table::{TableDBWithNames, TableVersionDB, TableVersionDBBuilder};
-use td_objects::types::trigger::{
-    TriggerDBWithNames, TriggerVersionDB, TriggerVersionDBBuilder, TriggerVersionDBWithNames,
-};
+use td_objects::types::table::{TableDB, TableDBBuilder};
+use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
@@ -47,8 +35,7 @@ use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxServ
 use td_tower::{l, layers, p, service_provider};
 
 pub struct RegisterFunctionService {
-    provider:
-        ServiceProvider<CreateRequest<CollectionParam, FunctionRegister>, FunctionVersion, TdError>,
+    provider: ServiceProvider<CreateRequest<CollectionParam, FunctionRegister>, Function, TdError>,
 }
 
 impl RegisterFunctionService {
@@ -89,30 +76,25 @@ impl RegisterFunctionService {
                 from_fn(data_location),
 
                 // Insert into function_versions(sql) status=Active.
-                from_fn(With::<FunctionRegister>::convert_to::<FunctionVersionDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<FunctionVersionDBBuilder, _>),
-                from_fn(With::<CollectionId>::set::<FunctionVersionDBBuilder>),
-                from_fn(With::<StorageVersion>::set::<FunctionVersionDBBuilder>),
-                from_fn(With::<DataLocation>::set::<FunctionVersionDBBuilder>),
-                from_fn(With::<FunctionVersionDBBuilder>::build::<FunctionVersionDB, _>),
-                from_fn(insert::<DaoQueries, FunctionVersionDB>),
-
-                // Remove from bundles
-                from_fn(With::<FunctionVersionDB>::extract::<BundleId>),
-                from_fn(By::<BundleId>::delete::<DaoQueries, BundleDB>),
-
-                // Insert into functions(sql) function info.
-                from_fn(With::<FunctionVersionDB>::convert_to::<FunctionDBBuilder, _>),
+                from_fn(With::<FunctionRegister>::convert_to::<FunctionDBBuilder, _>),
+                from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
+                from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
+                from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
+                from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
                 from_fn(With::<FunctionDBBuilder>::build::<FunctionDB, _>),
                 from_fn(insert::<DaoQueries, FunctionDB>),
+
+                // Remove from bundles
+                from_fn(With::<FunctionDB>::extract::<BundleId>),
+                from_fn(By::<BundleId>::delete::<DaoQueries, BundleDB>),
 
                 // Register associations
                 // Extract new function id
                 from_fn(With::<FunctionDB>::extract::<FunctionId>),
                 // Find previous versions (empty because it is a new function)
-                from_fn(With::<TableVersionDB>::empty_vec),
-                from_fn(With::<DependencyVersionDB>::empty_vec),
-                from_fn(With::<TriggerVersionDBWithNames>::empty_vec),
+                from_fn(With::<TableDB>::empty_vec),
+                from_fn(With::<DependencyDB>::empty_vec),
+                from_fn(With::<TriggerDBWithNames>::empty_vec),
                 // Extract new associations
                 from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
                 from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
@@ -125,9 +107,9 @@ impl RegisterFunctionService {
                 RegisterFunctionService::register_triggers(),
 
                 // Response
-                from_fn(By::<FunctionId>::select::<DaoQueries, FunctionVersionDBWithNames>),
-                from_fn(With::<FunctionVersionDBWithNames>::convert_to::<FunctionVersionBuilder, _>),
-                from_fn(With::<FunctionVersionBuilder>::build::<FunctionVersion, _>),
+                from_fn(By::<FunctionId>::select::<DaoQueries, FunctionDBWithNames>),
+                from_fn(With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+                from_fn(With::<FunctionBuilder>::build::<Function, _>),
             ))
         }
     }
@@ -137,14 +119,10 @@ impl RegisterFunctionService {
             layers!(
                 // Insert into table_versions(sql) current function tables status=Active.
                 // Reuse table_id for tables that existed (had status=Frozen)
-                from_fn(With::<FunctionVersionDB>::convert_to::<TableVersionDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<TableVersionDBBuilder, _>),
+                from_fn(With::<FunctionDB>::convert_to::<TableDBBuilder, _>),
+                from_fn(With::<RequestContext>::update::<TableDBBuilder, _>),
                 from_fn(build_table_versions),
-                from_fn(insert_vec::<DaoQueries, TableVersionDB>),
-
-                // Insert into tables(sql) function tables info and update already existing tables (frozen tables).
-                from_fn(By::<FunctionId>::select_all::<DaoQueries, TableDBWithNames>),
-                from_fn(insert_and_update_tables::<DaoQueries>),
+                from_fn(insert_vec::<DaoQueries, TableDB>),
             )
         }
     }
@@ -153,14 +131,10 @@ impl RegisterFunctionService {
         register_dependencies() {
             layers!(
                 // Insert into dependency_versions(sql) current function table dependencies status=Active.
-                from_fn(With::<FunctionVersionDB>::convert_to::<DependencyVersionDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<DependencyVersionDBBuilder, _>),
+                from_fn(With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
+                from_fn(With::<RequestContext>::update::<DependencyDBBuilder, _>),
                 from_fn(build_dependency_versions::<DaoQueries>),
-                from_fn(insert_vec::<DaoQueries, DependencyVersionDB>),
-
-                // Insert into dependencies(sql) function dependencies info.
-                from_fn(By::<FunctionId>::select_all::<DaoQueries, DependencyDBWithNames>),
-                from_fn(insert_and_update_dependencies::<DaoQueries>),
+                from_fn(insert_vec::<DaoQueries, DependencyDB>),
             )
         }
     }
@@ -169,22 +143,17 @@ impl RegisterFunctionService {
         register_triggers() {
             layers!(
                 // Insert into trigger_versions(sql) current function trigger status=Active.
-                from_fn(With::<FunctionVersionDB>::convert_to::<TriggerVersionDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<TriggerVersionDBBuilder, _>),
+                from_fn(With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
+                from_fn(With::<RequestContext>::update::<TriggerDBBuilder, _>),
                 from_fn(build_trigger_versions::<DaoQueries>),
-                from_fn(insert_vec::<DaoQueries, TriggerVersionDB>),
-
-                // Insert into triggers(sql) function trigger info.
-                from_fn(By::<FunctionId>::select_all::<DaoQueries, TriggerDBWithNames>),
-                from_fn(insert_and_update_triggers::<DaoQueries>),
+                from_fn(insert_vec::<DaoQueries, TriggerDB>),
             )
         }
     }
 
     pub async fn service(
         &self,
-    ) -> TdBoxService<CreateRequest<CollectionParam, FunctionRegister>, FunctionVersion, TdError>
-    {
+    ) -> TdBoxService<CreateRequest<CollectionParam, FunctionRegister>, Function, TdError> {
         self.provider.make().await
     }
 }
@@ -211,87 +180,79 @@ mod tests {
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<CreateRequest<CollectionParam, FunctionRegister>, FunctionVersion>(
-            &[
-                type_of_val(&With::<CreateRequest<CollectionParam, FunctionRegister>>::extract::<RequestContext>),
-                type_of_val(&With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_name::<CollectionParam>),
-                type_of_val(&With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_data::<FunctionRegister>),
-                // Extract collection from request.
-                type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                // Get collection. Extract collection id and name.
-                type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
-                // Get function.
-                type_of_val(&With::<FunctionRegister>::extract::<FunctionName>),
-                // Check function name does not exist in collection.
-                type_of_val(&combine::<CollectionId, FunctionName>),
-                type_of_val(&By::<(CollectionId, FunctionName)>::assert_not_exists::<DaoQueries, FunctionDBWithNames>),
-                // Get location and storage version.
-                type_of_val(&With::<StorageVersion>::default),
-                type_of_val(&data_location),
-                // Insert into function_versions(sql) status=Active.
-                type_of_val(&With::<FunctionRegister>::convert_to::<FunctionVersionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<FunctionVersionDBBuilder, _>),
-                type_of_val(&With::<CollectionId>::set::<FunctionVersionDBBuilder>),
-                type_of_val(&With::<StorageVersion>::set::<FunctionVersionDBBuilder>),
-                type_of_val(&With::<DataLocation>::set::<FunctionVersionDBBuilder>),
-                type_of_val(&With::<FunctionVersionDBBuilder>::build::<FunctionVersionDB, _>),
-                type_of_val(&insert::<DaoQueries, FunctionVersionDB>),
-                // Remove from bundles
-                type_of_val(&With::<FunctionVersionDB>::extract::<BundleId>),
-                type_of_val(&By::<BundleId>::delete::<DaoQueries, BundleDB>),
-                // Insert into functions(sql) function info.
-                type_of_val(&With::<FunctionVersionDB>::convert_to::<FunctionDBBuilder, _>),
-                type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB, _>),
-                type_of_val(&insert::<DaoQueries, FunctionDB>),
-                // Register associations
-                // Extract new function id
-                type_of_val(&With::<FunctionDB>::extract::<FunctionId>),
-                // Find previous versions (empty because it is a new function)
-                type_of_val(&With::<TableVersionDB>::empty_vec),
-                type_of_val(&With::<DependencyVersionDB>::empty_vec),
-                type_of_val(&With::<TriggerVersionDBWithNames>::empty_vec),
-                // Extract new associations
-                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
-                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
-                type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
-                // Extract reuse frozen
-                type_of_val(&With::<FunctionRegister>::extract::<ReuseFrozen>),
-                // And register new ones
-                // Insert into table_versions(sql) current function tables status=Active.
-                // Reuse table_id for tables that existed (had status=Frozen)
-                type_of_val(&With::<FunctionVersionDB>::convert_to::<TableVersionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<TableVersionDBBuilder, _>),
-                type_of_val(&build_table_versions),
-                type_of_val(&insert_vec::<DaoQueries, TableVersionDB>),
-                // Insert into tables(sql) function tables info and update already existing tables (frozen tables).
-                type_of_val(&By::<FunctionId>::select_all::<DaoQueries, TableDBWithNames>),
-                type_of_val(&insert_and_update_tables::<DaoQueries>),
-                // Insert into dependency_versions(sql) current function table dependencies status=Active.
-                type_of_val(&With::<FunctionVersionDB>::convert_to::<DependencyVersionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<DependencyVersionDBBuilder, _>),
-                type_of_val(&build_dependency_versions::<DaoQueries>),
-                type_of_val(&insert_vec::<DaoQueries, DependencyVersionDB>),
-                // Insert into dependencies(sql) function dependencies info.
-                type_of_val(&By::<FunctionId>::select_all::<DaoQueries, DependencyDBWithNames>),
-                type_of_val(&insert_and_update_dependencies::<DaoQueries>),
-                // Insert into trigger_versions(sql) current function trigger status=Active.
-                type_of_val(&With::<FunctionVersionDB>::convert_to::<TriggerVersionDBBuilder, _>),
-                type_of_val(&With::<RequestContext>::update::<TriggerVersionDBBuilder, _>),
-                type_of_val(&build_trigger_versions::<DaoQueries>),
-                type_of_val(&insert_vec::<DaoQueries, TriggerVersionDB>),
-                // Insert into triggers(sql) function trigger info.
-                type_of_val(&By::<FunctionId>::select_all::<DaoQueries, TriggerDBWithNames>),
-                type_of_val(&insert_and_update_triggers::<DaoQueries>),
-                // Response
-                type_of_val(&By::<FunctionId>::select::<DaoQueries, FunctionVersionDBWithNames>),
-                type_of_val(&
-                                With::<FunctionVersionDBWithNames>::convert_to::<FunctionVersionBuilder, _>,
-                ),
-                type_of_val(&With::<FunctionVersionBuilder>::build::<FunctionVersion, _>),
-            ],
-        );
+        metadata
+            .assert_service::<CreateRequest<CollectionParam, FunctionRegister>, Function>(
+                &[
+                    type_of_val(&With::<CreateRequest<CollectionParam, FunctionRegister>>::extract::<RequestContext>),
+                    type_of_val(&With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_name::<CollectionParam>),
+                    type_of_val(&With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_data::<FunctionRegister>),
+                    // Extract collection from request.
+                    type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
+
+                    // Get collection. Extract collection id and name.
+                    type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+                    type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                    type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
+
+                    // Get function.
+                    type_of_val(&With::<FunctionRegister>::extract::<FunctionName>),
+
+                    // Check function name does not exist in collection.
+                    type_of_val(&combine::<CollectionId, FunctionName>),
+                    type_of_val(&By::<(CollectionId, FunctionName)>::assert_not_exists::<DaoQueries, FunctionDBWithNames>),
+
+                    // Get location and storage version.
+                    type_of_val(&With::<StorageVersion>::default),
+                    type_of_val(&data_location),
+
+                    // Insert into function_versions(sql) status=Active.
+                    type_of_val(&With::<FunctionRegister>::convert_to::<FunctionDBBuilder, _>),
+                    type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
+                    type_of_val(&With::<CollectionId>::set::<FunctionDBBuilder>),
+                    type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
+                    type_of_val(&With::<DataLocation>::set::<FunctionDBBuilder>),
+                    type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB, _>),
+                    type_of_val(&insert::<DaoQueries, FunctionDB>),
+
+                    // Remove from bundles
+                    type_of_val(&With::<FunctionDB>::extract::<BundleId>),
+                    type_of_val(&By::<BundleId>::delete::<DaoQueries, BundleDB>),
+
+                    // Register associations
+                    // Extract new function id
+                    type_of_val(&With::<FunctionDB>::extract::<FunctionId>),
+                    // Find previous versions (empty because it is a new function)
+                    type_of_val(&With::<TableDB>::empty_vec),
+                    type_of_val(&With::<DependencyDB>::empty_vec),
+                    type_of_val(&With::<TriggerDBWithNames>::empty_vec),
+                    // Extract new associations
+                    type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
+                    type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
+                    type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
+                    // Extract reuse frozen
+                    type_of_val(&With::<FunctionRegister>::extract::<ReuseFrozen>),
+                    // Insert into table_versions(sql) current function tables status=Active.
+                    // Reuse table_id for tables that existed (had status=Frozen)
+                    type_of_val(&With::<FunctionDB>::convert_to::<TableDBBuilder, _>),
+                    type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
+                    type_of_val(&build_table_versions),
+                    type_of_val(&insert_vec::<DaoQueries, TableDB>),
+                    // Insert into dependency_versions(sql) current function table dependencies status=Active.
+                    type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
+                    type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
+                    type_of_val(&build_dependency_versions::<DaoQueries>),
+                    type_of_val(&insert_vec::<DaoQueries, DependencyDB>),
+                    // Insert into trigger_versions(sql) current function trigger status=Active.
+                    type_of_val(&With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
+                    type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
+                    type_of_val(&build_trigger_versions::<DaoQueries>),
+                    type_of_val(&insert_vec::<DaoQueries, TriggerDB>),
+                    // Response
+                    type_of_val(&By::<FunctionId>::select::<DaoQueries, FunctionDBWithNames>),
+                    type_of_val(&With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+                    type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
+                ],
+            );
     }
 
     #[td_test::test(sqlx)]
