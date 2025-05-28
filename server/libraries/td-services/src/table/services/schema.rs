@@ -2,89 +2,52 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::table::layers::schema::{get_table_schema, resolve_table_location};
-use std::sync::Arc;
+use crate::table::layers::find_data_version_location_at;
+use crate::table::layers::schema::get_table_schema;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
 };
-use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TableStatus,
-};
+use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::CollectionDB;
-use td_objects::types::execution::{TableDataVersionDBRead, TransactionStatus};
-use td_objects::types::table::{TableAtName, TableDB, TableDBWithNames, TableSchema};
+use td_objects::types::table::{TableAtIdName, TableSchema};
 use td_storage::Storage;
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
-use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
+use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
-use td_tower::service_provider::{ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::{layers, provider};
 
-pub struct TableSchemaService {
-    provider: ServiceProvider<ReadRequest<TableAtName>, TableSchema, TdError>,
-}
-
-impl TableSchemaService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context, storage),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>, storage: Arc<Storage>,) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                ConnectionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-                SrvCtxProvider::new(storage),
-
-                from_fn(With::<ReadRequest<TableAtName>>::extract::<RequestContext>),
-                from_fn(With::<ReadRequest<TableAtName>>::extract_name::<TableAtName>),
-
-                from_fn(With::<TableAtName>::extract::<CollectionIdName>),
-
-                // find collection ID
-                from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-                from_fn(With::<CollectionDB>::extract::<CollectionId>),
-
-                // check requester has collection permissions
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
-
-                // extract attime
-                from_fn(With::<TableAtName>::extract::<AtTime>),
-
-                // find table ID
-                from_fn(With::<TableAtName>::extract::<TableIdName>),
-                from_fn(combine::<CollectionIdName, TableIdName>),
-                from_fn(TableStatus::active_or_frozen),
-                from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDBWithNames>),
-                from_fn(With::<TableDBWithNames>::extract::<TableId>),
-
-                // find table data version
-                from_fn(TransactionStatus::published),
-                from_fn(By::<TableId>::select_version::<DaoQueries, TableDataVersionDBRead>),
-
-                // get schema
-                from_fn(resolve_table_location),
-                from_fn(get_table_schema),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<ReadRequest<TableAtName>, TableSchema, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = TableSchemaService,
+    request = ReadRequest<TableAtIdName>,
+    response = TableSchema,
+    connection = ConnectionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+    context = Storage,
+)]
+fn provider() {
+    layers!(
+        // Extract parameters
+        from_fn(With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
+        from_fn(With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
+        from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
+        // Find collection ID
+        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        // Check permissions
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
+        // Find data version location.
+        find_data_version_location_at::<_, TableAtIdName>(),
+        // Get table schema
+        from_fn(get_table_schema),
+    )
 }
 
 #[cfg(test)]
@@ -123,6 +86,12 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_schema_service(db: DbPool) {
+        use crate::table::layers::storage::resolve_table_location;
+        use td_objects::tower_service::from::combine;
+        use td_objects::types::basic::{TableId, TableIdName, TableStatus};
+        use td_objects::types::execution::{TableDataVersionDBRead, TransactionStatus};
+        use td_objects::types::table::{TableAtIdName, TableDBWithNames, TableSchema};
+
         use td_tower::metadata::{type_of_val, Metadata};
 
         fn dummy_file() -> String {
@@ -149,22 +118,25 @@ mod tests {
         let service = provider.make().await;
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
-        metadata.assert_service::<ReadRequest<TableAtName>, TableSchema>(&[
-            type_of_val(&With::<ReadRequest<TableAtName>>::extract::<RequestContext>),
-            type_of_val(&With::<ReadRequest<TableAtName>>::extract_name::<TableAtName>),
-            type_of_val(&With::<TableAtName>::extract::<CollectionIdName>),
+        metadata.assert_service::<ReadRequest<TableAtIdName>, TableSchema>(&[
+            type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
+            type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
+            type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
             // find collection ID
             type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
-            // extract attime
-            type_of_val(&With::<TableAtName>::extract::<AtTime>),
-            // find table ID
-            type_of_val(&With::<TableAtName>::extract::<TableIdName>),
-            type_of_val(&combine::<CollectionIdName, TableIdName>),
+            // Find table data version location.
+            // Extract parameters
+            type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
+            type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
+            type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
+            // Only active or frozen tables
             type_of_val(&TableStatus::active_or_frozen),
+            // Find Table ID, looking at the version at the time
+            type_of_val(&combine::<CollectionIdName, TableIdName>),
             type_of_val(
                 &By::<(CollectionIdName, TableIdName)>::select_version::<
                     DaoQueries,
@@ -172,11 +144,14 @@ mod tests {
                 >,
             ),
             type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-            // find table data version
+            // Only published transactions
             type_of_val(&TransactionStatus::published),
+            // Find the latest data version of the table ID, at that time
             type_of_val(&By::<TableId>::select_version::<DaoQueries, TableDataVersionDBRead>),
-            // get schema
+            // Resolve the location of the data version. This takes into account versions without
+            // data changes (in which the previous version is resolved)
             type_of_val(&resolve_table_location),
+            // get schema
             type_of_val(&get_table_schema),
         ]);
     }
@@ -196,7 +171,7 @@ mod tests {
 
         let collection = seed_collection(
             &db,
-            &CollectionName::try_from("collection").unwrap(),
+            &CollectionName::try_from("collection")?,
             &UserId::admin(),
         )
         .await;
@@ -299,9 +274,14 @@ mod tests {
             table: &str,
             at_time: &AtTime,
         ) -> Result<TableSchema, TdError> {
-            let service = TableSchemaService::new(db, Arc::new(AuthzContext::default()), storage)
-                .service()
-                .await;
+            let service = TableSchemaService::new(
+                db,
+                Arc::new(DaoQueries::default()),
+                Arc::new(AuthzContext::default()),
+                storage,
+            )
+            .service()
+            .await;
 
             let request = RequestContext::with(
                 AccessTokenId::default(),
@@ -309,7 +289,7 @@ mod tests {
                 RoleId::user(),
                 false,
             )
-            .read(TableAtName::new(
+            .read(TableAtIdName::new(
                 TableParam::builder()
                     .try_collection(collection)?
                     .try_table(table)?

@@ -15,9 +15,8 @@ use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::CollectionDB;
-use td_objects::types::table::TableAtName;
+use td_objects::types::table::TableAtIdName;
 use td_storage::SPath;
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
@@ -25,7 +24,7 @@ use td_tower::service_provider::{ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
 
 pub struct TableDownloadService {
-    provider: ServiceProvider<ReadRequest<TableAtName>, SPath, TdError>,
+    provider: ServiceProvider<ReadRequest<TableAtIdName>, SPath, TdError>,
 }
 
 impl TableDownloadService {
@@ -43,10 +42,10 @@ impl TableDownloadService {
                 ConnectionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
 
-                from_fn(With::<ReadRequest<TableAtName>>::extract::<RequestContext>),
-                from_fn(With::<ReadRequest<TableAtName>>::extract_name::<TableAtName>),
+                from_fn(With::<ReadRequest<TableAtIdName >>::extract::<RequestContext>),
+                from_fn(With::<ReadRequest<TableAtIdName >>::extract_name::<TableAtIdName>),
 
-                from_fn(With::<TableAtName>::extract::<CollectionIdName>),
+                from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
 
                 // find collection ID
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
@@ -61,7 +60,7 @@ impl TableDownloadService {
         }
     }
 
-    pub async fn service(&self) -> TdBoxService<ReadRequest<TableAtName>, SPath, TdError> {
+    pub async fn service(&self) -> TdBoxService<ReadRequest<TableAtIdName>, SPath, TdError> {
         self.provider.make().await
     }
 }

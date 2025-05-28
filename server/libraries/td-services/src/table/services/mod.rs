@@ -12,16 +12,18 @@ mod schema;
 use crate::table::services::download::TableDownloadService;
 use crate::table::services::list::TableListService;
 use crate::table::services::list_data_versions::TableListDataVersionsService;
-use crate::table::services::sample::{BoxedSyncStream, TableSampleService};
+use crate::table::services::sample::TableSampleService;
 use crate::table::services::schema::TableSchemaService;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, ReadRequest};
+use td_objects::sql::DaoQueries;
 use td_objects::types::execution::TableDataVersion;
+use td_objects::types::stream::BoxedSyncStream;
 use td_objects::types::table::{
-    CollectionAtName, Table, TableAtName, TableSampleAtName, TableSchema,
+    CollectionAtName, Table, TableAtIdName, TableSampleAtName, TableSchema,
 };
 use td_storage::{SPath, Storage};
 use td_tower::service_provider::TdBoxService;
@@ -36,6 +38,7 @@ pub struct TableServices {
 
 impl TableServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) -> Self {
+        let queries = Arc::new(DaoQueries::default());
         Self {
             list_table: TableListService::new(db.clone(), authz_context.clone()),
             list_table_data_versions: TableListDataVersionsService::new(
@@ -44,12 +47,14 @@ impl TableServices {
             ),
             table_schema: TableSchemaService::new(
                 db.clone(),
+                queries.clone(),
                 authz_context.clone(),
                 storage.clone(),
             ),
             table_download: TableDownloadService::new(db.clone(), authz_context.clone()),
             table_sample: TableSampleService::new(
                 db.clone(),
+                queries.clone(),
                 authz_context.clone(),
                 storage.clone(),
             ),
@@ -64,19 +69,19 @@ impl TableServices {
 
     pub async fn list_table_data_versions_service(
         &self,
-    ) -> TdBoxService<ListRequest<TableAtName>, ListResponse<TableDataVersion>, TdError> {
+    ) -> TdBoxService<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>, TdError> {
         self.list_table_data_versions.service().await
     }
 
     pub async fn table_schema_service(
         &self,
-    ) -> TdBoxService<ReadRequest<TableAtName>, TableSchema, TdError> {
+    ) -> TdBoxService<ReadRequest<TableAtIdName>, TableSchema, TdError> {
         self.table_schema.service().await
     }
 
     pub async fn table_download_service(
         &self,
-    ) -> TdBoxService<ReadRequest<TableAtName>, SPath, TdError> {
+    ) -> TdBoxService<ReadRequest<TableAtIdName>, SPath, TdError> {
         self.table_download.service().await
     }
 

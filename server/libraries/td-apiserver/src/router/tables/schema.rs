@@ -15,7 +15,7 @@ use serde::Serialize;
 use td_apiforge::{apiserver_path, get_status};
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{AtTimeParam, TableParam, SCHEMA_TABLE};
-use td_objects::types::table::{TableAtName, TableSchema};
+use td_objects::types::table::{TableAtIdName, TableSchema};
 use td_tower::ctx_service::CtxMap;
 use td_tower::ctx_service::CtxResponse;
 use td_tower::ctx_service::CtxResponseBuilder;
@@ -36,7 +36,7 @@ pub async fn schema(
     Path(table_param): Path<TableParam>,
     Query(at_param): Query<AtTimeParam>,
 ) -> Result<GetStatus, GetErrorStatus> {
-    let name = TableAtName::new(table_param, at_param);
+    let name = TableAtIdName::new(table_param, at_param);
     let request = context.read(name);
     let response = state.table_schema_service().await.oneshot(request).await?;
     Ok(GetStatus::OK(response.into()))

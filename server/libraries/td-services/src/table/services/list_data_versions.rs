@@ -19,7 +19,7 @@ use td_objects::types::basic::{
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::execution::TableDataVersion;
 use td_objects::types::execution::TransactionStatus;
-use td_objects::types::table::{TableAtName, TableDB, TableDBWithNames};
+use td_objects::types::table::{TableAtIdName, TableDBWithNames};
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
@@ -27,7 +27,7 @@ use td_tower::service_provider::{ServiceProvider, TdBoxService};
 use td_tower::{layers, p, service_provider};
 
 pub struct TableListDataVersionsService {
-    provider: ServiceProvider<ListRequest<TableAtName>, ListResponse<TableDataVersion>, TdError>,
+    provider: ServiceProvider<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>, TdError>,
 }
 
 impl TableListDataVersionsService {
@@ -45,11 +45,11 @@ impl TableListDataVersionsService {
                 ConnectionProvider::new(db),
                 SrvCtxProvider::new(authz_context),
 
-                from_fn(With::<ListRequest<TableAtName>>::extract::<RequestContext>),
-                from_fn(With::<ListRequest<TableAtName>>::extract_name::<TableAtName>),
+                from_fn(With::<ListRequest<TableAtIdName >>::extract::<RequestContext>),
+                from_fn(With::<ListRequest<TableAtIdName >>::extract_name::<TableAtIdName>),
 
                 // find collection ID
-                from_fn(With::<TableAtName>::extract::<CollectionIdName>),
+                from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                 from_fn(With::<CollectionDB>::extract::<CollectionId>),
 
@@ -58,10 +58,10 @@ impl TableListDataVersionsService {
                 from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
 
                 // extract attime
-                from_fn(With::<TableAtName>::extract::<AtTime>),
+                from_fn(With::<TableAtIdName>::extract::<AtTime>),
 
                 // find table ID
-                from_fn(With::<TableAtName>::extract::<TableIdName>),
+                from_fn(With::<TableAtIdName>::extract::<TableIdName>),
                 from_fn(combine::<CollectionIdName, TableIdName>),
                 from_fn(TableStatus::active_or_frozen),
                 from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDBWithNames>),
@@ -69,14 +69,14 @@ impl TableListDataVersionsService {
 
                 // list
                 from_fn(TransactionStatus::published),
-                from_fn(By::<TableId>::list_at::<TableAtName, DaoQueries, TableDataVersion>),
+                from_fn(By::<TableId>::list_at::<TableAtIdName, DaoQueries, TableDataVersion>),
             ))
         }
     }
 
     pub async fn service(
         &self,
-    ) -> TdBoxService<ListRequest<TableAtName>, ListResponse<TableDataVersion>, TdError> {
+    ) -> TdBoxService<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>, TdError> {
         self.provider.make().await
     }
 }
@@ -98,6 +98,7 @@ mod tests {
     };
     use td_objects::types::execution::FunctionRunStatus;
     use td_objects::types::function::FunctionRegister;
+    use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -113,20 +114,20 @@ mod tests {
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<ListRequest<TableAtName>, ListResponse<TableDataVersion>>(&[
-            type_of_val(&With::<ListRequest<TableAtName>>::extract::<RequestContext>),
-            type_of_val(&With::<ListRequest<TableAtName>>::extract_name::<TableAtName>),
+        metadata.assert_service::<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>>(&[
+            type_of_val(&With::<ListRequest<TableAtIdName>>::extract::<RequestContext>),
+            type_of_val(&With::<ListRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
             // find collection ID
-            type_of_val(&With::<TableAtName>::extract::<CollectionIdName>),
+            type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
             type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
             // extract attime
-            type_of_val(&With::<TableAtName>::extract::<AtTime>),
+            type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
             // find table ID
-            type_of_val(&With::<TableAtName>::extract::<TableIdName>),
+            type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
             type_of_val(&combine::<CollectionIdName, TableIdName>),
             type_of_val(&TableStatus::active_or_frozen),
             type_of_val(
@@ -138,7 +139,7 @@ mod tests {
             type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
             // list
             type_of_val(&TransactionStatus::published),
-            type_of_val(&By::<TableId>::list_at::<TableAtName, DaoQueries, TableDataVersion>),
+            type_of_val(&By::<TableId>::list_at::<TableAtIdName, DaoQueries, TableDataVersion>),
         ]);
     }
 
@@ -237,7 +238,7 @@ mod tests {
             true,
         )
         .list(
-            TableAtName::builder()
+            TableAtIdName::builder()
                 .try_collection(format!("~{}", collection.id()))?
                 .try_table(format!("{}", table_version.name()))?
                 .at(t0)
@@ -263,7 +264,7 @@ mod tests {
             true,
         )
         .list(
-            TableAtName::builder()
+            TableAtIdName::builder()
                 .try_collection(format!("~{}", collection.id()))?
                 .try_table(format!("{}", table_version.name()))?
                 .at(t1)
@@ -290,7 +291,7 @@ mod tests {
             true,
         )
         .list(
-            TableAtName::builder()
+            TableAtIdName::builder()
                 .try_collection(format!("~{}", collection.id()))?
                 .try_table(format!("{}", table_version.name()))?
                 .at(t2)

@@ -98,7 +98,7 @@ impl CollectionAtName {
 }
 
 #[td_type::Dlo]
-pub struct TableAtName {
+pub struct TableAtIdName {
     #[td_type(extractor)]
     collection: CollectionIdName,
     #[td_type(extractor)]
@@ -107,7 +107,7 @@ pub struct TableAtName {
     at: AtTime,
 }
 
-impl TableAtName {
+impl TableAtIdName {
     pub fn new(table: TableParam, at: AtTimeParam) -> Self {
         Self {
             collection: table.collection().clone(),

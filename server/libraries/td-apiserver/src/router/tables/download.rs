@@ -17,7 +17,7 @@ use td_apiforge::{apiserver_path, apiserver_schema};
 use td_error::TdError;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{AtTimeParam, TableParam, DOWNLOAD_TABLE};
-use td_objects::types::table::TableAtName;
+use td_objects::types::table::TableAtIdName;
 use tower::ServiceExt;
 use utoipa::IntoResponses;
 
@@ -47,7 +47,7 @@ pub async fn download(
     Path(table_param): Path<TableParam>,
     Query(at_param): Query<AtTimeParam>,
 ) -> Result<impl IntoResponse, GetErrorStatus> {
-    let name = TableAtName::new(table_param, at_param);
+    let name = TableAtIdName::new(table_param, at_param);
     let request = context.read(name);
 
     let path = tables
