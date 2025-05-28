@@ -14,6 +14,7 @@ pub mod function;
 pub mod parse;
 pub mod permission;
 pub mod role;
+pub mod stream;
 pub mod table;
 pub mod table_ref;
 pub mod trigger;

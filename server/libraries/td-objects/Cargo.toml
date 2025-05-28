@@ -62,10 +62,12 @@ td-tower = { workspace = true }
 aquamarine = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
+bytes = { workspace = true }
 constcat = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 derive_builder = { workspace = true }
 derive-new = { workspace = true }
+futures = { workspace = true }
 getset = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
