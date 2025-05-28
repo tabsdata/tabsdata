@@ -324,7 +324,6 @@ CREATE TABLE table_data_versions
 
 CREATE VIEW table_data_versions__with_status AS
 SELECT tdv.*,
-       tv.table_id        as table_id,
        fr.triggered_on    as triggered_on,
        fr.triggered_by_id as triggered_by_id,
        fr.status          as status,
@@ -351,14 +350,24 @@ FROM table_data_versions__with_status tdv
 
 CREATE VIEW table_data_versions__read AS
 SELECT tdv.*,
-       tdv.collection   as collection_name,
-       tdv.name         as table_name,
-       tdv.function     as function_name,
-       tdv.has_data     as data_changed,
-       tdv.triggered_on as created_at,
-       t.status         as transaction_status
+       tdv.collection     as collection_name,
+       tdv.name           as table_name,
+       tdv.function       as function_name,
+       tdv.has_data       as data_changed,
+       tdv.triggered_on   as created_at,
+       t.status           as transaction_status,
+       fv.data_location   as data_location,
+       fv.storage_version as storage_version,
+       (SELECT tdv2.id
+        FROM table_data_versions__with_names tdv2
+        WHERE tdv2.table_id = tdv.table_id
+          AND tdv2.has_data = TRUE
+          AND tdv2.triggered_on <= tdv.triggered_on
+        ORDER BY tdv2.triggered_on DESC
+        LIMIT 1)          as with_data_table_data_version_id
 FROM table_data_versions__with_names tdv
-         LEFT JOIN transactions__with_status t ON tdv.transaction_id = t.id;
+         LEFT JOIN transactions__with_status t ON tdv.transaction_id = t.id
+         LEFT JOIN functions fv ON tdv.function_version_id = fv.id;
 
 -- Partitions  (table & __with_names view)
 

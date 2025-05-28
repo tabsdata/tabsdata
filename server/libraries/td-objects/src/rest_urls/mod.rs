@@ -162,7 +162,7 @@ pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
 
 // Function versions
 #[td_type::QueryParam]
-pub struct AtMultiParam {
+pub struct AtTimeParam {
     #[td_type(extractor)]
     #[serde(default)]
     at: AtTime,
@@ -177,22 +177,6 @@ pub struct SampleOffsetLenParam {
     #[serde(default)]
     len: SampleLen,
 }
-
-// Function runs
-pub const FUNCTION_RUNS: &str = url!(FUNCTION, "/executions");
-pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{execution}");
-
-#[td_type::UrlParam]
-pub struct FunctionRunParam {
-    #[td_type(extractor)]
-    collection: CollectionIdName,
-    #[td_type(extractor)]
-    function: FunctionIdName,
-    #[td_type(extractor)]
-    execution: ExecutionIdName,
-}
-
-pub const FUNCTION_RUN_GET: &str = url!(FUNCTION_RUN);
 
 // Tables
 pub const TABLES: &str = url!(COLLECTION, "/tables");
@@ -215,6 +199,13 @@ pub const DOWNLOAD_TABLE: &str = url!(TABLE, "/download");
 pub const TABLE_DELETE: &str = url!(TABLE);
 
 // Executions
+// /executions/{transaction}/recover
+// /executions/{transaction}/cancel
+// /executions?execution?execution_name?status?who?when?trigger_fn
+// /executions/{exec_id}/tables
+// /executions/{exec_id}/graph
+// /executions/{exec_id}/status
+
 pub const EXECUTIONS: &str = url!(COLLECTION, "/executions");
 pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
 
@@ -224,10 +215,21 @@ pub struct ExecutionParam {
     execution: ExecutionIdName,
 }
 
-pub const EXECUTION_CANCEL: &str = concat!(EXECUTION, "/cancel");
-pub const EXECUTION_RECOVER: &str = concat!(EXECUTION, "/recover");
+pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
+pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 
 // Transactions
+// /transactions/{transaction}/recover
+// /transactions/{transaction}/cancel
+// /transactions?collection?execution?execution_name?status?who?when?trigger_fn
+// /transactions/synchrotron (pair with id and attime)
+// /transactions/{trx_id}/tables
+
+// /transactions/{trx_id}/messages -- (id, function)
+// /transactions/{trx_id}/messages/{message_id}/logs
+
+// /collections/{c}/tables/{t}/data_versions?at
+
 pub const TRANSACTIONS: &str = url!(COLLECTION, "/transactions");
 pub const TRANSACTION: &str = url!(TRANSACTIONS, "/{transaction}");
 
@@ -237,6 +239,22 @@ pub struct TransactionParam {
     transaction: TransactionIdName,
 }
 
-pub const TRANSACTION_CANCEL: &str = concat!(TRANSACTION, "/cancel");
-pub const TRANSACTION_RECOVER: &str = concat!(TRANSACTION, "/recover");
+pub const TRANSACTION_CANCEL: &str = url!(TRANSACTION, "/cancel");
+pub const TRANSACTION_RECOVER: &str = url!(TRANSACTION, "/recover");
 pub const TRANSACTIONS_LIST: &str = TRANSACTIONS;
+
+// Function runs
+pub const FUNCTION_RUNS: &str = url!(FUNCTION, "/executions");
+pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{execution}");
+
+#[td_type::UrlParam]
+pub struct FunctionRunParam {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    function: FunctionIdName,
+    #[td_type(extractor)]
+    execution: ExecutionIdName,
+}
+
+pub const FUNCTION_RUN_GET: &str = url!(FUNCTION_RUN);

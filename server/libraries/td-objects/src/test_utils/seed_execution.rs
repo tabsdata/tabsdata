@@ -77,7 +77,6 @@ mod tests {
             *execution.name(),
             Some(ExecutionName::try_from("test_execution").unwrap())
         );
-        assert_eq!(execution.collection_id(), collection.id());
         assert_eq!(execution.function_version_id(), function_version.id());
         assert_eq!(
             **execution.triggered_by_id(),

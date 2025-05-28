@@ -19,8 +19,9 @@ use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, ReadRequest};
+use td_objects::types::execution::TableDataVersion;
 use td_objects::types::table::{
-    CollectionAtName, Table, TableAtName, TableDataVersion, TableSampleAtName, TableSchema,
+    CollectionAtName, Table, TableAtName, TableSampleAtName, TableSchema,
 };
 use td_storage::{SPath, Storage};
 use td_tower::service_provider::TdBoxService;
@@ -41,7 +42,11 @@ impl TableServices {
                 db.clone(),
                 authz_context.clone(),
             ),
-            table_schema: TableSchemaService::new(db.clone(), authz_context.clone()),
+            table_schema: TableSchemaService::new(
+                db.clone(),
+                authz_context.clone(),
+                storage.clone(),
+            ),
             table_download: TableDownloadService::new(db.clone(), authz_context.clone()),
             table_sample: TableSampleService::new(
                 db.clone(),

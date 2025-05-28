@@ -181,9 +181,7 @@ pub struct Table {
     defined_on: AtTime,
 }
 
-#[td_type::Dto(
-    //TODO
-)]
+#[td_type::Dto()]
 pub struct SchemaField {
     name: SchemaFieldName,
     #[serde(rename = "type")]
