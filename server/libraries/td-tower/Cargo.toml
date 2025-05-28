@@ -45,6 +45,7 @@ ignored = ["openssl", "strum_macros", "serde_json", "td-build", "thiserror", "ut
 ## Macros
 
 td-apiforge = { workspace = true }
+tm-tower = { workspace = true }
 
 ## Libraries
 

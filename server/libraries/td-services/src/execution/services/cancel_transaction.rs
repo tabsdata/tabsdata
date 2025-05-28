@@ -13,7 +13,6 @@ use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
 use td_objects::types::basic::{TransactionId, TransactionIdName};
 use td_objects::types::execution::{FunctionRunDB, TransactionDB, UpdateFunctionRunDB};
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;

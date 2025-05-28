@@ -2,6 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+pub use tm_tower::*;
+
 pub mod box_sync_clone_layer;
 pub mod box_sync_clone_service;
 pub mod ctx_service;

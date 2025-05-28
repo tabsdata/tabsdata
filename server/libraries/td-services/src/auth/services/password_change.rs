@@ -25,7 +25,6 @@ use td_objects::types::basic::{
     UserName,
 };
 use td_objects::types::user::{UserDB, UserDBBuilder};
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;

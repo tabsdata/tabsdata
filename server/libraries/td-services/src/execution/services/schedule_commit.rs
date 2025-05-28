@@ -9,7 +9,6 @@ use td_common::server::WorkerMessageQueue;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::sql::DaoQueries;
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;

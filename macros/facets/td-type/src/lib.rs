@@ -3,21 +3,14 @@
 //
 
 extern crate proc_macro;
-use crate::service_type::service_type_impl;
 use proc_macro::TokenStream;
 
 mod dao;
 mod dlo;
 mod dto;
-mod service_type;
 mod type_builder;
 mod typed_types;
 mod url;
-
-#[proc_macro_attribute]
-pub fn service_type(args: TokenStream, item: TokenStream) -> TokenStream {
-    service_type_impl(args, item)
-}
 
 #[proc_macro_derive(DaoType, attributes(td_type, dao, sqlx))]
 pub fn dao_type(input: TokenStream) -> TokenStream {

@@ -20,7 +20,6 @@ use td_objects::types::execution::{
     CallbackRequest, FunctionRunDB, UpdateFunctionRun, UpdateFunctionRunDB,
     UpdateFunctionRunDBBuilder,
 };
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;

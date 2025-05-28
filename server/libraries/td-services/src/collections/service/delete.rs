@@ -16,7 +16,6 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::{CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder};
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};

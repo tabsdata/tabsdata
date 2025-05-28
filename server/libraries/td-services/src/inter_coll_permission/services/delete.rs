@@ -19,7 +19,6 @@ use td_objects::types::basic::{
 use td_objects::types::permission::{
     InterCollectionPermissionDB, InterCollectionPermissionDBWithNames,
 };
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;

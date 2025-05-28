@@ -28,7 +28,6 @@ use td_objects::types::function::{
 };
 use td_objects::types::table::{TableDB, TableDBBuilder};
 use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};

@@ -5,12 +5,13 @@
 #[macro_export]
 macro_rules! layers {
     ($($layer:expr),* $(,)? $(; map_err = $map_err:expr)?) => {
-        tower::builder::ServiceBuilder::new()
-            $(.map_err($map_err))?
-            $(
-                .layer($layer)
-            )*
-            .boxed_layer()
+        $crate::box_sync_clone_layer::BoxedSyncCloneServiceLayer::boxed_layer(
+            tower::builder::ServiceBuilder::new()
+                $(.map_err($map_err))?
+                $(
+                    .layer($layer)
+                )*
+        )
     };
 }
 
@@ -83,7 +84,6 @@ macro_rules! l {
 
 #[cfg(test)]
 mod tests {
-    use crate::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
     use crate::from_fn::from_fn;
     use crate::service_provider::{IntoServiceProvider, ServiceProvider};
     use td_error::TdError;

@@ -21,7 +21,6 @@ use td_objects::types::user::{
     UserCreate, UserDB, UserDBBuilder, UserDBWithNames, UserRead, UserReadBuilder,
 };
 use td_security::config::PasswordHashingConfig;
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::TdBoxService;

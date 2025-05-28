@@ -22,7 +22,6 @@ use td_objects::types::permission::{
     PermissionDBWithNames,
 };
 use td_objects::types::role::RoleDB;
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{conditional, Do, Else, If, SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};

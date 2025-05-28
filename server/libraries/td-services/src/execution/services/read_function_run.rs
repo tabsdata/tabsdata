@@ -25,7 +25,6 @@ use td_objects::types::execution::{
     ExecutionDB, FunctionRun, FunctionRunBuilder, FunctionRunDBWithNames,
 };
 use td_objects::types::function::FunctionDBWithNames;
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};

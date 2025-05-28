@@ -18,7 +18,6 @@ use td_objects::types::auth::{
 use td_objects::types::basic::{RoleId, UserId};
 use td_objects::types::permission::{Permission, PermissionBuilder, PermissionDBWithNames};
 use td_objects::types::user::UserDBWithNames;
-use td_tower::box_sync_clone_layer::BoxedSyncCloneServiceLayer;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
