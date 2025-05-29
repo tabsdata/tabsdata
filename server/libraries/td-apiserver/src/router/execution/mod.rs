@@ -9,6 +9,8 @@ use td_apiforge::apiserver_tag;
 pub mod callback;
 pub mod execute;
 pub mod read_run;
+pub mod recover_execution;
+pub mod recover_transaction;
 pub mod synchrotron;
 
 apiserver_tag!(name = "Execution", description = "Execution API");
@@ -18,6 +20,8 @@ routers! {
     router => {
         execute => { state ( Execution ) },
         read_run => { state ( Execution ) },
+        recover_execution => { state ( Execution ) },
+        recover_transaction => { state ( Execution ) },
         synchrotron => { state ( Execution ) },
     }
 }

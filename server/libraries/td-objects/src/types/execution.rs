@@ -622,6 +622,12 @@ impl UpdateFunctionRunDB {
             .build()?)
     }
 
+    pub async fn recover() -> Result<Self, TdError> {
+        Ok(Self::builder()
+            .status(FunctionRunStatus::ReScheduled)
+            .build()?)
+    }
+
     pub async fn cancel() -> Result<Self, TdError> {
         Ok(Self::builder()
             .ended_on(AtTime::now().await)

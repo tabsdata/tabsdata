@@ -7,6 +7,8 @@ use crate::execution::services::cancel_execution::ExecutionCancelService;
 use crate::execution::services::cancel_transaction::TransactionCancelService;
 use crate::execution::services::execute::ExecuteFunctionService;
 use crate::execution::services::read_function_run::FunctionRunReadService;
+use crate::execution::services::recover_execution::ExecutionRecoverService;
+use crate::execution::services::recover_transaction::TransactionRecoverService;
 use crate::execution::services::schedule_commit::ScheduleCommitService;
 use crate::execution::services::schedule_request::ScheduleRequestService;
 use crate::execution::services::synchrotron::SynchrotronService;
@@ -32,6 +34,8 @@ mod cancel_execution;
 mod cancel_transaction;
 mod execute;
 mod read_function_run;
+mod recover_execution;
+mod recover_transaction;
 mod schedule_commit;
 mod schedule_request;
 mod synchrotron;
@@ -42,6 +46,8 @@ pub struct ExecutionServices {
     cancel_transaction: TransactionCancelService,
     cancel_execution: ExecutionCancelService,
     read_function_run: FunctionRunReadService,
+    recover_execution: ExecutionRecoverService,
+    recover_transaction: TransactionRecoverService,
     synchrotron: SynchrotronService,
 }
 
@@ -54,6 +60,16 @@ impl ExecutionServices {
             cancel_transaction: TransactionCancelService::new(db.clone(), authz_context.clone()),
             cancel_execution: ExecutionCancelService::new(db.clone(), authz_context.clone()),
             read_function_run: FunctionRunReadService::new(db.clone(), authz_context.clone()),
+            recover_execution: ExecutionRecoverService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
+            recover_transaction: TransactionRecoverService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
             synchrotron: SynchrotronService::new(db.clone(), queries.clone()),
         }
     }
@@ -89,6 +105,17 @@ impl ExecutionServices {
         self.read_function_run.service().await
     }
 
+    pub async fn recover_execution(
+        &self,
+    ) -> TdBoxService<UpdateRequest<ExecutionParam, ()>, (), TdError> {
+        self.recover_execution.service().await
+    }
+
+    pub async fn recover_transaction(
+        &self,
+    ) -> TdBoxService<UpdateRequest<TransactionParam, ()>, (), TdError> {
+        self.recover_transaction.service().await
+    }
     pub async fn synchrotron(
         &self,
     ) -> TdBoxService<ListRequest<()>, ListResponse<SynchrotronResponse>, TdError> {

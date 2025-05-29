@@ -28,11 +28,11 @@ get_status!(FunctionRun);
 #[apiserver_path(method = get, path = FUNCTION_RUN_GET, tag = EXECUTION_TAG)]
 #[doc = "Read function run"]
 pub async fn read_run(
-    State(function): State<Execution>,
+    State(execution): State<Execution>,
     Extension(context): Extension<RequestContext>,
     Path(param): Path<FunctionRunParam>,
 ) -> Result<GetStatus, UpdateErrorStatus> {
     let request = context.read(param);
-    let response = function.read_function_run().await.oneshot(request).await?;
+    let response = execution.read_function_run().await.oneshot(request).await?;
     Ok(GetStatus::OK(response.into()))
 }
