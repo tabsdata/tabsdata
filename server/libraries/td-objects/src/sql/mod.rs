@@ -408,8 +408,19 @@ where
             let mut or_separated = query_builder.separated(" OR ");
             for cond in or.conditions() {
                 or_separated.push(format!("{} {} ", cond.field(), cond.operator()));
-                let value = cond.value().to_owned();
-                or_separated.push_bind_unseparated(value);
+                let value = cond.values();
+
+                match cond.cardinality() {
+                    1 => {
+                        or_separated.push_bind_unseparated(value[0].to_owned());
+                    }
+                    2 => {
+                        or_separated.push_bind_unseparated(value[0].to_owned());
+                        or_separated.push_unseparated(format!(" {} ", cond.connector()));
+                        or_separated.push_bind_unseparated(value[1].to_owned());
+                    }
+                    _ => {}
+                }
             }
             query_builder.push(")");
         });
@@ -1274,6 +1285,40 @@ mod tests {
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
             assert_eq!(result, *FIXTURE_DAOS);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_filter_between(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                #[dto(list(pagination_by = "+"))]
+                id: TestId,
+                #[dto(list(filter))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .filter(vec!["name:btw:B::C".to_string()])
+                .build()
+                .unwrap();
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (name BETWEEN ? AND ?) ORDER BY id ASC LIMIT ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0], FIXTURE_DAOS[0]);
+            assert_eq!(result[1], FIXTURE_DAOS[3]);
             Ok(())
         }
 

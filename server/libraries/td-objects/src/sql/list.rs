@@ -31,6 +31,8 @@ pub enum ListError {
     PreviousAndNext = 5,
     #[error("Natural Id must be use in pagination with Previous or Next parameters")]
     MissingPaginationParams = 6,
+    #[error("Invalid between condition '{0}', it must be <NAME>:btw:<min>::<max>")]
+    InvalidBetweenCondition(String) = 7,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -114,6 +116,7 @@ pub enum Condition {
     Ge(String, String),
     Lt(String, String),
     Le(String, String),
+    Btw(String, String, String),
 }
 
 impl Condition {
@@ -147,6 +150,10 @@ impl Condition {
         Self::Lk(field.into(), value)
     }
 
+    pub fn btw(field: impl Into<String>, min: impl Into<String>, max: impl Into<String>) -> Self {
+        Self::Btw(field.into(), min.into(), max.into())
+    }
+
     fn parse(s: &str) -> Result<Self, ListError> {
         const EQ: &str = ":eq:";
         const NE: &str = ":ne:";
@@ -155,8 +162,10 @@ impl Condition {
         const LT: &str = ":lt:";
         const LE: &str = ":le:";
         const LK: &str = ":lk:";
+        const BTW: &str = ":btw:";
+
         const OPERATORS: &str =
-            constcat::concat!(EQ, "|", NE, "|", GT, "|", GE, "|", LT, "|", LE, "|", LK,);
+            constcat::concat!(EQ, "|", NE, "|", GT, "|", GE, "|", LT, "|", LE, "|", LK, "|", BTW);
         const CONDITION_PATTERN: &str = constcat::concat!(
             "^(?<field>",
             IDENTIFIER_PATTERN,
@@ -181,6 +190,13 @@ impl Condition {
                 LT => Self::lt(field, value),
                 LE => Self::le(field, value),
                 LK => Self::lk(field, value),
+                BTW => {
+                    let min_max = value.split("::").collect::<Vec<_>>();
+                    if min_max.len() != 2 {
+                        return Err(ListError::InvalidBetweenCondition(s.to_string()));
+                    }
+                    Self::btw(field, min_max[0], min_max[1])
+                }
                 _ => {
                     return Err(ListError::InvalidCondition(
                         OPERATORS.to_string(),
@@ -206,18 +222,20 @@ impl Condition {
             Condition::Ge(field, _) => field,
             Condition::Lt(field, _) => field,
             Condition::Le(field, _) => field,
+            Condition::Btw(field, _, _) => field,
         }
     }
 
-    pub fn value(&self) -> &str {
+    pub fn values(&self) -> Vec<&str> {
         match self {
-            Condition::Eq(_, value) => value,
-            Condition::Ne(_, value) => value,
-            Condition::Lk(_, value) => value,
-            Condition::Gt(_, value) => value,
-            Condition::Ge(_, value) => value,
-            Condition::Lt(_, value) => value,
-            Condition::Le(_, value) => value,
+            Condition::Eq(_, value) => vec![value],
+            Condition::Ne(_, value) => vec![value],
+            Condition::Lk(_, value) => vec![value],
+            Condition::Gt(_, value) => vec![value],
+            Condition::Ge(_, value) => vec![value],
+            Condition::Lt(_, value) => vec![value],
+            Condition::Le(_, value) => vec![value],
+            Condition::Btw(_, min, max) => vec![min, max],
         }
     }
 
@@ -230,6 +248,33 @@ impl Condition {
             Condition::Ge(_, _) => ">=",
             Condition::Lt(_, _) => "<",
             Condition::Le(_, _) => "<=",
+            Condition::Btw(_, _, _) => "BETWEEN",
+        }
+    }
+
+    pub fn connector(&self) -> &str {
+        match self {
+            Condition::Eq(_, _)
+            | Condition::Ne(_, _)
+            | Condition::Lk(_, _)
+            | Condition::Gt(_, _)
+            | Condition::Ge(_, _)
+            | Condition::Lt(_, _)
+            | Condition::Le(_, _) => "",
+            Condition::Btw(_, _, _) => "AND",
+        }
+    }
+
+    pub fn cardinality(&self) -> usize {
+        match self {
+            Condition::Eq(_, _)
+            | Condition::Ne(_, _)
+            | Condition::Lk(_, _)
+            | Condition::Gt(_, _)
+            | Condition::Ge(_, _)
+            | Condition::Lt(_, _)
+            | Condition::Le(_, _) => 1,
+            Condition::Btw(_, _, _) => 2,
         }
     }
 }
