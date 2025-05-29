@@ -90,6 +90,22 @@ pub struct TransactionDBWithStatus {
     status: TransactionStatus,
 }
 
+#[td_type::Dto]
+#[td_type(builder(try_from = TransactionDBWithStatus))]
+#[dto(list(on = TransactionDBWithStatus))]
+pub struct SynchrotronResponse {
+    #[dto(list(filter, filter_like))]
+    id: TransactionId,
+    #[dto(list(filter, filter_like))]
+    execution_id: ExecutionId,
+    // #[dto(list(filter, filter_like))]
+    // execution_name: Option<ExecutionName>,
+    #[dto(list(pagination_by = "+"))]
+    triggered_on: TriggeredOn,
+    #[dto(list(filter, filter_like))]
+    status: TransactionStatus,
+}
+
 #[td_type::Dao]
 #[dao(
     sql_table = "function_runs",

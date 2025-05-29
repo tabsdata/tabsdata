@@ -9,18 +9,20 @@ use crate::execution::services::execute::ExecuteFunctionService;
 use crate::execution::services::read_function_run::FunctionRunReadService;
 use crate::execution::services::schedule_commit::ScheduleCommitService;
 use crate::execution::services::schedule_request::ScheduleRequestService;
+use crate::execution::services::synchrotron::SynchrotronService;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_common::server::WorkerMessageQueue;
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::{CreateRequest, ReadRequest, UpdateRequest};
+use td_objects::crudl::{CreateRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest};
 use td_objects::rest_urls::{
     ExecutionParam, FunctionParam, FunctionRunIdParam, FunctionRunParam, TransactionParam,
 };
+use td_objects::sql::DaoQueries;
 use td_objects::types::execution::{
-    CallbackRequest, ExecutionRequest, ExecutionResponse, FunctionRun,
+    CallbackRequest, ExecutionRequest, ExecutionResponse, FunctionRun, SynchrotronResponse,
 };
 use td_storage::Storage;
 use td_tower::service_provider::TdBoxService;
@@ -32,6 +34,7 @@ mod execute;
 mod read_function_run;
 mod schedule_commit;
 mod schedule_request;
+mod synchrotron;
 
 pub struct ExecutionServices {
     execute: ExecuteFunctionService,
@@ -39,16 +42,19 @@ pub struct ExecutionServices {
     cancel_transaction: TransactionCancelService,
     cancel_execution: ExecutionCancelService,
     read_function_run: FunctionRunReadService,
+    synchrotron: SynchrotronService,
 }
 
 impl ExecutionServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
+        let queries = Arc::new(DaoQueries::default());
         Self {
             execute: ExecuteFunctionService::new(db.clone()),
             callback: ExecutionCallbackService::new(db.clone()),
             cancel_transaction: TransactionCancelService::new(db.clone()),
             cancel_execution: ExecutionCancelService::new(db.clone()),
             read_function_run: FunctionRunReadService::new(db.clone(), authz_context.clone()),
+            synchrotron: SynchrotronService::new(db.clone(), queries.clone()),
         }
     }
 
@@ -81,6 +87,12 @@ impl ExecutionServices {
         &self,
     ) -> TdBoxService<ReadRequest<FunctionRunParam>, FunctionRun, TdError> {
         self.read_function_run.service().await
+    }
+
+    pub async fn synchrotron(
+        &self,
+    ) -> TdBoxService<ListRequest<()>, ListResponse<SynchrotronResponse>, TdError> {
+        self.synchrotron.service().await
     }
 }
 

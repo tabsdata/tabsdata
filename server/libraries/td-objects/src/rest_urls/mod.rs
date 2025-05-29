@@ -243,6 +243,9 @@ pub const TRANSACTION_CANCEL: &str = url!(TRANSACTION, "/cancel");
 pub const TRANSACTION_RECOVER: &str = url!(TRANSACTION, "/recover");
 pub const TRANSACTIONS_LIST: &str = TRANSACTIONS;
 
+// Synchrotron
+pub const SYNCHROTRON_READ: &str = url!("/synchrotron");
+
 // Function runs
 pub const FUNCTION_RUNS: &str = url!(FUNCTION, "/executions");
 pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{execution}");
