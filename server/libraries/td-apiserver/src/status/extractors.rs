@@ -10,6 +10,7 @@ use axum::extract::FromRequest;
 use axum::response::{IntoResponse, Response};
 use td_error::td_error;
 use td_error::TdError;
+use tracing::error;
 
 #[td_error]
 pub enum JsonError {
@@ -33,6 +34,7 @@ where
 impl IntoResponse for JsonError {
     fn into_response(self) -> Response {
         let error: TdError = self.into();
+        error!("{}", error);
         DefaultErrorStatus::from(error).into_response()
     }
 }

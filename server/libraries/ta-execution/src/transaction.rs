@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
 use td_error::{td_error, TdError};
-use td_objects::types::basic::{TransactionByStr, TransactionId, TransactionKey};
+use td_objects::types::basic::{CollectionId, TransactionByStr, TransactionId, TransactionKey};
 use td_objects::types::execution::FunctionVersionNode;
 
 #[td_error]
@@ -33,7 +33,7 @@ pub trait TransactionMapper:
 /// TransactionMap is a map that stores transaction keys and their corresponding transaction IDs.
 /// It uses a generic TransactionMapper to determine the key for each function version node.
 pub struct TransactionMap<T: TransactionMapper> {
-    map: HashMap<TransactionKey, TransactionId>,
+    map: HashMap<TransactionKey, (TransactionId, CollectionId)>,
     mapper: T, // CARE: transaction_by enum can have more than one form
 }
 
@@ -49,15 +49,26 @@ impl<T: TransactionMapper> TransactionMap<T> {
         &self.mapper
     }
 
-    pub fn add(&mut self, v: &FunctionVersionNode) -> Result<&TransactionId, TdError> {
-        Ok(self.map.entry(self.mapper.key(v)?.clone()).or_default())
+    pub fn add(
+        &mut self,
+        v: &FunctionVersionNode,
+    ) -> Result<&(TransactionId, CollectionId), TdError> {
+        Ok(self
+            .map
+            .entry(self.mapper.key(v)?.clone())
+            .or_insert_with(|| {
+                let transaction_id = TransactionId::default();
+                // This works because transactions last at most one collection.
+                let collection_id = *v.collection_id();
+                (transaction_id, collection_id)
+            }))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &TransactionKey> {
         self.map.keys()
     }
 
-    pub fn get(&self, key: &TransactionKey) -> Result<&TransactionId, TdError> {
+    pub fn get(&self, key: &TransactionKey) -> Result<&(TransactionId, CollectionId), TdError> {
         self.map
             .get(key)
             .ok_or(TransactionMapperError::MissingTransactionKey(key.clone()).into())

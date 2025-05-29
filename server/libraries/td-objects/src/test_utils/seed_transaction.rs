@@ -14,6 +14,7 @@ pub async fn seed_transaction(
 ) -> TransactionDB {
     let transaction_db = TransactionDB::builder()
         .id(TransactionId::default())
+        .collection_id(execution.collection_id())
         .execution_id(execution.id())
         .try_transaction_by("ANY")
         .unwrap()
@@ -84,6 +85,7 @@ mod tests {
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = seed_transaction(&db, &execution, &transaction_key).await;
 
+        assert_eq!(transaction.collection_id(), execution.collection_id());
         assert_eq!(transaction.execution_id(), execution.id());
         assert_eq!(*transaction.transaction_key(), transaction_key);
         assert_eq!(transaction.triggered_on(), transaction.triggered_on());

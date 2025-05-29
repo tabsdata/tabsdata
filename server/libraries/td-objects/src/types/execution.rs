@@ -39,6 +39,8 @@ pub struct ExecutionDB {
     id: ExecutionId,
     #[td_type(updater(try_from = ExecutionRequest, include))]
     name: Option<ExecutionName>,
+    #[td_type(extractor, builder(include))]
+    collection_id: CollectionId,
     #[td_type(builder(field = "id"))]
     function_version_id: FunctionVersionId,
     #[td_type(updater(try_from = RequestContext, include, field = "time"))]
@@ -52,6 +54,7 @@ pub struct ExecutionDB {
 pub struct ExecutionDBWithStatus {
     id: ExecutionId,
     name: Option<ExecutionName>,
+    collection_id: CollectionId,
     function_version_id: FunctionVersionId,
     triggered_on: TriggeredOn,
     triggered_by_id: UserId,
@@ -66,6 +69,8 @@ pub struct ExecutionDBWithStatus {
 pub struct TransactionDB {
     #[td_type(extractor)]
     id: TransactionId, // no default as it has to be calculated depending on the execution
+    #[td_type(extractor)] // tied to its functions, not the execution
+    collection_id: CollectionId,
     #[td_type(builder(field = "id"))]
     execution_id: ExecutionId,
     transaction_by: TransactionByStr,
@@ -80,6 +85,7 @@ pub struct TransactionDB {
 #[dao(sql_table = "transactions__with_status")]
 pub struct TransactionDBWithStatus {
     id: TransactionId,
+    collection_id: CollectionId,
     execution_id: ExecutionId,
     transaction_by: TransactionByStr,
     transaction_key: TransactionKey,
@@ -97,11 +103,13 @@ pub struct SynchrotronResponse {
     #[dto(list(filter, filter_like))]
     id: TransactionId,
     #[dto(list(filter, filter_like))]
+    collection_id: CollectionId,
+    #[dto(list(filter, filter_like))]
     execution_id: ExecutionId,
-    // #[dto(list(filter, filter_like))]
-    // execution_name: Option<ExecutionName>,
-    #[dto(list(pagination_by = "+"))]
+    #[dto(list(pagination_by = "+", filter, filter_like))]
     triggered_on: TriggeredOn,
+    #[dto(list(filter, filter_like))]
+    triggered_by_id: UserId,
     #[dto(list(filter, filter_like))]
     status: TransactionStatus,
 }

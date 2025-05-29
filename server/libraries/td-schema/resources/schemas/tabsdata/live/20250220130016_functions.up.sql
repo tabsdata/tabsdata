@@ -184,11 +184,13 @@ CREATE TABLE executions
 (
     id                  TEXT PRIMARY KEY,
     name                TEXT      NULL,
+    collection_id       TEXT      NOT NULL,
     function_version_id TEXT      NOT NULL,
 
     triggered_on        TIMESTAMP NOT NULL,
     triggered_by_id     TEXT      NOT NULL,
 
+    FOREIGN KEY (collection_id) REFERENCES collections (id),
     FOREIGN KEY (function_version_id) REFERENCES functions (id)
 );
 
@@ -215,7 +217,7 @@ GROUP BY s.id;
 CREATE TABLE transactions
 (
     id              TEXT PRIMARY KEY,
-    --     collection_id   TEXT      NOT NULL,
+    collection_id   TEXT      NOT NULL,
     execution_id    TEXT      NOT NULL,
 
     transaction_by  TEXT      NOT NULL,
@@ -224,6 +226,7 @@ CREATE TABLE transactions
     triggered_on    TIMESTAMP NOT NULL,
     triggered_by_id TEXT      NOT NULL,
 
+    FOREIGN KEY (collection_id) REFERENCES collections (id),
     FOREIGN KEY (execution_id) REFERENCES executions (id)
 );
 

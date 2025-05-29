@@ -346,6 +346,7 @@ mod tests {
         assert_eq!(executions.len(), 1);
         assert_eq!(executions[0].id(), response.id());
         assert_eq!(executions[0].name(), response.name());
+        assert_eq!(executions[0].collection_id(), collection.id());
         assert_eq!(*executions[0].status(), ExecutionStatus::Scheduled);
 
         // Transaction
@@ -357,6 +358,7 @@ mod tests {
             .map_err(handle_sql_err)?;
         assert!(transactions.len() == 1 || transactions.len() == 2);
         for transaction in transactions {
+            assert_eq!(transaction.collection_id(), collection.id());
             assert_eq!(transaction.execution_id(), response.id());
             assert_eq!(*transaction.status(), TransactionStatus::Scheduled);
         }

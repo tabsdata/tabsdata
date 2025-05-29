@@ -11,6 +11,7 @@ use td_database::sql::DbPool;
 pub async fn seed_execution(db: &DbPool, function_version: &FunctionDB) -> ExecutionDB {
     let execution_db = ExecutionDB::builder()
         .name(ExecutionName::try_from("test_execution").unwrap())
+        .collection_id(function_version.collection_id())
         .function_version_id(function_version.id())
         .triggered_on(TriggeredOn::now().await)
         .triggered_by_id(UserId::admin())
@@ -77,6 +78,7 @@ mod tests {
             *execution.name(),
             Some(ExecutionName::try_from("test_execution").unwrap())
         );
+        assert_eq!(execution.collection_id(), collection.id());
         assert_eq!(execution.function_version_id(), function_version.id());
         assert_eq!(
             **execution.triggered_by_id(),

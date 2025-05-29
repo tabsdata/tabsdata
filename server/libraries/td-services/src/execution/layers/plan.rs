@@ -44,10 +44,12 @@ pub async fn build_transactions(
     let transactions = transaction_map
         .iter()
         .map(|t| {
+            let (transaction_id, collection_id) = transaction_map.get(t)?;
             transaction_builder
                 .deref()
                 .clone()
-                .id(transaction_map.get(t)?)
+                .id(transaction_id)
+                .collection_id(collection_id)
                 .transaction_by(transaction_map.mapper().transaction_by()?)
                 .transaction_key(t)
                 .build()
@@ -65,12 +67,13 @@ pub async fn build_function_runs(
     Input(function_run_builder): Input<FunctionRunDBBuilder>,
 ) -> Result<Vec<FunctionRunDB>, TdError> {
     let manual_trigger = template.manual_trigger_function();
+    let (transaction_id, _) = transaction_map.get(&transaction_by.key(manual_trigger)?)?;
     let manual_trigger_function_run = function_run_builder
         .deref()
         .clone()
         .collection_id(manual_trigger.collection_id())
         .function_version_id(manual_trigger.function_version_id())
-        .transaction_id(transaction_map.get(&transaction_by.key(manual_trigger)?)?)
+        .transaction_id(transaction_id)
         .trigger(Trigger::Manual)
         .build()?;
 
@@ -78,12 +81,13 @@ pub async fn build_function_runs(
         .triggered_functions()
         .iter()
         .map(|f| {
+            let (transaction_id, _) = transaction_map.get(&transaction_by.key(manual_trigger)?)?;
             function_run_builder
                 .deref()
                 .clone()
                 .collection_id(f.collection_id())
                 .function_version_id(f.function_version_id())
-                .transaction_id(transaction_map.get(&transaction_by.key(f)?)?)
+                .transaction_id(transaction_id)
                 .trigger(Trigger::Dependency)
                 .build()
                 .map_err(TdError::from)
@@ -109,6 +113,7 @@ pub async fn build_table_data_versions(
         .output_tables()
         .iter()
         .map(|(f, t, edge)| {
+            let (transaction_id, _) = transaction_map.get(&transaction_by.key(f)?)?;
             TableDataVersionDB::builder()
                 .collection_id(f.collection_id())
                 .table_id(t.table_id())
@@ -116,7 +121,7 @@ pub async fn build_table_data_versions(
                 .table_version_id(t.table_version_id())
                 .function_version_id(t.function_version_id())
                 .execution_id(execution.id())
-                .transaction_id(transaction_map.get(&transaction_by.key(f)?)?)
+                .transaction_id(transaction_id)
                 .function_run_id(function_runs_map[f.function_version_id()].id())
                 .function_param_pos(edge.output_pos().cloned())
                 .build()
@@ -184,12 +189,13 @@ pub async fn build_function_requirements(
     let mut input_idx = 0;
     for (function, table, edge) in plan.function_version_requirements() {
         for (version_pos, version) in edge.versions().inner().iter().enumerate() {
+            let (transaction_id, _) = transaction_map.get(&transaction_by.key(function)?)?;
             let mut builder = FunctionRequirementDB::builder();
             builder
                 // current
                 .collection_id(function.collection_id())
                 .execution_id(execution.id())
-                .transaction_id(transaction_map.get(&transaction_by.key(function)?)?)
+                .transaction_id(transaction_id)
                 .function_run_id(function_runs_map[function.function_version_id()].id())
                 // condition
                 .requirement_table_id(table.table_id())
