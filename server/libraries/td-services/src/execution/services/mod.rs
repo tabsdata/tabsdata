@@ -49,10 +49,10 @@ impl ExecutionServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            execute: ExecuteFunctionService::new(db.clone()),
+            execute: ExecuteFunctionService::new(db.clone(), authz_context.clone()),
             callback: ExecutionCallbackService::new(db.clone()),
-            cancel_transaction: TransactionCancelService::new(db.clone()),
-            cancel_execution: ExecutionCancelService::new(db.clone()),
+            cancel_transaction: TransactionCancelService::new(db.clone(), authz_context.clone()),
+            cancel_execution: ExecutionCancelService::new(db.clone(), authz_context.clone()),
             read_function_run: FunctionRunReadService::new(db.clone(), authz_context.clone()),
             synchrotron: SynchrotronService::new(db.clone(), queries.clone()),
         }

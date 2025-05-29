@@ -8,6 +8,7 @@ use crate::function::services::register::RegisterFunctionService;
 use crate::function::services::update::UpdateFunctionService;
 use crate::function::services::upload::UploadFunctionService;
 use std::sync::Arc;
+use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, DeleteRequest, ReadRequest, UpdateRequest};
@@ -33,13 +34,13 @@ pub struct FunctionServices {
 }
 
 impl FunctionServices {
-    pub fn new(db: DbPool, storage: Arc<Storage>) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) -> Self {
         Self {
-            register: RegisterFunctionService::new(db.clone()),
-            upload: UploadFunctionService::new(db.clone(), storage.clone()),
-            read_version: ReadFunctionService::new(db.clone()),
-            update: UpdateFunctionService::new(db.clone()),
-            delete: DeleteFunctionService::new(db.clone()),
+            register: RegisterFunctionService::new(db.clone(), authz_context.clone()),
+            upload: UploadFunctionService::new(db.clone(), authz_context.clone(), storage.clone()),
+            read_version: ReadFunctionService::new(db.clone(), authz_context.clone()),
+            update: UpdateFunctionService::new(db.clone(), authz_context.clone()),
+            delete: DeleteFunctionService::new(db.clone(), authz_context.clone()),
         }
     }
 

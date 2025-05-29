@@ -133,6 +133,7 @@ pub struct FunctionDB {
 pub struct FunctionDBWithNames {
     #[td_type(extractor)]
     id: FunctionVersionId,
+    #[td_type(extractor)]
     collection_id: CollectionId,
     name: FunctionName,
     description: Description,

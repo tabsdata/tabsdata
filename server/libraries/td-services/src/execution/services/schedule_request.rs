@@ -90,6 +90,7 @@ impl<T: WorkerMessageQueue> ScheduleRequestService<T> {
 mod tests {
     use super::*;
     use crate::execution::services::execute::ExecuteFunctionService;
+    use td_authz::AuthzContext;
     use td_common::server::{FileWorkerMessageQueue, SupervisorMessagePayload};
     use td_database::sql::DbPool;
     use td_objects::crudl::{handle_sql_err, RequestContext};
@@ -192,7 +193,10 @@ mod tests {
                 .build()?,
         );
 
-        let service = ExecuteFunctionService::new(db.clone()).service().await;
+        let authz_context = Arc::new(AuthzContext::default());
+        let service = ExecuteFunctionService::new(db.clone(), authz_context)
+            .service()
+            .await;
         let execution = service.raw_oneshot(request).await?;
 
         // Actual test

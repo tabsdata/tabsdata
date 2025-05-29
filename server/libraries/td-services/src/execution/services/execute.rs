@@ -8,17 +8,21 @@ use crate::execution::layers::plan::{
 };
 use crate::execution::layers::template::{build_execution_template, version_graph};
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
 use td_objects::tower_service::from::{
     combine, BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
     UpdateService, With,
 };
 use td_objects::tower_service::sql::{insert, insert_vec, By, SqlSelectService};
-use td_objects::types::basic::{AtTime, CollectionIdName, FunctionId, FunctionIdName};
+use td_objects::types::basic::{
+    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName,
+};
 use td_objects::types::execution::{
     ExecutionDB, ExecutionDBBuilder, ExecutionRequest, ExecutionResponse, FunctionRequirementDB,
     FunctionRunDB, FunctionRunDBBuilder, TableDataVersionDB, TransactionDB, TransactionDBBuilder,
@@ -38,19 +42,21 @@ pub struct ExecuteFunctionService {
 }
 
 impl ExecuteFunctionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         let transaction_by = Arc::new(TransactionBy::Function);
         Self {
-            provider: Self::provider(db, queries, transaction_by),
+            provider: Self::provider(db, queries, authz_context, transaction_by),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, transaction_by: Arc<TransactionBy>) {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>, transaction_by: Arc<TransactionBy>) {
             service_provider!(layers!(
                 // Set context
+                TransactionProvider::new(db),
                 SrvCtxProvider::new(queries),
+                SrvCtxProvider::new(authz_context),
                 SrvCtxProvider::new(transaction_by),
 
                 // Extract from request.
@@ -63,11 +69,14 @@ impl ExecuteFunctionService {
                 from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
                 from_fn(combine::<CollectionIdName, FunctionIdName>),
 
-                // DB Transaction start.
-                TransactionProvider::new(db),
-
                 // Select trigger function.
                 from_fn(By::<(CollectionIdName, FunctionIdName)>::select::<DaoQueries, FunctionDBWithNames>),
+
+                // check requester is coll_admin or coll_exec for the function's collection
+                from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
+                from_fn(AuthzOn::<CollectionId>::set),
+                from_fn(Authz::<CollAdmin, CollExec>::check),
+
                 from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
 
                 // Create execution template.
@@ -152,7 +161,12 @@ mod tests {
 
         let queries = Arc::new(DaoQueries::default());
         let transaction_by = Arc::new(TransactionBy::default());
-        let provider = ExecuteFunctionService::provider(db, queries, transaction_by);
+        let provider = ExecuteFunctionService::provider(
+            db,
+            queries,
+            Arc::new(AuthzContext::default()),
+            transaction_by,
+        );
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -188,6 +202,10 @@ mod tests {
                             FunctionDBWithNames,
                         >,
                     ),
+                    // check requester is coll_admin or coll_exec for the function's collection
+                    type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
+                    type_of_val(&AuthzOn::<CollectionId>::set),
+                    type_of_val(&Authz::<CollAdmin, CollExec>::check),
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                     // Create execution template.
                     // Find trigger graph
@@ -285,7 +303,10 @@ mod tests {
                 .build()?,
         );
 
-        let service = ExecuteFunctionService::new(db.clone()).service().await;
+        let authz_context = Arc::new(AuthzContext::default());
+        let service = ExecuteFunctionService::new(db.clone(), authz_context)
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 

@@ -4,14 +4,16 @@
 
 use crate::execution::layers::update_status::update_function_run_status;
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::UpdateRequest;
+use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
-use td_objects::types::basic::{ExecutionId, ExecutionIdName};
+use td_objects::types::basic::{CollectionId, ExecutionId, ExecutionIdName};
 use td_objects::types::execution::{ExecutionDB, FunctionRunDB, UpdateFunctionRunDB};
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
@@ -24,30 +26,37 @@ pub struct ExecutionCancelService {
 }
 
 impl ExecutionCancelService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
+                // DB Transaction start.
+                TransactionProvider::new(db),
                 // Set context
                 SrvCtxProvider::new(queries),
+                SrvCtxProvider::new(authz_context),
 
                 // Extract from request.
+                from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
                 from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>),
 
                 // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
                 from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
 
-                // DB Transaction start.
-                TransactionProvider::new(db),
-
                 // Find function run.
                 from_fn(By::<ExecutionIdName>::select::<DaoQueries, ExecutionDB>),
+
+                // check requester is coll_admin or coll_exec for the trigger's collection
+                from_fn(With::<ExecutionDB>::extract::<CollectionId>),
+                from_fn(AuthzOn::<CollectionId>::set),
+                from_fn(Authz::<CollAdmin, CollExec>::check),
+
                 from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
                 from_fn(By::<ExecutionId>::select_all::<DaoQueries, FunctionRunDB>),
 
@@ -103,7 +112,8 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider = ExecutionCancelService::provider(db, queries);
+        let provider =
+            ExecutionCancelService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -308,7 +318,9 @@ mod tests {
             (),
         );
 
-        let service = ExecutionCancelService::new(db.clone()).service().await;
+        let service = ExecutionCancelService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         // Assertions

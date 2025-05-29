@@ -166,7 +166,11 @@ impl ApiServerInstance {
     }
 
     fn function_state(&self) -> state::Functions {
-        Arc::new(FunctionServices::new(self.db.clone(), self.storage.clone()))
+        Arc::new(FunctionServices::new(
+            self.db.clone(),
+            self.authz_context.clone(),
+            self.storage.clone(),
+        ))
     }
 
     fn roles_state(&self) -> state::Roles {

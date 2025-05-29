@@ -221,7 +221,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -323,7 +325,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 

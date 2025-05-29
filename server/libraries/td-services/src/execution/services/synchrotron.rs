@@ -21,6 +21,8 @@ use td_tower::{layers, provider};
 )]
 fn provider() {
     layers!(
+        // No need for authz for this service.
+
         // List all transactions in the system.
         from_fn(By::<()>::list::<(), DaoQueries, SynchrotronResponse>),
     )

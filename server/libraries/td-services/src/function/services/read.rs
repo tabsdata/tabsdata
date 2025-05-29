@@ -3,19 +3,23 @@
 //
 
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{
+    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
+};
 use td_objects::tower_service::from::{
     builder, combine, BuildService, ConvertIntoMapService, ExtractNameService, ExtractService,
     SetService, TryIntoService, With,
 };
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
 use td_objects::types::basic::{
-    AtTime, CollectionIdName, FunctionIdName, FunctionStatus, FunctionVersionId, TableDependency,
-    TableName, TableTrigger,
+    AtTime, CollectionId, CollectionIdName, FunctionIdName, FunctionStatus, FunctionVersionId,
+    TableDependency, TableName, TableTrigger,
 };
 use td_objects::types::dependency::DependencyDBWithNames;
 use td_objects::types::function::{
@@ -33,21 +37,23 @@ pub struct ReadFunctionService {
 }
 
 impl ReadFunctionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
+                ConnectionProvider::new(db),
                 SrvCtxProvider::new(queries),
+                SrvCtxProvider::new(authz_context),
+
                 from_fn(With::<ReadRequest<FunctionParam>>::extract::<RequestContext>),
                 from_fn(With::<ReadRequest<FunctionParam>>::extract_name::<FunctionParam>),
 
-                ConnectionProvider::new(db),
 
                 // Extract from request.
                 from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
@@ -58,6 +64,12 @@ impl ReadFunctionService {
                 from_fn(With::<RequestContext>::extract::<AtTime>),
                 from_fn(FunctionStatus::active),
                 from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>),
+
+                // check requester is coll_admin or coll_dev for the function's collection
+                from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
+                from_fn(AuthzOn::<CollectionId>::set),
+                from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
+
                 from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
 
                 // Read function with tables
@@ -116,7 +128,8 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider = ReadFunctionService::provider(db, queries);
+        let provider =
+            ReadFunctionService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -138,6 +151,10 @@ mod tests {
                     FunctionDBWithNames,
                 >,
             ),
+            // check requester is coll_admin or coll_dev for the function's collection
+            type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
+            type_of_val(&AuthzOn::<CollectionId>::set),
+            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
             type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
             // Read function with tables
             // Builder
@@ -201,7 +218,9 @@ mod tests {
                 .build()?,
         );
 
-        let service = ReadFunctionService::new(db.clone()).service().await;
+        let service = ReadFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 

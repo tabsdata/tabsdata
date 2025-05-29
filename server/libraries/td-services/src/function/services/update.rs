@@ -5,11 +5,13 @@
 use crate::function::layers::register::data_location;
 use crate::function::layers::update::assert_function_name_not_exists;
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
     combine, BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
     SetService, TryIntoService, UpdateService, With,
@@ -42,22 +44,24 @@ pub struct UpdateFunctionService {
 }
 
 impl UpdateFunctionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
+                TransactionProvider::new(db),
                 SrvCtxProvider::new(queries),
+                SrvCtxProvider::new(authz_context),
+
                 from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract::<RequestContext>),
                 from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_name::<FunctionParam>),
                 from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_data::<FunctionUpdate>),
 
-                TransactionProvider::new(db),
 
                 // Extract collection and current function from request.
                 from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
@@ -66,6 +70,11 @@ impl UpdateFunctionService {
                 // Get collection. Extract collection id and name.
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                 from_fn(With::<CollectionDB>::extract::<CollectionId>),
+
+                // check requester is coll_admin or coll_dev for the function's collection
+                from_fn(AuthzOn::<CollectionId>::set),
+                from_fn(Authz::<CollAdmin, CollDev>::check),
+
                 from_fn(With::<CollectionDB>::extract::<CollectionName>),
 
                 // Get function. Extract function id and name.
@@ -164,7 +173,8 @@ mod tests {
         use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider = UpdateFunctionService::provider(db, queries);
+        let provider =
+            UpdateFunctionService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -181,6 +191,10 @@ mod tests {
                 // Get collection. Extract collection id and name.
                 type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                // check requester is coll_admin or coll_dev for the function's collection
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev>::check),
+
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
                 // Get function. Extract function id and name.
                 type_of_val(&combine::<CollectionIdName, FunctionIdName>),
@@ -296,7 +310,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -359,7 +375,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -422,7 +440,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -485,7 +505,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -548,7 +570,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -611,7 +635,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -674,7 +700,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -753,7 +781,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -832,7 +862,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -911,7 +943,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -1002,7 +1036,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -1066,7 +1102,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -1105,7 +1143,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         // Without reuse_frozen, we just get an error
         let response = response;
@@ -1144,7 +1184,9 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone()).service().await;
+        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
         // But with reuse_frozen, we get the expected response

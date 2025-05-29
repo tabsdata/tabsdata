@@ -4,11 +4,13 @@
 
 use crate::function::layers::delete::build_deleted_function_version;
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
     combine, DefaultService, ExtractNameService, ExtractService, TryIntoService, UpdateService,
     With,
@@ -36,21 +38,23 @@ pub struct DeleteFunctionService {
 }
 
 impl DeleteFunctionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
+                TransactionProvider::new(db),
                 SrvCtxProvider::new(queries),
+                SrvCtxProvider::new(authz_context),
+
                 from_fn(With::<DeleteRequest<FunctionParam>>::extract::<RequestContext>),
                 from_fn(With::<DeleteRequest<FunctionParam>>::extract_name::<FunctionParam>),
 
-                TransactionProvider::new(db),
 
                 // Extract collection and function from request.
                 from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
@@ -59,6 +63,11 @@ impl DeleteFunctionService {
                 // Get collection. Extract collection id and name.
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                 from_fn(With::<CollectionDB>::extract::<CollectionId>),
+
+                // check requester is coll_admin or coll_dev for the function's collection
+                from_fn(AuthzOn::<CollectionId>::set),
+                from_fn(Authz::<CollAdmin, CollDev>::check),
+
                 from_fn(With::<CollectionDB>::extract::<CollectionName>),
 
                 // Get function. Extract function version id.
@@ -132,7 +141,8 @@ mod tests {
         use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider = DeleteFunctionService::provider(db, queries);
+        let provider =
+            DeleteFunctionService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -147,6 +157,9 @@ mod tests {
             // Get collection. Extract collection id and name.
             type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+            // check requester is coll_admin or coll_exec for the function's collection
+            type_of_val(&AuthzOn::<CollectionId>::set),
+            type_of_val(&Authz::<CollAdmin, CollDev>::check),
             type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
             // Get function. Extract function version id.
             type_of_val(&combine::<CollectionIdName, FunctionIdName>),
@@ -229,7 +242,9 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone()).service().await;
+        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -278,7 +293,9 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone()).service().await;
+        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -339,7 +356,9 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone()).service().await;
+        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -400,7 +419,9 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone()).service().await;
+        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -459,7 +480,9 @@ mod tests {
             create_1.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let created_function_version_1 = response?;
 
@@ -491,7 +514,9 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone()).service().await;
+        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         // Assert that the first function is as if it just got registered

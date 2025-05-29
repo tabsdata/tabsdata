@@ -5,11 +5,13 @@
 use crate::function::layers::register::{build_dependency_versions, build_table_versions};
 use crate::function::layers::register::{build_trigger_versions, data_location};
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
     combine, BuildService, DefaultService, EmptyVecService, ExtractDataService, ExtractNameService,
     ExtractService, SetService, TryIntoService, UpdateService, With,
@@ -38,22 +40,24 @@ pub struct RegisterFunctionService {
 }
 
 impl RegisterFunctionService {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries),
+            provider: Self::provider(db, queries, authz_context),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
             service_provider!(layers!(
+                TransactionProvider::new(db),
                 SrvCtxProvider::new(queries),
+                SrvCtxProvider::new(authz_context),
+
                 from_fn(With::<CreateRequest<CollectionParam, FunctionRegister>>::extract::<RequestContext>),
                 from_fn(With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_name::<CollectionParam>),
                 from_fn(With::<CreateRequest<CollectionParam, FunctionRegister>>::extract_data::<FunctionRegister>),
 
-                TransactionProvider::new(db),
 
                 // Extract collection from request.
                 from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
@@ -61,6 +65,11 @@ impl RegisterFunctionService {
                 // Get collection. Extract collection id and name.
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                 from_fn(With::<CollectionDB>::extract::<CollectionId>),
+
+                // check requester is coll_admin or coll_dev for the function's collection
+                from_fn(AuthzOn::<CollectionId>::set),
+                from_fn(Authz::<CollAdmin, CollDev>::check),
+
                 from_fn(With::<CollectionDB>::extract::<CollectionName>),
 
                 // Get function.
@@ -173,7 +182,8 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider = RegisterFunctionService::provider(db, queries);
+        let provider =
+            RegisterFunctionService::provider(db, queries, Arc::new(AuthzContext::default()));
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -191,6 +201,10 @@ mod tests {
                     // Get collection. Extract collection id and name.
                     type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                     type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                    // check requester is coll_admin or coll_dev for the function's collection
+                    type_of_val(&AuthzOn::<CollectionId>::set),
+                    type_of_val(&Authz::<CollAdmin, CollDev>::check),
+
                     type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
 
                     // Get function.
@@ -290,7 +304,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -333,7 +349,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -376,7 +394,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -419,7 +439,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -462,7 +484,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let _response = service.raw_oneshot(request).await?;
 
         // Actual test
@@ -497,7 +521,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -543,7 +569,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let _response = service.raw_oneshot(request).await?;
 
         // Actual test
@@ -587,7 +615,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -635,7 +665,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let _response = service.raw_oneshot(request).await?;
 
         // Actual test
@@ -684,7 +716,9 @@ mod tests {
             create.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone()).service().await;
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 

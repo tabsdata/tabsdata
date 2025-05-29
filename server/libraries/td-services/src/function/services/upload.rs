@@ -5,12 +5,14 @@
 use crate::function::layers::register::data_location;
 use crate::function::layers::upload::upload_function_write_to_storage;
 use std::sync::Arc;
+use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::CreateRequest;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
     BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
     SetService, TryIntoService, With,
@@ -34,18 +36,21 @@ pub struct UploadFunctionService {
 }
 
 impl UploadFunctionService {
-    pub fn new(db: DbPool, storage: Arc<Storage>) -> Self {
+    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            provider: Self::provider(db, queries, storage),
+            provider: Self::provider(db, queries, authz_context, storage),
         }
     }
 
     p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, storage: Arc<Storage>) {
+        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) {
             service_provider!(layers!(
+                TransactionProvider::new(db),
                 SrvCtxProvider::new(queries),
                 SrvCtxProvider::new(storage),
+                SrvCtxProvider::new(authz_context),
+
                 from_fn(With::<CreateRequest<CollectionParam, FunctionUpload>>::extract::<RequestContext>),
                 from_fn(With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_name::<CollectionParam>),
                 from_fn(With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_data::<FunctionUpload>),
@@ -53,11 +58,14 @@ impl UploadFunctionService {
                 // Extract function (TODO also use FunctionId to generate data_location)
                 from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
 
-                TransactionProvider::new(db),
 
                 // Extract collection
                 from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
                 from_fn(With::<CollectionDB>::extract::<CollectionId>),
+
+                // check requester is coll_admin or coll_dev for the function's collection
+                from_fn(AuthzOn::<CollectionId>::set),
+                from_fn(Authz::<CollAdmin, CollDev>::check),
 
                 // Get location and storage version.
                 from_fn(With::<StorageVersion>::default),
@@ -118,7 +126,12 @@ mod tests {
             .uri(mount_uri(&test_dir))
             .build()?;
         let storage = Arc::new(Storage::from(vec![mount_def]).await?);
-        let provider = UploadFunctionService::provider(db, queries, storage);
+        let provider = UploadFunctionService::provider(
+            db,
+            queries,
+            Arc::new(AuthzContext::default()),
+            storage,
+        );
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -143,6 +156,9 @@ mod tests {
             // Extract collection
             type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+            // check requester is coll_admin or coll_dev for the function's collection
+            type_of_val(&AuthzOn::<CollectionId>::set),
+            type_of_val(&Authz::<CollAdmin, CollDev>::check),
             // Get location and storage version.
             type_of_val(&With::<StorageVersion>::default),
             type_of_val(&data_location),
@@ -195,9 +211,13 @@ mod tests {
             function_upload,
         );
 
-        let service = UploadFunctionService::new(db.clone(), storage.clone())
-            .service()
-            .await;
+        let service = UploadFunctionService::new(
+            db.clone(),
+            Arc::new(AuthzContext::default()),
+            storage.clone(),
+        )
+        .service()
+        .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
