@@ -141,7 +141,7 @@ mod tests {
     use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
-    use td_services::collections::service::CollectionServices;
+    use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
 
     async fn collections_state() -> Collections {

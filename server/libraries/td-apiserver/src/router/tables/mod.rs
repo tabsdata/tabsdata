@@ -7,7 +7,7 @@ use crate::routers;
 use td_apiforge::apiserver_tag;
 
 pub mod download;
-pub mod list_table;
+pub mod list;
 pub mod list_table_data_versions;
 pub mod sample;
 pub mod schema;
@@ -18,7 +18,7 @@ routers! {
     state => { Tables, StorageRef },
     router => {
         download => { state ( Tables, StorageRef ) },
-        list_table => { state ( Tables ) },
+        list => { state ( Tables ) },
         list_table_data_versions => { state ( Tables ) },
         sample => { state ( Tables ) },
         schema => { state ( Tables ) },

@@ -128,7 +128,7 @@ mod tests {
     use td_objects::types::basic::RoleId;
     use td_objects::types::basic::UserId;
     use td_security::config::PasswordHashingConfig;
-    use td_services::users::service::UserServices;
+    use td_services::user::service::UserServices;
     use tower::ServiceExt;
 
     async fn users_state() -> Users {

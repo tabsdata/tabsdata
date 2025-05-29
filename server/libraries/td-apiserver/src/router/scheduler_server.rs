@@ -8,7 +8,7 @@ use std::time::Duration;
 use td_common::server::WorkerMessageQueue;
 use td_common::signal::terminate;
 use td_database::sql::DbPool;
-use td_services::execution::services::SchedulerServices;
+use td_services::scheduler::services::SchedulerServices;
 use td_storage::Storage;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
 use tokio::select;

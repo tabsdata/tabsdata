@@ -199,8 +199,6 @@ pub const DOWNLOAD_TABLE: &str = url!(TABLE, "/download");
 pub const TABLE_DELETE: &str = url!(TABLE);
 
 // Executions
-// /executions/{transaction}/recover
-// /executions/{transaction}/cancel
 // /executions?execution?execution_name?status?who?when?trigger_fn
 // /executions/{exec_id}/tables
 // /executions/{exec_id}/graph
@@ -219,13 +217,11 @@ pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
 pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 
 // Transactions
-// /transactions/{transaction}/recover
-// /transactions/{transaction}/cancel
 // /transactions?collection?execution?execution_name?status?who?when?trigger_fn
-// /transactions/synchrotron (pair with id and attime)
 // /transactions/{trx_id}/tables
 
 // /transactions/{trx_id}/messages -- (id, function)
+// /transactions/{trx_id}/messages/{message_id}
 // /transactions/{trx_id}/messages/{message_id}/logs
 
 // /collections/{c}/tables/{t}/data_versions?at
