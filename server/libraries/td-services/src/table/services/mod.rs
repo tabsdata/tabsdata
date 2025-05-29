@@ -51,7 +51,11 @@ impl TableServices {
                 authz_context.clone(),
                 storage.clone(),
             ),
-            table_download: TableDownloadService::new(db.clone(), authz_context.clone()),
+            table_download: TableDownloadService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
             table_sample: TableSampleService::new(
                 db.clone(),
                 queries.clone(),

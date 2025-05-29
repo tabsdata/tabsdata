@@ -49,14 +49,11 @@ pub async fn download(
 ) -> Result<impl IntoResponse, GetErrorStatus> {
     let name = TableAtIdName::new(table_param, at_param);
     let request = context.read(name);
-
     let path = tables
         .table_download_service()
         .await
         .oneshot(request)
         .await?;
-
     let stream = storage.read_stream(&path).await.map_err(TdError::from)?;
-
     Ok(Body::from_stream(stream))
 }
