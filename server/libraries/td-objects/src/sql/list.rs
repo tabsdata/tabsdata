@@ -40,6 +40,13 @@ pub enum Order {
 }
 
 impl Order {
+    pub fn invert(&self) -> Self {
+        match self {
+            Order::Asc(field) => Order::Desc(field.clone()),
+            Order::Desc(field) => Order::Asc(field.clone()),
+        }
+    }
+
     pub fn field(&self) -> &str {
         match self {
             Order::Asc(field) => field,

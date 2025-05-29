@@ -414,7 +414,8 @@ where
             query_builder.push(")");
         });
 
-    let natural_order = query_params.natural_order();
+    let mut order = query_params.order().clone();
+    let mut natural_order = query_params.natural_order().clone();
     if let Some(pagination) = query_params.pagination() {
         if first {
             query_builder.push(" WHERE ");
@@ -436,39 +437,38 @@ where
             (Order::Desc(_), Pagination::Next(_, _)) => "<",
         };
 
-        if pagination_field != natural_order {
-            // field OP value
-            query_builder.push(format!("{} {} ", pagination_field.field(), range_operator));
-            query_builder.push_bind(pagination.column_value().to_owned());
-
-            query_builder.push(" OR ");
-            query_builder.push("(");
-
-            // field = value
-            query_builder.push(format!("{} = ", pagination_field.field()));
-            query_builder.push_bind(pagination.column_value().to_owned());
-
-            // natural_field OP value
-            query_builder.push(format!(
-                " AND {} {} ",
-                natural_order.field(),
-                range_operator
-            ));
-            query_builder.push_bind(pagination.pagination_id().to_owned());
-
-            query_builder.push(")");
-        } else {
-            // natural_field OP value
-            query_builder.push(format!("{} {} ", natural_order.field(), range_operator));
-            query_builder.push_bind(pagination.pagination_id().to_owned());
+        if matches!(pagination, Pagination::Previous(_, _)) {
+            natural_order = natural_order.invert();
+            order = order.map(|o| o.invert());
         }
+
+        // field OP value
+        query_builder.push(format!("{} {} ", pagination_field.field(), range_operator));
+        query_builder.push_bind(pagination.column_value().to_owned());
+
+        query_builder.push(" OR ");
+        query_builder.push("(");
+
+        // field = value
+        query_builder.push(format!("{} = ", pagination_field.field()));
+        query_builder.push_bind(pagination.column_value().to_owned());
+
+        // natural_field OP value
+        query_builder.push(format!(
+            " AND {} {} ",
+            natural_order.field(),
+            range_operator
+        ));
+        query_builder.push_bind(pagination.pagination_id().to_owned());
+        query_builder.push(")");
+
         query_builder.push(")");
     }
 
     query_builder.push(" ORDER BY ");
     let mut separated = query_builder.separated(", ");
 
-    if let Some(order) = query_params.order() {
+    if let Some(order) = order {
         separated.push(format!("{} {}", order.field(), order.direction()));
     }
 
@@ -1330,7 +1330,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id < ?) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (id < ? OR (id = ? AND id < ?)) ORDER BY id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1363,7 +1363,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (id > ? OR (id = ? AND id > ?)) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1396,7 +1396,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id < ?) ORDER BY id DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (id < ? OR (id = ? AND id < ?)) ORDER BY id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1429,7 +1429,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) ORDER BY id DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (id > ? OR (id = ? AND id > ?)) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1501,7 +1501,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name ASC, id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name < ? OR (name = ? AND id < ?)) ORDER BY name DESC, id DESC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1573,7 +1573,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name DESC, id DESC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name > ? OR (name = ? AND id > ?)) ORDER BY name ASC, id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();

@@ -770,9 +770,13 @@ macro_rules! impl_list {
                     })
                     .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                let result = result
+                let mut result = result
                     .iter()
                     .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
+
+                if let Some(_) = request.list_params().previous() {
+                    result.reverse();
+                }
 
                 let (previous, previous_pagination_id) = compute_previous(request.list_params(), &query_params, &result);
                 let (next, next_pagination_id) = compute_next(request.list_params(), &query_params, &result);
@@ -826,9 +830,13 @@ macro_rules! impl_list {
                     })
                     .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                let result = result
+                let mut result = result
                     .iter()
                     .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
+
+                if let Some(_) = request.list_params().previous() {
+                    result.reverse();
+                }
 
                 let (previous, previous_pagination_id) = compute_previous(request.list_params(), &query_params, &result);
                 let (next, next_pagination_id) = compute_next(request.list_params(), &query_params, &result);
@@ -909,12 +917,16 @@ fn compute_previous<T: ListQuery>(
     query_params: &ListQueryParams<T>,
     result: &[T],
 ) -> (Option<String>, Option<String>) {
-    match (list_params.previous(), result.first()) {
-        // no previous in list params, no data => no previous page
-        (None, None) => (None, None),
-        (Some(_), None) => (None, None),
-        // previous list params, data => use the first data item to get previous info
-        (_, Some(first)) => {
+    let first = match (list_params.previous(), list_params.next(), result.first()) {
+        (None, None, _) => None,
+        (None, Some(_), Some(first)) => Some(first),
+        (Some(_), _, Some(first)) => Some(first),
+        (Some(_), _, None) => None,
+        (None, Some(_), None) => None,
+    };
+    match first {
+        None => (None, None),
+        Some(first) => {
             let order = query_params
                 .order()
                 .as_ref()
@@ -1445,10 +1457,7 @@ mod tests {
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
             compute_previous::<MyDto>(&list_params, &list_query_params, &data),
-            (
-                data[0].order_by_str_value(&Some("name".to_string())),
-                Some(data[0].pagination_value())
-            )
+            (None, None)
         );
 
         // previous list params with no data
@@ -1581,6 +1590,272 @@ mod tests {
                 Some(data[3].pagination_value())
             )
         );
+        Ok(())
+    }
+
+    #[Dto]
+    #[dto(list(on = FooDao))]
+    #[td_type(builder(try_from = FooDao))]
+    struct FooDto2 {
+        #[dto(list(pagination_by = "+", order_by))]
+        id: FooId,
+        #[dto(list(order_by))]
+        name: FooName,
+    }
+
+    #[td_test::test(sqlx(fixture = "test_pagination"))]
+    async fn test_list_pagination_asc(db: DbPool) -> Result<(), TdError> {
+        fn request(params: ListParams) -> ListRequest<()> {
+            RequestContext::with(
+                AccessTokenId::default(),
+                UserId::admin(),
+                RoleId::sys_admin(),
+                true,
+            )
+            .list((), params)
+        }
+
+        async fn list(db: &DbPool, request: ListRequest<()>) -> ListResponse<FooDto2> {
+            let connection =
+                Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
+            By::<()>::list::<(), DaoQueries, FooDto2>(
+                connection,
+                TEST_QUERIES.clone(),
+                Input::new(request),
+                Input::new(()),
+            )
+            .await
+            .unwrap()
+        }
+
+        // default, first full page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &2);
+        assert!(res.previous_pagination_id().is_none());
+        assert!(res.previous().is_none());
+        assert_eq!(res.next_pagination_id(), &Some("1".to_string()));
+        assert_eq!(res.next(), &Some("B".to_string()));
+
+        // next, second full page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name")
+                .next("B")
+                .pagination_id("1")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &2);
+        assert_eq!(res.previous_pagination_id(), &Some("2".to_string()));
+        assert_eq!(res.previous(), &Some("C".to_string()));
+        assert_eq!(res.next_pagination_id(), &Some("3".to_string()));
+        assert_eq!(res.next(), &Some("D".to_string()));
+
+        // next, third partial page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name")
+                .next("D")
+                .pagination_id("3")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &1);
+        assert_eq!(res.previous_pagination_id(), &Some("4".to_string()));
+        assert_eq!(res.previous(), &Some("E".to_string()));
+        assert!(res.next_pagination_id().is_none());
+        assert!(res.next().is_none());
+
+        // previous, second full page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name")
+                .previous("E")
+                .pagination_id("4")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &2);
+        assert_eq!(res.previous_pagination_id(), &Some("2".to_string()));
+        assert_eq!(res.previous(), &Some("C".to_string()));
+        assert_eq!(res.next_pagination_id(), &Some("3".to_string()));
+        assert_eq!(res.next(), &Some("D".to_string()));
+
+        // previous, first full page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name")
+                .previous("C")
+                .pagination_id("2")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &2);
+        assert_eq!(res.previous_pagination_id(), &Some("0".to_string()));
+        assert_eq!(res.previous(), &Some("A".to_string()));
+        assert_eq!(res.next_pagination_id(), &Some("1".to_string()));
+        assert_eq!(res.next(), &Some("B".to_string()));
+
+        // previous, non-existing page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name")
+                .previous("0")
+                .pagination_id("A")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &0);
+        assert!(res.previous_pagination_id().is_none());
+        assert!(res.previous().is_none());
+        assert!(res.next_pagination_id().is_none());
+        assert!(res.next().is_none());
+
+        Ok(())
+    }
+
+    #[td_test::test(sqlx(fixture = "test_pagination"))]
+    async fn test_list_pagination_desc(db: DbPool) -> Result<(), TdError> {
+        fn request(params: ListParams) -> ListRequest<()> {
+            RequestContext::with(
+                AccessTokenId::default(),
+                UserId::admin(),
+                RoleId::sys_admin(),
+                true,
+            )
+            .list((), params)
+        }
+
+        async fn list(db: &DbPool, request: ListRequest<()>) -> ListResponse<FooDto2> {
+            let connection =
+                Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
+            By::<()>::list::<(), DaoQueries, FooDto2>(
+                connection,
+                TEST_QUERIES.clone(),
+                Input::new(request),
+                Input::new(()),
+            )
+            .await
+            .unwrap()
+        }
+
+        // default, first full page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name-")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &2);
+        assert!(res.previous_pagination_id().is_none());
+        assert!(res.previous().is_none());
+        assert_eq!(res.next_pagination_id(), &Some("3".to_string()));
+        assert_eq!(res.next(), &Some("D".to_string()));
+
+        // next, second full page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name-")
+                .next("D")
+                .pagination_id("3")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &2);
+        assert_eq!(res.previous_pagination_id(), &Some("2".to_string()));
+        assert_eq!(res.previous(), &Some("C".to_string()));
+        assert_eq!(res.next_pagination_id(), &Some("1".to_string()));
+        assert_eq!(res.next(), &Some("B".to_string()));
+
+        // next, third partial page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name-")
+                .next("B")
+                .pagination_id("1")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &1);
+        assert_eq!(res.previous_pagination_id(), &Some("0".to_string()));
+        assert_eq!(res.previous(), &Some("A".to_string()));
+        assert!(res.next_pagination_id().is_none());
+        assert!(res.next().is_none());
+
+        // previous, second full page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name-")
+                .previous("A")
+                .pagination_id("0")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &2);
+        assert_eq!(res.previous_pagination_id(), &Some("2".to_string()));
+        assert_eq!(res.previous(), &Some("C".to_string()));
+        assert_eq!(res.next_pagination_id(), &Some("1".to_string()));
+        assert_eq!(res.next(), &Some("B".to_string()));
+
+        // previous, first full page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name-")
+                .previous("C")
+                .pagination_id("2")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &2);
+        assert_eq!(res.previous_pagination_id(), &Some("4".to_string()));
+        assert_eq!(res.previous(), &Some("E".to_string()));
+        assert_eq!(res.next_pagination_id(), &Some("3".to_string()));
+        assert_eq!(res.next(), &Some("D".to_string()));
+
+        // previous, non-existing page
+        let req = request(
+            ListParams::builder()
+                .len(2usize)
+                .order_by("name-")
+                .previous("E")
+                .pagination_id("4")
+                .build()
+                .unwrap(),
+        );
+        let res = list(&db, req).await;
+        assert_eq!(res.len(), &0);
+        assert!(res.previous_pagination_id().is_none());
+        assert!(res.previous().is_none());
+        assert!(res.next_pagination_id().is_none());
+        assert!(res.next().is_none());
+
         Ok(())
     }
 }
