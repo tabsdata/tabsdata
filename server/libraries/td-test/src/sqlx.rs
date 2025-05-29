@@ -32,7 +32,7 @@ impl TestSetup<DbPool> for SqlxTestSetup<'_> {
             }
         });
 
-        let db = DbPool::new(&config, schema).await.unwrap();
+        let db = DbPool::create(&config, schema).await.unwrap();
 
         for fixture in self.fixtures.iter() {
             db.execute(*fixture).await.unwrap();

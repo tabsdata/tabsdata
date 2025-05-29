@@ -16,6 +16,7 @@ use sqlx::{
     ConnectOptions, Database, Describe, Error, Execute, Executor, FromRow, Pool, Sqlite,
     Transaction,
 };
+use std::cmp::Ordering;
 use std::future::Future;
 use std::time::Duration;
 use td_error::td_error;
@@ -134,36 +135,43 @@ pub type DbSchema = Migrator;
 
 #[td_error]
 pub enum DbError {
+    #[error("Tabsdata database schema has not be created. It must be created")]
+    DatabaseSchemaDoesNotExist = 5000,
+    #[error("Tabsdata database version is '{0}', it should be an integer")]
+    DatabaseNeedsUpgrade(String, String) = 5001,
+    #[error("Tabsdata database version is '{0}', binary database version is '{1}'. Binary must be upgraded")]
+    DatabaseIsNewer(String, String) = 5002,
+    #[error("Tabsdata database corrupted. {0}")]
+    DatabaseCorrupted(String) = 5003,
+
     #[error("Database location is missing in the given configuration")]
-    MissingDatabaseLocation = 5000,
+    MissingDatabaseLocation = 5004,
     #[error("Failed to database existence: {0}")]
-    FailedToCheckDatabaseExistence(#[source] Error) = 5001,
+    FailedToCheckDatabaseExistence(#[source] sqlx::Error) = 5005,
     #[error("Failed to database existence: {0}")]
-    FailedToCreateDatabase(#[source] Error) = 5002,
+    FailedToCreateDatabase(#[source] sqlx::Error) = 5006,
     #[error("Failed to connect to the database: {0}")]
-    FailedToConnectToDatabase(#[source] Error) = 5003,
+    FailedToConnectToDatabase(#[source] sqlx::Error) = 5007,
     #[error("Failed to connect to the database: {0}")]
-    FailedToCreateOrUpdateDatabaseSchema(#[source] MigrateError) = 5004,
+    FailedToCreateOrUpdateDatabaseSchema(#[source] MigrateError) = 5008,
     #[error("Sql error: {0}")]
-    SqlError(#[source] Error) = 5005,
+    SqlError(#[source] sqlx::Error) = 5009,
     #[error("Database does not exist")]
-    DatabaseDoesNotExist = 5006,
+    DatabaseDoesNotExist = 5010,
     #[error("Failed to create database directory {0}: {1}")]
-    FailedToCreateDatabaseDir(String, #[source] std::io::Error) = 5007,
+    FailedToCreateDatabaseDir(String, #[source] std::io::Error) = 5011,
 }
 
 /// Sqlite database connection provider using Sqlx.
 ///
 /// Databases are automatically created and their schema is updated if necessary
 /// when the connection is created.
-pub struct Db {
-    schema: &'static DbSchema,
-}
+pub struct Db;
 
 impl Db {
     /// Returns a database connection provider for a database with the given schema.
-    pub fn schema(schema: &'static DbSchema) -> Self {
-        Db { schema }
+    pub fn schema() -> Self {
+        Db
     }
 
     fn db_location_path(config: &SqliteConfig) -> Result<String, DbError> {
@@ -220,12 +228,6 @@ impl Db {
             .connect_with(db_options)
             .await
             .map_err(DbError::FailedToConnectToDatabase)?;
-        if !read_only {
-            self.schema
-                .run(&pool)
-                .await
-                .map_err(DbError::FailedToCreateOrUpdateDatabaseSchema)?;
-        }
         Ok(pool)
     }
 
@@ -250,23 +252,105 @@ impl Db {
 
 #[derive(Debug, Clone)]
 pub struct DbPool {
+    pub schema: &'static DbSchema,
     pub ro_pool: Pool<Sqlite>,
     pub rw_pool: Pool<Sqlite>,
+}
+
+pub const DB_VERSION_NAME: &str = "db_version";
+pub const DB_VERSION_VALUE: usize = 1;
+
+#[derive(Debug, FromRow)]
+pub struct SystemValue {
+    pub name: String,
+    pub value: String,
 }
 
 /// Specialized Sqlx Sqlite [`Pool`] that uses two pools, one for read-only operations and one for
 /// read-write operations.
 impl DbPool {
-    /// Creates a new [`DbPool`] with the given configuration.
+    /// Connects to a database using the given configuration.
     ///
-    /// The schema is created or updated to match the given [`DbSchema`].
-    pub async fn new(config: &SqliteConfig, schema: &'static DbSchema) -> Result<Self, DbError> {
-        let rw_ool = Db::schema(schema).rw_pool(config).await?;
-        let ro_pool = Db::schema(schema).ro_connect(config).await?;
+    /// The schema is assumed to be up to date.
+    pub async fn connect(
+        config: &SqliteConfig,
+        schema: &'static DbSchema,
+    ) -> Result<Self, DbError> {
+        let rw_pool = Db::schema().rw_pool(config).await?;
+        let ro_pool = Db::schema().ro_connect(config).await?;
         Ok(Self {
+            schema,
             ro_pool,
-            rw_pool: rw_ool,
+            rw_pool,
         })
+    }
+
+    /// Creates a database using the given configuration.
+    ///
+    /// Creates the schema.
+    pub async fn create(config: &SqliteConfig, schema: &'static DbSchema) -> Result<Self, DbError> {
+        let rw_pool = Db::schema().rw_pool(config).await?;
+        let ro_pool = Db::schema().ro_connect(config).await?;
+        let db = Self {
+            schema,
+            ro_pool,
+            rw_pool,
+        };
+        db.update_db_version().await?;
+        Ok(db)
+    }
+
+    fn map_db_version_error(err: sqlx::Error) -> DbError {
+        match &err {
+            sqlx::Error::RowNotFound => DbError::DatabaseCorrupted(
+                "Missing 'db_version' row in 'tabsdata_system'".to_string(),
+            ),
+            sqlx::Error::Database(database_err) => {
+                if database_err.message().contains("no such table") {
+                    DbError::DatabaseSchemaDoesNotExist
+                } else {
+                    DbError::SqlError(err)
+                }
+            }
+            _ => DbError::SqlError(err),
+        }
+    }
+
+    pub async fn check_db_version(&self) -> Result<(), DbError> {
+        let select_version_sql = format!(
+            "SELECT name, value FROM tabsdata_system WHERE name = '{}'",
+            DB_VERSION_NAME
+        );
+        let res: SystemValue = sqlx::query_as(&select_version_sql)
+            .fetch_one(&self.ro_pool)
+            .await
+            .map_err(Self::map_db_version_error)?;
+        let version = res.value.parse::<usize>().map_err(|_| {
+            DbError::DatabaseCorrupted(format!(
+                "'{}' value '{}' must be an integer",
+                DB_VERSION_NAME, res.value
+            ))
+        })?;
+
+        match version.cmp(&DB_VERSION_VALUE) {
+            Ordering::Equal => Ok(()),
+            Ordering::Less => Err(DbError::DatabaseNeedsUpgrade(
+                version.to_string(),
+                DB_VERSION_VALUE.to_string(),
+            )),
+            Ordering::Greater => Err(DbError::DatabaseIsNewer(
+                version.to_string(),
+                DB_VERSION_VALUE.to_string(),
+            )),
+        }
+    }
+
+    pub async fn update_db_version(&self) -> Result<(), DbError> {
+        self.schema
+            .run(&self.rw_pool)
+            .await
+            .map_err(DbError::FailedToCreateOrUpdateDatabaseSchema)?;
+        Ok(())
     }
 
     /// Delegates to the read-only pool's [`Pool::acquire`] method.
@@ -433,7 +517,7 @@ fn remove_leading_slash(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use crate::sql;
-    use crate::sql::{remove_leading_file_protocol, remove_leading_slash, Db, DbPool};
+    use crate::sql::{remove_leading_file_protocol, remove_leading_slash, Db, DbError, DbPool};
     use std::time::Duration;
     use testdir::testdir;
     use url::Url;
@@ -486,6 +570,7 @@ mod tests {
         let db = crate::db_with_schema(&config, td_schema::test_schema())
             .await
             .unwrap();
+        db.update_db_version().await.unwrap();
         let _ = sqlx::query("SELECT * FROM foo").execute(&db).await.unwrap();
         assert!(db_file.exists());
     }
@@ -500,14 +585,14 @@ mod tests {
             .build()
             .unwrap();
         {
-            let db = DbPool::new(&config, schema).await.unwrap();
+            let db = DbPool::create(&config, schema).await.unwrap();
             sqlx::query("INSERT INTO foo values('a', 'A')")
                 .execute(&db)
                 .await
                 .unwrap();
         }
 
-        let db = DbPool::new(&config, schema).await.unwrap();
+        let db = DbPool::create(&config, schema).await.unwrap();
         let res = sqlx::query("SELECT * FROM foo")
             .fetch_all(&db)
             .await
@@ -566,5 +651,113 @@ mod tests {
             "/not/a/windows/path"
         );
         assert_eq!(remove_leading_slash(""), "");
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_database_schema_does_not_exist() {
+        let schema = td_schema::test_schema();
+        let db_file = testdir!().join("test.db");
+        let config = sql::SqliteConfigBuilder::default()
+            .url(db_file.to_str().map(str::to_string))
+            .build()
+            .unwrap();
+
+        // tabsdata schema does not exist
+        let db = DbPool::create(&config, schema).await.unwrap();
+        let res = db.check_db_version().await;
+        assert!(matches!(res, Err(DbError::DatabaseSchemaDoesNotExist)));
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_database_schema_ok() {
+        let schema = td_schema::schema();
+        let db_file = testdir!().join("test.db");
+        let config = sql::SqliteConfigBuilder::default()
+            .url(db_file.to_str().map(str::to_string))
+            .build()
+            .unwrap();
+
+        let db = DbPool::create(&config, schema).await.unwrap();
+        assert!(db.check_db_version().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_database_schema_missing_db_version() {
+        let schema = td_schema::schema();
+        let db_file = testdir!().join("test.db");
+        let config = sql::SqliteConfigBuilder::default()
+            .url(db_file.to_str().map(str::to_string))
+            .build()
+            .unwrap();
+
+        let db = DbPool::create(&config, schema).await.unwrap();
+
+        sqlx::query("DELETE FROM tabsdata_system")
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let res = db.check_db_version().await;
+        assert!(matches!(res, Err(DbError::DatabaseCorrupted(_))));
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_database_schema_invalid_db_version() {
+        let schema = td_schema::schema();
+        let db_file = testdir!().join("test.db");
+        let config = sql::SqliteConfigBuilder::default()
+            .url(db_file.to_str().map(str::to_string))
+            .build()
+            .unwrap();
+
+        let db = DbPool::create(&config, schema).await.unwrap();
+
+        sqlx::query("UPDATE tabsdata_system set value = 'invalid' WHERE name = 'db_version'")
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let res = db.check_db_version().await;
+        assert!(matches!(res, Err(DbError::DatabaseCorrupted(_))));
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_database_schema_db_needs_upgrade() {
+        let schema = td_schema::schema();
+        let db_file = testdir!().join("test.db");
+        let config = sql::SqliteConfigBuilder::default()
+            .url(db_file.to_str().map(str::to_string))
+            .build()
+            .unwrap();
+
+        let db = DbPool::create(&config, schema).await.unwrap();
+
+        sqlx::query("UPDATE tabsdata_system set value = '0' WHERE name = 'db_version'")
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let res = db.check_db_version().await;
+        assert!(matches!(res, Err(DbError::DatabaseNeedsUpgrade(_, _))));
+    }
+
+    #[tokio::test]
+    async fn test_tabsdata_database_schema_app_needs_upgrade() {
+        let schema = td_schema::schema();
+        let db_file = testdir!().join("test.db");
+        let config = sql::SqliteConfigBuilder::default()
+            .url(db_file.to_str().map(str::to_string))
+            .build()
+            .unwrap();
+
+        let db = DbPool::create(&config, schema).await.unwrap();
+
+        sqlx::query("UPDATE tabsdata_system set value = '1000' WHERE name = 'db_version'")
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let res = db.check_db_version().await;
+        assert!(matches!(res, Err(DbError::DatabaseIsNewer(_, _))));
     }
 }

@@ -5,7 +5,7 @@
 //! API Server CLI configuration and parameters.
 
 use crate::addresses_default;
-use clap_derive::Args;
+use clap_derive::{Args, ValueEnum};
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -93,6 +93,16 @@ impl From<&Config> for PasswordHashConfig {
     }
 }
 
+#[derive(Debug, Clone, ValueEnum)]
+pub enum DbSchema {
+    /// Creates Tabsdata database
+    Create,
+    /// Updates Tabsdata database
+    Update,
+    /// Creates or updates Tabsdata database as needed
+    Auto,
+}
+
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
 pub struct Params {
@@ -117,6 +127,9 @@ pub struct Params {
     #[clap(long, value_parser = parse_transaction_by)]
     /// Transaction by
     transaction_by: Option<TransactionBy>,
+    #[clap(long)]
+    /// The apiserver will create or update the DB schema on startup, default is false
+    db_schema: Option<DbSchema>,
 }
 
 impl Params {
@@ -251,6 +264,7 @@ mod tests {
             access_jwt_expiration: Some(7200),
             request_timeout: Some(120),
             transaction_by: Some(TransactionBy::default()),
+            db_schema: None,
         };
 
         let resolved_config = params.resolve(default_config.clone()).unwrap();
@@ -288,6 +302,7 @@ mod tests {
             access_jwt_expiration: Some(1800),
             request_timeout: None,
             transaction_by: Some(TransactionBy::default()),
+            db_schema: None,
         };
 
         let partially_resolved_config = partial_params.resolve(default_config.clone()).unwrap();

@@ -19,7 +19,7 @@ pub async fn db_with_schema(
     config: &SqliteConfig,
     schema: &'static DbSchema,
 ) -> Result<DbPool, sql::DbError> {
-    DbPool::new(config, schema).await
+    DbPool::connect(config, schema).await
 }
 
 #[cfg(test)]
@@ -40,7 +40,9 @@ mod tests {
     async fn test_tabsdata_db_schema_creation() {
         let db_file = testdir!().join("test.db").to_str().map(str::to_string);
         let config = SqliteConfigBuilder::default().url(db_file).build().unwrap();
-        assert!(!crate::db(&config).await.unwrap().is_closed());
+        let db = crate::db(&config).await.unwrap();
+        assert!(db.update_db_version().await.is_ok());
+        assert!(db.check_db_version().await.is_ok());
     }
 
     #[derive(sqlx::FromRow)]

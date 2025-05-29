@@ -4,7 +4,7 @@
 
 use std::env;
 use std::sync::Arc;
-use td_apiserver::config::{Config, Params};
+use td_apiserver::config::{Config, DbSchema, Params};
 use td_apiserver::router::scheduler_server::SchedulerBuilder;
 use td_apiserver::router::ApiServerInstance;
 use td_common::attach::attach;
@@ -12,6 +12,7 @@ use td_common::cli::Cli;
 use td_common::logging;
 use td_common::server::FileWorkerMessageQueue;
 use td_common::status::ExitStatus;
+use td_database::sql::DbError;
 use td_storage::Storage;
 use tracing::{error, info, Level};
 
@@ -42,7 +43,92 @@ fn main() {
 
             // Connect to db
             let db = match td_database::db(config.database()).await {
-                Ok(db) => db,
+                Ok(db) => {
+                    info!(
+                        "Connected to Sqlite database: {}",
+                        config.database().url().as_ref().unwrap()
+                    );
+                    if let Some(db_schema) = params.db_schema() {
+                        match db_schema {
+                            DbSchema::Create => {
+                                info!("Creating database");
+                                match db.check_db_version().await {
+                                    Ok(_) => {
+                                        info!("Database already exists");
+                                        return ExitStatus::GeneralError;
+                                    }
+                                    Err(DbError::DatabaseSchemaDoesNotExist) => {
+                                        if let Err(err) = db.update_db_version().await {
+                                            error!("Error creating database: {}", err);
+                                            return ExitStatus::GeneralError;
+                                        }
+                                        info!("Database created");
+                                    }
+                                    Err(err) => {
+                                        error!("Error checking database for creating it: {}", err);
+                                        return ExitStatus::GeneralError;
+                                    }
+                                }
+                            }
+                            DbSchema::Update => {
+                                info!("Updating database");
+                                match db.check_db_version().await {
+                                    Ok(_) => {
+                                        if let Err(err) = db.update_db_version().await {
+                                            error!("Error updating database: {}", err);
+                                            return ExitStatus::GeneralError;
+                                        }
+                                        info!("Database updated");
+                                    }
+                                    Err(DbError::DatabaseSchemaDoesNotExist) => {
+                                        error!("Database does not exist, cannot update");
+                                        return ExitStatus::GeneralError;
+                                    }
+                                    Err(err) => {
+                                        error!("Error checking database for updating it: {}", err);
+                                        return ExitStatus::GeneralError;
+                                    }
+                                }
+                            }
+                            DbSchema::Auto => {
+                                info!("Creating or updating database");
+                                match db.check_db_version().await {
+                                    Ok(_) => {
+                                        info!("Database exists and is up to date");
+                                    }
+                                    Err(DbError::DatabaseSchemaDoesNotExist) => {
+                                        if let Err(err) = db.update_db_version().await {
+                                            error!("Error creating database: {}", err);
+                                            return ExitStatus::GeneralError;
+                                        }
+                                        info!("Database created");
+                                    }
+                                    Err(DbError::DatabaseNeedsUpgrade(_, _)) => {
+                                        if let Err(err) = db.update_db_version().await {
+                                            error!("Error updating database: {}", err);
+                                            return ExitStatus::GeneralError;
+                                        }
+                                        info!("Database updated");
+                                    }
+                                    Err(err) => {
+                                        error!("Error checking database for creating or updating it: {}", err);
+                                        return ExitStatus::GeneralError;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    match db.check_db_version().await {
+                        Ok(_) => {
+                            info!("Database is up to date, starting apiserver");
+                        }
+                        Err(e) => {
+                            error!("Error checking if database is up to date: {}", e);
+                            return ExitStatus::GeneralError;
+                        }
+                    }
+                    db
+                }
                 Err(e) => {
                     error!("Error connecting to Sqlite database: {}", e);
                     return ExitStatus::GeneralError;
