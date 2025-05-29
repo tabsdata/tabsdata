@@ -3,9 +3,7 @@
 //
 
 use crate::execution::layers::update_status::update_function_run_status;
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::TransactionParam;
@@ -15,70 +13,46 @@ use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
 use td_objects::types::basic::{CollectionId, TransactionId, TransactionIdName};
 use td_objects::types::execution::{FunctionRunDB, TransactionDB, UpdateFunctionRunDB};
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
-use td_tower::service_provider::{ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::{layers, provider};
 
-pub struct TransactionCancelService {
-    provider: ServiceProvider<UpdateRequest<TransactionParam, ()>, (), TdError>,
-}
-
-impl TransactionCancelService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                // DB Transaction start.
-                TransactionProvider::new(db),
-                // Set context
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(authz_context),
-
-                // Extract from request.
-                from_fn(With::<UpdateRequest<TransactionParam, ()>>::extract::<RequestContext>),
-                from_fn(With::<UpdateRequest<TransactionParam, ()>>::extract_name::<TransactionParam>),
-
-                // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
-                from_fn(With::<TransactionParam>::extract::<TransactionIdName>),
-
-
-                // Find function run.
-                from_fn(By::<TransactionIdName>::select::<DaoQueries, TransactionDB>),
-
-                // check requester is coll_admin or coll_exec for the transaction's collection
-                from_fn(With::<TransactionDB>::extract::<CollectionId>),
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<CollAdmin, CollExec>::check),
-
-                from_fn(With::<TransactionDB>::extract::<TransactionId>),
-                from_fn(By::<TransactionId>::select_all::<DaoQueries, FunctionRunDB>),
-
-                // Set cancel status
-                from_fn(UpdateFunctionRunDB::cancel),
-
-                // Update function requirements status
-                from_fn(update_function_run_status::<DaoQueries>),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<UpdateRequest<TransactionParam, ()>, (), TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = TransactionCancelService,
+    request = UpdateRequest<TransactionParam, ()>,
+    response = (),
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        // Extract from request.
+        from_fn(With::<UpdateRequest<TransactionParam, ()>>::extract::<RequestContext>),
+        from_fn(With::<UpdateRequest<TransactionParam, ()>>::extract_name::<TransactionParam>),
+        // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+        from_fn(With::<TransactionParam>::extract::<TransactionIdName>),
+        // Find function run.
+        from_fn(By::<TransactionIdName>::select::<DaoQueries, TransactionDB>),
+        // check requester is coll_admin or coll_exec for the transaction's collection
+        from_fn(With::<TransactionDB>::extract::<CollectionId>),
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollExec>::check),
+        from_fn(With::<TransactionDB>::extract::<TransactionId>),
+        from_fn(By::<TransactionId>::select_all::<DaoQueries, FunctionRunDB>),
+        // Set cancel status
+        from_fn(UpdateFunctionRunDB::cancel),
+        // Update function requirements status
+        from_fn(update_function_run_status::<DaoQueries>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::execution::services::callback::ExecutionCallbackService;
+    use std::sync::Arc;
     use td_common::datetime::IntoDateTimeUtc;
     use td_common::execution_status::FunctionRunUpdateStatus;
     use td_common::server::{MessageAction, ResponseMessagePayloadBuilder, WorkerClass};
@@ -122,6 +96,7 @@ mod tests {
 
         metadata.assert_service::<UpdateRequest<TransactionParam, ()>, ()>(&[
             // Extract from request.
+            type_of_val(&With::<UpdateRequest<TransactionParam, ()>>::extract::<RequestContext>),
             type_of_val(
                 &With::<UpdateRequest<TransactionParam, ()>>::extract_name::<TransactionParam>,
             ),
@@ -129,6 +104,10 @@ mod tests {
             type_of_val(&With::<TransactionParam>::extract::<TransactionIdName>),
             // Find function run.
             type_of_val(&By::<TransactionIdName>::select::<DaoQueries, TransactionDB>),
+            // check requester is coll_admin or coll_exec for the transaction's collection
+            type_of_val(&With::<TransactionDB>::extract::<CollectionId>),
+            type_of_val(&AuthzOn::<CollectionId>::set),
+            type_of_val(&Authz::<CollAdmin, CollExec>::check),
             type_of_val(&With::<TransactionDB>::extract::<TransactionId>),
             type_of_val(&By::<TransactionId>::select_all::<DaoQueries, FunctionRunDB>),
             // Set cancel status
@@ -321,9 +300,13 @@ mod tests {
             (),
         );
 
-        let service = TransactionCancelService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service = TransactionCancelService::new(
+            db.clone(),
+            Arc::new(DaoQueries::default()),
+            Arc::new(AuthzContext::default()),
+        )
+        .service()
+        .await;
         service.raw_oneshot(request).await?;
 
         // Assertions

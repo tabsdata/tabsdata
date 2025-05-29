@@ -41,10 +41,10 @@ mod schedule_request;
 mod synchrotron;
 
 pub struct ExecutionServices {
-    execute: ExecuteFunctionService,
     callback: ExecutionCallbackService,
-    cancel_transaction: TransactionCancelService,
     cancel_execution: ExecutionCancelService,
+    cancel_transaction: TransactionCancelService,
+    execute: ExecuteFunctionService,
     read_function_run: FunctionRunReadService,
     recover_execution: ExecutionRecoverService,
     recover_transaction: TransactionRecoverService,
@@ -55,10 +55,18 @@ impl ExecutionServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            execute: ExecuteFunctionService::new(db.clone(), authz_context.clone()),
             callback: ExecutionCallbackService::new(db.clone()),
-            cancel_transaction: TransactionCancelService::new(db.clone(), authz_context.clone()),
-            cancel_execution: ExecutionCancelService::new(db.clone(), authz_context.clone()),
+            cancel_execution: ExecutionCancelService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
+            cancel_transaction: TransactionCancelService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
+            execute: ExecuteFunctionService::new(db.clone(), authz_context.clone()),
             read_function_run: FunctionRunReadService::new(db.clone(), authz_context.clone()),
             recover_execution: ExecutionRecoverService::new(
                 db.clone(),
@@ -74,17 +82,16 @@ impl ExecutionServices {
         }
     }
 
-    pub async fn execute(
-        &self,
-    ) -> TdBoxService<CreateRequest<FunctionParam, ExecutionRequest>, ExecutionResponse, TdError>
-    {
-        self.execute.service().await
-    }
-
     pub async fn callback(
         &self,
     ) -> TdBoxService<UpdateRequest<FunctionRunIdParam, CallbackRequest>, (), TdError> {
         self.callback.service().await
+    }
+
+    pub async fn cancel_execution(
+        &self,
+    ) -> TdBoxService<UpdateRequest<ExecutionParam, ()>, (), TdError> {
+        self.cancel_execution.service().await
     }
 
     pub async fn cancel_transaction(
@@ -93,10 +100,11 @@ impl ExecutionServices {
         self.cancel_transaction.service().await
     }
 
-    pub async fn cancel_execution(
+    pub async fn execute(
         &self,
-    ) -> TdBoxService<UpdateRequest<ExecutionParam, ()>, (), TdError> {
-        self.cancel_execution.service().await
+    ) -> TdBoxService<CreateRequest<FunctionParam, ExecutionRequest>, ExecutionResponse, TdError>
+    {
+        self.execute.service().await
     }
 
     pub async fn read_function_run(
@@ -116,6 +124,7 @@ impl ExecutionServices {
     ) -> TdBoxService<UpdateRequest<TransactionParam, ()>, (), TdError> {
         self.recover_transaction.service().await
     }
+
     pub async fn synchrotron(
         &self,
     ) -> TdBoxService<ListRequest<()>, ListResponse<SynchrotronResponse>, TdError> {

@@ -206,7 +206,7 @@ pub const TABLE_DELETE: &str = url!(TABLE);
 // /executions/{exec_id}/graph
 // /executions/{exec_id}/status
 
-pub const EXECUTIONS: &str = url!(COLLECTION, "/executions");
+pub const EXECUTIONS: &str = url!("/executions");
 pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
 
 #[td_type::UrlParam]
@@ -230,7 +230,7 @@ pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 
 // /collections/{c}/tables/{t}/data_versions?at
 
-pub const TRANSACTIONS: &str = url!(COLLECTION, "/transactions");
+pub const TRANSACTIONS: &str = url!("/transactions");
 pub const TRANSACTION: &str = url!(TRANSACTIONS, "/{transaction}");
 
 #[td_type::UrlParam]
