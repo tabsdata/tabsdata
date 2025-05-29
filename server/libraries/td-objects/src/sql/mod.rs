@@ -408,16 +408,23 @@ where
             let mut or_separated = query_builder.separated(" OR ");
             for cond in or.conditions() {
                 or_separated.push(format!("{} {} ", cond.field(), cond.operator()));
-                let value = cond.values();
+                let mut value = cond.values();
 
                 match cond.cardinality() {
                     1 => {
-                        or_separated.push_bind_unseparated(value[0].to_owned());
+                        let value = value.pop().unwrap();
+                        or_separated.push_bind_unseparated(value);
+                        if !cond.connector().is_empty() {
+                            let x = format!(" {} ", cond.connector());
+                            or_separated.push_unseparated(x);
+                        }
                     }
                     2 => {
-                        or_separated.push_bind_unseparated(value[0].to_owned());
+                        let max = value.pop().unwrap();
+                        let min = value.pop().unwrap();
+                        or_separated.push_bind_unseparated(min);
                         or_separated.push_unseparated(format!(" {} ", cond.connector()));
-                        or_separated.push_bind_unseparated(value[1].to_owned());
+                        or_separated.push_bind_unseparated(max);
                     }
                     _ => {}
                 }
@@ -1082,11 +1089,10 @@ mod tests {
 
             let query_str = query.sql();
             assert!(
-                query_str ==
-                "SELECT id, name, modified_on FROM test_table WHERE name = ? AND (modified_on > ?) AND (name LIKE ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"
-                ||
-                query_str ==
-                "SELECT id, name, modified_on FROM test_table WHERE name = ? AND (name LIKE ?) AND (modified_on > ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"
+                query_str
+                    == r#"SELECT id, name, modified_on FROM test_table WHERE name = ? AND (modified_on > ?) AND (name LIKE ? ESCAPE '\' ) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"#
+                    || query_str
+                        == r#"SELECT id, name, modified_on FROM test_table WHERE name = ? AND (name LIKE ? ESCAPE '\' ) AND (modified_on > ?) AND (name < ? OR (name = ? AND modified_on < ?)) ORDER BY name DESC, modified_on DESC LIMIT ?"#
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1246,7 +1252,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ?) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ? ESCAPE '\\' ) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
@@ -1280,7 +1286,7 @@ mod tests {
             let query_str = query.sql();
             assert_eq!(
                 query_str,
-                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ?) ORDER BY id ASC LIMIT ?"
+                "SELECT id, name, modified_on FROM test_table WHERE (name LIKE ? ESCAPE '\\' ) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();

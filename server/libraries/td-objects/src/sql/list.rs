@@ -145,9 +145,7 @@ impl Condition {
     }
 
     pub fn lk(field: impl Into<String>, value: impl Into<String>) -> Self {
-        // Replace '*' with '%' for SQL LIKE wildcard operator. URL cannot contain '%'.
-        let value = value.into().replace("*", "%");
-        Self::Lk(field.into(), value)
+        Self::Lk(field.into(), value.into())
     }
 
     pub fn btw(field: impl Into<String>, min: impl Into<String>, max: impl Into<String>) -> Self {
@@ -226,16 +224,43 @@ impl Condition {
         }
     }
 
-    pub fn values(&self) -> Vec<&str> {
+    fn convert_to_like_pattern(value: &str) -> String {
+        let mut converted_value = String::with_capacity(value.len() * 2);
+        let mut previous_char_is_escape = false;
+        for c in value.chars() {
+            let mut _buffer = String::with_capacity(4);
+            let (converted_char, is_escape) = match (c, previous_char_is_escape) {
+                ('\\', false) => ("", true),
+                ('\\', true) => ("\\\\", false),
+                ('%', _) => ("\\%", false),
+                ('_', _) => ("\\_", false),
+                ('*', true) => ("*", false),
+                ('.', true) => (".", false),
+                ('*', false) => ("%", false),
+                ('.', false) => ("_", false),
+                (other, _) => {
+                    // non special chars can be safely de-escaped
+                    _buffer.clear();
+                    _buffer.push(other);
+                    (_buffer.as_str(), false)
+                }
+            };
+            converted_value += converted_char;
+            previous_char_is_escape = is_escape;
+        }
+        converted_value
+    }
+
+    pub fn values(&self) -> Vec<String> {
         match self {
-            Condition::Eq(_, value) => vec![value],
-            Condition::Ne(_, value) => vec![value],
-            Condition::Lk(_, value) => vec![value],
-            Condition::Gt(_, value) => vec![value],
-            Condition::Ge(_, value) => vec![value],
-            Condition::Lt(_, value) => vec![value],
-            Condition::Le(_, value) => vec![value],
-            Condition::Btw(_, min, max) => vec![min, max],
+            Condition::Eq(_, value) => vec![value.to_owned()],
+            Condition::Ne(_, value) => vec![value.to_owned()],
+            Condition::Lk(_, value) => vec![Self::convert_to_like_pattern(value)],
+            Condition::Gt(_, value) => vec![value.to_owned()],
+            Condition::Ge(_, value) => vec![value.to_owned()],
+            Condition::Lt(_, value) => vec![value.to_owned()],
+            Condition::Le(_, value) => vec![value.to_owned()],
+            Condition::Btw(_, min, max) => vec![min.to_owned(), max.to_owned()],
         }
     }
 
@@ -256,11 +281,11 @@ impl Condition {
         match self {
             Condition::Eq(_, _)
             | Condition::Ne(_, _)
-            | Condition::Lk(_, _)
             | Condition::Gt(_, _)
             | Condition::Ge(_, _)
             | Condition::Lt(_, _)
             | Condition::Le(_, _) => "",
+            Condition::Lk(_, _) => r#"ESCAPE '\'"#,
             Condition::Btw(_, _, _) => "AND",
         }
     }
@@ -587,5 +612,44 @@ mod tests {
             .unwrap();
         let res: Result<ListQueryParams<Def>, ListError> = (&list_params).try_into();
         assert!(matches!(res, Err(ListError::UndefinedOrderBy(_))));
+    }
+
+    #[test]
+    fn test_convert_to_like_pattern() {
+        let test_cases = vec![
+            ("abc", "abc"),
+            ("\\abc", "abc"),
+            ("a\\bc", "abc"),
+            ("abc\\\\", "abc\\\\"),
+            ("*abc", "%abc"),
+            ("a*bc", "a%bc"),
+            ("abc*", "abc%"),
+            (".abc", "_abc"),
+            ("a.bc", "a_bc"),
+            ("abc.", "abc_"),
+            ("\\*abc", "*abc"),
+            ("a\\*bc", "a*bc"),
+            ("abc\\*", "abc*"),
+            ("\\.abc", ".abc"),
+            ("a\\.bc", "a.bc"),
+            ("abc\\.", "abc."),
+            ("%abc", "\\%abc"),
+            ("a%bc", "a\\%bc"),
+            ("abc%", "abc\\%"),
+            ("_abc", "\\_abc"),
+            ("a_bc", "a\\_bc"),
+            ("abc_", "abc\\_"),
+            ("\\\\", "\\\\"),
+            ("\\*", "*"),
+            ("\\%", "\\%"),
+            ("\\.", "."),
+            ("\\_", "\\_"),
+            ("_a%b*\\%c\\*d.e\\.\\_", "\\_a\\%b%\\%c*d_e.\\_"),
+        ];
+
+        for (input, expected) in test_cases {
+            let result = Condition::convert_to_like_pattern(input);
+            assert_eq!(result, expected);
+        }
     }
 }
