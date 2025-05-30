@@ -115,6 +115,48 @@ pub struct SynchrotronResponse {
 }
 
 #[td_type::Dao]
+#[dao(sql_table = "transactions__with_names")]
+pub struct TransactionDBWithNames {
+    id: TransactionId,
+    collection_id: CollectionId,
+    execution_id: ExecutionId,
+    transaction_by: TransactionByStr,
+    transaction_key: TransactionKey,
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: TransactionStatus,
+    collection: CollectionName,
+    execution: Option<ExecutionName>,
+    triggered_by: UserName,
+}
+
+#[td_type::Dto]
+#[td_type(builder(try_from = TransactionDBWithNames))]
+#[dto(list(on = TransactionDBWithNames))]
+pub struct Transaction {
+    #[dto(list(filter, filter_like, order_by))]
+    id: TransactionId,
+    #[dto(list(filter, filter_like))]
+    collection_id: CollectionId,
+    #[dto(list(filter, filter_like))]
+    execution_id: ExecutionId,
+    #[dto(list(pagination_by = "+", filter, filter_like))]
+    triggered_on: TriggeredOn,
+    #[dto(list(filter, filter_like))]
+    triggered_by_id: UserId,
+    #[dto(list(filter, filter_like))]
+    status: TransactionStatus,
+    #[dto(list(filter, filter_like, order_by))]
+    collection: CollectionName,
+    #[dto(list(filter, filter_like))]
+    execution: Option<ExecutionName>,
+    #[dto(list(filter, filter_like, order_by))]
+    triggered_by: UserName,
+}
+
+#[td_type::Dao]
 #[dao(
     sql_table = "function_runs",
     partition_by = "id",

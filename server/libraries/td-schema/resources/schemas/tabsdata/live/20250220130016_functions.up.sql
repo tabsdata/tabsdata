@@ -212,7 +212,7 @@ FROM (SELECT e.*,
          LEFT JOIN transactions__with_status t ON t.execution_id = e.id
 GROUP BY s.id;
 
--- Transactions  (table & __with_status view)
+-- Transactions  (table & __with_status view & __with_names view)
 
 CREATE TABLE transactions
 (
@@ -249,6 +249,16 @@ FROM (SELECT t.*,
          JOIN transactions t ON t.id = s.id
          LEFT JOIN function_runs fr ON fr.transaction_id = t.id
 GROUP BY s.id;
+
+CREATE VIEW transactions__with_names AS
+SELECT f.*,
+       c.name                                          AS collection,
+       e.name                                          AS execution,
+       IFNULL(u.name, '[' || f.triggered_by_id || ']') as triggered_by
+FROM transactions__with_status f
+         LEFT JOIN collections c ON f.collection_id = c.id
+         LEFT JOIN executions e ON f.execution_id = e.id
+         LEFT JOIN users u ON f.triggered_by_id = u.id;
 
 -- Function runs (table & __with_names & executable_ views)
 

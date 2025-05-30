@@ -3,10 +3,12 @@
 //
 
 pub mod cancel;
+pub mod list;
 pub mod recover;
 pub mod synchrotron;
 
 use crate::transaction::services::cancel::TransactionCancelService;
+use crate::transaction::services::list::TransactionListService;
 use crate::transaction::services::recover::TransactionRecoverService;
 use crate::transaction::services::synchrotron::SynchrotronService;
 use std::sync::Arc;
@@ -16,11 +18,12 @@ use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, UpdateRequest};
 use td_objects::rest_urls::TransactionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::types::execution::SynchrotronResponse;
+use td_objects::types::execution::{SynchrotronResponse, Transaction};
 use td_tower::service_provider::TdBoxService;
 
 pub struct TransactionServices {
     cancel: TransactionCancelService,
+    list: TransactionListService,
     recover: TransactionRecoverService,
     synchrotron: SynchrotronService,
 }
@@ -34,6 +37,7 @@ impl TransactionServices {
                 queries.clone(),
                 authz_context.clone(),
             ),
+            list: TransactionListService::new(db.clone(), queries.clone()),
             recover: TransactionRecoverService::new(
                 db.clone(),
                 queries.clone(),
@@ -45,6 +49,10 @@ impl TransactionServices {
 
     pub async fn cancel(&self) -> TdBoxService<UpdateRequest<TransactionParam, ()>, (), TdError> {
         self.cancel.service().await
+    }
+
+    pub async fn list(&self) -> TdBoxService<ListRequest<()>, ListResponse<Transaction>, TdError> {
+        self.list.service().await
     }
 
     pub async fn recover(&self) -> TdBoxService<UpdateRequest<TransactionParam, ()>, (), TdError> {

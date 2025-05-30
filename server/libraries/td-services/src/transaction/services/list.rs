@@ -6,20 +6,16 @@ use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::execution::SynchrotronResponse;
+use td_objects::types::execution::Transaction;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
 use td_tower::{layers, provider};
 
-/// Very similar to the `TransactionListService`. The idea is that this service is used as a
-/// lightweight timeline of the transactions in the system, not a regular list. It should evolve
-/// in that direction, if we add more information at some point.
-
 #[provider(
-    name = SynchrotronService,
+    name = TransactionListService,
     request = ListRequest<()>,
-    response = ListResponse<SynchrotronResponse>,
+    response = ListResponse<Transaction>,
     connection = ConnectionProvider,
     context = DaoQueries,
 )]
@@ -28,7 +24,7 @@ fn provider() {
         // No need for authz for this service.
 
         // List all transactions in the system.
-        from_fn(By::<()>::list::<(), DaoQueries, SynchrotronResponse>),
+        from_fn(By::<()>::list::<(), DaoQueries, Transaction>),
     )
 }
 
@@ -51,24 +47,24 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
-    async fn test_tower_metadata_synchrotron(db: DbPool) {
+    async fn test_tower_metadata_list_transaction(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider = SynchrotronService::provider(db, queries);
+        let provider = TransactionListService::provider(db, queries);
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<ListRequest<()>, ListResponse<SynchrotronResponse>>(&[
+        metadata.assert_service::<ListRequest<()>, ListResponse<Transaction>>(&[
             // List all transactions in the system.
-            type_of_val(&By::<()>::list::<(), DaoQueries, SynchrotronResponse>),
+            type_of_val(&By::<()>::list::<(), DaoQueries, Transaction>),
         ]);
     }
 
     #[td_test::test(sqlx)]
-    async fn test_synchrotron(db: DbPool) -> Result<(), TdError> {
+    async fn test_list_transaction(db: DbPool) -> Result<(), TdError> {
         let collection = seed_collection(
             &db,
             &CollectionName::try_from("collection")?,
@@ -103,7 +99,7 @@ mod tests {
             seed_transaction(&db, &execution, &transaction_key).await,
         ];
 
-        let service = SynchrotronService::new(db.clone(), Arc::new(DaoQueries::default()))
+        let service = TransactionListService::new(db.clone(), Arc::new(DaoQueries::default()))
             .service()
             .await;
         let request = RequestContext::with(

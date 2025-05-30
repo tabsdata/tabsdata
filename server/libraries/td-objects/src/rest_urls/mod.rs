@@ -199,11 +199,6 @@ pub const DOWNLOAD_TABLE: &str = url!(TABLE, "/download");
 pub const TABLE_DELETE: &str = url!(TABLE);
 
 // Executions
-// /executions?execution?execution_name?status?who?when?trigger_fn
-// /executions/{exec_id}/tables
-// /executions/{exec_id}/graph
-// /executions/{exec_id}/status
-
 pub const EXECUTIONS: &str = url!("/executions");
 pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
 
@@ -217,15 +212,6 @@ pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
 pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 
 // Transactions
-// /transactions?collection?execution?execution_name?status?who?when?trigger_fn
-// /transactions/{trx_id}/tables
-
-// /transactions/{trx_id}/messages -- (id, function)
-// /transactions/{trx_id}/messages/{message_id}
-// /transactions/{trx_id}/messages/{message_id}/logs
-
-// /collections/{c}/tables/{t}/data_versions?at
-
 pub const TRANSACTIONS: &str = url!("/transactions");
 pub const TRANSACTION: &str = url!(TRANSACTIONS, "/{transaction}");
 
