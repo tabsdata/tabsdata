@@ -71,7 +71,9 @@ axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+futures-util = { workspace = true }
 getset = { workspace = true }
+glob = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }

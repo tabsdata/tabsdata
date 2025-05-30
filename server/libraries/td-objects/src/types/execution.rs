@@ -517,6 +517,7 @@ pub struct FunctionRequirementDBWithNames {
 pub struct WorkerMessageDB {
     #[builder(default)]
     id: WorkerMessageId,
+    #[td_type(extractor)]
     collection_id: CollectionId,
     execution_id: ExecutionId,
     transaction_id: TransactionId,

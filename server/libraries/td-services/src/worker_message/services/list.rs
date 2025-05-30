@@ -2,18 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
-use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
-use td_objects::rest_urls::TransactionParam;
+use td_objects::crudl::{ListRequest, ListResponse};
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{
-    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
-};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
-use td_objects::types::basic::{CollectionId, TransactionIdName};
-use td_objects::types::execution::{TransactionDB, WorkerMessage};
+use td_objects::tower_service::sql::{By, SqlListService};
+use td_objects::types::execution::WorkerMessage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
@@ -21,26 +14,17 @@ use td_tower::{layers, provider};
 
 #[provider(
     name = WorkerMessageListService,
-    request = ListRequest<TransactionParam>,
+    request = ListRequest<()>,
     response = ListResponse<WorkerMessage>,
     connection = ConnectionProvider,
     context = DaoQueries,
-    context = AuthzContext,
 )]
 fn provider() {
     layers!(
-        // Extract parameters
-        from_fn(With::<ListRequest<TransactionParam>>::extract::<RequestContext>),
-        from_fn(With::<ListRequest<TransactionParam>>::extract_name::<TransactionParam>),
-        // find collection ID
-        from_fn(With::<TransactionParam>::extract::<TransactionIdName>),
-        from_fn(By::<TransactionIdName>::select::<DaoQueries, TransactionDB>),
-        from_fn(With::<TransactionDB>::extract::<CollectionId>),
-        // check requester has collection permissions
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
-        // List all WorkerMessage in a transaction.
-        from_fn(By::<TransactionIdName>::list::<TransactionParam, DaoQueries, WorkerMessage>),
+        // No need for authz for this service.
+
+        // List all WorkerMessages.
+        from_fn(By::<()>::list::<(), DaoQueries, WorkerMessage>),
     )
 }
 
@@ -70,28 +54,15 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let provider = WorkerMessageListService::provider(db, queries, authz_context);
+        let provider = WorkerMessageListService::provider(db, queries);
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<ListRequest<TransactionParam>, ListResponse<WorkerMessage>>(&[
-            // Extract parameters
-            type_of_val(&With::<ListRequest<TransactionParam>>::extract::<RequestContext>),
-            type_of_val(&With::<ListRequest<TransactionParam>>::extract_name::<TransactionParam>),
-            // find collection ID
-            type_of_val(&With::<TransactionParam>::extract::<TransactionIdName>),
-            type_of_val(&By::<TransactionIdName>::select::<DaoQueries, TransactionDB>),
-            type_of_val(&With::<TransactionDB>::extract::<CollectionId>),
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
-            // List all WorkerMessage in a transaction.
-            type_of_val(
-                &By::<TransactionIdName>::list::<TransactionParam, DaoQueries, WorkerMessage>,
-            ),
+        metadata.assert_service::<ListRequest<()>, ListResponse<WorkerMessage>>(&[
+            // List all WorkerMessages.
+            type_of_val(&By::<()>::list::<(), DaoQueries, WorkerMessage>),
         ]);
     }
 
@@ -178,25 +149,16 @@ mod tests {
             .await,
         ];
 
-        let service = WorkerMessageListService::new(
-            db.clone(),
-            Arc::new(DaoQueries::default()),
-            Arc::new(AuthzContext::default()),
-        )
-        .service()
-        .await;
+        let service = WorkerMessageListService::new(db.clone(), Arc::new(DaoQueries::default()))
+            .service()
+            .await;
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::user(),
             true,
         )
-        .list(
-            TransactionParam::builder()
-                .try_transaction(format!("{}", transaction.id()))?
-                .build()?,
-            ListParams::default(),
-        );
+        .list((), ListParams::default());
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(*response.len(), worker_messages.len());
