@@ -58,14 +58,10 @@ impl TableListService {
                 from_fn(With::<CollectionAtName>::extract::<AtTime>),
 
                 // list
-                from_fn(Self::table_status),
+                from_fn(TableStatus::active),
                 from_fn(By::<CollectionId>::list_versions_at::<CollectionAtName, DaoQueries, Table>),
             ))
         }
-    }
-
-    async fn table_status() -> Result<Vec<TableStatus>, TdError> {
-        Ok(vec![TableStatus::Active])
     }
 
     pub async fn service(
@@ -115,7 +111,7 @@ mod tests {
             // extract attime (natural order)
             type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
             // list
-            type_of_val(&TableListService::table_status),
+            type_of_val(&TableStatus::active),
             type_of_val(
                 &By::<CollectionId>::list_versions_at::<CollectionAtName, DaoQueries, Table>,
             ),

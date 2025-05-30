@@ -169,12 +169,14 @@ pub struct TableDBRead {
 pub struct Table {
     #[dto(list(pagination_by = "+"))]
     id: TableVersionId,
-    #[dto(list(order_by))]
+    #[dto(list(filter, filter_like, order_by))]
     name: TableName,
     collection_id: CollectionId,
+    #[dto(list(filter, filter_like, order_by))]
     collection_name: CollectionName,
     table_id: TableId,
     function_version_id: FunctionVersionId,
+    #[dto(list(filter, filter_like, order_by))]
     function_name: FunctionName,
     last_data_version: Option<TableDataVersionId>,
     // last_data_changed_version: Option<TableDataVersionId>, // TODO this is hard to get in a view

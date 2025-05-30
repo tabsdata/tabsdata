@@ -153,23 +153,38 @@ pub struct FunctionDBWithNames {
 }
 
 #[td_type::Dto]
+#[dto(list(on = FunctionDBWithNames))]
 #[td_type(builder(try_from = FunctionDBWithNames))]
 pub struct Function {
+    #[dto(list(pagination_by = "+"))]
     id: FunctionVersionId,
+    #[dto(list(filter, filter_like, order_by))]
     collection_id: CollectionId,
+    #[dto(list(filter, filter_like, order_by))]
     name: FunctionName,
+    #[dto(list(filter, filter_like, order_by))]
     description: Description,
+    #[dto(list(filter, filter_like, order_by))]
     decorator: Decorator,
+    #[dto(list(filter, filter_like, order_by))]
     function_id: FunctionId,
+    #[dto(list(filter, filter_like, order_by))]
     data_location: DataLocation,
+    #[dto(list(filter, filter_like, order_by))]
     storage_version: StorageVersion,
     bundle_id: BundleId,
+    #[dto(list(filter, filter_like, order_by))]
     snippet: Snippet,
+    #[dto(list(filter, filter_like, order_by))]
     defined_on: AtTime,
+    #[dto(list(filter, filter_like, order_by))]
     defined_by_id: UserId,
+    #[dto(list(filter, filter_like, order_by))]
     status: FunctionStatus,
 
+    #[dto(list(filter, filter_like, order_by))]
     collection: CollectionName,
+    #[dto(list(filter, filter_like, order_by))]
     defined_by: UserName,
 }
 

@@ -36,7 +36,6 @@ pub async fn update_function_run_status<Q: DerefQueries>(
     Connection(connection): Connection,
     Input(function_runs): Input<Vec<FunctionRunDB>>,
     Input(update): Input<UpdateFunctionRunDB>,
-    // Input(update_requirement): Input<UpdateFunctionRequirementDB>,
 ) -> Result<(), TdError> {
     let function_run_ids: Vec<_> = function_runs
         .iter()
