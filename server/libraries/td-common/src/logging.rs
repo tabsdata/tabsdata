@@ -12,6 +12,7 @@ use opentelemetry_sdk::logs::LoggerProvider;
 use opentelemetry_stdout::LogExporter;
 use pico_args::Arguments;
 use std::env;
+use std::fmt::Debug;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::stdout;
 use std::path::PathBuf;
@@ -243,6 +244,239 @@ pub fn set_log_level(level: Level) {
     }
 }
 
+/// Convenience function to log [`Result`] values.
+///
+/// Refer to the [`td_log_monad`] macro for details.
+pub fn result<V: Debug, E: Debug>(
+    msg: &str,
+) -> impl Fn(&Result<V, E>) -> Option<String> + use<'_, V, E> {
+    move |res: &Result<V, E>| match res {
+        Ok(v) => Some(format!("{} - Ok: {:?}", msg, v)),
+        Err(e) => Some(format!("{} - Err: {:?}", msg, e)),
+    }
+}
+
+/// Convenience function to log [`Result:Ok`] values.
+///
+/// Refer to the [`td_log_monad`] macro for details.
+pub fn ok<V: Debug, E: Debug>(
+    msg: &str,
+) -> impl Fn(&Result<V, E>) -> Option<String> + use<'_, V, E> {
+    move |res: &Result<V, E>| match res {
+        Ok(v) => Some(format!("{} - Ok: {:?}", msg, v)),
+        Err(_) => None,
+    }
+}
+
+/// Convenience function to log [`Result::Err`] values.
+///
+/// Refer to the [`td_log_monad`] macro for details.
+pub fn err<V: Debug, E: Debug>(
+    msg: &str,
+) -> impl Fn(&Result<V, E>) -> Option<String> + use<'_, V, E> {
+    move |res: &Result<V, E>| match res {
+        Ok(_) => None,
+        Err(e) => Some(format!("{} - Err: {:?}", msg, e)),
+    }
+}
+
+/// Convenience function to log [`Option`] values.
+///
+/// Refer to the [`td_log_monad`] macro for details.
+pub fn option<T: Debug>(msg: &str) -> impl Fn(&Option<T>) -> Option<String> + use<'_, T> {
+    |option: &Option<T>| match option {
+        Some(v) => Some(format!("{} - Some: {:?}", msg.to_owned(), v)),
+        None => Some(format!("{} - None", msg.to_owned())),
+    }
+}
+
+/// Convenience function to log [`Option::Some`] values.
+///
+/// Refer to the [`td_log_monad`] macro for details.
+pub fn some<T: Debug>(msg: &str) -> impl Fn(&Option<T>) -> Option<String> + use<'_, T> {
+    |option: &Option<T>| {
+        option
+            .as_ref()
+            .map(|v| format!("{} - Some: {:?}", msg.to_owned(), v))
+    }
+}
+
+/// Convenience function to log [`Option::None`] values.
+///
+/// The function receives a message that will be logged if the option is `None`.
+///
+/// Refer to the [`td_log_monad`] macro for details.
+pub fn none<T: Debug>(msg: &str) -> impl Fn(&Option<T>) -> Option<String> + use<'_, T> {
+    |option: &Option<T>| match option {
+        Some(_) => None,
+        None => Some(format!("{} - None", msg.to_owned())),
+    }
+}
+
+/// Macro that enables [`Result`] and [`Option`] direct logging in the current module.
+///
+/// It generates module private structs and traits for [`Result`] and [`Option`]:
+///
+/// `Result<T,E>` has a `log::<LEVEL>(Fn(&Result<T, E>) -> Option<String>) -> Result<T, E>` method.
+///
+/// `Option<T>` has a `log::<LEVEL>(Fn(&Option<T>) -> Option<String>) -> Option<T>` method.
+///
+/// `LEVEL` can be one of the following: `ERROR`, `WARN`, `INFO`, `DEBUG`, or `TRACE`.
+///
+/// The lambda function receives the [`Result`] or [`Option`] and returns an `Option<String>`.
+/// If the function returns `None`, no logging will be performed.
+///
+/// There are convenience lambda implementations:
+///
+/// - `ok` for [`Result::Ok`] values,
+/// - `err` for [`Result::Err`] values,
+/// - `some` for [`Option::Some`] values,
+/// - `none(message: &str)` for [`Option::None`] values with a custom message.
+///
+/// How to use it:
+///
+/// Invoke the `td_log_monad!();` macro after the module's `use` section.
+///
+/// For example:
+///
+/// ```
+///     use crate::td_common::logging::*;
+///     use crate::*;
+///
+///     td_log_monad!();
+///
+///     fn my_function() {
+///         let res = Result::<i32, String>::Ok(42).log::<DEBUG>(ok).log::<ERROR>(err);
+///
+///         let opt = Some("foo").log::<INFO>(some).log::<WARN>(none("No value found"));
+///     }
+/// ```
+///
+/// NOTE: the generation of all the structs and traits in each module is for logging to be able
+/// to capture the module path at compile time (due to how tracing macros work).
+#[macro_export]
+macro_rules! td_log_monad {
+    () => {
+        /// Trait used for [`ResultLogger`] and [`OptionLogger`] blanket trait implementations.
+        ///
+        /// See [`td_log_monad!`] macro for more information.
+        trait LogLevel {
+            /// Returns the log level to use.
+            fn level() -> tracing::log::Level;
+        }
+
+        #[allow(dead_code)]
+        #[allow(clippy::upper_case_acronyms)]
+        struct ERROR;
+
+        impl LogLevel for ERROR {
+            #[inline]
+            fn level() -> tracing::log::Level {
+                tracing::log::Level::Error
+            }
+        }
+
+        #[allow(dead_code)]
+        #[allow(clippy::upper_case_acronyms)]
+        struct WARN;
+
+        impl LogLevel for WARN {
+            #[inline]
+            fn level() -> tracing::log::Level {
+                tracing::log::Level::Warn
+            }
+        }
+
+        #[allow(dead_code)]
+        #[allow(clippy::upper_case_acronyms)]
+        struct INFO;
+
+        impl LogLevel for INFO {
+            #[inline]
+            fn level() -> tracing::log::Level {
+                tracing::log::Level::Info
+            }
+        }
+
+        #[allow(dead_code)]
+        #[allow(clippy::upper_case_acronyms)]
+        struct DEBUG;
+
+        impl LogLevel for DEBUG {
+            #[inline]
+            fn level() -> tracing::log::Level {
+                tracing::log::Level::Debug
+            }
+        }
+
+        #[allow(dead_code)]
+        #[allow(clippy::upper_case_acronyms)]
+        struct TRACE;
+
+        impl LogLevel for TRACE {
+            #[inline]
+            fn level() -> tracing::log::Level {
+                tracing::log::Level::Trace
+            }
+        }
+
+        /// Trait with blanket implementation for logging [`Result`] types.
+        trait ResultLogger<T, E> {
+            /// Logs the result using the provided message function and returns the original result.
+            #[allow(dead_code)]
+            fn log<Level: LogLevel>(self, msg: impl Fn(&Result<T, E>) -> Option<String>) -> Self;
+        }
+
+        /// Trait with blanket implementation for logging [`Option`] types.
+        trait OptionLogger<T> {
+            /// Logs the option using the provided message function and returns the original option.
+            #[allow(dead_code)]
+            fn log<Level: LogLevel>(self, msg: impl Fn(&Option<T>) -> Option<String>) -> Self;
+        }
+
+        #[allow(dead_code)]
+        impl<T, E> ResultLogger<T, E> for Result<T, E> {
+            fn log<MD: LogLevel>(self, msg_fn: impl Fn(&Result<T, E>) -> Option<String>) -> Self {
+                //let module = module_path!();
+                let level: tracing::log::Level = MD::level();
+                // todo check if module + level logging is enabled
+                // if the msg_fn returns None, skip logging
+                if let Some(msg) = msg_fn(&self) {
+                    match level {
+                        tracing::log::Level::Error => tracing::error!(message = msg),
+                        tracing::log::Level::Warn => tracing::warn!(message = msg),
+                        tracing::log::Level::Info => tracing::info!(message = msg),
+                        tracing::log::Level::Debug => tracing::debug!(message = msg),
+                        tracing::log::Level::Trace => tracing::trace!(message = msg),
+                    }
+                }
+                self
+            }
+        }
+
+        #[allow(dead_code)]
+        impl<T> OptionLogger<T> for Option<T> {
+            fn log<MD: LogLevel>(self, msg_fn: impl Fn(&Option<T>) -> Option<String>) -> Self {
+                //let module = module_path!();
+                let level: tracing::log::Level = MD::level();
+                // todo check if module + level logging is enabled
+                // if the msg_fn returns None, skip logging
+                if let Some(msg) = msg_fn(&self) {
+                    match level {
+                        tracing::log::Level::Error => tracing::error!(message = msg),
+                        tracing::log::Level::Warn => tracing::warn!(message = msg),
+                        tracing::log::Level::Info => tracing::info!(message = msg),
+                        tracing::log::Level::Debug => tracing::debug!(message = msg),
+                        tracing::log::Level::Trace => tracing::trace!(message = msg),
+                    }
+                }
+                self
+            }
+        }
+    };
+}
+pub use td_log_monad;
+
 #[cfg(test)]
 #[cfg(feature = "test_logging")]
 mod tests {
@@ -359,6 +593,146 @@ mod tests {
             assert!(message.contains("Show me"));
         } else {
             panic!("No message received");
+        }
+    }
+
+    mod test_res_opt_logging_module1 {
+        use crate::logging::tests::{SHARED_LOGGER, TEST_LOGGING_MUTEX};
+        use crate::logging::{err, ok, result};
+        use std::time::Duration;
+
+        td_log_monad!();
+
+        #[test]
+        fn test_result_log_result() {
+            let _guard = TEST_LOGGING_MUTEX.lock().unwrap();
+            let (_sender, receiver, _logger_provider) = &*SHARED_LOGGER.lock().unwrap();
+
+            let _ = Result::<String, String>::Ok("OK".to_string()).log::<DEBUG>(result("MSG"));
+            let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
+            if let Some(message) = received {
+                assert!(message.contains("logging::tests::test_res_opt_logging_module1"));
+                assert!(message.contains("MSG - Ok: \"OK\""));
+                assert!(!message.contains("Err:"));
+            } else {
+                panic!("No Ok message received");
+            }
+
+            let _ = Result::<String, String>::Err("ERR".to_string()).log::<DEBUG>(result("MSG"));
+            let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
+            if let Some(message) = received {
+                assert!(message.contains("logging::tests::test_res_opt_logging_module1"));
+                assert!(message.contains("MSG - Err: \"ERR\""));
+                assert!(!message.contains("Ok:"));
+            } else {
+                panic!("No Err message received");
+            }
+        }
+
+        #[test]
+        fn test_result_log_ok() {
+            let _guard = TEST_LOGGING_MUTEX.lock().unwrap();
+            let (_sender, receiver, _logger_provider) = &*SHARED_LOGGER.lock().unwrap();
+
+            let _ = Result::<String, String>::Ok("OK".to_string())
+                .log::<DEBUG>(ok("OK_MSG"))
+                .log::<DEBUG>(err("ERR_MSG"));
+            let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
+            if let Some(message) = received {
+                assert!(message.contains("logging::tests::test_res_opt_logging_module1"));
+                assert!(message.contains("OK_MSG - Ok: \"OK\""));
+                assert!(!message.contains("ERR_MSG"));
+            } else {
+                panic!("No Ok message received");
+            }
+        }
+
+        #[test]
+        fn test_result_log_err() {
+            let _guard = TEST_LOGGING_MUTEX.lock().unwrap();
+            let (_sender, receiver, _logger_provider) = &*SHARED_LOGGER.lock().unwrap();
+
+            let _ = Result::<String, String>::Err("ERR".to_string())
+                .log::<DEBUG>(ok("OK_MSG"))
+                .log::<DEBUG>(err("ERR_MSG"));
+            let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
+            if let Some(message) = received {
+                assert!(message.contains("logging::tests::test_res_opt_logging_module1"));
+                assert!(message.contains("ERR_MSG - Err: \"ERR\""));
+                assert!(!message.contains("OK_MSG"));
+            } else {
+                panic!("No Err message received");
+            }
+        }
+
+        mod test_res_opt_logging_module2 {
+            use crate::logging::tests::{SHARED_LOGGER, TEST_LOGGING_MUTEX};
+            use crate::logging::{none, option, some};
+            use std::time::Duration;
+
+            td_log_monad!();
+
+            #[test]
+            fn test_option_option() {
+                let _guard = TEST_LOGGING_MUTEX.lock().unwrap();
+                let (_sender, receiver, _logger_provider) = &*SHARED_LOGGER.lock().unwrap();
+
+                let _ = Option::<String>::Some("SOME".to_string()).log::<DEBUG>(option("MSG"));
+                let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
+                if let Some(message) = received {
+                    assert!(message.contains("logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"));
+                    assert!(message.contains("MSG - Some: \"SOME\""));
+                    assert!(!message.contains("MSG - None"));
+                } else {
+                    panic!("No Some message received");
+                }
+
+                let _ = Option::<String>::None.log::<DEBUG>(option("MSG"));
+                let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
+                if let Some(message) = received {
+                    assert!(message.contains("logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"));
+                    assert!(message.contains("MSG - None"));
+                    assert!(!message.contains("Some"));
+                } else {
+                    panic!("No None message received");
+                }
+            }
+
+            #[test]
+            fn test_option_some() {
+                let _guard = TEST_LOGGING_MUTEX.lock().unwrap();
+                let (_sender, receiver, _logger_provider) = &*SHARED_LOGGER.lock().unwrap();
+
+                let _ = Option::<String>::Some("SOME".to_string())
+                    .log::<DEBUG>(some("MSG_SOME"))
+                    .log::<DEBUG>(none("MSG_NONE"));
+                let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
+                if let Some(message) = received {
+                    assert!(message.contains("logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"));
+                    assert!(message.contains("MSG_SOME - Some: \"SOME\""));
+                    assert!(!message.contains("MSG_NONE"));
+                } else {
+                    panic!("No Ok message received");
+                }
+            }
+
+            #[test]
+            fn test_option_none() {
+                let _guard = TEST_LOGGING_MUTEX.lock().unwrap();
+                let (_sender, receiver, _logger_provider) = &*SHARED_LOGGER.lock().unwrap();
+
+                let _ = Option::<String>::None
+                    .log::<DEBUG>(some("MSG_SOME"))
+                    .log::<DEBUG>(none("MSG_NONE"));
+                let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
+                if let Some(message) = received {
+                    assert!(message.contains("logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"));
+                    assert!(message.contains("MSG_NONE - None"));
+                    assert!(!message.contains("MSG_SOME"));
+                } else {
+                    panic!("No Err message received");
+                }
+            }
         }
     }
 }
