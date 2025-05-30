@@ -18,6 +18,7 @@ routers! {
     router => {
         cancel => { state ( Executions ) },
         execute => { state ( Executions ) },
+        list => { state ( Executions ) },
         recover => { state ( Executions ) },
     }
 }

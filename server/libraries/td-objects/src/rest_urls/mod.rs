@@ -210,6 +210,7 @@ pub struct ExecutionParam {
 
 pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
 pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
+pub const EXECUTION_LIST: &str = EXECUTIONS;
 
 // Transactions
 pub const TRANSACTIONS: &str = url!("/transactions");

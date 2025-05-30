@@ -64,6 +64,53 @@ pub struct ExecutionDBWithStatus {
 }
 
 #[td_type::Dao]
+#[dao(sql_table = "executions__with_names")]
+pub struct ExecutionDBWithNames {
+    id: ExecutionId,
+    name: Option<ExecutionName>,
+    collection_id: CollectionId,
+    function_version_id: FunctionVersionId,
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: ExecutionStatus,
+    collection: CollectionName,
+    function: FunctionName,
+    triggered_by: UserName,
+}
+
+#[td_type::Dto]
+#[td_type(builder(try_from = ExecutionDBWithNames))]
+#[dto(list(on = ExecutionDBWithNames))]
+pub struct Execution {
+    #[dto(list(filter, filter_like, order_by))]
+    id: ExecutionId,
+    #[dto(list(filter, filter_like))]
+    name: Option<ExecutionName>,
+    #[dto(list(filter, filter_like, order_by))]
+    collection_id: CollectionId,
+    #[dto(list(filter, filter_like, order_by))]
+    function_version_id: FunctionVersionId,
+    #[dto(list(pagination_by = "+", filter, filter_like))]
+    triggered_on: TriggeredOn,
+    #[dto(list(filter, filter_like, order_by))]
+    triggered_by_id: UserId,
+    #[dto(list(filter, filter_like))]
+    started_on: Option<AtTime>,
+    #[dto(list(filter, filter_like))]
+    ended_on: Option<AtTime>,
+    #[dto(list(filter, filter_like, order_by))]
+    status: ExecutionStatus,
+    #[dto(list(filter, filter_like, order_by))]
+    collection: CollectionName,
+    #[dto(list(filter, filter_like, order_by))]
+    function: FunctionName,
+    #[dto(list(filter, filter_like, order_by))]
+    triggered_by: UserName,
+}
+
+#[td_type::Dao]
 #[dao(sql_table = "transactions")]
 #[td_type(builder(try_from = ExecutionDB, skip_all))]
 pub struct TransactionDB {

@@ -212,6 +212,16 @@ FROM (SELECT e.*,
          LEFT JOIN transactions__with_status t ON t.execution_id = e.id
 GROUP BY s.id;
 
+CREATE VIEW executions__with_names AS
+SELECT e.*,
+       c.name                                          AS collection,
+       f.name                                          AS function,
+       IFNULL(u.name, '[' || e.triggered_by_id || ']') as triggered_by
+FROM executions__with_status e
+         LEFT JOIN collections c ON e.collection_id = c.id
+         LEFT JOIN functions f ON e.function_version_id = f.id
+         LEFT JOIN users u ON e.triggered_by_id = u.id;
+
 -- Transactions  (table & __with_status view & __with_names view)
 
 CREATE TABLE transactions
@@ -251,14 +261,14 @@ FROM (SELECT t.*,
 GROUP BY s.id;
 
 CREATE VIEW transactions__with_names AS
-SELECT f.*,
+SELECT t.*,
        c.name                                          AS collection,
        e.name                                          AS execution,
-       IFNULL(u.name, '[' || f.triggered_by_id || ']') as triggered_by
-FROM transactions__with_status f
-         LEFT JOIN collections c ON f.collection_id = c.id
-         LEFT JOIN executions e ON f.execution_id = e.id
-         LEFT JOIN users u ON f.triggered_by_id = u.id;
+       IFNULL(u.name, '[' || t.triggered_by_id || ']') as triggered_by
+FROM transactions__with_status t
+         LEFT JOIN collections c ON t.collection_id = c.id
+         LEFT JOIN executions e ON t.execution_id = e.id
+         LEFT JOIN users u ON t.triggered_by_id = u.id;
 
 -- Function runs (table & __with_names & executable_ views)
 
