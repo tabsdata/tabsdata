@@ -26,6 +26,11 @@ use tracing::{error, info};
 
 pub const BOOTLOADER: &str = "bootloader";
 
+pub const BOOTLOADER_ARGUMENT_INSTANCE: &str = "--instance";
+pub const BOOTLOADER_ARGUMENT_REPOSITORY: &str = "--repository";
+pub const BOOTLOADER_ARGUMENT_WORKSPACE: &str = "--workspace";
+pub const BOOTLOADER_ARGUMENT_PROFILE: &str = "--profile";
+
 const VERSION: &str = ".version";
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Getters)]
@@ -178,33 +183,19 @@ impl Arguments {
     }
 
     fn repository(&self, config: &Configuration) -> PathBuf {
-        get_repository_path_for_instance(
-            &value(&self.repository, &config.repository),
-            &Some(self.instance(config)),
-        )
+        get_repository_path_for_instance(&Some(self.instance(config)))
     }
 
     fn workspace(&self, config: &Configuration) -> PathBuf {
-        get_workspace_path_for_instance(
-            &value(&self.workspace, &config.workspace),
-            &Some(self.instance(config)),
-        )
+        get_workspace_path_for_instance(&Some(self.instance(config)))
     }
 
     fn config(&self, config: &Configuration) -> PathBuf {
-        get_workspace_path_for_instance(
-            &value(&self.workspace, &config.workspace),
-            &Some(self.instance(config)),
-        )
-        .join(CONFIG_FOLDER)
+        get_workspace_path_for_instance(&Some(self.instance(config))).join(CONFIG_FOLDER)
     }
 
     fn work(&self, config: &Configuration) -> PathBuf {
-        get_workspace_path_for_instance(
-            &value(&self.workspace, &config.workspace),
-            &Some(self.instance(config)),
-        )
-        .join(WORK_FOLDER)
+        get_workspace_path_for_instance(&Some(self.instance(config))).join(WORK_FOLDER)
     }
 }
 

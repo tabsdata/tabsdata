@@ -44,21 +44,28 @@ const ENVIRONMENT_END: &str = "</environment>";
 const INTERPRETER_START: &str = "<interpreter>";
 const INTERPRETER_END: &str = "</interpreter>";
 
-pub fn set(instance: &PathBuf) -> Result<PathBuf, TdError> {
-    let environment = create(instance)?;
+pub fn set(instance: &PathBuf, dump_std: bool) -> Result<PathBuf, TdError> {
+    let environment = create(instance, dump_std)?;
     activate(&environment)?;
     Ok(environment)
 }
 
-pub fn get() -> Result<PathBuf, TdError> {
+pub fn get(dump_std: bool) -> Result<PathBuf, TdError> {
     let python = name_program(&PathBuf::from(PYTHON_PROGRAM));
     let output = Command::new(python)
         .arg(PYTHON_ARGUMENT_C)
         .arg(PYTHON_INTERPRETER_SCRIPT)
         .output()
         .map_err(InterpreterResolutionPanic)?;
-    dump(&output);
+    let mut dumped = false;
+    if dump_std {
+        dump(&output);
+        dumped = true;
+    }
     if !output.status.success() {
+        if !dumped {
+            dump(&output);
+        }
         error!("Bad exit code checking python virtual environment");
         return Err(TdError::new(InterpreterResolutionError(output.status)));
     }
@@ -72,15 +79,22 @@ pub fn get() -> Result<PathBuf, TdError> {
     }
 }
 
-pub fn create(instance: &PathBuf) -> Result<PathBuf, TdError> {
+pub fn create(instance: &PathBuf, dump_std: bool) -> Result<PathBuf, TdError> {
     let tdvenv = name_program(&PathBuf::from(TDVENV_PROGRAM));
     let output = Command::new(tdvenv)
         .arg(TDVENV_ARGUMENT_INSTANCE)
         .arg(instance)
         .output()
         .map_err(VenvCreationPanic)?;
-    dump(&output);
+    let mut dumped = false;
+    if dump_std {
+        dump(&output);
+        dumped = true;
+    }
     if !output.status.success() {
+        if !dumped {
+            dump(&output);
+        }
         error!("Bad exit code creating python virtual environment");
         return Err(TdError::new(VenvCreationError(output.status)));
     }
@@ -185,8 +199,8 @@ fn extract(string: &str, start: &str, end: &str) -> Option<String> {
     None
 }
 
-pub fn prepare(instance: &PathBuf) {
-    match set(instance) {
+pub fn prepare(instance: &PathBuf, dump_std: bool) {
+    match set(instance, dump_std) {
         Ok(environment) => {
             debug!(
                 "Using Python base virtual environment: {}",
@@ -198,7 +212,7 @@ pub fn prepare(instance: &PathBuf) {
             exit(GeneralError.code());
         }
     }
-    match get() {
+    match get(dump_std) {
         Ok(interpreter) => {
             debug!(
                 "Using Python base virtual interpreter: {}",

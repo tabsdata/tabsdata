@@ -8,7 +8,7 @@ use crate::{db_with_schema, sql, DbPool, SqliteConfig};
 /// Creates a connection pool for the `tabsdata` database.
 pub async fn db() -> Result<DbPool, sql::DbError> {
     let db = db_with_schema(&test_config(), td_schema::schema()).await?;
-    db.update_db_version().await?;
+    db.upgrade_db_version().await?;
     db.check_db_version().await?;
     Ok(db)
 }

@@ -143,19 +143,18 @@ pub enum DbError {
     DatabaseIsNewer(String, String) = 5002,
     #[error("Tabsdata database corrupted. {0}")]
     DatabaseCorrupted(String) = 5003,
-
     #[error("Database location is missing in the given configuration")]
     MissingDatabaseLocation = 5004,
-    #[error("Failed to database existence: {0}")]
-    FailedToCheckDatabaseExistence(#[source] sqlx::Error) = 5005,
-    #[error("Failed to database existence: {0}")]
-    FailedToCreateDatabase(#[source] sqlx::Error) = 5006,
+    #[error("Failed to check database existence: {0}")]
+    FailedToCheckDatabaseExistence(#[source] Error) = 5005,
+    #[error("Failed to create database: {0}")]
+    FailedToCreateDatabase(#[source] Error) = 5006,
     #[error("Failed to connect to the database: {0}")]
-    FailedToConnectToDatabase(#[source] sqlx::Error) = 5007,
-    #[error("Failed to connect to the database: {0}")]
-    FailedToCreateOrUpdateDatabaseSchema(#[source] MigrateError) = 5008,
+    FailedToConnectToDatabase(#[source] Error) = 5007,
+    #[error("Failed to create or upgrade the database: {0}")]
+    FailedToCreateOrUpgradeDatabaseSchema(#[source] MigrateError) = 5008,
     #[error("Sql error: {0}")]
-    SqlError(#[source] sqlx::Error) = 5009,
+    SqlError(#[source] Error) = 5009,
     #[error("Database does not exist")]
     DatabaseDoesNotExist = 5010,
     #[error("Failed to create database directory {0}: {1}")]
@@ -164,7 +163,7 @@ pub enum DbError {
 
 /// Sqlite database connection provider using Sqlx.
 ///
-/// Databases are automatically created and their schema is updated if necessary
+/// Databases are automatically created and their schema is upgraded if necessary
 /// when the connection is created.
 pub struct Db;
 
@@ -232,7 +231,7 @@ impl Db {
     }
 
     /// Connects to the database specified in the given configuration, if the database does not
-    /// exist it creates it, if the schema is out of date, it updates it.
+    /// exist it creates it, if the schema is out of date, it upgrades it.
     ///
     /// Returns a RW Sqlx connection pool to the database. After this point using the database is
     /// vanilla Sqlx.
@@ -296,16 +295,16 @@ impl DbPool {
             ro_pool,
             rw_pool,
         };
-        db.update_db_version().await?;
+        db.upgrade_db_version().await?;
         Ok(db)
     }
 
-    fn map_db_version_error(err: sqlx::Error) -> DbError {
+    fn map_db_version_error(err: Error) -> DbError {
         match &err {
-            sqlx::Error::RowNotFound => DbError::DatabaseCorrupted(
+            Error::RowNotFound => DbError::DatabaseCorrupted(
                 "Missing 'db_version' row in 'tabsdata_system'".to_string(),
             ),
-            sqlx::Error::Database(database_err) => {
+            Error::Database(database_err) => {
                 if database_err.message().contains("no such table") {
                     DbError::DatabaseSchemaDoesNotExist
                 } else {
@@ -345,11 +344,11 @@ impl DbPool {
         }
     }
 
-    pub async fn update_db_version(&self) -> Result<(), DbError> {
+    pub async fn upgrade_db_version(&self) -> Result<(), DbError> {
         self.schema
             .run(&self.rw_pool)
             .await
-            .map_err(DbError::FailedToCreateOrUpdateDatabaseSchema)?;
+            .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
         Ok(())
     }
 
@@ -570,7 +569,7 @@ mod tests {
         let db = crate::db_with_schema(&config, td_schema::test_schema())
             .await
             .unwrap();
-        db.update_db_version().await.unwrap();
+        db.upgrade_db_version().await.unwrap();
         let _ = sqlx::query("SELECT * FROM foo").execute(&db).await.unwrap();
         assert!(db_file.exists());
     }

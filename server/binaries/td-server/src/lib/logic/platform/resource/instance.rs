@@ -20,6 +20,9 @@ use thiserror::Error;
 use tracing::{error, info};
 use walkdir::WalkDir;
 
+pub const AVAILABLE_ENVIRONMENTS_FOLDER: &str = "available_environments";
+pub const ENVIRONMENTS_FOLDER: &str = "environments";
+
 pub const DEFAULT_INSTANCE: &str = "tabsdata";
 
 pub const CURRENT_FOLDER: &str = ".";
@@ -48,6 +51,11 @@ pub const INSTANCE_FOLDER: &str = "instance";
 
 pub const CONFIG_FOLDER: &str = "config";
 pub const WORK_FOLDER: &str = "work";
+
+pub const DATABASE_FOLDER: &str = "database";
+pub const DATABASE_FILE: &str = "tabsdata.db";
+
+pub const STORAGE_FOLDER: &str = "storage";
 
 pub const CONFIG_FILE_STEM: &str = "config";
 pub const CONFIG_FILE: &str = "config.yaml";
@@ -80,32 +88,18 @@ pub fn get_instance_path_for_instance(instance: &Option<PathBuf>) -> PathBuf {
 }
 
 /// Get the repository path of a given instance.
-pub fn get_repository_path_for_instance(
-    repository: &Option<PathBuf>,
-    instance: &Option<PathBuf>,
-) -> PathBuf {
-    get_folder_path_for_instance(repository, REPOSITORY_FOLDER, instance)
+pub fn get_repository_path_for_instance(instance: &Option<PathBuf>) -> PathBuf {
+    get_folder_path_for_instance(REPOSITORY_FOLDER, instance)
 }
 
 /// Get the workspace path of a given instance.
-pub fn get_workspace_path_for_instance(
-    workspace: &Option<PathBuf>,
-    instance: &Option<PathBuf>,
-) -> PathBuf {
-    get_folder_path_for_instance(workspace, WORKSPACE_FOLDER, instance)
+pub fn get_workspace_path_for_instance(instance: &Option<PathBuf>) -> PathBuf {
+    get_folder_path_for_instance(WORKSPACE_FOLDER, instance)
 }
 
 /// Get a folder path of a given instance.
-fn get_folder_path_for_instance(
-    folder: &Option<PathBuf>,
-    default: &str,
-    instance: &Option<PathBuf>,
-) -> PathBuf {
-    match folder {
-        None => get_instance_path_for_instance(instance).join(default),
-        Some(path) if path.is_relative() => instance.clone().unwrap().join(path),
-        Some(path) => path.clone(),
-    }
+fn get_folder_path_for_instance(default: &str, instance: &Option<PathBuf>) -> PathBuf {
+    get_instance_path_for_instance(instance).join(default)
 }
 
 /// Get the workspace path of a given program.
@@ -382,35 +376,13 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_get_workspace_path_for_instance_with_workspace() {
-        #[cfg(not(target_os = "windows"))]
-        let workspace = Some(PathBuf::from("/path/to/workspace"));
-        #[cfg(target_os = "windows")]
-        let workspace = Some(PathBuf::from("c:\\path\\to\\workspace"));
-
-        #[cfg(not(target_os = "windows"))]
-        let instance = Some(PathBuf::from("/path/to/instance"));
-        #[cfg(target_os = "windows")]
-        let instance = Some(PathBuf::from("c:\\path\\to\\instance"));
-
-        let result = get_workspace_path_for_instance(&workspace, &instance);
-
-        #[cfg(not(target_os = "windows"))]
-        assert_eq!(result, PathBuf::from("/path/to/workspace"));
-        #[cfg(target_os = "windows")]
-        assert_eq!(result, PathBuf::from("c:\\path\\to\\workspace"));
-    }
-
-    #[test]
     fn test_get_workspace_path_for_instance_with_instance() {
-        let workspace = None;
-
         #[cfg(not(target_os = "windows"))]
         let instance = Some(PathBuf::from("/path/to/instance"));
         #[cfg(target_os = "windows")]
         let instance = Some(PathBuf::from("c:\\path\\to\\instance"));
 
-        let result = get_workspace_path_for_instance(&workspace, &instance);
+        let result = get_workspace_path_for_instance(&instance);
 
         #[cfg(not(target_os = "windows"))]
         assert_eq!(result, PathBuf::from("/path/to/instance/workspace"));
@@ -420,9 +392,8 @@ mod tests {
 
     #[test]
     fn test_get_workspace_path_for_instance_with_nothing() {
-        let workspace = None;
         let instance = None;
-        let result = get_workspace_path_for_instance(&workspace, &instance);
+        let result = get_workspace_path_for_instance(&instance);
         assert_eq!(
             result,
             dirs::home_dir()

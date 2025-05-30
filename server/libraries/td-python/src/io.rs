@@ -8,34 +8,22 @@ use tracing::info;
 pub fn log_std_out_and_err(output: &Output) {
     match String::from_utf8(output.clone().stdout) {
         Ok(output) => {
-            print!("Standard Output:\n{}", output);
-            info!("Standard Output:\n{}", output)
+            print!("{}", output);
+            info!("{}", output)
         }
         Err(e) => {
-            print!(
-                "Standard Output: Error processing system standard output: {}",
-                e
-            );
-            info!(
-                "Standard Output: Error processing system standard output: {}",
-                e
-            )
+            print!("Error processing system standard output: {}", e);
+            info!("Error processing system standard output: {}", e)
         }
     };
     match String::from_utf8(output.clone().stderr) {
         Ok(output) => {
-            eprint!("Standard Error:\n{}", output);
-            info!("Standard Error:\n{}", output)
+            eprint!("{}", output);
+            info!("{}", output)
         }
         Err(e) => {
-            eprint!(
-                "Standard Error: Error processing system standard error: {}",
-                e
-            );
-            info!(
-                "Standard Error: Error processing system standard error: {}",
-                e
-            )
+            eprint!("Error processing system standard error: {}", e);
+            info!("Error processing system standard error: {}", e)
         }
     };
 }

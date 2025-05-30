@@ -21,8 +21,7 @@ use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
+use tracing_subscriber::{EnvFilter, Layer, Registry};
 
 // ToDo: Dimas: Accept logging configuration from external file. --> https://tabsdata.atlassian.net/browse/TD-249
 // ToDo: Dimas: Configure logging channel through logging configuration file. --> https://tabsdata.atlassian.net/browse/TD-250
@@ -45,6 +44,12 @@ pub const LOG_LOCATION: &str = "log";
 pub const LOG_FILE: &str = "td.log";
 
 pub const WORK_ENV: &str = "TD_URI_WORK";
+
+use tracing_subscriber::reload::Handle;
+use tracing_subscriber::reload::Layer as ReloadLayer;
+use tracing_subscriber::util::SubscriberInitExt;
+
+static LOG_RELOAD_HANDLE: OnceCell<Handle<EnvFilter, Registry>> = OnceCell::new();
 
 // Global logger provider, initialized once.
 static LOGGER_PROVIDER: OnceCell<LoggerGuard> = OnceCell::new();
@@ -100,11 +105,12 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     let log_with_ansi = MANAGER.get(LOG_WITH_ANSI).as_deref() == Some(TRUE);
     let tabsdata_layer = tracing_subscriber::fmt::layer()
         .with_ansi(log_with_ansi)
-        .with_writer(writer)
-        .with_filter(tracing_subscriber::filter::LevelFilter::from_level(
-            max_level,
-        ));
+        .with_writer(writer);
+    let env_filter = EnvFilter::from_default_env().add_directive(max_level.into());
+    let (reload_filter, handle) = ReloadLayer::new(env_filter);
+    LOG_RELOAD_HANDLE.set(handle).ok();
     let registry = tracing_subscriber::registry()
+        .with(reload_filter)
         .with(SensitiveFilterLayer)
         .with(tabsdata_layer);
     #[cfg(feature = "tokio_console")]
@@ -226,6 +232,14 @@ pub fn log(level: Level, message: &str) {
         Level::INFO => info!(message = message),
         Level::DEBUG => debug!(message = message),
         Level::TRACE => trace!(message = message),
+    }
+}
+
+pub fn set_log_level(level: Level) {
+    if let Some(handle) = LOG_RELOAD_HANDLE.get() {
+        let _ = handle.reload(EnvFilter::default().add_directive(level.into()));
+    } else {
+        error!("Log level reload handle not initialized");
     }
 }
 

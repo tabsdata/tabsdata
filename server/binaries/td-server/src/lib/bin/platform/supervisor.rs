@@ -365,29 +365,19 @@ impl Arguments {
     }
 
     fn repository(&self) -> PathBuf {
-        to_absolute(&get_repository_path_for_instance(
-            &self.repository,
-            &self.instance,
-        ))
-        .unwrap()
+        to_absolute(&get_repository_path_for_instance(&self.instance)).unwrap()
     }
 
     fn workspace(&self) -> PathBuf {
-        get_workspace_path_for_instance(&self.workspace, &self.instance)
+        get_workspace_path_for_instance(&self.instance)
     }
 
     fn config(&self) -> PathBuf {
-        to_absolute(
-            &get_workspace_path_for_instance(&self.workspace, &self.instance).join(CONFIG_FOLDER),
-        )
-        .unwrap()
+        to_absolute(&get_workspace_path_for_instance(&self.instance).join(CONFIG_FOLDER)).unwrap()
     }
 
     fn work(&self) -> PathBuf {
-        to_absolute(
-            &get_workspace_path_for_instance(&self.workspace, &self.instance).join(WORK_FOLDER),
-        )
-        .unwrap()
+        to_absolute(&get_workspace_path_for_instance(&self.instance).join(WORK_FOLDER)).unwrap()
     }
 
     pub fn instance_path(&self) -> PathBuf {
@@ -1963,16 +1953,10 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
         config = Some(profile_config);
     }
 
-    let repository_dir = get_repository_path_for_instance(
-        &Some(arguments.repository()),
-        &Some(instance_dir_absolute.clone()),
-    );
+    let repository_dir = get_repository_path_for_instance(&Some(instance_dir_absolute.clone()));
     let repository_dir_absolute = to_absolute(&repository_dir.clone()).unwrap();
 
-    let workspace_dir = get_workspace_path_for_instance(
-        &Some(arguments.workspace()),
-        &Some(instance_dir_absolute.clone()),
-    );
+    let workspace_dir = get_workspace_path_for_instance(&Some(instance_dir_absolute.clone()));
     let workspace_dir_absolute = to_absolute(&workspace_dir.clone()).unwrap();
 
     let config_dir = &workspace_dir_absolute.join(CONFIG_FOLDER);
@@ -2109,7 +2093,7 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
         );
     }
 
-    prepare(&instance_dir_absolute);
+    prepare(&instance_dir_absolute, true);
 
     config.and_then(|file| file.parent().map(|folder| folder.to_path_buf()))
 }

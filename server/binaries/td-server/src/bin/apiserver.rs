@@ -58,7 +58,7 @@ fn main() {
                                         return ExitStatus::GeneralError;
                                     }
                                     Err(DbError::DatabaseSchemaDoesNotExist) => {
-                                        if let Err(err) = db.update_db_version().await {
+                                        if let Err(err) = db.upgrade_db_version().await {
                                             error!("Error creating database: {}", err);
                                             return ExitStatus::GeneralError;
                                         }
@@ -69,49 +69,55 @@ fn main() {
                                         return ExitStatus::GeneralError;
                                     }
                                 }
+                                // After creating the database and/or schema, system exits.
+                                // Values 'auto' & 'None' keep the process running.
+                                return ExitStatus::Success;
                             }
-                            DbSchema::Update => {
-                                info!("Updating database");
+                            DbSchema::Upgrade => {
+                                info!("Upgrading database");
                                 match db.check_db_version().await {
-                                    Ok(_) => {
-                                        if let Err(err) = db.update_db_version().await {
-                                            error!("Error updating database: {}", err);
+                                    Err(DbError::DatabaseNeedsUpgrade(_, _)) => {
+                                        if let Err(err) = db.upgrade_db_version().await {
+                                            error!("Error upgrading database: {}", err);
                                             return ExitStatus::GeneralError;
                                         }
-                                        info!("Database updated");
+                                        info!("Database upgraded");
                                     }
-                                    Err(DbError::DatabaseSchemaDoesNotExist) => {
-                                        error!("Database does not exist, cannot update");
-                                        return ExitStatus::GeneralError;
+                                    Ok(_) => {
+                                        info!("Database does not need to be upgraded");
+                                        return ExitStatus::NoAction;
                                     }
-                                    Err(err) => {
-                                        error!("Error checking database for updating it: {}", err);
+                                    Err(error) => {
+                                        error!("Unexpected error occurred during the database upgrade check: {}", error);
                                         return ExitStatus::GeneralError;
                                     }
                                 }
+                                // After upgrading the database and/or schema, system exits.
+                                // Values 'auto' & 'None' keep the process running.
+                                return ExitStatus::Success;
                             }
                             DbSchema::Auto => {
-                                info!("Creating or updating database");
+                                info!("Creating or upgrading database");
                                 match db.check_db_version().await {
                                     Ok(_) => {
                                         info!("Database exists and is up to date");
                                     }
                                     Err(DbError::DatabaseSchemaDoesNotExist) => {
-                                        if let Err(err) = db.update_db_version().await {
+                                        if let Err(err) = db.upgrade_db_version().await {
                                             error!("Error creating database: {}", err);
                                             return ExitStatus::GeneralError;
                                         }
                                         info!("Database created");
                                     }
                                     Err(DbError::DatabaseNeedsUpgrade(_, _)) => {
-                                        if let Err(err) = db.update_db_version().await {
-                                            error!("Error updating database: {}", err);
+                                        if let Err(err) = db.upgrade_db_version().await {
+                                            error!("Error upgrading database: {}", err);
                                             return ExitStatus::GeneralError;
                                         }
-                                        info!("Database updated");
+                                        info!("Database upgraded");
                                     }
                                     Err(err) => {
-                                        error!("Error checking database for creating or updating it: {}", err);
+                                        error!("Error checking database for creating or upgrading it: {}", err);
                                         return ExitStatus::GeneralError;
                                     }
                                 }

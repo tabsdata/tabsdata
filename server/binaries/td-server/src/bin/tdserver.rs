@@ -39,7 +39,10 @@ fn check_banner() -> std::io::Result<()> {
 }
 
 fn show_banner() -> Result<(), std::io::Error> {
+    #[cfg(not(windows))]
     let use_colors = supports_color::on(supports_color::Stream::Stdout).is_some();
+    #[cfg(windows)]
+    let use_colors = false;
 
     let width = terminal_size()
         .map(|(Width(w), _)| w as usize - 6)
@@ -83,7 +86,7 @@ fn show_banner() -> Result<(), std::io::Error> {
 #[tokio::main]
 #[attach(signal = "tdserver")]
 async fn main() {
-    logging::start(Level::DEBUG, Some(LogOutput::StdOut), false);
+    logging::start(Level::INFO, Some(LogOutput::StdOut), false);
     let _ = check_banner();
     tdserver::start().await;
 }

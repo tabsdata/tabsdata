@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::net::{AddrParseError, SocketAddr};
 use strum::ParseError;
+use strum_macros::{Display, EnumString};
 use td_database::sql::SqliteConfig;
 use td_error::td_error;
 use td_services::auth::services::{JwtConfig, PasswordHashConfig};
@@ -93,13 +94,14 @@ impl From<&Config> for PasswordHashConfig {
     }
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
 pub enum DbSchema {
     /// Creates Tabsdata database
     Create,
-    /// Updates Tabsdata database
-    Update,
-    /// Creates or updates Tabsdata database as needed
+    /// Upgrades Tabsdata database
+    Upgrade,
+    /// Creates or upgrades Tabsdata database as needed
     Auto,
 }
 
@@ -128,7 +130,7 @@ pub struct Params {
     /// Transaction by
     transaction_by: Option<TransactionBy>,
     #[clap(long)]
-    /// The apiserver will create or update the DB schema on startup, default is false
+    /// The apiserver will create or upgrade the DB schema on startup, default is false
     db_schema: Option<DbSchema>,
 }
 
