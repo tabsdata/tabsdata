@@ -449,7 +449,7 @@ FROM function_requirements__with_status r
          LEFT JOIN tables tv ON r.requirement_table_version_id = tv.id
          LEFT JOIN functions fv ON r.requirement_function_run_id = fv.id;
 
--- Worker Messages  (table)
+-- Worker Messages  (table & __with_names view)
 
 CREATE TABLE worker_messages
 (
@@ -463,3 +463,13 @@ CREATE TABLE worker_messages
 
     FOREIGN KEY (function_run_id) REFERENCES function_runs (id)
 );
+
+CREATE VIEW worker_messages__with_names AS
+SELECT w.*,
+       c.name  as collection,
+       e.name  as execution,
+       fv.name as function
+FROM worker_messages w
+         LEFT JOIN collections c ON w.collection_id = c.id
+         LEFT JOIN executions e ON w.execution_id = e.id
+         LEFT JOIN functions fv ON w.function_version_id = fv.id;

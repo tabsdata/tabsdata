@@ -526,3 +526,6 @@ pub struct VersionPos;
 
 #[td_type::typed(id)]
 pub struct WorkerMessageId;
+
+#[td_type::typed(id_name(id = WorkerMessageId))]
+pub struct WorkerMessageIdName;

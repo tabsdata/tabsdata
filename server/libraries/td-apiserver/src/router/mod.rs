@@ -50,6 +50,7 @@ mod tables;
 mod transactions;
 mod user_roles;
 mod users;
+mod worker_messages;
 
 use crate::config::Config;
 use crate::layers::cors::CorsService;
@@ -80,6 +81,7 @@ use td_services::table::services::TableServices;
 use td_services::transaction::services::TransactionServices;
 use td_services::user::service::UserServices;
 use td_services::user_role::services::UserRoleServices;
+use td_services::worker_message::services::WorkerMessageServices;
 use td_storage::Storage;
 use te_apiserver::{ExtendedRouter, RouterExtension};
 
@@ -107,6 +109,7 @@ pub mod state {
     pub type Transactions = Arc<TransactionServices>;
     pub type Users = Arc<UserServices>;
     pub type UserRoles = Arc<UserRoleServices>;
+    pub type WorkerMessages = Arc<WorkerMessageServices>;
 
     pub type StorageRef = Arc<Storage>;
 }
@@ -232,6 +235,13 @@ impl ApiServerInstance {
         ))
     }
 
+    fn worker_messages_state(&self) -> state::WorkerMessages {
+        Arc::new(WorkerMessageServices::new(
+            self.db.clone(),
+            self.authz_context.clone(),
+        ))
+    }
+
     pub async fn build(&self) -> ApiServer {
         apiserver! {
             apiserver {
@@ -268,6 +278,7 @@ impl ApiServerInstance {
                     users => { state ( self.users_state() ) },
                     tables => { state ( self.table_state(), self.storage_state() ) },
                     transactions => { state ( self.transaction_state() ) },
+                    worker_messages => { state ( self.worker_messages_state() ) },
                 }
                 .layer => from_fn_with_state(self.auth_state(), authorization_layer),
 

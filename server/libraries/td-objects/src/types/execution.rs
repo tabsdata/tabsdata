@@ -525,6 +525,47 @@ pub struct WorkerMessageDB {
     status: WorkerMessageStatus,
 }
 
+#[td_type::Dao]
+#[dao(sql_table = "worker_messages__with_names")]
+pub struct WorkerMessageDBWithNames {
+    id: WorkerMessageId,
+    collection_id: CollectionId,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    function_run_id: FunctionRunId,
+    function_version_id: FunctionVersionId,
+    status: WorkerMessageStatus,
+    collection: CollectionName,
+    execution: Option<ExecutionName>,
+    function: FunctionName,
+}
+
+#[td_type::Dto]
+#[td_type(builder(try_from = WorkerMessageDBWithNames))]
+#[dto(list(on = WorkerMessageDBWithNames))]
+pub struct WorkerMessage {
+    #[dto(list(pagination_by = "+", filter, filter_like))]
+    id: WorkerMessageId,
+    #[dto(list(filter, filter_like, order_by))]
+    collection_id: CollectionId,
+    #[dto(list(filter, filter_like, order_by))]
+    execution_id: ExecutionId,
+    #[dto(list(filter, filter_like, order_by))]
+    transaction_id: TransactionId,
+    #[dto(list(filter, filter_like, order_by))]
+    function_run_id: FunctionRunId,
+    #[dto(list(filter, filter_like, order_by))]
+    function_version_id: FunctionVersionId,
+    #[dto(list(filter, filter_like, order_by))]
+    status: WorkerMessageStatus,
+    #[dto(list(filter, filter_like, order_by))]
+    collection: CollectionName,
+    #[dto(list(filter, filter_like))]
+    execution: Option<ExecutionName>,
+    #[dto(list(filter, filter_like, order_by))]
+    function: FunctionName,
+}
+
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// Represents the state of an execution.
 ///

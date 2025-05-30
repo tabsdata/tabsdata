@@ -1,8 +1,4 @@
 //
-// Copyright 2025. Tabs Data Inc.
-//
-
-//
 // Copyright 2025 Tabs Data Inc.
 //
 

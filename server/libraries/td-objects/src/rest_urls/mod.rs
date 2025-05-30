@@ -5,7 +5,7 @@
 use crate::types::basic::{
     AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
     InterCollectionPermissionIdName, PermissionIdName, RoleIdName, SampleLen, SampleOffset,
-    TableIdName, TransactionIdName, UserIdName,
+    TableIdName, TransactionIdName, UserIdName, WorkerMessageIdName,
 };
 use constcat::concat;
 
@@ -228,6 +228,18 @@ pub const TRANSACTIONS_LIST: &str = TRANSACTIONS;
 
 // Synchrotron
 pub const SYNCHROTRON_READ: &str = url!("/synchrotron");
+
+// Worker messages
+pub const WORKERS: &str = url!("/workers");
+pub const WORKER: &str = url!(WORKERS, "/{worker}");
+
+#[td_type::UrlParam]
+pub struct WorkerMessageParam {
+    #[td_type(extractor)]
+    worker: WorkerMessageIdName,
+}
+
+pub const WORKER_LOGS: &str = url!(WORKER_MESSAGE, "/logs");
 
 // Function runs
 pub const FUNCTION_RUNS: &str = url!(FUNCTION, "/executions");
