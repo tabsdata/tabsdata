@@ -8,7 +8,7 @@ use std::process;
 use sysinfo::{Pid, System};
 use tracing::debug;
 
-pub const MEMORY_CHECK_FREQUENCY: u64 = 10;
+pub const MEMORY_CHECK_FREQUENCY: u64 = 60 * 15;
 
 pub struct MemoryMonitor {
     system: System,

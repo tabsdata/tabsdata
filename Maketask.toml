@@ -37,6 +37,81 @@ run_task = [
     ] }
 ]
 
+[tasks.deploy]
+category = "80 - Install"
+description = "Build and install a local assembly"
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    info "🛠️ Configuring..."
+    set_env RUST_BACKTRACE "1"
+    set_env RUST_LOG "error"
+    set_env RUSTDOC_LOG "error"
+    set_env RUST_TEST_THREADS "16"
+    set_env TABSDATA_ATTACH "false"
+    set_env SWAGGER_UI_OVERWRITE_FOLDER "server/binaries/td-server/resources/swagger"
+    set_env PYTEST_MAXIMUM_RETRY_COUNT "16"
+    set_env TD_CLI_SHOW "false"
+    set_env TD_SHOW_ENV "false"
+    set_env LOG_CRATE_TM_WORKSPACE "false"
+    set_env TD_DISABLE_OPENAPI_DOCS_ENDPOINT "false"
+    set_env REQUIRE_SERVER_BINARIE "true"
+    set_env REQUIRE_THIRD_PARTY "false"
+    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
+    set_env TD_PYTHON_LINKED_TO_REPOSITORY "false"
+    set_env TD_INHERIT_TABSDATA_PACKAGES "false"
+    set_env TD_REMOTE_DEBUG "false"
+    set_env TD_UI_MODE "internal"
+
+    info "✂️️ Unistalling..."
+    cm_run_task uninstall
+    exec --fail-on-error pip uninstall tabsdata tabsdata-mongodb tabsdata-salesforce tabsdata-snowflake --yes
+
+    info "🧹️ Cleaning..."
+    cm_run_task clean
+
+    info "⚙️ Building..."
+    cm_run_task build
+
+    info "🏕️ Installing..."
+    cm_run_task install
+
+    os = get_env OS
+    if ${os}
+        lower_os = to_lowercase ${os}
+        contains_win = contains ${lower_os} "windows"
+        if ${contains_win}
+            exec cls
+        else
+            exec clear
+        end
+    else
+        exec clear
+    end
+
+    lines = array
+    array_push ${lines} "🎊 Local tabsdata successfully deployed!"
+    message = array_join ${lines} "\n"
+    info ${message}
+
+    lines = array
+    array_push ${lines} "❗ Set the environment variables below for a better user experience:"
+    array_push ${lines} ""
+    array_push ${lines} "export PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=true"
+    array_push ${lines} "export TD_CLI_SHOW=true"
+    array_push ${lines} "export TD_IGNORE_CONNECTOR_REQUIREMENTS=true"
+    array_push ${lines} "export TD_INHERIT_TABSDATA_PACKAGES=true"
+    array_push ${lines} "export TD_PYTHON_LINKED_TO_REPOSITORY=false"
+    array_push ${lines} "export TD_SKIP_NON_EXISTING_ASSETS=true"
+    message = array_join ${lines} "\n"
+    info ${message}
+    ''']
+
 ## wip...
 
 [tasks.test]
@@ -1452,9 +1527,6 @@ script = [
     exec python setup.py --quiet clean --all
     rm -r ${PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER}/target/python/
     ''']
-
-[tasks.deploy]
-dependencies = ["build", "assembly", "install"]
 
 [tasks.bump]
 run_task = [

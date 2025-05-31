@@ -267,7 +267,7 @@ pub fn move_to_dir(folder: Option<PathBuf>) -> std::io::Result<()> {
     }
 }
 
-// ToDO: Dimas: TD-349 - Improve arguments forwarding algorithms in cli & td & supervisor
+// ToDo: Dimas: TD-349 - Improve arguments forwarding algorithms in cli & td & supervisor
 /// Given trailing arguments with syntax:
 /// "-- group_1 --arg_1_1_k arg1_1_v ... -- group_2 --arg_2_1_k arg2_1_v ...",
 /// it will produce a map with entries for each group, and each group will have a map with the
