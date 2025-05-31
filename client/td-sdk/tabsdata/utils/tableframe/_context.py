@@ -3,9 +3,9 @@
 #
 
 
-class ExecutionContext:
+class TableFrameContext:
     """
-    Class to manage the information to handle TableFrame's metadata..
+    Class to manage the information to handle TableFrame's metadata.
 
     """
 

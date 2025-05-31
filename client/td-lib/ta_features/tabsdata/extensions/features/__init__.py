@@ -2,9 +2,7 @@
 #  Copyright 2025 Tabs Data Inc.
 #
 
-try:
-    __import__("pkg_resources").declare_namespace(__name__)
-except ImportError:
-    import pkgutil
+import pkgutil
 
-    pkgutil.extend_path(__path__, __name__)
+# noinspection PyUnboundLocalVariable
+__path__ = pkgutil.extend_path(__path__, __name__)
