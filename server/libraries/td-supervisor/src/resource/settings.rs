@@ -2,7 +2,6 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::resource::instance::{CONFIG_FILE, CONFIG_FOLDER, INSTANCES_FOLDER, WORKSPACE_FOLDER};
 use crate::services::tdserver::TD_KEEP;
 use include_dir::{include_dir, Dir, DirEntry};
 use std::fs::{create_dir_all, write, File};
@@ -11,7 +10,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::files::ROOT;
-use td_common::server::EXCLUSION_PREFIX;
+use td_common::server::{
+    CONFIG_FILE, CONFIG_FOLDER, EXCLUSION_PREFIX, INSTANCES_FOLDER, WORKSPACE_FOLDER,
+};
 use td_common::settings::{DEFAULT_SETTINGS, SETTINGS_FILE};
 use tracing::trace;
 

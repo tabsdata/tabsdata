@@ -8,6 +8,7 @@
 use crate::env::get_current_dir;
 use crate::execution_status::FunctionRunUpdateStatus;
 use crate::files::{get_files_in_folder_sorted_by_name, LOCK_EXTENSION, YAML_EXTENSION};
+use crate::logging::LOG_LOCATION;
 use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::server::QueueError::{
     MessageAlreadyExisting, MessageNonExisting, QueuePlannedCreationError, QueueRootCreationError,
@@ -39,6 +40,56 @@ use td_apiforge::apiserver_schema;
 use td_error::td_error;
 use tracing::error;
 use url::Url;
+
+pub const AVAILABLE_ENVIRONMENTS_FOLDER: &str = "available_environments";
+pub const ENVIRONMENTS_FOLDER: &str = "environments";
+
+pub const DEFAULT_INSTANCE: &str = "tabsdata";
+
+pub const CURRENT_FOLDER: &str = ".";
+pub const PARENT_FOLDER: &str = "..";
+
+pub const INSTANCES_FOLDER: &str = "instances";
+
+pub const WORKSPACE_FOLDER: &str = "workspace";
+pub const REPOSITORY_FOLDER: &str = "repository";
+
+pub const MOLD_FOLDER: &str = "mold";
+pub const LOG_FOLDER: &str = LOG_LOCATION;
+pub const LOCK_FOLDER: &str = "lock";
+pub const PROC_FOLDER: &str = "proc";
+pub const CAST_FOLDER: &str = "cast";
+pub const BIN_FOLDER: &str = "bin";
+pub const REQUEST_FOLDER: &str = "request";
+pub const RESPONSE_FOLDER: &str = "response";
+pub const INPUT_FOLDER: &str = "input";
+pub const OUTPUT_FOLDER: &str = "output";
+
+pub const CONFIG_NAMESPACE: &str = "td";
+
+pub const INSTANCE_FOLDER: &str = "instance";
+
+pub const CONFIG_FOLDER: &str = "config";
+pub const WORK_FOLDER: &str = "work";
+
+pub const DATABASE_FOLDER: &str = "database";
+pub const DATABASE_FILE: &str = "tabsdata.db";
+
+pub const STORAGE_FOLDER: &str = "storage";
+
+pub const CONFIG_FILE_STEM: &str = "config";
+pub const CONFIG_FILE: &str = "config.yaml";
+
+pub const REQUEST_FILE: &str = "request.yaml";
+pub const RESPONSE_FILE: &str = "response.yaml";
+pub const EXCEPTION_FILE: &str = "exception.yaml";
+
+pub const WORKER_PID_FILE: &str = "pid";
+pub const WORKER_OUT_FILE: &str = "out.log";
+pub const WORKER_ERR_FILE: &str = "err.log";
+
+pub const MESSAGE_PATTERN: &str = "_*";
+pub const LOG_PATTERN: &str = "*.log";
 
 // These environment variables are meant to be used as URI locations. Therefore, in Windows they will have a
 // leading slash (/), resulting in, for example, '/c:\folder\file' instead of 'c:\folder\file'

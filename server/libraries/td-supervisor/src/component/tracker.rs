@@ -13,8 +13,8 @@ use std::path::PathBuf;
 use std::{fs, io};
 use thiserror::Error;
 
-use crate::resource::instance::WORKER_PID_FILE;
 use td_common::os::check_process;
+use td_common::server::WORKER_PID_FILE;
 
 pub const DEFAULT_WORKER_FOLDER: &str = ".";
 pub const DEFAULT_WORKER_PID: i32 = -1;

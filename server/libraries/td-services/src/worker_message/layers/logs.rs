@@ -9,9 +9,13 @@ use futures_util::{stream, TryStreamExt};
 use glob::glob;
 use std::env;
 use std::path::PathBuf;
-use td_common::server::WORKSPACE_URI_ENV;
-use td_error::td_error;
-use td_error::TdError;
+use td_common::server::WorkerClass::EPHEMERAL;
+use td_common::server::WorkerName::FUNCTION;
+use td_common::server::{
+    CAST_FOLDER, LOG_FOLDER, LOG_PATTERN, MESSAGE_PATTERN, PROC_FOLDER, WORKSPACE_URI_ENV,
+    WORK_FOLDER,
+};
+use td_error::{td_error, TdError};
 use td_objects::types::execution::WorkerMessageDB;
 use td_objects::types::stream::BoxedSyncStream;
 use td_tower::extractors::Input;
@@ -32,36 +36,25 @@ enum ReadWorkerLogsError {
     IoError(#[from] std::io::Error) = 5005,
 }
 
-const PATH_SEPARATOR: &str = "-----------------------------------------------";
-const LOG_SEPARATOR: &str = "===============================================";
+const SEPARATOR_LEN: usize = 50;
+const PATH_SEPARATOR: &str = "-";
+const LOG_SEPARATOR: &str = "=";
 
 pub async fn resolve_worker_log_path(
     Input(message): Input<WorkerMessageDB>,
 ) -> Result<Vec<PathBuf>, TdError> {
     let worker_path = env::var(WORKSPACE_URI_ENV).map_err(ReadWorkerLogsError::EnvVar)?;
-    // TODO use constants in new td-supervisor crate
-    // let pattern = PathBuf::from(worker_path)
-    //     .join(WORK_FOLDER)
-    //     .join(PROC_FOLDER)
-    //     .join(EPHEMERAL.as_ref())
-    //     .join(FUNCTION.as_ref())
-    //     .join(WORK_FOLDER)
-    //     .join(CAST_FOLDER)
-    //     .join(format!("{}{}", message.id(), MESSAGE_PATTERN))
-    //     .join(WORK_FOLDER)
-    //     .join(LOG_FOLDER)
-    //     .join(LOG_PATTERN);
     let pattern = PathBuf::from(worker_path)
-        .join("work")
-        .join("proc")
-        .join("ephemeral")
-        .join("function")
-        .join("work")
-        .join("cast")
-        .join(format!("{}{}", message.id(), "_*"))
-        .join("work")
-        .join("log")
-        .join("*.log");
+        .join(WORK_FOLDER)
+        .join(PROC_FOLDER)
+        .join(EPHEMERAL.as_ref())
+        .join(FUNCTION.as_ref())
+        .join(WORK_FOLDER)
+        .join(CAST_FOLDER)
+        .join(format!("{}{}", message.id(), MESSAGE_PATTERN))
+        .join(WORK_FOLDER)
+        .join(LOG_FOLDER)
+        .join(LOG_PATTERN);
     let pattern = pattern.to_str().ok_or(ReadWorkerLogsError::EmptyPattern)?;
 
     let mut paths = Vec::new();
@@ -102,13 +95,13 @@ pub async fn get_worker_logs(
 
             // Separator stream
             let path_separator_stream = stream::once(async move {
-                let path_bytes = Bytes::from(format!("{}\n", PATH_SEPARATOR));
+                let path_bytes = Bytes::from(format!("{}\n", PATH_SEPARATOR.repeat(SEPARATOR_LEN)));
                 Ok(path_bytes)
             });
 
             // Separator stream
             let log_separator_stream = stream::once(async move {
-                let path_bytes = Bytes::from(format!("{}\n", LOG_SEPARATOR));
+                let path_bytes = Bytes::from(format!("{}\n", LOG_SEPARATOR.repeat(SEPARATOR_LEN)));
                 Ok(path_bytes)
             });
 

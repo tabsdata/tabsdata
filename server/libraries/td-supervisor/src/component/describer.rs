@@ -299,12 +299,12 @@ pub enum DescriberError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resource::instance::{CONFIG_FOLDER, MSG_FOLDER, WORK_FOLDER};
     use crate::services::supervisor::WorkerLocation::RELATIVE;
     use std::fs::create_dir_all;
     use std::path::PathBuf;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
     use td_common::server::WorkerClass::REGULAR;
+    use td_common::server::{CONFIG_FOLDER, MSG_FOLDER, WORK_FOLDER};
     use tempfile::tempdir;
 
     #[test]

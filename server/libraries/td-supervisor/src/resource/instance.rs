@@ -14,62 +14,13 @@ use std::path::{PathBuf, StripPrefixError};
 use std::string::ToString;
 use td_common::env::{get_current_exe_dir, EnvironmentError, TABSDATA_HOME_DIR};
 use td_common::files::ROOT;
-use td_common::logging::LOG_LOCATION;
 use td_common::os::{is_executable, name_program};
+use td_common::server::{
+    CONFIG_FOLDER, DEFAULT_INSTANCE, INSTANCES_FOLDER, REPOSITORY_FOLDER, WORKSPACE_FOLDER,
+};
 use thiserror::Error;
 use tracing::{error, info};
 use walkdir::WalkDir;
-
-pub const AVAILABLE_ENVIRONMENTS_FOLDER: &str = "available_environments";
-pub const ENVIRONMENTS_FOLDER: &str = "environments";
-
-pub const DEFAULT_INSTANCE: &str = "tabsdata";
-
-pub const CURRENT_FOLDER: &str = ".";
-pub const PARENT_FOLDER: &str = "..";
-
-pub const INSTANCES_FOLDER: &str = "instances";
-
-pub const WORKSPACE_FOLDER: &str = "workspace";
-pub const REPOSITORY_FOLDER: &str = "repository";
-
-pub const MOLD_FOLDER: &str = "mold";
-pub const LOG_FOLDER: &str = LOG_LOCATION;
-pub const LOCK_FOLDER: &str = "lock";
-pub const MSG_FOLDER: &str = td_common::server::MSG_FOLDER;
-pub const PROC_FOLDER: &str = "proc";
-pub const CAST_FOLDER: &str = "cast";
-pub const BIN_FOLDER: &str = "bin";
-pub const REQUEST_FOLDER: &str = "request";
-pub const RESPONSE_FOLDER: &str = "response";
-pub const INPUT_FOLDER: &str = "input";
-pub const OUTPUT_FOLDER: &str = "output";
-
-pub const CONFIG_NAMESPACE: &str = "td";
-
-pub const INSTANCE_FOLDER: &str = "instance";
-
-pub const CONFIG_FOLDER: &str = "config";
-pub const WORK_FOLDER: &str = "work";
-
-pub const DATABASE_FOLDER: &str = "database";
-pub const DATABASE_FILE: &str = "tabsdata.db";
-
-pub const STORAGE_FOLDER: &str = "storage";
-
-pub const CONFIG_FILE_STEM: &str = "config";
-pub const CONFIG_FILE: &str = "config.yaml";
-
-pub const REQUEST_FILE: &str = "request.yaml";
-pub const RESPONSE_FILE: &str = "response.yaml";
-pub const EXCEPTION_FILE: &str = "exception.yaml";
-
-pub const WORKER_PID_FILE: &str = "pid";
-pub const WORKER_OUT_FILE: &str = "out.log";
-pub const WORKER_ERR_FILE: &str = "err.log";
-
-pub const MESSAGE_PATTERN: &str = "_*";
-pub const LOG_PATTERN: &str = "*.log";
 
 /// Get the instance path of a given instance.
 pub fn get_instance_path_for_instance(instance: &Option<PathBuf>) -> PathBuf {

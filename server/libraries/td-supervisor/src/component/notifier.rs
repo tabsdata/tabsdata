@@ -9,7 +9,6 @@ use crate::component::runner::RunnerError::{
     BadRequest, BadStatus, BrokenContent, InvalidMessageType,
 };
 use crate::launch::worker::{TabsDataWorker, Worker};
-use crate::resource::instance::{EXCEPTION_FILE, RESPONSE_FILE, RESPONSE_FOLDER};
 use http::HeaderMap;
 use regex::Regex;
 use reqwest::header::{HeaderName, HeaderValue};
@@ -25,7 +24,7 @@ use td_common::server::SupervisorMessagePayload::{
 };
 use td_common::server::{
     Callback, ExceptionMessagePayload, PayloadType, ResponseMessagePayload, SupervisorMessage,
-    REQUEST_MESSAGE_FILE_PATTERN, UNKNOWN_RUN,
+    EXCEPTION_FILE, REQUEST_MESSAGE_FILE_PATTERN, RESPONSE_FILE, RESPONSE_FOLDER, UNKNOWN_RUN,
 };
 use td_common::status::ExitStatus;
 use tracing::{debug, info};

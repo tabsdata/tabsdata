@@ -2,15 +2,14 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::resource::instance::{
-    BIN_FOLDER, INPUT_FOLDER, LOCK_FOLDER, LOG_FOLDER, OUTPUT_FOLDER, REQUEST_FOLDER,
-    RESPONSE_FOLDER,
-};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use strum_macros::{AsRefStr, EnumIter, EnumString};
 use td_common::env::{to_absolute, EnvironmentError};
-use td_common::server::counter;
+use td_common::server::{
+    counter, BIN_FOLDER, INPUT_FOLDER, LOCK_FOLDER, LOG_FOLDER, OUTPUT_FOLDER, REQUEST_FOLDER,
+    RESPONSE_FOLDER,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone, EnumIter, EnumString, AsRefStr)]

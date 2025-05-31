@@ -16,8 +16,7 @@ use crate::component::tracker::{check_status, get_pid_path, WorkerStatus};
 use crate::launch::worker::{notify, TabsDataWorker, Worker};
 use crate::resource::instance::{
     copy_mold_tree, get_instance_path_for_instance, get_repository_path_for_instance,
-    get_workspace_path_for_instance, CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE,
-    MOLD_FOLDER, MSG_FOLDER, PARENT_FOLDER, PROC_FOLDER, WORKSPACE_FOLDER, WORK_FOLDER,
+    get_workspace_path_for_instance,
 };
 use crate::resource::messaging::SupervisorMessageQueue;
 use crate::resource::scripting::{ArgumentPrefix, CommandBuilder, ScriptBuilder};
@@ -67,9 +66,11 @@ use td_common::server::SupervisorMessagePayload::{
 };
 use td_common::server::WorkerClass::{EPHEMERAL, INIT, REGULAR};
 use td_common::server::{
-    SupervisorMessage, WorkerClass, CONFIG_PATH_ENV, CONFIG_URI_ENV, INSTANCE_PATH_ENV,
-    INSTANCE_URI_ENV, REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN,
-    RETRIES_DELIMITER, WORKSPACE_PATH_ENV, WORKSPACE_URI_ENV, WORK_PATH_ENV, WORK_URI_ENV,
+    SupervisorMessage, WorkerClass, CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE,
+    CONFIG_PATH_ENV, CONFIG_URI_ENV, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER, MSG_FOLDER,
+    PARENT_FOLDER, PROC_FOLDER, REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV,
+    REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, WORKSPACE_FOLDER, WORKSPACE_PATH_ENV,
+    WORKSPACE_URI_ENV, WORK_FOLDER, WORK_PATH_ENV, WORK_URI_ENV,
 };
 use td_common::signal::terminate;
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataError};

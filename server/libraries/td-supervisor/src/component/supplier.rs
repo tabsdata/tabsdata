@@ -6,7 +6,6 @@
 
 use crate::component::supplier::SupplierError::*;
 use crate::launch::worker::Worker;
-use crate::resource::instance::{REQUEST_FILE, REQUEST_FOLDER};
 use std::fmt::{Debug, Formatter};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
@@ -15,6 +14,7 @@ use td_common::logging::LOG_LOCATION;
 use td_common::manifest::Inf;
 use td_common::manifest::WORKER_INF_FILE;
 use td_common::server::SupervisorMessagePayload::SupervisorRequestMessagePayload;
+use td_common::server::{REQUEST_FILE, REQUEST_FOLDER};
 use thiserror::Error;
 
 /// Provides resources to a worker that can be run under the Tabsdata system.

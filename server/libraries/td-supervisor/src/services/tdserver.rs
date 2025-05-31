@@ -11,8 +11,7 @@ use crate::component::tracker::{WorkerStatus, WorkerTracker};
 use crate::launch::worker::{TabsDataWorker, Worker};
 use crate::resource::instance::{
     get_instance_path_for_instance, get_repository_path_for_instance,
-    get_workspace_path_for_instance, AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FOLDER, DATABASE_FILE,
-    DATABASE_FOLDER, ENVIRONMENTS_FOLDER, MSG_FOLDER, STORAGE_FOLDER, WORK_FOLDER,
+    get_workspace_path_for_instance,
 };
 use crate::services::bootloader::{
     BOOTLOADER, BOOTLOADER_ARGUMENT_INSTANCE, BOOTLOADER_ARGUMENT_PROFILE,
@@ -48,6 +47,10 @@ use td_common::env::{get_home_dir, to_absolute, TABSDATA_HOME_DIR};
 use td_common::logging::set_log_level;
 use td_common::os::{get_process_tree, name_program, terminate_process};
 use td_common::server::WorkerClass::REGULAR;
+use td_common::server::{
+    AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FOLDER, DATABASE_FILE, DATABASE_FOLDER,
+    ENVIRONMENTS_FOLDER, MSG_FOLDER, STORAGE_FOLDER, WORK_FOLDER,
+};
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
 use td_python::upgrade::{get_source_version, get_target_version, upgrade};
 use td_python::venv::prepare;
