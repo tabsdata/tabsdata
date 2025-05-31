@@ -20,7 +20,6 @@ from . import pytestmark  # noqa: F401
 
 @pytest.mark.integration
 @pytest.mark.slow
-@pytest.mark.skip(reason="To be unskipped in an upstream PR")
 def test_data_version_class_lazy_properties(
     tabsserver_connection, testing_collection_with_table
 ):

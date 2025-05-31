@@ -353,7 +353,6 @@ def test_function_info(testing_collection, function_path, tabsserver_connection)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip(reason="To be implemented in an upstream PR")
 def test_function_info_show_versions(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -376,6 +375,7 @@ def test_function_info_show_versions(
     result = runner.invoke(
         cli,
         [
+            "--no-prompt",
             "fn",
             "info",
             "--collection",

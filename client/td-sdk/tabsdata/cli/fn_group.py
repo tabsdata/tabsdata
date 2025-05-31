@@ -108,8 +108,8 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
             table.add_column("ID", style="cyan", no_wrap=True)
             table.add_column("Name")
             table.add_column("Description")
-            table.add_column("Created on")
-            table.add_column("Created by")
+            table.add_column("Defined on")
+            table.add_column("Defined by")
             table.add_column("Dependencies")
             table.add_column("Triggers (functions)")
             table.add_column("Tables")
@@ -119,8 +119,8 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
                     str(function.id),
                     function.name,
                     function.description,
-                    function.created_on_str,
-                    function.created_by,
+                    function.defined_on_str,
+                    function.defined_by,
                     beautify_list(function.dependencies_with_names),
                     beautify_list(function.trigger_with_names),
                     beautify_list([table.name for table in function.tables]),
@@ -139,8 +139,8 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
             table = Table(title=f"Function '{name}' in collection '{collection}'")
             table.add_column("ID", style="cyan", no_wrap=True)
             table.add_column("Description")
-            table.add_column("Created on")
-            table.add_column("Created by")
+            table.add_column("Defined on")
+            table.add_column("Defined by")
             table.add_column("Dependencies")
             table.add_column("Triggers (functions)")
             table.add_column("Tables")
@@ -148,8 +148,8 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
             table.add_row(
                 str(function.id),
                 function.description,
-                function.created_on_str,
-                function.created_by,
+                function.defined_on_str,
+                function.defined_by,
                 beautify_list(function.dependencies_with_names),
                 beautify_list(function.trigger_with_names),
                 beautify_list([table.name for table in function.tables]),
@@ -186,15 +186,15 @@ def list(ctx: click.Context, collection: str):
         table = Table(title=f"Functions in collection '{collection}'")
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("Description")
-        table.add_column("Created on")
-        table.add_column("Created by")
+        table.add_column("Defined on")
+        table.add_column("Defined by")
 
         for function in list_of_functions:
             table.add_row(
                 function.name,
                 function.description,
-                function.created_on_str,
-                function.created_by,
+                function.defined_on_str,
+                function.defined_by,
             )
 
         click.echo()

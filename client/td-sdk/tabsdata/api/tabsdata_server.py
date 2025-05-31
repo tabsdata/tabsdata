@@ -638,6 +638,11 @@ class DataVersion:
                 f"Table must be a string or a Table object; got{type(table)} instead."
             )
 
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, DataVersion):
+            return False
+        return self.id == other.id
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(id={self.id!r})"
 
@@ -884,18 +889,18 @@ class Function:
         dependencies_with_names (List[str]): The dependencies of the function.
         name (str): The name of the function.
         description (str): The description of the function.
-        created_on (int): The timestamp when the function was created.
-        created_by (str): The user that created the function.
+        defined_on (int): The timestamp when the function was defined.
+        defined_by (str): The user that defined the function.
         **kwargs: Additional keyword arguments.
 
     Attributes:
-        created_on_str (str): The timestamp when the function was created as a
+        defined_on_str (str): The timestamp when the function was defined as a
             string.
     """
 
-    created_by = LazyProperty("created_by")
-    created_on = LazyProperty("created_on")
-    created_on_str = LazyProperty("created_on_str", subordinate_time_string=True)
+    defined_by = LazyProperty("defined_by")
+    defined_on = LazyProperty("defined_on")
+    defined_on_str = LazyProperty("defined_on_str", subordinate_time_string=True)
     description = LazyProperty("description")
     id = LazyProperty("id")
 
@@ -917,8 +922,8 @@ class Function:
             dependencies_with_names (List[str]): The dependencies of the function.
             name (str): The name of the function.
             description (str): The description of the function.
-            created_on (int): The timestamp when the function was created.
-            created_by (str): The user that created the function.
+            defined_on (int): The timestamp when the function was defined.
+            defined_by (str): The user that defined the function.
             **kwargs: Additional keyword arguments.
         """
         self.connection = connection
@@ -930,9 +935,9 @@ class Function:
         self.tables = kwargs.get("tables")
         self.dependencies_with_names = kwargs.get("dependencies_with_names")
         self.description = kwargs.get("description")
-        self.created_on = kwargs.get("created_on")
-        self.created_on_str = None
-        self.created_by = kwargs.get("created_by")
+        self.defined_on = kwargs.get("defined_on")
+        self.defined_on_str = None
+        self.defined_by = kwargs.get("defined_by")
         self.kwargs = kwargs
         self._data = None
 
@@ -979,22 +984,7 @@ class Function:
 
     @property
     def history(self) -> List[Function]:
-        raw_list_of_functions = (
-            self.connection.function_list_history(self.collection.name, self.name)
-            .json()
-            .get("data")
-            .get("data")
-        )
-        return [
-            Function(
-                **{
-                    **function,
-                    "connection": self.connection,
-                    "collection": self.collection,
-                }
-            )
-            for function in raw_list_of_functions
-        ]
+        return self.list_history()
 
     @property
     def tables(self) -> List[Table]:
@@ -1067,6 +1057,50 @@ class Function:
                 return worker
         raise ValueError(f"Worker {worker_id} not found for function {self.name}")
 
+    def list_history(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Function]:
+        return list(
+            self.list_history_generator(
+                filter=filter, order_by=order_by, raise_for_status=raise_for_status
+            )
+        )
+
+    def list_history_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Function]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.function_list_history(
+                self.collection.name,
+                self.name,
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_functions = data.get("data")
+            for raw_function in raw_functions:
+                raw_function["collection"] = self.collection
+                built_function = Function(
+                    self.connection,
+                    **raw_function,
+                )
+                yield built_function
+            first_page = False
+
     def read_run(
         self, execution: Execution | str, raise_for_status: bool = True
     ) -> requests.Response:
@@ -1091,9 +1125,9 @@ class Function:
         self.tables = None
         self.dependencies_with_names = None
         self.description = None
-        self.created_on = None
-        self.created_on_str = None
-        self.created_by = None
+        self.defined_on = None
+        self.defined_on_str = None
+        self.defined_by = None
         self.kwargs = None
         self._data = None
         return self
@@ -1465,32 +1499,6 @@ class Table:
         )
         with open(destination_file, "wb") as file:
             file.write(response.content)
-
-    def list_collections_generator(
-        self,
-        filter: List[str] | str = None,
-        order_by: str = None,
-        raise_for_status: bool = True,
-    ) -> Generator[Collection]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id and next_step):
-            response = self.connection.collection_list(
-                request_filter=filter,
-                order_by=order_by,
-                pagination_id=next_pagination_id,
-                next_step=next_step,
-                raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_collections = data.get("data")
-            for raw_collection in raw_collections:
-                built_collection = Collection(self.connection, **raw_collection)
-                yield built_collection
-            first_page = False
 
     def list_dataversions(
         self,

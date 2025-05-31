@@ -6,7 +6,7 @@ import json
 import os
 import platform
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 
 import rich_click as click
 from PIL import Image
@@ -20,6 +20,21 @@ DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
 
 DOT_FOLDER = os.path.join(DEFAULT_TABSDATA_DIRECTORY, "dot")
 DOT_FORMAT = "-Tjpg -Gdpi=300 -Nfontsize=10 -Nmargin=0.4 -Efontsize=10"
+
+UTC_FORMATS = [
+    "%Y-%m-%d",
+    "%Y-%m-%dT%HZ",
+    "%Y-%m-%dT%H:%MZ",
+    "%Y-%m-%dT%H:%M:%SZ",
+    "%Y-%m-%dT%H:%M:%S.%fZ",
+]
+
+LOCALIZED_FORMATS = [
+    "%Y-%m-%dT%H",
+    "%Y-%m-%dT%H:%M",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S.%f",
+]
 
 
 def beautify_list(list_to_show) -> str:
@@ -137,32 +152,68 @@ def verify_login_or_prompt(ctx: click.Context):
         initialise_tabsdata_server_connection(ctx)
 
 
-def complete_datetime(incomplete_datetime: str | None) -> str | None:
+def complete_datetime(incomplete_datetime: str | None) -> int | None:
     if not incomplete_datetime:
         return None
+    try:
+        # Check if the input is a valid integer (unix timestamp in milliseconds)
+        timestamp = int(incomplete_datetime)
+        if timestamp < 0:
+            raise ValueError("Timestamp cannot be negative.")
+        return timestamp  # Return as is, assuming it's already in milliseconds
+    except ValueError:
+        # If it fails to convert to an integer, it must be a datetime string
+        pass
     # Define possible formats for incomplete datetime strings
-    formats = [
-        "%Y-%m-%d",
-        "%Y-%m-%dT%HZ",
-        "%Y-%m-%dT%H:%MZ",
-        "%Y-%m-%dT%H:%M:%SZ",
-        "%Y-%m-%dT%H:%M:%S.%fZ",
-    ]
 
-    for fmt in formats:
+    result = complete_utc_datetime(incomplete_datetime)
+    if result is not None:
+        return result
+
+    result = complete_localized_datetime(incomplete_datetime)
+    if result is not None:
+        return result
+
+    raise ValueError(
+        "Invalid datetime format string. It should be either a unix timestamp "
+        "(milliseconds since epoch) or one of one of the "
+        "following:"
+        f" {UTC_FORMATS + LOCALIZED_FORMATS}. "
+        "A 'Z' character at the end of the datetime indicates UTC timezone, if it is "
+        "not present the local timezone of the computer will be used."
+    )
+
+
+def complete_localized_datetime(incomplete_datetime: str | None) -> int | None:
+    for fmt in LOCALIZED_FORMATS:
         try:
             # Try to parse the incomplete datetime string
-            dt = datetime.strptime(incomplete_datetime, fmt)
+            dt = (
+                datetime.strptime(incomplete_datetime, fmt)
+                .replace(tzinfo=None)
+                .astimezone()
+            )
             # Format the datetime to the complete format
-            complete_dt = dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-            return complete_dt
+            return int(dt.timestamp() * 1000.0)  # Convert to milliseconds since epoch
         except ValueError:
             continue
 
-    raise ValueError(
-        "Invalid datetime format string. It should be of one of the "
-        f"following: {formats}."
-    )
+    return None
+
+
+def complete_utc_datetime(incomplete_datetime: str | None) -> int | None:
+    for fmt in UTC_FORMATS:
+        try:
+            # Try to parse the incomplete datetime string
+            dt = datetime.strptime(incomplete_datetime, fmt).replace(
+                tzinfo=timezone.utc
+            )
+            # Format the datetime to the complete format
+            return int(dt.timestamp() * 1000.0)  # Convert to milliseconds since epoch
+        except ValueError:
+            continue
+
+    return None
 
 
 class MutuallyExclusiveOption(Option):

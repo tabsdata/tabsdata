@@ -7,6 +7,7 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdata.api.tabsdata_server import TabsdataServer
 from tabsdata.cli.cli_utils import (
     logical_prompt,
     store_pinned_objects,
@@ -34,7 +35,8 @@ def create(
     click.echo("Creating a new collection")
     click.echo("-" * 10)
     try:
-        ctx.obj["tabsdataserver"].create_collection(name, description)
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.create_collection(name, description)
         click.echo("Collection created successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to create collection: {e}")
@@ -58,7 +60,8 @@ def delete(ctx: click.Context, name: str, confirm: str):
             "Deletion not confirmed. The confirmation word is 'delete'."
         )
     try:
-        ctx.obj["tabsdataserver"].delete_collection(name)
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.delete_collection(name)
         click.echo("Collection deleted successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to delete collection: {e}")
@@ -71,7 +74,8 @@ def info(ctx: click.Context, name: str):
     """Display a collection by name"""
     verify_login_or_prompt(ctx)
     try:
-        collection = ctx.obj["tabsdataserver"].get_collection(name)
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        collection = server.get_collection(name)
 
         table = Table(title=f"Collection '{name}'")
         table.add_column("Name", style="cyan", no_wrap=True)
@@ -100,7 +104,8 @@ def list(ctx: click.Context):
     """List all collections"""
     verify_login_or_prompt(ctx)
     try:
-        list_of_collections = ctx.obj["tabsdataserver"].collections
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        list_of_collections = server.collections
 
         table = Table(title="Collections")
         table.add_column("Name", style="cyan", no_wrap=True)
@@ -178,9 +183,8 @@ def update(
     click.echo(f"Updating collection: {name}")
     click.echo("-" * 10)
     try:
-        ctx.obj["tabsdataserver"].update_collection(
-            name, new_name=new_name, new_description=description
-        )
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.update_collection(name, new_name=new_name, new_description=description)
         click.echo("Collection updated successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to update collection: {e}")

@@ -65,9 +65,9 @@ def test_function_class_lazy_properties(
     assert function.trigger_with_names == api_function.trigger_with_names
     function.refresh()
     assert function.description == api_function.description
-    assert function.created_on == api_function.created_on
-    assert function.created_by == api_function.created_by
-    assert function.created_on_str == api_function.created_on_str
+    assert function.defined_on == api_function.defined_on
+    assert function.defined_by == api_function.defined_by
+    assert function.defined_on_str == api_function.defined_on_str
     assert function.__repr__()
     assert function.__str__()
     second_function = Function(
@@ -224,8 +224,6 @@ def test_function_class_update(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_history(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection, "test_function_class_history_collection"

@@ -292,13 +292,11 @@ class APIServer:
             return response
 
     def authentication_info(self, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = "/auth/info"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def authentication_login(self, name: str, password: str, role: str = None):
-        # Aleix: Updated
         endpoint = "/auth/login"
         data = self.get_params_dict(
             ["name", "password", "role"], [name, password, role]
@@ -318,7 +316,6 @@ class APIServer:
             raise APIServerError(response.json())
 
     def authentication_logout(self, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = "/auth/logout"
         response = self.post(endpoint, json={})
         if response.status_code == 200:
@@ -341,7 +338,6 @@ class APIServer:
         new_password: str,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = "/auth/password_change"
         json = {
             "name": name,
@@ -352,7 +348,6 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def authentication_refresh(self):
-        # Aleix: Updated
         endpoint = "/auth/refresh"
         data = {"refresh_token": self.refresh_token, "grant_type": "refresh_token"}
         time_of_request = time.time()
@@ -375,7 +370,6 @@ class APIServer:
             raise APIServerError(response.json())
 
     def authentication_role_change(self, role: str):
-        # Aleix: Updated
         endpoint = "/auth/role_change"
         data = {"role": role}
         time_of_request = time.time()
@@ -395,14 +389,12 @@ class APIServer:
     def collection_create(
         self, name: str, description: str, raise_for_status: bool = True
     ):
-        # Aleix: Updated
         endpoint = "/collections"
         data = {"name": name, "description": description}
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def collection_delete(self, collection_name: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}"
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -410,7 +402,6 @@ class APIServer:
     def collection_get_by_name(
         self, collection_name: str, raise_for_status: bool = True
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -424,7 +415,6 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = "/collections"
 
         params = self.get_params_dict(
@@ -441,7 +431,6 @@ class APIServer:
         description: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}"
         data = self.get_params_dict(
             ["name", "description"], [new_collection_name, description]
@@ -470,7 +459,6 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def execution_cancel(self, execution_id: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/executions/{execution_id}/cancel"
         response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -484,7 +472,6 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = "/executions"
 
         params = self.get_params_dict(
@@ -501,7 +488,6 @@ class APIServer:
         execution_id: str,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = (
             f"/collections/{collection_name}/functions/"
             f"{function_name_or_version_id}/executions/{execution_id}"
@@ -510,7 +496,6 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def execution_recover(self, execution_id: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/executions/{execution_id}/recover"
         response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -530,7 +515,6 @@ class APIServer:
         reuse_frozen_tables: bool,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions"
 
         names = [
@@ -564,7 +548,6 @@ class APIServer:
     def function_delete(
         self, collection_name: str, function_name: str, raise_for_status: bool = True
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions/{function_name}"
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -576,7 +559,6 @@ class APIServer:
         execution_name=None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions/{function_name}/execute"
         data = self.get_params_dict(["name"], [execution_name])
         response = self.post(endpoint, json=data)
@@ -585,7 +567,6 @@ class APIServer:
     def function_get(
         self, collection_name: str, function_name: str, raise_for_status: bool = True
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions/{function_name}"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -600,8 +581,8 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions"
+
         params = self.get_params_dict(
             ["len", "filter", "order_by", "pagination_id", "next"],
             [request_len, request_filter, order_by, pagination_id, next_step],
@@ -613,17 +594,20 @@ class APIServer:
         self,
         collection_name: str,
         function_name: str,
-        offset: int = None,
-        len: int = None,
-        filter: str = None,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
         order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}/functions/{function_name}/history"
+
         params = self.get_params_dict(
-            ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
+            ["len", "filter", "order_by", "pagination_id", "next"],
+            [request_len, request_filter, order_by, pagination_id, next_step],
         )
-        response = self.get(endpoint, params=params)
+        response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_update(
@@ -642,7 +626,6 @@ class APIServer:
         reuse_frozen_tables: bool = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions/{function_name}"
 
         data = self.get_params_dict(
@@ -680,7 +663,6 @@ class APIServer:
         bundle: bytes,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/function-bundle-upload"
         response = self.post_binary(endpoint, data=bundle)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -688,20 +670,17 @@ class APIServer:
     def role_create(
         self, name: str, description: str = None, raise_for_status: bool = True
     ):
-        # Aleix: Updated
         endpoint = "/roles"
         data = self.get_params_dict(["name", "description"], [name, description])
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def role_delete(self, name: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/roles/{name}"
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def role_get_by_name(self, name: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/roles/{name}"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -715,7 +694,6 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = "/roles"
         params = self.get_params_dict(
             ["len", "filter", "order_by", "pagination_id", "next"],
@@ -731,7 +709,6 @@ class APIServer:
         new_description: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/roles/{name}"
         data = self.get_params_dict(
             ["name", "description"], [new_name, new_description]
@@ -740,7 +717,6 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def status_get(self, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = "/status"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -752,7 +728,6 @@ class APIServer:
         at: int = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/tables/{table_name}/download"
         params = self.get_params_dict(
             ["at"],
@@ -770,7 +745,6 @@ class APIServer:
         len: int = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/tables/{table_name}/sample"
         params = self.get_params_dict(
             [
@@ -790,7 +764,6 @@ class APIServer:
         at: int = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/tables/{table_name}/schema"
         params = self.get_params_dict(
             ["at"],
@@ -810,7 +783,6 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/tables"
         names = [
             "at",
@@ -826,7 +798,6 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def transaction_cancel(self, transaction_id: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/transactions/{transaction_id}/cancel"
         response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -840,7 +811,6 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = "/transactions"
 
         params = self.get_params_dict(
@@ -851,7 +821,6 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def transaction_recover(self, transaction_id: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/transactions/{transaction_id}/recover"
         response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -865,7 +834,6 @@ class APIServer:
         enabled: bool,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = "/users"
 
         data = self.get_params_dict(
@@ -876,13 +844,11 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def users_delete(self, name: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/users/{name}"
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def users_get_by_name(self, name: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/users/{name}"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -896,7 +862,6 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = "/users"
         params = self.get_params_dict(
             ["len", "filter", "order_by", "pagination_id", "next"],
@@ -914,8 +879,8 @@ class APIServer:
         enabled: bool = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = f"/users/{name}"
+
         data = self.get_params_dict(
             ["full_name", "email", "enabled", "password"],
             [full_name, email, enabled, password],
@@ -924,8 +889,8 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def worker_log(self, message_id: str, raise_for_status: bool = True):
-        # Aleix: Updated
         endpoint = f"/workers/{message_id}/logs"
+
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -938,7 +903,6 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
-        # Aleix: Updated
         endpoint = "/workers"
 
         params = self.get_params_dict(

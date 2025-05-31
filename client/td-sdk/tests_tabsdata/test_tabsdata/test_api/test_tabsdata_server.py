@@ -249,8 +249,6 @@ def test_function_get(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_list_history(tabsserver_connection):
     try:
         tabsserver_connection.create_collection(

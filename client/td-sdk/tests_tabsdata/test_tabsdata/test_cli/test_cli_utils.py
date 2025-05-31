@@ -2,9 +2,8 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+import datetime
 import os
-
-import pytest
 
 from tabsdata.cli.cli_utils import (
     beautify_list,
@@ -23,14 +22,33 @@ def test_beautify_list():
 
 
 def test_complete_datetime():
-    assert complete_datetime("2025-01-16") == "2025-01-16T00:00:00.000Z"
-    assert complete_datetime("2025-01-16T15Z") == "2025-01-16T15:00:00.000Z"
-    assert complete_datetime("2025-01-16T15:30Z") == "2025-01-16T15:30:00.000Z"
-    assert complete_datetime("2025-01-16T15:30:45Z") == "2025-01-16T15:30:45.000Z"
-    assert complete_datetime("2025-01-16T15:05:38.137Z") == "2025-01-16T15:05:38.137Z"
-    with pytest.raises(ValueError):
-        complete_datetime("2025-01-16T15:05:38.137")
+    result = complete_datetime("2025-01-16")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 0, 0, tzinfo=datetime.timezone.utc)
+
+    result = complete_datetime("2025-01-16T15Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 15, 0, tzinfo=datetime.timezone.utc)
+
+    result = complete_datetime("2025-01-16T15:30Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 15, 30, tzinfo=datetime.timezone.utc)
+
+    result = complete_datetime("2025-01-16T15:30:45Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 15, 30, 45, tzinfo=datetime.timezone.utc)
+
+    result = complete_datetime("2025-01-16T15:05:38.137Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 15, 5, 38, 137000, tzinfo=datetime.timezone.utc)
+
     assert complete_datetime(None) is None
+    assert complete_datetime("123456") == 123456
 
 
 def test_cleanup_dot_files():
