@@ -120,6 +120,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_list_table_versions(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection = seed_collection(
             &db,
             &CollectionName::try_from("collection")?,
@@ -178,9 +180,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 

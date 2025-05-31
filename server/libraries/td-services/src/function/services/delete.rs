@@ -3,9 +3,10 @@
 //
 
 use crate::function::layers::delete::build_deleted_function_version;
-use std::sync::Arc;
+use crate::function::layers::{
+    register_dependencies, register_tables, register_triggers, SKIP_AUTHZ,
+};
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
@@ -26,93 +27,76 @@ use td_objects::types::dependency::DependencyDB;
 use td_objects::types::function::{FunctionDB, FunctionDBBuilder, FunctionDBWithNames};
 use td_objects::types::table::TableDB;
 use td_objects::types::trigger::TriggerDBWithNames;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-use super::register::RegisterFunctionService;
-
-pub struct DeleteFunctionService {
-    provider: ServiceProvider<DeleteRequest<FunctionParam>, (), TdError>,
-}
-
-impl DeleteFunctionService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(authz_context),
-
-                from_fn(With::<DeleteRequest<FunctionParam>>::extract::<RequestContext>),
-                from_fn(With::<DeleteRequest<FunctionParam>>::extract_name::<FunctionParam>),
-
-
-                // Extract collection and function from request.
-                from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
-                from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
-
-                // Get collection. Extract collection id and name.
-                from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-                from_fn(With::<CollectionDB>::extract::<CollectionId>),
-
-                // check requester is coll_admin or coll_dev for the function's collection
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<CollAdmin, CollDev>::check),
-
-                from_fn(With::<CollectionDB>::extract::<CollectionName>),
-
-                // Get function. Extract function version id.
-                from_fn(combine::<CollectionIdName, FunctionIdName>),
-                from_fn(With::<RequestContext>::extract::<AtTime>),
-                from_fn(FunctionStatus::active),
-                from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>),
-                from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-                from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-
-                // Insert into function_versions(sql) status=Deleted.
-                from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionDB>),
-                from_fn(With::<FunctionDB>::convert_to::<FunctionDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
-                from_fn(build_deleted_function_version),
-                from_fn(insert::<DaoQueries, FunctionDB>),
-
-                // Register associations
-                // Find previous versions.
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
-                // Extract new associations (empty because it is a delete operation).
-                from_fn(With::<Option<Vec<TableNameDto>>>::default),
-                from_fn(With::<Option<Vec<TableDependencyDto>>>::default),
-                from_fn(With::<Option<Vec<TableTriggerDto>>>::default),
-                // Extract reuse frozen (default as deletes are not reusing anything)
-                from_fn(With::<ReuseFrozen>::default),
-                // And register new ones
-                RegisterFunctionService::register_tables(),
-                RegisterFunctionService::register_dependencies_for_delete(),
-                RegisterFunctionService::register_triggers_for_delete(),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<DeleteRequest<FunctionParam>, (), TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = DeleteFunctionService,
+    request = DeleteRequest<FunctionParam>,
+    response = (),
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<DeleteRequest<FunctionParam>>::extract::<RequestContext>),
+        from_fn(With::<DeleteRequest<FunctionParam>>::extract_name::<FunctionParam>),
+        // Extract collection and function from request.
+        from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
+        from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
+        // Get collection. Extract collection id and name.
+        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        // check requester is coll_admin or coll_dev for the function's collection
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollDev>::check),
+        from_fn(With::<CollectionDB>::extract::<CollectionName>),
+        // Get function. Extract function version id.
+        from_fn(combine::<CollectionIdName, FunctionIdName>),
+        from_fn(With::<RequestContext>::extract::<AtTime>),
+        from_fn(FunctionStatus::active),
+        from_fn(
+            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                DaoQueries,
+                FunctionDBWithNames,
+            >
+        ),
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
+        // Insert into function_versions(sql) status=Deleted.
+        from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionDB>),
+        from_fn(With::<FunctionDB>::convert_to::<FunctionDBBuilder, _>),
+        from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
+        from_fn(build_deleted_function_version),
+        from_fn(insert::<DaoQueries, FunctionDB>),
+        // Register associations
+        // Find previous versions.
+        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
+        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
+        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
+        // Extract new associations (empty because it is a delete operation).
+        from_fn(With::<Option<Vec<TableNameDto>>>::default),
+        from_fn(With::<Option<Vec<TableDependencyDto>>>::default),
+        from_fn(With::<Option<Vec<TableTriggerDto>>>::default),
+        // Extract reuse frozen (default as deletes are not reusing anything)
+        from_fn(With::<ReuseFrozen>::default),
+        // And register new ones
+        register_tables(),
+        register_dependencies::<_, SKIP_AUTHZ>(),
+        register_triggers::<_, SKIP_AUTHZ>(),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::function::services::register::RegisterFunctionService;
     use crate::function::services::tests::{assert_delete, assert_register};
+    use std::sync::Arc;
+    use td_database::sql::DbPool;
     use td_objects::crudl::{handle_sql_err, RequestContext};
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
@@ -242,9 +226,12 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+        let service =
+            DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -293,9 +280,12 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+        let service =
+            DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -356,9 +346,12 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+        let service =
+            DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -419,9 +412,12 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+        let service =
+            DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -480,9 +476,12 @@ mod tests {
             create_1.clone(),
         );
 
-        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+        let service =
+            RegisterFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let created_function_version_1 = response?;
 
@@ -514,9 +513,12 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeleteFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+        let service =
+            DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         service.raw_oneshot(request).await?;
 
         // Assert that the first function is as if it just got registered

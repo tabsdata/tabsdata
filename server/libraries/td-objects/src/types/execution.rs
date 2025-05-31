@@ -407,18 +407,28 @@ pub struct TableDataVersionDBRead {
 #[dto(list(on = TableDataVersionDBRead))]
 #[td_type(builder(try_from = TableDataVersionDBRead))]
 pub struct TableDataVersion {
-    #[dto(list(pagination_by = "+"))]
+    #[dto(list(pagination_by = "+", filter, filter_like))]
     id: TableDataVersionId,
+    #[dto(list(filter, filter_like, order_by))]
     collection_id: CollectionId,
+    #[dto(list(filter, filter_like, order_by))]
     collection_name: CollectionName,
+    #[dto(list(filter, filter_like, order_by))]
     table_version_id: TableVersionId,
+    #[dto(list(filter, filter_like, order_by))]
     table_name: TableName,
+    #[dto(list(filter, filter_like, order_by))]
     function_version_id: FunctionVersionId,
+    #[dto(list(filter, filter_like, order_by))]
     function_name: FunctionName,
+    #[dto(list(filter, filter_like, order_by))]
     execution_id: ExecutionId,
+    #[dto(list(filter, filter_like, order_by))]
     transaction_id: TransactionId,
     data_changed: DataChanged,
+    #[dto(list(filter, filter_like, order_by))]
     created_at: AtTime,
+    #[dto(list(filter, filter_like, order_by))]
     transaction_status: TransactionStatus,
 }
 

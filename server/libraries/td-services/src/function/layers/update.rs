@@ -5,9 +5,12 @@
 use std::ops::Deref;
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
-use td_objects::sql::{DerefQueries, SelectBy};
-use td_objects::types::basic::{CollectionId, CollectionName, FunctionName};
-use td_objects::types::function::{FunctionDB, FunctionDBWithNames, FunctionUpdate};
+use td_objects::sql::cte::CteQueries;
+use td_objects::sql::DerefQueries;
+use td_objects::types::basic::{
+    AtTime, CollectionId, CollectionName, FunctionName, FunctionStatus,
+};
+use td_objects::types::function::{FunctionDBWithNames, FunctionUpdate};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[td_error]
@@ -19,6 +22,7 @@ enum UpdateFunctionError {
 pub async fn assert_function_name_not_exists<Q: DerefQueries>(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<Q>,
+    Input(at_time): Input<AtTime>,
     Input(collection_id): Input<CollectionId>,
     Input(collection_name): Input<CollectionName>,
     Input(function): Input<FunctionDBWithNames>,
@@ -28,8 +32,12 @@ pub async fn assert_function_name_not_exists<Q: DerefQueries>(
         let mut conn = connection.lock().await;
         let conn = conn.get_mut_connection()?;
 
-        let found: Option<FunctionDB> = queries
-            .select_by::<FunctionDB>(&(&*collection_id, function_update.name()))?
+        let found: Option<FunctionDBWithNames> = queries
+            .select_versions_at::<FunctionDBWithNames>(
+                Some(&at_time),
+                Some(&[&FunctionStatus::Active]),
+                &(&*collection_id, function_update.name()),
+            )?
             .build_query_as()
             .fetch_optional(&mut *conn)
             .await

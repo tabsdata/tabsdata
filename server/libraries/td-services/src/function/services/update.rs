@@ -4,9 +4,10 @@
 
 use crate::function::layers::register::data_location;
 use crate::function::layers::update::assert_function_name_not_exists;
-use std::sync::Arc;
+use crate::function::layers::{
+    register_dependencies, register_tables, register_triggers, DO_AUTHZ,
+};
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::FunctionParam;
@@ -32,122 +33,104 @@ use td_objects::types::function::{
 };
 use td_objects::types::table::TableDB;
 use td_objects::types::trigger::TriggerDBWithNames;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-use super::register::RegisterFunctionService;
-
-pub struct UpdateFunctionService {
-    provider: ServiceProvider<UpdateRequest<FunctionParam, FunctionUpdate>, Function, TdError>,
-}
-
-impl UpdateFunctionService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(authz_context),
-
-                from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract::<RequestContext>),
-                from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_name::<FunctionParam>),
-                from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_data::<FunctionUpdate>),
-
-
-                // Extract collection and current function from request.
-                from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
-                from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
-
-                // Get collection. Extract collection id and name.
-                from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-                from_fn(With::<CollectionDB>::extract::<CollectionId>),
-
-                // check requester is coll_admin or coll_dev for the function's collection
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<CollAdmin, CollDev>::check),
-
-                from_fn(With::<CollectionDB>::extract::<CollectionName>),
-
-                // Get function. Extract function id and name.
-                from_fn(combine::<CollectionIdName, FunctionIdName>),
-                from_fn(With::<RequestContext>::extract::<AtTime>),
-                from_fn(FunctionStatus::active),
-                from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>),
-                // This is, before update function id and function version id. Function id does
-                // not change, but function version id does.
-                from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-                from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-
-                // If function has a new name, check new name does not exist in collection.
-                from_fn(assert_function_name_not_exists::<DaoQueries>),
-
-                // Get location and storage version.
-                from_fn(With::<StorageVersion>::default),
-                from_fn(data_location),
-
-                // Insert into function_versions(sql) status=Active.
-                from_fn(With::<FunctionUpdate>::convert_to::<FunctionDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
-                from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
-                // We maintain the same function id
-                from_fn(With::<FunctionId>::set::<FunctionDBBuilder>),
-                from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
-                from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
-                from_fn(With::<FunctionDBBuilder>::build::<FunctionDB, _>),
-                from_fn(insert::<DaoQueries, FunctionDB>),
-
-                // Remove from bundles
-                from_fn(With::<FunctionDB>::extract::<BundleId>),
-                from_fn(By::<BundleId>::delete::<DaoQueries, BundleDB>),
-
-                // Register associations
-                // Find previous versions
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
-                // Extract new associations
-                from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
-                from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
-                from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
-                // Extract reuse frozen
-                from_fn(With::<FunctionUpdate>::extract::<ReuseFrozen>),
-                // And register new ones
-                RegisterFunctionService::register_tables(),
-                RegisterFunctionService::register_dependencies(),
-                RegisterFunctionService::register_triggers(),
-
-                // Response
-                // Extract new function version id
-                from_fn(With::<FunctionDB>::extract::<FunctionVersionId>),
-                from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionDBWithNames>),
-                from_fn(With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
-                from_fn(With::<FunctionBuilder>::build::<Function, _>),
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<UpdateRequest<FunctionParam, FunctionUpdate>, Function, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = UpdateFunctionService,
+    request = UpdateRequest<FunctionParam, FunctionUpdate>,
+    response = Function,
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract::<RequestContext>),
+        from_fn(
+            With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_name::<FunctionParam>
+        ),
+        from_fn(
+            With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_data::<FunctionUpdate>
+        ),
+        // Extract collection and current function from request.
+        from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
+        from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
+        // Get collection. Extract collection id and name.
+        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        // check requester is coll_admin or coll_dev for the function's collection
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollDev>::check),
+        from_fn(With::<CollectionDB>::extract::<CollectionName>),
+        // Get function. Extract function id and name.
+        from_fn(combine::<CollectionIdName, FunctionIdName>),
+        from_fn(With::<RequestContext>::extract::<AtTime>),
+        from_fn(FunctionStatus::active),
+        from_fn(
+            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                DaoQueries,
+                FunctionDBWithNames,
+            >
+        ),
+        // This is, before update function id and function version id. Function id does
+        // not change, but function version id does.
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
+        // If function has a new name, check new name does not exist in collection.
+        from_fn(assert_function_name_not_exists::<DaoQueries>),
+        // Get location and storage version.
+        from_fn(With::<StorageVersion>::default),
+        from_fn(data_location),
+        // Insert into function_versions(sql) status=Active.
+        from_fn(With::<FunctionUpdate>::convert_to::<FunctionDBBuilder, _>),
+        from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
+        from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
+        // We maintain the same function id
+        from_fn(With::<FunctionId>::set::<FunctionDBBuilder>),
+        from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
+        from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
+        from_fn(With::<FunctionDBBuilder>::build::<FunctionDB, _>),
+        from_fn(insert::<DaoQueries, FunctionDB>),
+        // Remove from bundles
+        from_fn(With::<FunctionDB>::extract::<BundleId>),
+        from_fn(By::<BundleId>::delete::<DaoQueries, BundleDB>),
+        // Register associations
+        // Find previous versions
+        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
+        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
+        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
+        // Extract new associations
+        from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
+        from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
+        from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
+        // Extract reuse frozen
+        from_fn(With::<FunctionUpdate>::extract::<ReuseFrozen>),
+        // And register new ones
+        register_tables(),
+        register_dependencies::<_, DO_AUTHZ>(),
+        register_triggers::<_, DO_AUTHZ>(),
+        // Response
+        // Extract new function version id
+        from_fn(With::<FunctionDB>::extract::<FunctionVersionId>),
+        from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionDBWithNames>),
+        from_fn(With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+        from_fn(With::<FunctionBuilder>::build::<Function, _>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::function::layers::register::RegisterFunctionError;
-    use crate::function::services::tests::assert_update;
+    use crate::function::services::register::RegisterFunctionService;
+    use crate::function::services::tests::{assert_register, assert_update};
+    use std::sync::Arc;
+    use td_database::sql::DbPool;
     use td_objects::crudl::handle_sql_err;
+    use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
@@ -155,29 +138,30 @@ mod tests {
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependencyDto,
         TableName, TableNameDto, TableStatus, UserId,
     };
+    use td_objects::types::function::FunctionRegister;
     use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_update_function(db: DbPool) {
-        use td_objects::tower_service::authz::InterColl;
-        use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
-        use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
-        use td_tower::metadata::{type_of_val, Metadata};
-
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_trigger_versions,
         };
+        use td_objects::tower_service::authz::InterColl;
+        use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
         use td_objects::tower_service::sql::insert_vec;
         use td_objects::types::basic::ReuseFrozen;
         use td_objects::types::dependency::DependencyDBBuilder;
+        use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
         use td_objects::types::table::TableDBBuilder;
         use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 
+        use td_tower::metadata::{type_of_val, Metadata};
+
         let queries = Arc::new(DaoQueries::default());
-        let provider =
-            UpdateFunctionService::provider(db, queries, Arc::new(AuthzContext::default()));
+        let authz_context = Arc::new(AuthzContext::default());
+        let provider = UpdateFunctionService::provider(db, queries, authz_context);
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -278,6 +262,9 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_fields(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -325,9 +312,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -345,6 +333,9 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_add_new_table(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -390,9 +381,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -410,6 +402,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_remove_table(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -455,9 +449,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -475,6 +470,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_maintain_table(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -520,9 +517,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -540,6 +538,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_add_dependencies(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -585,9 +585,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -605,6 +606,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_remove_dependencies(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -650,9 +653,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -670,6 +674,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_maintain_dependencies(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -715,9 +721,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -735,6 +742,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_add_trigger(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -796,9 +805,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -816,6 +826,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_remove_trigger(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -877,9 +889,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -897,6 +910,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_maintain_trigger(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -958,9 +973,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -978,6 +994,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_change_everything(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -1051,9 +1069,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -1071,9 +1090,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_freeze_unfreeze(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
-        let queries = DaoQueries::default();
 
         let create = FunctionUpdate::builder()
             .try_name("joaquin_workout")?
@@ -1117,9 +1138,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -1158,9 +1180,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         // Without reuse_frozen, we just get an error
         let response = response;
@@ -1199,9 +1222,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
         // But with reuse_frozen, we get the expected response
@@ -1219,5 +1243,104 @@ mod tests {
         assert_eq!(tables[0].table_id(), tables[1].table_id());
         assert_eq!(tables[1].table_id(), tables[2].table_id());
         Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_update_same_name(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        let dependencies = None;
+        let triggers = None;
+        let tables = None;
+
+        let bundle_id = BundleId::default();
+        let create = FunctionRegister::builder()
+            .try_name("function_foo")?
+            .try_description("function_foo description")?
+            .bundle_id(bundle_id)
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(dependencies.clone())
+            .triggers(triggers.clone())
+            .tables(tables.clone())
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let created_function = seed_function(&db, &collection, &create).await;
+
+        let update = FunctionUpdate::builder()
+            .try_name("function_foo_2")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(true)
+            .build()?;
+
+        let update_request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .update(
+            FunctionParam::builder()
+                .try_collection(format!("{}", collection.name()))?
+                .try_function("function_foo")?
+                .build()?,
+            update.clone(),
+        );
+
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
+        let response = service.raw_oneshot(update_request).await;
+        let update_response = response?;
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name.as_str())?
+                .build()?,
+            create.clone(),
+        );
+        let service =
+            RegisterFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
+        let response = service.raw_oneshot(request).await;
+        let create_response = response?;
+
+        assert_update(
+            &db,
+            &UserId::admin(),
+            &collection,
+            &create,
+            &created_function,
+            &update,
+            &update_response,
+        )
+        .await?;
+        assert_register(
+            &db,
+            &UserId::admin(),
+            &collection,
+            &create,
+            &create_response,
+        )
+        .await
     }
 }

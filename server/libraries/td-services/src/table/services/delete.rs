@@ -171,6 +171,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_table(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -221,9 +223,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -259,6 +262,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_function_with_dependency(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -325,9 +330,10 @@ mod tests {
             update.clone(),
         );
 
-        let service = UpdateFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
-            .service()
-            .await;
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 

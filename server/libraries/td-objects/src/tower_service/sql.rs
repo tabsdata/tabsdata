@@ -351,129 +351,6 @@ where
     }
 }
 
-// #[async_trait]
-// pub trait SqlSelectIdOrNameService<T> {
-//     async fn select<Q, D>(
-//         connection: Connection,
-//         queries: SrvCtx<Q>,
-//         by: Input<T>,
-//     ) -> Result<D, TdError>
-//     where
-//         Q: DerefQueries,
-//         D: DataAccessObject;
-//
-//     async fn select_version<Q, D>(
-//         connection: Connection,
-//         queries: SrvCtx<Q>,
-//         natural_order_by: Input<D::Order>,
-//         status: Input<Vec<D::Condition>>,
-//         by: Input<T>,
-//     ) -> Result<D, TdError>
-//     where
-//         Q: DerefQueries,
-//         D: DataAccessObject + PartitionBy + VersionedAt;
-// }
-
-// macro_rules! impl_select_id_or_name {
-//     (
-//     [$($E:ident),*]
-//     ) => {
-//         #[allow(non_snake_case, unused_parens)]
-//         #[async_trait]
-//         impl<$($E),*> SqlSelectIdOrNameService<($($E),*)> for By<($($E),*)>
-//         where
-//             $( for<'a> $E: IdOrName + 'a ),*
-//         {
-//             #[allow(non_snake_case)]
-//             async fn select<Q, D>(
-//                 Connection(connection): Connection,
-//                 SrvCtx(queries): SrvCtx<Q>,
-//                 Input(by): Input<($($E),*)>,
-//             ) -> Result<D, TdError>
-//             where
-//                 Q: DerefQueries,
-//                 D: DataAccessObject,
-//             {
-//                 let mut conn = connection.lock().await;
-//                 let conn = conn.get_mut_connection()?;
-//                 let queries = queries.deref();
-//
-//                 let ($($E),*) = by.deref();
-//                 impl_select_id_or_name!(@recurse (false) (queries, conn, D) ($($E),*) () ());
-//             }
-//
-//             #[allow(non_snake_case)]
-//             async fn select_version<Q, D>(
-//                 Connection(connection): Connection,
-//                 SrvCtx(queries): SrvCtx<Q>,
-//                 Input(natural_order_by): Input<D::Order>,
-//                 Input(status): Input<Vec<D::Condition>>,
-//                 Input(by): Input<($($E),*)>,
-//             ) -> Result<D, TdError>
-//             where
-//                 Q: DerefQueries,
-//                 D: DataAccessObject + PartitionBy + VersionedAt,
-//             {
-//                 let mut conn = connection.lock().await;
-//                 let conn = conn.get_mut_connection()?;
-//                 let queries = queries.deref();
-//
-//                 let ($($E),*) = by.deref();
-//                 impl_select_id_or_name!(@recurse (true) (queries, conn, D) ($($E),*) () ());
-//             }
-//         }
-//     };
-//
-//     // Recursive case: build nested matches
-//     (@recurse ($versioned:tt) ($queries:ident, $conn:ident, $D:ident) ($head:ident $(, $rest:ident)*) ($($acc:tt)*) ($($meta:tt)*)) => {
-//         match ($head.id(), $head.name()) {
-//             (Some($head), None) => {
-//                 impl_select_id_or_name!(@recurse ($versioned) ($queries, $conn, $D) ($($rest),*)
-//                     ($($acc)* $head)
-//                     ($($meta)* ($head, $head::Id),));
-//             },
-//             (None, Some($head)) => {
-//                 impl_select_id_or_name!(@recurse ($versioned) ($queries, $conn, $D) ($($rest),*)
-//                     ($($acc)* $head)
-//                     ($($meta)* ($head, $head::Name),));
-//             },
-//             _ => unreachable!("id or name must be provided for each element"),
-//         }
-//     };
-//
-//     // Base case: no more elements, call select_by
-//     (@recurse ($versioned:tt) ($queries:ident, $conn:ident, $D:ident) () ($($values:tt)*) ($($meta:tt)*)) => {
-//         let result = impl_select_id_or_name!(@select_query ($versioned) ($queries, $D) ($($values),*))
-//             .fetch_one(&mut *$conn)
-//             .await
-//             .map_err(|e| {
-//                 formatted_entity!($D; $($meta)*).map(|(columns, values, table)| {
-//                     TdError::from(SqlError::SelectError(columns, values, table, e))
-//                 })
-//             })
-//             .map_err(|e| e.unwrap_or_else(|e| e))?;
-//         return Ok(result);
-//     };
-//
-//     // Helper macro to select the appropriate query
-//     (@select_query (true) ($queries:ident, $D:ident) ($($values:tt),*)) => {
-//         $queries
-//             .select_versions_at::<D>(
-//                 Some(&*natural_order_by),
-//                 Some(&status.iter().collect::<Vec<_>>()[..]),
-//                 &($($values),*)
-//             )?
-//             .build_query_as()
-//     };
-//     (@select_query (false) ($queries:ident, $D:ident) ($($values:tt),*)) => {
-//         $queries
-//             .select_by::<$D>(&($($values),*))?
-//             .build_query_as()
-//     };
-// }
-//
-// all_the_tuples!(impl_select_id_or_name);
-
 #[async_trait]
 pub trait SqlAssertExistsService<E> {
     async fn assert_exists<Q, D>(
@@ -542,6 +419,17 @@ pub trait SqlAssertNotExistsService<E> {
     where
         Q: DerefQueries,
         D: DataAccessObject;
+
+    async fn assert_version_not_exists<Q, D>(
+        connection: Connection,
+        queries: SrvCtx<Q>,
+        natural_order_by: Input<D::Order>,
+        status: Input<Vec<D::Condition>>,
+        by: Input<E>,
+    ) -> Result<(), TdError>
+    where
+        Q: DerefQueries,
+        D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
 macro_rules! impl_assert_not_exists {
@@ -569,6 +457,43 @@ macro_rules! impl_assert_not_exists {
                 let ($($E),*) = by.deref();
                 let result: Vec<D> = queries
                     .select_by::<D>(&($($E),*))?
+                    .build_query_as()
+                    .fetch_all(&mut *conn)
+                    .await
+                    .map_err(handle_sql_err)?;
+
+                if !result.is_empty() {
+                    Err(
+                        formatted_entity!(D; $($E),*).and_then(|(columns, values, table)| {
+                            Err(SqlError::EntityAlreadyExists(columns, values, table))
+                        })?
+                    )
+                } else {
+                    Ok(())
+                }
+            }
+
+            async fn assert_version_not_exists<Q, D>(
+                Connection(connection): Connection,
+                SrvCtx(queries): SrvCtx<Q>,
+                Input(natural_order_by): Input<D::Order>,
+                Input(status): Input<Vec<D::Condition>>,
+                Input(by): Input<($($E),*)>,
+            ) -> Result<(), TdError>
+            where
+                Q: DerefQueries,
+                D: DataAccessObject + PartitionBy + VersionedAt,
+            {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
+
+                let ($($E),*) = by.deref();
+                let result: Vec<D> = queries
+                    .select_versions_at::<D>(
+                        Some(&*natural_order_by),
+                        Some(&status.iter().collect::<Vec<_>>()[..]),
+                        &($($E),*)
+                    )?
                     .build_query_as()
                     .fetch_all(&mut *conn)
                     .await

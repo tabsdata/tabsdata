@@ -5,6 +5,7 @@
 //! Functions API Service for API Server.
 
 pub mod delete;
+pub mod history;
 pub mod list;
 pub mod read;
 pub mod register;
@@ -26,5 +27,6 @@ routers! {
         register => { state ( Functions ) },
         update => { state ( Functions ) },
         upload => { state ( Functions ) },
+        history => { state ( Functions ) },
     }
 }

@@ -3,6 +3,7 @@
 //
 
 use crate::function::services::delete::DeleteFunctionService;
+use crate::function::services::history::FunctionHistoryService;
 use crate::function::services::list::FunctionListService;
 use crate::function::services::read::ReadFunctionService;
 use crate::function::services::register::RegisterFunctionService;
@@ -20,11 +21,12 @@ use td_objects::sql::DaoQueries;
 use td_objects::types::function::{
     Bundle, Function, FunctionRegister, FunctionUpdate, FunctionUpload, FunctionWithTables,
 };
-use td_objects::types::table::CollectionAtName;
+use td_objects::types::table::{CollectionAtName, FunctionAtIdName};
 use td_storage::Storage;
 use td_tower::service_provider::TdBoxService;
 
 pub(crate) mod delete;
+pub(crate) mod history;
 pub(crate) mod list;
 pub(crate) mod read;
 pub(crate) mod register;
@@ -38,18 +40,28 @@ pub struct FunctionServices {
     list: FunctionListService,
     update: UpdateFunctionService,
     delete: DeleteFunctionService,
+    history: FunctionHistoryService,
 }
 
 impl FunctionServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            register: RegisterFunctionService::new(db.clone(), authz_context.clone()),
+            register: RegisterFunctionService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
             upload: UploadFunctionService::new(db.clone(), authz_context.clone(), storage.clone()),
             read_version: ReadFunctionService::new(db.clone(), authz_context.clone()),
             list: FunctionListService::new(db.clone(), queries.clone(), authz_context.clone()),
-            update: UpdateFunctionService::new(db.clone(), authz_context.clone()),
-            delete: DeleteFunctionService::new(db.clone(), authz_context.clone()),
+            update: UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone()),
+            delete: DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone()),
+            history: FunctionHistoryService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
         }
     }
 
@@ -85,6 +97,12 @@ impl FunctionServices {
 
     pub async fn delete(&self) -> TdBoxService<DeleteRequest<FunctionParam>, (), TdError> {
         self.delete.service().await
+    }
+
+    pub async fn history(
+        &self,
+    ) -> TdBoxService<ListRequest<FunctionAtIdName>, ListResponse<Function>, TdError> {
+        self.history.service().await
     }
 }
 

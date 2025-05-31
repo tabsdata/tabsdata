@@ -3,12 +3,14 @@
 //
 
 use crate::crudl::RequestContext;
-use crate::rest_urls::{AtTimeParam, CollectionParam, SampleOffsetLenParam, TableParam};
+use crate::rest_urls::{
+    AtTimeParam, CollectionParam, FunctionParam, SampleOffsetLenParam, TableParam,
+};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName,
-    FunctionVersionId, Partitioned, Private, SampleLen, SampleOffset, SchemaFieldName,
-    SchemaFieldType, TableDataVersionId, TableFunctionParamPos, TableId, TableIdName, TableName,
-    TableStatus, TableVersionId, UserId, UserName,
+    AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
+    FunctionName, FunctionVersionId, Partitioned, Private, SampleLen, SampleOffset,
+    SchemaFieldName, SchemaFieldType, TableDataVersionId, TableFunctionParamPos, TableId,
+    TableIdName, TableName, TableStatus, TableVersionId, UserId, UserName,
 };
 use crate::types::function::FunctionDB;
 use polars::prelude::Field;
@@ -92,6 +94,26 @@ impl CollectionAtName {
     pub fn new(collection: CollectionParam, at: AtTimeParam) -> Self {
         Self {
             collection: collection.collection().clone(),
+            at: at.at().clone(),
+        }
+    }
+}
+
+#[td_type::Dlo]
+pub struct FunctionAtIdName {
+    #[td_type(extractor)]
+    collection: CollectionIdName,
+    #[td_type(extractor)]
+    function: FunctionIdName,
+    #[td_type(extractor)]
+    at: AtTime,
+}
+
+impl FunctionAtIdName {
+    pub fn new(function: FunctionParam, at: AtTimeParam) -> Self {
+        Self {
+            collection: function.collection().clone(),
+            function: function.function().clone(),
             at: at.at().clone(),
         }
     }
