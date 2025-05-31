@@ -49,7 +49,6 @@ def create(
 @click.pass_context
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a collection by name. Currently not supported."""
-    raise click.ClickException("Deleting a collection is currently not supported.")
     verify_login_or_prompt(ctx)
     click.echo(f"Deleting collection: {name}")
     click.echo("-" * 10)

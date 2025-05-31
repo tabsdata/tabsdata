@@ -139,7 +139,7 @@ class InputYaml(ABC):
     @property
     @abstractmethod
     def scheduled_on(self) -> str:
-        """Timestamp of the scheduling of the whole execution plan."""
+        """Timestamp of the scheduling of the whole execution."""
 
     @property
     @abstractmethod

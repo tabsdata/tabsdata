@@ -8,7 +8,7 @@ import pytest
 
 from tabsdata.api.tabsdata_server import (
     Collection,
-    ExecutionPlan,
+    Execution,
     Function,
     Transaction,
     Worker,
@@ -23,8 +23,6 @@ logger.setLevel(logging.DEBUG)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_class_lazy_properties(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -32,7 +30,9 @@ def test_worker_class_lazy_properties(
         tabsserver_connection.connection, testing_collection_with_table
     )
     function = collection.functions[0]
-    workers = tabsserver_connection.worker_list(by_function_id=function.id)
+    workers = tabsserver_connection.list_workers(
+        filter=[f"function:eq:{function.name}", f"collection:eq:{collection.name}"]
+    )
     logger.debug(f"Workers: {workers}")
     assert workers
     assert isinstance(workers, list)
@@ -46,11 +46,11 @@ def test_worker_class_lazy_properties(
     assert worker.collection == collection
     assert worker.__repr__()
     assert worker.__str__()
-    assert worker.execution_plan
-    execution_plan = worker.execution_plan
-    assert isinstance(execution_plan, ExecutionPlan)
-    assert worker in execution_plan.workers
-    assert worker == execution_plan.get_worker(worker.id)
+    assert worker.execution
+    execution = worker.execution
+    assert isinstance(execution, Execution)
+    assert worker in execution.workers
+    assert worker == execution.get_worker(worker.id)
     transaction = worker.transaction
     assert isinstance(transaction, Transaction)
     assert worker in transaction.workers
@@ -59,14 +59,14 @@ def test_worker_class_lazy_properties(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_class_log(tabsserver_connection, testing_collection_with_table):
     collection = Collection(
         tabsserver_connection.connection, testing_collection_with_table
     )
     function = collection.functions[0]
-    workers = tabsserver_connection.worker_list(by_function_id=function.id)
+    workers = tabsserver_connection.list_workers(
+        filter=[f"function:eq:{function.name}", f"collection:eq:{collection.name}"]
+    )
     logger.debug(f"Workers: {workers}")
     assert workers
     assert isinstance(workers, list)

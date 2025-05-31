@@ -38,8 +38,6 @@ def import_all_tabsdatafunctions(module_name):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_examples(login, tabsserver_connection):
 
     import tabsdata

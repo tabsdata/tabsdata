@@ -110,7 +110,6 @@ def test_collection_create(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip("Not currently supported")
 def test_collection_delete_cli(login):
     runner = CliRunner()
     try:
@@ -148,7 +147,6 @@ def test_collection_delete_cli(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip("Not currently supported")
 def test_collection_delete_no_prompt(login):
     runner = CliRunner()
     try:
@@ -192,7 +190,6 @@ def test_collection_delete_no_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip("Not currently supported")
 def test_collection_delete_wrong_options_raises_error(login):
     runner = CliRunner()
     result = runner.invoke(

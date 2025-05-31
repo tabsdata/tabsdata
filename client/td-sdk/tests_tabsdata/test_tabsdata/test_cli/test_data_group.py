@@ -18,8 +18,6 @@ logger.setLevel(logging.DEBUG)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_wrong_command_raises_exception(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(cli, ["--no-prompt", "table", "potato"])
@@ -28,12 +26,10 @@ def test_wrong_command_raises_exception(login, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_data_version(login, testing_collection_with_table, tabsserver_connection):
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
+    table_name = tabsserver_connection.list_tables(testing_collection_with_table)[
+        0
+    ].name
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -43,8 +39,8 @@ def test_data_version(login, testing_collection_with_table, tabsserver_connectio
             "versions",
             "--collection",
             testing_collection_with_table,
-            "--function",
-            function_name,
+            "--table",
+            table_name,
         ],
     )
     logger.debug(result.output)

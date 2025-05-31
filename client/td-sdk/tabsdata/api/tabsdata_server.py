@@ -144,24 +144,11 @@ class Collection:
 
     @property
     def functions(self) -> List[Function]:
-        raw_list_of_functions = (
-            self.connection.function_in_collection_list(self.name)
-            .json()
-            .get("data")
-            .get("data")
-        )
-        # TODO Aleix: Once the endpoint returns the proper id, remove the "refresh()"
-        #   workaround
-        return [
-            Function(
-                **{**function, "connection": self.connection, "collection": self}
-            ).refresh()
-            for function in raw_list_of_functions
-        ]
+        return self.list_functions()
 
     @property
     def tables(self) -> List[Table]:
-        return self.get_tables()
+        return self.list_tables()
 
     def create(self, raise_for_status: bool = True) -> Collection:
         description = self._description or self.name
@@ -183,39 +170,109 @@ class Collection:
         return Function(**function_definition)
 
     def get_table(self, table_name: str) -> Table | None:
-        # TODO: Change for the specific endpoint once implemented, for now iterating
-        #  through all tables in the collection
         for table in self.tables:
             if table.name == table_name:
                 return table
         raise ValueError(f"Table {table_name} not found in collection {self.name}")
 
-    def get_tables(self, offset: int = None, len: int = None) -> List[Table]:
+    def list_functions(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Function]:
+        return list(
+            self.list_functions_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_functions_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Function]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.function_in_collection_list(
+                collection_name=self.name,
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_functions = data.get("data")
+            for raw_function in raw_functions:
+                raw_function = Function(self.connection, **raw_function)
+                yield raw_function
+            first_page = False
+
+    def list_tables(
+        self,
+        at: int = None,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Table]:
         """
         List the tables in a collection.
 
         Args:
-            offset (int, optional): The offset of the list.
-            len (int, optional): The length of the list.
 
         Returns:
             List[Table]: The requested list of tables in the collection.
         """
-        raw_tables = (
-            self.connection.table_list(self.name, offset=offset, len=len)
-            .json()
-            .get("data")
-            .get("data")
+        return list(
+            self.list_tables_generator(
+                at=at,
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
         )
-        return [
-            Table(**{**table, "connection": self.connection, "collection": self})
-            for table in raw_tables
-        ]
+
+    def list_tables_generator(
+        self,
+        at: int = None,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Table]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.table_list(
+                collection_name=self.name,
+                at=at,
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_tables = data.get("data")
+            for raw_table in raw_tables:
+                raw_table = Table(self.connection, self, **raw_table)
+                yield raw_table
+            first_page = False
 
     def read_function_run(
         self,
         function: Function | str,
-        execution_plan: ExecutionPlan | str,
+        execution: Execution | str,
         raise_for_status=True,
     ) -> requests.Response:
         """
@@ -223,7 +280,7 @@ class Collection:
 
         Args:
             function (Function | str): The function to read the status of.
-            execution_plan (ExecutionPlan | str): The execution plan of the run.
+            execution (Execution | str): The execution of the run.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
         """
@@ -232,7 +289,7 @@ class Collection:
             if isinstance(function, Function)
             else Function(self.connection, self, function)
         )
-        return function.read_run(execution_plan, raise_for_status=raise_for_status)
+        return function.read_run(execution, raise_for_status=raise_for_status)
 
     def refresh(self) -> Collection:
         self.description = None
@@ -443,84 +500,26 @@ class Collection:
         return f"Name: {self.name!r}"
 
 
-class Commit:
-    """
-    This class represents a commit in the TabsdataServer.
-
-    Args:
-        id (str): The ID of the commit.
-        execution_plan_id (str): The ID of the execution plan it is associated with.
-        transaction_id (str): The ID of the transaction it is associated with.
-        triggered_on (int): The timestamp when the commit was triggered.
-        ended_on (int): The timestamp when the commit ended.
-        started_on (int): The timestamp when the commit started.
-        **kwargs: Additional keyword arguments.
-
-    Attributes:
-        triggered_on_str (str): The timestamp when the commit was triggered as a
-            string.
-        ended_on_str (str): The timestamp when the commit ended as a string.
-        started_on_str (str): The timestamp when the commit started as a string.
-    """
-
-    # TODO Aleix: Add the rest of the attributes and link class
-    def __init__(
-        self,
-        id: str,
-        execution_plan_id: str,
-        transaction_id: str,
-        triggered_on: int,
-        ended_on: int,
-        started_on: int,
-        **kwargs,
-    ):
-        self.id = id
-        self.execution_plan_id = execution_plan_id
-        self.transaction_id = transaction_id
-        self.triggered_on = triggered_on
-        self.triggered_on_str = convert_timestamp_to_string(triggered_on)
-        self.ended_on = ended_on
-        self.ended_on_str = convert_timestamp_to_string(ended_on)
-        self.started_on = started_on
-        self.started_on_str = convert_timestamp_to_string(started_on)
-        self.kwargs = kwargs
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(id={self.id!r},"
-            f" execution_plan_id={self.execution_plan_id!r}, transaction_id"
-            f"={self.transaction_id!r}, triggered_on={self.triggered_on_str!r},"
-            f" ended_on={self.ended_on_str!r}, started_on={self.started_on_str!r})"
-        )
-
-    def __str__(self) -> str:
-        return (
-            f"ID: {self.id!s}, execution plan ID: {self.execution_plan_id!s}, "
-            f"transaction ID : {self.transaction_id!s}, triggered on:"
-            f" {self.triggered_on_str!s}, ended on: {self.ended_on_str!s},"
-            f" started on: {self.started_on_str!s}"
-        )
-
-
 class DataVersion:
     """
     This class represents a data version of a table in the TabsdataServer.
 
     Args:
         id (str): The ID of the data version.
-        execution_plan_id (str): The ID of the execution plan.
+        execution_id (str): The ID of the execution.
         triggered_on (int): The timestamp when the data version was triggered.
         status (str): The status of the data version.
         function_id (str): The ID of the function.
         **kwargs: Additional keyword arguments.
     """
 
+    # TODO: Make a first class citizen, with links to transaction and execution
     def __init__(
         self,
         connection: APIServer,
         id: str,
         collection: str | Collection,
-        function: str | Function,
+        table: str | Table,
         **kwargs,
     ):
         """
@@ -528,7 +527,7 @@ class DataVersion:
 
         Args:
             id (str): The ID of the data version.
-            execution_plan_id (str): The ID of the execution plan.
+            execution_id (str): The ID of the execution.
             triggered_on (int): The timestamp when the data version was triggered.
             status (str): The status of the data version.
             function_id (str): The ID of the function.
@@ -537,24 +536,36 @@ class DataVersion:
         self.connection = connection
         self.id = id
         self.collection = collection
-        self.function = function
+        self.table = table
 
-        self.execution_plan = kwargs.get("execution_plan_id")
+        self.execution = kwargs.get("execution_id")
+        # TODO: Add lazy properties for status, triggered_on and triggered_on_str
         self.triggered_on = kwargs.get("triggered_on")
         triggered_on = kwargs.get("triggered_on")
         self.triggered_on_str = (
             convert_timestamp_to_string(self.triggered_on) if triggered_on else None
         )
-        status = kwargs.get("status")
+        status = kwargs.get("transaction_status") or kwargs.get("status")
         self.status = status_to_mapping(status) if status else None
         # Note: this might cause an inconsistency or a bug if function_id corresponds
         # to a different function than the one in the function attribute. Revisit this
         # if necessary.
-        self.function_id = kwargs.get("function_id")
+        self.function = kwargs.get("function_name") or kwargs.get("function")
         self.kwargs = kwargs
-        # TODO Aleix: add _data logic once an endpoint is created to get a dataversion
-        #   by ID
         self._data = None
+
+    @property
+    def _data(self):
+        if self._data_dict is None:
+            response = self.connection.dataversion_list(
+                self.collection.name, self.table.name, request_filter=f"id:eq:{self.id}"
+            )
+            self._data = response.json().get("data").get("data")[0]
+        return self._data_dict
+
+    @_data.setter
+    def _data(self, data_dict: dict | None):
+        self._data_dict = data_dict
 
     @property
     def collection(self) -> Collection:
@@ -573,27 +584,29 @@ class DataVersion:
             )
 
     @property
-    def execution_plan(self) -> ExecutionPlan:
-        if self._execution_plan is None:
-            self.execution_plan = self._data.get("execution_plan_id")
-        return self._execution_plan
+    def execution(self) -> Execution:
+        if self._execution is None:
+            self.execution = self._data.get("execution_id")
+        return self._execution
 
-    @execution_plan.setter
-    def execution_plan(self, execution_plan: ExecutionPlan | str | None):
-        if isinstance(execution_plan, ExecutionPlan):
-            self._execution_plan = execution_plan
-        elif isinstance(execution_plan, str):
-            self._execution_plan = ExecutionPlan(self.connection, execution_plan)
-        elif execution_plan is None:
-            self._execution_plan = None
+    @execution.setter
+    def execution(self, execution: Execution | str | None):
+        if isinstance(execution, Execution):
+            self._execution = execution
+        elif isinstance(execution, str):
+            self._execution = Execution(self.connection, execution)
+        elif execution is None:
+            self._execution = None
         else:
             raise TypeError(
-                "Execution plan must be an ExecutionPlan object, a string or None; got"
-                f"{type(execution_plan)} instead."
+                "Execution must be an Execution object, a string or None; got"
+                f"{type(execution)} instead."
             )
 
     @property
     def function(self) -> Function:
+        if self._function is None:
+            self.function = self._data.get("function_name")
         return self._function
 
     @function.setter
@@ -602,30 +615,28 @@ class DataVersion:
             self._function = Function(self.connection, self.collection, function)
         elif isinstance(function, Function):
             self._function = function
+        elif function is None:
+            self._function = None
         else:
             raise TypeError(
-                "Function must be a string or a Function object; got"
+                "Function must be a string, a Function object or None; got"
                 f"{type(function)} instead."
             )
 
     @property
-    def workers(self):
-        raw_workers = (
-            self.connection.workers_list(by_data_version_id=self.id)
-            .json()
-            .get("data")
-            .get("data")
-        )
-        return [
-            Worker(**{**worker, "connection": self.connection})
-            for worker in raw_workers
-        ]
+    def table(self) -> Table:
+        return self._table
 
-    def get_worker(self, worker_id: str):
-        for worker in self.workers:
-            if worker.id == worker_id:
-                return worker
-        raise ValueError(f"Worker {worker_id} not found for data version {self.id}")
+    @table.setter
+    def table(self, table: str | Table):
+        if isinstance(table, str):
+            self._table = Table(self.connection, self.collection, table)
+        elif isinstance(table, Table):
+            self._table = table
+        else:
+            raise TypeError(
+                f"Table must be a string or a Table object; got{type(table)} instead."
+            )
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(id={self.id!r})"
@@ -634,32 +645,30 @@ class DataVersion:
         return f"ID: {self.id!r}"
 
 
-class ExecutionPlan:
+class Execution:
     """
-    This class represents an execution plan in the TabsdataServer.
+    This class represents an execution in the TabsdataServer.
 
     Args:
-        id (str): The id of the execution plan.
-        name (str): The name of the execution plan.
-        collection (str): The collection where the execution plan is running.
-        dataset (str): The function where the execution plan is running,
-            will eventually be changed to 'function'.
-        triggered_by (str): The user that triggered the execution plan.
-        triggered_on (int): The timestamp when the execution plan was triggered.
-        ended_on (int): The timestamp when the execution plan ended.
-        started_on (int): The timestamp when the execution plan started.
-        status (str): The status of the execution plan.
+        id (str): The id of the execution.
+        name (str): The name of the execution.
+        collection (str): The collection where the execution is running.
+        function (str): The function that was triggered to start the execution.
+        triggered_by (str): The user that triggered the execution.
+        triggered_on (int): The timestamp when the execution was triggered.
+        ended_on (int): The timestamp when the execution ended.
+        started_on (int): The timestamp when the execution started.
+        status (str): The status of the execution.
         **kwargs: Additional keyword arguments.
 
     Attributes:
-        triggered_on_str (str): The timestamp when the execution plan was triggered as a
+        triggered_on_str (str): The timestamp when the execution was triggered as a
             string.
-        ended_on_str (str): The timestamp when the execution plan ended as a string.
-        started_on_str (str): The timestamp when the execution plan started as a string.
+        ended_on_str (str): The timestamp when the execution ended as a string.
+        started_on_str (str): The timestamp when the execution started as a string.
 
     """
 
-    dot = LazyProperty("dot")
     ended_on = LazyProperty("ended_on")
     ended_on_str = LazyProperty("ended_on_str", subordinate_time_string=True)
     name = LazyProperty("name")
@@ -676,25 +685,25 @@ class ExecutionPlan:
         **kwargs,
     ):
         """
-        Initialize the ExecutionPlan object.
+        Initialize the Execution object.
 
         Args:
-            id (str): The id of the execution plan.
-            name (str): The name of the execution plan.
-            collection (str): The collection where the execution plan is running.
-            dataset (str): The dataset where the execution plan is running.
-            triggered_by (str): The user that triggered the execution plan.
-            triggered_on (int): The timestamp when the execution plan was triggered.
-            ended_on (int): The timestamp when the execution plan ended.
-            started_on (int): The timestamp when the execution plan started.
-            status (str): The status of the execution plan.
+            id (str): The id of the execution.
+            name (str): The name of the execution.
+            collection (str): The collection where the execution is running.
+            function (str): The function that was triggered to start the execution.
+            triggered_by (str): The user that triggered the execution.
+            triggered_on (int): The timestamp when the execution was triggered.
+            ended_on (int): The timestamp when the execution ended.
+            started_on (int): The timestamp when the execution started.
+            status (str): The status of the execution.
             **kwargs: Additional keyword arguments.
         """
         self.connection = connection
         self.id = id
         self.name = kwargs.get("name")
         self.collection = kwargs.get("collection")
-        self.function = kwargs.get("dataset")
+        self.function = kwargs.get("function")
         self.triggered_on = kwargs.get("triggered_on")
         # This way it gets computed dynamically, and we don't need to replicate logic
         self.triggered_on_str = None
@@ -714,23 +723,8 @@ class ExecutionPlan:
     @property
     def _data(self):
         if self._data_dict is None:
-            # TODO: This is a costly workaround until information is added to
-            #  execution_plan_get endpoint. Remove as soon as possible
-            raw_execution_plans = (
-                self.connection.execution_plan_list().json().get("data").get("data")
-            )
-            execution_plans = [
-                ExecutionPlan(**{**execution_plan, "connection": self.connection})
-                for execution_plan in raw_execution_plans
-            ]
-            for execution_plan in execution_plans:
-                if execution_plan.id == self.id:
-                    self._data_dict = execution_plan.kwargs
-                    break
-            # TODO: End of workaround
-            self._data_dict.update(
-                self.connection.execution_plan_read(self.id).json().get("data")
-            )
+            response = self.connection.execution_list(request_filter=f"id:eq:{self.id}")
+            self._data = response.json().get("data").get("data")[0]
         return self._data_dict
 
     @_data.setter
@@ -760,8 +754,7 @@ class ExecutionPlan:
     @property
     def function(self) -> Function | None:
         if self._function is None:
-            # TODO: Eventually this will be .get("function")
-            self.function = self._data.get("dataset")
+            self.function = self._data.get("function")
         return self._function
 
     @function.setter
@@ -792,9 +785,18 @@ class ExecutionPlan:
             self._status = status_to_mapping(status)
 
     @property
+    def transactions(self) -> List[Transaction]:
+        tabsdata_server = TabsdataServer.__new__(TabsdataServer)
+        tabsdata_server.connection = self.connection
+        transactions = tabsdata_server.list_transactions(
+            filter=f"execution_id:eq:{self.id}"
+        )
+        return transactions
+
+    @property
     def workers(self):
         raw_workers = (
-            self.connection.workers_list(by_execution_plan_id=self.id)
+            self.connection.workers_list(request_filter=f"execution_id:eq:{self.id}")
             .json()
             .get("data")
             .get("data")
@@ -804,13 +806,43 @@ class ExecutionPlan:
             for worker in raw_workers
         ]
 
+    def cancel(self) -> requests.Response:
+        """
+        Cancel an execution. This includes all transactions that are part of the
+            execution.
+
+        Returns:
+            requests.Response: The response of the server to the request.
+
+        Raises:
+            APIServerError: If the execution_id is not found in the system.
+        """
+        response = self.connection.execution_cancel(self.id)
+        self.refresh()
+        return response
+
     def get_worker(self, worker_id: str):
         for worker in self.workers:
             if worker.id == worker_id:
                 return worker
-        raise ValueError(f"Worker {worker_id} not found for execution plan {self.id}")
+        raise ValueError(f"Worker {worker_id} not found for execution {self.id}")
 
-    def refresh(self) -> ExecutionPlan:
+    def recover(self) -> requests.Response:
+        """
+        Recover an execution. This includes all transactions that are part of the
+            execution.
+
+        Returns:
+            requests.Response: The response of the server to the request.
+
+        Raises:
+            APIServerError: If the execution_id is not found in the system.
+        """
+        response = self.connection.execution_recover(self.id)
+        self.refresh()
+        return response
+
+    def refresh(self) -> Execution:
         self.name = None
         self.collection = None
         self.function = None
@@ -824,11 +856,10 @@ class ExecutionPlan:
         self.started_on_str = None
         self.kwargs = None
         self._data = None
-        self.dot = None
         return self
 
     def __eq__(self, other):
-        if not isinstance(other, ExecutionPlan):
+        if not isinstance(other, Execution):
             return False
         return self.id == other.id
 
@@ -936,10 +967,6 @@ class Function:
             )
 
     @property
-    def data_versions(self) -> List[DataVersion]:
-        return self.get_dataversions()
-
-    @property
     def dependencies_with_names(self) -> List[str]:
         # TODO Aleix: see if we can return something other than a string
         if self._dependencies_with_names is None:
@@ -982,7 +1009,7 @@ class Function:
         elif isinstance(tables, list):
             self._tables = [
                 (
-                    Table(self.connection, self.collection, table, function=self)
+                    Table(self.connection, self.collection, table, function_name=self)
                     if isinstance(table, str)
                     else table
                 )
@@ -1008,7 +1035,12 @@ class Function:
     @property
     def workers(self):
         raw_workers = (
-            self.connection.workers_list(by_function_id=self.id)
+            self.connection.workers_list(
+                request_filter=[
+                    f"function:eq:{self.name}",
+                    f"collection:eq:{self.collection.name}",
+                ]
+            )
             .json()
             .get("data")
             .get("data")
@@ -1023,44 +1055,6 @@ class Function:
             self.collection.name, self.name, raise_for_status=raise_for_status
         )
 
-    def get_dataversions(
-        self,
-        offset: int = None,
-        len: int = None,
-    ) -> List[DataVersion]:
-        """
-        List the data versions of a function in a collection.
-
-        Args:
-            offset (int, optional): The offset of the data versions to list.
-            len (int, optional): The number of data versions to list.
-
-        Returns:
-            List[DataVersion]: The list of data versions of the function.
-
-        Raises:
-            APIServerError: If the data versions could not be listed.
-        """
-        raw_list_of_data_versions = (
-            self.connection.dataversion_list(
-                self.collection.name, self.name, offset=offset, len=len
-            )
-            .json()
-            .get("data")
-            .get("data")
-        )
-        return [
-            DataVersion(
-                **{
-                    **data_version,
-                    "connection": self.connection,
-                    "collection": self.collection,
-                    "function": self,
-                }
-            )
-            for data_version in raw_list_of_data_versions
-        ]
-
     def get_table(self, table_name: str) -> Table:
         for table in self.tables:
             if table.name == table_name:
@@ -1074,22 +1068,20 @@ class Function:
         raise ValueError(f"Worker {worker_id} not found for function {self.name}")
 
     def read_run(
-        self, execution_plan: ExecutionPlan | str, raise_for_status: bool = True
+        self, execution: Execution | str, raise_for_status: bool = True
     ) -> requests.Response:
         """
         Read the status of a function run.
 
         Args:
-            execution_plan (ExecutionPlan | str): The execution plan of the run.
+            execution (Execution | str): The execution of the run.
 
         """
-        execution_plan_id = (
-            execution_plan if isinstance(execution_plan, str) else execution_plan.id
-        )
+        execution_id = execution if isinstance(execution, str) else execution.id
         return self.connection.execution_read_function_run(
             self.collection.name,
             self.name,
-            execution_plan_id,
+            execution_id,
             raise_for_status=raise_for_status,
         )
 
@@ -1131,14 +1123,14 @@ class Function:
 
     def trigger(
         self,
-        execution_plan_name: str | None = None,
+        execution_name: str | None = None,
         raise_for_status: bool = True,
-    ) -> ExecutionPlan:
+    ) -> Execution:
         """
         Trigger a function in the server.
 
         Args:
-            execution_plan_name (str, optional): The name of the execution plan.
+            execution_name (str, optional): The name of the execution.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
@@ -1151,10 +1143,10 @@ class Function:
         response = self.connection.function_execute(
             self.collection.name,
             self.name,
-            execution_plan_name=execution_plan_name,
+            execution_name=execution_name,
             raise_for_status=raise_for_status,
         )
-        return ExecutionPlan(
+        return Execution(
             self.connection,
             **{
                 **response.json().get("data"),
@@ -1380,20 +1372,22 @@ class Table:
         self.name = name
 
         self.id = kwargs.get("id")
-        self.function = kwargs.get("function")
+        self.function = kwargs.get("function_name")
         self.kwargs = kwargs
+        self._data = None
 
     @property
     def _data(self) -> dict:
-        return None
-        # TODO: In the near future, the following code should be the one used to get
-        #  the data for the table
-        # if self._data_dict is None:
-        #   self._data_dict = (
-        #       self.connection.table_get(self.collection.name, self.name).json(
-        #       ).get("data")
-        #   )
-        # return self._data_dict
+        if self._data_dict is None:
+            self._data_dict = (
+                self.connection.table_list(
+                    self.collection.name, request_filter=f"name:eq:{self.name}"
+                )
+                .json()
+                .get("data")
+                .get("data")[0]
+            )
+        return self._data_dict
 
     @_data.setter
     def _data(self, data_dict: dict | None):
@@ -1416,10 +1410,13 @@ class Table:
             )
 
     @property
+    def dataversions(self) -> List[DataVersion]:
+        return self.list_dataversions()
+
+    @property
     def function(self) -> Function | None:
         if self._function is None:
-            # TODO: Change this to a specific endpoint once implemented
-            self._function = self.collection.get_table(self.name).function
+            self.function = self._data.get("function_name")
         return self._function
 
     @function.setter
@@ -1439,9 +1436,7 @@ class Table:
     def download(
         self,
         destination_file: str,
-        commit: str = None,
-        time: str = None,
-        version: str = None,
+        at: int = None,
         raise_for_status: bool = True,
     ):
         """
@@ -1462,55 +1457,124 @@ class Table:
         Raises:
             APIServerError: If the schema could not be obtained.
         """
-        # TODO Aleix: Maybe version or commit can be an object apart from a string
-        response = self.connection.table_get_data(
+        response = self.connection.table_download(
             self.collection.name,
             self.name,
-            commit=commit,
-            time=time,
-            version=version,
+            at=at,
             raise_for_status=raise_for_status,
         )
         with open(destination_file, "wb") as file:
             file.write(response.content)
 
+    def list_collections_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Collection]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.collection_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_collections = data.get("data")
+            for raw_collection in raw_collections:
+                built_collection = Collection(self.connection, **raw_collection)
+                yield built_collection
+            first_page = False
+
+    def list_dataversions(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[DataVersion]:
+        """
+        List the data versions of a table in a collection.
+
+        Args:
+
+        Returns:
+            List[DataVersion]: The list of data versions of the function.
+
+        Raises:
+            APIServerError: If the data versions could not be listed.
+        """
+        return list(
+            self.list_dataversions_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_dataversions_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[DataVersion]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.dataversion_list(
+                self.collection.name,
+                self.name,
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_dataversions = data.get("data")
+            for raw_dataversion in raw_dataversions:
+                built_dataversion = DataVersion(
+                    self.connection,
+                    collection=self.collection,
+                    table=self,
+                    **raw_dataversion,
+                )
+                yield built_dataversion
+            first_page = False
+
     def get_schema(
         self,
-        commit: str = None,
-        time: str = None,
-        version: str = None,
-    ) -> dict:
+        at: int = None,
+    ) -> List[dict]:
         """
         Get the schema of a table for a given version. The version can be a
             fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
 
         Args:
-            commit (str, optional): The commit ID of the table from which we will
-                obtain the schema.
-            time (str, optional): If provided, the table version that was
-                published last before that time will be the one queried for its schema.
-            version (str, optional): The version of the table to be queried for its
-                schema. The version can be a fixed version or a relative one
-                (HEAD, HEAD^, and HEAD~## syntax). Defaults to "HEAD".
 
         Returns:
-            dict: The schema of the table.
+            list: The schema of the table.
 
         Raises:
             APIServerError: If the schema could not be obtained.
         """
-        # TODO Aleix: Maybe version or commit can be an object apart from a string
         return (
             self.connection.table_get_schema(
                 self.collection.name,
                 self.name,
-                commit=commit,
-                time=time,
-                version=version,
+                at=at,
             )
             .json()
             .get("data")
-        )
+        )["fields"]
 
     def refresh(self) -> Table:
         self.id = None
@@ -1521,9 +1585,7 @@ class Table:
 
     def sample(
         self,
-        commit: str = None,
-        time: str = None,
-        version: str = None,
+        at: int = None,
         offset: int = None,
         len: int = None,
     ) -> pl.DataFrame:
@@ -1533,25 +1595,15 @@ class Table:
             and HEAD~## syntax).
 
         Args:
-            commit (str, optional): The commit ID of the table from which we will
-                obtain the sample.
-            time (str, optional): If provided, the table version that was
-                published last before that time will be the one queried for a sample.
-            version (str, optional): The version of the table to be queried for a
-                sample. The version can be a fixed version or a relative one
-                (HEAD, HEAD^, and HEAD~## syntax). Defaults to "HEAD".
             offset (int, optional): The offset of the sample.
             len (int, optional): The length of the sample.
         Raises:
             APIServerError: If the schema could not be obtained.
         """
-        # TODO Aleix: Maybe version or commit can be an object apart from a string
         parquet_frame = self.connection.table_get_sample(
             self.collection.name,
             self.name,
-            commit=commit,
-            time=time,
-            version=version,
+            at=at,
             offset=offset,
             len=len,
         ).content
@@ -1575,7 +1627,7 @@ class Transaction:
 
     Args:
         id (str): The ID of the transaction.
-        execution_plan_id (str): The ID of the execution plan.
+        execution_id (str): The ID of the execution.
         status (str): The status of the transaction.
         triggered_on (int): The timestamp when the transaction was triggered.
         ended_on (int): The timestamp when the transaction ended.
@@ -1605,7 +1657,7 @@ class Transaction:
         self.id = id
         self.connection = connection
 
-        self.execution_plan = kwargs.get("execution_plan_id")
+        self.execution = kwargs.get("execution_id")
         self.status = kwargs.get("status")
         self.triggered_on = kwargs.get("triggered_on")
         self.triggered_on_str = None
@@ -1618,13 +1670,13 @@ class Transaction:
 
     @property
     def _data(self) -> dict:
-        # TODO: This is an inefficient workaround, waiting for the endpoint to exist
         if self._data_dict is None:
             tabsdata_server = TabsdataServer.__new__(TabsdataServer)
             tabsdata_server.connection = self.connection
-            for transaction in tabsdata_server.transactions:
-                if transaction.id == self.id:
-                    self._data = transaction.kwargs
+            transaction = tabsdata_server.list_transactions(filter=f"id:eq:{self.id}")[
+                0
+            ]
+            self._data = transaction.kwargs
         return self._data_dict
 
     @_data.setter
@@ -1632,23 +1684,23 @@ class Transaction:
         self._data_dict = data_dict
 
     @property
-    def execution_plan(self) -> ExecutionPlan:
-        if self._execution_plan is None:
-            self.execution_plan = self._data.get("execution_plan_id")
-        return self._execution_plan
+    def execution(self) -> Execution:
+        if self._execution is None:
+            self.execution = self._data.get("execution_id")
+        return self._execution
 
-    @execution_plan.setter
-    def execution_plan(self, execution_plan: str | ExecutionPlan | None):
-        if isinstance(execution_plan, str):
-            self._execution_plan = ExecutionPlan(self.connection, execution_plan)
-        elif isinstance(execution_plan, ExecutionPlan):
-            self._execution_plan = execution_plan
-        elif execution_plan is None:
-            self._execution_plan = None
+    @execution.setter
+    def execution(self, execution: str | Execution | None):
+        if isinstance(execution, str):
+            self._execution = Execution(self.connection, execution)
+        elif isinstance(execution, Execution):
+            self._execution = execution
+        elif execution is None:
+            self._execution = None
         else:
             raise TypeError(
-                "Execution plan must be a string, an ExecutionPlan object or None; got"
-                f"{type(execution_plan)} instead."
+                "Execution must be a string, an Execution object or None; got"
+                f"{type(execution)} instead."
             )
 
     @property
@@ -1667,7 +1719,7 @@ class Transaction:
     @property
     def workers(self):
         raw_workers = (
-            self.connection.workers_list(by_transaction_id=self.id)
+            self.connection.workers_list(request_filter=f"transaction_id:eq:{self.id}")
             .json()
             .get("data")
             .get("data")
@@ -1679,16 +1731,18 @@ class Transaction:
 
     def cancel(self) -> requests.Response:
         """
-        Cancel an execution plan. This includes all functions that are part of the
-            execution plan and all its dependants.
+        Cancel a transaction. This includes all functions that are part of the
+            transaction and all its dependants.
 
         Returns:
             requests.Response: The response of the server to the request.
 
         Raises:
-            APIServerError: If the execution_plan_id is not found in the system.
+            APIServerError: If the execution_id is not found in the system.
         """
-        return self.connection.transaction_cancel(self.id)
+        response = self.connection.transaction_cancel(self.id)
+        self.refresh()
+        return response
 
     def get_worker(self, worker_id: str):
         for worker in self.workers:
@@ -1698,19 +1752,21 @@ class Transaction:
 
     def recover(self) -> requests.Response:
         """
-        Recover an execution plan. This includes all functions that are part of the
-            execution plan and all its dependants.
+        Recover a transaction. This includes all functions that are part of the
+            transaction.
 
         Returns:
             requests.Response: The response of the server to the request.
 
         Raises:
-            APIServerError: If the execution_plan_id is not found in the system.
+            APIServerError: If the execution_id is not found in the system.
         """
-        return self.connection.transaction_recover(self.id)
+        response = self.connection.transaction_recover(self.id)
+        self.refresh()
+        return response
 
     def refresh(self) -> Transaction:
-        self.execution_plan = None
+        self.execution = None
         self.status = None
         self.triggered_on = None
         self.triggered_on_str = None
@@ -1860,15 +1916,11 @@ class Worker:
         function (str): The function of the worker.
         function_id (str): The ID of the function of the worker.
         transaction_id (str): The ID of the transaction of the worker.
-        execution_plan (str): The execution plan of the worker.
-        execution_plan_id (str): The ID of the execution plan of the worker.
-        data_version_id (str): The ID of the data version of the worker.
+        execution (str): The execution of the worker.
+        execution_id (str): The ID of the execution of the worker.
         status (str): The status of the associated data version.
         **kwargs: Additional keyword arguments.
     """
-
-    started_on = LazyProperty("started_on")
-    started_on_str = LazyProperty("started_on_str", subordinate_time_string=True)
 
     def __init__(
         self,
@@ -1885,8 +1937,8 @@ class Worker:
             function (str): The function of the worker.
             function_id (str): The ID of the function of the worker.
             transaction_id (str): The ID of the transaction of the worker.
-            execution_plan (str): The execution plan of the worker.
-            execution_plan_id (str): The ID of the execution plan of the worker.
+            execution (str): The execution of the worker.
+            execution_id (str): The ID of the execution of the worker.
             data_version_id (str): The ID of the data version of the worker.
             **kwargs: Additional keyword arguments.
         """
@@ -1896,13 +1948,7 @@ class Worker:
         self.collection = kwargs.get("collection")
         self.function = kwargs.get("function")
         self.transaction = kwargs.get("transaction_id")
-        self.execution_plan = kwargs.get("execution_plan_id")
-        self.data_version_id = kwargs.get("data_version_id")
-        started_on = kwargs.get("started_on")
-        self.started_on = started_on
-        self.started_on_str = (
-            convert_timestamp_to_string(started_on) if started_on else None
-        )
+        self.execution = kwargs.get("execution_id")
         self.status = kwargs.get("status")
         self._data = None
         self.kwargs = kwargs
@@ -1914,16 +1960,8 @@ class Worker:
             #  Currently it is extremely inefficient
             tabsdata_server = TabsdataServer.__new__(TabsdataServer)
             tabsdata_server.connection = self.connection
-            raw_list_of_execution_plans = tabsdata_server.execution_plans
-            for plan in raw_list_of_execution_plans:
-                plan_id = plan.id
-                worker_list = tabsdata_server.worker_list(by_execution_plan_id=plan_id)
-                for worker in worker_list:
-                    if worker.id == self.id:
-                        self._data = worker.kwargs
-                        break
-                if self._data_dict is not None:
-                    break
+            worker = tabsdata_server.list_workers(filter=f"id:eq:{self.id}")[0]
+            self._data = worker.kwargs
         return self._data_dict
 
     @_data.setter
@@ -1951,36 +1989,23 @@ class Worker:
             )
 
     @property
-    def data_version_id(self) -> str:
-        # TODO: To link the worker with the data version, we need a specific endpoint
-        #   that given a data_version_id, returns the whole information of the
-        #   data_version. For now leaving it as a string
-        if self._data_version_id is None:
-            self.data_version_id = self._data.get("data_version_id")
-        return self._data_version_id
+    def execution(self) -> Execution:
+        if self._execution is None:
+            self.execution = self._data.get("execution_id")
+        return self._execution
 
-    @data_version_id.setter
-    def data_version_id(self, data_version_id: str | None):
-        self._data_version_id = data_version_id
-
-    @property
-    def execution_plan(self) -> ExecutionPlan:
-        if self._execution_plan is None:
-            self.execution_plan = self._data.get("execution_plan_id")
-        return self._execution_plan
-
-    @execution_plan.setter
-    def execution_plan(self, execution_plan: str | ExecutionPlan | None):
-        if isinstance(execution_plan, str):
-            self._execution_plan = ExecutionPlan(self.connection, execution_plan)
-        elif isinstance(execution_plan, ExecutionPlan):
-            self._execution_plan = execution_plan
-        elif execution_plan is None:
-            self._execution_plan = None
+    @execution.setter
+    def execution(self, execution: str | Execution | None):
+        if isinstance(execution, str):
+            self._execution = Execution(self.connection, execution)
+        elif isinstance(execution, Execution):
+            self._execution = execution
+        elif execution is None:
+            self._execution = None
         else:
             raise TypeError(
-                "Execution plan must be a string, an ExecutionPlan object or None; got"
-                f"{type(execution_plan)} instead."
+                "Execution must be a string, an Execution object or None; got"
+                f"{type(execution)} instead."
             )
 
     @property
@@ -2094,36 +2119,16 @@ class TabsdataServer:
         return self.list_collections()
 
     @property
-    def commits(self) -> List[Commit]:
+    def executions(self) -> List[Execution]:
         """
-        Get the list of commits in the server. This list is obtained every time the
-            property is accessed, so sequential accesses to this property in the same
-            object might yield different results.
-
-        Returns:
-            List[Commit]: The list of commits in the server.
-        """
-        # TODO Aleix
-        raw_commits = self.connection.commit_list().json().get("data").get("data")
-        return [Commit(**commit) for commit in raw_commits]
-
-    @property
-    def execution_plans(self) -> List[ExecutionPlan]:
-        """
-        Get the list of execution plans in the server. This list is obtained every time
+        Get the list of executions in the server. This list is obtained every time
             the property is accessed, so sequential accesses to this property in the
             same object might yield different results.
 
         Returns:
-            List[ExecutionPlan]: The list of execution plans in the server.
+            List[Execution]: The list of executions in the server.
         """
-        raw_execution_plans = (
-            self.connection.execution_plan_list().json().get("data").get("data")
-        )
-        return [
-            ExecutionPlan(**{**execution_plan, "connection": self.connection})
-            for execution_plan in raw_execution_plans
-        ]
+        return self.list_executions()
 
     @property
     def roles(self) -> List[Role]:
@@ -2159,13 +2164,7 @@ class TabsdataServer:
         Returns:
             List[Transaction]: The list of transactions in the server.
         """
-        raw_transactions = (
-            self.connection.transaction_list().json().get("data").get("data")
-        )
-        return [
-            Transaction(**{**transaction, "connection": self.connection})
-            for transaction in raw_transactions
-        ]
+        return self.list_transactions()
 
     @property
     def users(self) -> List[User]:
@@ -2272,7 +2271,13 @@ class TabsdataServer:
                 yield built_collection
             first_page = False
 
-    def collection_list_functions(self, collection_name) -> List[Function]:
+    def list_functions(
+        self,
+        collection_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Function]:
         """
         List the functions in a collection.
 
@@ -2285,7 +2290,11 @@ class TabsdataServer:
         Raises:
             APIServerError: If the functions could not be listed.
         """
-        return Collection(self.connection, collection_name).functions
+        return Collection(self.connection, collection_name).list_functions(
+            filter=filter,
+            order_by=order_by,
+            raise_for_status=raise_for_status,
+        )
 
     def update_collection(
         self,
@@ -2314,21 +2323,19 @@ class TabsdataServer:
             raise_for_status=raise_for_status,
         )
 
-    def dataversion_list(
+    def list_dataversions(
         self,
         collection_name: str,
-        function_name: str,
-        offset: int = None,
-        len: int = None,
+        table_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
     ) -> List[DataVersion]:
         """
-        List the data versions of a function in a collection.
+        List the data versions of a table in a collection.
 
         Args:
             collection_name (str): The name of the collection.
-            function_name (str): The name of the function.
-            offset (int, optional): The offset of the data versions to list.
-            len (int, optional): The number of data versions to list.
 
         Returns:
             List[DataVersion]: The list of data versions of the function.
@@ -2336,23 +2343,101 @@ class TabsdataServer:
         Raises:
             APIServerError: If the data versions could not be listed.
         """
-        function = Function(self.connection, collection_name, function_name)
-        return function.get_dataversions(offset=offset, len=len)
+        table = Table(self.connection, collection_name, table_name)
+        return table.list_dataversions(
+            filter=filter, order_by=order_by, raise_for_status=raise_for_status
+        )
 
-    def execution_plan_read(self, execution_plan_id: str) -> str:
+    def cancel_execution(self, execution_id: str) -> requests.Response:
         """
-        Read the execution plan in the server.
+        Cancel an execution. This includes all transactions that are part of the
+            execution.
 
         Args:
-            execution_plan_id (str): The ID of the execution plan.
+            execution_id (str): The ID of the execution to cancel.
 
         Returns:
-            str: The execution plan.
-        """
-        execution_plan = ExecutionPlan(self.connection, execution_plan_id)
-        return execution_plan.dot
+            requests.Response: The response of the server to the request.
 
-    def function_create(
+        Raises:
+            APIServerError: If the execution_id is not found in the system.
+        """
+        execution = Execution(self.connection, execution_id)
+        return execution.cancel()
+
+    def get_execution(self, execution_id: str) -> Execution:
+        """
+        Get an execution in the server.
+
+        Args:
+            execution_id (str): The ID of the execution.
+
+        Returns:
+            Execution: The execution.
+
+        Raises:
+            APIServerError: If the execution could not be obtained.
+        """
+        return self.list_executions(filter=f"id:eq:{execution_id}")[0]
+
+    def list_executions(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Execution]:
+        return list(
+            self.list_executions_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_executions_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Execution]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.execution_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_executions = data.get("data")
+            for raw_execution in raw_executions:
+                built_execution = Execution(self.connection, **raw_execution)
+                yield built_execution
+            first_page = False
+
+    def recover_execution(self, execution_id: str) -> requests.Response:
+        """
+        Recover an execution. This includes all transactions that are part of the
+            execution.
+
+        Args:
+            execution_id (str): The ID of the execution to recover.
+
+        Returns:
+            requests.Response: The response of the server to the request.
+
+        Raises:
+            APIServerError: If the execution_id is not found in the system.
+        """
+        execution = Execution(self.connection, execution_id)
+        return execution.recover()
+
+    def register_function(
         self,
         collection_name: str,
         function_path: str,
@@ -2403,7 +2488,7 @@ class TabsdataServer:
             raise_for_status=raise_for_status,
         )
 
-    def function_delete(
+    def delete_function(
         self, collection_name, function_name, raise_for_status: bool = True
     ) -> None:
         """
@@ -2437,7 +2522,7 @@ class TabsdataServer:
         """
         return Function(self.connection, collection_name, function_name)
 
-    def function_list_history(self, collection_name, function_name) -> List[Function]:
+    def list_function_history(self, collection_name, function_name) -> List[Function]:
         """
         List the version history of a function.
 
@@ -2454,11 +2539,11 @@ class TabsdataServer:
         function = Function(self.connection, collection_name, function_name)
         return function.history
 
-    def function_read_run(
+    def read_function_run(
         self,
         collection: Collection | str,
         function: Function | str,
-        execution_plan: ExecutionPlan | str,
+        execution: Execution | str,
         raise_for_status: bool = True,
     ) -> requests.Response:
         """
@@ -2468,8 +2553,8 @@ class TabsdataServer:
             collection(Collection | str): The name of the collection or a
                 Collection object.
             function(Function | str): The name of the function or a Function object.
-            execution_plan(ExecutionPlan | str): The name of the execution plan or a
-                ExecutionPlan object.
+            execution(Execution | str): The name of the execution or a
+                Execution object.
 
         Raises:
             APIServerError: If the run could not be obtained.
@@ -2479,22 +2564,22 @@ class TabsdataServer:
             if isinstance(function, Function)
             else Function(self.connection, collection, function)
         )
-        return function.read_run(execution_plan, raise_for_status=raise_for_status)
+        return function.read_run(execution, raise_for_status=raise_for_status)
 
-    def function_trigger(
+    def trigger_function(
         self,
         collection_name,
         function_name,
-        execution_plan_name: str | None = None,
+        execution_name: str | None = None,
         raise_for_status: bool = True,
-    ) -> ExecutionPlan:
+    ) -> Execution:
         """
         Trigger a function in the server.
 
         Args:
             collection_name (str): The name of the collection.
             function_name (str): The name of the function.
-            execution_plan_name (str, optional): The name of the execution plan.
+            execution_name (str, optional): The name of the execution.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
@@ -2506,7 +2591,7 @@ class TabsdataServer:
         """
         function = Function(self.connection, collection_name, function_name)
         return function.trigger(
-            execution_plan_name=execution_plan_name, raise_for_status=raise_for_status
+            execution_name=execution_name, raise_for_status=raise_for_status
         )
 
     def function_update(
@@ -2583,7 +2668,7 @@ class TabsdataServer:
             username, old_password, new_password, raise_for_status=raise_for_status
         )
 
-    def role_change(self, role: str):
+    def change_role(self, role: str):
         self.connection.authentication_role_change(role)
 
     def auth_info(self) -> dict:
@@ -2728,14 +2813,12 @@ class TabsdataServer:
             raise_for_status=raise_for_status,
         )
 
-    def table_download(
+    def download_table(
         self,
         collection_name: str,
         table_name: str,
         destination_file: str,
-        commit: str = None,
-        time: str = None,
-        version: str = None,
+        at: int = None,
         raise_for_status: bool = True,
     ):
         """
@@ -2746,12 +2829,6 @@ class TabsdataServer:
             collection_name (str): The name of the collection.
             table_name (str): The name of the table.
             destination_file (str): The path to the destination file.
-            commit (str, optional): The commit ID of the table to be downloaded.
-            time (str, optional): If provided, the table version that was
-                published last before that time will be downloaded.
-            version (str, optional): The version of the table to be downloaded. The
-                version can be a fixed version or a relative one (HEAD, HEAD^,
-                and HEAD~## syntax). Defaults to "HEAD".
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
@@ -2761,20 +2838,16 @@ class TabsdataServer:
         table = Table(self.connection, collection_name, table_name)
         table.download(
             destination_file,
-            commit=commit,
-            time=time,
-            version=version,
+            at=at,
             raise_for_status=raise_for_status,
         )
 
-    def table_get_schema(
+    def get_table_schema(
         self,
         collection_name: str,
         table_name: str,
-        commit: str = None,
-        time: str = None,
-        version: str = None,
-    ) -> dict:
+        at: int = None,
+    ) -> List[dict]:
         """
         Get the schema of a table for a given version. The version can be a
             fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
@@ -2782,25 +2855,22 @@ class TabsdataServer:
         Args:
             collection_name (str): The name of the collection.
             table_name (str): The name of the table.
-            commit (str, optional): The commit ID of the table from which we will
-                obtain the schema.
-            time (str, optional): If provided, the table version that was
-                published last before that time will be the one queried for its schema.
-            version (str, optional): The version of the table to be queried for its
-                schema. The version can be a fixed version or a relative one
-                (HEAD, HEAD^, and HEAD~## syntax). Defaults to "HEAD".
 
         Returns:
-            dict: The schema of the table.
+            list: The schema of the table.
 
         Raises:
             APIServerError: If the schema could not be obtained.
         """
         table = Table(self.connection, collection_name, table_name)
-        return table.get_schema(commit=commit, time=time, version=version)
+        return table.get_schema(at=at)
 
-    def table_list(
-        self, collection_name: str, offset: int = None, len: int = None
+    def list_tables(
+        self,
+        collection_name: str,
+        at: int = None,
+        filter: List[str] | str = None,
+        order_by: str = None,
     ) -> List[Table]:
         """
         List the tables in a collection.
@@ -2814,15 +2884,13 @@ class TabsdataServer:
             List[Table]: The requested list of tables in the collection.
         """
         collection = Collection(self.connection, collection_name)
-        return collection.get_tables(offset=offset, len=len)
+        return collection.list_tables(at=at, filter=filter, order_by=order_by)
 
-    def table_sample(
+    def sample_table(
         self,
         collection_name: str,
         table_name: str,
-        commit: str = None,
-        time: str = None,
-        version: str = None,
+        at: int = None,
         offset: int = None,
         len: int = None,
     ) -> pl.DataFrame:
@@ -2834,13 +2902,6 @@ class TabsdataServer:
         Args:
             collection_name (str): The name of the collection.
             table_name (str): The name of the table.
-            commit (str, optional): The commit ID of the table from which we will
-                obtain the sample.
-            time (str, optional): If provided, the table version that was
-                published last before that time will be the one queried for a sample.
-            version (str, optional): The version of the table to be queried for a
-                sample. The version can be a fixed version or a relative one
-                (HEAD, HEAD^, and HEAD~## syntax). Defaults to "HEAD".
             offset (int, optional): The offset of the sample.
             len (int, optional): The length of the sample.
         Raises:
@@ -2848,43 +2909,96 @@ class TabsdataServer:
         """
         table = Table(self.connection, collection_name, table_name)
         return table.sample(
-            commit=commit,
-            time=time,
-            version=version,
+            at=at,
             offset=offset,
             len=len,
         )
 
-    def transaction_cancel(self, transaction_id: str) -> requests.Response:
+    def cancel_transaction(self, transaction_id: str) -> requests.Response:
         """
-        Cancel an execution plan. This includes all functions that are part of the
-            execution plan and all its dependants.
+        Cancel a transaction. This includes all functions that are part of the
+            transaction and all its dependants.
 
         Args:
-            transaction_id (str): The ID of the execution plan to cancel.
+            transaction_id (str): The ID of the transaction to cancel.
 
         Returns:
             requests.Response: The response of the server to the request.
 
         Raises:
-            APIServerError: If the execution_plan_id is not found in the system.
+            APIServerError: If the transaction_id is not found in the system.
         """
         transaction = Transaction(self.connection, transaction_id)
         return transaction.cancel()
 
-    def transaction_recover(self, transaction_id: str) -> requests.Response:
+    def get_transaction(self, transaction_id: str) -> Transaction:
         """
-        Recover an execution plan. This includes all functions that are part of the
-            execution plan and all its dependants.
+        Get a transaction in the server.
 
         Args:
-            transaction_id (str): The ID of the execution plan to recover.
+            transaction_id (str): The ID of the transaction.
+
+        Returns:
+            Transaction: The transaction.
+
+        Raises:
+            APIServerError: If the transaction could not be obtained.
+        """
+        return self.list_transactions(filter=f"id:eq:{transaction_id}")[0]
+
+    def list_transactions(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Transaction]:
+        return list(
+            self.list_transactions_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_transactions_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Transaction]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.transaction_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_transactions = data.get("data")
+            for raw_transaction in raw_transactions:
+                built_transaction = Transaction(self.connection, **raw_transaction)
+                yield built_transaction
+            first_page = False
+
+    def recover_transaction(self, transaction_id: str) -> requests.Response:
+        """
+        Recover a transaction. This includes all functions that are part of the
+            transaction.
+
+        Args:
+            transaction_id (str): The ID of the transaction to recover.
 
         Returns:
             requests.Response: The response of the server to the request.
 
         Raises:
-            APIServerError: If the execution_plan_id is not found in the system.
+            APIServerError: If the transaction_id is not found in the system.
         """
         transaction = Transaction(self.connection, transaction_id)
         return transaction.recover()
@@ -3025,7 +3139,7 @@ class TabsdataServer:
             raise_for_status=raise_for_status,
         )
 
-    def worker_log(self, worker_id: str) -> str:
+    def get_worker_log(self, worker_id: str) -> str:
         """
         Get the logs of a worker in the server.
 
@@ -3038,28 +3152,45 @@ class TabsdataServer:
         worker = Worker(self.connection, worker_id)
         return worker.log
 
-    def worker_list(
+    def list_workers(
         self,
-        by_function_id: str = None,
-        by_transaction_id: str = None,
-        by_execution_plan_id: str = None,
-        by_data_version_id: str = None,
-    ):
-        raw_worker_messages = (
-            self.connection.workers_list(
-                by_function_id,
-                by_transaction_id,
-                by_execution_plan_id,
-                by_data_version_id,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Worker]:
+        return list(
+            self.list_workers_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
             )
-            .json()
-            .get("data")
-            .get("data")
         )
-        return [
-            Worker(**{**worker_message, "connection": self.connection})
-            for worker_message in raw_worker_messages
-        ]
+
+    def list_workers_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Worker]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.workers_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_workers = data.get("data")
+            for raw_worker in raw_workers:
+                built_worker = Worker(self.connection, **raw_worker)
+                yield built_worker
+            first_page = False
 
 
 def convert_timestamp_to_string(timestamp: int | None) -> str:

@@ -264,6 +264,7 @@ def testing_mysql(tmp_path_factory, worker_id):
 
 
 def create_docker_postgres_database():
+    remove_docker_containers(DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME)
     logger.info("Starting Postgres container")
     client = docker.from_env()
     if client.containers.list(
@@ -396,6 +397,7 @@ def azure_client():
 
 
 def create_docker_mysql_database():
+    remove_docker_containers(DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME)
     logger.info("Starting MySQL container")
     client = docker.from_env()
     if client.containers.list(
@@ -480,6 +482,7 @@ def create_docker_mysql_database():
 
 
 def create_docker_hashicorp_vault():
+    remove_docker_containers(DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME)
     logger.info("Starting HashiCorp vault container")
     client = docker.from_env()
     if client.containers.list(
@@ -558,6 +561,7 @@ def create_docker_hashicorp_vault():
 
 
 def create_docker_mariadb_database():
+    remove_docker_containers(DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME)
     logger.info("Starting MariaDB container")
     client = docker.from_env()
     if client.containers.list(
@@ -644,6 +648,7 @@ def create_docker_mariadb_database():
 
 
 def create_docker_oracle_database():
+    remove_docker_containers(DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME)
     logger.info("Starting Oracle container")
     client = docker.from_env()
     if client.containers.list(
@@ -970,16 +975,16 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
     )
     function_path = file_path + "::input_file_csv_string_format"
     tabsserver_connection.create_collection(collection_name, description="description")
-    tabsserver_connection.function_create(
+    tabsserver_connection.register_function(
         collection_name, function_path, local_packages=LOCAL_PACKAGES_LIST
     )
-    tabsserver_connection.function_trigger(
+    tabsserver_connection.trigger_function(
         collection_name, "input_file_csv_string_format"
     )
     retry = 0
     while True:
         try:
-            tabsserver_connection.table_sample(collection_name, "output")
+            tabsserver_connection.sample_table(collection_name, "output")
             break
         except APIServerError as e:
             logger.debug(f"Error sampling table '{random_id}' - '{file_path}': {e}")

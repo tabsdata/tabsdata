@@ -60,7 +60,7 @@ def role_change(
     click.echo("Changing role")
     click.echo("-" * 10)
     try:
-        ctx.obj["tabsdataserver"].role_change(role)
+        ctx.obj["tabsdataserver"].change_role(role)
         click.echo("Role changed successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to change role: {e}")

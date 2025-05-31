@@ -36,9 +36,8 @@ from polars import (
 
 from tabsdata.api.tabsdata_server import (
     Collection,
-    Commit,
     DataVersion,
-    ExecutionPlan,
+    Execution,
     TabsdataServer,
     User,
 )
@@ -135,9 +134,8 @@ __all__ = [
     "TableURI",
     # from tabsdata_server.py
     "Collection",
-    "Commit",
     "DataVersion",
-    "ExecutionPlan",
+    "Execution",
     "TabsdataServer",
     "User",
     # from tabsserver.function.execution_exceptions.py

@@ -29,10 +29,8 @@ def calculate_sha256(binary_data: bytes) -> str:
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_obtain_connection():
-    connection = obtain_connection(APISERVER_URL, "admin", "tabsdata")
+    connection = obtain_connection(APISERVER_URL, "admin", "tabsdata", "sys_admin")
     real_url = f"http://{APISERVER_URL}{BASE_API_URL}"
     assert connection.url == real_url
     assert connection.bearer_token is not None
@@ -45,11 +43,14 @@ def test_obtain_connection():
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_authentication_access_success(apiserver_connection):
+def test_authentication_access_success():
+    apiserver_connection = obtain_connection(
+        APISERVER_URL, "admin", "tabsdata", "sys_admin"
+    )
     current_bearer = apiserver_connection.bearer_token
-    response = apiserver_connection.authentication_login("admin", "tabsdata")
+    response = apiserver_connection.authentication_login(
+        "admin", "tabsdata", role="sys_admin"
+    )
     assert response.status_code == 200
     assert apiserver_connection.bearer_token is not None
     assert apiserver_connection.refresh_token is not None
@@ -58,22 +59,27 @@ def test_authentication_access_success(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_authentication_access_raises_error(apiserver_connection):
+def test_authentication_info(apiserver_connection):
+    response = apiserver_connection.authentication_info()
+    assert response.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_authentication_access_raises_error():
+    apiserver_connection = obtain_connection(
+        APISERVER_URL, "admin", "tabsdata", "sys_admin"
+    )
     with pytest.raises(APIServerError):
         apiserver_connection.authentication_login("wrong_user", "wrong_password")
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip(
-    reason=(
-        "This test is not working due to a backend bug. The backend "
-        "is returning a 'Failed to fetch' error."
+def test_authentication_refresh_success():
+    apiserver_connection = obtain_connection(
+        APISERVER_URL, "admin", "tabsdata", "sys_admin"
     )
-)
-def test_authentication_refresh_success(apiserver_connection):
     current_bearer = apiserver_connection.bearer_token
     response = apiserver_connection.authentication_refresh()
     assert response.status_code == 200
@@ -84,14 +90,10 @@ def test_authentication_refresh_success(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip(
-    reason=(
-        "This test is not working due to a backend bug: the backend "
-        "is always providing a new token, even if the refresh token "
-        "is incorrect."
+def test_authentication_refresh_fail():
+    apiserver_connection = obtain_connection(
+        APISERVER_URL, "admin", "tabsdata", "sys_admin"
     )
-)
-def test_authentication_refresh_fail(apiserver_connection):
     apiserver_connection.refresh_token = "incorrect_token"
     with pytest.raises(APIServerError):
         apiserver_connection.authentication_refresh()
@@ -99,8 +101,6 @@ def test_authentication_refresh_fail(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_status_get(apiserver_connection):
     response = apiserver_connection.status_get()
     assert response.status_code == 200
@@ -151,8 +151,6 @@ def test_collection_create_api(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_delete_api(apiserver_connection):
     apiserver_connection.collection_create(
         "test_collection_delete_api",
@@ -165,8 +163,6 @@ def test_collection_delete_api(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_collection_delete_no_exists_raises_error(apiserver_connection):
     with pytest.raises(APIServerError):
         apiserver_connection.collection_delete("test_collection_delete_no_exists")
@@ -570,8 +566,6 @@ def test_users_update_change_fullname(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_in_collection_list(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_COLLECTION_NAME,
@@ -586,8 +580,6 @@ def test_function_in_collection_list(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_in_collection_list_with_params(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_COLLECTION_NAME,
@@ -596,24 +588,20 @@ def test_function_in_collection_list_with_params(apiserver_connection):
     )
     response = apiserver_connection.function_in_collection_list(
         FUNCTION_TESTING_COLLECTION_NAME,
-        offset=10,
-        len=42,
-        filter="hi",
-        order_by="hello",
+        order_by="name",
+        request_len=42,
+        request_filter="name:eq:invent",
     )
     assert response.status_code == 200
     list_params = response.json().get("data").get("list_params")
     assert list_params is not None
-    assert list_params.get("offset") == 10
     assert list_params.get("len") == 42
-    assert list_params.get("filter") == "hi"
-    assert list_params.get("order_by") == "hello"
+    assert list_params.get("filter") == ["name:eq:invent"]
+    assert list_params.get("order_by") == "name"
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_in_collection_get_no_exists_raises_error(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_COLLECTION_NAME,
@@ -654,28 +642,13 @@ def test_users_update_change_password(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_execution_plan_list_api(apiserver_connection):
-    response = apiserver_connection.execution_plan_list()
+def test_execution_list_api(apiserver_connection):
+    response = apiserver_connection.execution_list()
     assert response.status_code == 200
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_execution_plan_read_api(apiserver_connection, tabsserver_connection):
-    execution_plans = tabsserver_connection.execution_plans
-    if execution_plans:
-        response = apiserver_connection.execution_plan_read(execution_plans[0].id)
-        assert response.status_code == 200
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_list_api(apiserver_connection):
     apiserver_connection.collection_create(
         FUNCTION_TESTING_COLLECTION_NAME,
@@ -688,8 +661,6 @@ def test_table_list_api(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_transaction_list_api(apiserver_connection):
     response = apiserver_connection.transaction_list()
     assert response.status_code == 200

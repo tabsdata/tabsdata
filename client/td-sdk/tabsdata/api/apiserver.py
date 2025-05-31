@@ -292,11 +292,13 @@ class APIServer:
             return response
 
     def authentication_info(self, raise_for_status: bool = True):
+        # Aleix: Updated
         endpoint = "/auth/info"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def authentication_login(self, name: str, password: str, role: str = None):
+        # Aleix: Updated
         endpoint = "/auth/login"
         data = self.get_params_dict(
             ["name", "password", "role"], [name, password, role]
@@ -316,6 +318,7 @@ class APIServer:
             raise APIServerError(response.json())
 
     def authentication_logout(self, raise_for_status: bool = True):
+        # Aleix: Updated
         endpoint = "/auth/logout"
         response = self.post(endpoint, json={})
         if response.status_code == 200:
@@ -338,6 +341,7 @@ class APIServer:
         new_password: str,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = "/auth/password_change"
         json = {
             "name": name,
@@ -348,6 +352,7 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def authentication_refresh(self):
+        # Aleix: Updated
         endpoint = "/auth/refresh"
         data = {"refresh_token": self.refresh_token, "grant_type": "refresh_token"}
         time_of_request = time.time()
@@ -370,6 +375,7 @@ class APIServer:
             raise APIServerError(response.json())
 
     def authentication_role_change(self, role: str):
+        # Aleix: Updated
         endpoint = "/auth/role_change"
         data = {"role": role}
         time_of_request = time.time()
@@ -418,7 +424,9 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = "/collections"
+
         params = self.get_params_dict(
             ["len", "filter", "order_by", "pagination_id", "next"],
             [request_len, request_filter, order_by, pagination_id, next_step],
@@ -441,63 +449,49 @@ class APIServer:
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
-    def commit_list(
-        self,
-        offset: int = None,
-        len: int = None,
-        filter: str = None,
-        order_by: str = None,
-        raise_for_status: bool = True,
-    ):
-        endpoint = "/commits"
-
-        params = self.get_params_dict(
-            ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
-        )
-        response = self.get(endpoint, params)
-        return self.raise_for_status_or_return(raise_for_status, response)
-
     def dataversion_list(
         self,
         collection_name: str,
-        function_name: str,
-        offset: int = None,
-        len: int = None,
-        filter: str = None,
+        table_name: str,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
         order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/functions/{function_name}/versions"
+        endpoint = f"/collections/{collection_name}/tables/{table_name}/data-versions"
 
         params = self.get_params_dict(
-            ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
+            ["len", "filter", "order_by", "pagination_id", "next"],
+            [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
-    def execution_plan_list(
-        self,
-        offset: int = None,
-        len: int = None,
-        filter: str = None,
-        order_by: str = None,
-        raise_for_status: bool = True,
-    ):
-        endpoint = "/execution_plans"
-
-        params = self.get_params_dict(
-            ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
-        )
-        response = self.get(endpoint, params)
+    def execution_cancel(self, execution_id: str, raise_for_status: bool = True):
+        # Aleix: Updated
+        endpoint = f"/executions/{execution_id}/cancel"
+        response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
 
-    def execution_plan_read(
+    def execution_list(
         self,
-        execution_plan_id: str,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/execution_plans/{execution_plan_id}"
-        response = self.get(endpoint)
+        # Aleix: Updated
+        endpoint = "/executions"
+
+        params = self.get_params_dict(
+            ["len", "filter", "order_by", "pagination_id", "next"],
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def execution_read_function_run(
@@ -507,11 +501,18 @@ class APIServer:
         execution_id: str,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = (
             f"/collections/{collection_name}/functions/"
             f"{function_name_or_version_id}/executions/{execution_id}"
         )
         response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def execution_recover(self, execution_id: str, raise_for_status: bool = True):
+        # Aleix: Updated
+        endpoint = f"/executions/{execution_id}/recover"
+        response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_create(
@@ -529,29 +530,41 @@ class APIServer:
         reuse_frozen_tables: bool,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions"
 
-        data = {
-            "name": function_name,
-            "description": description,
-            "bundle_id": bundle_id,
-            "snippet": function_snippet,
-            "decorator": decorator,  # Either P, S or T
-            "dependencies": dependencies,
-            "triggers": trigger_by,
-            "tables": tables,
-            "reuse_frozen_tables": reuse_frozen_tables,
-        }
-        if runtime_values:
-            data["runtime_values"] = runtime_values
+        names = [
+            "name",
+            "description",
+            "bundle_id",
+            "snippet",
+            "decorator",
+            "dependencies",
+            "triggers",
+            "tables",
+            "reuse_frozen_tables",
+            "runtime_values",
+        ]
+        values = [
+            function_name,
+            description,
+            bundle_id,
+            function_snippet,
+            decorator,
+            dependencies,
+            trigger_by,
+            tables,
+            reuse_frozen_tables,
+            runtime_values,
+        ]
+        data = self.get_params_dict(names, values)
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_delete(
         self, collection_name: str, function_name: str, raise_for_status: bool = True
     ):
-        return
-        # TODO: Implement this method once the API is ready
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions/{function_name}"
         response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -560,17 +573,19 @@ class APIServer:
         self,
         collection_name: str,
         function_name: str,
-        execution_plan_name=None,
+        execution_name=None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions/{function_name}/execute"
-        data = self.get_params_dict(["name"], [execution_plan_name])
+        data = self.get_params_dict(["name"], [execution_name])
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_get(
         self, collection_name: str, function_name: str, raise_for_status: bool = True
     ):
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions/{function_name}"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -578,17 +593,20 @@ class APIServer:
     def function_in_collection_list(
         self,
         collection_name: str,
-        offset: int = None,
-        len: int = None,
-        filter: str = None,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
         order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions"
         params = self.get_params_dict(
-            ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
+            ["len", "filter", "order_by", "pagination_id", "next"],
+            [request_len, request_filter, order_by, pagination_id, next_step],
         )
-        response = self.get(endpoint, params=params)
+        response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_list_history(
@@ -624,6 +642,7 @@ class APIServer:
         reuse_frozen_tables: bool = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/functions/{function_name}"
 
         data = self.get_params_dict(
@@ -661,6 +680,7 @@ class APIServer:
         bundle: bytes,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/function-bundle-upload"
         response = self.post_binary(endpoint, data=bundle)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -695,6 +715,7 @@ class APIServer:
         next_step: str = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = "/roles"
         params = self.get_params_dict(
             ["len", "filter", "order_by", "pagination_id", "next"],
@@ -719,23 +740,23 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def status_get(self, raise_for_status: bool = True):
+        # Aleix: Updated
         endpoint = "/status"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
-    def table_get_data(
+    def table_download(
         self,
         collection_name: str,
         table_name: str,
-        commit: str = None,
-        time: str = None,
-        version: str = None,
+        at: int = None,
         raise_for_status: bool = True,
     ):
-        endpoint = f"/collections/{collection_name}/tables/{table_name}/data"
+        # Aleix: Updated
+        endpoint = f"/collections/{collection_name}/tables/{table_name}/download"
         params = self.get_params_dict(
-            ["at_commit", "at_time", "at_version"],
-            [commit, time, version],
+            ["at"],
+            [at],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -744,27 +765,20 @@ class APIServer:
         self,
         collection_name: str,
         table_name: str,
-        commit: str = None,
-        time: str = None,
-        version: str = None,
+        at: int = None,
         offset: int = None,
         len: int = None,
-        filter: str = None,
-        order_by: str = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/tables/{table_name}/sample"
         params = self.get_params_dict(
             [
-                "at_commit",
-                "at_time",
-                "at_version",
+                "at",
                 "offset",
                 "len",
-                "filter",
-                "order_by",
             ],
-            [commit, time, version, offset, len, filter, order_by],
+            [at, offset, len],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -773,15 +787,14 @@ class APIServer:
         self,
         collection_name: str,
         table_name: str,
-        commit: str = None,
-        time: str = None,
-        version: str = None,
+        at: int = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/tables/{table_name}/schema"
         params = self.get_params_dict(
-            ["at_commit", "at_time", "at_version"],
-            [commit, time, version],
+            ["at"],
+            [at],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -789,41 +802,56 @@ class APIServer:
     def table_list(
         self,
         collection_name: str,
-        offset: int = None,
-        len: int = None,
-        filter: str = None,
+        at: int = None,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
         order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = f"/collections/{collection_name}/tables"
-        params = self.get_params_dict(
-            ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
-        )
+        names = [
+            "at",
+            "len",
+            "filter",
+            "order_by",
+            "pagination_id",
+            "next",
+        ]
+        values = [at, request_len, request_filter, order_by, pagination_id, next_step]
+        params = self.get_params_dict(names, values)
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def transaction_cancel(self, transaction_id: str, raise_for_status: bool = True):
+        # Aleix: Updated
         endpoint = f"/transactions/{transaction_id}/cancel"
         response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def transaction_list(
         self,
-        offset: int = None,
-        len: int = None,
-        filter: str = None,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
         order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = "/transactions"
 
         params = self.get_params_dict(
-            ["offset", "len", "filter", "order_by"], [offset, len, filter, order_by]
+            ["len", "filter", "order_by", "pagination_id", "next"],
+            [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def transaction_recover(self, transaction_id: str, raise_for_status: bool = True):
+        # Aleix: Updated
         endpoint = f"/transactions/{transaction_id}/recover"
         response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -896,32 +924,26 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def worker_log(self, message_id: str, raise_for_status: bool = True):
+        # Aleix: Updated
         endpoint = f"/workers/{message_id}/logs"
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def workers_list(
         self,
-        by_function_id: str = None,
-        by_transaction_id: str = None,
-        by_execution_plan_id: str = None,
-        by_data_version_id: str = None,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
         raise_for_status: bool = True,
     ):
+        # Aleix: Updated
         endpoint = "/workers"
+
         params = self.get_params_dict(
-            [
-                "by_function_id",
-                "by_transaction_id",
-                "by_execution_plan_id",
-                "by_data_version_id",
-            ],
-            [
-                by_function_id,
-                by_transaction_id,
-                by_execution_plan_id,
-                by_data_version_id,
-            ],
+            ["len", "filter", "order_by", "pagination_id", "next"],
+            [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)

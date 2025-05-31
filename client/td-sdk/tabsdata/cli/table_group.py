@@ -2,15 +2,14 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
-
-import polars as pl
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdata.api.tabsdata_server import (
+    TabsdataServer,
+)
 from tabsdata.cli.cli_utils import (
-    MutuallyExclusiveOption,
-    complete_datetime,
     get_currently_pinned_object,
     logical_prompt,
     verify_login_or_prompt,
@@ -33,16 +32,6 @@ def table():
     help="Name of the collection to which the table belongs.",
 )
 @click.option(
-    "--version",
-    type=str,
-    cls=MutuallyExclusiveOption,
-    help=(
-        "Version of the table. Can be a fixed version or a relative one (HEAD, "
-        "HEAD^, and HEAD~## syntax)."
-    ),
-    mutually_exclusive=["commit", "time"],
-)
-@click.option(
     "--file",
     help=(
         "File in which the table will be stored. Can be an absolute or a relative "
@@ -51,30 +40,20 @@ def table():
     ),
 )
 @click.option(
-    "--commit",
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["time", "version"],
-    help="The commit ID of the table.",
-)
-@click.option(
-    "--time",
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["commit", "version"],
+    "--at",
     help=(
-        "If provided, the table values at the given time will be downloaded. The valid "
-        "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHHZ', 'YYYY-MM-DDTHH:MMZ', "
-        "'YYYY-MM-DDTHH:MM:SSZ', and 'YYYY-MM-DDTHH:MM:SS.sssZ'."
+        "If provided, the table values at the given time will be downloaded. Must be "
+        "a valid timestamp in the form of a unix timestamp (milliseconds since epoch)."
     ),
+    type=int,
 )
 @click.pass_context
 def download(
     ctx: click.Context,
     collection: str,
     name: str,
-    commit: str,
-    time: str,
-    version: str,
     file: str,
+    at: int,
 ):
     """Download the table as a parquet file"""
     verify_login_or_prompt(ctx)
@@ -88,13 +67,12 @@ def download(
     click.echo(f"Downloading table to file '{file}'")
     click.echo("-" * 10)
     try:
-        ctx.obj["tabsdataserver"].table_download(
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.download_table(
             collection,
             name,
             file,
-            commit=commit,
-            time=complete_datetime(time),
-            version=version,
+            at=at,
         )
 
         click.echo("Table downloaded successfully")
@@ -119,7 +97,8 @@ def list(ctx: click.Context, collection: str):
         or logical_prompt(ctx, "Name of the collection to which the tables belong")
     )
     try:
-        list_of_tables = ctx.obj["tabsdataserver"].table_list(collection)
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        list_of_tables = server.list_tables(collection)
 
         cli_table = Table(title=f"Tables in collection '{collection}'")
         cli_table.add_column("Name", style="cyan", no_wrap=True)
@@ -154,16 +133,6 @@ def list(ctx: click.Context, collection: str):
     help="Name of the collection to which the table belongs.",
 )
 @click.option(
-    "--version",
-    type=str,
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["time", "commit"],
-    help=(
-        "Version of the table. Can be a fixed version or a relative one (HEAD, "
-        "HEAD^, and HEAD~## syntax)."
-    ),
-)
-@click.option(
     "--len",
     type=int,
     help="Amount of rows to be sampled. If not provided, all rows will be shown.",
@@ -177,20 +146,12 @@ def list(ctx: click.Context, collection: str):
     ),
 )
 @click.option(
-    "--commit",
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["time", "version"],
-    help="The commit ID of the table.",
-)
-@click.option(
-    "--time",
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["commit", "version"],
+    "--at",
     help=(
-        "If provided, the table values at the given time will be shown. The valid "
-        "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHHZ', 'YYYY-MM-DDTHH:MMZ', "
-        "'YYYY-MM-DDTHH:MM:SSZ', and 'YYYY-MM-DDTHH:MM:SS.sssZ'."
+        "If provided, the table values at the given time will be shown. Must be "
+        "a valid timestamp in the form of a unix timestamp (milliseconds since epoch)."
     ),
+    type=int,
 )
 @click.option(
     "--file",
@@ -205,12 +166,10 @@ def sample(
     ctx: click.Context,
     collection: str,
     name: str,
-    commit: str,
-    time: str,
-    version: str,
     len: int,
-    offset=int,
-    file=str,
+    offset: int,
+    file: str,
+    at: int,
 ):
     """Sample rows from the table"""
     verify_login_or_prompt(ctx)
@@ -221,12 +180,11 @@ def sample(
         or logical_prompt(ctx, "Name of the collection to which the table belongs")
     )
     try:
-        sampled_table: pl.DataFrame = ctx.obj["tabsdataserver"].table_sample(
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        sampled_table = server.sample_table(
             collection,
             name,
-            commit=commit,
-            time=complete_datetime(time),
-            version=version,
+            at=at,
             len=len,
             offset=offset,
         )
@@ -255,33 +213,19 @@ def sample(
     help="Name of the collection to which the table belongs.",
 )
 @click.option(
-    "--version",
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["time", "commit"],
+    "--at",
     help=(
-        "Version of the table. Can be a fixed version or a relative one (HEAD, "
-        "HEAD^, and HEAD~## syntax)."
+        "If provided, the table schema at the given time will be shown. Must be "
+        "a valid timestamp in the form of a unix timestamp (milliseconds since epoch)."
     ),
-)
-@click.option(
-    "--commit",
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["time", "version"],
-    help="The commit ID of the table.",
-)
-@click.option(
-    "--time",
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["commit", "version"],
-    help=(
-        "If provided, the table schema at the given time will be shown. The valid "
-        "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHHZ', 'YYYY-MM-DDTHH:MMZ', "
-        "'YYYY-MM-DDTHH:MM:SSZ', and 'YYYY-MM-DDTHH:MM:SS.sssZ'."
-    ),
+    type=int,
 )
 @click.pass_context
 def schema(
-    ctx: click.Context, collection: str, name: str, commit: str, time: str, version: str
+    ctx: click.Context,
+    collection: str,
+    name: str,
+    at: int,
 ):
     """Show table schema"""
     verify_login_or_prompt(ctx)
@@ -292,18 +236,16 @@ def schema(
         or logical_prompt(ctx, "Name of the collection to which the table belongs")
     )
     try:
-        table_schema = ctx.obj["tabsdataserver"].table_get_schema(
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        table_schema = server.get_table_schema(
             collection,
             name,
-            commit=commit,
-            time=complete_datetime(time),
-            version=version,
+            at=at,
         )
 
         table = Table(title=f"Schema of table '{name}'")
         table.add_column("Column", style="cyan", no_wrap=True)
         table.add_column("Type")
-
         for column in table_schema:
             table.add_row(column["name"], column["type"])
 

@@ -2,27 +2,41 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-
-import datetime
-import os
-
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdata.api.tabsdata_server import TabsdataServer
 from tabsdata.cli.cli_utils import (
-    DOT_FOLDER,
     MutuallyExclusiveOption,
-    cleanup_dot_files,
+    get_currently_pinned_object,
     logical_prompt,
-    show_dot_file,
     verify_login_or_prompt,
 )
 
 
 @click.group()
 def exec():
-    """Execution plan management commands"""
+    """Execution management commands"""
+
+
+@exec.command()
+@click.argument("id")
+@click.pass_context
+def cancel(ctx: click.Context, id: str):
+    """Cancel an execution. This includes all transactions that are part of the
+    execution
+    """
+    verify_login_or_prompt(ctx)
+    id = id or logical_prompt(ctx, "ID of the execution that will be canceled")
+    click.echo(f"Canceling execution with ID '{id}'")
+    click.echo("-" * 10)
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.cancel_execution(id)
+        click.echo("Execution canceled successfully")
+    except Exception as e:
+        raise click.ClickException(f"Failed to cancel execution: {e}")
 
 
 @exec.command()
@@ -31,61 +45,30 @@ def exec():
     help="ID of the transaction that will be cancelled.",
 )
 @click.pass_context
-def cancel(ctx: click.Context, trx: str):
+def cancel_trx(ctx: click.Context, trx: str):
     """Cancel a transaction. This includes all functions that are part of the
-    transaction and all its dependants
+    transaction
     """
     verify_login_or_prompt(ctx)
     trx = trx or logical_prompt(ctx, "ID of the transaction that will be canceled")
     click.echo(f"Canceling transaction with ID '{trx}'")
     click.echo("-" * 10)
     try:
-        ctx.obj["tabsdataserver"].transaction_cancel(trx)
-        click.echo("Execution plan canceled successfully")
+        ctx.obj["tabsdataserver"].cancel_transaction(trx)
+        click.echo("Transaction canceled successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to cancel transaction: {e}")
 
 
 @exec.command()
 @click.pass_context
-def list_commits(ctx: click.Context):
-    """List all commits"""
+def list(ctx: click.Context):
+    """List all executions"""
     verify_login_or_prompt(ctx)
     try:
-        list_of_commits = ctx.obj["tabsdataserver"].commits
+        list_of_executions = ctx.obj["tabsdataserver"].executions
 
-        table = Table(title="Commits")
-        table.add_column("ID", style="cyan", no_wrap=True)
-        table.add_column("Execution Plan ID")
-        table.add_column("Triggered on")
-        table.add_column("Ended on")
-
-        for commit in list_of_commits:
-            table.add_row(
-                commit.id,
-                commit.execution_plan_id,
-                commit.triggered_on_str,
-                commit.ended_on_str,
-            )
-
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo(f"Number of commits: {len(list_of_commits)}")
-        click.echo()
-    except Exception as e:
-        raise click.ClickException(f"Failed to list commits: {e}")
-
-
-@exec.command()
-@click.pass_context
-def list_plans(ctx: click.Context):
-    """List all execution plans"""
-    verify_login_or_prompt(ctx)
-    try:
-        list_of_plans = ctx.obj["tabsdataserver"].execution_plans
-
-        table = Table(title="Execution plans")
+        table = Table(title="Executions")
         table.add_column("ID", style="cyan", no_wrap=True)
         table.add_column("Name")
         table.add_column("Collection")
@@ -93,45 +76,56 @@ def list_plans(ctx: click.Context):
         table.add_column("Triggered on")
         table.add_column("Status", no_wrap=True)
 
-        for plan in list_of_plans:
+        for execution in list_of_executions:
             table.add_row(
-                plan.id,
-                plan.name,
-                plan.collection.name,
-                plan.function.name,
-                plan.triggered_on_str,
-                plan.status,
+                execution.id,
+                execution.name,
+                execution.collection.name,
+                execution.function.name,
+                execution.triggered_on_str,
+                execution.status,
             )
 
         click.echo()
         console = Console()
         console.print(table)
-        click.echo(f"Number of execution plans: {len(list_of_plans)}")
+        click.echo(f"Number of executions: {len(list_of_executions)}")
         click.echo()
     except Exception as e:
-        raise click.ClickException(f"Failed to list execution plans: {e}")
+        raise click.ClickException(f"Failed to list executions: {e}")
 
 
 @exec.command()
+@click.option(
+    "--published",
+    is_flag=True,
+    help="Show only the transactions with a 'Published' status.",
+)
 @click.pass_context
-def list_trxs(ctx: click.Context):
+def list_trxs(ctx: click.Context, published: bool):
     """List all transactions"""
     verify_login_or_prompt(ctx)
     try:
-        list_of_transactions = ctx.obj["tabsdataserver"].transactions
+        if published:
+            click.echo("Listing only the transactions with a 'Published' status")
+            request_filter = ["status:eq:P"]
+        else:
+            request_filter = None
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        list_of_transactions = server.list_transactions(filter=request_filter)
 
         table = Table(title="Transactions")
         table.add_column("ID", style="cyan", no_wrap=True)
-        table.add_column("Execution Plan ID")
+        table.add_column("Execution ID")
         table.add_column("Triggered on")
         table.add_column("Status", no_wrap=True)
 
-        for plan in list_of_transactions:
+        for transaction in list_of_transactions:
             table.add_row(
-                plan.id,
-                plan.execution_plan.id,
-                plan.triggered_on_str,
-                plan.status,
+                transaction.id,
+                transaction.execution.id,
+                transaction.triggered_on_str,
+                transaction.status,
             )
 
         click.echo()
@@ -145,69 +139,85 @@ def list_trxs(ctx: click.Context):
 
 @exec.command()
 @click.option(
-    "--data-ver",
+    "--execution",
     type=str,
     cls=MutuallyExclusiveOption,
-    help="ID of the data version to which the workers belong.",
-    mutually_exclusive=["plan", "fn", "trx"],
-)
-@click.option(
-    "--plan",
-    type=str,
-    cls=MutuallyExclusiveOption,
-    help="ID of the execution plan to which the workers belong.",
-    mutually_exclusive=["data-ver", "fn", "trx"],
+    help="ID of the execution to which the workers belong.",
+    mutually_exclusive=["fn", "trx"],
 )
 @click.option(
     "--fn",
     type=str,
     cls=MutuallyExclusiveOption,
-    help="ID of the function to which the workers belong.",
-    mutually_exclusive=["data-ver", "plan", "trx"],
+    help=(
+        "Name of the function to which the workers belong. If this is provided, "
+        "collection must also be provided."
+    ),
+    mutually_exclusive=["execution", "trx"],
+)
+@click.option(
+    "--collection",
+    type=str,
+    cls=MutuallyExclusiveOption,
+    help=(
+        "Collection of the function to which the workers belong. If this is provided, "
+        "fn must also be provided."
+    ),
+    mutually_exclusive=["execution", "trx"],
 )
 @click.option(
     "--trx",
     type=str,
     cls=MutuallyExclusiveOption,
     help="ID of the transaction to which the workers belong.",
-    mutually_exclusive=["data-ver", "plan", "fn"],
+    mutually_exclusive=["execution", "fn"],
 )
 @click.pass_context
 def list_workers(
     ctx: click.Context,
-    data_ver: str,
-    plan: str,
+    execution: str,
     fn: str,
+    collection: str,
     trx: str,
 ):
     """
-    List all workers of a specific data version, execution plan, function or
+    List all workers of a specific execution, function or
         transaction.
     """
     verify_login_or_prompt(ctx)
-    if not (data_ver or plan or fn or trx):
+    if not (execution or fn or trx):
         raise click.ClickException(
-            "Exactly one of data version, execution plan, "
-            "function or transaction ID must be provided, "
+            "Exactly one of execution ID, "
+            "function name or transaction ID must be provided, "
             "but none were provided."
         )
-    try:
-        list_of_workers = ctx.obj["tabsdataserver"].worker_list(
-            by_execution_plan_id=plan,
-            by_function_id=fn,
-            by_data_version_id=data_ver,
-            by_transaction_id=trx,
+    if fn:
+        collection = (
+            collection
+            or get_currently_pinned_object(ctx, "collection")
+            or logical_prompt(
+                ctx, "Name of the collection to which the function belongs"
+            )
         )
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        request_filter = []
+        if execution:
+            request_filter = [f"execution_id:eq:{execution}"]
+        elif fn:
+            request_filter = [f"function:eq:{fn}", f"collection:eq:{collection}"]
+        elif trx:
+            request_filter = [f"transaction_id:eq:{trx}"]
+        list_of_workers = server.list_workers(filter=request_filter)
 
         table = Table(title="Workers")
         table.add_column("Worker ID", style="cyan", no_wrap=True)
         table.add_column("Collection")
         table.add_column("Function")
         table.add_column("Function ID")
-        table.add_column("Execution Plan")
-        table.add_column("Execution Plan ID")
+        table.add_column("Execution")
+        table.add_column("Execution ID")
         table.add_column("Transaction ID")
-        table.add_column("Started on")
         table.add_column("Status")
 
         for worker in list_of_workers:
@@ -216,10 +226,9 @@ def list_workers(
                 worker.collection.name,
                 worker.function.name,
                 worker.function.id,
-                worker.execution_plan.name,
-                worker.execution_plan.id,
+                worker.execution.name,
+                worker.execution.id,
                 worker.transaction.id,
-                worker.started_on_str,
                 worker.status,
             )
 
@@ -252,7 +261,7 @@ def logs(ctx: click.Context, worker: str, file: str):
     verify_login_or_prompt(ctx)
     worker = worker or logical_prompt(ctx, "ID of the worker that generated the logs")
     try:
-        generated_logs = ctx.obj["tabsdataserver"].worker_log(worker)
+        generated_logs = ctx.obj["tabsdataserver"].get_worker_log(worker)
         if file:
             click.echo(f"Saving logs from worker '{worker}' to file '{file}'")
             with open(file, "w") as f:
@@ -267,39 +276,23 @@ def logs(ctx: click.Context, worker: str, file: str):
 
 
 @exec.command()
-@click.option(
-    "--plan",
-    help="ID of the execution plan that will be shown.",
-)
+@click.argument("id")
 @click.pass_context
-def show_plan(ctx: click.Context, plan: str):
+def recover(ctx: click.Context, trx: str):
     """
-    Show an execution plan. If the appropriate binary is installed, the dot file will
-    be opened and show.
+    Recover an execution. This includes all transactions that are part of the
+    execution
     """
     verify_login_or_prompt(ctx)
-    plan = plan or logical_prompt(ctx, "ID of the execution plan that will be shown")
-    click.echo(f"Reading execution plan with ID '{plan}'")
+    trx = trx or logical_prompt(ctx, "ID of the execution that will be recovered")
+    click.echo(f"Recovering execution with ID '{trx}'")
     click.echo("-" * 10)
     try:
-        dot = ctx.obj["tabsdataserver"].execution_plan_read(plan)
-        click.echo("Execution plan shown successfully")
-        if dot:
-            os.makedirs(DOT_FOLDER, exist_ok=True)
-            current_timestamp = int(
-                datetime.datetime.now().replace(microsecond=0).timestamp()
-            )
-            file_name = f"{plan}-{current_timestamp}.dot"
-            full_path = os.path.join(DOT_FOLDER, file_name)
-            with open(full_path, "w") as f:
-                f.write(dot)
-            click.echo(f"Plan DOT at path: {full_path}")
-            show_dot_file(full_path)
-        else:
-            click.echo("No DOT returned")
-        cleanup_dot_files()
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.recover_execution(trx)
+        click.echo("Execution recovered successfully")
     except Exception as e:
-        raise click.ClickException(f"Failed to show execution plan: {e}")
+        raise click.ClickException(f"Failed to recover execution: {e}")
 
 
 @exec.command()
@@ -308,17 +301,18 @@ def show_plan(ctx: click.Context, plan: str):
     help="ID of the transaction that will be cancelled.",
 )
 @click.pass_context
-def recover(ctx: click.Context, trx: str):
+def recover_trx(ctx: click.Context, trx: str):
     """
     Recover a transaction. This includes all functions that are part of the
-    transaction and all its dependants
+    transaction
     """
     verify_login_or_prompt(ctx)
     trx = trx or logical_prompt(ctx, "ID of the transaction that will be recovered")
     click.echo(f"Recovering transaction with ID '{trx}'")
     click.echo("-" * 10)
     try:
-        ctx.obj["tabsdataserver"].transaction_recover(trx)
-        click.echo("Execution plan recovered successfully")
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.recover_transaction(trx)
+        click.echo("Transaction recovered successfully")
     except Exception as e:
         raise click.ClickException(f"Failed to recover transaction: {e}")

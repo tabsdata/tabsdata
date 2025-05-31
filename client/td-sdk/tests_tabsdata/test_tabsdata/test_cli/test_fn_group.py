@@ -23,14 +23,12 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.requires_internet
 def test_wrong_command_raises_exception(login, testing_collection):
     runner = CliRunner()
-    result = runner.invoke(cli, ["fn", "potato"])
+    result = runner.invoke(cli, ["--no-prompt", "fn", "potato"])
     assert result.exit_code == 2
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create_prompt(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -42,14 +40,12 @@ def test_function_create_prompt(
     )
     logger.debug(result.output)
     assert result.exit_code == 0
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create_no_prompt(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -68,14 +64,12 @@ def test_function_create_no_prompt(
     )
     logger.debug(result.output)
     assert result.exit_code == 0
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create_no_prompt_multiple_local_packages(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -98,18 +92,12 @@ def test_function_create_no_prompt_multiple_local_packages(
     )
     logger.debug(result.output)
     assert result.exit_code == 0
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip(
-    reason=(
-        "Not working due to a bug in the backend. Function delete is "
-        "not working properly."
-    )
-)
 def test_function_delete_cli(testing_collection, function_path, tabsserver_connection):
     runner = CliRunner()
     result = runner.invoke(
@@ -126,7 +114,7 @@ def test_function_delete_cli(testing_collection, function_path, tabsserver_conne
     )
     logger.debug(result.output)
     assert result.exit_code == 0
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
     result = runner.invoke(
         cli,
@@ -142,18 +130,12 @@ def test_function_delete_cli(testing_collection, function_path, tabsserver_conne
     )
     logger.debug(result.output)
     assert result.exit_code == 0
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 0
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip(
-    reason=(
-        "Not working due to a bug in the backend. Function delete is "
-        "not working properly."
-    )
-)
 def test_function_delete_no_prompt(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -172,7 +154,7 @@ def test_function_delete_no_prompt(
     )
     logger.debug(result.output)
     assert result.exit_code == 0
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
     result = runner.invoke(
         cli,
@@ -190,13 +172,12 @@ def test_function_delete_no_prompt(
     )
     logger.debug(result.output)
     assert result.exit_code == 0
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 0
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip("Not currently supported")
 def test_function_delete_wrong_options_raises_error(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -229,7 +210,7 @@ def test_function_delete_wrong_options_raises_error(
     )
     logger.debug(result.output)
     assert result.exit_code == 0
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
     result = runner.invoke(
         cli,
@@ -275,8 +256,6 @@ def test_function_delete_wrong_options_raises_error(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_list(testing_collection, function_path, tabsserver_connection):
     runner = CliRunner()
     result = runner.invoke(
@@ -299,8 +278,6 @@ def test_function_list(testing_collection, function_path, tabsserver_connection)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_update(testing_collection, function_path, tabsserver_connection):
     runner = CliRunner()
     result = runner.invoke(
@@ -316,7 +293,7 @@ def test_function_update(testing_collection, function_path, tabsserver_connectio
         ],
     )
     logger.debug(result.output)
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
     result = runner.invoke(
         cli,
@@ -335,15 +312,13 @@ def test_function_update(testing_collection, function_path, tabsserver_connectio
     )
     logger.debug(result.output)
     assert result.exit_code == 0
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
     assert functions[0].description == "new_description"
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_info(testing_collection, function_path, tabsserver_connection):
     runner = CliRunner()
     result = runner.invoke(
@@ -359,7 +334,7 @@ def test_function_info(testing_collection, function_path, tabsserver_connection)
         ],
     )
     logger.debug(result.output)
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) != 0
     result = runner.invoke(
         cli,
@@ -378,8 +353,7 @@ def test_function_info(testing_collection, function_path, tabsserver_connection)
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
+@pytest.mark.skip(reason="To be implemented in an upstream PR")
 def test_function_info_show_versions(
     testing_collection, function_path, tabsserver_connection
 ):
@@ -397,7 +371,7 @@ def test_function_info_show_versions(
         ],
     )
     logger.debug(result.output)
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
     result = runner.invoke(
         cli,
@@ -417,24 +391,25 @@ def test_function_info_show_versions(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger(testing_collection, function_path, tabsserver_connection):
     runner = CliRunner()
+    arguments = [
+        "--no-prompt",
+        "fn",
+        "register",
+        "--collection",
+        testing_collection,
+        "--fn-path",
+        function_path,
+    ]
+    for package in LOCAL_PACKAGES_LIST:
+        arguments.extend(["--local-pkg", package])
     result = runner.invoke(
         cli,
-        [
-            "--no-prompt",
-            "fn",
-            "register",
-            "--collection",
-            testing_collection,
-            "--fn-path",
-            function_path,
-        ],
+        arguments,
     )
     logger.debug(result.output)
-    functions = tabsserver_connection.collection_list_functions(testing_collection)
+    functions = tabsserver_connection.list_functions(testing_collection)
     assert len(functions) == 1
     result = runner.invoke(
         cli,
@@ -466,23 +441,24 @@ def test_function_trigger(testing_collection, function_path, tabsserver_connecti
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_function_trigger_execution_plan_name(
+def test_function_trigger_execution_name(
     testing_collection, function_path, tabsserver_connection
 ):
     runner = CliRunner()
+    arguments = [
+        "--no-prompt",
+        "fn",
+        "register",
+        "--collection",
+        testing_collection,
+        "--fn-path",
+        function_path,
+    ]
+    for package in LOCAL_PACKAGES_LIST:
+        arguments.extend(["--local-pkg", package])
     result = runner.invoke(
         cli,
-        [
-            "--no-prompt",
-            "fn",
-            "register",
-            "--collection",
-            testing_collection,
-            "--fn-path",
-            function_path,
-        ],
+        arguments,
     )
     logger.debug(result.output)
     result = runner.invoke(
@@ -507,8 +483,8 @@ def test_function_trigger_execution_plan_name(
             testing_collection,
             "--name",
             "test_input_plugin",
-            "--execution-plan-name",
-            "test_execution_plan_name",
+            "--execution-name",
+            "test_execution_name",
         ],
     )
     logger.debug(result.output)
@@ -517,8 +493,6 @@ def test_function_trigger_execution_plan_name(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_info_error(testing_collection):
     runner = CliRunner()
     result = runner.invoke(

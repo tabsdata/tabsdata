@@ -2,7 +2,6 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
-import datetime
 import logging
 import os
 import time
@@ -20,9 +19,8 @@ from tests_tabsdata.conftest import (
 from tabsdata.api.apiserver import BASE_API_URL, APIServerError
 from tabsdata.api.tabsdata_server import (
     Collection,
-    Commit,
     DataVersion,
-    ExecutionPlan,
+    Execution,
     Function,
     Role,
     ServerStatus,
@@ -47,6 +45,31 @@ def test_tabsdata_server_create():
     tabsdata_server = TabsdataServer(APISERVER_URL, "admin", "tabsdata")
     real_url = f"http://{APISERVER_URL}{BASE_API_URL}"
     assert tabsdata_server.connection.url == real_url
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_auth_info(tabsserver_connection):
+    assert tabsserver_connection.auth_info
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_password_change(tabsserver_connection):
+    user_name = "test_tabsdata_server_password_change_user"
+    password = "test_tabsdata_server_password_change_password"
+    try:
+        tabsserver_connection.create_user(user_name, password)
+        assert tabsserver_connection.get_user(user_name).name == user_name
+        new_password = "test_tabsdata_server_password_change_new_password"
+        tabsserver_connection.password_change(user_name, password, new_password)
+        # Re-authenticate with the new password
+        assert TabsdataServer(APISERVER_URL, user_name, new_password)
+        with pytest.raises(APIServerError):
+            # Try to authenticate with the old password
+            TabsdataServer(APISERVER_URL, user_name, password)
+    finally:
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
 
 
 @pytest.mark.integration
@@ -194,32 +217,34 @@ def test_tabsdata_server_update_user(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_get(tabsserver_connection):
     try:
         tabsserver_connection.create_collection(
             name="test_function_get_collection",
             description="test_collection_description",
         )
-        tabsserver_connection.function_create(
+        tabsserver_connection.register_function(
             collection_name="test_function_get_collection",
             description="test_function_get_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
         function = tabsserver_connection.function_get(
             "test_function_get_collection", "test_input_plugin"
         )
         assert function.name == "test_input_plugin"
     finally:
-        tabsserver_connection.function_delete(
-            "test_function_get_collection", "test_input_plugin"
+        tabsserver_connection.delete_function(
+            "test_function_get_collection",
+            "test_input_plugin",
+            raise_for_status=False,
         )
-        # TODO: Uncomment this line when the collection_delete method is implemented
-        # tabsserver_connection.collection_delete("test_function_get_collection")
+        tabsserver_connection.delete_collection(
+            "test_function_get_collection", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
@@ -232,139 +257,148 @@ def test_function_list_history(tabsserver_connection):
             name="test_function_list_history_collection",
             description="test_collection_description",
         )
-        tabsserver_connection.function_create(
+        tabsserver_connection.register_function(
             collection_name="test_function_list_history_collection",
             description="test_function_list_history_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        functions = tabsserver_connection.function_list_history(
+        functions = tabsserver_connection.list_function_history(
             "test_function_list_history_collection", "test_input_plugin"
         )
         assert isinstance(functions, list)
         assert all(isinstance(function, Function) for function in functions)
     finally:
-        tabsserver_connection.function_delete(
-            "test_function_list_history", "test_input_plugin"
+        tabsserver_connection.delete_function(
+            "test_function_list_history",
+            "test_input_plugin",
+            raise_for_status=False,
         )
-        # TODO: Uncomment this line when the collection_delete method is implemented
-        # tabsserver_connection.collection_delete("test_function_get_collection")
+        tabsserver_connection.delete_collection(
+            "test_function_list_history_collection", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_trigger(tabsserver_connection):
     try:
         tabsserver_connection.create_collection(
             name="test_function_trigger_collection",
             description="test_collection_description",
         )
-        tabsserver_connection.function_create(
+        tabsserver_connection.register_function(
             collection_name="test_function_trigger_collection",
             description="test_function_trigger_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        response = tabsserver_connection.function_trigger(
+        response = tabsserver_connection.trigger_function(
             "test_function_trigger_collection", "test_input_plugin"
         )
-        assert response.status_code == 201
+        assert isinstance(response, Execution)
     finally:
-        tabsserver_connection.function_delete(
-            "test_function_trigger_collection", "test_input_plugin"
+        tabsserver_connection.delete_function(
+            "test_function_trigger_collection",
+            "test_input_plugin",
+            raise_for_status=False,
         )
-        # TODO: Uncomment this line when the collection_delete method is implemented
-        # tabsserver_connection.collection_delete("test_function_trigger_collection")
+        tabsserver_connection.delete_collection(
+            "test_function_trigger_collection", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_function_trigger_execution_plan_name(tabsserver_connection):
+def test_function_trigger_execution_name(tabsserver_connection):
     try:
         tabsserver_connection.create_collection(
-            name="test_function_trigger_execution_plan_name_collection",
+            name="test_function_trigger_execution_name_collection",
             description="test_collection_description",
         )
-        tabsserver_connection.function_create(
-            collection_name="test_function_trigger_execution_plan_name_collection",
-            description="test_function_trigger_execution_plan_name_description",
+        tabsserver_connection.register_function(
+            collection_name="test_function_trigger_execution_name_collection",
+            description="test_function_trigger_execution_name_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        response = tabsserver_connection.function_trigger(
-            "test_function_trigger_execution_plan_name_collection",
+        execution = tabsserver_connection.trigger_function(
+            "test_function_trigger_execution_name_collection",
             "test_input_plugin",
-            execution_plan_name="test_execution_plan_name",
+            execution_name="test_execution_name",
         )
-        assert response.status_code == 201
-        assert response.json()["data"]["name"] == "test_execution_plan_name"
+        assert execution
+        assert execution.name == "test_execution_name"
     finally:
-        tabsserver_connection.function_delete(
-            "test_function_trigger_execution_plan_name_collection", "test_input_plugin"
+        tabsserver_connection.delete_function(
+            "test_function_trigger_execution_name_collection",
+            "test_input_plugin",
+            raise_for_status=False,
         )
-        # TODO: Uncomment this line when the collection_delete method is implemented
-        # tabsserver_connection.collection_delete("test_function_trigger_execution_plan_name_collection")
+        tabsserver_connection.delete_collection(
+            "test_function_trigger_execution_name_collection", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_create(tabsserver_connection):
     try:
         tabsserver_connection.create_collection(
             name="test_function_create_collection",
             description="test_collection_description",
         )
-        tabsserver_connection.function_create(
+        tabsserver_connection.register_function(
             collection_name="test_function_create_collection",
             description="test_function_create_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_create_collection"
         )
         assert any(function.name == "test_input_plugin" for function in functions)
     finally:
-        tabsserver_connection.function_delete(
-            "test_function_create_collection", "test_input_plugin"
+        tabsserver_connection.delete_function(
+            "test_function_create_collection",
+            "test_input_plugin",
+            raise_for_status=False,
         )
-        # TODO: Uncomment this line when the collection_delete method is implemented
-        # tabsserver_connection.collection_delete("test_function_create_collection")
+        tabsserver_connection.delete_collection(
+            "test_function_create_collection", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_update(tabsserver_connection):
     try:
         tabsserver_connection.create_collection(
             name="test_function_update_server_collection",
             description="test_collection_description",
         )
-        tabsserver_connection.function_create(
+        tabsserver_connection.register_function(
             collection_name="test_function_update_server_collection",
             description="test_function_update_server_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_update_server_collection"
         )
         assert any(function.name == "test_input_plugin" for function in functions)
@@ -380,60 +414,60 @@ def test_function_update(tabsserver_connection):
             description=new_description,
             function_path=new_function_path,
         )
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_update_server_collection"
         )
         assert len(functions) == 1
         assert functions[0].name == "input_file_csv_modified_format"
 
     finally:
-        tabsserver_connection.function_delete(
+        tabsserver_connection.delete_function(
             "test_function_update_server_collection",
             "input_file_csv_modified_format",
+            raise_for_status=False,
         )
-        # TODO: Uncomment this line when the collection_delete method is implemented
-        # tabsserver_connection.collection_delete("test_function_update_collection")
+        tabsserver_connection.delete_collection(
+            "test_function_update_server_collection", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.skip(
-    reason=(
-        "Not working due to a bug in the backend. function delete is "
-        "not working properly."
-    )
-)
 def test_function_delete(tabsserver_connection):
     try:
         tabsserver_connection.create_collection(
             name="test_function_delete_collection",
             description="test_collection_description",
         )
-        tabsserver_connection.function_create(
+        tabsserver_connection.register_function(
             collection_name="test_function_delete_collection",
             description="test_function_delete_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_delete_collection"
         )
         assert any(function.name == "test_input_plugin" for function in functions)
-        tabsserver_connection.function_delete(
-            "test_function_create_collection", "test_input_plugin"
+        tabsserver_connection.delete_function(
+            "test_function_delete_collection", "test_input_plugin"
         )
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_delete_collection"
         )
         assert not any(function.name == "test_input_plugin" for function in functions)
     finally:
-        tabsserver_connection.function_delete(
-            "test_function_create_collection", "test_input_plugin"
+        tabsserver_connection.delete_function(
+            "test_function_delete_collection",
+            "test_input_plugin",
+            raise_for_status=False,
         )
-        # TODO: Uncomment this line when the collection_delete method is implemented
-        # tabsserver_connection.collection_delete("test_function_create_collection")
+        tabsserver_connection.delete_collection(
+            "test_function_delete_collection", raise_for_status=False
+        )
 
 
 @pytest.mark.integration
@@ -761,20 +795,18 @@ def test_convert_timestamp_to_string():
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_tabsdata_server_execution_plans_list(tabsserver_connection):
-    execution_plans = tabsserver_connection.execution_plans
-    assert isinstance(execution_plans, list)
-    assert all(isinstance(user, ExecutionPlan) for user in execution_plans)
+def test_tabsdata_server_executions_list(tabsserver_connection):
+    executions = tabsserver_connection.executions
+    assert isinstance(executions, list)
+    assert all(isinstance(user, Execution) for user in executions)
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_list(tabsserver_connection, testing_collection_with_table):
-    tables = tabsserver_connection.table_list(
+def test_tabsdata_server_table_list(
+    tabsserver_connection, testing_collection_with_table
+):
+    tables = tabsserver_connection.list_tables(
         collection_name=testing_collection_with_table,
     )
     assert tables
@@ -784,13 +816,11 @@ def test_table_list(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_download(tabsserver_connection, tmp_path, testing_collection_with_table):
     destination_file = os.path.join(
         tmp_path, "test_table_download_collection_output.parquet"
     )
-    tabsserver_connection.table_download(
+    tabsserver_connection.download_table(
         collection_name=testing_collection_with_table,
         table_name="output",
         destination_file=destination_file,
@@ -801,10 +831,8 @@ def test_table_download(tabsserver_connection, tmp_path, testing_collection_with
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_sample(tabsserver_connection, testing_collection_with_table):
-    table = tabsserver_connection.table_sample(
+    table = tabsserver_connection.sample_table(
         collection_name=testing_collection_with_table,
         table_name="output",
     )
@@ -813,10 +841,8 @@ def test_table_sample(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_table_get_schema(tabsserver_connection, testing_collection_with_table):
-    schema = tabsserver_connection.table_get_schema(
+    schema = tabsserver_connection.get_table_schema(
         collection_name=testing_collection_with_table,
         table_name="output",
     )
@@ -825,8 +851,49 @@ def test_table_get_schema(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
+def test_table_download_at(
+    tabsserver_connection, tmp_path, testing_collection_with_table
+):
+    destination_file = os.path.join(
+        tmp_path, "test_table_download_at_collection_output.parquet"
+    )
+    epoch_ms = int(time.time() * 1000)  # Current time in milliseconds
+    tabsserver_connection.download_table(
+        collection_name=testing_collection_with_table,
+        table_name="output",
+        destination_file=destination_file,
+        at=epoch_ms,
+    )
+
+    assert os.path.exists(destination_file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_sample(tabsserver_connection, testing_collection_with_table):
+    epoch_ms = int(time.time() * 1000)  # Current time in milliseconds
+    table = tabsserver_connection.sample_table(
+        collection_name=testing_collection_with_table,
+        table_name="output",
+        at=epoch_ms,
+    )
+    assert isinstance(table, pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_get_schema(tabsserver_connection, testing_collection_with_table):
+    epoch_ms = int(time.time() * 1000)  # Current time in milliseconds
+    schema = tabsserver_connection.get_table_schema(
+        collection_name=testing_collection_with_table,
+        table_name="output",
+        at=epoch_ms,
+    )
+    assert schema
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
 def test_tabsdata_server_transaction_list(tabsserver_connection):
     transactions = tabsserver_connection.transactions
     assert isinstance(transactions, list)
@@ -835,416 +902,12 @@ def test_tabsdata_server_transaction_list(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_download_with_version(
-    tabsserver_connection, tmp_path, testing_collection_with_table
-):
-    destination_file = os.path.join(
-        tmp_path, "test_table_download_with_version_collection_output.parquet"
-    )
-    tabsserver_connection.table_download(
-        collection_name=testing_collection_with_table,
-        table_name="output",
-        version="HEAD",
-        destination_file=destination_file,
-    )
-    assert os.path.exists(destination_file)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_sample_with_version(
-    tabsserver_connection, testing_collection_with_table
-):
-    table = tabsserver_connection.table_sample(
-        collection_name=testing_collection_with_table,
-        table_name="output",
-        version="HEAD",
-    )
-    assert isinstance(table, pl.DataFrame)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_get_schema_with_version(
-    tabsserver_connection, testing_collection_with_table
-):
-    schema = tabsserver_connection.table_get_schema(
-        collection_name=testing_collection_with_table,
-        table_name="output",
-        version="HEAD",
-    )
-    assert schema
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_download_with_commit(
-    tabsserver_connection, tmp_path, testing_collection_with_table
-):
-    destination_file = os.path.join(
-        tmp_path, "test_table_download_with_commit_collection_output.parquet"
-    )
-    commit = tabsserver_connection.commits[0].id
-    tabsserver_connection.table_download(
-        collection_name=testing_collection_with_table,
-        table_name="output",
-        destination_file=destination_file,
-        commit=commit,
-    )
-    assert os.path.exists(destination_file)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_sample_with_commit(tabsserver_connection, testing_collection_with_table):
-    commit = tabsserver_connection.commits[0].id
-    table = tabsserver_connection.table_sample(
-        collection_name=testing_collection_with_table,
-        table_name="output",
-        commit=commit,
-    )
-    assert isinstance(table, pl.DataFrame)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_get_schema_with_commit(
-    tabsserver_connection, testing_collection_with_table
-):
-    commit = tabsserver_connection.commits[0].id
-    schema = tabsserver_connection.table_get_schema(
-        collection_name=testing_collection_with_table,
-        table_name="output",
-        commit=commit,
-    )
-    assert schema
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_download_with_wrong_version(
-    tabsserver_connection, tmp_path, testing_collection_with_table
-):
-    destination_file = os.path.join(
-        tmp_path, "test_table_download_with_wrong_version_collection_output.parquet"
-    )
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_download(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            version="DOESNTEXIST",
-            destination_file=destination_file,
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_sample_with_wrong_version(
-    tabsserver_connection, testing_collection_with_table
-):
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_sample(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            version="DOESNTEXIST",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_get_schema_with_wrong_version(
-    tabsserver_connection, testing_collection_with_table
-):
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_get_schema(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            version="DOESNTEXIST",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_download_with_wrong_commit(
-    tabsserver_connection, tmp_path, testing_collection_with_table
-):
-    destination_file = os.path.join(
-        tmp_path, "test_table_download_with_wrong_commit_collection_output.parquet"
-    )
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_download(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            destination_file=destination_file,
-            commit="DOESNTEXIST",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_sample_with_wrong_commit(
-    tabsserver_connection, testing_collection_with_table
-):
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_sample(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            commit="DOESNTEXIST",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_get_schema_with_wrong_commit(
-    tabsserver_connection, testing_collection_with_table
-):
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_get_schema(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            commit="DOESNTEXIST",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_download_with_time(
-    tabsserver_connection, tmp_path, testing_collection_with_table
-):
-    destination_file = os.path.join(
-        tmp_path, "test_table_download_with_time_collection_output.parquet"
-    )
-    current_time = datetime.datetime.now(datetime.UTC)
-    formatted_time = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    tabsserver_connection.table_download(
-        collection_name=testing_collection_with_table,
-        table_name="output",
-        destination_file=destination_file,
-        time=formatted_time,
-    )
-    assert os.path.exists(destination_file)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_sample_with_time(tabsserver_connection, testing_collection_with_table):
-    current_time = datetime.datetime.now(datetime.UTC)
-    formatted_time = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    table = tabsserver_connection.table_sample(
-        collection_name=testing_collection_with_table,
-        table_name="output",
-        time=formatted_time,
-    )
-    assert isinstance(table, pl.DataFrame)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_get_schema_with_time(
-    tabsserver_connection, testing_collection_with_table
-):
-    current_time = datetime.datetime.now(datetime.UTC)
-    formatted_time = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    schema = tabsserver_connection.table_get_schema(
-        collection_name=testing_collection_with_table,
-        table_name="output",
-        time=formatted_time,
-    )
-    assert schema
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_download_with_wrong_time(
-    tabsserver_connection, tmp_path, testing_collection_with_table
-):
-    destination_file = os.path.join(
-        tmp_path, "test_table_download_with_wrong_time_collection_output.parquet"
-    )
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_download(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            destination_file=destination_file,
-            time="DOESNTEXIST",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_sample_with_wrong_time(
-    tabsserver_connection, testing_collection_with_table
-):
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_sample(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            time="DOESNTEXIST",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_get_schema_with_wrong_time(
-    tabsserver_connection, testing_collection_with_table
-):
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_get_schema(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            time="DOESNTEXIST",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_download_with_all_options_fails(
-    tabsserver_connection, tmp_path, testing_collection_with_table
-):
-    commit = tabsserver_connection.commits[0].id
-    destination_file = os.path.join(
-        tmp_path, "test_table_download_with_time_collection_output.parquet"
-    )
-    current_time = datetime.datetime.now(datetime.UTC)
-    formatted_time = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_download(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            destination_file=destination_file,
-            time=formatted_time,
-            commit=commit,
-            version="HEAD",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_sample_with_all_options_fails(
-    tabsserver_connection, testing_collection_with_table
-):
-    commit = tabsserver_connection.commits[0].id
-    current_time = datetime.datetime.now(datetime.UTC)
-    formatted_time = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_sample(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            time=formatted_time,
-            commit=commit,
-            version="HEAD",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_table_get_schema_with_all_options_fails(
-    tabsserver_connection, testing_collection_with_table
-):
-    commit = tabsserver_connection.commits[0].id
-    current_time = datetime.datetime.now(datetime.UTC)
-    formatted_time = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    with pytest.raises(APIServerError):
-        tabsserver_connection.table_get_schema(
-            collection_name=testing_collection_with_table,
-            table_name="output",
-            time=formatted_time,
-            commit=commit,
-            version="HEAD",
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_tabsdata_server_commit_list(
-    testing_collection_with_table, tabsserver_connection
-):
-    commits = tabsserver_connection.commits
-    assert isinstance(commits, list)
-    assert all(isinstance(commit, Commit) for commit in commits)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-def test_commit_class():
-    time_triggered = int(time.time())
-    commit = Commit(
-        id="test_id",
-        execution_plan_id="test_execution_plan_id",
-        triggered_on=time_triggered,
-        ended_on=time_triggered,
-        started_on=time_triggered,
-        transaction_id="test_transaction_id",
-        example_kwarg="example",
-    )
-    assert commit.id == "test_id"
-    assert commit.execution_plan_id == "test_execution_plan_id"
-    assert commit.triggered_on == time_triggered
-    assert isinstance(commit.triggered_on_str, str)
-    assert commit.transaction_id == "test_transaction_id"
-    assert commit.started_on == time_triggered
-    assert isinstance(commit.started_on_str, str)
-    assert commit.ended_on == time_triggered
-    assert isinstance(commit.ended_on_str, str)
-    assert commit.kwargs == {"example_kwarg": "example"}
-    assert commit.__repr__()
-    assert commit.__str__()
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_dataversion_list(tabsserver_connection, testing_collection_with_table):
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
-    data_versions = tabsserver_connection.dataversion_list(
-        testing_collection_with_table, function_name
+    table_name = tabsserver_connection.list_tables(testing_collection_with_table)[
+        0
+    ].name
+    data_versions = tabsserver_connection.list_dataversions(
+        testing_collection_with_table, table_name
     )
     assert data_versions
     assert isinstance(data_versions, list)
@@ -1253,8 +916,6 @@ def test_dataversion_list(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_message_get(tabsserver_connection, testing_collection_with_table):
     transaction_id = None
     for element in tabsserver_connection.transactions:
@@ -1264,10 +925,13 @@ def test_worker_message_get(tabsserver_connection, testing_collection_with_table
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
     assert transaction_id
-    function = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0]
-    messages = tabsserver_connection.worker_list(by_function_id=function.id)
+    function = tabsserver_connection.list_functions(testing_collection_with_table)[0]
+    messages = tabsserver_connection.list_workers(
+        filter=[
+            f"function:eq:{function.name}",
+            f"collection:eq:{testing_collection_with_table}",
+        ]
+    )
     logger.debug(f"Messages: {messages}")
     assert messages
     assert isinstance(messages, list)
@@ -1275,27 +939,25 @@ def test_worker_message_get(tabsserver_connection, testing_collection_with_table
     message_id = messages[0].id
     logger.debug(f"Message ID: {message_id}")
     # Flakiness should be fixed now, comment if it starts failing again
-    log = tabsserver_connection.worker_log(message_id)
+    log = tabsserver_connection.get_worker_log(message_id)
     assert isinstance(log, str)
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_worker_messages_list_by_execution_plan_id(
+def test_worker_messages_list_by_execution_id(
     tabsserver_connection, testing_collection_with_table
 ):
-    execution_plan_id = tabsserver_connection.execution_plans[0].id
-    messages = tabsserver_connection.worker_list(by_execution_plan_id=execution_plan_id)
+    execution_id = tabsserver_connection.executions[0].id
+    messages = tabsserver_connection.list_workers(
+        filter=[f"execution_id:eq:{execution_id}"]
+    )
     assert isinstance(messages, list)
     assert all(isinstance(message, Worker) for message in messages)
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_worker_messages_list_by_transaction_id(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -1307,7 +969,9 @@ def test_worker_messages_list_by_transaction_id(
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
     assert transaction_id
-    messages = tabsserver_connection.worker_list(by_transaction_id=transaction_id)
+    messages = tabsserver_connection.list_workers(
+        filter=[f"transaction_id:eq:{transaction_id}"]
+    )
     assert messages
     assert isinstance(messages, list)
     assert all(isinstance(message, Worker) for message in messages)
@@ -1315,98 +979,21 @@ def test_worker_messages_list_by_transaction_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_worker_messages_list_by_function_id(
+def test_tabsdata_server_class_worker_messages_list_by_function_and_collection(
     tabsserver_connection, testing_collection_with_table
 ):
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
-    function_id = tabsserver_connection.function_get(
-        testing_collection_with_table, function_name
-    ).id
-    messages = tabsserver_connection.worker_list(by_function_id=function_id)
+    function_name = tabsserver_connection.list_functions(testing_collection_with_table)[
+        0
+    ].name
+    messages = tabsserver_connection.list_workers(
+        filter=[
+            f"function:eq:{function_name}",
+            f"collection:eq:{testing_collection_with_table}",
+        ]
+    )
     assert messages
     assert isinstance(messages, list)
     assert all(isinstance(message, Worker) for message in messages)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_worker_messages_list_by_data_version_id(
-    tabsserver_connection, testing_collection_with_table
-):
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
-    data_version = tabsserver_connection.dataversion_list(
-        testing_collection_with_table, function_name
-    )[0].id
-    messages = tabsserver_connection.worker_list(by_data_version_id=data_version)
-    assert messages
-    assert isinstance(messages, list)
-    assert all(isinstance(message, Worker) for message in messages)
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_worker_messages_list_by_all_options_fails(
-    tabsserver_connection, testing_collection_with_table
-):
-    execution_plan_id = tabsserver_connection.execution_plans[0].id
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
-    data_version = tabsserver_connection.dataversion_list(
-        testing_collection_with_table, function_name
-    )[0].id
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
-    function_id = tabsserver_connection.function_get(
-        testing_collection_with_table, function_name
-    ).id
-    transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
-            break
-    logger.debug(f"Transactions: {tabsserver_connection.transactions}")
-    logger.debug(f"Transaction ID: {transaction_id}")
-    assert transaction_id
-    with pytest.raises(APIServerError):
-        tabsserver_connection.worker_list(
-            by_execution_plan_id=execution_plan_id,
-            by_function_id=function_id,
-            by_data_version_id=data_version,
-            by_transaction_id=transaction_id,
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_worker_messages_list_no_options_fails(
-    tabsserver_connection, testing_collection_with_table
-):
-    with pytest.raises(APIServerError):
-        tabsserver_connection.worker_list()
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_execution_plan_read(tabsserver_connection, testing_collection_with_table):
-    execution_plans = tabsserver_connection.execution_plans
-    assert execution_plans
-    assert tabsserver_connection.execution_plan_read(execution_plans[0].id)
 
 
 @pytest.mark.integration
@@ -1427,9 +1014,188 @@ def test_tabsdata_server_class_read_run(tabsserver_connection):
     plan = function.trigger(
         f"test_tabsdata_server_class_read_run_plan_{uuid.uuid4().hex[:16]}"
     )
-    response = tabsserver_connection.function_read_run(
+    response = tabsserver_connection.read_function_run(
         collection.name, function.name, plan.id
     )
     assert response.status_code == 200
-    response = tabsserver_connection.function_read_run(collection, function, plan)
+    response = tabsserver_connection.read_function_run(collection, function, plan)
     assert response.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_execution_cancel(tabsserver_connection):
+    try:
+        tabsserver_connection.create_collection(
+            name="test_tabsdata_server_execution_cancel_collection",
+            description="test_collection_description",
+        )
+        tabsserver_connection.register_function(
+            collection_name="test_tabsdata_server_execution_cancel_collection",
+            description="test_tabsdata_server_execution_cancel_description",
+            function_path=(
+                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
+                                "test_input_plugin", "example.py")}::input_plugin"
+            ),
+            local_packages=LOCAL_PACKAGES_LIST,
+        )
+        execution = tabsserver_connection.trigger_function(
+            "test_tabsdata_server_execution_cancel_collection", "test_input_plugin"
+        )
+        assert isinstance(execution, Execution)
+        response = tabsserver_connection.cancel_execution(execution.id)
+        assert response.status_code == 200
+    finally:
+        tabsserver_connection.delete_function(
+            "test_tabsdata_server_execution_cancel_collection",
+            "test_input_plugin",
+            raise_for_status=False,
+        )
+        tabsserver_connection.delete_collection(
+            "test_tabsdata_server_execution_cancel_collection", raise_for_status=False
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.skip(reason="Awaiting decision of behavior of recover method.")
+def test_tabsdata_server_execution_recover(tabsserver_connection):
+    try:
+        tabsserver_connection.create_collection(
+            name="test_tabsdata_server_execution_recover_collection",
+            description="test_collection_description",
+        )
+        tabsserver_connection.register_function(
+            collection_name="test_tabsdata_server_execution_recover_collection",
+            description="test_tabsdata_server_execution_recover_description",
+            function_path=(
+                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
+                                "test_input_plugin", "example.py")}::input_plugin"
+            ),
+            local_packages=LOCAL_PACKAGES_LIST,
+        )
+        execution = tabsserver_connection.trigger_function(
+            "test_tabsdata_server_execution_recover_collection", "test_input_plugin"
+        )
+        assert isinstance(execution, Execution)
+        response = tabsserver_connection.recover_execution(execution.id)
+        assert response.status_code == 200
+    finally:
+        tabsserver_connection.delete_function(
+            "test_tabsdata_server_execution_recover_collection",
+            "test_input_plugin",
+            raise_for_status=False,
+        )
+        tabsserver_connection.delete_collection(
+            "test_tabsdata_server_execution_recover_collection", raise_for_status=False
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_get_transaction(
+    tabsserver_connection, testing_collection_with_table
+):
+    transaction_id = None
+    for element in tabsserver_connection.transactions:
+        transaction_id = element.id
+        break
+    logger.debug(f"Transactions: {tabsserver_connection.transactions}")
+    logger.debug(f"Transaction ID: {transaction_id}")
+    assert transaction_id
+    transaction = tabsserver_connection.get_transaction(transaction_id)
+    assert isinstance(transaction, Transaction)
+    assert transaction.id == transaction_id
+    assert transaction.__repr__()
+    assert transaction.__str__()
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_get_execution(
+    tabsserver_connection, testing_collection_with_table
+):
+    execution_id = None
+    for element in tabsserver_connection.executions:
+        execution_id = element.id
+        break
+    logger.debug(f"Executions: {tabsserver_connection.executions}")
+    logger.debug(f"Execution ID: {execution_id}")
+    assert execution_id
+    execution = tabsserver_connection.get_execution(execution_id)
+    assert isinstance(execution, Execution)
+    assert execution.id == execution_id
+    assert execution.__repr__()
+    assert execution.__str__()
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_transaction_cancel(tabsserver_connection):
+    try:
+        tabsserver_connection.create_collection(
+            name="test_tabsdata_server_transaction_cancel_collection",
+            description="test_collection_description",
+        )
+        tabsserver_connection.register_function(
+            collection_name="test_tabsdata_server_transaction_cancel_collection",
+            description="test_tabsdata_server_transaction_cancel_description",
+            function_path=(
+                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
+                                "test_input_plugin", "example.py")}::input_plugin"
+            ),
+            local_packages=LOCAL_PACKAGES_LIST,
+        )
+        execution = tabsserver_connection.trigger_function(
+            "test_tabsdata_server_transaction_cancel_collection", "test_input_plugin"
+        )
+        assert isinstance(execution, Execution)
+        transaction = execution.transactions[0]
+        response = tabsserver_connection.cancel_transaction(transaction.id)
+        assert response.status_code == 200
+    finally:
+        tabsserver_connection.delete_function(
+            "test_tabsdata_server_transaction_cancel_collection",
+            "test_input_plugin",
+            raise_for_status=False,
+        )
+        tabsserver_connection.delete_collection(
+            "test_tabsdata_server_transaction_cancel_collection", raise_for_status=False
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.skip(reason="Awaiting decision of behavior of recover method.")
+def test_tabsdata_server_transaction_recover(tabsserver_connection):
+    try:
+        tabsserver_connection.create_collection(
+            name="test_tabsdata_server_transaction_recover_collection",
+            description="test_collection_description",
+        )
+        tabsserver_connection.register_function(
+            collection_name="test_tabsdata_server_transaction_recover_collection",
+            description="test_tabsdata_server_transaction_recover_description",
+            function_path=(
+                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
+                                "test_input_plugin", "example.py")}::input_plugin"
+            ),
+            local_packages=LOCAL_PACKAGES_LIST,
+        )
+        execution = tabsserver_connection.trigger_function(
+            "test_tabsdata_server_transaction_recover_collection", "test_input_plugin"
+        )
+        assert isinstance(execution, Execution)
+        transaction = execution.transactions[0]
+        response = tabsserver_connection.recover_transaction(transaction.id)
+        assert response.status_code == 200
+    finally:
+        tabsserver_connection.delete_function(
+            "test_tabsdata_server_transaction_recover_collection",
+            "test_input_plugin",
+            raise_for_status=False,
+        )
+        tabsserver_connection.delete_collection(
+            "test_tabsdata_server_transaction_recover_collection",
+            raise_for_status=False,
+        )

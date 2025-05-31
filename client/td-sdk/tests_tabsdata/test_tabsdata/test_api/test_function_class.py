@@ -16,8 +16,6 @@ from . import pytestmark  # noqa: F401
 
 @pytest.mark.integration
 @pytest.mark.slow
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class(tabsserver_connection, testing_collection_with_table):
     function = Function(
         connection=tabsserver_connection.connection,
@@ -40,8 +38,6 @@ def test_function_class(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.slow
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_lazy_properties(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -87,27 +83,26 @@ def test_function_class_lazy_properties(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_register(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection, "test_function_class_register_collection"
     )
+    collection.create()
+    function = Function(
+        tabsserver_connection.connection,
+        collection=collection,
+        name="test_function_class_register_function",
+    )
     try:
-        collection.create()
-        function = Function(
-            tabsserver_connection.connection,
-            collection=collection,
-            name="test_function_class_register_function",
-        )
         function.register(
             description="test_function_create_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_class_register_collection"
         )
         assert any(
@@ -120,35 +115,31 @@ def test_function_class_register(tabsserver_connection):
             for function in functions
         )
     finally:
-        try:
-            function.delete(raise_for_status=False)
-        except Exception:
-            pass
+        function.delete(raise_for_status=False)
         collection.delete(raise_for_status=False)
 
 
 @pytest.mark.integration
-@pytest.mark.requires_internet
-@pytest.mark.skip("Skipping until deleting functions is supported by the backend")
 def test_function_class_delete(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection, "test_function_class_delete_collection"
     )
+    collection.create()
+    function = Function(
+        tabsserver_connection.connection,
+        collection=collection,
+        name="test_function_class_delete_function",
+    )
     try:
-        collection.create()
-        function = Function(
-            tabsserver_connection.connection,
-            collection=collection,
-            name="test_function_class_delete_function",
-        )
         function.register(
             description="test_function_create_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_class_delete_collection"
         )
         assert any(
@@ -161,7 +152,7 @@ def test_function_class_delete(tabsserver_connection):
             for function in functions
         )
         function.delete()
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_class_delete_collection"
         )
         assert not (
@@ -178,17 +169,12 @@ def test_function_class_delete(tabsserver_connection):
             )
         )
     finally:
-        try:
-            function.delete(raise_for_status=False)
-        except Exception:
-            pass
+        function.delete(raise_for_status=False)
         collection.delete(raise_for_status=False)
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_function_class_update(tabsserver_connection):
     collection = Collection(
         tabsserver_connection.connection, "test_function_class_update_collection"
@@ -201,8 +187,9 @@ def test_function_class_update(tabsserver_connection):
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_class_update_collection"
         )
         assert any(function.name == "test_input_plugin" for function in functions)
@@ -217,7 +204,7 @@ def test_function_class_update(tabsserver_connection):
         )
         function = collection.get_function("test_input_plugin")
         function.update(description=new_description, function_path=new_function_path)
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_class_update_collection"
         )
         assert len(functions) == 1
@@ -251,8 +238,9 @@ def test_function_class_history(tabsserver_connection):
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
             ),
+            local_packages=LOCAL_PACKAGES_LIST,
         )
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_class_history_collection"
         )
         assert any(function.name == "test_input_plugin" for function in functions)
@@ -267,7 +255,7 @@ def test_function_class_history(tabsserver_connection):
         )
         function = collection.get_function("test_input_plugin")
         function.update(description=new_description, function_path=new_function_path)
-        functions = tabsserver_connection.collection_list_functions(
+        functions = tabsserver_connection.list_functions(
             "test_function_class_history_collection"
         )
         assert len(functions) == 1
@@ -288,47 +276,6 @@ def test_function_class_history(tabsserver_connection):
         except Exception:
             pass
         collection.delete(raise_for_status=False)
-
-
-@pytest.mark.integration
-@pytest.mark.slow
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_function_class_dataversions(
-    tabsserver_connection, testing_collection_with_table
-):
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
-    function = Function(
-        tabsserver_connection.connection,
-        collection=testing_collection_with_table,
-        name=function_name,
-    )
-    data_versions = function.data_versions
-    assert data_versions
-    data_version = data_versions[0]
-    assert data_version.function == function
-
-
-@pytest.mark.integration
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
-def test_function_class_get_dataversions(
-    tabsserver_connection, testing_collection_with_table
-):
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
-    function = Function(
-        tabsserver_connection.connection,
-        collection=testing_collection_with_table,
-        name=function_name,
-    )
-    data_versions = function.get_dataversions(offset=0, len=100)
-    assert data_versions
-    data_version = data_versions[0]
-    assert data_version.function == function
 
 
 @pytest.mark.integration
@@ -356,12 +303,11 @@ def test_function_class_read_run(tabsserver_connection):
 
 
 @pytest.mark.integration
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
+@pytest.mark.slow
 def test_function_class_workers(tabsserver_connection, testing_collection_with_table):
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
+    function_name = tabsserver_connection.list_functions(testing_collection_with_table)[
+        0
+    ].name
     function = Function(
         tabsserver_connection.connection,
         collection=testing_collection_with_table,
@@ -376,14 +322,13 @@ def test_function_class_workers(tabsserver_connection, testing_collection_with_t
 
 
 @pytest.mark.integration
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
+@pytest.mark.slow
 def test_function_class_get_worker(
     tabsserver_connection, testing_collection_with_table
 ):
-    function_name = tabsserver_connection.collection_list_functions(
-        testing_collection_with_table
-    )[0].name
+    function_name = tabsserver_connection.list_functions(testing_collection_with_table)[
+        0
+    ].name
     function = Function(
         tabsserver_connection.connection,
         collection=testing_collection_with_table,

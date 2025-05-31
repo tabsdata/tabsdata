@@ -26,8 +26,6 @@ def test_cli():
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.wip
-@pytest.mark.skip(reason="Pending rework after server last refactors.")
 def test_status(login):
     runner = CliRunner()
     result = runner.invoke(
