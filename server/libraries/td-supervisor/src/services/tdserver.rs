@@ -14,7 +14,6 @@ use crate::resource::instance::{
     get_workspace_path_for_instance, AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FOLDER, DATABASE_FILE,
     DATABASE_FOLDER, ENVIRONMENTS_FOLDER, MSG_FOLDER, STORAGE_FOLDER, WORK_FOLDER,
 };
-use crate::resource::settings::{extract_default_settings, extract_profile};
 use crate::services::bootloader::{
     BOOTLOADER, BOOTLOADER_ARGUMENT_INSTANCE, BOOTLOADER_ARGUMENT_PROFILE,
     BOOTLOADER_ARGUMENT_REPOSITORY, BOOTLOADER_ARGUMENT_WORKSPACE,
@@ -24,8 +23,6 @@ use crate::services::supervisor::TD_ARGUMENT_KEY;
 use clap::{command, Parser};
 use clap_derive::{Args, Subcommand};
 use getset::Getters;
-use ignore::{WalkBuilder, WalkState};
-use indicatif::{ProgressBar, ProgressStyle};
 use linemux::MuxedLines;
 use num_format::{Locale, ToFormattedString};
 use std::collections::{HashMap, HashSet};
@@ -34,7 +31,6 @@ use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Output};
-use std::sync::{Arc, Mutex};
 use std::{env, fs, io};
 use sysinfo::Signal;
 use ta_tableframe::api::Extension;
@@ -49,7 +45,6 @@ use tabled::{
 use td_apiserver::config::DbSchema;
 use td_common::cli::{parse_extra_arguments, ARGUMENT_PREFIX, TRAILING_ARGUMENTS_PREFIX};
 use td_common::env::{get_home_dir, to_absolute, TABSDATA_HOME_DIR};
-use td_common::files::ROOT;
 use td_common::logging::set_log_level;
 use td_common::os::{get_process_tree, name_program, terminate_process};
 use td_common::server::WorkerClass::REGULAR;
@@ -100,47 +95,48 @@ struct Arguments {
 
 #[derive(Debug, Clone, Subcommand)]
 enum Commands {
-    #[command(about = "Create a Tabsdata profile based on the product defaults")]
-    Profile(ProfileArguments),
-
+    /*
     #[command(about = "Create a Tabsdata settings based on the product defaults")]
     Settings(SettingsArguments),
+     */
+
+    /*
+    #[command(about = "Create a Tabsdata profile based on the product defaults")]
+    Profile(ProfileArguments),
+     */
+    #[command(about = "Create a Tabsdata instance")]
+    Create(CreateArguments),
 
     #[command(about = "Upgrade a Tabsdata instance")]
     Upgrade(UpgradeArguments),
 
-    #[command(
-        name = "clean-cache",
-        about = "Clean dependencies cache from pip and uv"
-    )]
-    CleanCache(CleanCacheArguments),
-
-    #[command(name = "clean-envs", about = "Clean tabsdata internal environments")]
-    CleanEnvs(CleanEnvsArguments),
-
-    #[command(about = "Create a Tabsdata instance (with optional additional arguments)")]
-    Create(CreateArguments),
-
     #[command(about = "Delete a Tabsdata instance")]
     Delete(DeleteArguments),
 
-    #[command(about = "Start a Tabsdata instance (with optional additional arguments)")]
+    #[command(about = "Start a Tabsdata instance")]
     Start(StartArguments),
 
-    #[command(about = "Restart (stopping gracefully) a Tabsdata instance")]
+    #[command(about = "Restart a Tabsdata instance, stopping gracefully")]
     Restart(RestartArguments),
 
-    #[command(about = "Stop (graceful) a Tabsdata instance")]
+    #[command(about = "Stop a Tabsdata instance, gracefully")]
     Stop(StopArguments),
 
-    #[command(about = "Get the status of a Tabsdata instance")]
+    #[command(about = "Show the status of a Tabsdata instance")]
     Status(ControlArguments),
 
     #[command(about = "Tail the logs of a Tabsdata instance")]
     Log(ControlArguments),
 
+    #[command(
+        name = "clean",
+        about = "Clean Tabsdata internal Python virtual environments & pip and uv cache"
+    )]
+    Clean(CleanArguments),
+    /*
     #[command(about = "Find Tabsdata instances in the system")]
     Instances,
+     */
 }
 
 #[derive(Debug, Clone, Getters, Args)]
@@ -217,11 +213,7 @@ struct UpgradeArguments {
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
-struct CleanCacheArguments {}
-
-#[derive(Debug, Clone, Getters, Args)]
-#[getset(get = "pub")]
-struct CleanEnvsArguments {}
+struct CleanArguments {}
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
@@ -296,6 +288,7 @@ struct StartArguments {
     )]
     instance: Option<PathBuf>,
 
+    /*
     /// Folder containing the instance's profile.
     #[arg(
         long,
@@ -306,7 +299,7 @@ struct StartArguments {
                     The default Tabsdata profile will we used if unspecified."
     )]
     profile: Option<PathBuf>,
-
+     */
     /// Additional arguments to pass to the root supervisor and all its workers.
     #[arg(
         trailing_var_arg = true,
@@ -353,23 +346,21 @@ impl TabsDataCli {
     async fn run(&self) {
         let arguments = Arguments::parse();
         match arguments.command {
-            Commands::Profile(arguments) => {
-                command_profile(arguments);
-            }
+            /*
             Commands::Settings(arguments) => {
                 command_settings(arguments);
             }
-            Commands::Upgrade(arguments) => {
-                command_upgrade(arguments);
+             */
+            /*
+            Commands::Profile(arguments) => {
+                command_profile(arguments);
             }
-            Commands::CleanCache(arguments) => {
-                command_clean_cache(arguments);
-            }
-            Commands::CleanEnvs(arguments) => {
-                command_clean_envs(arguments);
-            }
+             */
             Commands::Create(arguments) => {
                 command_create(arguments);
+            }
+            Commands::Upgrade(arguments) => {
+                command_upgrade(arguments);
             }
             Commands::Delete(arguments) => {
                 command_delete(arguments);
@@ -389,34 +380,18 @@ impl TabsDataCli {
             Commands::Log(arguments) => {
                 command_log(arguments).await;
             }
-            Commands::Instances => {
-                command_instances();
-            }
+            Commands::Clean(arguments) => {
+                command_clean(arguments);
+            } /*
+              Commands::Instances => {
+                  command_instances();
+              }
+               */
         }
     }
 }
 
-fn command_profile(arguments: ProfileArguments) {
-    match extract_profile(arguments.folder().join(arguments.name()), true) {
-        Ok(_) => {
-            info!(
-                "Tabsdata profile '{}' at '{:?}' created successfully",
-                arguments.folder().display(),
-                arguments.name()
-            );
-        }
-        Err(e) => {
-            error!(
-                "Failed to create Tabsdata profile '{}' at '{:?}': {}",
-                arguments.folder().display(),
-                arguments.name(),
-                e
-            );
-            exit(GeneralError.code())
-        }
-    };
-}
-
+/*
 fn command_settings(arguments: SettingsArguments) {
     match extract_default_settings(arguments.instance().clone(), arguments.folder().clone()) {
         Ok(settings) => {
@@ -442,428 +417,30 @@ fn command_settings(arguments: SettingsArguments) {
         }
     };
 }
+ */
 
-fn command_upgrade(arguments: UpgradeArguments) {
-    let supervisor_instance = get_instance_path_for_instance(&arguments.instance.instance);
-    let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
-
-    let supervisor_repository =
-        get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
-    let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
-
-    let supervisor_database = supervisor_repository_absolute
-        .clone()
-        .join(DATABASE_FOLDER)
-        .join(DATABASE_FILE);
-    let supervisor_database_absolute = to_absolute(&supervisor_database.clone()).unwrap();
-    let supervisor_database_url = Url::from_file_path(supervisor_database_absolute.clone())
-        .expect("Failed to convert database file path to file:// URL");
-
-    let supervisor_storage = supervisor_repository_absolute.clone().join(STORAGE_FOLDER);
-    let supervisor_storage_absolute = to_absolute(&supervisor_storage.clone()).unwrap();
-    let supervisor_storage_url = Url::from_file_path(supervisor_storage_absolute.clone())
-        .expect("Failed to convert storage folder path to file:// URL");
-
-    let supervisor_workspace = get_workspace_path_for_instance(arguments.instance.instance());
-    let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
-    let supervisor_tracker = WorkerTracker::new(supervisor_work.clone());
-
-    match supervisor_tracker.check_worker_status() {
-        WorkerStatus::Running { pid } => {
-            error!(
-                "Tabsdata instance '{}' is running with pid {}. You need to stop it before upgrading",
-                supervisor_instance_absolute.clone().display(),
-                pid,
+/*
+fn command_profile(arguments: ProfileArguments) {
+    match extract_profile(arguments.folder().join(arguments.name()), true) {
+        Ok(_) => {
+            info!(
+                "Tabsdata profile '{}' at '{:?}' created successfully",
+                arguments.folder().display(),
+                arguments.name()
             );
-            exit(GeneralError.code());
         }
-        _ => {
-            if !needs_upgrade(supervisor_instance_absolute.clone()) {
-                info!(
-                    "The instance '{}' is already up to date. No need to upgrade.",
-                    supervisor_instance_absolute.clone().display()
-                );
-            } else {
-                set_log_level(Level::ERROR);
-                match upgrade(&supervisor_instance_absolute, true) {
-                    Ok(_) => {
-                        set_log_level(Level::INFO);
-                        info!(
-                            "Instance '{}' successfully upgraded!",
-                            supervisor_instance_absolute.display(),
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to upgrade instance '{}': {}",
-                            supervisor_instance_absolute.display(),
-                            e
-                        );
-                        exit(GeneralError.code());
-                    }
-                }
-            }
-
-            let apiserver = name_program(&PathBuf::from(APISERVER));
-            let mut binary = Command::new(apiserver);
-            set_log_level(Level::ERROR);
-            let command = binary
-                .arg(APISERVER_ARGUMENT_DATABASE_URL)
-                .arg(supervisor_database_url.clone().to_string())
-                .arg(APISERVER_ARGUMENT_STORAGE_URL)
-                .arg(supervisor_storage_url.clone().to_string())
-                .arg(APISERVER_ARGUMENT_DB_SCHEMA)
-                .arg(DbSchema::Upgrade.to_string());
-            let result = command.output();
-            match result {
-                Ok(output) => {
-                    if !output.status.success() {
-                        if let Some(code) = output.status.code() {
-                            if code == NoAction.code() {
-                                set_log_level(Level::INFO);
-                                info!(
-                                    "The database '{}' is already up to date. No need to upgrade.",
-                                    supervisor_database_absolute.clone().display()
-                                );
-                                exit(Success.code())
-                            }
-                        }
-                        show_std_out_and_err(&output);
-                        error!(
-                            "Bad exit code upgrading database '{}': {}",
-                            supervisor_database_absolute.clone().display(),
-                            output.status
-                        );
-                        exit(GeneralError.code())
-                    };
-                    set_log_level(Level::INFO);
-                    info!(
-                        "Database '{}' successfully upgraded!",
-                        supervisor_database_absolute.clone().display()
-                    );
-                }
-                Err(error) => {
-                    error!(
-                        "Error upgrading database '{}' structure: {}",
-                        supervisor_database_absolute.clone().display(),
-                        error
-                    );
-                    exit(GeneralError.code())
-                }
-            }
+        Err(e) => {
+            error!(
+                "Failed to create Tabsdata profile '{}' at '{:?}': {}",
+                arguments.folder().display(),
+                arguments.name(),
+                e
+            );
+            exit(GeneralError.code())
         }
     };
-    exit(Success.code());
 }
-
-fn command_clean_cache(_: CleanCacheArguments) {
-    let mut ok: bool = true;
-    let mut binary = Command::new("uv");
-    let command = binary.arg("cache").arg("clean");
-    let result = command.output();
-    match result {
-        Ok(output) => {
-            show_std_out_and_err(&output);
-        }
-        Err(_) => {
-            ok = false;
-            error!("Error purging uv cache");
-        }
-    }
-    let mut binary = Command::new("pip");
-    let command = binary.arg("cache").arg("purge");
-    let result = command.output();
-    match result {
-        Ok(output) => {
-            show_std_out_and_err(&output);
-        }
-        Err(_) => {
-            ok = false;
-            error!("Error purging pip cache");
-        }
-    }
-    if ok {
-        exit(Success.code());
-    }
-    exit(GeneralError.code())
-}
-
-fn command_clean_envs(_: CleanEnvsArguments) {
-    eprintln!("Make sure there is no running instance before deleting the tabsdata environments.");
-    eprintln!("Removing environments is a task that cannot be undone. Please, confirm with 'yes' to continue...");
-    io::stdout().flush().unwrap();
-    let mut confirmation = String::new();
-    io::stdin().read_line(&mut confirmation).unwrap();
-    if confirmation.trim() != "yes" {
-        eprintln!("Cancelling operation");
-        exit(NoAction.code());
-    }
-
-    set_log_level(Level::INFO);
-    info!("Removing all tabsdata environments...");
-
-    let available_environments_folder = get_home_dir()
-        .join(TABSDATA_HOME_DIR)
-        .join(AVAILABLE_ENVIRONMENTS_FOLDER);
-    if (available_environments_folder).exists() {
-        info!(
-            "Deleting folder '{}'...",
-            available_environments_folder.display()
-        );
-        fs::remove_dir_all(&available_environments_folder).unwrap_or_else(|e| {
-            error!(
-                "Unexpected error deleting folder '{}': {}",
-                available_environments_folder.display(),
-                e
-            );
-            exit(GeneralError.code())
-        });
-        info!(
-            "Folder '{}' deleted successfully!",
-            available_environments_folder.display()
-        );
-    } else {
-        info!(
-            "Folder '{}' does not exist; skipping.",
-            available_environments_folder.display()
-        );
-    }
-
-    let environments_folder = get_home_dir()
-        .join(TABSDATA_HOME_DIR)
-        .join(ENVIRONMENTS_FOLDER);
-    if (environments_folder).exists() {
-        info!("Deleting folder '{}'...", environments_folder.display());
-        fs::remove_dir_all(&environments_folder).unwrap_or_else(|e| {
-            error!(
-                "Unexpected error deleting folder '{}': {}",
-                environments_folder.display(),
-                e
-            );
-            exit(GeneralError.code())
-        });
-        info!(
-            "Folder '{}' deleted successfully!",
-            environments_folder.display()
-        );
-    } else {
-        info!(
-            "Folder '{}' does not exist; skipping.",
-            environments_folder.display()
-        );
-    }
-
-    info!("All tabsdata environments removed successfully!");
-    exit(Success.code());
-}
-
-fn create_instance_folders(
-    supervisor_instance: PathBuf,
-    supervisor_repository: PathBuf,
-    supervisor_workspace: PathBuf,
-    supervisor_config: PathBuf,
-    supervisor_work: PathBuf,
-) {
-    match create_dir_all(supervisor_instance.clone()) {
-        Ok(_) => (),
-        Err(e) => {
-            error!(
-                "Failed to create instance folder '{}' for Tabsdata instance: {}",
-                supervisor_instance.clone().display(),
-                e
-            );
-            exit(GeneralError.code());
-        }
-    }
-    match create_dir_all(supervisor_repository.clone()) {
-        Ok(_) => (),
-        Err(e) => {
-            error!(
-                "Failed to create repository folder '{}' for Tabsdata instance: {}",
-                supervisor_repository.clone().display(),
-                e
-            );
-            exit(GeneralError.code());
-        }
-    }
-    match create_dir_all(supervisor_workspace.clone()) {
-        Ok(_) => (),
-        Err(e) => {
-            error!(
-                "Failed to create workspace folder '{}' for Tabsdata instance: {}",
-                supervisor_workspace.clone().display(),
-                e
-            );
-            exit(GeneralError.code());
-        }
-    }
-    match create_dir_all(supervisor_config.clone()) {
-        Ok(_) => (),
-        Err(e) => {
-            error!(
-                "Failed to create config folder '{}' for Tabsdata instance: {}",
-                supervisor_config.clone().display(),
-                e
-            );
-            exit(GeneralError.code());
-        }
-    }
-    match create_dir_all(supervisor_work.clone()) {
-        Ok(_) => (),
-        Err(e) => {
-            error!(
-                "Failed to create work folder '{}' for Tabsdata instance: {}",
-                supervisor_work.clone().display(),
-                e
-            );
-            exit(GeneralError.code());
-        }
-    }
-    match set_current_dir(supervisor_work.clone()) {
-        Ok(_) => (),
-        Err(e) => {
-            error!(
-                "Failed to set current folder '{}' for the Tabsdata instance: {}",
-                supervisor_config.clone().display(),
-                e
-            );
-            exit(GeneralError.code());
-        }
-    }
-}
-
-fn forward_parameters(
-    arguments: Vec<String>,
-    profile: Option<PathBuf>,
-    instance: &Path,
-    repository: &Path,
-    workspace: &Path,
-) -> Vec<String> {
-    let mut arguments_map = parse_extra_arguments(arguments.clone()).unwrap();
-    let common_extra_arguments = arguments_map
-        .entry(TD_ARGUMENT_KEY.to_string())
-        .or_default();
-    forward_parameter(profile.clone(), Profile, common_extra_arguments);
-    forward_parameter(
-        Some(instance.to_path_buf()),
-        Instance,
-        common_extra_arguments,
-    );
-    forward_parameter(
-        Some(repository.to_path_buf()),
-        Repository,
-        common_extra_arguments,
-    );
-    forward_parameter(
-        Some(workspace.to_path_buf()),
-        Workspace,
-        common_extra_arguments,
-    );
-
-    let forward_arguments = &mut Vec::new();
-
-    forward_argument(
-        Some(to_absolute(&instance.to_path_buf()).unwrap()),
-        Instance,
-        forward_arguments,
-    );
-    forward_argument(
-        Some(to_absolute(&repository.to_path_buf()).unwrap()),
-        Repository,
-        forward_arguments,
-    );
-    forward_argument(
-        Some(to_absolute(&workspace.to_path_buf()).unwrap()),
-        Workspace,
-        forward_arguments,
-    );
-    forward_argument(profile.clone(), Profile, forward_arguments);
-    forward_arguments.push(TRAILING_ARGUMENTS_PREFIX.to_string());
-    for (key, value) in arguments_map {
-        forward_arguments.push(ARGUMENT_PREFIX.to_string());
-        forward_arguments.push(key.clone());
-        for (sub_key, sub_value) in value {
-            forward_arguments.push(format!("--{}", sub_key));
-            forward_arguments.push(sub_value);
-        }
-    }
-    forward_arguments.clone()
-}
-
-fn forward_parameter(
-    value: Option<PathBuf>,
-    key: InheritedArgumentKey,
-    map: &mut HashMap<String, String>,
-) {
-    if let Some(path) = value {
-        let path_str = path.as_os_str().to_string_lossy();
-        let trimmed_path = path_str.trim();
-        if path_str != trimmed_path {
-            error!(
-                "Paths cannot contain leading or trailing spaces: '{}'",
-                path_str
-            );
-            exit(GeneralError.code())
-        }
-        if !trimmed_path.is_empty() {
-            map.insert(
-                key.as_ref().to_string(),
-                to_absolute(&path).unwrap().to_string_lossy().to_string(),
-            );
-        }
-    }
-}
-
-fn forward_argument(value: Option<PathBuf>, key: InheritedArgumentKey, vector: &mut Vec<String>) {
-    if let Some(path) = value {
-        let path_str = path.as_os_str().to_string_lossy();
-        let trimmed_path = path_str.trim();
-        if path_str != trimmed_path {
-            error!(
-                "Paths cannot contain leading or trailing spaces: '{}'",
-                path_str
-            );
-            exit(GeneralError.code())
-        }
-        if !trimmed_path.is_empty() {
-            vector.push(format!("--{}", key.as_ref()));
-            vector.push(
-                to_absolute(&path)
-                    .unwrap()
-                    .as_os_str()
-                    .to_string_lossy()
-                    .to_string(),
-            );
-        }
-    }
-}
-
-fn build_instance_describer(
-    forwarded_parameters: Vec<String>,
-    supervisor_config: PathBuf,
-    supervisor_work: PathBuf,
-) -> Result<TabsDataWorkerDescriber, DescriberError> {
-    let describer = TabsDataWorkerDescriberBuilder::default()
-        .class(REGULAR)
-        .name(SUPERVISOR.to_string())
-        .location(RELATIVE)
-        .program(PathBuf::from(SUPERVISOR))
-        .set_state(None)
-        .get_states(vec![])
-        .arguments(forwarded_parameters)
-        .config(supervisor_config.clone())
-        .work(supervisor_work.clone())
-        .queue(supervisor_work.clone().join(MSG_FOLDER))
-        .build();
-    if describer.is_err() {
-        error!(
-            "Failed to create describer for the Tabsdata instance: {:?}",
-            describer.err()
-        );
-        exit(GeneralError.code());
-    };
-    describer
-}
+ */
 
 fn command_create(arguments: CreateArguments) {
     let supervisor_instance = get_instance_path_for_instance(arguments.instance());
@@ -1014,6 +591,119 @@ fn create_database(instance: &Option<PathBuf>) {
     }
 }
 
+fn command_upgrade(arguments: UpgradeArguments) {
+    let supervisor_instance = get_instance_path_for_instance(&arguments.instance.instance);
+    let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
+
+    let supervisor_repository =
+        get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
+    let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
+
+    let supervisor_database = supervisor_repository_absolute
+        .clone()
+        .join(DATABASE_FOLDER)
+        .join(DATABASE_FILE);
+    let supervisor_database_absolute = to_absolute(&supervisor_database.clone()).unwrap();
+    let supervisor_database_url = Url::from_file_path(supervisor_database_absolute.clone())
+        .expect("Failed to convert database file path to file:// URL");
+
+    let supervisor_storage = supervisor_repository_absolute.clone().join(STORAGE_FOLDER);
+    let supervisor_storage_absolute = to_absolute(&supervisor_storage.clone()).unwrap();
+    let supervisor_storage_url = Url::from_file_path(supervisor_storage_absolute.clone())
+        .expect("Failed to convert storage folder path to file:// URL");
+
+    let supervisor_workspace = get_workspace_path_for_instance(arguments.instance.instance());
+    let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
+    let supervisor_tracker = WorkerTracker::new(supervisor_work.clone());
+
+    match supervisor_tracker.check_worker_status() {
+        WorkerStatus::Running { pid } => {
+            error!(
+                "Tabsdata instance '{}' is running with pid {}. You need to stop it before upgrading",
+                supervisor_instance_absolute.clone().display(),
+                pid,
+            );
+            exit(GeneralError.code());
+        }
+        _ => {
+            if !needs_upgrade(supervisor_instance_absolute.clone()) {
+                info!(
+                    "The instance '{}' is already up to date. No need to upgrade.",
+                    supervisor_instance_absolute.clone().display()
+                );
+            } else {
+                set_log_level(Level::ERROR);
+                match upgrade(&supervisor_instance_absolute, true) {
+                    Ok(_) => {
+                        set_log_level(Level::INFO);
+                        info!(
+                            "Instance '{}' successfully upgraded!",
+                            supervisor_instance_absolute.display(),
+                        );
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to upgrade instance '{}': {}",
+                            supervisor_instance_absolute.display(),
+                            e
+                        );
+                        exit(GeneralError.code());
+                    }
+                }
+            }
+
+            let apiserver = name_program(&PathBuf::from(APISERVER));
+            let mut binary = Command::new(apiserver);
+            set_log_level(Level::ERROR);
+            let command = binary
+                .arg(APISERVER_ARGUMENT_DATABASE_URL)
+                .arg(supervisor_database_url.clone().to_string())
+                .arg(APISERVER_ARGUMENT_STORAGE_URL)
+                .arg(supervisor_storage_url.clone().to_string())
+                .arg(APISERVER_ARGUMENT_DB_SCHEMA)
+                .arg(DbSchema::Upgrade.to_string());
+            let result = command.output();
+            match result {
+                Ok(output) => {
+                    if !output.status.success() {
+                        if let Some(code) = output.status.code() {
+                            if code == NoAction.code() {
+                                set_log_level(Level::INFO);
+                                info!(
+                                    "The database '{}' is already up to date. No need to upgrade.",
+                                    supervisor_database_absolute.clone().display()
+                                );
+                                exit(Success.code())
+                            }
+                        }
+                        show_std_out_and_err(&output);
+                        error!(
+                            "Bad exit code upgrading database '{}': {}",
+                            supervisor_database_absolute.clone().display(),
+                            output.status
+                        );
+                        exit(GeneralError.code())
+                    };
+                    set_log_level(Level::INFO);
+                    info!(
+                        "Database '{}' successfully upgraded!",
+                        supervisor_database_absolute.clone().display()
+                    );
+                }
+                Err(error) => {
+                    error!(
+                        "Error upgrading database '{}' structure: {}",
+                        supervisor_database_absolute.clone().display(),
+                        error
+                    );
+                    exit(GeneralError.code())
+                }
+            }
+        }
+    };
+    exit(Success.code());
+}
+
 fn command_delete(arguments: DeleteArguments) {
     let supervisor_instance = get_instance_path_for_instance(&arguments.instance.instance);
     let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
@@ -1103,7 +793,7 @@ fn command_start(arguments: StartArguments) {
 
     let forwarded_parameters = forward_parameters(
         arguments.arguments.clone(),
-        arguments.profile.clone(),
+        None,
         &supervisor_instance_absolute,
         &supervisor_repository_absolute,
         &supervisor_workspace_absolute,
@@ -1135,7 +825,7 @@ fn command_start(arguments: StartArguments) {
                     supervisor_config_absolute.clone(),
                     supervisor_work_absolute.clone(),
                 );
-                create_instance(arguments.instance(), arguments.profile());
+                create_instance(arguments.instance(), &None);
                 create_database(arguments.instance());
             }
 
@@ -1355,6 +1045,341 @@ async fn command_log(arguments: ControlArguments) {
     }
 }
 
+fn needs_upgrade(instance: PathBuf) -> bool {
+    if !instance.exists() {
+        return false;
+    }
+    let source = match get_source_version(&instance) {
+        Ok(version) => version,
+        Err(err) => {
+            error!("Failed to get source version: {}", err);
+            exit(GeneralError.code());
+        }
+    };
+    let target = match get_target_version() {
+        Ok(version) => version,
+        Err(err) => {
+            error!("Failed to get target version: {}", err);
+            exit(GeneralError.code());
+        }
+    };
+    source < target
+}
+
+fn create_instance_folders(
+    supervisor_instance: PathBuf,
+    supervisor_repository: PathBuf,
+    supervisor_workspace: PathBuf,
+    supervisor_config: PathBuf,
+    supervisor_work: PathBuf,
+) {
+    match create_dir_all(supervisor_instance.clone()) {
+        Ok(_) => (),
+        Err(e) => {
+            error!(
+                "Failed to create instance folder '{}' for Tabsdata instance: {}",
+                supervisor_instance.clone().display(),
+                e
+            );
+            exit(GeneralError.code());
+        }
+    }
+    match create_dir_all(supervisor_repository.clone()) {
+        Ok(_) => (),
+        Err(e) => {
+            error!(
+                "Failed to create repository folder '{}' for Tabsdata instance: {}",
+                supervisor_repository.clone().display(),
+                e
+            );
+            exit(GeneralError.code());
+        }
+    }
+    match create_dir_all(supervisor_workspace.clone()) {
+        Ok(_) => (),
+        Err(e) => {
+            error!(
+                "Failed to create workspace folder '{}' for Tabsdata instance: {}",
+                supervisor_workspace.clone().display(),
+                e
+            );
+            exit(GeneralError.code());
+        }
+    }
+    match create_dir_all(supervisor_config.clone()) {
+        Ok(_) => (),
+        Err(e) => {
+            error!(
+                "Failed to create config folder '{}' for Tabsdata instance: {}",
+                supervisor_config.clone().display(),
+                e
+            );
+            exit(GeneralError.code());
+        }
+    }
+    match create_dir_all(supervisor_work.clone()) {
+        Ok(_) => (),
+        Err(e) => {
+            error!(
+                "Failed to create work folder '{}' for Tabsdata instance: {}",
+                supervisor_work.clone().display(),
+                e
+            );
+            exit(GeneralError.code());
+        }
+    }
+    match set_current_dir(supervisor_work.clone()) {
+        Ok(_) => (),
+        Err(e) => {
+            error!(
+                "Failed to set current folder '{}' for the Tabsdata instance: {}",
+                supervisor_config.clone().display(),
+                e
+            );
+            exit(GeneralError.code());
+        }
+    }
+}
+
+fn forward_parameters(
+    arguments: Vec<String>,
+    profile: Option<PathBuf>,
+    instance: &Path,
+    repository: &Path,
+    workspace: &Path,
+) -> Vec<String> {
+    let mut arguments_map = parse_extra_arguments(arguments.clone()).unwrap();
+    let common_extra_arguments = arguments_map
+        .entry(TD_ARGUMENT_KEY.to_string())
+        .or_default();
+    forward_parameter(profile.clone(), Profile, common_extra_arguments);
+    forward_parameter(
+        Some(instance.to_path_buf()),
+        Instance,
+        common_extra_arguments,
+    );
+    forward_parameter(
+        Some(repository.to_path_buf()),
+        Repository,
+        common_extra_arguments,
+    );
+    forward_parameter(
+        Some(workspace.to_path_buf()),
+        Workspace,
+        common_extra_arguments,
+    );
+
+    let forward_arguments = &mut Vec::new();
+
+    forward_argument(
+        Some(to_absolute(&instance.to_path_buf()).unwrap()),
+        Instance,
+        forward_arguments,
+    );
+    forward_argument(
+        Some(to_absolute(&repository.to_path_buf()).unwrap()),
+        Repository,
+        forward_arguments,
+    );
+    forward_argument(
+        Some(to_absolute(&workspace.to_path_buf()).unwrap()),
+        Workspace,
+        forward_arguments,
+    );
+    forward_argument(profile.clone(), Profile, forward_arguments);
+    forward_arguments.push(TRAILING_ARGUMENTS_PREFIX.to_string());
+    for (key, value) in arguments_map {
+        forward_arguments.push(ARGUMENT_PREFIX.to_string());
+        forward_arguments.push(key.clone());
+        for (sub_key, sub_value) in value {
+            forward_arguments.push(format!("--{}", sub_key));
+            forward_arguments.push(sub_value);
+        }
+    }
+    forward_arguments.clone()
+}
+
+fn forward_parameter(
+    value: Option<PathBuf>,
+    key: InheritedArgumentKey,
+    map: &mut HashMap<String, String>,
+) {
+    if let Some(path) = value {
+        let path_str = path.as_os_str().to_string_lossy();
+        let trimmed_path = path_str.trim();
+        if path_str != trimmed_path {
+            error!(
+                "Paths cannot contain leading or trailing spaces: '{}'",
+                path_str
+            );
+            exit(GeneralError.code())
+        }
+        if !trimmed_path.is_empty() {
+            map.insert(
+                key.as_ref().to_string(),
+                to_absolute(&path).unwrap().to_string_lossy().to_string(),
+            );
+        }
+    }
+}
+
+fn forward_argument(value: Option<PathBuf>, key: InheritedArgumentKey, vector: &mut Vec<String>) {
+    if let Some(path) = value {
+        let path_str = path.as_os_str().to_string_lossy();
+        let trimmed_path = path_str.trim();
+        if path_str != trimmed_path {
+            error!(
+                "Paths cannot contain leading or trailing spaces: '{}'",
+                path_str
+            );
+            exit(GeneralError.code())
+        }
+        if !trimmed_path.is_empty() {
+            vector.push(format!("--{}", key.as_ref()));
+            vector.push(
+                to_absolute(&path)
+                    .unwrap()
+                    .as_os_str()
+                    .to_string_lossy()
+                    .to_string(),
+            );
+        }
+    }
+}
+
+fn build_instance_describer(
+    forwarded_parameters: Vec<String>,
+    supervisor_config: PathBuf,
+    supervisor_work: PathBuf,
+) -> Result<TabsDataWorkerDescriber, DescriberError> {
+    let describer = TabsDataWorkerDescriberBuilder::default()
+        .class(REGULAR)
+        .name(SUPERVISOR.to_string())
+        .location(RELATIVE)
+        .program(PathBuf::from(SUPERVISOR))
+        .set_state(None)
+        .get_states(vec![])
+        .arguments(forwarded_parameters)
+        .config(supervisor_config.clone())
+        .work(supervisor_work.clone())
+        .queue(supervisor_work.clone().join(MSG_FOLDER))
+        .build();
+    if describer.is_err() {
+        error!(
+            "Failed to create describer for the Tabsdata instance: {:?}",
+            describer.err()
+        );
+        exit(GeneralError.code());
+    };
+    describer
+}
+
+fn command_clean(arguments: CleanArguments) {
+    clean_envs(arguments.clone());
+    clean_cache(arguments.clone());
+    exit(Success.code());
+}
+
+fn clean_envs(_: CleanArguments) {
+    eprintln!("Make sure there is no running instance before cleaning the Tabsdata internal Python virtual environments & pip and uv cache");
+    eprintln!("Removing Tabsdata internal Python virtual environments is a task that cannot be undone. Please, confirm with 'yes' to continue...");
+    io::stdout().flush().unwrap();
+    let mut confirmation = String::new();
+    io::stdin().read_line(&mut confirmation).unwrap();
+    if confirmation.trim() != "yes" {
+        eprintln!("Cancelling operation");
+        return;
+    }
+
+    set_log_level(Level::INFO);
+    info!("Removing all Tabsdata internal Python virtual environments...");
+
+    let available_environments_folder = get_home_dir()
+        .join(TABSDATA_HOME_DIR)
+        .join(AVAILABLE_ENVIRONMENTS_FOLDER);
+    if available_environments_folder.exists() {
+        info!(
+            "Deleting folder '{}'...",
+            available_environments_folder.display()
+        );
+        fs::remove_dir_all(&available_environments_folder).unwrap_or_else(|e| {
+            error!(
+                "Unexpected error deleting folder '{}': {}",
+                available_environments_folder.display(),
+                e
+            );
+            exit(GeneralError.code())
+        });
+        info!(
+            "Folder '{}' deleted successfully!",
+            available_environments_folder.display()
+        );
+    } else {
+        info!(
+            "Folder '{}' does not exist; skipping.",
+            available_environments_folder.display()
+        );
+    }
+
+    let environments_folder = get_home_dir()
+        .join(TABSDATA_HOME_DIR)
+        .join(ENVIRONMENTS_FOLDER);
+    if environments_folder.exists() {
+        info!("Deleting folder '{}'...", environments_folder.display());
+        fs::remove_dir_all(&environments_folder).unwrap_or_else(|e| {
+            error!(
+                "Unexpected error deleting folder '{}': {}",
+                environments_folder.display(),
+                e
+            );
+            exit(GeneralError.code())
+        });
+        info!(
+            "Folder '{}' deleted successfully!",
+            environments_folder.display()
+        );
+    } else {
+        info!(
+            "Folder '{}' does not exist; skipping.",
+            environments_folder.display()
+        );
+    }
+
+    info!("All Tabsdata internal Python virtual environments removed successfully!");
+}
+
+fn clean_cache(_: CleanArguments) {
+    let mut ok: bool = true;
+    let mut binary = Command::new("uv");
+    let command = binary.arg("cache").arg("clean");
+    let result = command.output();
+    match result {
+        Ok(output) => {
+            show_std_out_and_err(&output);
+        }
+        Err(_) => {
+            ok = false;
+            error!("Error purging uv cache");
+        }
+    }
+    let mut binary = Command::new("pip");
+    let command = binary.arg("cache").arg("purge");
+    let result = command.output();
+    match result {
+        Ok(output) => {
+            show_std_out_and_err(&output);
+        }
+        Err(_) => {
+            ok = false;
+            error!("Error purging pip cache");
+        }
+    }
+    if !ok {
+        exit(GeneralError.code())
+    }
+}
+
+/*
 fn command_instances() {
     let start_time = Instant::now();
     let instances = Arc::new(Mutex::new(Vec::new()));
@@ -1420,27 +1445,7 @@ fn command_instances() {
     }
     info!("Search completed in {:.2?} seconds", start_time.elapsed());
 }
-
-fn needs_upgrade(instance: PathBuf) -> bool {
-    if !instance.exists() {
-        return false;
-    }
-    let source = match get_source_version(&instance) {
-        Ok(version) => version,
-        Err(err) => {
-            error!("Failed to get source version: {}", err);
-            exit(GeneralError.code());
-        }
-    };
-    let target = match get_target_version() {
-        Ok(version) => version,
-        Err(err) => {
-            error!("Failed to get target version: {}", err);
-            exit(GeneralError.code());
-        }
-    };
-    source < target
-}
+ */
 
 #[derive(Tabled)]
 struct WorkerRow {
@@ -1492,11 +1497,13 @@ impl WorkerRow {
     }
 }
 
+/*
 #[derive(Tabled)]
 struct InstanceRow {
     #[tabled(rename = "Instance")]
     path: String,
 }
+ */
 
 #[cfg(not(any(test, feature = "mock-env")))]
 pub fn show_mode() {
