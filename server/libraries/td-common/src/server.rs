@@ -231,10 +231,12 @@ where
 
 #[derive(Debug, Clone, Eq, PartialEq, Getters, Setters, Builder, Serialize, Deserialize)]
 #[getset(get = "pub", set = "pub")]
+#[serde(tag = "")]
 pub struct ExceptionMessagePayload<T = Value>
 where
     T: Clone,
 {
+    #[serde(skip)]
     _type: PhantomData<T>,
     kind: Option<String>,
     message: Option<String>,
