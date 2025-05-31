@@ -13,7 +13,10 @@ use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::server::QueueError::{
     MessageAlreadyExisting, MessageNonExisting, QueuePlannedCreationError, QueueRootCreationError,
 };
-use crate::server::SupervisorMessagePayload::SupervisorRequestMessagePayload;
+use crate::server::SupervisorMessagePayload::{
+    SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
+    SupervisorResponseMessagePayload,
+};
 use crate::status::ExitStatus;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -26,7 +29,7 @@ use pico_args::Arguments;
 use regex::Regex;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
+use serde_yaml::{Mapping, Value};
 use std::collections::HashMap;
 use std::fs::{create_dir_all, read_dir, remove_file, rename, File};
 use std::io;
@@ -333,7 +336,7 @@ impl ResponseMessagePayload {
 
 impl<T> Default for ResponseMessagePayload<T>
 where
-    T: Clone + Default,
+    T: Clone,
 {
     fn default() -> Self {
         Self {
@@ -430,6 +433,27 @@ where
     type Error = Error;
 
     fn try_from(parameters: (PathBuf, PayloadType)) -> Result<Self, Self::Error> {
+        fn strip_tags(value: Value) -> Value {
+            match value {
+                Value::Tagged(tagged) => {
+                    let tag = tagged.tag.to_string().trim_start_matches('!').to_string();
+                    let inner = strip_tags(tagged.value);
+                    let mut map = Mapping::new();
+                    map.insert(Value::String(tag), inner);
+                    Value::Mapping(map)
+                }
+                Value::Sequence(seq) => Value::Sequence(seq.into_iter().map(strip_tags).collect()),
+                Value::Mapping(mapping) => {
+                    let map = mapping
+                        .into_iter()
+                        .map(|(k, v)| (strip_tags(k), strip_tags(v)))
+                        .collect::<Mapping>();
+                    Value::Mapping(map)
+                }
+                other => other,
+            }
+        }
+
         let (message, payload_type) = parameters;
         let file = File::open(&message)?;
         let payload = match payload_type {
@@ -444,14 +468,24 @@ where
                 SupervisorRequestMessagePayload(request_payload)
             }
             PayloadType::Response => {
-                let response_payload: ResponseMessagePayload<T> = serde_yaml::from_reader(&file)
+                let response_context_value: Value =
+                    serde_yaml::from_reader(&file).map_err(|e| {
+                        Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("Error parsing response message {:?}: {}", message, e),
+                        )
+                    })?;
+                let response_context_value_cleaned = strip_tags(response_context_value);
+                let response_context: T = serde_yaml::from_value(response_context_value_cleaned)
                     .map_err(|e| {
                         Error::new(
                             io::ErrorKind::InvalidData,
                             format!("Error deserializing response message {:?}: {}", message, e),
                         )
                     })?;
-                SupervisorMessagePayload::SupervisorResponseMessagePayload(response_payload)
+                let mut response_payload = ResponseMessagePayload::default();
+                response_payload.set_context(Some(response_context));
+                SupervisorResponseMessagePayload(response_payload)
             }
             PayloadType::Exception => {
                 let exception_payload: ExceptionMessagePayload<T> = serde_yaml::from_reader(&file)
@@ -461,7 +495,7 @@ where
                             format!("Error deserializing exception message {:?}: {}", message, e),
                         )
                     })?;
-                SupervisorMessagePayload::SupervisorExceptionMessagePayload(exception_payload)
+                SupervisorExceptionMessagePayload(exception_payload)
             }
         };
         let work = if let Some(file_stem) = message.file_stem() {

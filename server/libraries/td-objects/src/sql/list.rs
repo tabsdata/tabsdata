@@ -321,11 +321,16 @@ impl OrConditions {
     }
 }
 
+/*
+Using HashSet<&Condition> creates a set of references rather than actual values.
+This results in pointer-based equality checks, which is not the desired behavior.
+Instead, we use collect into HashSet<T> by cloning the items, so that equality is based on value, not reference.
+ */
 impl PartialEq for OrConditions {
     fn eq(&self, other: &Self) -> bool {
-        let this = self.0.iter().collect::<HashSet<&Condition>>();
-        let other = other.0.iter().collect::<HashSet<&Condition>>();
-        this == other
+        let this = self.0.iter().cloned().collect::<HashSet<Condition>>();
+        let that = other.0.iter().cloned().collect::<HashSet<Condition>>();
+        this == that
     }
 }
 
@@ -348,11 +353,16 @@ impl AndConditions {
     }
 }
 
+/*
+Using HashSet<&OrCondition> creates a set of references rather than actual values.
+This results in pointer-based equality checks, which is not the desired behavior.
+Instead, we use collect into HashSet<T> by cloning the items, so that equality is based on value, not reference.
+ */
 impl PartialEq for AndConditions {
     fn eq(&self, other: &Self) -> bool {
-        let this = self.0.iter().collect::<HashSet<&OrConditions>>();
-        let other = other.0.iter().collect::<HashSet<&OrConditions>>();
-        this == other
+        let this = self.0.iter().cloned().collect::<HashSet<OrConditions>>();
+        let that = other.0.iter().cloned().collect::<HashSet<OrConditions>>();
+        this == that
     }
 }
 

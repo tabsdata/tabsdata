@@ -204,6 +204,7 @@ pub enum WrittenTableV2 {
 mod tests {
     use super::*;
     use crate::types::basic::FunctionId;
+    use crate::types::worker::FunctionOutput;
     use crate::types::worker::{EnvPrefix, FunctionInput};
     use itertools::Itertools;
     use std::collections::HashSet;
@@ -364,23 +365,25 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_output_table_serde_yaml() -> Result<(), TdError> {
-    //     let function_output = FunctionOutputV2::builder()
-    //         .output(vec![
-    //             WrittenTableV2::Data {
-    //                 table: TableName::try_from("table_1")?,
-    //             },
-    //             WrittenTableV2::NoData {
-    //                 table: TableName::try_from("table_2")?,
-    //             },
-    //         ])
-    //         .build()?;
-    //     let function_output = FunctionOutput::V2(function_output);
-    //
-    //     println!("{}", serde_yaml::to_string(&function_output).unwrap());
-    //     Ok(())
-    // }
+    #[test]
+    fn test_output_table_serde_yaml() -> Result<(), TdError> {
+        let function_output = FunctionOutputV2::builder()
+            .output(vec![
+                WrittenTableV2::Data {
+                    table: TableName::try_from("table_1")?,
+                },
+                WrittenTableV2::NoData {
+                    table: TableName::try_from("table_2")?,
+                },
+            ])
+            .build()?;
+        let function_output = FunctionOutput::V2(function_output);
+
+        println!("{}", serde_json::to_string(&function_output).unwrap());
+        println!("{}", serde_yaml::to_string(&function_output).unwrap());
+
+        Ok(())
+    }
 
     #[test]
     fn test_function_input_v1_locations() -> Result<(), TdError> {
