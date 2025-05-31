@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
@@ -330,12 +330,14 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
     Ok(new_dependency_versions)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn build_trigger_versions<Q: DerefQueries>(
     Connection(connection): Connection,
     SrvCtx(queries): SrvCtx<Q>,
     Input(existing_versions): Input<Vec<TriggerDBWithNames>>,
     Input(new_tables): Input<Option<Vec<TableNameDto>>>,
     Input(new_triggers): Input<Option<Vec<TableTriggerDto>>>,
+    Input(new_dependencies): Input<Option<Vec<TableDependencyDto>>>,
     Input(collection_in_context): Input<CollectionName>,
     Input(trigger_version_builder): Input<TriggerDBBuilder>,
 ) -> Result<Vec<TriggerDB>, TdError> {
@@ -350,12 +352,30 @@ pub async fn build_trigger_versions<Q: DerefQueries>(
         .map(|t| ((t.trigger_by_collection_id(), t.trigger_by_table_name()), t))
         .collect();
 
-    let new_triggers = new_triggers
-        .as_deref()
-        .unwrap_or(Default::default())
-        .iter()
-        .map(TableTrigger::try_from)
-        .collect::<Result<Vec<_>, _>>()?;
+    let new_triggers = if let Some(new_triggers) = new_triggers.as_deref() {
+        // function specifies triggers, we use those
+        new_triggers
+            .iter()
+            .map(TableTrigger::try_from)
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        // function does not specify triggers (different than empty triggers), then all dependencies are triggers,
+        // except those that are produced by the function itself and dedup them
+        let new_tables = new_tables.as_deref().unwrap_or_default();
+        new_dependencies
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .filter(|t| {
+                !((t.collection().is_none()
+                    || t.collection().as_deref() == Some(&*collection_in_context))
+                    && new_tables.contains(t.table()))
+            })
+            .map(TableTrigger::try_from)
+            .collect::<Result<HashSet<_>, _>>()?
+            .into_iter()
+            .collect()
+    };
 
     // Create new trigger versions
     let tables_found = if new_triggers.is_empty() {

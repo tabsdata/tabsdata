@@ -422,6 +422,15 @@ impl TableStatus {
 #[td_type::typed(composed(inner = "TableRef::<TableName>"), try_from = TableTriggerDto)]
 pub struct TableTrigger;
 
+impl TryFrom<&TableDependencyDto> for TableTrigger {
+    type Error = TdError;
+
+    fn try_from(v: &TableDependencyDto) -> Result<Self, Self::Error> {
+        let table = TableTrigger::new(TableRef::new(v.collection().clone(), v.table().try_into()?));
+        Ok(table)
+    }
+}
+
 impl TryFrom<&TriggerDBWithNames> for TableTrigger {
     type Error = TdError;
 

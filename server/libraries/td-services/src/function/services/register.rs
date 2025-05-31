@@ -439,13 +439,38 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
-    async fn test_register_trigger(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_implicit_trigger_none(db: DbPool) -> Result<(), TdError> {
+        test_register_trigger(db, None).await
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_register_implicit_trigger_some_empty(db: DbPool) -> Result<(), TdError> {
+        let test_triggers = Some(vec![]);
+        test_register_trigger(db, test_triggers).await
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_register_implicit_trigger_some(db: DbPool) -> Result<(), TdError> {
+        let test_triggers = Some(vec![
+            TableTriggerDto::try_from("table_1")?,
+            TableTriggerDto::try_from("table_2")?,
+        ]);
+        test_register_trigger(db, test_triggers).await
+    }
+
+    async fn test_register_trigger(
+        db: DbPool,
+        test_triggers: Option<Vec<TableTriggerDto>>,
+    ) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
         let dependencies = None;
         let triggers = None;
-        let tables = Some(vec![TableNameDto::try_from("foo")?]);
+        let tables = Some(vec![
+            TableNameDto::try_from("table_1")?,
+            TableNameDto::try_from("table_2")?,
+        ]);
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
@@ -482,9 +507,14 @@ mod tests {
         let _response = service.raw_oneshot(request).await?;
 
         // Actual test
-        let dependencies = None;
-        let triggers = Some(vec![TableTriggerDto::try_from("foo")?]);
-        let tables = None;
+        let dependencies = Some(vec![
+            TableDependencyDto::try_from("table_1")?,
+            TableDependencyDto::try_from("table_2")?,
+        ]);
+        let tables = Some(vec![
+            TableNameDto::try_from("output_1")?,
+            TableNameDto::try_from("output_2")?,
+        ]);
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
@@ -492,9 +522,9 @@ mod tests {
             .try_description("function_2 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
-            .triggers(triggers.clone())
+            .triggers(test_triggers.clone())
             .tables(tables.clone())
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)

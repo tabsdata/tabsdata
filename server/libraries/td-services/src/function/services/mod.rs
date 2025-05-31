@@ -118,12 +118,13 @@ pub(crate) mod tests {
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::types::basic::{
         DependencyStatus, FunctionStatus, TableDependency, TableName, TableStatus, TableTrigger,
-        TriggerStatus, UserId,
+        TableTriggerDto, TriggerStatus, UserId,
     };
     use td_objects::types::collection::CollectionDB;
     use td_objects::types::dependency::DependencyDBWithNames;
     use td_objects::types::function::{Function, FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::types::table::TableDB;
+    use td_objects::types::table_ref::TableRef;
     use td_objects::types::trigger::TriggerDBWithNames;
 
     pub async fn assert_register(
@@ -134,9 +135,24 @@ pub(crate) mod tests {
         response: &Function,
     ) -> Result<(), TdError> {
         // Assertions
-        let req_dependencies = create.dependencies().as_deref().unwrap_or(&[]);
-        let req_triggers = create.triggers().as_deref().unwrap_or(&[]);
         let req_tables = create.tables().as_deref().unwrap_or(&[]);
+        let req_dependencies = create.dependencies().as_deref().unwrap_or(&[]);
+        // Similar to build_trigger_versions
+        let req_triggers: Vec<_> = if let Some(req_triggers) = create.triggers().as_deref() {
+            req_triggers.to_vec()
+        } else {
+            req_dependencies
+                .iter()
+                .filter(|t| {
+                    !((t.collection().is_none()
+                        || t.collection().as_deref() == Some(collection.name()))
+                        && req_tables.contains(t.table()))
+                })
+                .map(|t| {
+                    TableTriggerDto::new(TableRef::new(t.collection().clone(), t.table().clone()))
+                })
+                .collect()
+        };
 
         // Assert response is correct
         assert_eq!(response.collection_id(), collection.id());

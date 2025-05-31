@@ -121,7 +121,7 @@ pub async fn update_function_run_status<Q: DerefQueries>(
 
     // Downstream
     let mut downstream_function_run_updates = HashMap::new();
-    for current in function_runs.iter() {
+    for current in function_run_ids {
         match update.status() {
             FunctionRunStatus::Canceled => {
                 let function_runs: Vec<FunctionRequirementDBWithNames> = queries
@@ -130,7 +130,7 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                         None,
                         None,
                         None,
-                        current.id(),
+                        current,
                     )?
                     .build_query_as()
                     .fetch_all(&mut *conn)
@@ -139,7 +139,7 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                 let function_run_ids: Vec<_> = function_runs
                     .iter()
                     .map(|f| *f.function_run_id())
-                    .filter(|id| id != current.id()) // current is already canceled
+                    .filter(|id| id != current) // current is already canceled
                     .collect();
 
                 downstream_function_run_updates
@@ -154,7 +154,7 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                         None,
                         None,
                         None,
-                        current.id(),
+                        current,
                     )?
                     .build_query_as()
                     .fetch_all(&mut *conn)
@@ -163,7 +163,7 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                 let function_run_ids: Vec<_> = function_runs
                     .iter()
                     .map(|f| *f.function_run_id())
-                    .filter(|id| id != current.id()) // current is already rescheduled
+                    .filter(|id| id != current) // current is already rescheduled
                     .collect();
 
                 downstream_function_run_updates
@@ -178,7 +178,7 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                         None,
                         None,
                         None,
-                        current.id(),
+                        current,
                     )?
                     .build_query_as()
                     .fetch_all(&mut *conn)
@@ -187,7 +187,7 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                 let function_run_ids: Vec<_> = function_runs
                     .iter()
                     .map(|f| *f.function_run_id())
-                    .filter(|id| id != current.id()) // current is already failed
+                    .filter(|id| id != current) // current is already failed
                     .collect();
 
                 downstream_function_run_updates

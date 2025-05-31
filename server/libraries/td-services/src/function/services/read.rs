@@ -82,17 +82,17 @@ impl ReadFunctionService {
                 from_fn(With::<FunctionBuilder>::build::<Function, _>),
                 from_fn(With::<Function>::set::<FunctionWithTablesBuilder>),
 
-                // Read tables
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBWithNames>),
-                from_fn(With::<DependencyDBWithNames>::vec_convert_to::<TableDependency, _>),
-                from_fn(With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
-
-                // Read dependencies
+                // Read triggers
                 from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
                 from_fn(With::<TriggerDBWithNames>::vec_convert_to::<TableTrigger, _>),
                 from_fn(With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
 
-                // Read triggers
+                // Read dependencies
+                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBWithNames>),
+                from_fn(With::<DependencyDBWithNames>::vec_convert_to::<TableDependency, _>),
+                from_fn(With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
+
+                // Read tables
                 from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDBWithNames>),
                 from_fn(With::<TableDBWithNames>::vec_convert_to::<TableName, _>),
                 from_fn(With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
@@ -164,15 +164,15 @@ mod tests {
             type_of_val(&With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
             type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
             type_of_val(&With::<Function>::set::<FunctionWithTablesBuilder>),
-            // Read tables
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBWithNames>),
-            type_of_val(&With::<DependencyDBWithNames>::vec_convert_to::<TableDependency, _>),
-            type_of_val(&With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
-            // Read dependencies
+            // Read trigger
             type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
             type_of_val(&With::<TriggerDBWithNames>::vec_convert_to::<TableTrigger, _>),
             type_of_val(&With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
-            // Read triggers
+            // Read dependencies
+            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBWithNames>),
+            type_of_val(&With::<DependencyDBWithNames>::vec_convert_to::<TableDependency, _>),
+            type_of_val(&With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
+            // Read tables
             type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TableDBWithNames>),
             type_of_val(&With::<TableDBWithNames>::vec_convert_to::<TableName, _>),
             type_of_val(&With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
