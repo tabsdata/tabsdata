@@ -258,22 +258,34 @@ pub struct FunctionRunDBWithNames {
 }
 
 #[td_type::Dto]
+#[dto(list(on = FunctionRunDBWithNames))]
 #[td_type(builder(try_from = FunctionRunDBWithNames))]
 pub struct FunctionRun {
+    #[dto(list(filter, filter_like, order_by))]
     id: FunctionRunId,
+    #[dto(list(filter, filter_like, order_by))]
     collection_id: CollectionId,
     function_version_id: FunctionVersionId,
+    #[dto(list(filter, filter_like, order_by))]
     execution_id: ExecutionId,
+    #[dto(list(filter, filter_like, order_by))]
     transaction_id: TransactionId,
+    #[dto(list(pagination_by = "+", filter, filter_like))]
     triggered_on: TriggeredOn,
     trigger: Trigger,
+    #[dto(list(filter, filter_like))]
     started_on: Option<AtTime>,
+    #[dto(list(filter, filter_like))]
     ended_on: Option<AtTime>,
+    #[dto(list(filter, filter_like, order_by))]
     status: FunctionRunStatus,
 
     data_location: DataLocation,
+    #[dto(list(filter, filter_like, order_by))]
     name: FunctionName,
+    #[dto(list(filter, filter_like, order_by))]
     collection: CollectionName,
+    #[dto(list(filter, filter_like))]
     execution: Option<ExecutionName>,
     triggered_by: UserName,
     // TODO exception info

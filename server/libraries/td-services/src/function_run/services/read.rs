@@ -2,9 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::FunctionRunParam;
@@ -25,77 +23,62 @@ use td_objects::types::execution::{
     ExecutionDB, FunctionRun, FunctionRunBuilder, FunctionRunDBWithNames,
 };
 use td_objects::types::function::FunctionDBWithNames;
-use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
+use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct FunctionRunReadService {
-    provider: ServiceProvider<ReadRequest<FunctionRunParam>, FunctionRun, TdError>,
-}
-
-impl FunctionRunReadService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                ConnectionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-
-                from_fn(With::<ReadRequest<FunctionRunParam>>::extract::<RequestContext>),
-                from_fn(With::<ReadRequest<FunctionRunParam>>::extract_name::<FunctionRunParam>),
-
-                from_fn(With::<FunctionRunParam>::extract::<CollectionIdName>),
-
-                // find collection ID
-                from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-                from_fn(With::<CollectionDB>::extract::<CollectionId>),
-
-                // check requester has collection permissions
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
-
-                // find function version ID
-                from_fn(With::<FunctionRunParam>::extract::<FunctionIdName>),
-                from_fn(combine::<CollectionIdName, FunctionIdName>),
-                from_fn(With::<RequestContext>::extract::<AtTime>),
-                from_fn(FunctionStatus::active),
-                from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>),
-                from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-
-                // find execution ID
-                from_fn(With::<FunctionRunParam>::extract::<ExecutionIdName>),
-                from_fn(By::<ExecutionIdName>::select::<DaoQueries, ExecutionDB>),
-                from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
-
-                // find function run
-                from_fn(combine::<ExecutionId, FunctionVersionId>),
-                from_fn(By::<(ExecutionId, FunctionVersionId)>::select::<DaoQueries, FunctionRunDBWithNames>),
-
-                // Build FunctionRun
-                from_fn(With::<FunctionRunDBWithNames>::convert_to::<FunctionRunBuilder, _>),
-                from_fn(With::<FunctionRunBuilder>::build::<FunctionRun, _>),
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<ReadRequest<FunctionRunParam>, FunctionRun, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = FunctionRunReadService,
+    request = ReadRequest<FunctionRunParam>,
+    response = FunctionRun,
+    connection = ConnectionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<ReadRequest<FunctionRunParam>>::extract::<RequestContext>),
+        from_fn(With::<ReadRequest<FunctionRunParam>>::extract_name::<FunctionRunParam>),
+        from_fn(With::<FunctionRunParam>::extract::<CollectionIdName>),
+        // find collection ID
+        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        // check requester has collection permissions
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
+        // find function version ID
+        from_fn(With::<FunctionRunParam>::extract::<FunctionIdName>),
+        from_fn(combine::<CollectionIdName, FunctionIdName>),
+        from_fn(With::<RequestContext>::extract::<AtTime>),
+        from_fn(FunctionStatus::active),
+        from_fn(
+            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                DaoQueries,
+                FunctionDBWithNames,
+            >
+        ),
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
+        // find execution ID
+        from_fn(With::<FunctionRunParam>::extract::<ExecutionIdName>),
+        from_fn(By::<ExecutionIdName>::select::<DaoQueries, ExecutionDB>),
+        from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
+        // find function run
+        from_fn(combine::<ExecutionId, FunctionVersionId>),
+        from_fn(
+            By::<(ExecutionId, FunctionVersionId)>::select::<DaoQueries, FunctionRunDBWithNames>
+        ),
+        // Build FunctionRun
+        from_fn(With::<FunctionRunDBWithNames>::convert_to::<FunctionRunBuilder, _>),
+        from_fn(With::<FunctionRunBuilder>::build::<FunctionRun, _>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -116,8 +99,8 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider =
-            FunctionRunReadService::provider(db, queries, Arc::new(AuthzContext::default()));
+        let authz_context = Arc::new(AuthzContext::default());
+        let provider = FunctionRunReadService::provider(db, queries, authz_context);
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -162,6 +145,9 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_read_function_run(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+
         let collection = seed_collection(
             &db,
             &CollectionName::try_from("collection")?,
@@ -214,7 +200,7 @@ mod tests {
                 .build()?,
         );
 
-        let service = FunctionRunReadService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = FunctionRunReadService::new(db.clone(), queries, authz_context)
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
