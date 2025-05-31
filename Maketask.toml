@@ -594,7 +594,7 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error pip-compile --no-strip-extras --quiet ./requirements-third-party-all.txt_ --output-file ./target/requirements.txt
+    exec --fail-on-error pip-compile --no-strip-extras --quiet ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt
     cd target
     exec --fail-on-error python ../devutils/automation/tasks/makers/td-scripts/report_licenses_py.py
     ''']
@@ -605,7 +605,7 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error pip-compile ./requirements-third-party-all.txt_ --output-file ./target/requirements.txt
+    exec --fail-on-error pip-compile ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt
     cd target
     exec --fail-on-error licensecheck -r requirements.txt
     cd ..

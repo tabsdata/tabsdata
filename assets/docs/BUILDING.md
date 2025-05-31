@@ -61,7 +61,7 @@ git clone https://github.com/tabsdata/tabsdata
 From Tabsdata local repo root directory, run:
 
 ```
-pip install -r requirements-dev.txt
+pip install -r requirements-test.txt
 ```
 
 ## Basic Build Commands

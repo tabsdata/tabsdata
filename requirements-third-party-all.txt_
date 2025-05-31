@@ -1,8 +1,0 @@
-#
-# Copyright 2025 Tabs Data Inc.
-#
-
--r requirements-third-party.txt_
--r connectors/python/tabsdata_mongodb/requirements-third-party.txt_
--r connectors/python/tabsdata_salesforce/requirements-third-party.txt_
--r connectors/python/tabsdata_snowflake/requirements-third-party.txt_

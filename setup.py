@@ -9,6 +9,7 @@ import platform
 import shutil
 from pathlib import Path
 from sysconfig import get_platform
+from uuid import uuid4
 
 import psutil
 from setuptools import find_packages, setup
@@ -215,10 +216,15 @@ def get_binaries_folder():
 
 
 # noinspection DuplicatedCode
-def read_requirements(path, visited=None):
+def read_requirements(path, root=None, token=None, visited=None):  # noqa: C901
+    if token is None:
+        token = str(uuid4())
     if visited is None:
         visited = set()
     path = Path(path).resolve()
+
+    logger.debug(f" - 🥁 {token} · Visiting requirements path: {root} - {path}")
+
     if path in visited:
         raise ValueError(f"Circular dependency detected: {path}")
     visited.add(path)
@@ -232,7 +238,9 @@ def read_requirements(path, visited=None):
                 included_path = line.split(maxsplit=1)[1]
                 if not os.path.isabs(included_path):
                     included_path = path.parent / included_path
-                requirements.extend(read_requirements(included_path, visited))
+                requirements.extend(
+                    read_requirements(included_path, path, token, visited)
+                )
             elif not line.startswith(("-", "git+")):
                 requirements.append(line)
     if ignore_connector_requirements:
@@ -424,10 +432,14 @@ setup(
     python_requires=">=3.12",
     install_requires=read_requirements("requirements.txt"),
     extras_require={
-        "mongodb": read_requirements("requirements-connector-mongodb.txt"),
-        "salesforce": read_requirements("requirements-connector-salesforce.txt"),
-        "snowflake": read_requirements("requirements-connector-snowflake.txt"),
-        "test": read_requirements("requirements-dev.txt"),
+        "mongodb": read_requirements("requirements/requirements-connector-mongodb.txt"),
+        "salesforce": read_requirements(
+            "requirements/requirements-connector-salesforce.txt"
+        ),
+        "snowflake": read_requirements(
+            "requirements/requirements-connector-snowflake.txt"
+        ),
+        "test": read_requirements("requirements-test.txt"),
     },
     options={
         "bdist_wheel": {
