@@ -11,7 +11,9 @@ use td_common::id::Id;
 use td_error::{td_error, TdError};
 
 const IDENTIFIER_LEN: &str = "99";
-pub const IDENTIFIER_PATTERN: &str = concat!("[a-zA-Z_][a-zA-Z0-9_]{0,", IDENTIFIER_LEN, "}");
+pub const IDENTIFIER_PATTERN: &str = concat!("[a-zA-Z][a-zA-Z0-9_]{0,", IDENTIFIER_LEN, "}");
+pub const UNDERSCORE_IDENTIFIER_PATTERN: &str =
+    concat!("[a-zA-Z_][a-zA-Z0-9_]{0,", IDENTIFIER_LEN, "}");
 
 pub const DATA_LOCATION_REGEX: &str = concat!("^(/|(/", IDENTIFIER_PATTERN, ")*)$");
 
@@ -225,6 +227,19 @@ pub fn parse_name(s: impl Into<String>, name_type: &str) -> Result<String, TdErr
     parser(
         REGEX.clone(),
         s,
+        format!("{name_type}, a [A-Za-z0-9] word of up to 100 characters"),
+    )
+}
+
+const UNDERSCORE_NAME_PATTERN: &str = concat!("^", UNDERSCORE_IDENTIFIER_PATTERN, "$");
+
+pub fn parse_underscore_name(s: impl Into<String>, name_type: &str) -> Result<String, TdError> {
+    lazy_static! {
+        static ref REGEX: Regex = Regex::new(UNDERSCORE_NAME_PATTERN).unwrap();
+    }
+    parser(
+        REGEX.clone(),
+        s,
         format!("{name_type}, a [_A-Za-z0-9] word of up to 100 characters"),
     )
 }
@@ -246,7 +261,7 @@ pub fn parse_execution(s: impl Into<String>) -> Result<String, TdError> {
 }
 
 pub fn parse_table(s: impl Into<String>) -> Result<String, TdError> {
-    parse_name(s, "Table name")
+    parse_underscore_name(s, "Table name")
 }
 
 pub fn parse_role(s: impl Into<String>) -> Result<String, TdError> {
@@ -302,9 +317,13 @@ mod tests {
     #[test]
     fn test_parse_names() {
         assert!(parse_user("abc".to_string()).is_ok());
+        assert!(parse_user("_abc".to_string()).is_err());
         assert!(parse_collection("abc".to_string()).is_ok());
+        assert!(parse_collection("_abc".to_string()).is_err());
         assert!(parse_function("abc".to_string()).is_ok());
+        assert!(parse_function("_abc".to_string()).is_err());
         assert!(parse_table("abc".to_string()).is_ok());
+        assert!(parse_table("_abc".to_string()).is_ok());
     }
 
     #[test]

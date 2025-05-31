@@ -383,6 +383,12 @@ pub struct TableIdName;
 #[td_type::typed(string, try_from = TableNameDto)]
 pub struct TableName;
 
+impl TableName {
+    pub fn is_private(&self) -> bool {
+        self.0.starts_with('_')
+    }
+}
+
 impl TryFrom<&TableDBWithNames> for TableName {
     type Error = TdError;
 
@@ -394,6 +400,12 @@ impl TryFrom<&TableDBWithNames> for TableName {
 
 #[td_type::typed(string(parser = parse_table))]
 pub struct TableNameDto;
+
+impl TableNameDto {
+    pub fn is_private(&self) -> bool {
+        self.0.starts_with('_')
+    }
+}
 
 #[td_type::typed_enum]
 pub enum TableStatus {

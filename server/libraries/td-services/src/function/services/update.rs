@@ -5,7 +5,7 @@
 use crate::function::layers::register::data_location;
 use crate::function::layers::update::assert_function_name_not_exists;
 use crate::function::layers::{
-    register_dependencies, register_tables, register_triggers, DO_AUTHZ,
+    check_private_tables, register_dependencies, register_tables, register_triggers, DO_AUTHZ,
 };
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
@@ -106,6 +106,9 @@ fn provider() {
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
+        // check private tables
+        from_fn(check_private_tables::<TableDependencyDto>),
+        from_fn(check_private_tables::<TableTriggerDto>),
         // Extract reuse frozen
         from_fn(With::<FunctionUpdate>::extract::<ReuseFrozen>),
         // And register new ones
@@ -127,6 +130,8 @@ mod tests {
     use crate::function::layers::register::RegisterFunctionError;
     use crate::function::services::register::RegisterFunctionService;
     use crate::function::services::tests::{assert_register, assert_update};
+    use std::collections::HashMap;
+    use std::ops::Deref;
     use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_objects::crudl::handle_sql_err;
@@ -134,9 +139,10 @@ mod tests {
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
+    use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, TableDependencyDto,
-        TableName, TableNameDto, TableStatus, UserId,
+        TableName, TableNameDto, TableStatus, ToCollectionId, UserId,
     };
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::table::TableDB;
@@ -219,6 +225,9 @@ mod tests {
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
+                // check private tables
+                type_of_val(&check_private_tables::<TableDependencyDto>),
+                type_of_val(&check_private_tables::<TableTriggerDto>),
                 // Extract reuse frozen
                 type_of_val(&With::<FunctionUpdate>::extract::<ReuseFrozen>),
                 // And register new ones
@@ -1342,5 +1351,232 @@ mod tests {
             &create_response,
         )
         .await
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_update_private_tables_all_same_collection(db: DbPool) -> Result<(), TdError> {
+        test_private_tables(db, false, false).await
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_update_private_tables_deps_diff_collection(db: DbPool) -> Result<(), TdError> {
+        test_private_tables(db, true, false).await
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_update_private_tables_triggers_diff_collection(
+        db: DbPool,
+    ) -> Result<(), TdError> {
+        test_private_tables(db, false, true).await
+    }
+
+    async fn test_private_tables(
+        db: DbPool,
+        deps_diff_collection: bool,
+        triggers_diff_collection: bool,
+    ) -> Result<(), TdError> {
+        let collection_name_1 = CollectionName::try_from("collection_1")?;
+        let collection_1 = seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+        let collection_name_2 = CollectionName::try_from("collection_2")?;
+        let collection_2 = seed_collection(&db, &collection_name_2, &UserId::admin()).await;
+
+        seed_inter_collection_permission(
+            &db,
+            collection_1.id(),
+            &ToCollectionId::try_from(collection_2.id())?,
+        )
+        .await;
+
+        for collection in [&collection_1, &collection_2] {
+            let dependencies = None;
+            let triggers = None;
+            let tables = Some(vec![
+                TableNameDto::try_from("_table_1")?,
+                TableNameDto::try_from("_table_2")?,
+            ]);
+
+            let bundle_id = BundleId::default();
+            let create = FunctionRegister::builder()
+                .try_name("function_1")?
+                .try_description("function_1 description")?
+                .bundle_id(bundle_id)
+                .try_snippet("function_1 snippet")?
+                .decorator(Decorator::Subscriber)
+                .dependencies(dependencies.clone())
+                .triggers(triggers.clone())
+                .tables(tables.clone())
+                .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+                .reuse_frozen_tables(false)
+                .build()?;
+            seed_function(&db, &collection, &create).await;
+        }
+
+        let dependencies = Some(vec![
+            TableDependencyDto::try_from("_table_1")?,
+            TableDependencyDto::try_from("_table_2")?,
+        ]);
+        let triggers = Some(vec![
+            TableTriggerDto::try_from("_table_1")?,
+            TableTriggerDto::try_from("_table_2")?,
+        ]);
+        let tables = Some(vec![TableNameDto::try_from("output_1")?]);
+
+        let bundle_id = BundleId::default();
+        let create = FunctionRegister::builder()
+            .try_name("function_2")?
+            .try_description("function_2 description")?
+            .bundle_id(bundle_id)
+            .try_snippet("function_2 snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(dependencies)
+            .triggers(triggers)
+            .tables(tables)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        seed_function(&db, &collection_2, &create).await;
+
+        // Actual test
+
+        let deps_collection = if deps_diff_collection {
+            "collection_1"
+        } else {
+            "collection_2"
+        };
+        let triggers_collection = if triggers_diff_collection {
+            "collection_1"
+        } else {
+            "collection_2"
+        };
+
+        let dependencies = Some(vec![
+            TableDependencyDto::try_from(format!("{}/_table_1", deps_collection))?,
+            TableDependencyDto::try_from("_table_2")?,
+        ]);
+        let triggers = Some(vec![
+            TableTriggerDto::try_from(format!("{}/_table_1", triggers_collection))?,
+            TableTriggerDto::try_from("_table_2")?,
+        ]);
+        let tables = Some(vec![TableNameDto::try_from("output_1")?]);
+
+        let bundle_id = BundleId::default();
+        let update = FunctionRegister::builder()
+            .try_name("function_2")?
+            .try_description("function_2 description")?
+            .bundle_id(bundle_id)
+            .try_snippet("function_2 snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(dependencies)
+            .triggers(triggers)
+            .tables(tables)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .update(
+            FunctionParam::builder()
+                .try_collection(format!("{}", collection_2.name()))?
+                .try_function("function_2")?
+                .build()?,
+            update.clone(),
+        );
+
+        let queries = Arc::new(DaoQueries::default());
+        let authz = Arc::new(AuthzContext::default());
+        let service = UpdateFunctionService::new(db.clone(), queries.clone(), authz.clone())
+            .service()
+            .await;
+        let res = service.raw_oneshot(request).await;
+        if deps_diff_collection || triggers_diff_collection {
+            assert!(res.is_err());
+            assert!(res.err().unwrap().code().contains("PrivateTableError"))
+        } else {
+            assert!(res.is_ok());
+        }
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_private_table_flag(db: DbPool) -> Result<(), TdError> {
+        let collection_name_1 = CollectionName::try_from("collection_1")?;
+        let collection_1 = seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+
+        let tables = Some(vec![TableNameDto::try_from("table0")?]);
+
+        let bundle_id = BundleId::default();
+        let create = FunctionRegister::builder()
+            .try_name("function")?
+            .try_description("description")?
+            .bundle_id(bundle_id)
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(Some(vec![]))
+            .triggers(Some(vec![]))
+            .tables(tables)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        seed_function(&db, &collection_1, &create).await;
+
+        let tables = Some(vec![
+            TableNameDto::try_from("table0")?,
+            TableNameDto::try_from("_table0")?,
+        ]);
+
+        let bundle_id = BundleId::default();
+        let update = FunctionRegister::builder()
+            .try_name("function")?
+            .try_description("description")?
+            .bundle_id(bundle_id)
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(Some(vec![]))
+            .triggers(Some(vec![]))
+            .tables(tables)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .update(
+            FunctionParam::builder()
+                .try_collection(format!("{}", collection_1.name()))?
+                .try_function("function")?
+                .build()?,
+            update.clone(),
+        );
+
+        let queries = Arc::new(DaoQueries::default());
+        let authz = Arc::new(AuthzContext::default());
+        let service = UpdateFunctionService::new(db.clone(), queries.clone(), authz.clone())
+            .service()
+            .await;
+        let res = service.raw_oneshot(request).await;
+        assert!(res.is_ok());
+
+        let tables: Vec<TableDB> = queries
+            .select_by::<TableDB>(&(res.unwrap().id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .map_err(handle_sql_err)?;
+        let map: HashMap<String, TableDB> = tables
+            .into_iter()
+            .map(|table| (table.name().to_string(), table))
+            .collect();
+        assert!(!map.get("table0").unwrap().private().deref());
+        assert!(map.get("_table0").unwrap().private().deref());
+        Ok(())
     }
 }

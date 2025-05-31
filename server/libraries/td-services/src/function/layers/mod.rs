@@ -7,8 +7,10 @@
 use crate::function::layers::register::{
     build_dependency_versions, build_table_versions, build_trigger_versions,
 };
+use itertools::Itertools;
+use std::ops::Deref;
 use td_authz::Authz;
-use td_error::TdError;
+use td_error::{td_error, TdError};
 use td_objects::crudl::RequestContext;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::InterColl;
@@ -16,11 +18,13 @@ use td_objects::tower_service::from::{
     ConvertIntoMapService, TryIntoService, UpdateService, VecBuildService, With,
 };
 use td_objects::tower_service::sql::insert_vec;
+use td_objects::types::basic::{CollectionName, TableDependencyDto, TableNameDto, TableTriggerDto};
 use td_objects::types::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::types::function::FunctionDB;
 use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
 use td_objects::types::table::{TableDB, TableDBBuilder};
 use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder};
+use td_tower::extractors::Input;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
@@ -101,4 +105,72 @@ where
     } else {
         layers!()
     }
+}
+
+pub trait ReferencedTable {
+    fn referenced_collection(&self) -> &Option<CollectionName>;
+
+    fn referenced_table(&self) -> &TableNameDto;
+
+    fn can_be_used_from(&self, from: &CollectionName) -> bool {
+        !self.referenced_table().is_private()
+            || self
+                .referenced_collection()
+                .as_ref()
+                .map_or_else(|| true, |c| c == from)
+    }
+}
+
+impl ReferencedTable for TableDependencyDto {
+    fn referenced_collection(&self) -> &Option<CollectionName> {
+        self.collection()
+    }
+
+    fn referenced_table(&self) -> &TableNameDto {
+        self.table()
+    }
+}
+
+impl ReferencedTable for TableTriggerDto {
+    fn referenced_collection(&self) -> &Option<CollectionName> {
+        self.collection()
+    }
+
+    fn referenced_table(&self) -> &TableNameDto {
+        self.table()
+    }
+}
+
+#[td_error]
+pub enum PrivateTableError {
+    #[error("Cannot use private tables from other collections: {0}")]
+    PrivateTableCannotBeUsed(String) = 0,
+}
+
+pub async fn check_private_tables<T: ReferencedTable + Send + Sync>(
+    Input(this_collection): Input<CollectionName>,
+    Input(referenced_tables): Input<Option<Vec<T>>>,
+) -> Result<(), TdError> {
+    if let Some(referenced_tables) = referenced_tables.deref() {
+        let out_of_reach_private_tables = referenced_tables
+            .iter()
+            .filter(|t| !t.can_be_used_from(&this_collection))
+            .map(|t| {
+                (
+                    t.referenced_collection().as_ref().unwrap(),
+                    t.referenced_table(),
+                )
+            }) // if it cannot be used it must have a collection name.
+            .collect::<Vec<_>>();
+        if !out_of_reach_private_tables.is_empty() {
+            let out_of_reach_private_tables = out_of_reach_private_tables
+                .into_iter()
+                .map(|(collection, table)| format!("'{}/{}'", collection, table))
+                .join(", ");
+            Err(PrivateTableError::PrivateTableCannotBeUsed(
+                out_of_reach_private_tables,
+            ))?
+        }
+    }
+    Ok(())
 }

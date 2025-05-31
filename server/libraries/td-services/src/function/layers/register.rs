@@ -130,6 +130,7 @@ pub async fn build_table_versions(
             .deref()
             .clone()
             .table_id(table_id)
+            .private(table_name.is_private())
             .name(table_name)
             .function_param_pos(Some(TableFunctionParamPos::try_from(pos)?))
             .status(TableStatus::Active)
