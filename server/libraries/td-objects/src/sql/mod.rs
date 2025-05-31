@@ -407,6 +407,7 @@ where
             query_builder.push("(");
             let mut or_separated = query_builder.separated(" OR ");
             for cond in or.conditions() {
+                // no SQL injection here, as the values are bound to the fields of the struct
                 or_separated.push(format!("{} {} ", cond.field(), cond.operator()));
                 let mut value = cond.values();
 

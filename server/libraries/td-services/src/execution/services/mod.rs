@@ -18,6 +18,7 @@ use td_objects::types::execution::{
     CallbackRequest, Execution, ExecutionRequest, ExecutionResponse,
 };
 use td_tower::service_provider::TdBoxService;
+use te_execution::transaction::TransactionBy;
 
 pub(crate) mod callback;
 mod cancel;
@@ -36,10 +37,16 @@ pub struct ExecutionServices {
 impl ExecutionServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
         let queries = Arc::new(DaoQueries::default());
+        let transaction_by = Arc::new(TransactionBy::default());
         Self {
             callback: ExecutionCallbackService::new(db.clone()),
             cancel: ExecutionCancelService::new(db.clone(), queries.clone(), authz_context.clone()),
-            execute: ExecuteFunctionService::new(db.clone(), authz_context.clone()),
+            execute: ExecuteFunctionService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+                transaction_by.clone(),
+            ),
             list: ExecutionListService::new(db.clone(), queries.clone()),
             recover: ExecutionRecoverService::new(
                 db.clone(),

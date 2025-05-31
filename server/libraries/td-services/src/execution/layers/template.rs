@@ -54,14 +54,13 @@ where
     Ok(result)
 }
 
-pub async fn build_execution_template<Q: DerefQueries>(
+pub async fn find_all_input_tables<Q: DerefQueries>(
     SrvCtx(queries): SrvCtx<Q>,
-    SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Connection(connection): Connection,
     Input(at_time): Input<AtTime>,
     Input(trigger_function_version): Input<FunctionDBWithNames>,
     Input(trigger_graph): Input<Vec<TriggerDBWithNames>>,
-) -> Result<ExecutionGraph<Versions>, TdError> {
+) -> Result<Vec<DependencyDBWithNames>, TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
@@ -90,6 +89,32 @@ pub async fn build_execution_template<Q: DerefQueries>(
         .fetch_all(&mut *conn)
         .await
         .map_err(handle_sql_err)?;
+    Ok(input_tables)
+}
+
+pub async fn build_execution_template<Q: DerefQueries>(
+    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(transaction_by): SrvCtx<TransactionBy>,
+    Connection(connection): Connection,
+    Input(at_time): Input<AtTime>,
+    Input(trigger_function_version): Input<FunctionDBWithNames>,
+    Input(trigger_graph): Input<Vec<TriggerDBWithNames>>,
+    Input(input_tables): Input<Vec<DependencyDBWithNames>>,
+) -> Result<ExecutionGraph<Versions>, TdError> {
+    let mut conn = connection.lock().await;
+    let conn = conn.get_mut_connection()?;
+
+    // We find unique triggered functions
+    let unique_triggered_functions = trigger_graph
+        .iter()
+        .map(|f| f.function_version_id())
+        .collect::<HashSet<_>>();
+
+    let manual_trigger = trigger_function_version.id();
+    let unique_triggered_functions: Vec<_> = unique_triggered_functions
+        .into_iter()
+        .chain(std::iter::once(manual_trigger))
+        .collect();
 
     // TODO this should be chunked
     let status = [&TableStatus::Active, &TableStatus::Frozen];

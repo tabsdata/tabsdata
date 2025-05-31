@@ -8,7 +8,11 @@ use crate::types::basic::{
     PermissionEntityType, PermissionId, PermissionType, RoleId, RoleName, ToCollectionId,
     ToCollectionName, UserId, UserName,
 };
+use crate::types::dependency::DependencyDB;
+use crate::types::dependency::DependencyDBWithNames;
 use crate::types::role::RoleDB;
+use crate::types::trigger::TriggerDB;
+use crate::types::trigger::TriggerDBWithNames;
 
 #[td_type::Dto]
 pub struct PermissionCreate {
@@ -131,4 +135,29 @@ pub struct InterCollectionPermission {
     granted_by_id: UserId,
     granted_by: UserName,
     granted_on: AtTime,
+}
+
+#[td_type::Dlo]
+#[derive(Hash)]
+#[td_type(
+    builder(try_from = DependencyDB),
+    builder(try_from = TriggerDB),
+    builder(try_from = DependencyDBWithNames),
+    builder(try_from = TriggerDBWithNames)
+)]
+pub struct InterCollectionAccess {
+    #[td_type(
+        builder(try_from = DependencyDB, field = "table_collection_id"),
+        builder(try_from = TriggerDB, field = "trigger_by_collection_id"),
+        builder(try_from = DependencyDBWithNames, field = "table_collection_id"),
+        builder(try_from = TriggerDBWithNames, field = "trigger_by_collection_id")
+    )]
+    pub source: CollectionId,
+    #[td_type(
+        builder(try_from = DependencyDB, field = "collection_id"),
+        builder(try_from = TriggerDB, field = "collection_id"),
+        builder(try_from = DependencyDBWithNames, field = "collection_id"),
+        builder(try_from = TriggerDBWithNames, field = "collection_id")
+    )]
+    pub target: ToCollectionId,
 }

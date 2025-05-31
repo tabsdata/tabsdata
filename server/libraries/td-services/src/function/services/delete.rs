@@ -98,8 +98,8 @@ impl DeleteFunctionService {
                 from_fn(With::<ReuseFrozen>::default),
                 // And register new ones
                 RegisterFunctionService::register_tables(),
-                RegisterFunctionService::register_dependencies(),
-                RegisterFunctionService::register_triggers(),
+                RegisterFunctionService::register_dependencies_for_delete(),
+                RegisterFunctionService::register_triggers_for_delete(),
             ))
         }
     }

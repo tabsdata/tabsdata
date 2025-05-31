@@ -11,10 +11,11 @@ use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, InterColl};
 use td_objects::tower_service::from::{
-    combine, BuildService, DefaultService, EmptyVecService, ExtractDataService, ExtractNameService,
-    ExtractService, SetService, TryIntoService, UpdateService, With,
+    combine, BuildService, ConvertIntoMapService, DefaultService, EmptyVecService,
+    ExtractDataService, ExtractNameService, ExtractService, SetService, TryIntoService,
+    UpdateService, VecBuildService, With,
 };
 use td_objects::tower_service::sql::SqlAssertNotExistsService;
 use td_objects::tower_service::sql::{insert, insert_vec, By, SqlDeleteService, SqlSelectService};
@@ -28,6 +29,7 @@ use td_objects::types::function::{
     BundleDB, Function, FunctionBuilder, FunctionDB, FunctionDBBuilder, FunctionDBWithNames,
     FunctionRegister,
 };
+use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
 use td_objects::types::table::{TableDB, TableDBBuilder};
 use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
@@ -142,6 +144,26 @@ impl RegisterFunctionService {
                 from_fn(With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
                 from_fn(With::<RequestContext>::update::<DependencyDBBuilder, _>),
                 from_fn(build_dependency_versions::<DaoQueries>),
+
+                // inter collection authz check
+                from_fn(With::<DependencyDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
+                from_fn(With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
+                from_fn(Authz::<InterColl>::check_inter_collection),
+
+                from_fn(insert_vec::<DaoQueries, DependencyDB>),
+            )
+        }
+    }
+
+    // we don't want to check inter collection authz when deleting
+    // we'll do the delete, will fail when triggering
+    l! {
+        register_dependencies_for_delete() {
+            layers!(
+                // Insert into dependency_versions(sql) current function table dependencies status=Active.
+                from_fn(With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
+                from_fn(With::<RequestContext>::update::<DependencyDBBuilder, _>),
+                from_fn(build_dependency_versions::<DaoQueries>),
                 from_fn(insert_vec::<DaoQueries, DependencyDB>),
             )
         }
@@ -149,6 +171,26 @@ impl RegisterFunctionService {
 
     l! {
         register_triggers() {
+            layers!(
+                // Insert into trigger_versions(sql) current function trigger status=Active.
+                from_fn(With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
+                from_fn(With::<RequestContext>::update::<TriggerDBBuilder, _>),
+                from_fn(build_trigger_versions::<DaoQueries>),
+
+                // inter collection authz check
+                from_fn(With::<TriggerDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
+                from_fn(With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
+                from_fn(Authz::<InterColl>::check_inter_collection),
+
+                from_fn(insert_vec::<DaoQueries, TriggerDB>),
+            )
+        }
+    }
+
+    // we don't want to check inter collection authz when deleting
+    // we'll do the delete, will fail when triggering
+    l! {
+        register_triggers_for_delete() {
             layers!(
                 // Insert into trigger_versions(sql) current function trigger status=Active.
                 from_fn(With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
@@ -171,8 +213,10 @@ mod tests {
     use super::*;
     use crate::function::services::tests::assert_register;
     use td_objects::test_utils::seed_collection::seed_collection;
+    use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
+    use td_objects::tower_service::authz::AuthzError;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, ToCollectionId, UserId,
     };
     use td_tower::ctx_service::RawOneshot;
 
@@ -254,11 +298,23 @@ mod tests {
                     type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
                     type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
                     type_of_val(&build_dependency_versions::<DaoQueries>),
+
+                    // inter collections check for dependencies
+                    type_of_val(&With::<DependencyDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
+                    type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
+                    type_of_val(&Authz::<InterColl>::check_inter_collection),
+
                     type_of_val(&insert_vec::<DaoQueries, DependencyDB>),
                     // Insert into trigger_versions(sql) current function trigger status=Active.
                     type_of_val(&With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
                     type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
                     type_of_val(&build_trigger_versions::<DaoQueries>),
+
+                    // inter collections check for trigger
+                    type_of_val(&With::<TriggerDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
+                    type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
+                    type_of_val(&Authz::<InterColl>::check_inter_collection),
+
                     type_of_val(&insert_vec::<DaoQueries, TriggerDB>),
                     // Response
                     type_of_val(&By::<FunctionId>::select::<DaoQueries, FunctionDBWithNames>),
@@ -625,11 +681,56 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
-    async fn test_register_tables_dependencies_triggers_different_collections(
+    async fn test_register_tables_dependencies_different_collections_permissions_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
+        test_register_tables_dependencies_triggers_different_collections(db, true, false, true)
+            .await
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_register_tables_dependencies_different_collections_permissions_forbidden(
+        db: DbPool,
+    ) -> Result<(), TdError> {
+        test_register_tables_dependencies_triggers_different_collections(db, true, false, false)
+            .await
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_register_tables_triggers_different_collections_with_tr_permissions_ok(
+        db: DbPool,
+    ) -> Result<(), TdError> {
+        test_register_tables_dependencies_triggers_different_collections(db, false, true, true)
+            .await
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_register_tables_triggers_different_collections_with_tr_permissions_forbidden(
+        db: DbPool,
+    ) -> Result<(), TdError> {
+        test_register_tables_dependencies_triggers_different_collections(db, false, true, false)
+            .await
+    }
+
+    async fn test_register_tables_dependencies_triggers_different_collections(
+        db: DbPool,
+        deps_diff_collection: bool,
+        triggers_diff_collection: bool,
+        with_permission: bool,
+    ) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        let _collection_id = seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+        let collection_1 = seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+        let collection_name_2 = CollectionName::try_from("collection_2")?;
+        let collection_2 = seed_collection(&db, &collection_name_2, &UserId::admin()).await;
+
+        if with_permission {
+            seed_inter_collection_permission(
+                &db,
+                collection_1.id(),
+                &ToCollectionId::try_from(collection_2.id())?,
+            )
+            .await;
+        }
 
         let dependencies = None;
         let triggers = None;
@@ -670,19 +771,67 @@ mod tests {
             .await;
         let _response = service.raw_oneshot(request).await?;
 
+        let dependencies = Some(vec![]);
+        let triggers = Some(vec![]);
+        let tables = Some(vec![
+            TableNameDto::try_from("table_1")?,
+            TableNameDto::try_from("table_2")?,
+        ]);
+
+        let bundle_id = BundleId::default();
+        let create = FunctionRegister::builder()
+            .try_name("function_3")?
+            .try_description("function_3 description")?
+            .bundle_id(bundle_id)
+            .try_snippet("function_3 snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(dependencies.clone())
+            .triggers(triggers.clone())
+            .tables(tables.clone())
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .create(
+            CollectionParam::builder()
+                .try_collection(collection_name_2.as_str())?
+                .build()?,
+            create.clone(),
+        );
+
+        let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+            .service()
+            .await;
+        let _ = service.raw_oneshot(request).await?;
+
         // Actual test
-        let collection_name_2 = CollectionName::try_from("collection_2")?;
-        let collection_2 = seed_collection(&db, &collection_name_2, &UserId::admin()).await;
+
+        let deps_collection = if deps_diff_collection {
+            "collection_1"
+        } else {
+            "collection_2"
+        };
+        let triggers_collection = if triggers_diff_collection {
+            "collection_1"
+        } else {
+            "collection_2"
+        };
 
         let dependencies = Some(vec![
-            TableDependencyDto::try_from("collection_1/table_1")?,
-            TableDependencyDto::try_from("collection_1/table_2")?,
+            TableDependencyDto::try_from(format!("{}/table_1", deps_collection))?,
+            TableDependencyDto::try_from(format!("{}/table_2", deps_collection))?,
             TableDependencyDto::try_from("collection_2/output_1")?,
             TableDependencyDto::try_from("output_2")?,
         ]);
         let triggers = Some(vec![
             TableTriggerDto::try_from("collection_1/table_1")?,
-            TableTriggerDto::try_from("collection_1/table_2")?,
+            TableTriggerDto::try_from(format!("{}/table_2", triggers_collection))?,
         ]);
         let tables = Some(vec![
             TableNameDto::try_from("output_1")?,
@@ -719,9 +868,17 @@ mod tests {
         let service = RegisterFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
             .service()
             .await;
-        let response = service.raw_oneshot(request).await;
-        let response = response?;
+        let res = service.raw_oneshot(request).await;
 
-        assert_register(&db, &UserId::admin(), &collection_2, &create, &response).await
+        if with_permission {
+            let _ = assert_register(&db, &UserId::admin(), &collection_2, &create, &res?).await;
+        } else {
+            let err = res.err().unwrap();
+            assert_eq!(
+                std::mem::discriminant(&AuthzError::ForbiddenInterCollectionAccess("".to_string())),
+                std::mem::discriminant(err.domain_err())
+            );
+        }
+        Ok(())
     }
 }

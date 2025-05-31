@@ -117,12 +117,16 @@
 //!   ...
 //! ```
 
-use crate::crudl::RequestContext;
+use crate::crudl::{handle_sql_err, RequestContext};
+use crate::sql::{DaoQueries, FindBy};
 use crate::types::basic::{CollectionId, RoleId, ToCollectionId, UserId};
+use crate::types::collection::CollectionDB;
+use crate::types::permission::InterCollectionAccess;
 use async_trait::async_trait;
+use itertools::Itertools;
 use sqlx::SqliteConnection;
 use std::any::type_name;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::mem;
@@ -197,6 +201,9 @@ pub trait AuthzContextT {
 
 #[td_error::td_error]
 pub enum AuthzError {
+    #[error("Forbidden inter collection access: {0}")]
+    ForbiddenInterCollectionAccess(String) = 3000,
+
     #[error("Unauthorized for '{0}'")]
     UnAuthorized(String) = 4000,
 
@@ -400,6 +407,19 @@ pub struct NoPermissions {
 impl AuthzRequirements for NoPermissions {
     fn any_of(_scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
         Ok(None)
+    }
+}
+
+/// For inter collection check.
+#[derive(Debug)]
+pub struct InterColl {
+    #[allow(dead_code)]
+    instance_blocker: (),
+}
+
+impl AuthzRequirements for InterColl {
+    fn any_of(_scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+        panic!("InterColl should not be used as a permission requirement, it is only used for inter collection access checks");
     }
 }
 
@@ -733,6 +753,76 @@ impl<
             Err(AuthzError::UnAuthorized(scope.to_string()))?
         }
     }
+
+    pub async fn check_inter_collection(
+        SrvCtx(authz_context): SrvCtx<AC>,
+        Connection(conn): Connection,
+        Input(inter_collection_access_list): Input<Vec<InterCollectionAccess>>,
+    ) -> Result<(), TdError> {
+        let mut conn = conn.lock().await;
+        let conn = conn.get_mut_connection()?;
+
+        // within the same collection access is always allowed, so we filter them out
+        let inter_collection_access_list = inter_collection_access_list
+            .deref()
+            .iter()
+            .filter(|access| access.source().deref() != access.target().deref())
+            .collect::<HashSet<_>>();
+        if inter_collection_access_list.is_empty() {
+            return Ok(());
+        }
+        let mut no_access = vec![];
+        for inter_collection_access in inter_collection_access_list {
+            if let Some(collections) = authz_context
+                .inter_collection_access(conn, inter_collection_access.source())
+                .await?
+            {
+                if !collections
+                    .deref()
+                    .contains(inter_collection_access.target())
+                {
+                    no_access.push(inter_collection_access);
+                }
+            } else {
+                no_access.push(inter_collection_access);
+            }
+        }
+        if no_access.is_empty() {
+            return Ok(());
+        }
+        let collection_ids = no_access
+            .iter()
+            .flat_map(|access| vec![access.source().deref(), access.target().deref()])
+            .map(CollectionId::from)
+            .collect::<Vec<_>>();
+        let collection_ids = collection_ids.iter().collect::<Vec<_>>();
+        let collections: Vec<CollectionDB> = DaoQueries::default()
+            .find_by::<CollectionDB>(&collection_ids)?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
+
+        let collection_id_name_map: HashMap<_, _> = collections
+            .into_iter()
+            .map(|collection| (**collection.id(), collection.name().to_string()))
+            .collect();
+        let no_access = no_access
+            .into_iter()
+            .map(|access| {
+                format!(
+                    "collection '{}' cannot access collection '{}'",
+                    collection_id_name_map
+                        .get(access.target().deref())
+                        .unwrap_or(&"<Unknown>".to_string()),
+                    collection_id_name_map
+                        .get(access.source().deref())
+                        .unwrap_or(&"<Unknown>".to_string()),
+                )
+            })
+            .join(", ");
+        Err(AuthzError::ForbiddenInterCollectionAccess(no_access))?
+    }
 }
 
 #[cfg(test)]
@@ -740,9 +830,11 @@ mod test {
     use crate::crudl::RequestContext;
     use crate::tower_service::authz::{
         AuthzContextT, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,
-        CollExec, CollRead, CollReadAll, NoPermissions, Permission, Requester, SecAdmin, SysAdmin,
+        CollExec, CollRead, CollReadAll, InterColl, NoPermissions, Permission, Requester, SecAdmin,
+        SysAdmin,
     };
     use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
+    use crate::types::permission::InterCollectionAccess;
     use async_trait::async_trait;
     use sqlx::SqliteConnection;
     use std::collections::HashMap;
@@ -863,6 +955,22 @@ mod test {
 
         pub fn remove_permissions(mut self, role: &RoleId) -> Self {
             self.role_permissions_map.remove(role);
+            self
+        }
+
+        pub fn add_inter_collection_permission(
+            mut self,
+            source: &CollectionId,
+            target: &ToCollectionId,
+        ) -> Self {
+            let entry = self
+                .inter_collection_permission_map
+                .entry(*source)
+                .or_insert_with(|| Arc::new(Vec::new()));
+            let entry_vec = Arc::make_mut(entry);
+            if !entry_vec.contains(target) {
+                entry_vec.push(*target);
+            }
             self
         }
 
@@ -2090,5 +2198,125 @@ mod test {
             UserId::default(),
         )))
         .await;
+    }
+
+    #[tokio::test]
+    async fn test_inter_collection_permission_ok() {
+        let source = CollectionId::default();
+        let target = ToCollectionId::default();
+        let mut authz_context = AuthzContextForTest::default();
+        authz_context = authz_context.add_inter_collection_permission(&source, &target);
+        let authz_context = Arc::new(authz_context);
+
+        let db = td_database::test_utils::db().await.unwrap();
+        let conn = db.acquire().await.unwrap();
+        let conn = ConnectionType::PoolConnection(conn).into();
+        let conn = Connection::new(conn);
+
+        let list = Arc::new(vec![]);
+
+        let res = Authz::<InterColl>::check_inter_collection(
+            SrvCtx(authz_context.clone()),
+            conn.clone(),
+            Input(list),
+        )
+        .await;
+        assert!(matches!(res, Ok(())));
+
+        let list = Arc::new(vec![InterCollectionAccess::builder()
+            .source(source)
+            .target(ToCollectionId::try_from(&source).unwrap())
+            .build()
+            .unwrap()]);
+
+        let res = Authz::<InterColl>::check_inter_collection(
+            SrvCtx(authz_context.clone()),
+            conn.clone(),
+            Input(list),
+        )
+        .await;
+        assert!(matches!(res, Ok(())));
+
+        let list = Arc::new(vec![InterCollectionAccess::builder()
+            .source(source)
+            .target(target)
+            .build()
+            .unwrap()]);
+
+        let res = Authz::<InterColl>::check_inter_collection(
+            SrvCtx(authz_context.clone()),
+            conn.clone(),
+            Input(list),
+        )
+        .await;
+        assert!(matches!(res, Ok(())));
+    }
+
+    #[tokio::test]
+    async fn test_inter_collection_permission_err() {
+        let source = CollectionId::default();
+        let target = ToCollectionId::default();
+        let mut authz_context = AuthzContextForTest::default();
+        authz_context = authz_context.add_inter_collection_permission(&source, &target);
+        let authz_context = Arc::new(authz_context);
+
+        let db = td_database::test_utils::db().await.unwrap();
+        let conn = db.acquire().await.unwrap();
+        let conn = ConnectionType::PoolConnection(conn).into();
+        let conn = Connection::new(conn);
+
+        let list = Arc::new(vec![InterCollectionAccess::builder()
+            .source(CollectionId::default())
+            .target(ToCollectionId::default())
+            .build()
+            .unwrap()]);
+
+        let res = Authz::<InterColl>::check_inter_collection(
+            SrvCtx(authz_context.clone()),
+            conn.clone(),
+            Input(list),
+        )
+        .await;
+        let err = res.err().unwrap();
+        assert_eq!(
+            std::mem::discriminant(&AuthzError::ForbiddenInterCollectionAccess("".to_string())),
+            std::mem::discriminant(err.domain_err()),
+        );
+
+        let list = Arc::new(vec![InterCollectionAccess::builder()
+            .source(source)
+            .target(ToCollectionId::default())
+            .build()
+            .unwrap()]);
+
+        let res = Authz::<InterColl>::check_inter_collection(
+            SrvCtx(authz_context.clone()),
+            conn.clone(),
+            Input(list),
+        )
+        .await;
+        let err = res.err().unwrap();
+        assert_eq!(
+            std::mem::discriminant(&AuthzError::ForbiddenInterCollectionAccess("".to_string())),
+            std::mem::discriminant(err.domain_err()),
+        );
+
+        let list = Arc::new(vec![InterCollectionAccess::builder()
+            .source(CollectionId::default())
+            .target(target)
+            .build()
+            .unwrap()]);
+
+        let res = Authz::<InterColl>::check_inter_collection(
+            SrvCtx(authz_context.clone()),
+            conn.clone(),
+            Input(list),
+        )
+        .await;
+        let err = res.err().unwrap();
+        assert_eq!(
+            std::mem::discriminant(&AuthzError::ForbiddenInterCollectionAccess("".to_string())),
+            std::mem::discriminant(err.domain_err()),
+        );
     }
 }

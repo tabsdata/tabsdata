@@ -82,6 +82,7 @@ mod tests {
     use td_storage::{MountDef, Storage};
     use td_test::file::mount_uri;
     use td_tower::ctx_service::RawOneshot;
+    use te_execution::transaction::TransactionBy;
     use testdir::testdir;
     use tower::ServiceExt;
 
@@ -145,10 +146,13 @@ mod tests {
                 .build()?,
         );
 
+        let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
-        let service = ExecuteFunctionService::new(db.clone(), authz_context)
-            .service()
-            .await;
+        let transaction_by = Arc::new(TransactionBy::default());
+        let service =
+            ExecuteFunctionService::new(db.clone(), queries, authz_context, transaction_by)
+                .service()
+                .await;
         let _ = service.raw_oneshot(request).await?;
 
         let test_dir = testdir!();

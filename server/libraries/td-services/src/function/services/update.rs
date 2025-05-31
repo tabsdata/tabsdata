@@ -161,6 +161,9 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_update_function(db: DbPool) {
+        use td_objects::tower_service::authz::InterColl;
+        use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
+        use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
         use td_tower::metadata::{type_of_val, Metadata};
 
         use crate::function::layers::register::{
@@ -245,11 +248,23 @@ mod tests {
                 type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
                 type_of_val(&build_dependency_versions::<DaoQueries>),
+
+                // inter collections check for dependencies
+                type_of_val(&With::<DependencyDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
+                type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
+                type_of_val(&Authz::<InterColl>::check_inter_collection),
+
                 type_of_val(&insert_vec::<DaoQueries, DependencyDB>),
                 // Insert into trigger_versions(sql) current function trigger status=Active.
                 type_of_val(&With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
                 type_of_val(&build_trigger_versions::<DaoQueries>),
+
+                // inter collections check for trigger
+                type_of_val(&With::<TriggerDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
+                type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
+                type_of_val(&Authz::<InterColl>::check_inter_collection),
+
                 type_of_val(&insert_vec::<DaoQueries, TriggerDB>),
                 // Response
                 // Extract new function version id
