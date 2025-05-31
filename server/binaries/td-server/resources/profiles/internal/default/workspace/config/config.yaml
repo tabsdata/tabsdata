@@ -75,3 +75,6 @@ controllers:
           - input-folder
           - output-folder
           - current-instance
+        get-states:
+          - state-type: map
+            state-key: apiserver-mounts-options
