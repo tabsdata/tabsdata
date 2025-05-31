@@ -747,6 +747,10 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 def clean_python_virtual_environments():
+    if not os.path.exists(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER):
+        logger.info("No virtual environments to clean up.")
+        return
+
     try:
         existing_virtual_environments = sorted(
             os.listdir(DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER)
@@ -764,8 +768,9 @@ def clean_python_virtual_environments():
                     f"Cleaning up environment {environment} with real name {real_name}"
                 )
                 delete_virtual_environment(environment, real_name)
-    except FileNotFoundError:
-        logger.info("No virtual environments to clean up.")
+    except Exception as e:
+        logger.warning(f"Error cleaning up the virtual environments: {e}.")
+        logger.warning("Ignoring this exception as it is not critical.")
 
 
 def remove_docker_containers(name_pattern):

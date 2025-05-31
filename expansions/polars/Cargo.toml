@@ -108,7 +108,7 @@ default-features = false
 # Pay attention to these any time you intend to upgrade pyo3 dependency version.
 
 [workspace.dependencies.openssl]
-version = "0.10.71"
+version = "0.10.73"
 features = ["vendored"]
 
 [workspace.dependencies.pyo3]
@@ -124,7 +124,7 @@ version = "1.0.219"
 features = ["derive"]
 
 [workspace.dependencies.toml]
-version = "0.8.20"
+version = "0.8.22"
 
 [build-dependencies]
 

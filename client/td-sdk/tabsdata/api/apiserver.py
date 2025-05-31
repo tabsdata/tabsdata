@@ -508,7 +508,7 @@ class APIServer:
         raise_for_status: bool = True,
     ):
         endpoint = (
-            f"/collections/{collection_name}/function_versions/"
+            f"/collections/{collection_name}/functions/"
             f"{function_name_or_version_id}/executions/{execution_id}"
         )
         response = self.get(endpoint)

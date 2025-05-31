@@ -46,7 +46,10 @@ members = [
     "server/libraries/td-schema",
     "server/libraries/td-security",
     "server/libraries/td-services",
+    "server/libraries/td-shuttle",
     "server/libraries/td-storage",
+    "server/libraries/td-supervisor",
+    "server/libraries/td-tableframe",
     "server/libraries/td-test",
     "server/libraries/td-tower",
     "extensions/rust/te-apiserver",
@@ -214,8 +217,17 @@ path = "server/libraries/td-services"
 [workspace.dependencies.td-server]
 path = "server/binaries/td-server"
 
+[workspace.dependencies.td-shuttle]
+path = "server/libraries/td-shuttle"
+
 [workspace.dependencies.td-storage]
 path = "server/libraries/td-storage"
+
+[workspace.dependencies.td-supervisor]
+path = "server/libraries/td-supervisor"
+
+[workspace.dependencies.td-tableframe]
+path = "server/libraries/td-tableframe"
 
 [workspace.dependencies.td-test]
 path = "server/libraries/td-test"
@@ -232,7 +244,7 @@ path = "extensions/rust/te-execution"
 # External dependencies
 
 [workspace.dependencies.anyhow]
-version = "1.0.97"
+version = "1.0.98"
 
 [workspace.dependencies.aquamarine]
 version = "0.6.0"
@@ -247,13 +259,13 @@ version = "0.1.88"
 version = "0.3.0"
 
 [workspace.dependencies.axum]
-version = "0.8.1"
+version = "0.8.4"
 
 [workspace.dependencies.axum-embed]
 version = "0.1.0"
 
 [workspace.dependencies.axum-extra]
-version = "0.10.0"
+version = "0.10.1"
 
 [workspace.dependencies.base64]
 version = "0.22.1"
@@ -266,20 +278,20 @@ features = ["serde"]
 version = "1.10.1"
 
 [workspace.dependencies.clap]
-version = "4.5.32"
+version = "4.5.39"
 features = ["derive"]
 
 [workspace.dependencies.clap_derive]
 version = "4.5.32"
 
 [workspace.dependencies.chrono]
-version = "0.4.40"
+version = "0.4.41"
 
 [workspace.dependencies.colored]
 version = "2.2.0"
 
 [workspace.dependencies.color-eyre]
-version = "0.6.3"
+version = "0.6.4"
 
 [workspace.dependencies.config]
 version = "0.14.1"
@@ -301,7 +313,7 @@ version = "0.5.1"
 version = "0.2.34"
 
 [workspace.dependencies.data-encoding]
-version = "2.8.0"
+version = "2.9.0"
 
 [workspace.dependencies.derive-new]
 version = "0.7.0"
@@ -313,7 +325,7 @@ version = "5.0.1"
 version = "0.20.2"
 
 [workspace.dependencies.duct]
-version = "0.13"
+version = "0.13.7"
 
 [workspace.dependencies.futures]
 version = "0.3.31"
@@ -331,7 +343,7 @@ version = "0.4.3"
 version = "0.3.2"
 
 [workspace.dependencies.graphviz-rust]
-version = "0.9.3"
+version = "0.9.4"
 
 [workspace.dependencies.homedir]
 version = "0.3.4"
@@ -353,7 +365,7 @@ version = "0.4.23"
 version = "0.7.4"
 
 [workspace.dependencies.indexmap]
-version = "2.8.0"
+version = "2.9.0"
 
 [workspace.dependencies.itertools]
 version = "0.13.0"
@@ -368,7 +380,7 @@ version = "1.5.0"
 version = "0.3.0"
 
 [workspace.dependencies.libc]
-version = "0.2.171"
+version = "0.2.172"
 
 [workspace.dependencies.nix]
 version = "0.29.0"
@@ -382,10 +394,10 @@ version = "0.11.2"
 features = ["aws", "azure", "gcp", "http"]
 
 [workspace.dependencies.once_cell]
-version = "1.21.1"
+version = "1.21.3"
 
 [workspace.dependencies.openssl]
-version = "0.10.71"
+version = "0.10.73"
 features = ["vendored"]
 
 [workspace.dependencies.opentelemetry_sdk]
@@ -412,7 +424,7 @@ version = "0.44.2"
 features = ["lazy", "parquet", "csv", "json", "polars-lazy", "streaming", "cloud", "aws", "azure", "gcp", "cloud_write"]
 
 [workspace.dependencies.rand]
-version = "0.9.0"
+version = "0.9.1"
 
 [workspace.dependencies.ratatui]
 version = "0.28.1"
@@ -421,16 +433,16 @@ version = "0.28.1"
 version = "1.11.1"
 
 [workspace.dependencies.reqwest]
-version = "0.12.15"
+version = "0.12.18"
 
 [workspace.dependencies.rust-embed]
-version = "8.7.0"
+version = "8.7.2"
 
 [workspace.dependencies.semver]
 version = "1.0.26"
 
 [workspace.dependencies.sha2]
-version = "0.10.8"
+version = "0.10.9"
 
 [workspace.dependencies.serde]
 version = "1.0.219"
@@ -446,7 +458,7 @@ version = "0.25.1"
 version = "0.9.34"
 
 [workspace.dependencies.sqlx]
-version = "0.8.3"
+version = "0.8.6"
 features = ["sqlite", "runtime-tokio", "macros", "chrono"]
 
 [workspace.dependencies.strum]
@@ -462,7 +474,7 @@ version = "3.0.2"
 version = "0.32.1"
 
 [workspace.dependencies.tempfile]
-version = "3.19.0"
+version = "3.20.0"
 
 [workspace.dependencies.testdir]
 version = "0.9.3"
@@ -477,14 +489,14 @@ version = "0.4.2"
 version = "2.0.12"
 
 [workspace.dependencies.tokio]
-version = "1.44.1"
+version = "1.45.1"
 features = ["full"]
 
 [workspace.dependencies.tokio-util]
-version = "0.7.14"
+version = "0.7.15"
 
 [workspace.dependencies.toml]
-version = "0.8.20"
+version = "0.8.22"
 
 [workspace.dependencies.tower]
 version = "0.5.2"
@@ -497,7 +509,7 @@ version = "0.3.3"
 version = "0.3.3"
 
 [workspace.dependencies.tower-http]
-version = "0.6.2"
+version = "0.6.4"
 features = ["cors", "timeout", "trace"]
 
 [workspace.dependencies.tabled]
@@ -526,14 +538,14 @@ version = "2.5.4"
 features = ["serde"]
 
 [workspace.dependencies.uuid]
-version = "1.16.0"
+version = "1.17.0"
 features = ["v7"]
 
 [workspace.dependencies.walkdir]
 version = "2.5.0"
 
 [workspace.dependencies.whoami]
-version = "1.5.2"
+version = "1.6.0"
 
 [workspace.dependencies.wildmatch]
 version = "2.4.0"
