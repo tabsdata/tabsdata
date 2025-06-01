@@ -162,7 +162,7 @@ mod tests {
         assert_eq!(user_info.name(), &UserName::try_from("admin")?);
         assert_eq!(user_info.current_role_id(), &RoleId::user());
         assert_eq!(user_info.user_roles().len(), 3);
-        assert_eq!(user_info.current_permissions().len(), 4);
+        assert_eq!(user_info.current_permissions().len(), 3);
         Ok(())
     }
 }

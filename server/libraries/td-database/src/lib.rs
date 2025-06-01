@@ -27,12 +27,12 @@ mod tests {
     use crate::sql::SqliteConfigBuilder;
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CA_ALL_SYS_ADMIN, ENCODED_ID_CD_ALL_SYS_ADMIN,
-        ENCODED_ID_CD_ALL_USER, ENCODED_ID_CRR_ALL_SYS_ADMIN, ENCODED_ID_CRR_ALL_USER,
-        ENCODED_ID_CR_ALL_SYS_ADMIN, ENCODED_ID_CR_ALL_USER, ENCODED_ID_CX_ALL_SYS_ADMIN,
-        ENCODED_ID_CX_ALL_USER, ENCODED_ID_ROLE_SEC_ADMIN, ENCODED_ID_ROLE_SYS_ADMIN,
-        ENCODED_ID_ROLE_USER, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
-        ENCODED_ID_SS_SYS_ADMIN, ENCODED_ID_USER_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN,
-        ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_USER,
+        ENCODED_ID_CD_ALL_USER, ENCODED_ID_CR_ALL_SYS_ADMIN, ENCODED_ID_CR_ALL_USER,
+        ENCODED_ID_CX_ALL_SYS_ADMIN, ENCODED_ID_CX_ALL_USER, ENCODED_ID_ROLE_SEC_ADMIN,
+        ENCODED_ID_ROLE_SYS_ADMIN, ENCODED_ID_ROLE_USER, ENCODED_ID_SA_SYS_ADMIN,
+        ENCODED_ID_SS_SEC_ADMIN, ENCODED_ID_SS_SYS_ADMIN, ENCODED_ID_USER_ADMIN,
+        ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN,
+        ENCODED_ID_USER_ROLE_ADMIN_USER,
     };
     use testdir::testdir;
 
@@ -209,22 +209,6 @@ mod tests {
             SELECT id FROM permissions
             WHERE
                 role_id = ?1 AND
-                permission_type = 'cR' AND
-                entity_type = 'c' AND
-                entity_id IS NULL
-            "#,
-        )
-        .bind(ENCODED_ID_ROLE_SYS_ADMIN)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CRR_ALL_SYS_ADMIN);
-
-        let row: Value = sqlx::query_as(
-            r#"
-            SELECT id FROM permissions
-            WHERE
-                role_id = ?1 AND
                 permission_type = 'cr' AND
                 entity_type = 'c' AND
                 entity_id IS NULL
@@ -299,22 +283,6 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(row.id, ENCODED_ID_CX_ALL_USER);
-
-        let row: Value = sqlx::query_as(
-            r#"
-            SELECT id FROM permissions
-            WHERE
-                role_id = ?1 AND
-                permission_type = 'cR' AND
-                entity_type = 'c' AND
-                entity_id IS NULL
-            "#,
-        )
-        .bind(ENCODED_ID_ROLE_USER)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CRR_ALL_USER);
 
         let row: Value = sqlx::query_as(
             r#"

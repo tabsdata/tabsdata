@@ -236,8 +236,6 @@ pub enum PermissionType {
     CollectionExec,
     #[strum(to_string = "cr")]
     CollectionRead,
-    #[strum(to_string = "cR")]
-    CollectionReadAll,
 }
 
 impl PermissionType {

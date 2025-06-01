@@ -8,9 +8,7 @@ use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::WorkerMessageParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{
-    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
-};
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
 use td_objects::types::basic::{CollectionId, WorkerMessageIdName};
@@ -40,7 +38,7 @@ fn provider() {
         from_fn(With::<WorkerMessageDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
         // Resolve worker message path.
         from_fn(resolve_worker_log_path),
         // Get worker message logs.
@@ -83,7 +81,7 @@ mod tests {
             type_of_val(&With::<WorkerMessageDB>::extract::<CollectionId>),
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
+            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
             // Resolve worker message path.
             type_of_val(&resolve_worker_log_path),
             // Get worker message logs.

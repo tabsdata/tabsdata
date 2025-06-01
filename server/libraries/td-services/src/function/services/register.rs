@@ -983,7 +983,7 @@ mod tests {
                 .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
                 .reuse_frozen_tables(false)
                 .build()?;
-            seed_function(&db, &collection, &create).await;
+            seed_function(&db, collection, &create).await;
         }
 
         // Actual test

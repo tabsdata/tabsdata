@@ -93,19 +93,6 @@ WHERE r.name = 'sys_admin'
 ;
 
 INSERT INTO permissions
-SELECT '0000000000000000000000010C',
-       r.id,
-       'cR',
-       'c',
-       NULL,
-       '00000000000000000000000000',
-       datetime('now'),
-       false
-FROM roles r
-WHERE r.name = 'sys_admin'
-;
-
-INSERT INTO permissions
 SELECT '0000000000000000000000010G',
        r.id,
        'cr',
@@ -162,19 +149,6 @@ INSERT INTO permissions
 SELECT '00000000000000000000000110',
        r.id,
        'cx',
-       'c',
-       NULL,
-       '00000000000000000000000000',
-       datetime('now'),
-       false
-FROM roles r
-WHERE r.name = 'user'
-;
-
-INSERT INTO permissions
-SELECT '00000000000000000000000114',
-       r.id,
-       'cR',
        'c',
        NULL,
        '00000000000000000000000000',

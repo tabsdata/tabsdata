@@ -7,9 +7,7 @@ use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::FunctionRunParam;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{
-    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, CollReadAll,
-};
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{
     combine, BuildService, ExtractNameService, ExtractService, TryIntoService, With,
 };
@@ -46,7 +44,7 @@ fn provider() {
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
         // find function version ID
         from_fn(With::<FunctionRunParam>::extract::<FunctionIdName>),
         from_fn(combine::<CollectionIdName, FunctionIdName>),
@@ -118,7 +116,7 @@ mod tests {
 
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, CollReadAll>::check),
+            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
 
             // find function version ID
             type_of_val(&With::<FunctionRunParam>::extract::<FunctionIdName>),

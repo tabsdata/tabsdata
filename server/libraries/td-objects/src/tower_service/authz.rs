@@ -356,8 +356,6 @@ pub enum Permission {
     CollectionExec(AuthzEntity<CollectionId>), //trigger functions
     /// Accessing public tables (schema and data) in a collection.
     CollectionRead(AuthzEntity<CollectionId>), //read (public) tables
-    /// Accessing private and public tables (schema and data) in a collection.
-    CollectionReadAll(AuthzEntity<CollectionId>), //read (public & private) tables
 }
 
 impl Permission {
@@ -369,7 +367,6 @@ impl Permission {
                 | Permission::CollectionDev(_)
                 | Permission::CollectionExec(_)
                 | Permission::CollectionRead(_)
-                | Permission::CollectionReadAll(_)
         )
     }
 
@@ -381,7 +378,6 @@ impl Permission {
                 | Permission::CollectionDev(AuthzEntity::All)
                 | Permission::CollectionExec(AuthzEntity::All)
                 | Permission::CollectionRead(AuthzEntity::All)
-                | Permission::CollectionReadAll(AuthzEntity::All)
         )
     }
 
@@ -585,23 +581,6 @@ impl AuthzRequirements for CollRead {
     }
 }
 
-/// Collection read public and private permission.
-#[derive(Debug)]
-pub struct CollReadAll {
-    #[allow(dead_code)]
-    instance_blocker: (),
-}
-
-impl AuthzRequirements for CollReadAll {
-    fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
-        collection_any_of::<Self>(scope, |collection_id| {
-            HashSet::from([Permission::CollectionReadAll(AuthzEntity::On(
-                *collection_id,
-            ))])
-        })
-    }
-}
-
 /// Internally used to add [`AuthzEntity::All`] to the required permissions for
 /// a given [`AuthzScope`] to match current permissions that have wildcards.
 fn augment_with_wildcards(required_permissions: HashSet<Permission>) -> HashSet<Permission> {
@@ -619,9 +598,6 @@ fn augment_with_wildcards(required_permissions: HashSet<Permission>) -> HashSet<
             }
             Permission::CollectionRead(AuthzEntity::On(_)) => {
                 with_wildcards.insert(Permission::CollectionRead(AuthzEntity::All));
-            }
-            Permission::CollectionReadAll(AuthzEntity::On(_)) => {
-                with_wildcards.insert(Permission::CollectionReadAll(AuthzEntity::All));
             }
             _ => {}
         }
@@ -830,8 +806,7 @@ mod test {
     use crate::crudl::RequestContext;
     use crate::tower_service::authz::{
         AuthzContextT, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,
-        CollExec, CollRead, CollReadAll, InterColl, NoPermissions, Permission, Requester, SecAdmin,
-        SysAdmin,
+        CollExec, CollRead, InterColl, NoPermissions, Permission, Requester, SecAdmin, SysAdmin,
     };
     use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
     use crate::types::permission::InterCollectionAccess;
@@ -859,16 +834,11 @@ mod test {
         assert!(
             Permission::CollectionRead(AuthzEntity::On(CollectionId::default())).is_on_collection()
         );
-        assert!(
-            Permission::CollectionReadAll(AuthzEntity::On(CollectionId::default()))
-                .is_on_collection()
-        );
 
         assert!(Permission::CollectionAdmin(AuthzEntity::All).is_on_collection());
         assert!(Permission::CollectionDev(AuthzEntity::All).is_on_collection());
         assert!(Permission::CollectionExec(AuthzEntity::All).is_on_collection());
         assert!(Permission::CollectionRead(AuthzEntity::All).is_on_collection());
-        assert!(Permission::CollectionReadAll(AuthzEntity::All).is_on_collection());
 
         assert!(!Permission::SysAdmin.is_on_collection());
         assert!(!Permission::SecAdmin.is_on_collection());
@@ -893,16 +863,11 @@ mod test {
             !Permission::CollectionRead(AuthzEntity::On(CollectionId::default()))
                 .is_on_all_collections()
         );
-        assert!(
-            !Permission::CollectionReadAll(AuthzEntity::On(CollectionId::default()))
-                .is_on_all_collections()
-        );
 
         assert!(Permission::CollectionAdmin(AuthzEntity::All).is_on_all_collections());
         assert!(Permission::CollectionDev(AuthzEntity::All).is_on_all_collections());
         assert!(Permission::CollectionExec(AuthzEntity::All).is_on_all_collections());
         assert!(Permission::CollectionRead(AuthzEntity::All).is_on_all_collections());
-        assert!(Permission::CollectionReadAll(AuthzEntity::All).is_on_all_collections());
 
         assert!(!Permission::SysAdmin.is_on_all_collections());
         assert!(!Permission::SecAdmin.is_on_all_collections());
@@ -988,7 +953,6 @@ mod test {
                     Permission::CollectionDev(AuthzEntity::All),
                     Permission::CollectionExec(AuthzEntity::All),
                     Permission::CollectionRead(AuthzEntity::All),
-                    Permission::CollectionReadAll(AuthzEntity::All),
                 ],
             )
             .add_permissions(
@@ -1004,7 +968,6 @@ mod test {
                     Permission::CollectionDev(AuthzEntity::All),
                     Permission::CollectionExec(AuthzEntity::All),
                     Permission::CollectionRead(AuthzEntity::All),
-                    Permission::CollectionReadAll(AuthzEntity::All),
                 ],
             )
         }
@@ -1221,13 +1184,6 @@ mod test {
             Authz::<CollRead>::new(),
         )
         .await;
-        assert_ok(
-            &authz_context,
-            &request_context,
-            scope,
-            Authz::<CollReadAll>::new(),
-        )
-        .await;
 
         // sec_admin role
         let request_context = Arc::new(sec_admin_context);
@@ -1279,14 +1235,6 @@ mod test {
             AuthzError::UnAuthorized("".to_string()),
         )
         .await;
-        assert_error(
-            &authz_context,
-            &request_context,
-            scope,
-            Authz::<CollReadAll>::new(),
-            AuthzError::UnAuthorized("".to_string()),
-        )
-        .await;
 
         // user role
         let request_context = Arc::new(user_context);
@@ -1335,13 +1283,6 @@ mod test {
             &request_context,
             scope,
             Authz::<CollRead>::new(),
-        )
-        .await;
-        assert_ok(
-            &authz_context,
-            &request_context,
-            scope,
-            Authz::<CollReadAll>::new(),
         )
         .await;
     }

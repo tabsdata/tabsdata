@@ -162,7 +162,7 @@ mod tests {
         // Permissions
         let _hero_permissions = seed_permission(
             db,
-            PermissionType::try_from("cR").unwrap(),
+            PermissionType::try_from("cr").unwrap(),
             None,
             None,
             &hero_role,
@@ -170,7 +170,7 @@ mod tests {
         .await;
         let _villain_permissions = seed_permission(
             db,
-            PermissionType::try_from("cR").unwrap(),
+            PermissionType::try_from("cr").unwrap(),
             None,
             None,
             &villain_role,

@@ -36,9 +36,6 @@ impl SqlAuthzDataProvider {
             PermissionType::CollectionDev => Permission::CollectionDev(authz_entity(perm_db)),
             PermissionType::CollectionExec => Permission::CollectionExec(authz_entity(perm_db)),
             PermissionType::CollectionRead => Permission::CollectionRead(authz_entity(perm_db)),
-            PermissionType::CollectionReadAll => {
-                Permission::CollectionReadAll(authz_entity(perm_db))
-            }
         };
         Ok(perm)
     }
@@ -114,9 +111,9 @@ mod tests {
             .get_permissions(&mut db.acquire().await.unwrap())
             .await?;
         assert_eq!(permissions.len(), 3);
-        assert_eq!(permissions.get(&RoleId::sys_admin()).unwrap().len(), 7);
+        assert_eq!(permissions.get(&RoleId::sys_admin()).unwrap().len(), 6);
         assert_eq!(permissions.get(&RoleId::sec_admin()).unwrap().len(), 2);
-        assert_eq!(permissions.get(&RoleId::user()).unwrap().len(), 4);
+        assert_eq!(permissions.get(&RoleId::user()).unwrap().len(), 3);
         Ok(())
     }
 
