@@ -105,7 +105,7 @@ def clean_py(project_folder):
 
 def clean_rs(project_folder):
     inclusion_patterns = [
-        "Cargo.lock",
+        # "Cargo.lock",
         "target",
         "*.log",
         "*.log.*",

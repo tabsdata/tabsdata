@@ -83,7 +83,6 @@ connectors.ee/python/**/assets/manifest/SOURCETRACK.yaml
 build/
 **/build/
 !.github/**/build/
-**/Cargo.lock
 celerybeat-schedule
 celerybeat.pid
 changelog.config.js
