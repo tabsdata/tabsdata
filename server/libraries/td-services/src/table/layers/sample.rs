@@ -12,6 +12,7 @@ use td_error::{td_error, TdError};
 use td_objects::types::basic::{SampleLen, SampleOffset};
 use td_objects::types::stream::BoxedSyncStream;
 use td_storage::{SPath, Storage};
+use td_tableframe::common::drop_system_columns;
 use td_tower::extractors::{Input, SrvCtx};
 
 #[td_error]
@@ -45,6 +46,9 @@ pub async fn get_table_sample(
                 let lazy_frame = LazyFrame::scan_parquet(&url_str, parquet_config)
                     .map_err(SampleError::LazyFrameError)?;
 
+                let lazy_frame =
+                    drop_system_columns(lazy_frame).map_err(SampleError::LazyFrameError)?;
+
                 let mut dataframe = lazy_frame
                     .slice(**offset, **len as u32)
                     .collect()
@@ -58,11 +62,9 @@ pub async fn get_table_sample(
 
                 Bytes::from(buffer)
             };
-
             Ok::<_, TdError>(bytes)
         })
     }
     .into_stream();
-
     Ok(BoxedSyncStream::new(stream))
 }

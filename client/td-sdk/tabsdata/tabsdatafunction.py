@@ -15,9 +15,6 @@ import polars as pl
 import tabsdata.tableframe.lazyframe.frame as td_frame
 
 # noinspection PyProtectedMember
-import tabsdata.utils.tableframe._common as td_common
-
-# noinspection PyProtectedMember
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata.exceptions import (
     ErrorCode,
@@ -27,6 +24,11 @@ from tabsdata.io.input import Input, TableInput, build_input
 from tabsdata.io.output import Output, TableOutput, build_output
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.tableuri import build_table_uri_object
+
+# noinspection PyProtectedMember
+from tabsdata.utils.tableframe._translator import _unwrap_table_frame
+
+# noinspection PyProtectedMember
 
 logger = logging.getLogger(__name__)
 
@@ -347,26 +349,13 @@ def _clean_recursively_and_convert_to_datatype(
         try:
             if datatype == pl.DataFrame:
                 # noinspection PyProtectedMember
-                return td_common.drop_system_columns(
-                    lf=result._lf,
-                    ignore_missing=True,
-                ).collect()
+                return _unwrap_table_frame(result).collect()
             elif datatype == pl.LazyFrame:
                 # noinspection PyProtectedMember
-                return td_common.drop_system_columns(
-                    lf=result._lf,
-                    ignore_missing=True,
-                )
+                return _unwrap_table_frame(result)
             elif datatype == pd.DataFrame:
                 # noinspection PyProtectedMember
-                return (
-                    td_common.drop_system_columns(
-                        lf=result._lf,
-                        ignore_missing=True,
-                    )
-                    .collect()
-                    .to_pandas()
-                )
+                return _unwrap_table_frame(result).collect().to_pandas()
             else:
                 return result
         except pl.exceptions.ColumnNotFoundError as e:

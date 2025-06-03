@@ -8,6 +8,7 @@ use polars::prelude::{Field, LazyFrame, PolarsError, ScanArgsParquet, SchemaExt}
 use td_error::{td_error, TdError};
 use td_objects::types::table::{SchemaField, TableSchema};
 use td_storage::{SPath, Storage};
+use td_tableframe::common::drop_system_columns;
 use td_tower::extractors::{Input, SrvCtx};
 
 #[td_error]
@@ -29,8 +30,12 @@ pub async fn get_table_schema(
         ..ScanArgsParquet::default()
     };
     let schema: Result<_, TdError> = tokio::task::block_in_place(move || {
-        let mut lazy_frame = LazyFrame::scan_parquet(&url_str, parquet_config)
+        let lazy_frame = LazyFrame::scan_parquet(&url_str, parquet_config)
             .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
+
+        let mut lazy_frame = drop_system_columns(lazy_frame)
+            .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
+
         let schema = lazy_frame
             .collect_schema()
             .map_err(SchemaError::CouldNotGetSchema)?;

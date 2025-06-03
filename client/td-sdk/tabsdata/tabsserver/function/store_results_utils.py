@@ -42,7 +42,20 @@ from tabsdata.io.output import (
 from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tabsserver.function.logging_utils import pad_string
+from tabsdata.tabsserver.function.yaml_parsing import (
+    InputYaml,
+    Table,
+    TransporterAzure,
+    TransporterEnv,
+    TransporterLocalFile,
+    TransporterS3,
+    V1CopyFormat,
+    store_copy_as_yaml,
+)
 from tabsdata.utils.sql_utils import add_driver_to_uri, obtain_uri
+
+# noinspection PyProtectedMember
+from tabsdata.utils.tableframe._translator import _unwrap_table_frame
 
 from . import sql_utils
 from .cloud_connectivity_utils import (
@@ -63,16 +76,6 @@ from .global_utils import (
     TABSDATA_EXTENSION,
     convert_path_to_uri,
     convert_uri_to_path,
-)
-from .yaml_parsing import (
-    InputYaml,
-    Table,
-    TransporterAzure,
-    TransporterEnv,
-    TransporterLocalFile,
-    TransporterS3,
-    V1CopyFormat,
-    store_copy_as_yaml,
 )
 
 if TYPE_CHECKING:
@@ -790,7 +793,7 @@ def store_polars_lf_in_file(
 def remove_system_columns_and_convert(result: TableFrame) -> pl.LazyFrame:
     try:
         # Note: this converts result from a TableFrame to a LazyFrame
-        return result._lf.drop(td_helpers.SYSTEM_COLUMNS)
+        return _unwrap_table_frame(result)
     except pl.exceptions.ColumnNotFoundError as e:
         logger.error(
             "Missing one of the following system columns"

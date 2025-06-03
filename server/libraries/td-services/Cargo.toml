@@ -57,6 +57,7 @@ td-execution = { workspace = true }
 td-objects = { workspace = true }
 td-security = { workspace = true }
 td-storage = { workspace = true }
+td-tableframe = { workspace = true }
 td-tower = { workspace = true }
 
 ## Extensions

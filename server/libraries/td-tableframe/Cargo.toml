@@ -63,6 +63,7 @@ ta-tableframe = { workspace = true }
 
 # External dependencies
 
+polars = { workspace = true, features = ["lazy"] }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 
