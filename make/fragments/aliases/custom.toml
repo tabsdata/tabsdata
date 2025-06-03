@@ -4,3 +4,6 @@
 
 [tasks.dguide]
 alias = "book_dguide"
+
+[tasks.docs]
+alias = "book_dguide"
