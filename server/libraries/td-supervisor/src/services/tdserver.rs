@@ -216,7 +216,17 @@ struct UpgradeArguments {
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
-struct CleanArguments {}
+struct CleanArguments {
+    /// Automatic confirmation.
+    #[arg(
+        long,
+        name = "force",
+        required = false,
+        default_value_t = false,
+        long_help = "Clean without confirmation."
+    )]
+    force: bool,
+}
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
@@ -264,6 +274,16 @@ struct CreateArguments {
 struct DeleteArguments {
     #[command(flatten)]
     instance: InstanceArguments,
+
+    /// Automatic confirmation.
+    #[arg(
+        long,
+        name = "force",
+        required = false,
+        default_value_t = false,
+        long_help = "Delete without confirmation."
+    )]
+    force: bool,
 }
 
 #[derive(Debug, Clone, Getters, Args)]
@@ -715,14 +735,19 @@ fn command_delete(arguments: DeleteArguments) {
     let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
 
     eprintln!("Removing an instance will delete only the local instance resources.");
-    eprintln!("Cloud storage and other external resources will be kept unmodified.");
-    eprintln!("Removing an instance is a task that cannot be undone. Please, confirm with 'yes' to continue...");
-    io::stdout().flush().unwrap();
-    let mut confirmation = String::new();
-    io::stdin().read_line(&mut confirmation).unwrap();
-    if confirmation.trim() != "yes" {
-        eprintln!("Cancelling operation");
-        exit(NoAction.code());
+    eprintln!("Cloud storage and other external resources will be left unmodified.");
+    eprintln!("Removing an instance cannot be undone.");
+
+    if !arguments.force {
+        eprintln!("Please, confirm with 'yes' to continue...");
+        eprint!(">>> ");
+        io::stdout().flush().unwrap();
+        let mut confirmation = String::new();
+        io::stdin().read_line(&mut confirmation).unwrap();
+        if confirmation.trim() != "yes" {
+            eprintln!("Cancelling operation");
+            exit(NoAction.code());
+        }
     }
 
     if !supervisor_instance_absolute.exists() {
@@ -1283,15 +1308,20 @@ fn command_clean(arguments: CleanArguments) {
     exit(Success.code());
 }
 
-fn clean_envs(_: CleanArguments) {
-    eprintln!("Make sure there is no running instance before cleaning the Tabsdata internal Python virtual environments & pip and uv cache");
-    eprintln!("Removing Tabsdata internal Python virtual environments is a task that cannot be undone. Please, confirm with 'yes' to continue...");
-    io::stdout().flush().unwrap();
-    let mut confirmation = String::new();
-    io::stdin().read_line(&mut confirmation).unwrap();
-    if confirmation.trim() != "yes" {
-        eprintln!("Cancelling operation");
-        return;
+fn clean_envs(arguments: CleanArguments) {
+    eprintln!("Make sure there is no running instance before continuing.");
+    eprintln!("Removing Tabsdata internal Python virtual environments cannot be undone.");
+
+    if !arguments.force {
+        eprintln!("Please, confirm with 'yes' to continue...");
+        eprint!(">>> ");
+        io::stdout().flush().unwrap();
+        let mut confirmation = String::new();
+        io::stdin().read_line(&mut confirmation).unwrap();
+        if confirmation.trim() != "yes" {
+            eprintln!("Cancelling operation");
+            return;
+        }
     }
 
     set_log_level(Level::INFO);
