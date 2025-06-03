@@ -35,6 +35,13 @@ pub fn wait_for_attach(signal: &str) {
     println!("Exiting from Wait for Attach function...");
 }
 
+/// Checks if Tabs Data No Wait flag is activated as an environment variable.
+// When debugging, this environment variable can make the supervisor not to wait for workers.
+pub fn check_nowait_env() -> bool {
+    const TABSDATA_NOWAIT: &str = "TABSDATA_NOWAIT";
+    check_flag_env(TABSDATA_NOWAIT)
+}
+
 /// Checks if Tabs Data Attach flag is activated as an environment variable.
 // This function is called by the macro generated code. Therefore, identifying it as dead code is fine.
 #[allow(dead_code)]

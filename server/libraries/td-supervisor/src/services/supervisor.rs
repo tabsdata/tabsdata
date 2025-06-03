@@ -55,6 +55,7 @@ use std::{fmt, panic, process};
 use strum_macros::{AsRefStr, EnumString};
 use sysinfo::Signal::Kill;
 use sysinfo::{Pid, Signal};
+use td_common::attach::check_nowait_env;
 use td_common::cli::{parse_extra_arguments, Cli, TRAILING_ARGUMENTS_PREFIX};
 use td_common::config::Config;
 use td_common::env::to_absolute;
@@ -1417,72 +1418,89 @@ impl Supervisor {
                         Err(err) => return (Some(td_worker), Err(RunnerError::from(err))),
                     };
                 }
-                match child.wait().await {
-                    Ok(exit_status) => {
-                        if exit_status.success() {
-                            info!(
-                                "Class {} worker '{}' completed successfully!",
-                                class.as_ref(),
-                                &describer.name()
-                            );
-                            if let Some(set_state) = worker.set_state().as_ref().cloned() {
-                                let mut output = String::new();
-                                if let Some(mut stdout) = child.stdout.take() {
-                                    if let Err(e) = stdout.read_to_string(&mut output).await {
-                                        return (Some(td_worker), Err(ReadStdOutError(e)));
-                                    }
-                                } else {
-                                    return (Some(td_worker), Err(MissingStdOutError));
-                                }
-                                let state =
-                                    extract_state_data_from_string(output, set_state.state_type);
-                                self.state
-                                    .write()
-                                    .await
-                                    .data_mut()
-                                    .insert(set_state, state.unwrap());
-                            }
-                        } else {
-                            return if let Some(code) = exit_status.code() {
-                                let message = format!(
-                                    "Class {} worker '{}' failed with exit code: {:?}",
+                if class == REGULAR && check_nowait_env() {
+                    info!(
+                        "Holding {} worker... '{}'",
+                        class.as_ref().to_string(),
+                        worker.name()
+                    );
+                    loop {
+                        sleep(Duration::from_secs(5)).await;
+                    }
+                } else {
+                    match child.wait().await {
+                        Ok(exit_status) => {
+                            if exit_status.success() {
+                                info!(
+                                    "Class {} worker '{}' completed successfully!",
                                     class.as_ref(),
-                                    &describer.name(),
-                                    code
+                                    &describer.name()
                                 );
-                                error!(message);
-                                (Some(td_worker), Err(WorkerExited { message }))
-                            } else {
-                                #[cfg(not(target_os = "windows"))]
-                                {
-                                    if let Some(signal) = exit_status.signal() {
-                                        let message = format!(
-                                            "Class {} worker '{}' failed with signal: {:?}",
-                                            class.as_ref(),
-                                            &describer.name(),
-                                            signal
-                                        );
-                                        error!(message);
-                                        return (Some(td_worker), Err(WorkerExited { message }));
+                                if let Some(set_state) = worker.set_state().as_ref().cloned() {
+                                    let mut output = String::new();
+                                    if let Some(mut stdout) = child.stdout.take() {
+                                        if let Err(e) = stdout.read_to_string(&mut output).await {
+                                            return (Some(td_worker), Err(ReadStdOutError(e)));
+                                        }
+                                    } else {
+                                        return (Some(td_worker), Err(MissingStdOutError));
                                     }
+                                    let state = extract_state_data_from_string(
+                                        output,
+                                        set_state.state_type,
+                                    );
+                                    self.state
+                                        .write()
+                                        .await
+                                        .data_mut()
+                                        .insert(set_state, state.unwrap());
                                 }
-                                let message =
-                                    "Process exited with unknown exit code or signal.".to_string();
-                                error!(message);
-                                (Some(td_worker), Err(WorkerExited { message }))
-                            };
+                            } else {
+                                return if let Some(code) = exit_status.code() {
+                                    let message = format!(
+                                        "Class {} worker '{}' failed with exit code: {:?}",
+                                        class.as_ref(),
+                                        &describer.name(),
+                                        code
+                                    );
+                                    error!(message);
+                                    (Some(td_worker), Err(WorkerExited { message }))
+                                } else {
+                                    #[cfg(not(target_os = "windows"))]
+                                    {
+                                        if let Some(signal) = exit_status.signal() {
+                                            let message = format!(
+                                                "Class {} worker '{}' failed with signal: {:?}",
+                                                class.as_ref(),
+                                                &describer.name(),
+                                                signal
+                                            );
+                                            error!(message);
+                                            return (
+                                                Some(td_worker),
+                                                Err(WorkerExited { message }),
+                                            );
+                                        }
+                                    }
+                                    let message =
+                                        "Process exited with unknown exit code or signal."
+                                            .to_string();
+                                    error!(message);
+                                    (Some(td_worker), Err(WorkerExited { message }))
+                                };
+                            }
                         }
-                    }
-                    Err(e) => {
-                        error!(
-                            "Class {} worker '{}' failed with error: {:?}",
-                            class.as_ref().to_string(),
-                            &describer.name(),
-                            e
-                        );
-                        return (Some(td_worker), Err(IOError(e)));
-                    }
-                };
+                        Err(e) => {
+                            error!(
+                                "Class {} worker '{}' failed with error: {:?}",
+                                class.as_ref().to_string(),
+                                &describer.name(),
+                                e
+                            );
+                            return (Some(td_worker), Err(IOError(e)));
+                        }
+                    };
+                }
             }
             Err(e) => match class {
                 INIT => {
