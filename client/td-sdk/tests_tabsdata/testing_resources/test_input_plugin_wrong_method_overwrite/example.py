@@ -1,0 +1,44 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+import os
+
+from custom_pypi_importer import PyPIPkgStatsSource
+from tests_tabsdata.bootest import TDLOCAL_FOLDER
+from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
+
+import tabsdata as td
+from tabsdata.utils.bundle_utils import create_bundle_archive
+
+ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
+ROOT_PROJECT_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        )
+    )
+)
+DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
+
+
+# In this example, we are obtaining the data from all files that match the
+# source_*.csv wildcard in the current folder, and then performing an inner join by ID.
+# The output is saved in output.json, and expected_result.json contains the expected
+# output of applying the function to the  input data.
+@td.publisher(
+    name="test_input_plugin_wrong_method_overwrite",
+    source=PyPIPkgStatsSource("polars"),
+    tables="output",
+)
+def input_plugin_wrong_method_overwrite(df: td.TableFrame):
+    return df
+
+
+if __name__ == "__main__":
+    os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
+    create_bundle_archive(
+        input_plugin_wrong_method_overwrite,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=DEFAULT_SAVE_LOCATION,
+    )

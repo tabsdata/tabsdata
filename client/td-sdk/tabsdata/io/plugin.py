@@ -235,6 +235,11 @@ class SourcePlugin:
             Union[str, Tuple[str, ...], List[str]]: The path of the file(s) created, in
                 the order they must be mapped to the dataset function
         """
+        raise NotImplementedError(
+            "When implementing a SourcePlugin, either the 'stream' method or the "
+            "'chunk' method must be overridden. The current plugin "
+            f"'{self.__class__.__name__}' does not implement either of them."
+        )
 
     def to_dict(self) -> dict:
         """
@@ -392,6 +397,11 @@ class DestinationPlugin:
         Returns:
             A list of the intermediate files created
         """
+        raise NotImplementedError(
+            "When implementing a DestinationPlugin, either the 'stream' method or the "
+            "'chunk' method must be overridden. The current plugin "
+            f"'{self.__class__.__name__}' does not implement either of them."
+        )
 
     def write(self, files: List[str | List[str] | List[List[str]]]):
         """
