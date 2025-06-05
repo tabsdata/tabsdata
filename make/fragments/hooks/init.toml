@@ -38,5 +38,7 @@ script = [
 
     PATH = get_env PATH
     debug "✅ Real PATH: ${PATH}"
+
+    cm_run_task permit
     ''']
 

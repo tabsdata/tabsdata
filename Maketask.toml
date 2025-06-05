@@ -3,6 +3,9 @@
 #
 
 extend = [
+    { path = "./make/fragments/tasks/permit_rs.toml" },
+    { path = "./make/fragments/tasks/permit_py.toml" },
+
     { path = "./make/fragments/tasks/clean_rs.toml" },
     { path = "./make/fragments/tasks/clean_py.toml" },
 
@@ -15,6 +18,16 @@ extend = [
     { path = "./make/fragments/tasks/book.toml" },
 
     { path = "./make/fragments/aliases/custom.toml" },
+]
+
+[tasks.permit]
+category = "00 - Verify"
+description = "Ensure all basic required language tools are available"
+run_task = [
+    { name = [
+        "permit_py",
+        "permit_rs",
+    ] }
 ]
 
 [tasks.clean]
@@ -115,7 +128,7 @@ script = [
 ## wip...
 
 [tasks.test]
-category = "02 - Test"
+category = "03 - Test"
 description = "Unitary automated tests"
 run_task = [
     { name = [
