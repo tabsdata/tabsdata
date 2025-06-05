@@ -20,7 +20,7 @@ const CONFIG_NAME: &str = "apiserver";
 
 #[attach(signal = "apiserver")]
 fn main() {
-    logging::start(Level::DEBUG, None, false);
+    logging::start(Level::INFO, None, false);
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");
@@ -30,7 +30,7 @@ fn main() {
         CONFIG_NAME,
         |config, params| async move {
             // Initialize logging
-            logging::start(Level::DEBUG, None, false);
+            logging::start(Level::INFO, None, false);
 
             // Resolve config and params
             let config = match params.resolve(config) {

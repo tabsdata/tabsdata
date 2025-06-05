@@ -11,11 +11,14 @@ use once_cell::sync::OnceCell;
 use opentelemetry_sdk::logs::LoggerProvider;
 use opentelemetry_stdout::LogExporter;
 use pico_args::Arguments;
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::env;
 use std::fmt::Debug;
-use std::fs::{create_dir_all, OpenOptions};
-use std::io::stdout;
+use std::fs::{create_dir_all, read_to_string, OpenOptions};
+use std::io::{stdout, ErrorKind};
 use std::path::PathBuf;
+use std::str::FromStr;
 use tracing::field::Field;
 use tracing::{debug, error, info, trace, warn, Event, Level, Subscriber};
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
@@ -40,6 +43,10 @@ pub const WORK_PARAMETER: &str = "--work";
 pub const CURRENT_DIR: &str = ".";
 pub const DEFAULT_LOG_POSITION: &str = "..";
 pub const DEFAULT_LOG_PLACE: &str = "work";
+
+pub const PROFILE_ENV_PATTERN: &str = "TD_LOG_PROFILE_";
+
+pub const LOG_CONFIG_FILE: &str = "log.yaml";
 
 pub const LOG_LOCATION: &str = "log";
 pub const LOG_FILE: &str = "td.log";
@@ -86,7 +93,7 @@ where
     fn event_enabled(&self, event: &Event<'_>, _context: Context<'_, S>) -> bool {
         let mut forward = true;
         let mut message = String::new();
-        event.record(&mut |field: &Field, value: &dyn std::fmt::Debug| {
+        event.record(&mut |field: &Field, value: &dyn Debug| {
             if field.name() == LOG_MESSAGE_FIELD {
                 message.push_str(&format!("{:?}", value));
             }
@@ -104,14 +111,47 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     with_tokio_console: bool,
 ) -> LoggerGuard {
     let log_with_ansi = MANAGER.get(LOG_WITH_ANSI).as_deref() == Some(TRUE);
+
     let tabsdata_layer = tracing_subscriber::fmt::layer()
         .with_ansi(log_with_ansi)
         .with_writer(writer);
-    let env_filter = EnvFilter::from_default_env()
-        .add_directive(max_level.into())
-        .add_directive("tower::buffer::worker=info".parse().unwrap());
+
+    let env_filter = match load() {
+        Some(log_config) => {
+            let profile = match obtain_name() {
+                Some(worker_name) => {
+                    let profile_env = format!("{}{}", PROFILE_ENV_PATTERN, &worker_name);
+                    env::var(profile_env).unwrap_or(log_config.profile)
+                }
+                None => log_config.profile,
+            };
+            match log_config.profiles.get(&profile) {
+                Some(log_filter) => {
+                    let env_filter = log_filter.directives.iter().fold(
+                        EnvFilter::from_default_env().add_directive(
+                            Level::from_str(&log_filter.level)
+                                .unwrap_or_else(|_| {
+                                    panic!("Unable to parse log level `{}`", log_filter.level)
+                                })
+                                .into(),
+                        ),
+                        |filter, directive| {
+                            filter.add_directive(directive.parse().unwrap_or_else(|_| {
+                                panic!("Unable to parse log directive `{}`", directive)
+                            }))
+                        },
+                    );
+                    env_filter
+                }
+                None => EnvFilter::from_default_env().add_directive(max_level.into()),
+            }
+        }
+        None => EnvFilter::from_default_env().add_directive(max_level.into()),
+    };
+
     let (reload_filter, handle) = ReloadLayer::new(env_filter);
     LOG_RELOAD_HANDLE.set(handle).ok();
+
     let registry = tracing_subscriber::registry()
         .with(reload_filter)
         .with(SensitiveFilterLayer)
@@ -122,11 +162,14 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     } else {
         None
     });
+
     registry.init();
+
     let exporter = LogExporter::default();
     let provider = LoggerProvider::builder()
         .with_simple_exporter(exporter)
         .build();
+
     LoggerGuard { provider }
 }
 
@@ -135,20 +178,40 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
 // Otherwise, flag will be ignored defaulting to standard behavior.
 pub fn start(max_level: Level, output_type: Option<LogOutput>, with_tokio_console: bool) {
     match output_type {
-        None => obtain(
+        None => obtain_log_path(
             max_level,
             File(PathBuf::from(CURRENT_DIR)),
             with_tokio_console,
         ),
-        Some(channel) => obtain(max_level, channel, with_tokio_console),
+        Some(channel) => obtain_log_path(max_level, channel, with_tokio_console),
     }
 }
 
-fn obtain(max_level: Level, output_type: LogOutput, with_tokio_console: bool) {
+fn obtain_name() -> Option<String> {
+    let inf_path = get_current_dir().join(WORKER_INF_FILE);
+    if !inf_path.exists() {
+        return None;
+    }
+    let file = std::fs::File::open(&inf_path).ok()?;
+    let inf: Inf = serde_yaml::from_reader(file).ok()?;
+    Some(inf.name.to_uppercase())
+}
+
+fn obtain_config_folder() -> Option<PathBuf> {
+    let inf_path = get_current_dir().join(WORKER_INF_FILE);
+    if !inf_path.exists() {
+        return None;
+    }
+    let file = std::fs::File::open(&inf_path).ok()?;
+    let inf: Inf = serde_yaml::from_reader(file).ok()?;
+    Some(inf.config)
+}
+
+fn obtain_log_path(max_level: Level, output_type: LogOutput, with_tokio_console: bool) {
     let writer = match output_type {
         LogOutput::StdOut => BoxMakeWriter::new(stdout),
         File(path) => {
-            let location = obtain_path_location(path);
+            let location = obtain_log_location(path);
             if location.is_none() {
                 BoxMakeWriter::new(stdout)
             } else {
@@ -172,13 +235,13 @@ fn obtain(max_level: Level, output_type: LogOutput, with_tokio_console: bool) {
     LOGGER_PROVIDER.get_or_init(|| init(max_level, writer, with_tokio_console));
 }
 
-fn obtain_path_location(path: PathBuf) -> Option<PathBuf> {
+fn obtain_log_location(path: PathBuf) -> Option<PathBuf> {
     let path = if path.is_absolute() {
         Some(path)
     } else {
-        obtain_path_location_from_info_file(path.clone())
-            .or_else(|| obtain_path_location_from_arguments(path.clone()))
-            .or_else(|| obtain_path_location_from_environment(path))
+        obtain_log_location_from_info_file(path.clone())
+            .or_else(|| obtain_log_location_from_arguments(path.clone()))
+            .or_else(|| obtain_log_location_from_environment(path))
     };
     path.and_then(|path| {
         to_absolute(&path)
@@ -187,7 +250,7 @@ fn obtain_path_location(path: PathBuf) -> Option<PathBuf> {
     })
 }
 
-fn obtain_path_location_from_info_file(path: PathBuf) -> Option<PathBuf> {
+fn obtain_log_location_from_info_file(path: PathBuf) -> Option<PathBuf> {
     let inf_path = get_current_dir().join(WORKER_INF_FILE);
     if inf_path.exists() {
         if let Ok(inf_file) = std::fs::File::open(&inf_path) {
@@ -199,7 +262,7 @@ fn obtain_path_location_from_info_file(path: PathBuf) -> Option<PathBuf> {
     None
 }
 
-fn obtain_path_location_from_arguments(path: PathBuf) -> Option<PathBuf> {
+fn obtain_log_location_from_arguments(path: PathBuf) -> Option<PathBuf> {
     let mut arguments = Arguments::from_env();
     let work: Option<PathBuf> = arguments.opt_value_from_str(WORK_PARAMETER).unwrap_or(None);
     let _ = arguments.finish();
@@ -209,7 +272,7 @@ fn obtain_path_location_from_arguments(path: PathBuf) -> Option<PathBuf> {
     work
 }
 
-fn obtain_path_location_from_environment(path: PathBuf) -> Option<PathBuf> {
+fn obtain_log_location_from_environment(path: PathBuf) -> Option<PathBuf> {
     if let Ok(work) = env::var(WORK_ENV) {
         Some(PathBuf::from(work).join(path))
     } else {
@@ -246,6 +309,43 @@ pub fn set_log_level(level: Level) {
     }
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct LogProfile {
+    pub level: String,
+    pub directives: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LogConfig {
+    pub profile: String,
+    pub profiles: HashMap<String, LogProfile>,
+}
+
+pub fn load() -> Option<LogConfig> {
+    let config_folder = obtain_config_folder()?;
+    let content = match read_to_string(config_folder.join(LOG_CONFIG_FILE)) {
+        Ok(content) => content,
+        Err(err) if err.kind() == ErrorKind::NotFound => {
+            return None;
+        }
+        Err(e) => {
+            panic!(
+                "Failed to read log configuration file '{}' in working folder: {}",
+                LOG_CONFIG_FILE, e
+            );
+        }
+    };
+    match serde_yaml::from_str::<LogConfig>(&content) {
+        Ok(config) => Some(config),
+        Err(e) => {
+            panic!(
+                "Failed to parse log configuration file '{}' in working folder: {}",
+                LOG_CONFIG_FILE, e
+            )
+        }
+    }
+}
+
 /// Convenience function to log [`Result`] values.
 ///
 /// Refer to the [`td_log_monad`] macro for details.
@@ -270,7 +370,7 @@ pub fn ok<V: Debug, E: Debug>(
     }
 }
 
-/// Convenience function to log [`Result::Err`] values.
+/// Convenience function to log [`Err`] values.
 ///
 /// Refer to the [`td_log_monad`] macro for details.
 pub fn err<V: Debug, E: Debug>(
@@ -292,7 +392,7 @@ pub fn option<T: Debug>(msg: &str) -> impl Fn(&Option<T>) -> Option<String> + us
     }
 }
 
-/// Convenience function to log [`Option::Some`] values.
+/// Convenience function to log [`Some`] values.
 ///
 /// Refer to the [`td_log_monad`] macro for details.
 pub fn some<T: Debug>(msg: &str) -> impl Fn(&Option<T>) -> Option<String> + use<'_, T> {
@@ -303,7 +403,7 @@ pub fn some<T: Debug>(msg: &str) -> impl Fn(&Option<T>) -> Option<String> + use<
     }
 }
 
-/// Convenience function to log [`Option::None`] values.
+/// Convenience function to log [`None`] values.
 ///
 /// The function receives a message that will be logged if the option is `None`.
 ///
@@ -330,10 +430,10 @@ pub fn none<T: Debug>(msg: &str) -> impl Fn(&Option<T>) -> Option<String> + use<
 ///
 /// There are convenience lambda implementations:
 ///
-/// - `ok` for [`Result::Ok`] values,
-/// - `err` for [`Result::Err`] values,
-/// - `some` for [`Option::Some`] values,
-/// - `none(message: &str)` for [`Option::None`] values with a custom message.
+/// - `ok` for [`Ok`] values,
+/// - `err` for [`Err`] values,
+/// - `some` for [`Some`] values,
+/// - `none(message: &str)` for [`None`] values with a custom message.
 ///
 /// How to use it:
 ///
@@ -535,7 +635,7 @@ mod tests {
     }
 
     impl Write for TestWriterGuard<'_> {
-        // Write to the sender channel, converting to an UTF-8 string.
+        // Write to the sender channel, converting to a UTF-8 string.
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             let msg = String::from_utf8_lossy(buf).into_owned();
             self.sender.send(msg).unwrap();

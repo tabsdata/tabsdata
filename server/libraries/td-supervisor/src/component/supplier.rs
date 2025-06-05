@@ -57,6 +57,7 @@ impl WorkerSupplier for TabsDataWorkerSupplier {
         create_dir_all(log_path)?;
 
         let inf = Inf {
+            name: worker.describer().name().to_string(),
             config: worker.describer().config().clone(),
             work: worker.describer().work().clone(),
             queue: worker.describer().queue().clone(),

@@ -10,7 +10,7 @@ use tracing::{info, Level};
 
 #[attach(signal = "bootloader")]
 pub fn main() {
-    logging::start(Level::DEBUG, None, false);
+    logging::start(Level::INFO, None, false);
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");

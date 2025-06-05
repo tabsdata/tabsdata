@@ -9,6 +9,7 @@ pub const WORKER_INF_FILE: &str = "inf";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Inf {
+    pub name: String,
     pub config: PathBuf,
     pub work: PathBuf,
     pub queue: PathBuf,

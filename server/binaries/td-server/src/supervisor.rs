@@ -21,20 +21,22 @@ pub fn main() {
     unsafe {
         set_var(INSTANCE_URI_ENV, prepend_slash(instance_path.clone()));
     }
-    set_var(
-        INSTANCE_PATH_ENV,
-        OsString::from(
-            instance_path
-                .clone()
-                .to_slash()
-                .unwrap_or_else(|| {
-                    panic!("Invalid characters in instance path: {:?}", instance_path)
-                })
-                .into_owned(),
-        ),
-    );
+    unsafe {
+        set_var(
+            INSTANCE_PATH_ENV,
+            OsString::from(
+                instance_path
+                    .clone()
+                    .to_slash()
+                    .unwrap_or_else(|| {
+                        panic!("Invalid characters in instance path: {:?}", instance_path)
+                    })
+                    .into_owned(),
+            ),
+        );
+    }
 
-    logging::start(Level::DEBUG, None, true);
+    logging::start(Level::INFO, None, true);
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");

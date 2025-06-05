@@ -1,0 +1,11 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+profile: default
+
+profiles:
+  default:
+    level: debug
+    directives:
+      - tower::buffer::worker=info
