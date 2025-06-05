@@ -107,7 +107,9 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     let tabsdata_layer = tracing_subscriber::fmt::layer()
         .with_ansi(log_with_ansi)
         .with_writer(writer);
-    let env_filter = EnvFilter::from_default_env().add_directive(max_level.into());
+    let env_filter = EnvFilter::from_default_env()
+        .add_directive(max_level.into())
+        .add_directive("tower::buffer::worker=info".parse().unwrap());
     let (reload_filter, handle) = ReloadLayer::new(env_filter);
     LOG_RELOAD_HANDLE.set(handle).ok();
     let registry = tracing_subscriber::registry()
