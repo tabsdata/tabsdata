@@ -1381,10 +1381,13 @@ impl Supervisor {
                         Err(error) => return (None, Err(error.into())),
                     };
                     let prefixes = get_state.state_prefixes;
-                    let mapping: HashMap<String, String> = map
-                        .into_iter()
-                        .filter(|(k, _)| prefixes.iter().any(|p| k.starts_with(p)))
-                        .collect();
+                    let mapping: HashMap<String, String> = if prefixes.is_empty() {
+                        map
+                    } else {
+                        map.into_iter()
+                            .filter(|(k, _)| prefixes.iter().any(|p| k.starts_with(p)))
+                            .collect()
+                    };
                     match EncodedMap::serialize(&mapping) {
                         Ok(yaml) => yaml,
                         Err(error) => return (None, Err(error.into())),
