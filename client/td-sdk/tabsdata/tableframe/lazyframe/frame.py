@@ -54,7 +54,7 @@ IndexInput = Union[int, td_generators.IdxGenerator, None]
 
 @accessify
 class TableFrame:
-    """Owned Functions."""
+    """> Private Functions"""
 
     @classmethod
     def _from_lazy(cls, lf: pl.LazyFrame) -> TableFrame:
@@ -68,7 +68,7 @@ class TableFrame:
     def _to_lazy(self) -> pl.LazyFrame:
         return self._lf
 
-    """ Initialization Functions """
+    """> Initialization Functions """
 
     @classmethod
     @pydoc(categories="tableframe")
@@ -183,7 +183,7 @@ class TableFrame:
     def width(self) -> int:
         return self.schema.len()
 
-    """ Special Functions """
+    """> Special Functions """
 
     # ToDo: pending restricted access and system td columns handling.
     # status(Status.TODO)
@@ -284,7 +284,7 @@ class TableFrame:
         # noinspection PyProtectedMember
         return self._lf._repr_html_().replace("LazyFrame", "TableFrame")
 
-    """ Description Functions """
+    """> Description Functions """
 
     @private
     @pydoc(categories="description")
@@ -338,7 +338,122 @@ class TableFrame:
             idx=self._idx,
         )
 
-    """ Transformation Functions """
+    def has_cols(
+        self, cols: str | list[str], exact: bool | None = False
+    ) -> (bool, set[str], set[str]):
+        """
+        Verifies the presence of (non-system) columns in the TableFrame.
+
+        If `exact` is True, the check ensures that the TableFrame contains exactly the
+        specified columns (excluding system columns), with no extras or omissions.
+
+        Args:
+            cols: The column name(s) to verify. Can be a string or a list of strings.
+            exact: If True, checks that the TableFrame contains exactly the specified
+                columns.
+
+        Returns:
+            tuple[bool, set[str], set[str]]:
+                - A boolean indicating whether the check was successful.
+                - A set of columns in `cols` missing in the TableFrame.
+                - A set of columns in the TableFrame missing in `cols`.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌──────┬──────┐
+        │ a    ┆ b    │
+        │ ---  ┆ ---  │
+        │ str  ┆ i64  │
+        ╞══════╪══════╡
+        │ A    ┆ 1    │
+        └──────┴──────┘
+        >>>
+        >>> tf.has_cols("a")
+        >>>
+        (True, {}, {"b"})
+        >>>
+        >>> tf.has_cols(["a", "c", "d"])
+        >>>
+        (False, {"c", "d"}, {"b"})
+        >>>
+        >>> tf.has_cols("a", exact=True)
+        >>>
+        (False, {}, {"b"})
+        >>>
+        >>> tf.has_cols(["a", "b"], exact=True)
+        >>>
+        (True, {}, {})
+        """
+        # noinspection DuplicatedCode
+        if not isinstance(cols, str) and (
+            not isinstance(cols, list)
+            or not all(isinstance(column, str) for column in cols)
+        ):
+            raise TypeError(
+                "Columns to check need to be either a single string or a list of"
+                " strings."
+            )
+
+        tableframe_columns = self._lf.collect_schema().names()
+
+        system_columns_set = set(td_helpers.SYSTEM_COLUMNS)
+        table_frame_columns_set = set(tableframe_columns) - system_columns_set
+        expected_columns_set = set(cols) - system_columns_set
+
+        in_cols_not_in_tf = expected_columns_set - table_frame_columns_set
+        in_tf_not_in_cols = table_frame_columns_set - expected_columns_set
+        return (
+            (
+                (len(in_cols_not_in_tf) == 0 and len(in_tf_not_in_cols) == 0)
+                if exact
+                else len(in_cols_not_in_tf) == 0
+            ),
+            in_cols_not_in_tf,
+            in_tf_not_in_cols,
+        )
+
+    def assert_has_cols(
+        self, cols: str | list[str], exact: bool | None = False
+    ) -> None:
+        """
+        Ensures that the (non-system) columns in the TableFrame match the expected
+        columns.
+
+        Raises an exception if the expectation is not met.
+
+        If `exact` is True, the check verifies that the TableFrame contains exactly the
+        expected columns, with no extra or missing ones.
+
+        Args:
+            cols: The expected column name(s). Can be a string or a list of strings.
+            exact: If True, checks that the TableFrame contains exactly the specified
+                columns.
+
+        Raises:
+            ValueError: If expected columns are missing or unexpected columns are
+                present in the TableFrame.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>> tf.assert_has_cols("a")
+        >>> tf.assert_has_cols(["a", "b"], exact=True)
+        """
+        success, not_in_tf, not_in_cols = self.has_cols(cols, exact=exact)
+        if not success:
+            raise ValueError(
+                "Column check failed.\n"
+                f"Missing in TableFrame: {sorted(not_in_tf)}\n"
+                f"Unexpected in TableFrame: {sorted(not_in_cols)}"
+            )
+
+    """> Transformation Functions """
 
     # ToDo: proper expressions handling.
     # status(Status.TODO)
@@ -1200,7 +1315,7 @@ class TableFrame:
             idx=self._idx,
         )
 
-    """Retrieval Functions"""
+    """> Retrieval Functions """
 
     # ToDo: allways attach system td columns.
     # ToDo: dedicated algorithm for proper provenance handling.
@@ -1676,7 +1791,7 @@ class TableFrame:
             idx=self._idx,
         )
 
-    """ Functions derived from DataFrame"""
+    """> Functions Derived from DataFrame """
 
     @pydoc(categories="projection")
     def item(self) -> Any:
@@ -1703,7 +1818,7 @@ class TableFrame:
         │ A   │
         └─────┘
         >>>
-        >>> tf.item()
+        >>> tf.python_version()
         >>>
         A
         """
@@ -1713,7 +1828,7 @@ class TableFrame:
 
 TdType = TypeVar("TdType", TableFrame, Series, td_expr.Expr)
 
-"""Internal private Functions."""
+"""> Internal Private Functions """
 
 
 def _assemble_system_columns(f: TableFrame | pl.LazyFrame) -> TableFrame:
