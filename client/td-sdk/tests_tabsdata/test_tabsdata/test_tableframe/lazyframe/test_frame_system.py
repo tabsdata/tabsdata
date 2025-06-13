@@ -46,8 +46,8 @@ class TestTableFrame(unittest.TestCase):
         self.assertEqual(lf_row_count, lf_len, "LazyFrame len (1) mismatch.")
         self.assertEqual(lf_row_count, lf_count, "LazyFrame count (1) mismatch.")
 
-        tf_len = _unwrap_table_frame(tf).select(pl.len()).collect().python_version()
-        tf_count = _unwrap_table_frame(tf).select(pl.count()).collect().python_version()
+        tf_len = _unwrap_table_frame(tf).select(pl.len()).collect().item()
+        tf_count = _unwrap_table_frame(tf).select(pl.count()).collect().item()
         self.assertEqual(lf_row_count, tf_len, "TableFrame len (1.2) mismatch.")
         self.assertEqual(lf_row_count, tf_count, "TableFrame count (1) mismatch.")
 
@@ -58,8 +58,8 @@ class TestTableFrame(unittest.TestCase):
         self.assertEqual(lf_row_count, lf_count, "LazyFrame count (2) mismatch.")
         tf_len = tf._lf.select(pl.len()).collect(no_optimization=True).item()
         self.assertEqual(lf_row_count, tf_len, "TableFrame len (2.1) mismatch.")
-        tf_len = _unwrap_table_frame(tf).select(pl.len()).collect().python_version()
-        tf_count = _unwrap_table_frame(tf).select(pl.count()).collect().python_version()
+        tf_len = _unwrap_table_frame(tf).select(pl.len()).collect().item()
+        tf_count = _unwrap_table_frame(tf).select(pl.count()).collect().item()
         self.assertEqual(lf_row_count, tf_len, "TableFrame len (2.2) mismatch.")
         self.assertEqual(lf_row_count, tf_count, "TableFrame count (2) mismatch.")
 
@@ -69,11 +69,11 @@ class TestTableFrame(unittest.TestCase):
         lf = pl.scan_parquet(parquet)
         tf = _wrap_polars_frame(lf)
 
-        lf_len = lf.select(pl.len()).collect().python_version()
-        lf_count = lf.select(pl.count()).collect().python_version()
+        lf_len = lf.select(pl.len()).collect().item()
+        lf_count = lf.select(pl.count()).collect().item()
         self.assertEqual(lf_row_count, lf_len, "LazyFrame len (3.2) mismatch.")
         self.assertEqual(lf_row_count, lf_count, "LazyFrame count (3) mismatch.")
-        tf_len = _unwrap_table_frame(tf).select(pl.len()).collect().python_version()
-        tf_count = _unwrap_table_frame(tf).select(pl.count()).collect().python_version()
+        tf_len = _unwrap_table_frame(tf).select(pl.len()).collect().item()
+        tf_count = _unwrap_table_frame(tf).select(pl.count()).collect().item()
         self.assertEqual(lf_row_count, tf_len, "TableFrame len (3) mismatch.")
         self.assertEqual(lf_row_count, tf_count, "TableFrame count (3) mismatch.")

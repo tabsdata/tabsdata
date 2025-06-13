@@ -971,6 +971,27 @@ class ErrorCode(Enum):
             "Reserved system column names cannot be used to transform a TableFrame: {}."
         ),
     }
+    TF11 = {
+        "code": "TF-011",
+        "message": (
+            "Builder fom_polars requires a polars DataFrame or LazyFrameTableFrame, or "
+            " None. '{}' was provided instead."
+        ),
+    }
+    TF12 = {
+        "code": "TF-012",
+        "message": (
+            "Builder fom_pandas requires a pandas DataFrame, or None. '{}' was provided"
+            " instead."
+        ),
+    }
+    TF13 = {
+        "code": "TF-013",
+        "message": (
+            "Builder fom_dict requires a dictionary, or None. '{}' was provided"
+            " instead."
+        ),
+    }
     TUCE1 = {
         "code": "TUCE-001",
         "message": (

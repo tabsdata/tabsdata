@@ -4,11 +4,14 @@
 
 from __future__ import annotations
 
+import enum
 import logging
 import os
 from collections.abc import Collection, Iterable, Mapping, Sequence
+from enum import auto
 from typing import Any, List, Literal, NoReturn, TypeVar, Union, cast
 
+import pandas as pd
 import polars as pl
 from accessify import accessify, private
 from polars import DataType, Schema, Series
@@ -52,6 +55,30 @@ logger = logging.getLogger(__name__)
 IndexInput = Union[int, td_generators.IdxGenerator, None]
 
 
+# These origins are currently shallowly used, and no relevant functional difference
+# should be perceived depending on mark in TableFrames. Currently, these marks are
+# mainly informative.
+class TableFrameOrigin(enum.Enum):
+    # A TableFrame that was created from external data, or from a TableFrame that
+    # already was marked as IMPORT. Here, external data means data not loaded from
+    # a function. It serves to recognize pure external data.
+    IMPORT = auto()
+    # A TableFrame that was created from internal data. Here, internal data is data
+    # loaded from a function, or from an existing table. It serves to recognize pure
+    # internal data.
+    BUILD = auto()
+    # A TableFrame that was created using the init function, which is the standard way
+    # to declare some data as internal even if actually external. It serves to recognize
+    # TableFrames the user created out of existing TableFrames or out of some volatile
+    # data used in functions processing. Main difference with IMPORT data is that these
+    # TableFrames will have provenance support.
+    INIT = auto()
+    # A TableFrame that was created from a TableFrame using any of the available
+    # transformation functions available in the TableFrame API, except when the rules
+    # above indicated to mark them differently.
+    TRANSFORM = auto()
+
+
 @accessify
 class TableFrame:
     """> Private Functions"""
@@ -73,24 +100,155 @@ class TableFrame:
     @classmethod
     @pydoc(categories="tableframe")
     def empty(cls) -> TableFrame:
-        """Use only for testing."""
+        """
+        Creates an empty (no column - no row) TableFrame.
+        """
         return TableFrame.__build__(
+            origin=TableFrameOrigin.IMPORT,
             df=None,
             mode="tab",
             idx=None,
+        )
+
+    @classmethod
+    @pydoc(categories="tableframe")
+    def from_polars(
+        cls,
+        data: pl.LazyFrame | pl.DataFrame | None = None,
+    ) -> TableFrame:
+        """
+        Creates tableframe from a polars dataframe or lazyframe, or None.
+        `None` produces as an empty (no column - no row) tableframe.
+
+        Args:
+            data: Input data.
+        """
+        # noinspection PyProtectedMember
+        if data is None:
+            data_out = pl.LazyFrame(None)
+        elif isinstance(data, pl.LazyFrame):
+            data_out = data
+        elif isinstance(data, pl.DataFrame):
+            data_out = data.lazy()
+        else:
+            raise TableFrameError(ErrorCode.TF11, type(data))
+        return cls.__build__(
+            origin=TableFrameOrigin.IMPORT, df=data_out, mode="raw", idx=None
+        )
+
+    @classmethod
+    @pydoc(categories="tableframe")
+    def from_pandas(
+        cls,
+        data: pd.DataFrame | None = None,
+    ) -> TableFrame:
+        """
+        Creates tableframe from a pandas dataframe, or None.
+        `None` produces as an empty (no column - no row) tableframe.
+
+        Args:
+            data: Input data.
+        """
+        # noinspection PyProtectedMember
+        if data is None:
+            data_out = pl.LazyFrame(None)
+        elif isinstance(data, pd.DataFrame):
+            data_out = pl.from_pandas(data)
+        else:
+            raise TableFrameError(ErrorCode.TF12, type(data))
+        return cls.__build__(
+            origin=TableFrameOrigin.IMPORT, df=data_out, mode="raw", idx=None
+        )
+
+    @classmethod
+    @pydoc(categories="tableframe")
+    def from_dict(
+        cls,
+        data: td_typing.TableDictionary | None = None,
+    ) -> TableFrame:
+        """
+        Creates tableframe from a dictionary, or None.
+        `None` produces as an empty (no column - no row) tableframe.
+
+        Args:
+            data: Input data.
+        """
+        # noinspection PyProtectedMember
+        if data is None:
+            data_out = pl.LazyFrame(None)
+        elif isinstance(data, dict):
+            data_out = pl.LazyFrame(data)
+        else:
+            raise TableFrameError(ErrorCode.TF13, type(data))
+        return cls.__build__(
+            origin=TableFrameOrigin.IMPORT, df=data_out, mode="raw", idx=None
+        )
+
+    @pydoc(categories="tableframe")
+    def to_polars_lf(self) -> pl.LazyFrame:
+        """
+        Creates a polars lazyframe from this tableframe.
+        """
+        # noinspection PyProtectedMember
+        return td_translator._unwrap_table_frame(self)
+
+    @pydoc(categories="tableframe")
+    def to_polars_df(self) -> pl.DataFrame:
+        """
+        Creates a polars dataframe from this tableframe.
+        """
+        # noinspection PyProtectedMember
+        return td_translator._unwrap_table_frame(self).collect(no_optimization=True)
+
+    @pydoc(categories="tableframe")
+    def to_pandas(self) -> pd.DataFrame:
+        """
+        Creates a pandas dataframe from this tableframe.
+        """
+        # noinspection PyProtectedMember
+        return (
+            td_translator._unwrap_table_frame(self)
+            .collect(no_optimization=True)
+            .to_pandas()
+        )
+
+    @pydoc(categories="tableframe")
+    def to_dict(self) -> dict[str, list[Any]]:
+        """
+        Creates a dictionary from this tableframe.
+        """
+        # noinspection PyProtectedMember
+        return (
+            td_translator._unwrap_table_frame(self)
+            .collect(no_optimization=True)
+            .to_dict(as_series=False)
         )
 
     # Passing a IdxGenerator for idx is meant to be used only when populating pub
     # tables, An IdxGenerator is a stateful callable class that ensures a unique
     # sequential id is generated in each invocation.
     @classmethod
+    # flake8: noqa: C901
     def __build__(
         cls,
         *,
+        origin: TableFrameOrigin | None = None,
         df: td_typing.TableDictionary | pl.LazyFrame | pl.DataFrame | TableFrame | None,
         mode: td_common.AddSystemColumnsMode,
         idx: IndexInput,
     ) -> TableFrame:
+        if isinstance(df, TableFrame):
+            if df._origin.value == TableFrameOrigin.IMPORT.value:
+                origin = TableFrameOrigin.IMPORT
+            else:
+                origin = TableFrameOrigin.TRANSFORM
+        elif origin is None:
+            origin = TableFrameOrigin.BUILD
+        elif isinstance(origin, TableFrameOrigin):
+            pass
+        else:
+            raise ValueError(f"Invalid origin: {origin}")
+
         if isinstance(idx, td_generators.IdxGenerator):
             # noinspection PyProtectedMember
             idx = idx()
@@ -118,6 +276,7 @@ class TableFrame:
         td_reflection.check_required_columns(df)
 
         instance = cls.__new__(cls)
+        instance._origin = origin
         # noinspection PyProtectedMember
         instance._id = td_generators._id()
         instance._idx = idx
@@ -127,7 +286,22 @@ class TableFrame:
     def __init__(
         self,
         df: td_typing.TableDictionary | TableFrame | None = None,
+        *,
+        origin: TableFrameOrigin | None = TableFrameOrigin.INIT,
     ) -> None:
+        if isinstance(df, TableFrame):
+            # noinspection PyProtectedMember
+            if df._origin.value == TableFrameOrigin.IMPORT.value:
+                origin = TableFrameOrigin.IMPORT
+            else:
+                origin = TableFrameOrigin.TRANSFORM
+        elif origin is None:
+            origin = TableFrameOrigin.INIT
+        elif isinstance(origin, TableFrameOrigin):
+            pass
+        else:
+            raise ValueError(f"Invalid origin: {origin}")
+
         if isinstance(df, TableFrame):
             mode = "tab"
             # noinspection PyProtectedMember
@@ -150,6 +324,7 @@ class TableFrame:
         )
         td_reflection.check_required_columns(df)
 
+        self._origin = origin
         # noinspection PyProtectedMember
         self._id = td_generators._id()
         self._idx = idx
