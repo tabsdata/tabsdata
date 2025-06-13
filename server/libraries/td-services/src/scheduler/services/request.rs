@@ -262,7 +262,7 @@ mod tests {
         assert_eq!(info.function_run_id(), function_run.id());
 
         let function_path = SPath::parse(format!(
-            "/c/{}/f/{}.tgz",
+            "/bundles/c/{}/f/{}.tgz",
             collection.id(),
             create.bundle_id()
         ))?;

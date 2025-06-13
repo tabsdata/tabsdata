@@ -7,6 +7,7 @@ use bytes::Bytes;
 use derive_builder::Builder;
 use futures_util::stream::BoxStream;
 use getset::Getters;
+use lazy_static::lazy_static;
 use object_store::path::{Path, PathPart};
 use object_store::{ObjectStore, PutPayload};
 #[cfg(target_os = "windows")]
@@ -37,6 +38,7 @@ pub struct MountDef {
     uri: String,
 
     #[builder(default)]
+    #[getset(skip)]
     /// Options for the mount. This is [`uri`] scheme specific.
     ///
     /// AWS S3: refer to https://docs.rs/object_store/0.11.0/object_store/aws/enum.AmazonS3ConfigKey.html
@@ -44,7 +46,7 @@ pub struct MountDef {
     /// Azure Cloud File Storage: refer to https://docs.rs/0.11.0/latest/object_store/azure/enum.AzureConfigKey.html
     ///
     /// Google Cloud Storage: refer to https://docs.rs/object_store/0.11.0/object_store/gcp/enum.GoogleConfigKey.html
-    options: HashMap<String, String>,
+    options: Option<HashMap<String, String>>,
 }
 
 impl MountDef {
@@ -62,6 +64,13 @@ impl MountDef {
     /// create environment variables with information for the mount for sub-processes.
     pub fn id_as_prefix(&self) -> String {
         format!("{}_", self.id.to_uppercase())
+    }
+
+    pub fn options(&self) -> &HashMap<String, String> {
+        lazy_static! {
+            static ref NO_OPTIONS: HashMap<String, String> = HashMap::new();
+        }
+        self.options.as_ref().unwrap_or(&NO_OPTIONS)
     }
 }
 

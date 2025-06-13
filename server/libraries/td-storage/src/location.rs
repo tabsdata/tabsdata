@@ -31,10 +31,10 @@ pub enum StorageLocation {
     ///
     /// * /LOCATION
     /// * /LOCATION/c/COLLECTION
-    /// * /LOCATION/c/COLLECTION/f/BUNDLE.tgz
     /// * /LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION (function_run contents)
     /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t
     /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p
+    /// * /bundles/c/COLLECTION/f/BUNDLE.tgz
     V2,
 }
 
@@ -415,6 +415,16 @@ impl VersionLocationBuilder for V2LocationBuilder {
         if let Some(collection) = &info.collection {
             path = path.child("c").unwrap().child(collection).unwrap();
             if let Some(bundle) = &info.bundle {
+                // Bundles are stored at /bundles/c/COLLECTION/f/BUNDLE.tgz
+                // we need to recalculate the base path accordingly.
+                path = SPath::default()
+                    .child("bundles")
+                    .unwrap()
+                    .child("c")
+                    .unwrap()
+                    .child(collection)
+                    .unwrap();
+
                 path = path
                     .child("f")
                     .unwrap()
@@ -528,18 +538,21 @@ mod tests {
             .function(&bundle);
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/L/c/{}/f/{}.tgz", collection, bundle))?
+            SPath::parse(format!("/bundles/c/{}/f/{}.tgz", collection, bundle))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse(format!("/L/c/{}/f/{}.tgz-foo.meta", collection, bundle))?
+            SPath::parse(format!(
+                "/bundles/c/{}/f/{}.tgz-foo.meta",
+                collection, bundle
+            ))?
         );
 
         let bundle = BundleId::default();
         builder.function(&bundle);
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/L/c/{}/f/{}.tgz", collection, bundle))?
+            SPath::parse(format!("/bundles/c/{}/f/{}.tgz", collection, bundle))?
         );
         Ok(())
     }

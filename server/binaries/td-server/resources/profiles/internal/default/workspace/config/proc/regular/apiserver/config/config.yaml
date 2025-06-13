@@ -23,11 +23,20 @@ database:
   max_lifetime: 3600
   idle_timeout: 60
   test_before_acquire: true
-#storage_url: null    # by default as parameter is given by supervisor
-#storage_mounts: []   # by default a mount is inferred from the provided storage_url
-#- id: TDS_ROOT_MOUNT
-#  mount_path: /
-#  uri: file:///tmp/storage
-#  configs:
-#    key1: value1
-#    key2: value2
+storage:
+  mounts:
+    - id: ROOT
+      path: /
+      uri: file://${env:TD_URI_REPOSITORY}/storage/data/
+    # IMPORTANT: /bundles must be a local mount.
+    - id: BUNDLES
+      path: /bundles
+      uri: file://${env:TD_URI_REPOSITORY}/storage/bundles/
+
+#    # Mount configuration sample:
+#    - id: PREFIX
+#      path: /foo
+#      uri: file://${env:TD_URI_REPOSITORY}/storage/data/
+#      options:
+#        - option_1: value1
+#          option_2: value2
