@@ -147,7 +147,7 @@ mod tests {
         let storage = Storage::from(vec![MountDef::builder()
             .id("id")
             .uri(url)
-            .mount_path("/")
+            .path("/")
             .build()?])
         .await?;
         let storage = Arc::new(storage);

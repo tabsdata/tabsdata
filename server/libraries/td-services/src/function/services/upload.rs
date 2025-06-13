@@ -122,7 +122,7 @@ mod tests {
         let test_dir = testdir!();
         let mount_def = MountDef::builder()
             .id("id")
-            .mount_path("/")
+            .path("/")
             .uri(mount_uri(&test_dir))
             .build()?;
         let storage = Arc::new(Storage::from(vec![mount_def]).await?);
@@ -187,7 +187,7 @@ mod tests {
         let test_dir = testdir!();
         let mount_def = MountDef::builder()
             .id("id")
-            .mount_path("/")
+            .path("/")
             .uri(mount_uri(&test_dir))
             .build()?;
         let storage = Arc::new(Storage::from(vec![mount_def]).await?);

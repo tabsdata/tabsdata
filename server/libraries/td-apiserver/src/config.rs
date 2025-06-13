@@ -27,29 +27,44 @@ pub struct Config {
     jwt: JwtConfig,
     request_timeout: i64, // in seconds
     database: SqliteConfig,
-    storage_url: Option<String>,
-    #[getset(skip)]
-    storage_mounts: Option<Vec<MountDef>>,
+    #[serde(default)]
+    storage: Option<StorageConfig>,
     #[serde(default)]
     transaction_by: TransactionBy,
 }
 
+#[derive(Clone, Serialize, Deserialize, Getters, Debug)]
+#[getset(get = "pub")]
+#[derive(Default)]
+pub struct StorageConfig {
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    mounts: Option<Vec<MountDef>>,
+}
+
 impl Config {
     pub fn storage_mounts(&self) -> Result<Vec<MountDef>, ConfigError> {
-        if self.storage_url.is_some() && self.storage_mounts.is_some() {
-            Err(ConfigError::DoubleStorageConfig)
-        } else if self.storage_url.is_none() && self.storage_mounts.is_none() {
-            Err(ConfigError::MissingStorageConfig)
-        } else if self.storage_url.is_some() {
-            let mount_def = MountDef::builder()
-                .id("TDS_MOUNT_ROOT")
-                .mount_path("/")
-                .uri(self.storage_url.as_ref().unwrap())
-                .build()
-                .unwrap();
-            Ok(vec![mount_def])
-        } else {
-            Ok(self.storage_mounts.as_ref().unwrap().clone())
+        let Some(storage) = &self.storage else {
+            return Err(ConfigError::MissingStorage);
+        };
+
+        let has_url = storage.url.is_some();
+        let has_mounts = storage.mounts.is_some();
+
+        match (has_url, has_mounts) {
+            (true, true) => Err(ConfigError::DoubleStorageConfig),
+            (false, false) => Err(ConfigError::MissingStorageConfig),
+            (true, false) => {
+                let mount_def = MountDef::builder()
+                    .id("TDS_MOUNT_ROOT")
+                    .path("/")
+                    .uri(storage.url.as_ref().unwrap())
+                    .build()
+                    .map_err(|_| ConfigError::InvalidMountDefinition)?;
+                Ok(vec![mount_def])
+            }
+            (false, true) => Ok(storage.mounts.as_ref().unwrap().clone()),
         }
     }
 }
@@ -62,8 +77,7 @@ impl Default for Config {
             jwt: JwtConfig::default(),
             request_timeout: 60,
             database: SqliteConfig::default(),
-            storage_url: None,
-            storage_mounts: None,
+            storage: Some(StorageConfig::default()),
             transaction_by: TransactionBy::default(),
         }
     }
@@ -71,11 +85,18 @@ impl Default for Config {
 
 impl Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let storage_url = self
+            .storage
+            .as_ref()
+            .and_then(|s| s.url.as_ref())
+            .map(|s| s.as_str())
+            .unwrap_or("None");
+
         // hide sensitive configs from displaying
         write!(
             f,
-            "{{ addresses: {:?}, database: {:?}, storage {:?} }}",
-            self.addresses, self.database, self.storage_url
+            "{{ addresses: {:?}, database: {:?}, storage {} }}",
+            self.addresses, self.database, storage_url
         )
     }
 }
@@ -136,6 +157,16 @@ pub struct Params {
 
 impl Params {
     pub fn resolve(&self, config: Config) -> Result<Config, ConfigError> {
+        let mut resolved_storage: StorageConfig = config.storage.clone().unwrap_or_default();
+        if self.storage_url.is_some() {
+            let resolved_storage_url = self
+                .storage_url
+                .as_ref()
+                .map(|url| url.to_string())
+                .or(self.storage_url().clone());
+            resolved_storage.url = resolved_storage_url;
+        }
+        let resolved_storage = Some(resolved_storage);
         let config = Config {
             database: self
                 .database_url
@@ -146,12 +177,7 @@ impl Params {
                     database_config_builder.build().unwrap()
                 })
                 .unwrap_or_else(|| config.database().clone()),
-            storage_url: self
-                .storage_url
-                .as_ref()
-                .map(|url| url.to_string())
-                .or(self.storage_url().clone()),
-            storage_mounts: config.storage_mounts.clone(),
+            storage: resolved_storage,
             addresses: self
                 .address
                 .clone()
@@ -192,7 +218,7 @@ impl Params {
             _ => {}
         }
         if config.storage_mounts()?.is_empty() {
-            Err(ConfigError::MissingStorageUrl)?;
+            Err(ConfigError::MissingStorage)?;
         }
         Ok(config)
     }
@@ -216,12 +242,14 @@ pub enum ConfigError {
     MissingDatabaseUrl = 2,
     #[error("The database URL '{0}' must be a file:// URL.")]
     InvalidDatabaseUrl(String) = 3,
-    #[error("No storage URL (must be a file:// URL) was provided.")]
-    MissingStorageUrl = 4,
-    #[error("Cannot define both storage-url and storage-mounts in the configuration")]
+    #[error("No storage settings.")]
+    MissingStorage = 4,
+    #[error("Both storage.url and storage.mounts have been configured.")]
     DoubleStorageConfig = 5,
-    #[error("No storage URL no mounts configuration")]
+    #[error("Neither storage.url nor storage.mounts has been configured.")]
     MissingStorageConfig = 6,
+    #[error("The url specified in storage.url is wrong.")]
+    InvalidMountDefinition = 7,
 }
 
 #[cfg(test)]
@@ -240,7 +268,8 @@ mod tests {
             &vec![SocketAddr::from(([127, 0, 0, 1], 0))]
         );
         id::Id::try_from(config.jwt().secret().as_ref().unwrap()).unwrap();
-        assert_eq!(config.storage_url(), &None);
+        assert!(config.storage.is_some());
+        assert!(config.clone().storage.unwrap().url.is_none());
         assert_eq!(
             *config.jwt().access_token_expiration(),
             Duration::hours(1).num_seconds()
@@ -283,8 +312,15 @@ mod tests {
             resolved_config.database().url().as_ref().unwrap(),
             "file:///test.db"
         );
+        assert!(resolved_config.clone().storage.is_some());
         assert_eq!(
-            resolved_config.storage_url().as_ref().unwrap(),
+            resolved_config
+                .clone()
+                .storage
+                .unwrap()
+                .url()
+                .as_ref()
+                .unwrap(),
             "file:///storage"
         );
         assert_eq!(*resolved_config.request_timeout(), 120);

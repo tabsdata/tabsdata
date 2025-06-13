@@ -324,7 +324,7 @@ mod tests {
 
         let mount1 = MountDef::builder()
             .id("id0")
-            .mount_path("/")
+            .path("/")
             .uri(uri1)
             .build()
             .unwrap();
@@ -336,7 +336,7 @@ mod tests {
 
         let mount2 = MountDef::builder()
             .id("id1")
-            .mount_path("/foo")
+            .path("/foo")
             .uri(uri2)
             .build()
             .unwrap();

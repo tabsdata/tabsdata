@@ -23,7 +23,7 @@ pub async fn get_table_schema(
 ) -> Result<TableSchema, TdError> {
     let (url, mount_def) = storage.to_external_uri(&table_path)?;
     let url_str = url.to_string();
-    let cloud_config = CloudOptions::from_untyped_config(&url_str, mount_def.configs())
+    let cloud_config = CloudOptions::from_untyped_config(&url_str, mount_def.options())
         .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
     let parquet_config = ScanArgsParquet {
         cloud_options: Some(cloud_config),

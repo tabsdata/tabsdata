@@ -30,21 +30,21 @@ pub struct MountDef {
     id: String,
 
     /// Path, in the storage, where the mount is located.
-    mount_path: String,
+    path: String,
 
     #[builder(setter(custom))]
     /// External URI that is backing the storage of the mount.
     uri: String,
 
     #[builder(default)]
-    /// Configurations for the mount. This is [`uri`] scheme specific.
+    /// Options for the mount. This is [`uri`] scheme specific.
     ///
     /// AWS S3: refer to https://docs.rs/object_store/0.11.0/object_store/aws/enum.AmazonS3ConfigKey.html
     ///
     /// Azure Cloud File Storage: refer to https://docs.rs/0.11.0/latest/object_store/azure/enum.AzureConfigKey.html
     ///
     /// Google Cloud Storage: refer to https://docs.rs/object_store/0.11.0/object_store/gcp/enum.GoogleConfigKey.html
-    configs: HashMap<String, String>,
+    options: HashMap<String, String>,
 }
 
 impl MountDef {
@@ -81,8 +81,8 @@ impl MountDefBuilder {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.mount_path.is_some() {
-            let mount_path = self.mount_path.as_ref().unwrap();
+        if self.path.is_some() {
+            let mount_path = self.path.as_ref().unwrap();
             SPath::parse(mount_path).map_err(|e| {
                 StorageError::ConfigurationError(format!(
                     "Invalid mount path {} : {}",
@@ -153,9 +153,9 @@ impl From<&MountDef> for MountDefBuilder {
     fn from(mount: &MountDef) -> MountDefBuilder {
         MountDefBuilder {
             id: Some(mount.id.clone()),
-            mount_path: Some(mount.mount_path.clone()),
+            path: Some(mount.path.clone()),
             uri: Some(mount.uri.clone()),
-            configs: Some(mount.configs.clone()),
+            options: Some(mount.options.clone()),
         }
     }
 }
@@ -260,9 +260,9 @@ impl Mount {
     /// Create a [`Mount`] with the given definition.
     pub fn new(def: MountDef) -> Result<Self> {
         let mut uri = Url::parse(def.uri()).unwrap();
-        let store = Self::create_store(&uri, def.configs())?;
+        let store = Self::create_store(&uri, def.options())?;
 
-        let mount_path = SPath::parse(def.mount_path())?;
+        let mount_path = SPath::parse(def.path())?;
         let path_mapper_from_mount = PathMapperFromMount::new(mount_path.parts().count());
         let path_mapper_to_mount = PathMapperToMount::new(&mount_path);
 
@@ -270,7 +270,7 @@ impl Mount {
         let path_mapper_to_uri = PathMapperToUri::new(&uri_path);
         let path_mapper_from_uri = PathMapperFromUri::new(uri_path.parts().count());
 
-        debug!("Mount, mount: {} uri: {}", def.mount_path(), def.uri());
+        debug!("Mount, mount: {} uri: {}", def.path(), def.uri());
 
         uri.set_path("");
         Ok(Mount {
@@ -479,56 +479,44 @@ mod tests {
     fn test_mount_def_validation_ok() {
         let mount_def = MountDef::builder()
             .id("id")
-            .mount_path("/foo")
+            .path("/foo")
             .uri(bar_file())
             .build()
             .unwrap();
-        assert_eq!(mount_def.mount_path(), "/foo");
+        assert_eq!(mount_def.path(), "/foo");
         assert_eq!(mount_def.uri(), &slashed_bar_file());
-        assert_eq!(mount_def.configs(), &HashMap::new());
+        assert_eq!(mount_def.options(), &HashMap::new());
         assert_eq!(mount_def.id_as_prefix(), "ID_".to_uppercase());
     }
 
     #[test]
     fn test_def_mount_validation_error() {
         assert!(matches!(
-            MountDef::builder()
-                .mount_path("foo")
-                .uri("foo:///bar")
-                .build(),
+            MountDef::builder().path("foo").uri("foo:///bar").build(),
             Err(StorageError::ConfigurationError(_))
         ));
         assert!(matches!(
             MountDef::builder()
-                .mount_path("/foo")
+                .path("/foo")
                 .uri(relative_bar_file())
                 .build(),
             Err(StorageError::ConfigurationError(_))
         ));
         assert!(matches!(
-            MountDef::builder()
-                .mount_path("/foo/x$")
-                .uri(bar_file())
-                .build(),
+            MountDef::builder().path("/foo/x$").uri(bar_file()).build(),
+            Err(StorageError::ConfigurationError(_))
+        ));
+        assert!(matches!(
+            MountDef::builder().path("/foo/").uri(bar_file()).build(),
+            Err(StorageError::ConfigurationError(_))
+        ));
+        assert!(matches!(
+            MountDef::builder().path("/foo ").uri(bar_file()).build(),
             Err(StorageError::ConfigurationError(_))
         ));
         assert!(matches!(
             MountDef::builder()
-                .mount_path("/foo/")
-                .uri(bar_file())
-                .build(),
-            Err(StorageError::ConfigurationError(_))
-        ));
-        assert!(matches!(
-            MountDef::builder()
-                .mount_path("/foo ")
-                .uri(bar_file())
-                .build(),
-            Err(StorageError::ConfigurationError(_))
-        ));
-        assert!(matches!(
-            MountDef::builder()
-                .mount_path("/foo")
+                .path("/foo")
                 .uri(padded_bar_file())
                 .build(),
             Err(StorageError::ConfigurationError(_))
@@ -538,7 +526,7 @@ mod tests {
     #[test]
     fn test_mount_def_validate() {
         let json_str = format!(
-            r#"{{"id":"id","mount_path":"/foo","uri":"{}","configs":{{}},"env_prefix":null}}"#,
+            r#"{{"id":"id","path":"/foo","uri":"{}","options":{{}},"env_prefix":null}}"#,
             slashed_bar_file()
         );
         let mount_def: MountDef = serde_json::from_str(&json_str).unwrap();
@@ -546,7 +534,7 @@ mod tests {
         assert!(matches!(mount_def.validate(), Ok(())));
 
         let json_str = format!(
-            r#"{{"id":"id","mount_path":"foo","uri":"{}","configs":{{}},"env_prefix":null}}"#,
+            r#"{{"id":"id","path":"foo","uri":"{}","options":{{}},"env_prefix":null}}"#,
             slashed_bar_file()
         );
 
@@ -557,7 +545,7 @@ mod tests {
         ));
 
         let json_str = format!(
-            r#"{{"id":"id","mount_path":"/foo","uri":"{}","configs":{{}},"env_prefix":null}}"#,
+            r#"{{"id":"id","path":"/foo","uri":"{}","options":{{}},"env_prefix":null}}"#,
             bar_file()
         );
         let mount_def: MountDef = serde_json::from_str(&json_str).unwrap();
@@ -696,7 +684,7 @@ mod tests {
 
         let mount_def = MountDef::builder()
             .id("id")
-            .mount_path("/")
+            .path("/")
             .uri(&uri)
             .build()
             .unwrap();
@@ -716,7 +704,7 @@ mod tests {
 
         let mount_def = MountDef::builder()
             .id("id")
-            .mount_path("/mount")
+            .path("/mount")
             .uri(&uri)
             .build()
             .unwrap();
@@ -725,8 +713,8 @@ mod tests {
         test_mount(&uri, "/mount", store, Mount::new(mount_def).unwrap()).await;
     }
 
-    async fn test_aws_mount(mount_path: &str, s3_info: &S3WithAccessKeySecretKeyReqs) {
-        let configs = HashMap::from([
+    async fn test_aws_mount(path: &str, s3_info: &S3WithAccessKeySecretKeyReqs) {
+        let options = HashMap::from([
             ("aws_region".to_string(), s3_info.region.clone()),
             ("aws_access_key_id".to_string(), s3_info.access_key.clone()),
             (
@@ -738,23 +726,17 @@ mod tests {
         let uri = format!("{}/{}", s3_info.uri, s3_info.test_path().to_str().unwrap());
         let uri = Url::parse(&uri).unwrap();
 
-        let object_store = object_store::parse_url_opts(&uri, &configs).unwrap().0;
+        let object_store = object_store::parse_url_opts(&uri, &options).unwrap().0;
 
         let mount_def = MountDef::builder()
             .id("id")
-            .mount_path(mount_path)
+            .path(path)
             .uri(uri.to_string())
-            .configs(configs)
+            .options(options)
             .build()
             .unwrap();
 
-        test_mount(
-            &uri,
-            mount_path,
-            object_store,
-            Mount::new(mount_def).unwrap(),
-        )
-        .await;
+        test_mount(&uri, path, object_store, Mount::new(mount_def).unwrap()).await;
     }
 
     #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
@@ -767,7 +749,7 @@ mod tests {
         test_aws_mount("/foo", &reqs).await;
     }
 
-    async fn test_azure_mount(mount_path: &str, az_info: &AzureStorageWithAccountKeyReqs) {
+    async fn test_azure_mount(path: &str, az_info: &AzureStorageWithAccountKeyReqs) {
         let configs = HashMap::from([
             (
                 "azure_storage_account_name".to_string(),
@@ -786,19 +768,13 @@ mod tests {
 
         let mount_def = MountDef::builder()
             .id("id")
-            .mount_path(mount_path)
+            .path(path)
             .uri(uri.to_string())
-            .configs(configs)
+            .options(configs)
             .build()
             .unwrap();
 
-        test_mount(
-            &uri,
-            mount_path,
-            object_store,
-            Mount::new(mount_def).unwrap(),
-        )
-        .await;
+        test_mount(&uri, path, object_store, Mount::new(mount_def).unwrap()).await;
     }
 
     #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
@@ -822,9 +798,9 @@ mod tests {
         let _c = C {
             mounts: vec![MountDef::builder()
                 .id("id")
-                .mount_path("/foo")
+                .path("/foo")
                 .uri(bar_file())
-                .configs(HashMap::from([("key".to_string(), "value".to_string())]))
+                .options(HashMap::from([("key".to_string(), "value".to_string())]))
                 .build()
                 .unwrap()],
         };

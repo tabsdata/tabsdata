@@ -26,7 +26,7 @@ impl MountsStorage {
         static ROOT: &str = "/";
         for mount_def in mount_defs.iter() {
             mount_def.validate()?;
-            if mount_def.mount_path() == ROOT {
+            if mount_def.path() == ROOT {
                 has_root = true;
             }
         }
@@ -137,7 +137,7 @@ mod tests {
 
         let mount1 = MountDef::builder()
             .id("id")
-            .mount_path("/")
+            .path("/")
             .uri(uri1)
             .build()
             .unwrap();
@@ -149,7 +149,7 @@ mod tests {
 
         let mount2 = MountDef::builder()
             .id("id")
-            .mount_path("/foo")
+            .path("/foo")
             .uri(uri2)
             .build()
             .unwrap();
@@ -174,7 +174,7 @@ mod tests {
 
         let mount1 = MountDef::builder()
             .id("id0")
-            .mount_path("/")
+            .path("/")
             .uri(uri1)
             .build()
             .unwrap();
@@ -186,7 +186,7 @@ mod tests {
 
         let mount2 = MountDef::builder()
             .id("id1")
-            .mount_path("/foo")
+            .path("/foo")
             .uri(uri2)
             .build()
             .unwrap();
