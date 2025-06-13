@@ -6,7 +6,7 @@ use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, BundleId, CollectionId, CollectionName, DataChanged, DataLocation, DependencyPos, Dot,
     ExecutionId, ExecutionName, FunctionName, FunctionRunId, FunctionVersionId, HasData, InputIdx,
-    Partitioned, RequirementId, SelfDependency, StorageVersion, TableDataVersionId,
+    OptionDto, Partitioned, RequirementId, SelfDependency, StorageVersion, TableDataVersionId,
     TableFunctionParamPos, TableId, TableName, TableVersionId, TableVersions, TransactionByStr,
     TransactionId, TransactionKey, Trigger, TriggeredOn, UserId, UserName, VersionPos,
     WorkerMessageId,
@@ -191,6 +191,10 @@ pub struct Transaction {
     execution_id: ExecutionId,
     #[dto(list(pagination_by = "+", filter, filter_like))]
     triggered_on: TriggeredOn,
+    #[dto(list(filter, order_by))]
+    started_on: OptionDto<AtTime>,
+    #[dto(list(filter, order_by))]
+    ended_on: OptionDto<AtTime>,
     #[dto(list(filter, filter_like))]
     triggered_by_id: UserId,
     #[dto(list(filter, filter_like))]
