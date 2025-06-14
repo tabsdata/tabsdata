@@ -21,12 +21,12 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::field::Field;
 use tracing::{debug, error, info, trace, warn, Event, Level, Subscriber};
+use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
-
 // ToDo: Dimas: Accept logging configuration from external file. --> https://tabsdata.atlassian.net/browse/TD-249
 // ToDo: Dimas: Configure logging channel through logging configuration file. --> https://tabsdata.atlassian.net/browse/TD-250
 // ToDo: Dimas: Allow custom configuration of log format. --> https://tabsdata.atlassian.net/browse/TD-251
@@ -114,7 +114,8 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
 
     let tabsdata_layer = tracing_subscriber::fmt::layer()
         .with_ansi(log_with_ansi)
-        .with_writer(writer);
+        .with_writer(writer)
+        .with_span_events(FmtSpan::FULL);
 
     let env_filter = match load() {
         Some(log_config) => {
