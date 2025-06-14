@@ -41,6 +41,7 @@ from tabsdata.io.output import (
 )
 from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.tableframe.lazyframe.frame import TableFrame
+from tabsdata.tabsserver.function import sql_utils
 from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.yaml_parsing import (
     InputYaml,
@@ -57,7 +58,6 @@ from tabsdata.utils.sql_utils import add_driver_to_uri, obtain_uri
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._translator import _unwrap_table_frame
 
-from . import sql_utils
 from .cloud_connectivity_utils import (
     SERVER_SIDE_AWS_ACCESS_KEY_ID,
     SERVER_SIDE_AWS_REGION,

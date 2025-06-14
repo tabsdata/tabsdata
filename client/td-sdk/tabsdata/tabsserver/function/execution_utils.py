@@ -12,7 +12,7 @@ import pathlib
 import subprocess
 import tempfile
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Tuple, Union
+from typing import TYPE_CHECKING, Tuple, Union
 from urllib.parse import unquote
 
 import polars as pl
@@ -38,11 +38,14 @@ from tabsdata.io.input import (
 )
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import build_table_uri_object
+from tabsdata.tabsserver.function import environment_import_utils
 from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
 from tabsdata.utils.sql_utils import obtain_uri
 
-from . import environment_import_utils
+# noinspection PyProtectedMember
+from tabsdata.utils.tableframe._context import TableFrameContext
+
 from .cloud_connectivity_utils import (
     obtain_and_set_azure_credentials,
     obtain_and_set_s3_credentials,
@@ -108,7 +111,7 @@ def update_initial_values(execution_context: ExecutionContext, result):
 
 def obtain_user_provided_function_parameters(
     execution_context: ExecutionContext,
-) -> List[TableFrame | None | List[TableFrame | None]]:
+) -> list[TableFrame | None | list[TableFrame | None]]:
     if source_plugin := execution_context.source_plugin:
         logger.debug("Running the source plugin")
         # noinspection PyProtectedMember
@@ -129,7 +132,7 @@ def obtain_user_provided_function_parameters(
 
 def convert_tuple_to_list(
     result: TableFrame | Tuple[TableFrame],
-) -> List[TableFrame] | TableFrame:
+) -> list[TableFrame] | TableFrame:
     if isinstance(result, tuple):
         return list(result)
     else:
@@ -142,7 +145,7 @@ def trigger_non_plugin_source(
     execution_context: ExecutionContext,
     initial_values: Offset = None,
     idx: td_generators.IdxGenerator | None = None,
-) -> List[TableFrame | None | List[TableFrame | None]]:
+) -> list[TableFrame | None | list[TableFrame | None]]:
     # Call binary to import files
     destination_folder = os.path.join(working_dir, SOURCES_FOLDER)
     os.makedirs(destination_folder, exist_ok=True)
@@ -194,7 +197,7 @@ def trigger_non_plugin_source(
 def execute_table_importer(
     source: TableInput,
     execution_context: ExecutionContext,
-) -> List[Union[Tuple[str, Table], List[Tuple[str, Table]]]]:
+) -> list[Union[TableFrameContext, list[TableFrameContext]]]:
     # Right now, source provides very little information, but we use it to do a small
     # sanity check and to ensure that everything is running properly
     context_request_input = execution_context.request.input
@@ -202,7 +205,7 @@ def execute_table_importer(
         f"Importing tables '{context_request_input}' and matching them"
         f" with source '{source}'"
     )
-    table_list: List[Union[Tuple[str, Table], List[Tuple[str, Table]]]] = []
+    table_list: list[Union[TableFrameContext, list[TableFrameContext]]] = []
     # Note: source.uri is a list of URIs, it can't be a single URI because when we
     # serialised it we stored it as such even if it was a single one.
     if len(context_request_input) != len(source.table):
@@ -226,17 +229,19 @@ def execute_table_importer(
             real_table_uri = obtain_table_uri_and_verify(
                 execution_context_input_entry, source_table_str
             )
-            table_list.append((real_table_uri, execution_context_input_entry))
+            table_list.append(
+                TableFrameContext(real_table_uri, execution_context_input_entry)
+            )
         elif isinstance(execution_context_input_entry, TableVersions):
             logger.debug(
                 f"Matching TableVersions '{execution_context_input_entry}' with source"
                 f" URI '{source_table_str}'"
             )
             list_of_table_objects = execution_context_input_entry.list_of_table_objects
-            list_of_table_uris: List[Tuple[str, Table]] = []
+            list_of_table_uris: list[TableFrameContext] = []
             for table in list_of_table_objects:
                 real_table_uri = obtain_table_uri_and_verify(table, source_table_str)
-                list_of_table_uris.append((real_table_uri, table))
+                list_of_table_uris.append(TableFrameContext(real_table_uri, table))
             table_list.append(list_of_table_uris)
         else:
             logger.error(
@@ -561,7 +566,7 @@ def load_sources(
     execution_context: ExecutionContext,
     local_sources: list,
     idx: td_generators.IdxGenerator | None = None,
-) -> List[TableFrame | None | List[TableFrame | None]]:
+) -> list[TableFrame | None | list[TableFrame | None]]:
     """
     Given a list of sources, load them into tabsdata TableFrames.
     :param execution_context: The context of the function.
@@ -573,13 +578,22 @@ def load_sources(
     logger.debug(f"Loading list of sources: {local_sources}")
     if idx is None:
         idx = td_generators.IdxGenerator()
-    sources = []
+    sources: list[TableFrame | list[TableFrame]] = []
     for source in local_sources:
         logger.debug(f"Loading single source: {source}")
         if isinstance(source, list):
             sources.append(load_sources_from_list(execution_context, idx, source))
         else:
-            sources.append(load_source(execution_context, idx, source))
+            if isinstance(source, str):
+                table_context = TableFrameContext(source)
+            elif isinstance(source, TableFrameContext):
+                table_context = source
+            else:
+                raise ValueError(
+                    "Invalid source type. Expected 'str' or 'TableFrameContext'; got"
+                    f" '{type(source).__name__}' instead"
+                )
+            sources.append(load_source(execution_context, idx, table_context))
     return sources
 
 
@@ -587,40 +601,49 @@ def load_sources_from_list(
     execution_context: ExecutionContext,
     idx: td_generators.IdxGenerator,
     source_list: list,
-) -> List[TableFrame]:
-    return [load_source(execution_context, idx, path) for path in source_list]
+) -> list[TableFrame]:
+    sources: list[TableFrame] = []
+    for source in source_list:
+        if isinstance(source, str):
+            table_context = TableFrameContext(source)
+        elif isinstance(source, TableFrameContext):
+            table_context = source
+        else:
+            raise ValueError(
+                "Invalid source type. Expected 'str' or 'TableFrameContext'; got"
+                f" '{type(source).__name__}' instead"
+            )
+        sources.append(load_source(execution_context, idx, table_context))
+    return sources
 
 
+# When table_frame_context.table is not None, it means the table was loaded from the
+# repository, implying it already has an index (idx).
+# When table_frame_context.table is None, it means the table was loaded from a
+# publisher, implying it requires a new index (idx).
 def load_source(
     execution_context: ExecutionContext,
     idx: td_generators.IdxGenerator,
-    spec: Union[str, os.PathLike, Tuple[Union[str, os.PathLike], Table]],
+    table_frame_context: TableFrameContext,
 ) -> TableFrame | None:
-    if spec is None:
-        logger.warning("Spec to source is None. No data loaded.")
+    if table_frame_context is None:
+        logger.warning("TableFrame context to source is None. No data loaded.")
         return None
 
-    # This case means table was loaded from repository, implying it already has an idx.
-    if isinstance(spec, tuple):
-        path_to_source, table = spec
-        idx = table.input_idx
-    # This case means table was loaded from a publisher, implying it requires a new idx.
-    else:
-        path_to_source = spec
-        table = None
-
-    if path_to_source is None:
+    if table_frame_context.path is None:
         logger.warning("Path to source is None. No data loaded.")
         return None
 
-    logger.debug(f"Loading parquet file from path: {path_to_source}")
-    lf = pl.scan_parquet(path_to_source)
+    logger.debug(f"Loading parquet file from path: {table_frame_context.path}")
+    lf = pl.scan_parquet(table_frame_context.path)
     logger.debug("Loaded parquet file successfully!")
 
-    if table is None:
+    if table_frame_context.table is None:
         return store_source_raw_data(execution_context, lf, idx)
     else:
-        return TableFrame.__build__(df=lf, mode="tab", idx=idx)
+        return TableFrame.__build__(
+            df=lf, mode="tab", idx=table_frame_context.table.input_idx
+        )
 
 
 # ToDo: Pending storing metadata. This will require deciding how to determine which

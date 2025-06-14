@@ -28,6 +28,9 @@ script = [
         assert_fail
     end
 
+    version = trim ${result.stdout}
+    info "❇️ Python version: ${version}"
+
     result = exec python -c "import os, sys, subprocess; v = tuple(map(int, os.environ['TABSDATA_PYTHON_VERSION'].split('.'))); r = subprocess.check_output(['python', '--version']).decode().split()[1]; rv = tuple(map(int, r.split('.'))); sys.exit(0 if rv >= v else 1)"
     code = set ${result.code}
     if not equals ${code} "0"
