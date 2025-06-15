@@ -638,6 +638,7 @@ def test_output_mongodb(tmp_path, testing_mongodb):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -699,6 +700,7 @@ def test_multiple_outputs_mongodb(tmp_path, testing_mongodb):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))

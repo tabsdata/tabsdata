@@ -102,6 +102,7 @@ def test_output_sql_list(tmp_path, testing_mysql):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -160,6 +161,7 @@ def test_output_sql_modified_params(tmp_path, testing_mysql):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -218,6 +220,7 @@ def test_output_sql_wrong_driver_fails(tmp_path, testing_mysql):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result != 0
 
@@ -256,6 +259,7 @@ def test_output_sql_driver_provided(tmp_path, testing_mysql):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -303,6 +307,7 @@ def test_output_sql_list_none(tmp_path, testing_mysql):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -352,6 +357,7 @@ def test_output_sql_none(tmp_path, testing_mysql):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -394,6 +400,7 @@ def test_output_sql_transaction(tmp_path, testing_mysql):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result != 0
     output = pl.read_database_uri(

@@ -86,6 +86,7 @@ def test_input_postgres(testing_postgres, tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -147,6 +148,7 @@ def test_input_postgres_initial_values(testing_postgres, tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -216,6 +218,7 @@ def test_input_postgres_initial_values_stored_number_0(testing_postgres, tmp_pat
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -285,6 +288,7 @@ def test_input_postgres_initial_values_stored_number_2(testing_postgres, tmp_pat
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))

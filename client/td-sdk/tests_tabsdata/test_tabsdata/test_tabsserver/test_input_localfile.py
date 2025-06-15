@@ -102,6 +102,7 @@ def test_input_file_wildcard(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -145,6 +146,7 @@ def test_input_file_csv_string_format(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -190,6 +192,7 @@ def test_input_file_parquet_string_format(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -235,6 +238,7 @@ def test_input_file_parquet_wildcard(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -279,6 +283,7 @@ def test_input_file_csv_separator(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -324,6 +329,7 @@ def test_input_file_csv_modified_path(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -369,6 +375,7 @@ def test_input_file_csv_modified_format(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -414,6 +421,7 @@ def test_input_file_log_string_format(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -459,6 +467,7 @@ def test_input_file_log_wildcard(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -503,6 +512,7 @@ def test_input_file_ndjson_string_format(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -548,6 +558,7 @@ def test_input_file_ndjson_wildcard(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -592,6 +603,7 @@ def test_input_file_csv_dtype_inference(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     # Actual functional checks are in the publisher function.
     assert result == 0
@@ -627,6 +639,7 @@ def test_input_file_ndjson_dtype_inference(tmp_path):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     # Actual functional checks are in the publisher function.
     assert result == 0

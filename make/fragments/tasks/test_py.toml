@@ -57,11 +57,11 @@ script = [
     cd "${PROJECT_PY_TA_FEATURES_FOLDER}"
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
 
     is_zero = eq ${exit_code} "0"
@@ -96,11 +96,11 @@ script = [
     cd "${PROJECT_PY_TA_TABLEFRAME_FOLDER}"
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -134,11 +134,11 @@ script = [
     cd ${PROJECT_PY_TE_TABLEFRAME_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -172,11 +172,11 @@ script = [
     cd ${PROJECT_PY_TD_SDK_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -210,11 +210,11 @@ script = [
     cd ${PROJECT_PY_TABSDATA_MONGODB_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -248,11 +248,11 @@ script = [
     cd ${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -286,11 +286,11 @@ script = [
     cd ${PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     else
-        debug "🚀 pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"

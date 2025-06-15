@@ -327,6 +327,7 @@ def test_output_snowflake(tmp_path, snowflake_connection):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     try:
         assert result == 0
@@ -397,6 +398,7 @@ def test_multiple_outputs_snowflake(tmp_path, snowflake_connection):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     try:
         assert result == 0

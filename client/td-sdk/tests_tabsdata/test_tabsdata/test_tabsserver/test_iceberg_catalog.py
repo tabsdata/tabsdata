@@ -131,6 +131,7 @@ def test_output_s3_catalog(tmp_path, s3_client):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -240,6 +241,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
                 tabsserver_output_folder,
                 environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
                 logs_folder=logs_folder,
+                temp_cwd=True,
             )
             assert result == 0
             assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -344,6 +346,7 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
                 tabsserver_output_folder,
                 environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
                 logs_folder=logs_folder,
+                temp_cwd=True,
             )
             assert result == 0
             assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -450,9 +453,9 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result != 0
-
     finally:
         operations = [
             lambda: catalog.drop_table(table_0),
@@ -535,6 +538,7 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -642,6 +646,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result != 0
     finally:
@@ -739,6 +744,7 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -851,6 +857,7 @@ def test_output_s3_catalog_region_creds(tmp_path, s3_client):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))

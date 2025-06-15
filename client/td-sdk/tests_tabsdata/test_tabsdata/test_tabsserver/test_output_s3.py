@@ -92,6 +92,7 @@ def test_output_s3_parquet(tmp_path, s3_client):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -164,6 +165,7 @@ def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -236,6 +238,7 @@ def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))

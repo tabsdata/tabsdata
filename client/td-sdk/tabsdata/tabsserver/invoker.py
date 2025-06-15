@@ -8,6 +8,7 @@ import logging
 import os
 import subprocess
 import sys
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -62,6 +63,22 @@ def invoke(
     locks_folder: str = DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
     logs_folder: str = None,
     work: str = "0",
+    # When running pytest tests, the current working directory is set relative to the
+    # location of the test file.
+    # This can "pollute" sys.path, leading to incorrect module resolution, especially
+    # problematic with namespace packages (that we use).
+    # In particular, it may cause Python to import the tabsdata module from the test
+    # project directory instead of from local packages or the installed version.
+    # To avoid this, when this parameter is set to True (typically during tests), a
+    # temporary directory (considered a safe and neutral context)  is used as the
+    # working directory. Otherwise (in production or supervised execution), the current
+    # directory is preserved, since the supervisor is responsible for setting it
+    # correctly.
+    # Note: This behaviour is further improved using parameter --import-mode=importlib
+    #       when running pytest, which increases odds of having a proper sys path
+    #       when running tests.
+    #       (https://docs.pytest.org/en/stable/explanation/pythonpath.html)
+    temp_cwd: bool = False,
 ):
     request_file_path = os.path.join(request_folder, REQUEST_FILE_NAME)
     setup_logging(os.path.join(ABSOLUTE_LOCATION, "logging.yaml"))
@@ -109,6 +126,7 @@ def invoke(
             f"Created the virtual environment {python_environment} for the function in"
             f" {uncompressed_bundle_folder}. Time taken: {time_block.time_taken():.2f}s"
         )
+
     command_to_execute = [
         get_path_to_environment_bin(python_environment),
         "-m",
@@ -124,6 +142,7 @@ def invoke(
         "--output-folder",
         output_folder,
     ]
+
     if logs_folder:
         command_to_execute.extend(["--logs-folder", logs_folder])
     logger.info(
@@ -131,11 +150,14 @@ def invoke(
     )
     with clear_environment():
         with time_block:
-            result = subprocess.run(command_to_execute, env=os.environ)
+            # See explanation on parameter temp_cwd
+            cwd = tempfile.gettempdir() if temp_cwd else None
+            result = subprocess.run(command_to_execute, env=os.environ, cwd=cwd)
         logger.info(
             f"Result of executing the bundled function: {result}. Time taken:"
             f" {time_block.time_taken():.2f}s"
         )
+
     return python_environment, result.returncode
 
 

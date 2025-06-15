@@ -96,6 +96,7 @@ def test_output_postgres_list(tmp_path, testing_postgres):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -154,6 +155,7 @@ def test_output_postgres_driver_provided(tmp_path, testing_postgres):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -205,6 +207,7 @@ def test_output_postgres_transaction(tmp_path, testing_postgres):
         tabsserver_output_folder,
         environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
         logs_folder=logs_folder,
+        temp_cwd=True,
     )
     assert result != 0
 
@@ -258,6 +261,7 @@ def test_output_postgres_table_replace(tmp_path, testing_postgres):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
@@ -310,6 +314,7 @@ def test_output_postgres_schema(tmp_path, testing_postgres):
             tabsserver_output_folder,
             environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
             logs_folder=logs_folder,
+            temp_cwd=True,
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
