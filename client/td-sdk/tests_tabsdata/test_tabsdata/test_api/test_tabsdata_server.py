@@ -2,6 +2,7 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+import datetime
 import logging
 import os
 import time
@@ -30,6 +31,7 @@ from tabsdata.api.tabsdata_server import (
     User,
     Worker,
     convert_timestamp_to_string,
+    top_and_convert_to_timestamp,
 )
 
 # noinspection PyUnresolvedReferences
@@ -1197,3 +1199,38 @@ def test_tabsdata_server_transaction_recover(tabsserver_connection):
             "test_tabsdata_server_transaction_recover_collection",
             raise_for_status=False,
         )
+
+
+def test_complete_datetime():
+    result = top_and_convert_to_timestamp("2025-01-16Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 17, 0, 0, tzinfo=datetime.timezone.utc)
+
+    result = top_and_convert_to_timestamp("2025-01-16T15Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 16, 0, tzinfo=datetime.timezone.utc)
+
+    result = top_and_convert_to_timestamp("2025-01-16T15:30Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 15, 31, tzinfo=datetime.timezone.utc)
+
+    result = top_and_convert_to_timestamp("2025-01-16T15:59Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 16, 0, tzinfo=datetime.timezone.utc)
+
+    result = top_and_convert_to_timestamp("2025-01-16T15:30:45Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 15, 30, 46, tzinfo=datetime.timezone.utc)
+
+    result = top_and_convert_to_timestamp("2025-01-16T15:30:59Z")
+    assert datetime.datetime.fromtimestamp(
+        result / 1000, datetime.UTC
+    ) == datetime.datetime(2025, 1, 16, 15, 31, 0, tzinfo=datetime.timezone.utc)
+
+    assert top_and_convert_to_timestamp(None) is None
+    assert top_and_convert_to_timestamp("123456") == 123456

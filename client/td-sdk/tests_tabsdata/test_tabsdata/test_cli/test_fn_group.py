@@ -58,7 +58,7 @@ def test_function_create_no_prompt(
             "register",
             "--collection",
             testing_collection,
-            "--fn-path",
+            "--path",
             function_path,
         ],
     )
@@ -82,7 +82,7 @@ def test_function_create_no_prompt_multiple_local_packages(
             "register",
             "--collection",
             testing_collection,
-            "--fn-path",
+            "--path",
             function_path,
             "--local-pkg",
             os.getcwd(),
@@ -108,7 +108,7 @@ def test_function_delete_cli(testing_collection, function_path, tabsserver_conne
             "register",
             "--collection",
             testing_collection,
-            "--fn-path",
+            "--path",
             function_path,
         ],
     )
@@ -148,7 +148,7 @@ def test_function_delete_no_prompt(
             "register",
             "--collection",
             testing_collection,
-            "--fn-path",
+            "--path",
             function_path,
         ],
     )
@@ -204,7 +204,7 @@ def test_function_delete_wrong_options_raises_error(
             "register",
             "--collection",
             testing_collection,
-            "--fn-path",
+            "--path",
             function_path,
         ],
     )
@@ -266,7 +266,7 @@ def test_function_list(testing_collection, function_path, tabsserver_connection)
             "register",
             "--collection",
             testing_collection,
-            "--fn-path",
+            "--path",
             function_path,
         ],
     )
@@ -288,7 +288,7 @@ def test_function_update(testing_collection, function_path, tabsserver_connectio
             "register",
             "--collection",
             testing_collection,
-            "--fn-path",
+            "--path",
             function_path,
         ],
     )
@@ -306,7 +306,7 @@ def test_function_update(testing_collection, function_path, tabsserver_connectio
             testing_collection,
             "--description",
             "new_description",
-            "--fn-path",
+            "--path",
             function_path,
         ],
     )
@@ -329,7 +329,7 @@ def test_function_info(testing_collection, function_path, tabsserver_connection)
             "register",
             "--collection",
             testing_collection,
-            "--fn-path",
+            "--path",
             function_path,
         ],
     )
@@ -365,7 +365,7 @@ def test_function_info_show_versions(
             "register",
             "--collection",
             testing_collection,
-            "--fn-path",
+            "--path",
             function_path,
         ],
     )
@@ -399,7 +399,7 @@ def test_function_trigger(testing_collection, function_path, tabsserver_connecti
         "register",
         "--collection",
         testing_collection,
-        "--fn-path",
+        "--path",
         function_path,
     ]
     for package in LOCAL_PACKAGES_LIST:
@@ -451,7 +451,7 @@ def test_function_trigger_execution_name(
         "register",
         "--collection",
         testing_collection,
-        "--fn-path",
+        "--path",
         function_path,
     ]
     for package in LOCAL_PACKAGES_LIST:
@@ -483,7 +483,7 @@ def test_function_trigger_execution_name(
             testing_collection,
             "--name",
             "test_input_plugin",
-            "--execution-name",
+            "--exec-name",
             "test_execution_name",
         ],
     )
@@ -537,7 +537,7 @@ def test_function_cli_read_run(login, tabsserver_connection):
             collection.name,
             "--name",
             "input_file_csv_string_format",
-            "--execution-id",
+            "--exec",
             plan.id,
         ],
     )

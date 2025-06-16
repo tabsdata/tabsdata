@@ -19,7 +19,6 @@ from tabsdata.cli.cli_utils import (
     verify_login_or_prompt,
 )
 from tabsdata.cli.collection_group import collection
-from tabsdata.cli.data_group import data
 from tabsdata.cli.exec_group import exec
 from tabsdata.cli.fn_group import fn
 from tabsdata.cli.table_group import table
@@ -46,7 +45,6 @@ def cli(ctx: click.Context, no_prompt: bool):
 
 
 cli.add_command(collection)
-cli.add_command(data)
 cli.add_command(exec)
 cli.add_command(fn)
 cli.add_command(auth)

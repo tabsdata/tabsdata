@@ -5,6 +5,7 @@
 import os
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
@@ -344,3 +345,61 @@ def test_collection_class_read_run(tabsserver_connection):
     assert response.status_code == 200
     response = collection.read_function_run(function.name, plan)
     assert response.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_collection_get_tables_at(testing_collection_with_table, tabsserver_connection):
+    collection = Collection(
+        tabsserver_connection.connection, testing_collection_with_table
+    )
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    tables = collection.list_tables(at=next_day)
+    assert tables
+    assert isinstance(tables, list)
+    assert all(isinstance(table, Table) for table in tables)
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_collection_get_tables_at_trx(
+    testing_collection_with_table, tabsserver_connection
+):
+    collection = Collection(
+        tabsserver_connection.connection, testing_collection_with_table
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    tables = collection.list_tables(at_trx=trx)
+    assert tables
+    assert isinstance(tables, list)
+    assert all(isinstance(table, Table) for table in tables)
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_collection_get_tables_at_trx_id(
+    testing_collection_with_table, tabsserver_connection
+):
+    collection = Collection(
+        tabsserver_connection.connection, testing_collection_with_table
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    tables = collection.list_tables(at_trx=trx.id)
+    assert tables
+    assert isinstance(tables, list)
+    assert all(isinstance(table, Table) for table in tables)
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_collection_get_tables_all_options_fails(
+    testing_collection_with_table, tabsserver_connection
+):
+    collection = Collection(
+        tabsserver_connection.connection, testing_collection_with_table
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    with pytest.raises(ValueError):
+        # Cannot use both at and at_trx
+        collection.list_tables(at=next_day, at_trx=trx)

@@ -55,7 +55,7 @@ td collection create examples --description "Examples"
 
 ### Register the Publisher
 ```
-td fn register --collection examples --fn-path publisher.py::pub
+td fn register --collection examples --path publisher.py::pub
 ```
 
 ### Trigger the Publisher
@@ -65,7 +65,7 @@ td fn trigger --collection examples --name pub
 
 ### Check the Publisher Execution
 ```
-td exec list-trxs
+td exec list-trx
 ```
 
 ### Show Schema of Table populated by the Publisher
@@ -77,7 +77,7 @@ td table schema --collection examples --name persons
 
 ### Register the Transformer
 ```
-td fn register --collection examples --fn-path transformer.py::tfr
+td fn register --collection examples --path transformer.py::tfr
 ```
 
 ### Trigger the Transformer
@@ -86,7 +86,7 @@ td fn trigger --collection examples --name tfr
 ```
 ### Check the Transformer Execution
 ```
-td exec list-trxs
+td exec list-trx
 ```
 
 ### Show Schema of a Table populated by the Transformer
@@ -98,7 +98,7 @@ td table schema --collection examples --name spanish
 
 ### Register the Subscriber
 ```
-td fn register --collection examples --fn-path subscriber.py::sub
+td fn register --collection examples --path subscriber.py::sub
 ```
 
 ### Trigger the Subscriber
@@ -107,7 +107,7 @@ td fn trigger --collection examples --name sub
 ```
 ### Check the Subscriber Execution
 ```
-td exec list-trxs
+td exec list-trx
 ```
 
 ### See the Files Exported by the Subscriber
@@ -148,7 +148,7 @@ td fn trigger --collection examples --name pub
 
 ### Check the Transaction Execution
 ```
-td exec list-trxs
+td exec list-trx
 ```
 
 ### See the Files Exported by the Subscriber

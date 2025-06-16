@@ -10,6 +10,7 @@ from tabsdata.api.tabsdata_server import (
     TabsdataServer,
 )
 from tabsdata.cli.cli_utils import (
+    MutuallyExclusiveOption,
     get_currently_pinned_object,
     logical_prompt,
     verify_login_or_prompt,
@@ -42,10 +43,38 @@ def table():
 @click.option(
     "--at",
     help=(
-        "If provided, the table values at the given time will be downloaded. Must be "
-        "a valid timestamp in the form of a unix timestamp (milliseconds since epoch)."
+        "If provided, the table values at the given time will be shown. Must be "
+        " either a valid timestamp in the form of a unix timestamp (milliseconds since "
+        "epoch) or a valid date-time format. The valid "
+        "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
+        "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
+        "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "
+        "'2023-10-01T12:00:00.000Z') or it can be omitted to indicate local "
+        "time (e.g., '2023-10-01T12' or '2023-10-01T12:00:00.000')."
     ),
-    type=int,
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at-trx", "version"],
+)
+@click.option(
+    "--at-trx",
+    help=(
+        "ID of a transaction. If provided, the table values at the end of the given "
+        "transaction will be shown."
+    ),
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at", "version"],
+)
+@click.option(
+    "--version",
+    help=(
+        "ID of a dataversion of the table. If provided, the table values at that "
+        "dataversion will be shown."
+    ),
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at", "at-trx"],
 )
 @click.pass_context
 def download(
@@ -53,7 +82,9 @@ def download(
     collection: str,
     name: str,
     file: str,
-    at: int,
+    at: str,
+    at_trx: str,
+    version: str,
 ):
     """Download the table as a parquet file"""
     verify_login_or_prompt(ctx)
@@ -73,6 +104,8 @@ def download(
             name,
             file,
             at=at,
+            at_trx=at_trx,
+            version=version,
         )
 
         click.echo("Table downloaded successfully")
@@ -87,8 +120,43 @@ def download(
     "-c",
     help="Name of the collection to which the tables belong.",
 )
+@click.option(
+    "--name",
+    "-n",
+    help=(
+        "A name wildcard to match for the list. "
+        "For example, 'my_table*' will match all tables "
+        "starting with 'my_table'."
+    ),
+)
+@click.option(
+    "--at",
+    help=(
+        "If provided, the table values at the given time will be shown. Must be "
+        " either a valid timestamp in the form of a unix timestamp (milliseconds since "
+        "epoch) or a valid date-time format. The valid "
+        "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
+        "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
+        "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "
+        "'2023-10-01T12:00:00.000Z') or it can be omitted to indicate local "
+        "time (e.g., '2023-10-01T12' or '2023-10-01T12:00:00.000')."
+    ),
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at-trx"],
+)
+@click.option(
+    "--at-trx",
+    help=(
+        "ID of a transaction. If provided, the table values at the end of the given "
+        "transaction will be shown."
+    ),
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at"],
+)
 @click.pass_context
-def list(ctx: click.Context, collection: str):
+def list(ctx: click.Context, collection: str, name: str, at: str, at_trx: str):
     """List all tables in a collection"""
     verify_login_or_prompt(ctx)
     collection = (
@@ -98,7 +166,12 @@ def list(ctx: click.Context, collection: str):
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_tables = server.list_tables(collection)
+        request_filter = []
+        if name:
+            request_filter.append(f"name:lk:{name}")
+        list_of_tables = server.list_tables(
+            collection, filter=request_filter, at=at, at_trx=at_trx
+        )
 
         cli_table = Table(title=f"Tables in collection '{collection}'")
         cli_table.add_column("Name", style="cyan", no_wrap=True)
@@ -149,9 +222,37 @@ def list(ctx: click.Context, collection: str):
     "--at",
     help=(
         "If provided, the table values at the given time will be shown. Must be "
-        "a valid timestamp in the form of a unix timestamp (milliseconds since epoch)."
+        " either a valid timestamp in the form of a unix timestamp (milliseconds since "
+        "epoch) or a valid date-time format. The valid "
+        "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
+        "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
+        "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "
+        "'2023-10-01T12:00:00.000Z') or it can be omitted to indicate local "
+        "time (e.g., '2023-10-01T12' or '2023-10-01T12:00:00.000')."
     ),
-    type=int,
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at-trx", "version"],
+)
+@click.option(
+    "--at-trx",
+    help=(
+        "ID of a transaction. If provided, the table values at the end of the given "
+        "transaction will be shown."
+    ),
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at", "version"],
+)
+@click.option(
+    "--version",
+    help=(
+        "ID of a dataversion of the table. If provided, the table values at that "
+        "dataversion will be shown."
+    ),
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at", "at-trx"],
 )
 @click.option(
     "--file",
@@ -169,7 +270,9 @@ def sample(
     len: int,
     offset: int,
     file: str,
-    at: int,
+    at: str,
+    at_trx: str,
+    version: str,
 ):
     """Sample rows from the table"""
     verify_login_or_prompt(ctx)
@@ -185,6 +288,8 @@ def sample(
             collection,
             name,
             at=at,
+            at_trx=at_trx,
+            version=version,
             len=len,
             offset=offset,
         )
@@ -215,17 +320,47 @@ def sample(
 @click.option(
     "--at",
     help=(
-        "If provided, the table schema at the given time will be shown. Must be "
-        "a valid timestamp in the form of a unix timestamp (milliseconds since epoch)."
+        "If provided, the table values at the given time will be shown. Must be "
+        " either a valid timestamp in the form of a unix timestamp (milliseconds since "
+        "epoch) or a valid date-time format. The valid "
+        "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
+        "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
+        "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "
+        "'2023-10-01T12:00:00.000Z') or it can be omitted to indicate local "
+        "time (e.g., '2023-10-01T12' or '2023-10-01T12:00:00.000')."
     ),
-    type=int,
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at-trx", "version"],
+)
+@click.option(
+    "--at-trx",
+    help=(
+        "ID of a transaction. If provided, the table values at the end of the given "
+        "transaction will be shown."
+    ),
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at", "version"],
+)
+@click.option(
+    "--version",
+    help=(
+        "ID of a dataversion of the table. If provided, the table values at that "
+        "dataversion will be shown."
+    ),
+    type=str,
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["at", "at-trx"],
 )
 @click.pass_context
 def schema(
     ctx: click.Context,
     collection: str,
     name: str,
-    at: int,
+    at: str,
+    at_trx: str,
+    version: str,
 ):
     """Show table schema"""
     verify_login_or_prompt(ctx)
@@ -241,6 +376,8 @@ def schema(
             collection,
             name,
             at=at,
+            at_trx=at_trx,
+            version=version,
         )
 
         table = Table(title=f"Schema of table '{name}'")
@@ -256,3 +393,56 @@ def schema(
 
     except Exception as e:
         raise click.ClickException(f"Failed to obtain table schema: {e}")
+
+
+@table.command()
+@click.option(
+    "--collection",
+    "-c",
+    help="Name of the collection to which the data belongs.",
+)
+@click.option(
+    "--name",
+    help="The name of the table to which the data belongs.",
+)
+@click.pass_context
+def versions(ctx: click.Context, collection: str, name: str):
+    """
+    List all versions of the data of a table.
+    """
+    verify_login_or_prompt(ctx)
+    collection = (
+        collection
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the data belongs")
+    )
+    name = name or logical_prompt(
+        ctx, "The name of the table to which the data belongs"
+    )
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        data_version_list = server.list_dataversions(collection, name)
+
+        table = Table(title=f"Data versions for table '{name}'")
+        table.add_column("ID", style="cyan", no_wrap=True)
+        table.add_column("Function ID")
+        table.add_column("Execution ID")
+        table.add_column("Created at")
+        table.add_column("Status")
+
+        for data_version in data_version_list:
+            table.add_row(
+                data_version.id,
+                data_version.function.id,
+                data_version.execution.id,
+                data_version.created_at_str,
+                data_version.status,
+            )
+
+        click.echo()
+        console = Console()
+        console.print(table)
+        click.echo(f"Number of data versions: {len(data_version_list)}")
+
+    except Exception as e:
+        raise click.ClickException(f"Failed to list data versions: {e}")

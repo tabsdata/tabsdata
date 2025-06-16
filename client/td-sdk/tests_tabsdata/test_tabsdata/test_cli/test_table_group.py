@@ -5,11 +5,13 @@
 import logging
 import os
 import time
+from datetime import datetime, timedelta, timezone
 
 import polars as pl
 import pytest
 from click.testing import CliRunner
 
+from tabsdata.api.tabsdata_server import Table
 from tabsdata.cli.cli import cli
 
 # noinspection PyUnresolvedReferences
@@ -235,6 +237,479 @@ def test_table_schema_at(login, testing_collection_with_table):
             "output",
             "--at",
             str(epoch_ms),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_sample_at_date(login, testing_collection_with_table):
+    runner = CliRunner()
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "sample",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--at",
+            str(next_day),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_sample_file_destination_at_date(
+    login, testing_collection_with_table, tmp_path
+):
+    runner = CliRunner()
+    destination_file = os.path.join(tmp_path, "test_table_sample_at_date_cli.ndjson")
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "sample",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--file",
+            destination_file,
+            "--at",
+            str(next_day),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    assert os.path.exists(destination_file)
+    assert isinstance(pl.read_ndjson(destination_file), pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_schema_at_date(login, testing_collection_with_table):
+    runner = CliRunner()
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "schema",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--at",
+            str(next_day),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_sample_at_utc_time(login, testing_collection_with_table):
+    runner = CliRunner()
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "sample",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--at",
+            str(next_day),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_sample_file_destination_at_utc_time(
+    login, testing_collection_with_table, tmp_path
+):
+    runner = CliRunner()
+    destination_file = os.path.join(
+        tmp_path, "test_table_sample_at_utc_time_cli.ndjson"
+    )
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "sample",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--file",
+            destination_file,
+            "--at",
+            str(next_day),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    assert os.path.exists(destination_file)
+    assert isinstance(pl.read_ndjson(destination_file), pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_schema_at_utc_time(login, testing_collection_with_table):
+    runner = CliRunner()
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "schema",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--at",
+            str(next_day),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_sample_at_dataversion_id(
+    login, testing_collection_with_table, tabsserver_connection
+):
+    runner = CliRunner()
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "sample",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--version",
+            str(version.id),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_sample_file_destination_at_dataversion_id(
+    login, testing_collection_with_table, tmp_path, tabsserver_connection
+):
+    runner = CliRunner()
+    destination_file = os.path.join(
+        tmp_path, "test_table_sample_at_dataversion_id_cli.ndjson"
+    )
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "sample",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--file",
+            destination_file,
+            "--version",
+            str(version.id),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    assert os.path.exists(destination_file)
+    assert isinstance(pl.read_ndjson(destination_file), pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_schema_at_dataversion_id(
+    login, testing_collection_with_table, tabsserver_connection
+):
+    runner = CliRunner()
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "schema",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--version",
+            str(version.id),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_sample_at_transaction_id(
+    login, testing_collection_with_table, tabsserver_connection
+):
+    runner = CliRunner()
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "sample",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--at-trx",
+            str(trx.id),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_sample_file_destination_at_transaction_id(
+    login, testing_collection_with_table, tmp_path, tabsserver_connection
+):
+    runner = CliRunner()
+    destination_file = os.path.join(
+        tmp_path, "test_table_sample_at_transaction_id_cli.ndjson"
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "sample",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--file",
+            destination_file,
+            "--at-trx",
+            str(trx.id),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    assert os.path.exists(destination_file)
+    assert isinstance(pl.read_ndjson(destination_file), pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_schema_at_transaction_id(
+    login, testing_collection_with_table, tabsserver_connection
+):
+    runner = CliRunner()
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "schema",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "output",
+            "--at-trx",
+            str(trx.id),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_data_version(login, testing_collection_with_table, tabsserver_connection):
+    table_name = tabsserver_connection.list_tables(testing_collection_with_table)[
+        0
+    ].name
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "versions",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            table_name,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_list_with_wildcard(login, testing_collection_with_table):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "list",
+            "--collection",
+            testing_collection_with_table,
+            "--name",
+            "*",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_list_with_at(login, testing_collection_with_table):
+    epoch_ms = int(time.time() * 1000)  # Current time in milliseconds
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "list",
+            "--collection",
+            testing_collection_with_table,
+            "--at",
+            str(epoch_ms),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_list_with_at_date(login, testing_collection_with_table):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "list",
+            "--collection",
+            testing_collection_with_table,
+            "--at",
+            str(next_day),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_list_with_at_utc_time(login, testing_collection_with_table):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "list",
+            "--collection",
+            testing_collection_with_table,
+            "--at",
+            str(next_day),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.slow
+def test_table_list_with_at_transaction_id(
+    login, testing_collection_with_table, tabsserver_connection
+):
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "list",
+            "--collection",
+            testing_collection_with_table,
+            "--at-trx",
+            str(trx.id),
         ],
     )
     logger.debug(result.output)

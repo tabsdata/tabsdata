@@ -68,6 +68,8 @@ def test_transaction_class_lazy_properties(
     assert isinstance(transaction.workers, list)
     assert all(isinstance(worker, Worker) for worker in transaction.workers)
     assert transaction.status
+    assert transaction.triggered_by
+    assert isinstance(transaction.collection, Collection)
 
 
 @pytest.mark.integration

@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
-import datetime
 import importlib.util
 import inspect
 import os
 import sys
 import tempfile
+from datetime import UTC, datetime, timedelta, timezone
 from enum import Enum
 from typing import Generator, List
 
@@ -27,26 +27,54 @@ from tabsdata.utils.sql_utils import verify_output_sql_drivers
 class FunctionRunStatus(Enum):
     CANCELED = "C"
     DONE = "D"
+    ERROR = "E"
     FAILED = "F"
     ON_HOLD = "H"
     INCOMPLETE = "I"
     PUBLISHED = "P"
     RUNNING = "R"
     RUN_REQUESTED = "RR"
+    RESCHEDULED = "RS"
     SCHEDULED = "S"
+    UNRECOGNIZED = "U"
 
 
 STATUS_MAPPING = {
     FunctionRunStatus.CANCELED.value: "Canceled",
     FunctionRunStatus.DONE.value: "Done",
+    FunctionRunStatus.ERROR.value: "Error",
     FunctionRunStatus.FAILED.value: "Failed",
     FunctionRunStatus.ON_HOLD.value: "On Hold",
     FunctionRunStatus.INCOMPLETE.value: "Incomplete",
     FunctionRunStatus.PUBLISHED.value: "Published",
     FunctionRunStatus.RUNNING.value: "Running",
     FunctionRunStatus.RUN_REQUESTED.value: "Run Requested",
+    FunctionRunStatus.RESCHEDULED.value: "Rescheduled",
     FunctionRunStatus.SCHEDULED.value: "Scheduled",
+    FunctionRunStatus.UNRECOGNIZED.value: "Unrecognized",
 }
+
+
+class FunctionType(Enum):
+    PUBLISHER = "P"
+    SUBSCRIBER = "S"
+    TRANSFORMER = "T"
+
+
+FUNCTION_TYPE_MAPPING = {
+    FunctionType.PUBLISHER.value: "Publisher",
+    FunctionType.SUBSCRIBER.value: "Subscriber",
+    FunctionType.TRANSFORMER.value: "Transformer",
+}
+
+
+def function_type_to_mapping(function_type: str) -> str:
+    """
+    Function to convert a function type to a mapping. While currently it
+    only accesses the dictionary and returns the corresponding value, it could get
+    more difficult in the future.
+    """
+    return FUNCTION_TYPE_MAPPING.get(function_type, function_type)
 
 
 def status_to_mapping(status: str) -> str:
@@ -56,6 +84,24 @@ def status_to_mapping(status: str) -> str:
     more difficult in the future.
     """
     return STATUS_MAPPING.get(status, status)
+
+
+FAILED_FINAL_STATUSES = {
+    status_to_mapping(FunctionRunStatus.CANCELED.value),
+    status_to_mapping(FunctionRunStatus.ERROR.value),
+    status_to_mapping(FunctionRunStatus.FAILED.value),
+    status_to_mapping(FunctionRunStatus.ON_HOLD.value),
+    status_to_mapping(FunctionRunStatus.INCOMPLETE.value),
+    status_to_mapping(FunctionRunStatus.UNRECOGNIZED.value),
+}
+
+SUCCESSFUL_FINAL_STATUSES = {
+    status_to_mapping(FunctionRunStatus.DONE.value),
+    status_to_mapping(FunctionRunStatus.PUBLISHED.value),
+}
+
+
+FINAL_STATUSES = FAILED_FINAL_STATUSES | SUCCESSFUL_FINAL_STATUSES
 
 
 class LazyProperty:
@@ -218,7 +264,8 @@ class Collection:
 
     def list_tables(
         self,
-        at: int = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
@@ -234,6 +281,7 @@ class Collection:
         return list(
             self.list_tables_generator(
                 at=at,
+                at_trx=at_trx,
                 filter=filter,
                 order_by=order_by,
                 raise_for_status=raise_for_status,
@@ -242,11 +290,24 @@ class Collection:
 
     def list_tables_generator(
         self,
-        at: int = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
     ) -> Generator[Table]:
+        provided = [x is not None for x in (at, at_trx)]
+        if sum(provided) > 1:
+            raise ValueError("Only one of 'at' or 'at_trx' can be provided at a time.")
+        if at:
+            at = top_and_convert_to_timestamp(at)
+        elif at_trx:
+            if isinstance(at_trx, Transaction):
+                transaction = at_trx
+            else:
+                transaction = Transaction(self.connection, at_trx)
+            at = transaction.ended_on
+
         first_page = True
         next_pagination_id = None
         next_step = None
@@ -513,6 +574,9 @@ class DataVersion:
         **kwargs: Additional keyword arguments.
     """
 
+    created_at = LazyProperty("created_at")
+    created_at_str = LazyProperty("created_at_str", subordinate_time_string=True)
+
     # TODO: Make a first class citizen, with links to transaction and execution
     def __init__(
         self,
@@ -540,11 +604,8 @@ class DataVersion:
 
         self.execution = kwargs.get("execution_id")
         # TODO: Add lazy properties for status, triggered_on and triggered_on_str
-        self.triggered_on = kwargs.get("triggered_on")
-        triggered_on = kwargs.get("triggered_on")
-        self.triggered_on_str = (
-            convert_timestamp_to_string(self.triggered_on) if triggered_on else None
-        )
+        self.created_at = kwargs.get("created_at")
+        self.created_at_str = None
         status = kwargs.get("transaction_status") or kwargs.get("status")
         self.status = status_to_mapping(status) if status else None
         # Note: this might cause an inconsistency or a bug if function_id corresponds
@@ -560,7 +621,13 @@ class DataVersion:
             response = self.connection.dataversion_list(
                 self.collection.name, self.table.name, request_filter=f"id:eq:{self.id}"
             )
-            self._data = response.json().get("data").get("data")[0]
+            try:
+                self._data = response.json().get("data").get("data")[0]
+            except IndexError:
+                raise ValueError(
+                    f"Data version with ID {self.id} not found in collection "
+                    f"{self.collection.name} for table {self.table.name}."
+                )
         return self._data_dict
 
     @_data.setter
@@ -729,7 +796,10 @@ class Execution:
     def _data(self):
         if self._data_dict is None:
             response = self.connection.execution_list(request_filter=f"id:eq:{self.id}")
-            self._data = response.json().get("data").get("data")[0]
+            try:
+                self._data = response.json().get("data").get("data")[0]
+            except IndexError:
+                raise ValueError(f"Execution with ID {self.id} not found.")
         return self._data_dict
 
     @_data.setter
@@ -903,6 +973,7 @@ class Function:
     defined_on_str = LazyProperty("defined_on_str", subordinate_time_string=True)
     description = LazyProperty("description")
     id = LazyProperty("id")
+    type = LazyProperty("decorator")
 
     def __init__(
         self,
@@ -938,6 +1009,7 @@ class Function:
         self.defined_on = kwargs.get("defined_on")
         self.defined_on_str = None
         self.defined_by = kwargs.get("defined_by")
+        self.type = kwargs.get("decorator")
         self.kwargs = kwargs
         self._data = None
 
@@ -1128,6 +1200,7 @@ class Function:
         self.defined_on = None
         self.defined_on_str = None
         self.defined_by = None
+        self.type = None
         self.kwargs = None
         self._data = None
         return self
@@ -1384,7 +1457,9 @@ class ServerStatus:
         )
 
     def __str__(self) -> str:
-        return f"Status: {self.status!r} - Latency (ns): {self.latency_as_nanos!r}"
+        latency_as_seconds = self.latency_as_nanos / float(10**9)
+        formatted_latency = f"{latency_as_seconds:.6f}"
+        return f"Status: {self.status!r} - Latency (s): {formatted_latency}"
 
 
 class Table:
@@ -1413,14 +1488,20 @@ class Table:
     @property
     def _data(self) -> dict:
         if self._data_dict is None:
-            self._data_dict = (
-                self.connection.table_list(
-                    self.collection.name, request_filter=f"name:eq:{self.name}"
+            try:
+                self._data_dict = (
+                    self.connection.table_list(
+                        self.collection.name, request_filter=f"name:eq:{self.name}"
+                    )
+                    .json()
+                    .get("data")
+                    .get("data")[0]
                 )
-                .json()
-                .get("data")
-                .get("data")[0]
-            )
+            except IndexError:
+                raise ValueError(
+                    f"Table with name {self.name} not found in collection "
+                    f"{self.collection.name}."
+                )
         return self._data_dict
 
     @_data.setter
@@ -1470,7 +1551,9 @@ class Table:
     def download(
         self,
         destination_file: str,
-        at: int = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
+        version: DataVersion | str | None = None,
         raise_for_status: bool = True,
     ):
         """
@@ -1489,8 +1572,32 @@ class Table:
                 request was not successful. Defaults to True.
 
         Raises:
-            APIServerError: If the schema could not be obtained.
+            APIServerError: If the table could not be downloaded.
         """
+        provided = [x is not None for x in (at, at_trx, version)]
+        if sum(provided) > 1:
+            raise ValueError(
+                "Only one of 'at', 'at_trx' or 'version' can be provided at a time."
+            )
+        if at:
+            at = top_and_convert_to_timestamp(at)
+        elif at_trx:
+            if isinstance(at_trx, Transaction):
+                transaction = at_trx
+            else:
+                transaction = Transaction(self.connection, at_trx)
+            at = transaction.ended_on
+        elif version:
+            if isinstance(version, DataVersion):
+                dataversion = version
+            else:
+                dataversion = DataVersion(
+                    self.connection,
+                    collection=self.collection,
+                    table=self,
+                    id=version,
+                )
+            at = dataversion.created_at
         response = self.connection.table_download(
             self.collection.name,
             self.name,
@@ -1560,7 +1667,9 @@ class Table:
 
     def get_schema(
         self,
-        at: int = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
+        version: DataVersion | str | None = None,
     ) -> List[dict]:
         """
         Get the schema of a table for a given version. The version can be a
@@ -1574,6 +1683,30 @@ class Table:
         Raises:
             APIServerError: If the schema could not be obtained.
         """
+        provided = [x is not None for x in (at, at_trx, version)]
+        if sum(provided) > 1:
+            raise ValueError(
+                "Only one of 'at', 'at_trx' or 'version' can be provided at a time."
+            )
+        if at:
+            at = top_and_convert_to_timestamp(at)
+        elif at_trx:
+            if isinstance(at_trx, Transaction):
+                transaction = at_trx
+            else:
+                transaction = Transaction(self.connection, at_trx)
+            at = transaction.ended_on
+        elif version:
+            if isinstance(version, DataVersion):
+                dataversion = version
+            else:
+                dataversion = DataVersion(
+                    self.connection,
+                    collection=self.collection,
+                    table=self,
+                    id=version,
+                )
+            at = dataversion.created_at
         return (
             self.connection.table_get_schema(
                 self.collection.name,
@@ -1593,7 +1726,9 @@ class Table:
 
     def sample(
         self,
-        at: int = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
+        version: DataVersion | str | None = None,
         offset: int = None,
         len: int = None,
     ) -> pl.DataFrame:
@@ -1606,8 +1741,32 @@ class Table:
             offset (int, optional): The offset of the sample.
             len (int, optional): The length of the sample.
         Raises:
-            APIServerError: If the schema could not be obtained.
+            APIServerError: If the sample could not be obtained.
         """
+        provided = [x is not None for x in (at, at_trx, version)]
+        if sum(provided) > 1:
+            raise ValueError(
+                "Only one of 'at', 'at_trx' or 'version' can be provided at a time."
+            )
+        if at:
+            at = top_and_convert_to_timestamp(at)
+        elif at_trx:
+            if isinstance(at_trx, Transaction):
+                transaction = at_trx
+            else:
+                transaction = Transaction(self.connection, at_trx)
+            at = transaction.ended_on
+        elif version:
+            if isinstance(version, DataVersion):
+                dataversion = version
+            else:
+                dataversion = DataVersion(
+                    self.connection,
+                    collection=self.collection,
+                    table=self,
+                    id=version,
+                )
+            at = dataversion.created_at
         parquet_frame = self.connection.table_get_sample(
             self.collection.name,
             self.name,
@@ -1653,6 +1812,7 @@ class Transaction:
     ended_on_str = LazyProperty("ended_on_str", subordinate_time_string=True)
     started_on = LazyProperty("started_on")
     started_on_str = LazyProperty("started_on_str", subordinate_time_string=True)
+    triggered_by = LazyProperty("triggered_by")
     triggered_on = LazyProperty("triggered_on")
     triggered_on_str = LazyProperty("triggered_on_str", subordinate_time_string=True)
 
@@ -1665,8 +1825,10 @@ class Transaction:
         self.id = id
         self.connection = connection
 
+        self.collection = kwargs.get("collection")
         self.execution = kwargs.get("execution_id")
         self.status = kwargs.get("status")
+        self.triggered_by = kwargs.get("triggered_by")
         self.triggered_on = kwargs.get("triggered_on")
         self.triggered_on_str = None
         self.ended_on = kwargs.get("ended_on")
@@ -1690,6 +1852,26 @@ class Transaction:
     @_data.setter
     def _data(self, data_dict: dict | None):
         self._data_dict = data_dict
+
+    @property
+    def collection(self) -> Collection:
+        if self._collection is None:
+            self.collection = self._data.get("collection")
+        return self._collection
+
+    @collection.setter
+    def collection(self, collection: str | Collection | None):
+        if isinstance(collection, str):
+            self._collection = Collection(self.connection, collection)
+        elif isinstance(collection, Collection):
+            self._collection = collection
+        elif collection is None:
+            self._collection = None
+        else:
+            raise TypeError(
+                "Collection must be a string or a Collection object; got"
+                f"{type(collection)} instead."
+            )
 
     @property
     def execution(self) -> Execution:
@@ -1776,6 +1958,7 @@ class Transaction:
     def refresh(self) -> Transaction:
         self.execution = None
         self.status = None
+        self.triggered_by = None
         self.triggered_on = None
         self.triggered_on_str = None
         self.ended_on = None
@@ -1952,7 +2135,6 @@ class Worker:
         """
         self.connection = connection
         self.id = id
-
         self.collection = kwargs.get("collection")
         self.function = kwargs.get("function")
         self.transaction = kwargs.get("transaction_id")
@@ -1968,7 +2150,10 @@ class Worker:
             #  Currently it is extremely inefficient
             tabsdata_server = TabsdataServer.__new__(TabsdataServer)
             tabsdata_server.connection = self.connection
-            worker = tabsdata_server.list_workers(filter=f"id:eq:{self.id}")[0]
+            try:
+                worker = tabsdata_server.list_workers(filter=f"id:eq:{self.id}")[0]
+            except IndexError:
+                raise ValueError(f"Worker with ID {self.id} not found.")
             self._data = worker.kwargs
         return self._data_dict
 
@@ -2386,7 +2571,10 @@ class TabsdataServer:
         Raises:
             APIServerError: If the execution could not be obtained.
         """
-        return self.list_executions(filter=f"id:eq:{execution_id}")[0]
+        try:
+            return self.list_executions(filter=f"id:eq:{execution_id}")[0]
+        except IndexError:
+            raise ValueError(f"Execution with ID {execution_id} not found.")
 
     def list_executions(
         self,
@@ -2561,7 +2749,7 @@ class TabsdataServer:
             collection(Collection | str): The name of the collection or a
                 Collection object.
             function(Function | str): The name of the function or a Function object.
-            execution(Execution | str): The name of the execution or a
+            execution(Execution | str): The ID of the execution or am
                 Execution object.
 
         Raises:
@@ -2826,7 +3014,9 @@ class TabsdataServer:
         collection_name: str,
         table_name: str,
         destination_file: str,
-        at: int = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
+        version: DataVersion | str | None = None,
         raise_for_status: bool = True,
     ):
         """
@@ -2841,12 +3031,14 @@ class TabsdataServer:
                 request was not successful. Defaults to True.
 
         Raises:
-            APIServerError: If the schema could not be obtained.
+            APIServerError: If the table could not be downloaded.
         """
         table = Table(self.connection, collection_name, table_name)
         table.download(
             destination_file,
             at=at,
+            at_trx=at_trx,
+            version=version,
             raise_for_status=raise_for_status,
         )
 
@@ -2854,7 +3046,9 @@ class TabsdataServer:
         self,
         collection_name: str,
         table_name: str,
-        at: int = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
+        version: DataVersion | str | None = None,
     ) -> List[dict]:
         """
         Get the schema of a table for a given version. The version can be a
@@ -2871,12 +3065,13 @@ class TabsdataServer:
             APIServerError: If the schema could not be obtained.
         """
         table = Table(self.connection, collection_name, table_name)
-        return table.get_schema(at=at)
+        return table.get_schema(at=at, at_trx=at_trx, version=version)
 
     def list_tables(
         self,
         collection_name: str,
-        at: int = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
         filter: List[str] | str = None,
         order_by: str = None,
     ) -> List[Table]:
@@ -2892,13 +3087,17 @@ class TabsdataServer:
             List[Table]: The requested list of tables in the collection.
         """
         collection = Collection(self.connection, collection_name)
-        return collection.list_tables(at=at, filter=filter, order_by=order_by)
+        return collection.list_tables(
+            at=at, at_trx=at_trx, filter=filter, order_by=order_by
+        )
 
     def sample_table(
         self,
         collection_name: str,
         table_name: str,
-        at: int = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
+        version: DataVersion | str | None = None,
         offset: int = None,
         len: int = None,
     ) -> pl.DataFrame:
@@ -2913,11 +3112,13 @@ class TabsdataServer:
             offset (int, optional): The offset of the sample.
             len (int, optional): The length of the sample.
         Raises:
-            APIServerError: If the schema could not be obtained.
+            APIServerError: If the sample could not be obtained.
         """
         table = Table(self.connection, collection_name, table_name)
         return table.sample(
             at=at,
+            at_trx=at_trx,
+            version=version,
             offset=offset,
             len=len,
         )
@@ -2952,7 +3153,10 @@ class TabsdataServer:
         Raises:
             APIServerError: If the transaction could not be obtained.
         """
-        return self.list_transactions(filter=f"id:eq:{transaction_id}")[0]
+        try:
+            return self.list_transactions(filter=f"id:eq:{transaction_id}")[0]
+        except IndexError:
+            raise ValueError(f"Transaction with ID {transaction_id} not found.")
 
     def list_transactions(
         self,
@@ -3147,17 +3351,18 @@ class TabsdataServer:
             raise_for_status=raise_for_status,
         )
 
-    def get_worker_log(self, worker_id: str) -> str:
+    def get_worker_log(self, worker: str | Worker) -> str:
         """
         Get the logs of a worker in the server.
 
         Args:
-            worker_id (str): The ID of the worker.
+            worker (str | Worker): The ID of the worker.
 
         Returns:
             str: The worker logs.
         """
-        worker = Worker(self.connection, worker_id)
+        if isinstance(worker, str):
+            worker = Worker(self.connection, worker)
         return worker.log
 
     def list_workers(
@@ -3205,9 +3410,7 @@ def convert_timestamp_to_string(timestamp: int | None) -> str:
     if not timestamp:
         return str(timestamp)
     return str(
-        datetime.datetime.fromtimestamp(timestamp / 1e3, datetime.UTC).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        datetime.fromtimestamp(timestamp / 1e3, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     )
 
 
@@ -3259,6 +3462,103 @@ def create_archive(
     )
 
 
+UTC_FORMATS = [
+    "%Y-%m-%dZ",
+    "%Y-%m-%dT%HZ",
+    "%Y-%m-%dT%H:%MZ",
+    "%Y-%m-%dT%H:%M:%SZ",
+    "%Y-%m-%dT%H:%M:%S.%fZ",
+]
+
+LOCALIZED_FORMATS = [
+    "%Y-%m-%d",
+    "%Y-%m-%dT%H",
+    "%Y-%m-%dT%H:%M",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S.%f",
+]
+
+
+def top_and_convert_to_timestamp(incomplete_datetime: str | None) -> int | None:
+    if not incomplete_datetime:
+        return None
+    try:
+        # Check if the input is a valid integer (unix timestamp in milliseconds)
+        timestamp = int(incomplete_datetime)
+        if timestamp < 0:
+            raise ValueError("Timestamp cannot be negative.")
+        return timestamp  # Return as is, assuming it's already in milliseconds
+    except ValueError:
+        # If it fails to convert to an integer, it must be a datetime string
+        pass
+    # Define possible formats for incomplete datetime strings
+
+    result = complete_utc_datetime(incomplete_datetime)
+    if result is not None:
+        return result
+
+    result = complete_localized_datetime(incomplete_datetime)
+    if result is not None:
+        return result
+
+    raise ValueError(
+        f"Invalid datetime format string: {incomplete_datetime}. It should be either "
+        "a unix timestamp "
+        "(milliseconds since epoch) or one of one of the "
+        "following:"
+        f" {UTC_FORMATS + LOCALIZED_FORMATS}. "
+        "A 'Z' character at the end of the datetime indicates UTC timezone, if it is "
+        "not present the local timezone of the computer will be used."
+    )
+
+
+def add_one_to_last_field(dt: datetime) -> datetime:
+    if dt.microsecond != 0:
+        return dt + timedelta(microseconds=1)
+    elif dt.second != 0:
+        return dt + timedelta(seconds=1)
+    elif dt.minute != 0:
+        return dt + timedelta(minutes=1)
+    elif dt.hour != 0:
+        return dt + timedelta(hours=1)
+    else:
+        return dt + timedelta(days=1)
+
+
+def complete_localized_datetime(incomplete_datetime: str | None) -> int | None:
+    for fmt in LOCALIZED_FORMATS:
+        try:
+            # Try to parse the incomplete datetime string
+            dt = (
+                datetime.strptime(incomplete_datetime, fmt)
+                .replace(tzinfo=None)
+                .astimezone()
+            )
+            dt = add_one_to_last_field(dt)  # Add one to the last field
+            # Format the datetime to the complete format
+            return int(dt.timestamp() * 1000.0)  # Convert to milliseconds since epoch
+        except ValueError:
+            continue
+
+    return None
+
+
+def complete_utc_datetime(incomplete_datetime: str | None) -> int | None:
+    for fmt in UTC_FORMATS:
+        try:
+            # Try to parse the incomplete datetime string
+            dt = datetime.strptime(incomplete_datetime, fmt).replace(
+                tzinfo=timezone.utc
+            )
+            dt = add_one_to_last_field(dt)  # Add one to the last field
+            # Format the datetime to the complete format
+            return int(dt.timestamp() * 1000.0)  # Convert to milliseconds since epoch
+        except ValueError:
+            continue
+
+    return None
+
+
 def dynamic_import_function_from_path(path: str) -> TabsdataFunction:
     """
     Dynamically import a function from a path in the form of 'path::function_name'.
@@ -3267,7 +3567,13 @@ def dynamic_import_function_from_path(path: str) -> TabsdataFunction:
     """
     file_path, function_name = path.split("::")
     sys.path.insert(0, os.path.dirname(file_path))
-    module_name = os.path.splitext(os.path.basename(file_path))[0]
+    try:
+        module_name = os.path.splitext(os.path.basename(file_path))[0]
+    except ValueError:
+        raise ValueError(
+            f"Invalid file path: {file_path}. Expected format is "
+            "'/path/to/file.py::function_name'."
+        )
 
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     module = importlib.util.module_from_spec(spec)

@@ -2,14 +2,15 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
-import datetime
 import os
+
+import pytest
 
 from tabsdata.cli.cli_utils import (
     beautify_list,
     cleanup_dot_files,
-    complete_datetime,
-    show_dot_file,
+    convert_user_provided_status_to_api_status,
+    generate_dot_image,
 )
 
 # noinspection PyUnresolvedReferences
@@ -19,36 +20,6 @@ from . import pytestmark  # noqa: F401
 def test_beautify_list():
     assert beautify_list(["a", "b", "c"]) == "a\nb\nc"
     assert beautify_list(3) == "3"
-
-
-def test_complete_datetime():
-    result = complete_datetime("2025-01-16")
-    assert datetime.datetime.fromtimestamp(
-        result / 1000, datetime.UTC
-    ) == datetime.datetime(2025, 1, 16, 0, 0, tzinfo=datetime.timezone.utc)
-
-    result = complete_datetime("2025-01-16T15Z")
-    assert datetime.datetime.fromtimestamp(
-        result / 1000, datetime.UTC
-    ) == datetime.datetime(2025, 1, 16, 15, 0, tzinfo=datetime.timezone.utc)
-
-    result = complete_datetime("2025-01-16T15:30Z")
-    assert datetime.datetime.fromtimestamp(
-        result / 1000, datetime.UTC
-    ) == datetime.datetime(2025, 1, 16, 15, 30, tzinfo=datetime.timezone.utc)
-
-    result = complete_datetime("2025-01-16T15:30:45Z")
-    assert datetime.datetime.fromtimestamp(
-        result / 1000, datetime.UTC
-    ) == datetime.datetime(2025, 1, 16, 15, 30, 45, tzinfo=datetime.timezone.utc)
-
-    result = complete_datetime("2025-01-16T15:05:38.137Z")
-    assert datetime.datetime.fromtimestamp(
-        result / 1000, datetime.UTC
-    ) == datetime.datetime(2025, 1, 16, 15, 5, 38, 137000, tzinfo=datetime.timezone.utc)
-
-    assert complete_datetime(None) is None
-    assert complete_datetime("123456") == 123456
 
 
 def test_cleanup_dot_files():
@@ -69,4 +40,14 @@ def test_show_dot_file(tmp_path):
     full_path = os.path.join(tmp_path, "test.dot")
     with open(full_path, "w") as f:
         f.write(sample_dot_string)
-    show_dot_file(full_path)
+    generate_dot_image(full_path)
+
+
+def test_convert_user_provided_status_to_api_status():
+    assert convert_user_provided_status_to_api_status("P") == "P"
+    assert convert_user_provided_status_to_api_status("p") == "P"
+    assert convert_user_provided_status_to_api_status("pUblIshEd") == "P"
+    assert convert_user_provided_status_to_api_status(None) is None
+    assert convert_user_provided_status_to_api_status("") is None
+    with pytest.raises(ValueError):
+        convert_user_provided_status_to_api_status("invalid_status")

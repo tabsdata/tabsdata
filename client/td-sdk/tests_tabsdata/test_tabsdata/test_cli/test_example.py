@@ -88,7 +88,7 @@ def test_examples(login, tabsserver_connection):
             "register",
             "--collection",
             "examples",
-            "--fn-path",
+            "--path",
             f"{os.path.join(WORKING_FOLDER, "publisher.py")}::pub",
             *[arg for path in LOCAL_PACKAGES_LIST for arg in ("--local-pkg", path)],
         ],
@@ -98,7 +98,7 @@ def test_examples(login, tabsserver_connection):
         cli, ["fn", "trigger", "--collection", "examples", "--name", "pub"]
     )
     log_and_assert(result)
-    result = runner.invoke(cli, ["exec", "list-trxs"])
+    result = runner.invoke(cli, ["exec", "list-trx"])
     log_and_assert(result)
     transactions = tabsserver_connection.transactions
     logger.debug(transactions)
@@ -128,7 +128,7 @@ def test_examples(login, tabsserver_connection):
             "register",
             "--collection",
             "examples",
-            "--fn-path",
+            "--path",
             f"{os.path.join(WORKING_FOLDER, "transformer.py")}::tfr",
             *[arg for path in LOCAL_PACKAGES_LIST for arg in ("--local-pkg", path)],
         ],
@@ -138,7 +138,7 @@ def test_examples(login, tabsserver_connection):
         cli, ["fn", "trigger", "--collection", "examples", "--name", "tfr"]
     )
     log_and_assert(result)
-    result = runner.invoke(cli, ["exec", "list-trxs"])
+    result = runner.invoke(cli, ["exec", "list-trx"])
     log_and_assert(result)
     transactions = tabsserver_connection.transactions
     logger.debug(transactions)
@@ -168,7 +168,7 @@ def test_examples(login, tabsserver_connection):
             "register",
             "--collection",
             "examples",
-            "--fn-path",
+            "--path",
             f"{os.path.join(WORKING_FOLDER, "subscriber.py")}::sub",
             *[arg for path in LOCAL_PACKAGES_LIST for arg in ("--local-pkg", path)],
         ],
@@ -178,7 +178,7 @@ def test_examples(login, tabsserver_connection):
         cli, ["fn", "trigger", "--collection", "examples", "--name", "sub"]
     )
     log_and_assert(result)
-    result = runner.invoke(cli, ["exec", "list-trxs"])
+    result = runner.invoke(cli, ["exec", "list-trx"])
     log_and_assert(result)
     transactions = tabsserver_connection.transactions
     logger.debug(transactions)
@@ -207,7 +207,7 @@ def test_examples(login, tabsserver_connection):
         cli, ["fn", "trigger", "--collection", "examples", "--name", "pub"]
     )
     log_and_assert(result)
-    result = runner.invoke(cli, ["exec", "list-trxs"])
+    result = runner.invoke(cli, ["exec", "list-trx"])
     log_and_assert(result)
     transactions = tabsserver_connection.transactions
     logger.debug(transactions)

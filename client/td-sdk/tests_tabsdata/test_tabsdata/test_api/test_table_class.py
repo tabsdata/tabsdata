@@ -4,6 +4,7 @@
 
 import os
 import time
+from datetime import datetime, timedelta, timezone
 
 import polars as pl
 import pytest
@@ -152,3 +153,437 @@ def test_table_class_get_schema_at(
     )
     schema = origin_table.get_schema(at=epoch_ms)
     assert schema
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_download_at_date(
+    tabsserver_connection, tmp_path, testing_collection_with_table
+):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    destination_file = os.path.join(
+        tmp_path, "test_table_class_download_at_date_collection_output.parquet"
+    )
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    origin_table.download(
+        destination_file=destination_file,
+        at=next_day,
+    )
+
+    assert os.path.exists(destination_file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_sample_at_date(
+    tabsserver_connection, testing_collection_with_table
+):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    table = origin_table.sample(at=next_day)
+    assert isinstance(table, pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_get_schema_at_date(
+    tabsserver_connection, testing_collection_with_table
+):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    schema = origin_table.get_schema(at=next_day)
+    assert schema
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_download_at_utc_time(
+    tabsserver_connection, tmp_path, testing_collection_with_table
+):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    destination_file = os.path.join(
+        tmp_path, "test_table_class_download_at_utc_time_collection_output.parquet"
+    )
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    origin_table.download(
+        destination_file=destination_file,
+        at=next_day,
+    )
+
+    assert os.path.exists(destination_file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_sample_at_utc_time(
+    tabsserver_connection, testing_collection_with_table
+):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    table = origin_table.sample(at=next_day)
+    assert isinstance(table, pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_get_schema_at_utc_time(
+    tabsserver_connection, testing_collection_with_table
+):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    schema = origin_table.get_schema(at=next_day)
+    assert schema
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_download_at_localized_time(
+    tabsserver_connection, tmp_path, testing_collection_with_table
+):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H")
+    destination_file = os.path.join(
+        tmp_path,
+        "test_table_class_download_at_localized_time_collection_output.parquet",
+    )
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    origin_table.download(
+        destination_file=destination_file,
+        at=next_day,
+    )
+
+    assert os.path.exists(destination_file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_sample_at_localized_time(
+    tabsserver_connection, testing_collection_with_table
+):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H")
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    table = origin_table.sample(at=next_day)
+    assert isinstance(table, pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_get_schema_at_localized_time(
+    tabsserver_connection, testing_collection_with_table
+):
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H")
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    schema = origin_table.get_schema(at=next_day)
+    assert schema
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_download_at_trx(
+    tabsserver_connection, tmp_path, testing_collection_with_table
+):
+    destination_file = os.path.join(
+        tmp_path, "test_table_class_download_at_trx_collection_output.parquet"
+    )
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    origin_table.download(
+        destination_file=destination_file,
+        at_trx=trx,
+    )
+
+    assert os.path.exists(destination_file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_sample_at_trx(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    table = origin_table.sample(at_trx=trx)
+    assert isinstance(table, pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_get_schema_at_trx(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    schema = origin_table.get_schema(at_trx=trx)
+    assert schema
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_download_at_trx_id(
+    tabsserver_connection, tmp_path, testing_collection_with_table
+):
+    destination_file = os.path.join(
+        tmp_path, "test_table_class_download_at_trx_id_collection_output.parquet"
+    )
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    origin_table.download(
+        destination_file=destination_file,
+        at_trx=trx.id,
+    )
+
+    assert os.path.exists(destination_file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_sample_at_trx_id(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    table = origin_table.sample(at_trx=trx.id)
+    assert isinstance(table, pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_get_schema_at_trx_id(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    schema = origin_table.get_schema(at_trx=trx.id)
+    assert schema
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_download_at_dataversion(
+    tabsserver_connection, tmp_path, testing_collection_with_table
+):
+    destination_file = os.path.join(
+        tmp_path, "test_table_class_download_at_dataversion_collection_output.parquet"
+    )
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    origin_table.download(
+        destination_file=destination_file,
+        version=version,
+    )
+
+    assert os.path.exists(destination_file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_sample_at_dataversion(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    table = origin_table.sample(version=version)
+    assert isinstance(table, pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_get_schema_at_dataversion(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    schema = origin_table.get_schema(version=version)
+    assert schema
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_download_at_dataversion_id(
+    tabsserver_connection, tmp_path, testing_collection_with_table
+):
+    destination_file = os.path.join(
+        tmp_path,
+        "test_table_class_download_at_dataversion_id_collection_output.parquet",
+    )
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    origin_table.download(
+        destination_file=destination_file,
+        version=version.id,
+    )
+
+    assert os.path.exists(destination_file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_sample_at_dataversion_id(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    table = origin_table.sample(version=version.id)
+    assert isinstance(table, pl.DataFrame)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_get_schema_at_dataversion_id(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    schema = origin_table.get_schema(version=version.id)
+    assert schema
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_download_more_than_one_option_fails(
+    tabsserver_connection, tmp_path, testing_collection_with_table
+):
+    destination_file = os.path.join(
+        tmp_path,
+        "test_table_class_download_more_than_one_option_fails_collection_output.parquet",
+    )
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    with pytest.raises(ValueError):
+        origin_table.download(
+            destination_file=destination_file,
+            at=next_day,
+            at_trx=trx,
+        )
+    with pytest.raises(ValueError):
+        origin_table.download(
+            destination_file=destination_file,
+            at=next_day,
+            version=version.id,
+        )
+    with pytest.raises(ValueError):
+        origin_table.download(
+            destination_file=destination_file,
+            at_trx=trx,
+            version=version.id,
+        )
+    with pytest.raises(ValueError):
+        origin_table.download(
+            destination_file=destination_file,
+            at=next_day,
+            at_trx=trx,
+            version=version.id,
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_sample_more_than_one_option_fails(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    with pytest.raises(ValueError):
+        origin_table.sample(
+            at=next_day,
+            at_trx=trx,
+        )
+    with pytest.raises(ValueError):
+        origin_table.sample(
+            at=next_day,
+            version=version.id,
+        )
+    with pytest.raises(ValueError):
+        origin_table.sample(
+            at_trx=trx,
+            version=version.id,
+        )
+    with pytest.raises(ValueError):
+        origin_table.sample(
+            at=next_day,
+            at_trx=trx,
+            version=version.id,
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_table_class_get_schema_more_than_one_option_fails(
+    tabsserver_connection, testing_collection_with_table
+):
+    origin_table = Table(
+        tabsserver_connection.connection, testing_collection_with_table, "output"
+    )
+    version = origin_table.dataversions[-1]  # Get the latest data version
+    trx = tabsserver_connection.list_transactions(order_by="triggered_on+")[-1]
+    next_day = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%HZ")
+    with pytest.raises(ValueError):
+        origin_table.get_schema(
+            at=next_day,
+            at_trx=trx,
+        )
+    with pytest.raises(ValueError):
+        origin_table.get_schema(
+            at=next_day,
+            version=version.id,
+        )
+    with pytest.raises(ValueError):
+        origin_table.get_schema(
+            at_trx=trx,
+            version=version.id,
+        )
+    with pytest.raises(ValueError):
+        origin_table.get_schema(
+            at=next_day,
+            at_trx=trx,
+            version=version.id,
+        )

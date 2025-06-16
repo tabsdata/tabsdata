@@ -6,35 +6,20 @@ import json
 import os
 import platform
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime
 
 import rich_click as click
 from PIL import Image
 from rich_click import Option, UsageError
 
 from tabsdata.api.apiserver import APIServer, obtain_connection
-from tabsdata.api.tabsdata_server import TabsdataServer
+from tabsdata.api.tabsdata_server import STATUS_MAPPING, TabsdataServer
 
 CONNECTION_FILE = "connection.json"
 DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
 
 DOT_FOLDER = os.path.join(DEFAULT_TABSDATA_DIRECTORY, "dot")
 DOT_FORMAT = "-Tjpg -Gdpi=300 -Nfontsize=10 -Nmargin=0.4 -Efontsize=10"
-
-UTC_FORMATS = [
-    "%Y-%m-%d",
-    "%Y-%m-%dT%HZ",
-    "%Y-%m-%dT%H:%MZ",
-    "%Y-%m-%dT%H:%M:%SZ",
-    "%Y-%m-%dT%H:%M:%S.%fZ",
-]
-
-LOCALIZED_FORMATS = [
-    "%Y-%m-%dT%H",
-    "%Y-%m-%dT%H:%M",
-    "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S.%f",
-]
 
 
 def beautify_list(list_to_show) -> str:
@@ -152,70 +137,6 @@ def verify_login_or_prompt(ctx: click.Context):
         initialise_tabsdata_server_connection(ctx)
 
 
-def complete_datetime(incomplete_datetime: str | None) -> int | None:
-    if not incomplete_datetime:
-        return None
-    try:
-        # Check if the input is a valid integer (unix timestamp in milliseconds)
-        timestamp = int(incomplete_datetime)
-        if timestamp < 0:
-            raise ValueError("Timestamp cannot be negative.")
-        return timestamp  # Return as is, assuming it's already in milliseconds
-    except ValueError:
-        # If it fails to convert to an integer, it must be a datetime string
-        pass
-    # Define possible formats for incomplete datetime strings
-
-    result = complete_utc_datetime(incomplete_datetime)
-    if result is not None:
-        return result
-
-    result = complete_localized_datetime(incomplete_datetime)
-    if result is not None:
-        return result
-
-    raise ValueError(
-        "Invalid datetime format string. It should be either a unix timestamp "
-        "(milliseconds since epoch) or one of one of the "
-        "following:"
-        f" {UTC_FORMATS + LOCALIZED_FORMATS}. "
-        "A 'Z' character at the end of the datetime indicates UTC timezone, if it is "
-        "not present the local timezone of the computer will be used."
-    )
-
-
-def complete_localized_datetime(incomplete_datetime: str | None) -> int | None:
-    for fmt in LOCALIZED_FORMATS:
-        try:
-            # Try to parse the incomplete datetime string
-            dt = (
-                datetime.strptime(incomplete_datetime, fmt)
-                .replace(tzinfo=None)
-                .astimezone()
-            )
-            # Format the datetime to the complete format
-            return int(dt.timestamp() * 1000.0)  # Convert to milliseconds since epoch
-        except ValueError:
-            continue
-
-    return None
-
-
-def complete_utc_datetime(incomplete_datetime: str | None) -> int | None:
-    for fmt in UTC_FORMATS:
-        try:
-            # Try to parse the incomplete datetime string
-            dt = datetime.strptime(incomplete_datetime, fmt).replace(
-                tzinfo=timezone.utc
-            )
-            # Format the datetime to the complete format
-            return int(dt.timestamp() * 1000.0)  # Convert to milliseconds since epoch
-        except ValueError:
-            continue
-
-    return None
-
-
 class MutuallyExclusiveOption(Option):
     def __init__(self, *args, **kwargs):
         self.mutually_exclusive = set(kwargs.pop("mutually_exclusive", []))
@@ -259,23 +180,20 @@ class CurrentPlatform:
 
 
 def cleanup_dot_files():
-    click.echo("Cleaning up DOT files older than 30 minutes")
     try:
         for file in os.listdir(DOT_FOLDER):
             file_path = os.path.join(DOT_FOLDER, file)
             if os.path.isfile(file_path):
                 if os.stat(file_path).st_mtime < datetime.now().timestamp() - 1800:
                     os.remove(file_path)
-        click.echo("DOT files cleaned up successfully")
-    except Exception as e:
-        click.echo(f"Failed to clean up DOT files: {e}")
-        click.echo("This will not affect the rest of the command execution.")
+    except Exception:
+        pass
 
 
 CURRENT_CLI_PLATFORM = CurrentPlatform()
 
 
-def show_dot_file(full_path: str):
+def generate_dot_image(full_path: str, open_image: bool = False):
     if os.environ.get("TD_CLI_SHOW") in ["0", "False", "false", "no", "NO"]:
         click.echo("Skipping DOT file opening")
         return
@@ -283,19 +201,20 @@ def show_dot_file(full_path: str):
     if CURRENT_CLI_PLATFORM.is_windows():
         dot_binary = "dot.exe"
     if not shutil.which(dot_binary):
-        click.echo("Cannot open DOT file, dot binary not found")
+        click.echo("Cannot generate DOT image file, dot binary not found")
         click.echo(
-            "If you want to be able to open DOT files, please install "
+            "If you want to be able to convert DOT files to images, please install "
             "the dot binary from Graphviz (https://graphviz.org/)"
         )
         return
     try:
         jpg_full_path = full_path[: -len(".dot")] + ".jpg"
         os.system(f"{dot_binary} {DOT_FORMAT} -o {jpg_full_path} {full_path}")
-        click.echo(f"Generated DOT jpg file at {jpg_full_path}")
-        click.echo("Opening DOT file")
-        img = Image.open(jpg_full_path)
-        img.show()
+        click.echo(f"Plan DOT jpg at path: {jpg_full_path}")
+        if open_image:
+            click.echo("Opening DOT file")
+            img = Image.open(jpg_full_path)
+            img.show()
     except Exception as e:
         click.echo(f"Failed to open DOT file: {e}")
 
@@ -305,3 +224,28 @@ def get_credentials_file_path(ctx: click.Context) -> str:
     Get the path to the credentials file.
     """
     return os.path.join(ctx.obj["tabsdata_directory"], CONNECTION_FILE)
+
+
+def convert_user_provided_status_to_api_status(
+    user_provided_status: str | None,
+) -> str | None:
+    """
+    Convert a user-provided status string to the API status string.
+    :param user_provided_status: The user-provided status string.
+    :return: The API status string.
+    """
+    if not user_provided_status:
+        return None
+
+    user_provided_status = user_provided_status.lower()
+    for key, value in STATUS_MAPPING.items():
+        if user_provided_status == key.lower() or user_provided_status == value.lower():
+            return key
+
+    valid_statuses = ", ".join(STATUS_MAPPING.keys())
+    valid_statuses += ", " + ", ".join(STATUS_MAPPING.values())
+    raise ValueError(
+        f"Invalid status: '{user_provided_status}'. "
+        "Valid statuses are: "
+        f"{valid_statuses}. Statuses are case-insensitive."
+    )
