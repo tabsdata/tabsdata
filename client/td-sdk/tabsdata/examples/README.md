@@ -48,66 +48,66 @@ td login localhost --user admin --password tabsdata
 
 ## Create a Collection
 ```
-td collection create examples --description "Examples"
+td collection create --name examples --description "Examples"
 ```
 
 ## Create and Test the Publisher
 
 ### Register the Publisher
 ```
-td fn register --collection examples --path publisher.py::pub
+td fn register --coll examples --path publisher.py::pub
 ```
 
 ### Trigger the Publisher
 ```
-td fn trigger --collection examples --name pub
+td fn trigger --coll examples --name pub
 ```
 
 ### Check the Publisher Execution
 ```
-td exec list-trx
+td exe list-trx
 ```
 
 ### Show Schema of Table populated by the Publisher
 ```
-td table schema --collection examples --name persons
+td table schema --coll examples --name persons
 ```
 
 ## Create and Test the Transformer
 
 ### Register the Transformer
 ```
-td fn register --collection examples --path transformer.py::tfr
+td fn register --coll examples --path transformer.py::tfr
 ```
 
 ### Trigger the Transformer
 ```
-td fn trigger --collection examples --name tfr
+td fn trigger --coll examples --name tfr
 ```
 ### Check the Transformer Execution
 ```
-td exec list-trx
+td exe list-trx
 ```
 
 ### Show Schema of a Table populated by the Transformer
 ```
-td table schema --collection examples --name spanish
+td table schema --coll examples --name spanish
 ```
 
 ## Create and Test the Subscriber
 
 ### Register the Subscriber
 ```
-td fn register --collection examples --path subscriber.py::sub
+td fn register --coll examples --path subscriber.py::sub
 ```
 
 ### Trigger the Subscriber
 ```
-td fn trigger --collection examples --name sub
+td fn trigger --coll examples --name sub
 ```
 ### Check the Subscriber Execution
 ```
-td exec list-trx
+td exe list-trx
 ```
 
 ### See the Files Exported by the Subscriber
@@ -143,12 +143,12 @@ the Publisher will trigger the execution of the 3 in order
 (the whole trigger graph).
 
 ```
-td fn trigger --collection examples --name pub
+td fn trigger --coll examples --name pub
 ```
 
 ### Check the Transaction Execution
 ```
-td exec list-trx
+td exe list-trx
 ```
 
 ### See the Files Exported by the Subscriber

@@ -20,7 +20,7 @@ def user():
 
 
 @user.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Name of the user to create.")
 @click.option("--full-name", "-f", help="Full name of the user.")
 @click.option("--email", "-e", help="Email of the user.")
 @click.option(
@@ -42,6 +42,7 @@ def create(
     verify_login_or_prompt(ctx)
     click.echo("Creating a new user")
     click.echo("-" * 10)
+    name = name or logical_prompt(ctx, "Name of the user")
     if password is None:
         password = logical_prompt(ctx, "Password for the user", hide_input=True)
         second_password = click.prompt("Please re-enter the password", hide_input=True)
@@ -66,7 +67,7 @@ def create(
 
 
 @user.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Name of the user to delete.")
 @click.option(
     "--confirm",
     help="Write 'delete' to confirm deletion. Will be prompted for it if not provided.",
@@ -75,6 +76,7 @@ def create(
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a user by name"""
     verify_login_or_prompt(ctx)
+    name = name or logical_prompt(ctx, "Name of the user to delete")
     click.echo(f"Deleting user: {name}")
     click.echo("-" * 10)
     confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
@@ -91,11 +93,12 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 
 @user.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Name of the user to display.")
 @click.pass_context
 def info(ctx: click.Context, name: str):
     """Display a user by name"""
     verify_login_or_prompt(ctx)
+    name = name or logical_prompt(ctx, "Name of the user to display")
     try:
         user = ctx.obj["tabsdataserver"].get_user(name)
 
@@ -144,7 +147,7 @@ def list(ctx: click.Context):
 
 
 @user.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Name of the user to update.")
 @click.option("--full-name", "-f", help="New full name of the user.")
 @click.option("--email", "-e", help="New email of the user.")
 @click.option("--password", "-p", help="New password for the user.")
@@ -165,6 +168,7 @@ def update(
 ):
     """Update a user by name"""
     verify_login_or_prompt(ctx)
+    name = name or logical_prompt(ctx, "Name of the user to update")
     click.echo(f"Updating user: {name}")
     click.echo("-" * 10)
     try:

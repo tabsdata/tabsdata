@@ -29,7 +29,7 @@ def table():
     help="Name of the table.",
 )
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the table belongs.",
 )
@@ -80,7 +80,7 @@ def table():
 @click.pass_context
 def download(
     ctx: click.Context,
-    collection: str,
+    coll: str,
     name: str,
     file: str,
     at: str,
@@ -91,8 +91,8 @@ def download(
     verify_login_or_prompt(ctx)
     file = file or logical_prompt(ctx, "File in which the table will be stored")
     name = name or logical_prompt(ctx, "Name of the table")
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the table belongs")
     )
@@ -101,7 +101,7 @@ def download(
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.download_table(
-            collection,
+            coll,
             name,
             file,
             at=at,
@@ -118,7 +118,7 @@ def download(
 
 @table.command()
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the tables belong.",
 )
@@ -158,11 +158,11 @@ def download(
     mutually_exclusive=["at"],
 )
 @click.pass_context
-def list(ctx: click.Context, collection: str, name: str, at: str, at_trx: str):
+def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
     """List all tables in a collection"""
     verify_login_or_prompt(ctx)
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the tables belong")
     )
@@ -172,10 +172,10 @@ def list(ctx: click.Context, collection: str, name: str, at: str, at_trx: str):
         if name:
             request_filter.append(f"name:lk:{name}")
         list_of_tables = server.list_tables(
-            collection, filter=request_filter, at=at, at_trx=at_trx
+            coll, filter=request_filter, at=at, at_trx=at_trx
         )
 
-        cli_table = Table(title=f"Tables in collection '{collection}'")
+        cli_table = Table(title=f"Tables in collection '{coll}'")
         cli_table.add_column("Name", style="cyan", no_wrap=True)
         cli_table.add_column("Function")
 
@@ -188,9 +188,7 @@ def list(ctx: click.Context, collection: str, name: str, at: str, at_trx: str):
         click.echo()
         console = Console()
         console.print(cli_table)
-        click.echo(
-            f"Number of tables in collection '{collection}': {len(list_of_tables)}"
-        )
+        click.echo(f"Number of tables in collection '{coll}': {len(list_of_tables)}")
         click.echo()
 
     except Exception as e:
@@ -204,7 +202,7 @@ def list(ctx: click.Context, collection: str, name: str, at: str, at_trx: str):
     help="Name of the table.",
 )
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the table belongs.",
 )
@@ -268,7 +266,7 @@ def list(ctx: click.Context, collection: str, name: str, at: str, at_trx: str):
 @click.pass_context
 def sample(
     ctx: click.Context,
-    collection: str,
+    coll: str,
     name: str,
     len: int,
     offset: int,
@@ -280,15 +278,15 @@ def sample(
     """Sample rows from the table"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the table")
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the table belongs")
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         sampled_table = server.sample_table(
-            collection,
+            coll,
             name,
             at=at,
             at_trx=at_trx,
@@ -317,7 +315,7 @@ def sample(
     help="Name of the table.",
 )
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the table belongs.",
 )
@@ -360,7 +358,7 @@ def sample(
 @click.pass_context
 def schema(
     ctx: click.Context,
-    collection: str,
+    coll: str,
     name: str,
     at: str,
     at_trx: str,
@@ -369,15 +367,15 @@ def schema(
     """Show table schema"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the table")
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the table belongs")
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         table_schema = server.get_table_schema(
-            collection,
+            coll,
             name,
             at=at,
             at_trx=at_trx,
@@ -402,7 +400,7 @@ def schema(
 
 @table.command()
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the data belongs.",
 )
@@ -411,13 +409,13 @@ def schema(
     help="The name of the table to which the data belongs.",
 )
 @click.pass_context
-def versions(ctx: click.Context, collection: str, name: str):
+def versions(ctx: click.Context, coll: str, name: str):
     """
     List all versions of the data of a table.
     """
     verify_login_or_prompt(ctx)
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the data belongs")
     )
@@ -426,12 +424,12 @@ def versions(ctx: click.Context, collection: str, name: str):
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        data_version_list = server.list_dataversions(collection, name)
+        data_version_list = server.list_dataversions(coll, name)
 
         table = Table(title=f"Data versions for table '{name}'")
         table.add_column("ID", style="cyan", no_wrap=True)
         table.add_column("Function ID")
-        table.add_column("Execution ID")
+        table.add_column("Plan ID")
         table.add_column("Created at")
         table.add_column("Status")
 

@@ -61,6 +61,7 @@ def testing_collection(login, worker_id):
         [
             "collection",
             "create",
+            "--name",
             collection_name,
             "--description",
             "description",

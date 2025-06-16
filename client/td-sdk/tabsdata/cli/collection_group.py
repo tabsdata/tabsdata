@@ -9,6 +9,7 @@ from rich.table import Table
 
 from tabsdata.api.tabsdata_server import TabsdataServer
 from tabsdata.cli.cli_utils import (
+    get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
     store_pinned_objects,
@@ -22,7 +23,7 @@ def collection():
 
 
 @collection.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Name of the collection to create.")
 @click.option("--description", help="Description of the collection.")
 @click.pass_context
 def create(
@@ -32,6 +33,11 @@ def create(
 ):
     """Create a new collection"""
     verify_login_or_prompt(ctx)
+    name = (
+        name
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to create")
+    )
     description = description or ""
     click.echo("Creating a new collection")
     click.echo("-" * 10)
@@ -45,7 +51,7 @@ def create(
 
 
 @collection.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Name of the collection to delete.")
 @click.option(
     "--confirm",
     help="Write 'delete' to confirm deletion. Will be prompted for it if not provided.",
@@ -54,6 +60,11 @@ def create(
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a collection by name. Currently not supported."""
     verify_login_or_prompt(ctx)
+    name = (
+        name
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to delete")
+    )
     click.echo(f"Deleting collection: {name}")
     click.echo("-" * 10)
     confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
@@ -71,11 +82,16 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 
 @collection.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Name of the collection to display.")
 @click.pass_context
 def info(ctx: click.Context, name: str):
     """Display a collection by name"""
     verify_login_or_prompt(ctx)
+    name = (
+        name
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to display")
+    )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         collection = server.get_collection(name)
@@ -136,7 +152,7 @@ def list(ctx: click.Context):
 
 
 @collection.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Name of the collection to pin.")
 @click.pass_context
 def pin(ctx: click.Context, name: str):
     """Pin a collection by name"""
@@ -174,7 +190,7 @@ def unpin(ctx: click.Context):
 
 
 @collection.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Name of the collection to update.")
 @click.option("--new-name", "-n", help="New name for the collection.")
 @click.option("--description", help="New description for the collection.")
 @click.pass_context
@@ -186,6 +202,11 @@ def update(
 ):
     """Update a collection by name"""
     verify_login_or_prompt(ctx)
+    name = (
+        name
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to update")
+    )
     description = description or ""
     click.echo(f"Updating collection: {name}")
     click.echo("-" * 10)

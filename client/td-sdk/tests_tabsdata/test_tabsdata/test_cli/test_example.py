@@ -77,7 +77,8 @@ def test_examples(login, tabsserver_connection):
     assert os.path.exists(WORKING_FOLDER)
     assert os.path.exists(os.path.join(WORKING_FOLDER, "input", "persons.csv"))
     result = runner.invoke(
-        cli, ["collection", "create", "examples", "--description", '"Examples"']
+        cli,
+        ["collection", "create", "--name", "examples", "--description", '"Examples"'],
     )
     log_and_assert(result)
     # Test the publisher
@@ -86,7 +87,7 @@ def test_examples(login, tabsserver_connection):
         [
             "fn",
             "register",
-            "--collection",
+            "--coll",
             "examples",
             "--path",
             f"{os.path.join(WORKING_FOLDER, "publisher.py")}::pub",
@@ -96,10 +97,10 @@ def test_examples(login, tabsserver_connection):
     log_and_assert(result)
     result = runner.invoke(
         cli,
-        ["fn", "trigger", "--collection", "examples", "--name", "pub", "--background"],
+        ["fn", "trigger", "--coll", "examples", "--name", "pub", "--detach"],
     )
     log_and_assert(result)
-    result = runner.invoke(cli, ["exec", "list-trx"])
+    result = runner.invoke(cli, ["exe", "list-trx"])
     log_and_assert(result)
     transactions = tabsserver_connection.transactions
     logger.debug(transactions)
@@ -109,7 +110,7 @@ def test_examples(login, tabsserver_connection):
         sleep(retry)
         result = runner.invoke(
             cli,
-            ["table", "schema", "--collection", "examples", "--name", "persons"],
+            ["table", "schema", "--coll", "examples", "--name", "persons"],
         )
         logger.debug(result.output)
         if result.exit_code == 0:
@@ -117,7 +118,7 @@ def test_examples(login, tabsserver_connection):
         retry += 1
     result = runner.invoke(
         cli,
-        ["table", "schema", "--collection", "examples", "--name", "persons"],
+        ["table", "schema", "--coll", "examples", "--name", "persons"],
     )
     log_and_assert(result)
 
@@ -127,7 +128,7 @@ def test_examples(login, tabsserver_connection):
         [
             "fn",
             "register",
-            "--collection",
+            "--coll",
             "examples",
             "--path",
             f"{os.path.join(WORKING_FOLDER, "transformer.py")}::tfr",
@@ -137,10 +138,10 @@ def test_examples(login, tabsserver_connection):
     log_and_assert(result)
     result = runner.invoke(
         cli,
-        ["fn", "trigger", "--collection", "examples", "--name", "tfr", "--background"],
+        ["fn", "trigger", "--coll", "examples", "--name", "tfr", "--detach"],
     )
     log_and_assert(result)
-    result = runner.invoke(cli, ["exec", "list-trx"])
+    result = runner.invoke(cli, ["exe", "list-trx"])
     log_and_assert(result)
     transactions = tabsserver_connection.transactions
     logger.debug(transactions)
@@ -150,7 +151,7 @@ def test_examples(login, tabsserver_connection):
         sleep(retry)
         result = runner.invoke(
             cli,
-            ["table", "schema", "--collection", "examples", "--name", "spanish"],
+            ["table", "schema", "--coll", "examples", "--name", "spanish"],
         )
         logger.debug(result.output)
         if result.exit_code == 0:
@@ -158,7 +159,7 @@ def test_examples(login, tabsserver_connection):
         retry += 1
     result = runner.invoke(
         cli,
-        ["table", "schema", "--collection", "examples", "--name", "spanish"],
+        ["table", "schema", "--coll", "examples", "--name", "spanish"],
     )
     log_and_assert(result)
 
@@ -168,7 +169,7 @@ def test_examples(login, tabsserver_connection):
         [
             "fn",
             "register",
-            "--collection",
+            "--coll",
             "examples",
             "--path",
             f"{os.path.join(WORKING_FOLDER, "subscriber.py")}::sub",
@@ -178,10 +179,10 @@ def test_examples(login, tabsserver_connection):
     log_and_assert(result)
     result = runner.invoke(
         cli,
-        ["fn", "trigger", "--collection", "examples", "--name", "sub", "--background"],
+        ["fn", "trigger", "--coll", "examples", "--name", "sub", "--detach"],
     )
     log_and_assert(result)
-    result = runner.invoke(cli, ["exec", "list-trx"])
+    result = runner.invoke(cli, ["exe", "list-trx"])
     log_and_assert(result)
     transactions = tabsserver_connection.transactions
     logger.debug(transactions)
@@ -208,10 +209,10 @@ def test_examples(login, tabsserver_connection):
     # Multitrigger
     result = runner.invoke(
         cli,
-        ["fn", "trigger", "--collection", "examples", "--name", "pub", "--background"],
+        ["fn", "trigger", "--coll", "examples", "--name", "pub", "--detach"],
     )
     log_and_assert(result)
-    result = runner.invoke(cli, ["exec", "list-trx"])
+    result = runner.invoke(cli, ["exe", "list-trx"])
     log_and_assert(result)
     transactions = tabsserver_connection.transactions
     logger.debug(transactions)

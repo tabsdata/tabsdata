@@ -24,7 +24,7 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.requires_internet
 def test_wrong_command_raises_exception(login):
     runner = CliRunner()
-    result = runner.invoke(cli, ["exec", "potato"])
+    result = runner.invoke(cli, ["exe", "potato"])
     assert result.exit_code == 2
 
 
@@ -32,7 +32,7 @@ def test_wrong_command_raises_exception(login):
 @pytest.mark.requires_internet
 def test_execution_list(login, testing_collection_with_table):
     runner = CliRunner()
-    result = runner.invoke(cli, ["--no-prompt", "exec", "list-exec"])
+    result = runner.invoke(cli, ["--no-prompt", "exe", "list-plan"])
     assert result.exit_code == 0
 
 
@@ -40,7 +40,7 @@ def test_execution_list(login, testing_collection_with_table):
 @pytest.mark.requires_internet
 def test_transaction_list(login, testing_collection_with_table):
     runner = CliRunner()
-    result = runner.invoke(cli, ["--no-prompt", "exec", "list-trx"])
+    result = runner.invoke(cli, ["--no-prompt", "exe", "list-trx"])
     assert result.exit_code == 0
 
 
@@ -67,7 +67,7 @@ def test_cli_execution_cancel(login, tabsserver_connection):
         assert isinstance(execution, Execution)
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["--no-prompt", "exec", "cancel-exec", execution.id]
+            cli, ["--no-prompt", "exe", "cancel", "--plan", execution.id]
         )
         logger.debug(result.output)
         assert result.exit_code == 0
@@ -106,7 +106,7 @@ def test_cli_execution_recover(login, tabsserver_connection):
         assert isinstance(execution, Execution)
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["--no-prompt", "exec", "recover-exec", execution.id]
+            cli, ["--no-prompt", "exe", "recover", "--plan", execution.id]
         )
         logger.debug(result.output)
         assert result.exit_code == 0
@@ -145,7 +145,7 @@ def test_cli_transaction_cancel(login, tabsserver_connection):
         transaction = execution.transactions[0]
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["--no-prompt", "exec", "cancel-trx", transaction.id]
+            cli, ["--no-prompt", "exe", "cancel", "--trx", transaction.id]
         )
         logger.debug(result.output)
         assert result.exit_code == 0
@@ -185,7 +185,7 @@ def test_cli_transaction_recover(login, tabsserver_connection):
         transaction = execution.transactions[0]
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["--no-prompt", "exec", "recover-trx", transaction.id]
+            cli, ["--no-prompt", "exe", "recover", "--trx", transaction.id]
         )
         logger.debug(result.output)
         assert result.exit_code == 0
@@ -205,7 +205,7 @@ def test_cli_transaction_recover(login, tabsserver_connection):
 def test_execution_list_with_status(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-exec", "--status", "published"]
+        cli, ["--no-prompt", "exe", "list-plan", "--status", "published"]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -219,8 +219,8 @@ def test_execution_list_with_multiple_statuses(login, testing_collection_with_ta
         cli,
         [
             "--no-prompt",
-            "exec",
-            "list-exec",
+            "exe",
+            "list-plan",
             "--status",
             "published",
             "--status",
@@ -236,7 +236,7 @@ def test_execution_list_with_multiple_statuses(login, testing_collection_with_ta
 def test_execution_list_with_wrong_status_fails(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-exec", "--status", "doesnotexist"]
+        cli, ["--no-prompt", "exe", "list-plan", "--status", "doesnotexist"]
     )
     logger.debug(result.output)
     assert result.exit_code != 0
@@ -248,7 +248,7 @@ def test_execution_list_with_function_name(login, testing_collection_with_table)
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["--no-prompt", "exec", "list-exec", "--fn", "input_file_csv_string_format"],
+        ["--no-prompt", "exe", "list-plan", "--fn", "input_file_csv_string_format"],
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -262,9 +262,9 @@ def test_execution_list_with_collection_name(login, testing_collection_with_tabl
         cli,
         [
             "--no-prompt",
-            "exec",
-            "list-exec",
-            "--collection",
+            "exe",
+            "list-plan",
+            "--coll",
             testing_collection_with_table,
         ],
     )
@@ -276,7 +276,7 @@ def test_execution_list_with_collection_name(login, testing_collection_with_tabl
 @pytest.mark.requires_internet
 def test_execution_list_last(login, testing_collection_with_table):
     runner = CliRunner()
-    result = runner.invoke(cli, ["--no-prompt", "exec", "list-exec", "--last"])
+    result = runner.invoke(cli, ["--no-prompt", "exe", "list-plan", "--last"])
     logger.debug(result.output)
     assert result.exit_code == 0
 
@@ -285,9 +285,7 @@ def test_execution_list_last(login, testing_collection_with_table):
 @pytest.mark.requires_internet
 def test_execution_list_with_wildcard_name(login, testing_collection_with_table):
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-exec", "--name", "test_*"]
-    )
+    result = runner.invoke(cli, ["--no-prompt", "exe", "list-plan", "--name", "test_*"])
     logger.debug(result.output)
     assert result.exit_code == 0
 
@@ -298,7 +296,7 @@ def test_execution_list_with_at(login, testing_collection_with_table):
     epoch_ms = int(time.time() * 1000)
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-exec", "--at", str(epoch_ms)]
+        cli, ["--no-prompt", "exe", "list-plan", "--at", str(epoch_ms)]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -309,7 +307,7 @@ def test_execution_list_with_at(login, testing_collection_with_table):
 def test_transaction_list_with_status(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-trx", "--status", "published"]
+        cli, ["--no-prompt", "exe", "list-trx", "--status", "published"]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -323,7 +321,7 @@ def test_transaction_list_with_multiple_statuses(login, testing_collection_with_
         cli,
         [
             "--no-prompt",
-            "exec",
+            "exe",
             "list-trx",
             "--status",
             "published",
@@ -340,7 +338,7 @@ def test_transaction_list_with_multiple_statuses(login, testing_collection_with_
 def test_transaction_list_with_wrong_status_fails(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-trx", "--status", "doesnotexist"]
+        cli, ["--no-prompt", "exe", "list-trx", "--status", "doesnotexist"]
     )
     logger.debug(result.output)
     assert result.exit_code != 0
@@ -355,7 +353,7 @@ def test_transaction_list_with_execution_id(
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["--no-prompt", "exec", "list-trx", "--exec", str(execution_id)],
+        ["--no-prompt", "exe", "list-trx", "--plan", str(execution_id)],
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -369,9 +367,9 @@ def test_transaction_list_with_collection_name(login, testing_collection_with_ta
         cli,
         [
             "--no-prompt",
-            "exec",
+            "exe",
             "list-trx",
-            "--collection",
+            "--coll",
             testing_collection_with_table,
         ],
     )
@@ -383,7 +381,7 @@ def test_transaction_list_with_collection_name(login, testing_collection_with_ta
 @pytest.mark.requires_internet
 def test_transaction_list_last(login, testing_collection_with_table):
     runner = CliRunner()
-    result = runner.invoke(cli, ["--no-prompt", "exec", "list-trx", "--last"])
+    result = runner.invoke(cli, ["--no-prompt", "exe", "list-trx", "--last"])
     logger.debug(result.output)
     assert result.exit_code == 0
 
@@ -393,7 +391,7 @@ def test_transaction_list_last(login, testing_collection_with_table):
 def test_transaction_list_with_wildcard_name(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-trx", "--exec-name", "test_*"]
+        cli, ["--no-prompt", "exe", "list-trx", "--plan-name", "test_*"]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -405,7 +403,7 @@ def test_transaction_list_with_at(login, testing_collection_with_table):
     epoch_ms = int(time.time() * 1000)
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-trx", "--at", str(epoch_ms)]
+        cli, ["--no-prompt", "exe", "list-trx", "--at", str(epoch_ms)]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -416,7 +414,7 @@ def test_transaction_list_with_at(login, testing_collection_with_table):
 def test_worker_list_with_status(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-worker", "--status", "published"]
+        cli, ["--no-prompt", "exe", "list-worker", "--status", "published"]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -430,7 +428,7 @@ def test_worker_list_with_multiple_statuses(login, testing_collection_with_table
         cli,
         [
             "--no-prompt",
-            "exec",
+            "exe",
             "list-worker",
             "--status",
             "published",
@@ -447,7 +445,7 @@ def test_worker_list_with_multiple_statuses(login, testing_collection_with_table
 def test_worker_list_with_wrong_status_fails(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-worker", "--status", "doesnotexist"]
+        cli, ["--no-prompt", "exe", "list-worker", "--status", "doesnotexist"]
     )
     logger.debug(result.output)
     assert result.exit_code != 0
@@ -461,7 +459,7 @@ def test_worker_list_with_only_function_name_fails(
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["--no-prompt", "exec", "list-worker", "--fn", "input_file_csv_string_format"],
+        ["--no-prompt", "exe", "list-worker", "--fn", "input_file_csv_string_format"],
     )
     logger.debug(result.output)
     assert result.exit_code != 0
@@ -475,9 +473,9 @@ def test_worker_list_with_collection_name(login, testing_collection_with_table):
         cli,
         [
             "--no-prompt",
-            "exec",
+            "exe",
             "list-worker",
-            "--collection",
+            "--coll",
             testing_collection_with_table,
         ],
     )
@@ -490,7 +488,7 @@ def test_worker_list_with_collection_name(login, testing_collection_with_table):
 def test_worker_list_with_wildcard_execution_name(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-worker", "--exec-name", "test_*"]
+        cli, ["--no-prompt", "exe", "list-worker", "--plan-name", "test_*"]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -504,7 +502,7 @@ def test_worker_list_with_execution_id(
     execution_id = tabsserver_connection.executions[0].id
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-worker", "--exec", str(execution_id)]
+        cli, ["--no-prompt", "exe", "list-worker", "--plan", str(execution_id)]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -518,7 +516,7 @@ def test_worker_messages_list_by_execution_id(
     execution_id = tabsserver_connection.executions[0].id
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-worker", "--exec", execution_id]
+        cli, ["--no-prompt", "exe", "list-worker", "--plan", execution_id]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -539,7 +537,7 @@ def test_worker_messages_list_by_transaction_id(
     assert transaction_id
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exec", "list-worker", "--trx", transaction_id]
+        cli, ["--no-prompt", "exe", "list-worker", "--trx", transaction_id]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -558,11 +556,11 @@ def test_worker_messages_list_by_function_and_collection(
         cli,
         [
             "--no-prompt",
-            "exec",
+            "exe",
             "list-worker",
             "--fn",
             function_name,
-            "--collection",
+            "--coll",
             testing_collection_with_table,
         ],
     )
@@ -592,15 +590,15 @@ def test_worker_messages_list_by_all_options_fails(
         cli,
         [
             "--no-prompt",
-            "exec",
+            "exe",
             "list-worker",
             "--fn",
             function_name,
             "--trx",
             transaction_id,
-            "--exec",
+            "--plan",
             execution_id,
-            "--collection",
+            "--coll",
             testing_collection_with_table,
         ],
     )
@@ -625,9 +623,7 @@ def test_exec_logs(login, testing_collection_with_table, tabsserver_connection):
     assert messages
     message_id = messages[0].id
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--no-prompt", "exec", "worker-logs", "--worker", message_id]
-    )
+    result = runner.invoke(cli, ["--no-prompt", "exe", "logs", "--worker", message_id])
     logger.debug(result.output)
     assert result.exit_code == 0
 
@@ -656,8 +652,8 @@ def test_exec_logs_to_file(
         cli,
         [
             "--no-prompt",
-            "exec",
-            "worker-logs",
+            "exe",
+            "logs",
             "--worker",
             message_id,
             "--file",
@@ -677,9 +673,9 @@ def test_exec_logs_collection(login, testing_collection_with_table):
         cli,
         [
             "--no-prompt",
-            "exec",
-            "worker-logs",
-            "--collection",
+            "exe",
+            "logs",
+            "--coll",
             testing_collection_with_table,
         ],
     )
@@ -696,9 +692,9 @@ def test_exec_logs_collection_to_file(login, testing_collection_with_table, tmp_
         cli,
         [
             "--no-prompt",
-            "exec",
-            "worker-logs",
-            "--collection",
+            "exe",
+            "logs",
+            "--coll",
             testing_collection_with_table,
             "--file",
             destination,
@@ -718,9 +714,9 @@ def test_exec_logs_collection_to_file_with_prompt(
     result = runner.invoke(
         cli,
         [
-            "exec",
-            "worker-logs",
-            "--collection",
+            "exe",
+            "logs",
+            "--coll",
             testing_collection_with_table,
             "--file",
             destination,
@@ -743,9 +739,7 @@ def test_exec_logs_transaction(
             break
     assert transaction_id
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--no-prompt", "exec", "worker-logs", "--trx", transaction_id]
-    )
+    result = runner.invoke(cli, ["--no-prompt", "exe", "logs", "--trx", transaction_id])
     logger.debug(result.output)
     assert result.exit_code == 0
 
@@ -767,8 +761,8 @@ def test_exec_logs_transaction_to_file(
         cli,
         [
             "--no-prompt",
-            "exec",
-            "worker-logs",
+            "exe",
+            "logs",
             "--trx",
             transaction_id,
             "--file",
@@ -794,7 +788,7 @@ def test_exec_logs_transaction_to_file_with_prompt(
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["exec", "worker-logs", "--trx", transaction_id, "--file", destination],
+        ["exe", "logs", "--trx", transaction_id, "--file", destination],
         input="\n",
     )
     logger.debug(result.output)
@@ -808,7 +802,33 @@ def test_exec_info(login, testing_collection_with_table, tabsserver_connection):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["--no-prompt", "exec", "info", exec_id],
+        ["--no-prompt", "exe", "info", "--plan", exec_id],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_exec_monitor(login, testing_collection_with_table, tabsserver_connection):
+    exec_id = tabsserver_connection.executions[0].id
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--no-prompt", "exe", "monitor", "--plan", exec_id],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_exec_monitor(login, testing_collection_with_table, tabsserver_connection):
+    transaction_id = tabsserver_connection.transactions[0].id
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--no-prompt", "exe", "monitor", "--trx", transaction_id],
     )
     logger.debug(result.output)
     assert result.exit_code == 0

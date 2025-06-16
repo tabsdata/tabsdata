@@ -318,14 +318,16 @@ def set_current_cli_option(ctx: click.Context, option: str, value: str):
     ctx.obj["cli_options"][option] = value
 
 
-def show_hint(ctx: click.Context, hint: str):
+def show_hint(ctx: click.Context, hint: str, final_empty_line: bool = False):
     """
     Show a hint in the CLI.
     """
     if get_current_cli_option(ctx, "hints", default="enabled") == "enabled":
         click.echo(click.style("Hint: ", fg="green", bold=True), nl=False)
         click.echo(hint)
-        click.echo("Use 'td disable-hints' command to stop seeing these hints.")
+        click.echo("Use 'td hints off' to stop seeing these hints.")
+        if final_empty_line:
+            click.echo()
     else:
         pass
 

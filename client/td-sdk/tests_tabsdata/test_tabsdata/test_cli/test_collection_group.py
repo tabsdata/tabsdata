@@ -31,7 +31,7 @@ def test_collection_create_prompt(login):
     try:
         result = runner.invoke(
             cli,
-            ["collection", "create", "test_collection_create_prompt"],
+            ["collection", "create", "--name", "test_collection_create_prompt"],
             input="the_decription\n",
         )
         logger.debug(result.output)
@@ -42,6 +42,7 @@ def test_collection_create_prompt(login):
             [
                 "collection",
                 "delete",
+                "--name",
                 "test_collection_create_prompt",
                 "--confirm",
                 "delete",
@@ -60,6 +61,7 @@ def test_collection_create_no_prompt(login):
                 "--no-prompt",
                 "collection",
                 "create",
+                "--name",
                 "test_collection_create_no_prompt",
             ],
         )
@@ -71,6 +73,7 @@ def test_collection_create_no_prompt(login):
             [
                 "collection",
                 "delete",
+                "--name",
                 "test_collection_create_no_prompt",
                 "--confirm",
                 "delete",
@@ -88,6 +91,7 @@ def test_collection_create(login):
             [
                 "collection",
                 "create",
+                "--name",
                 "test_collection_create",
                 "--description",
                 "test_collection_create_description",
@@ -101,6 +105,7 @@ def test_collection_create(login):
             [
                 "collection",
                 "delete",
+                "--name",
                 "test_collection_create",
                 "--confirm",
                 "delete",
@@ -118,6 +123,7 @@ def test_collection_delete_cli(login):
             [
                 "collection",
                 "create",
+                "--name",
                 "test_collection_delete_cli",
                 "--description",
                 "test_collection_delete_description",
@@ -127,7 +133,7 @@ def test_collection_delete_cli(login):
         assert result.exit_code == 0
         result = runner.invoke(
             cli,
-            ["collection", "delete", "test_collection_delete_cli"],
+            ["collection", "delete", "--name", "test_collection_delete_cli"],
             input="delete\n",
         )
         logger.debug(result.output)
@@ -138,6 +144,7 @@ def test_collection_delete_cli(login):
             [
                 "collection",
                 "delete",
+                "--name",
                 "test_collection_delete_cli",
                 "--confirm",
                 "delete",
@@ -155,6 +162,7 @@ def test_collection_delete_no_prompt(login):
             [
                 "collection",
                 "create",
+                "--name",
                 "test_collection_delete_no_prompt",
                 "--description",
                 "test_collection_delete_description",
@@ -168,6 +176,7 @@ def test_collection_delete_no_prompt(login):
                 "--no-prompt",
                 "collection",
                 "delete",
+                "--name",
                 "test_collection_delete_no_prompt",
                 "--confirm",
                 "delete",
@@ -181,6 +190,7 @@ def test_collection_delete_no_prompt(login):
             [
                 "collection",
                 "delete",
+                "--name",
                 "test_collection_delete_no_prompt",
                 "--confirm",
                 "delete",
@@ -197,6 +207,7 @@ def test_collection_delete_wrong_options_raises_error(login):
         [
             "collection",
             "delete",
+            "--name",
             "test_collection_delete_no_exists_raises_error",
             "--confirm",
             "delete",
@@ -209,6 +220,7 @@ def test_collection_delete_wrong_options_raises_error(login):
             [
                 "collection",
                 "create",
+                "--name",
                 "test_collection_delete_raises_error",
                 "--description",
                 "test_collection_delete_raises_error_description",
@@ -221,6 +233,7 @@ def test_collection_delete_wrong_options_raises_error(login):
             [
                 "collection",
                 "delete",
+                "--name",
                 "test_collection_delete_raises_error",
                 "--confirm",
                 "yes",
@@ -229,7 +242,7 @@ def test_collection_delete_wrong_options_raises_error(login):
         assert result.exit_code != 0
         result = runner.invoke(
             cli,
-            ["collection", "delete", "test_collection_delete_raises_error"],
+            ["collection", "delete", "--name", "test_collection_delete_raises_error"],
             input="yes\n",
         )
         assert result.exit_code != 0
@@ -239,6 +252,7 @@ def test_collection_delete_wrong_options_raises_error(login):
                 "collection",
                 "--no-prompt",
                 "delete",
+                "--name",
                 "test_collection_delete_raises_error",
             ],
             input="delete\n",
@@ -250,6 +264,7 @@ def test_collection_delete_wrong_options_raises_error(login):
             [
                 "collection",
                 "delete",
+                "--name",
                 "test_collection_delete_raises_error",
                 "--confirm",
                 "delete",
@@ -276,6 +291,7 @@ def test_collection_update(login):
             [
                 "collection",
                 "create",
+                "--name",
                 "test_collection_update",
                 "--description",
                 "test_collection_update_description",
@@ -288,6 +304,7 @@ def test_collection_update(login):
             [
                 "collection",
                 "update",
+                "--name",
                 "test_collection_update",
                 "--description",
                 "new_description",
@@ -298,7 +315,14 @@ def test_collection_update(login):
     finally:
         runner.invoke(
             cli,
-            ["collection", "delete", "test_collection_update", "--confirm", "delete"],
+            [
+                "collection",
+                "delete",
+                "--name",
+                "test_collection_update",
+                "--confirm",
+                "delete",
+            ],
         )
 
 
@@ -312,6 +336,7 @@ def test_collection_info(login):
             [
                 "collection",
                 "create",
+                "--name",
                 "test_collection_info",
                 "--description",
                 "test_collection_info_description",
@@ -324,6 +349,7 @@ def test_collection_info(login):
             [
                 "collection",
                 "info",
+                "--name",
                 "test_collection_info",
             ],
         )
@@ -332,7 +358,14 @@ def test_collection_info(login):
     finally:
         runner.invoke(
             cli,
-            ["collection", "delete", "test_collection_info", "--confirm", "delete"],
+            [
+                "collection",
+                "delete",
+                "--name",
+                "test_collection_info",
+                "--confirm",
+                "delete",
+            ],
         )
 
 
@@ -345,6 +378,7 @@ def test_collection_info_error(login):
         [
             "collection",
             "info",
+            "--name",
             "test_collection_info_error",
         ],
     )

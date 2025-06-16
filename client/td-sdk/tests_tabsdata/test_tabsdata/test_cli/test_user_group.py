@@ -26,7 +26,7 @@ def test_user_create_prompt(login):
     try:
         result = runner.invoke(
             cli,
-            ["user", "create", "test_user_create_prompt"],
+            ["user", "create", "--name", "test_user_create_prompt"],
             input=(
                 "the_password\nthe_password\nthe_prompt_fullname\nprompt_email"
                 "@tabsdata.com\n"
@@ -35,7 +35,15 @@ def test_user_create_prompt(login):
         assert result.exit_code == 0
     finally:
         runner.invoke(
-            cli, ["user", "delete", "test_user_create_prompt", "--confirm", "delete"]
+            cli,
+            [
+                "user",
+                "delete",
+                "--name",
+                "test_user_create_prompt",
+                "--confirm",
+                "delete",
+            ],
         )
 
 
@@ -49,6 +57,7 @@ def test_user_create(login):
             [
                 "user",
                 "create",
+                "--name",
                 "test_user_create",
                 "--password",
                 "the_password",
@@ -61,7 +70,7 @@ def test_user_create(login):
         assert result.exit_code == 0
     finally:
         runner.invoke(
-            cli, ["user", "delete", "test_user_create", "--confirm", "delete"]
+            cli, ["user", "delete", "--name", "test_user_create", "--confirm", "delete"]
         )
 
 
@@ -76,6 +85,7 @@ def test_user_create_no_prompt(login):
                 "--no-prompt",
                 "user",
                 "create",
+                "--name",
                 "test_user_create_no_prompt",
                 "--password",
                 "the_password",
@@ -84,7 +94,15 @@ def test_user_create_no_prompt(login):
         assert result.exit_code == 0
     finally:
         runner.invoke(
-            cli, ["user", "delete", "test_user_create_no_prompt", "--confirm", "delete"]
+            cli,
+            [
+                "user",
+                "delete",
+                "--name",
+                "test_user_create_no_prompt",
+                "--confirm",
+                "delete",
+            ],
         )
 
 
@@ -99,13 +117,22 @@ def test_user_create_no_prompt_missing_password_fails(login):
                 "--no-prompt",
                 "user",
                 "create",
+                "--name",
                 "test_user_create_no_prompt",
             ],
         )
         assert result.exit_code != 0
     finally:
         runner.invoke(
-            cli, ["user", "delete", "test_user_create_no_prompt", "--confirm", "delete"]
+            cli,
+            [
+                "user",
+                "delete",
+                "--name",
+                "test_user_create_no_prompt",
+                "--confirm",
+                "delete",
+            ],
         )
 
 
@@ -119,6 +146,7 @@ def test_user_delete(login):
             [
                 "user",
                 "create",
+                "--name",
                 "test_user_delete",
                 "--password",
                 "the_password",
@@ -130,12 +158,12 @@ def test_user_delete(login):
         )
         assert result.exit_code == 0
         result = runner.invoke(
-            cli, ["user", "delete", "test_user_delete", "--confirm", "delete"]
+            cli, ["user", "delete", "--name", "test_user_delete", "--confirm", "delete"]
         )
         assert result.exit_code == 0
     finally:
         runner.invoke(
-            cli, ["user", "delete", "test_user_delete", "--confirm", "delete"]
+            cli, ["user", "delete", "--name", "test_user_delete", "--confirm", "delete"]
         )
 
 
@@ -149,6 +177,7 @@ def test_user_delete_prompt(login):
             [
                 "user",
                 "create",
+                "--name",
                 "test_user_delete_prompt",
                 "--password",
                 "the_password",
@@ -160,12 +189,22 @@ def test_user_delete_prompt(login):
         )
         assert result.exit_code == 0
         result = runner.invoke(
-            cli, ["user", "delete", "test_user_delete_prompt"], input="delete\n"
+            cli,
+            ["user", "delete", "--name", "test_user_delete_prompt"],
+            input="delete\n",
         )
         assert result.exit_code == 0
     finally:
         runner.invoke(
-            cli, ["user", "delete", "test_user_delete_prompt", "--confirm", "delete"]
+            cli,
+            [
+                "user",
+                "delete",
+                "--name",
+                "test_user_delete_prompt",
+                "--confirm",
+                "delete",
+            ],
         )
 
 
@@ -179,6 +218,7 @@ def test_user_delete_error(login):
             [
                 "user",
                 "create",
+                "--name",
                 "test_user_delete_error",
                 "--password",
                 "the_password",
@@ -190,16 +230,17 @@ def test_user_delete_error(login):
         )
         assert result.exit_code == 0
         result = runner.invoke(
-            cli, ["user", "delete", "test_user_delete_error", "--confirm", "yes"]
+            cli,
+            ["user", "delete", "--name", "test_user_delete_error", "--confirm", "yes"],
         )
         assert result.exit_code != 0
         result = runner.invoke(
-            cli, ["user", "delete", "test_user_delete_error"], input="yes\n"
+            cli, ["user", "delete", "--name", "test_user_delete_error"], input="yes\n"
         )
         assert result.exit_code != 0
         result = runner.invoke(
             cli,
-            ["user", "--no-prompt", "delete", "test_user_delete_error"],
+            ["user", "--no-prompt", "delete", "--name", "test_user_delete_error"],
             input="delete\n",
         )
         assert result.exit_code != 0
@@ -208,6 +249,7 @@ def test_user_delete_error(login):
             [
                 "user",
                 "delete",
+                "--name",
                 "test_user_delete_no_exists_raises_error",
                 "--confirm",
                 "delete",
@@ -217,7 +259,15 @@ def test_user_delete_error(login):
 
     finally:
         runner.invoke(
-            cli, ["user", "delete", "test_user_delete_error", "--confirm", "delete"]
+            cli,
+            [
+                "user",
+                "delete",
+                "--name",
+                "test_user_delete_error",
+                "--confirm",
+                "delete",
+            ],
         )
 
 
@@ -239,6 +289,7 @@ def test_user_update(login):
             [
                 "user",
                 "create",
+                "--name",
                 "test_user_update",
                 "--password",
                 "the_password",
@@ -250,12 +301,20 @@ def test_user_update(login):
         )
         assert result.exit_code == 0
         result = runner.invoke(
-            cli, ["user", "update", "test_user_update", "--full-name", "new_full_name"]
+            cli,
+            [
+                "user",
+                "update",
+                "--name",
+                "test_user_update",
+                "--full-name",
+                "new_full_name",
+            ],
         )
         assert result.exit_code == 0
     finally:
         runner.invoke(
-            cli, ["user", "delete", "test_user_update", "--confirm", "delete"]
+            cli, ["user", "delete", "--name", "test_user_update", "--confirm", "delete"]
         )
 
 
@@ -269,6 +328,7 @@ def test_user_info(login):
             [
                 "user",
                 "create",
+                "--name",
                 "test_user_info",
                 "--password",
                 "the_password",
@@ -279,15 +339,17 @@ def test_user_info(login):
             ],
         )
         assert result.exit_code == 0
-        result = runner.invoke(cli, ["user", "info", "test_user_info"])
+        result = runner.invoke(cli, ["user", "info", "--name", "test_user_info"])
         assert result.exit_code == 0
     finally:
-        runner.invoke(cli, ["user", "delete", "test_user_info", "--confirm", "delete"])
+        runner.invoke(
+            cli, ["user", "delete", "--name", "test_user_info", "--confirm", "delete"]
+        )
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_user_info_error(login):
     runner = CliRunner()
-    result = runner.invoke(cli, ["user", "info", "test_user_info_error"])
+    result = runner.invoke(cli, ["user", "info", "--name", "test_user_info_error"])
     assert result.exit_code != 0

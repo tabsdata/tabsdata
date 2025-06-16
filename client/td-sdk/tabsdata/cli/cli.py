@@ -23,13 +23,15 @@ from tabsdata.cli.cli_utils import (
     verify_login_or_prompt,
 )
 from tabsdata.cli.collection_group import collection
-from tabsdata.cli.exec_group import exec
+from tabsdata.cli.exec_group import exe
 from tabsdata.cli.fn_group import fn
 from tabsdata.cli.table_group import table
 from tabsdata.cli.user_group import user
 
+CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
-@click.group()
+
+@click.group(context_settings=CONTEXT_SETTINGS)
 @click.version_option()
 @click.option(
     "--no-prompt",
@@ -50,7 +52,7 @@ def cli(ctx: click.Context, no_prompt: bool):
 
 
 cli.add_command(collection)
-cli.add_command(exec)
+cli.add_command(exe)
 cli.add_command(fn)
 cli.add_command(auth)
 cli.add_command(table)
@@ -58,21 +60,18 @@ cli.add_command(user)
 
 
 @cli.command()
+@click.argument("mode", type=click.Choice(["on", "off"]))
 @click.pass_context
-def enable_hints(ctx: click.Context):
-    """Enable hints in the CLI"""
-    set_current_cli_option(ctx, "hints", "enabled")
-    store_cli_options(ctx)
-    click.echo("Hints enabled. You will now see hints in the CLI.")
-
-
-@cli.command()
-@click.pass_context
-def disable_hints(ctx: click.Context):
-    """Disable hints in the CLI"""
-    set_current_cli_option(ctx, "hints", "disabled")
-    store_cli_options(ctx)
-    click.echo("Hints disabled. You will no longer see hints in the CLI.")
+def hints(ctx: click.Context, mode: str):
+    """Toggle hints in the CLI. Provide either 'on' or 'off' as an argument."""
+    if mode == "on":
+        set_current_cli_option(ctx, "hints", "enabled")
+        store_cli_options(ctx)
+        click.echo("Hints enabled. You will now see hints in the CLI.")
+    else:
+        set_current_cli_option(ctx, "hints", "disabled")
+        store_cli_options(ctx)
+        click.echo("Hints disabled. You will no longer see hints in the CLI.")
 
 
 @cli.command()

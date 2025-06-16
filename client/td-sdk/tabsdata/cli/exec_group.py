@@ -22,83 +22,89 @@ from tabsdata.cli.cli_utils import (
     show_hint,
     verify_login_or_prompt,
 )
+from tabsdata.cli.fn_group import _monitor_execution_or_transaction
 
 
 @click.group()
-def exec():
+def exe():
     """Execution management commands"""
 
 
-@exec.command()
-@click.argument("id")
+@exe.command()
+@click.option(
+    "--plan",
+    help="ID of the plan to cancel. Either this or --trx must be provided.",
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["trx"],
+)
+@click.option(
+    "--trx",
+    "-t",
+    help="ID of the transaction to cancel. Either this or --plan must be provided.",
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["plan"],
+)
 @click.pass_context
-def cancel_exec(ctx: click.Context, id: str):
-    """Cancel an execution. This includes all transactions that are part of the
-    execution
-    """
+def cancel(ctx: click.Context, plan: str, trx: str):
+    """Cancel a plan or transaction."""
     verify_login_or_prompt(ctx)
-    click.echo(f"Canceling execution with ID '{id}'")
-    click.echo("-" * 10)
-    try:
-        server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.cancel_execution(id)
-        click.echo("Execution canceled successfully")
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to cancel execution: {e}")
+    if plan:
+        click.echo(f"Canceling plan with ID '{plan}'")
+        click.echo("-" * 10)
+        try:
+            server: TabsdataServer = ctx.obj["tabsdataserver"]
+            server.cancel_execution(plan)
+            click.echo("Plan canceled successfully")
+        except Exception as e:
+            hint_common_solutions(ctx, e)
+            raise click.ClickException(f"Failed to cancel plan: {e}")
+    elif trx:
+        click.echo(f"Canceling transaction with ID '{trx}'")
+        click.echo("-" * 10)
+        try:
+            server: TabsdataServer = ctx.obj["tabsdataserver"]
+            server.cancel_transaction(trx)
+            click.echo("Transaction canceled successfully")
+        except Exception as e:
+            hint_common_solutions(ctx, e)
+            raise click.ClickException(f"Failed to cancel transaction: {e}")
+    else:
+        raise click.ClickException(
+            "Either a plan ID with '--plan' or a transaction ID "
+            "with '--trx' must be provided."
+        )
 
 
-@exec.command()
-@click.argument("id")
-@click.pass_context
-def cancel_trx(ctx: click.Context, id: str):
-    """Cancel a transaction. This includes all functions that are part of the
-    transaction
-    """
-    verify_login_or_prompt(ctx)
-    click.echo(f"Canceling transaction with ID '{id}'")
-    click.echo("-" * 10)
-    try:
-        server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.cancel_transaction(id)
-        click.echo("Transaction canceled successfully")
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to cancel transaction: {e}")
-
-
-@exec.command()
+@exe.command()
 @click.option(
     "--status",
     type=str,
     multiple=True,
     help=(
-        "Filter executions by status. The status can be provided in long form, like"
+        "Filter plans by status. The status can be provided in long form, like"
         " 'Published', or in short form, like 'P'. It is case-insensitive. "
     ),
 )
-@click.option("--fn", type=str, help="Name of the function to filter executions by.")
-@click.option(
-    "--collection", type=str, help="Name of the collection to filter executions by."
-)
+@click.option("--fn", type=str, help="Name of the function to filter plans by.")
+@click.option("--coll", type=str, help="Name of the collection to filter plans by.")
 @click.option(
     "--name",
     "-n",
     help=(
-        "An execution name wildcard to match for the list. "
-        "For example, 'my_execution*' will match all executions "
-        "with names starting with 'my_execution'."
+        "A plan name wildcard to match for the list. "
+        "For example, 'my_plan*' will match all plans "
+        "with names starting with 'my_plan'."
     ),
 )
 @click.option(
     "--last",
     is_flag=True,
-    help="If set, only the last execution of the list will be shown.",
+    help="If set, only the last plan of the list will be shown.",
 )
 @click.option(
     "--at",
     help=(
-        "If provided, only executions started before that time will be shown. Must be "
+        "If provided, only plans started before that time will be shown. Must be "
         " either a valid timestamp in the form of a unix timestamp (milliseconds since "
         "epoch) or a valid date-time format. The valid "
         "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
@@ -110,22 +116,22 @@ def cancel_trx(ctx: click.Context, id: str):
     type=str,
 )
 @click.pass_context
-def list_exec(
+def list_plan(
     ctx: click.Context,
     status: List[str],
     name: str,
     fn: str,
-    collection: str,
+    coll: str,
     last: bool,
     at: str,
 ):
-    """List all executions"""
+    """List all plans"""
     verify_login_or_prompt(ctx)
     request_filter = obtain_list_exec_filters(
         status=status,
-        exec_name=name,
+        exe_name=name,
         fn=fn,
-        collection=collection,
+        collection=coll,
         at=at,
     )
     try:
@@ -137,7 +143,7 @@ def list_exec(
         if last:
             list_of_executions = list_of_executions[:1]
 
-        table = Table(title="Executions")
+        table = Table(title="Plans")
         table.add_column("ID", style="cyan", no_wrap=True)
         table.add_column("Name")
         table.add_column("Collection")
@@ -158,28 +164,28 @@ def list_exec(
         click.echo()
         console = Console()
         console.print(table)
-        click.echo(f"Number of executions: {len(list_of_executions)}")
+        click.echo(f"Number of plans: {len(list_of_executions)}")
         click.echo()
         show_hint(
             ctx,
-            "If you want to explore why an execution failed, you can "
-            "use the 'td exec worker-logs' command with the '--exec "
-            "<EXECUTION_ID>' option to see the logs.",
+            "If you want to explore why a plan failed, you can "
+            "use the 'td exe logs' command with the '--plan "
+            "<PLAN-ID>' option to see the logs.",
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to list executions: {e}")
+        raise click.ClickException(f"Failed to list plans: {e}")
 
 
 def obtain_list_exec_filters(
     status: List[str],
-    exec_name: str,
+    exe_name: str,
     fn: str,
     collection: str,
     at: str,
 ) -> List[str]:
     """
-    Helper function to obtain the filters for listing executions.
+    Helper function to obtain the filters for listing plans.
     """
     request_filter = []
     if status:
@@ -189,8 +195,8 @@ def obtain_list_exec_filters(
                 for s in status
             ]
         )
-    if exec_name:
-        request_filter.append(f"name:lk:{exec_name}")
+    if exe_name:
+        request_filter.append(f"name:lk:{exe_name}")
     if fn:
         request_filter.append(f"function:eq:{fn}")
     if collection:
@@ -204,7 +210,7 @@ def obtain_list_exec_filters(
     return request_filter
 
 
-@exec.command()
+@exe.command()
 @click.option(
     "--status",
     type=str,
@@ -215,27 +221,26 @@ def obtain_list_exec_filters(
     ),
 )
 @click.option(
-    "--collection", type=str, help="Name of the collection to filter transactions by."
+    "--coll", type=str, help="Name of the collection to filter transactions by."
 )
 @click.option(
-    "--exec-name",
-    "-n",
+    "--plan-name",
     help=(
-        "An execution name wildcard to match. "
-        "For example, 'my_execution*' will match all executions "
-        "with names starting with 'my_execution'."
+        "A plan name wildcard to match. "
+        "For example, 'my_plan*' will match all plans "
+        "with names starting with 'my_plan'."
     ),
     cls=MutuallyExclusiveOption,
-    mutually_exclusive=["exec"],
+    mutually_exclusive=["plan"],
 )
 @click.option(
-    "--exec",
+    "--plan",
     help=(
-        "An execution ID to filter transactions by. If provided, only transactions "
-        "that are part of the specified execution will be shown."
+        "A plan ID to filter transactions by. If provided, only transactions "
+        "that are part of the specified plan will be shown."
     ),
     cls=MutuallyExclusiveOption,
-    mutually_exclusive=["exec-name"],
+    mutually_exclusive=["plan-name"],
 )
 @click.option(
     "--last",
@@ -261,9 +266,9 @@ def obtain_list_exec_filters(
 def list_trx(
     ctx: click.Context,
     status: List[str],
-    collection: str,
-    exec_name: str,
-    exec: str,
+    coll: str,
+    plan_name: str,
+    plan: str,
     last: bool,
     at: str,
 ):
@@ -272,9 +277,9 @@ def list_trx(
     try:
         request_filter = obtain_list_trx_filters(
             status=status,
-            exec_name=exec_name,
-            execution_id=exec,
-            collection=collection,
+            exe_name=plan_name,
+            execution_id=plan,
+            collection=coll,
             at=at,
         )
         server: TabsdataServer = ctx.obj["tabsdataserver"]
@@ -286,7 +291,7 @@ def list_trx(
 
         table = Table(title="Transactions")
         table.add_column("ID", style="cyan", no_wrap=True)
-        table.add_column("Execution ID")
+        table.add_column("Plan ID")
         table.add_column("Collection")
         table.add_column("Triggered on")
         table.add_column("Triggered by")
@@ -310,8 +315,8 @@ def list_trx(
         show_hint(
             ctx,
             "If you want to explore why a transaction failed, you can "
-            "use the 'td exec worker-logs' command with the '--trx "
-            "<TRANSACTION_ID>' option to see the logs.",
+            "use the 'td exe logs' command with the '--trx "
+            "<TRANSACTION-ID>' option to see the logs.",
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -320,7 +325,7 @@ def list_trx(
 
 def obtain_list_trx_filters(
     status: List[str],
-    exec_name: str,
+    exe_name: str,
     execution_id: str,
     collection: str,
     at: str,
@@ -336,8 +341,8 @@ def obtain_list_trx_filters(
                 for s in status
             ]
         )
-    if exec_name:
-        request_filter.append(f"execution:lk:{exec_name}")
+    if exe_name:
+        request_filter.append(f"execution:lk:{exe_name}")
     if execution_id:
         request_filter.append(f"execution_id:eq:{execution_id}")
     if collection:
@@ -351,7 +356,7 @@ def obtain_list_trx_filters(
     return request_filter
 
 
-@exec.command()
+@exe.command()
 @click.option(
     "--status",
     type=str,
@@ -362,22 +367,21 @@ def obtain_list_trx_filters(
     ),
 )
 @click.option(
-    "--exec",
+    "--plan",
     type=str,
     cls=MutuallyExclusiveOption,
-    help="ID of the execution to which the workers belong.",
-    mutually_exclusive=["exec-name", "fn", "trx"],
+    help="ID of the plan to which the workers belong.",
+    mutually_exclusive=["plan-name", "fn", "trx", "coll"],
 )
 @click.option(
-    "--exec-name",
-    "-n",
+    "--plan-name",
     help=(
-        "An execution name wildcard to match. "
-        "For example, 'my_execution*' will match all executions "
-        "with names starting with 'my_execution'."
+        "A plan name wildcard to match. "
+        "For example, 'my_plan*' will match all plans "
+        "with names starting with 'my_plan'."
     ),
     cls=MutuallyExclusiveOption,
-    mutually_exclusive=["exec"],
+    mutually_exclusive=["plan"],
 )
 @click.option(
     "--fn",
@@ -387,40 +391,39 @@ def obtain_list_trx_filters(
         "Name of the function to which the workers belong. If this is provided, "
         "collection must also be provided."
     ),
-    mutually_exclusive=["exec", "trx"],
+    mutually_exclusive=["plan", "trx"],
 )
 @click.option(
-    "--collection",
+    "--coll",
     type=str,
     cls=MutuallyExclusiveOption,
     help="Collection of the function to which the workers belong.",
-    mutually_exclusive=["exec", "trx"],
+    mutually_exclusive=["plan", "trx"],
 )
 @click.option(
     "--trx",
     type=str,
     cls=MutuallyExclusiveOption,
     help="ID of the transaction to which the workers belong.",
-    mutually_exclusive=["exec", "fn"],
+    mutually_exclusive=["plan", "fn", "coll"],
 )
 @click.pass_context
 def list_worker(
     ctx: click.Context,
     status: List[str],
-    exec: str,
-    exec_name: str,
+    plan: str,
+    plan_name: str,
     fn: str,
-    collection: str,
+    coll: str,
     trx: str,
 ):
     """
-    List all workers of a specific execution, function or
-        transaction.
+    List all workers of a specific plan, function or transaction.
     """
     verify_login_or_prompt(ctx)
     if fn:
-        collection = (
-            collection
+        coll = (
+            coll
             or get_currently_pinned_object(ctx, "collection")
             or logical_prompt(
                 ctx, "Name of the collection to which the function belongs"
@@ -430,20 +433,31 @@ def list_worker(
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         request_filter = obtain_list_worker_filters(
             status=status,
-            exec_name=exec_name,
-            execution_id=exec,
+            exe_name=plan_name,
+            execution_id=plan,
             fn=fn,
-            collection=collection,
+            collection=coll,
             trx=trx,
         )
+        if plan:
+            execution = server.get_execution(plan)
+            click.echo(
+                f"The current status of the plan '{plan}' is '{execution.status}'"
+            )
+        if trx:
+            transaction = server.get_transaction(trx)
+            click.echo(
+                f"The current status of the transaction '{trx}' is"
+                f" '{transaction.status}'"
+            )
         list_of_workers = server.list_workers(filter=request_filter)
 
         table = Table(title="Workers")
         table.add_column("Worker ID", style="cyan", no_wrap=True)
         table.add_column("Collection")
         table.add_column("Function")
-        table.add_column("Execution")
-        table.add_column("Execution ID")
+        table.add_column("Plan name")
+        table.add_column("Plan ID")
         table.add_column("Transaction ID")
         table.add_column("Status")
 
@@ -466,8 +480,8 @@ def list_worker(
         show_hint(
             ctx,
             "If you want to explore why a worker failed, you can "
-            "use the 'td exec worker-logs' command with the '--worker "
-            "<WORKER_ID>' option to see the logs.",
+            "use the 'td exe logs' command with the '--worker "
+            "<WORKER-ID>' option to see the logs.",
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -476,7 +490,7 @@ def list_worker(
 
 def obtain_list_worker_filters(
     status: List[str],
-    exec_name: str,
+    exe_name: str,
     execution_id: str,
     fn: str,
     collection: str,
@@ -494,8 +508,8 @@ def obtain_list_worker_filters(
                 for s in status
             ]
         )
-    if exec_name:
-        request_filter.append(f"execution:lk:{exec_name}")
+    if exe_name:
+        request_filter.append(f"execution:lk:{exe_name}")
     if execution_id:
         request_filter.append(f"execution_id:eq:{execution_id}")
     if fn:
@@ -507,19 +521,19 @@ def obtain_list_worker_filters(
     return request_filter
 
 
-@exec.command()
-@click.argument("id")
+@exe.command()
+@click.option("--plan", help="ID of the plan to display.")
 @click.pass_context
-def info(ctx: click.Context, id: str):
+def info(ctx: click.Context, plan: str):
     """
-    Display an execution by ID.
+    Display a plan by ID.
     """
     verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        execution = server.get_execution(id)
+        execution = server.get_execution(plan)
 
-        table = Table(title=f"Execution '{id}'")
+        table = Table(title=f"Plan '{plan}'")
         table.add_column("Name")
         table.add_column("Collection")
         table.add_column("Function")
@@ -541,15 +555,15 @@ def info(ctx: click.Context, id: str):
 
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to display execution: {e}")
+        raise click.ClickException(f"Failed to display plan: {e}")
 
 
-@exec.command()
+@exe.command()
 @click.option(
     "--worker",
     help="ID of the worker that generated the logs.",
     cls=MutuallyExclusiveOption,
-    mutually_exclusive=["status", "exec", "exec-name", "fn", "collection", "trx"],
+    mutually_exclusive=["status", "plan", "exec-name", "fn", "collection", "trx"],
 )
 @click.option(
     "--file",
@@ -568,22 +582,21 @@ def info(ctx: click.Context, id: str):
     ),
 )
 @click.option(
-    "--exec",
+    "--plan",
     type=str,
     cls=MutuallyExclusiveOption,
-    help="ID of the execution to which the workers belong.",
-    mutually_exclusive=["exec-name", "fn", "trx"],
+    help="ID of the plan to which the workers belong.",
+    mutually_exclusive=["plan-name", "fn", "trx"],
 )
 @click.option(
-    "--exec-name",
-    "-n",
+    "--plan-name",
     help=(
-        "An execution name wildcard to match. "
-        "For example, 'my_execution*' will match all executions "
-        "with names starting with 'my_execution'."
+        "A plan name wildcard to match. "
+        "For example, 'my_plan*' will match all plans "
+        "with names starting with 'my_plan'."
     ),
     cls=MutuallyExclusiveOption,
-    mutually_exclusive=["exec"],
+    mutually_exclusive=["plan"],
 )
 @click.option(
     "--fn",
@@ -593,32 +606,32 @@ def info(ctx: click.Context, id: str):
         "Name of the function to which the workers belong. If this is provided, "
         "collection must also be provided."
     ),
-    mutually_exclusive=["exec", "trx"],
+    mutually_exclusive=["plan", "trx"],
 )
 @click.option(
-    "--collection",
+    "--coll",
     type=str,
     cls=MutuallyExclusiveOption,
     help="Collection of the function to which the workers belong.",
-    mutually_exclusive=["exec", "trx"],
+    mutually_exclusive=["plan", "trx"],
 )
 @click.option(
     "--trx",
     type=str,
     cls=MutuallyExclusiveOption,
     help="ID of the transaction to which the workers belong.",
-    mutually_exclusive=["exec", "fn"],
+    mutually_exclusive=["plan", "fn"],
 )
 @click.pass_context
-def worker_logs(
+def logs(
     ctx: click.Context,
     worker: str,
     file: str,
     status: List[str],
-    exec: str,
-    exec_name: str,
+    plan: str,
+    plan_name: str,
     fn: str,
-    collection: str,
+    coll: str,
     trx: str,
 ):
     """
@@ -626,8 +639,8 @@ def worker_logs(
     """
     verify_login_or_prompt(ctx)
     if fn:
-        collection = (
-            collection
+        coll = (
+            coll
             or get_currently_pinned_object(ctx, "collection")
             or logical_prompt(
                 ctx, "Name of the collection to which the function belongs"
@@ -636,10 +649,10 @@ def worker_logs(
     server: TabsdataServer = ctx.obj["tabsdataserver"]
     request_filter = obtain_list_worker_filters(
         status=status,
-        exec_name=exec_name,
-        execution_id=exec,
+        exe_name=plan_name,
+        execution_id=plan,
         fn=fn,
-        collection=collection,
+        collection=coll,
         trx=trx,
     )
     if request_filter:
@@ -686,8 +699,8 @@ def obtain_worker_list_from_filters(
     table.add_column("Worker ID", style="cyan", no_wrap=True)
     table.add_column("Collection")
     table.add_column("Function")
-    table.add_column("Execution")
-    table.add_column("Execution ID")
+    table.add_column("Plan name")
+    table.add_column("Plan ID")
     table.add_column("Transaction ID")
     table.add_column("Status")
     table.add_column("Counter", no_wrap=True)
@@ -734,41 +747,90 @@ def obtain_worker_list_from_filters(
     return list_of_workers
 
 
-@exec.command()
-@click.argument("id")
+@exe.command()
+@click.option(
+    "--plan",
+    help="ID of the plan to monitor. Either this or --trx must be provided.",
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["trx"],
+)
+@click.option(
+    "--trx",
+    "-t",
+    help="ID of the transaction to monitor. Either this or --plan must be provided.",
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["plan"],
+)
 @click.pass_context
-def recover_exec(ctx: click.Context, id: str):
+def monitor(ctx: click.Context, plan: str, trx: str):
     """
-    Recover an execution. This includes all transactions that are part of the
-    execution
+    Monitor the execution of a plan or transaction.
     """
     verify_login_or_prompt(ctx)
-    click.echo(f"Recovering execution with ID '{id}'")
-    click.echo("-" * 10)
+    server: TabsdataServer = ctx.obj["tabsdataserver"]
+    if not plan and not trx:
+        raise click.ClickException(
+            "Either a plan ID with '--plan' or a transaction ID "
+            "with '--trx' must be provided."
+        )
     try:
-        server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.recover_execution(id)
-        click.echo("Execution recovered successfully")
+        execution = None
+        transaction = None
+        if plan:
+            execution = server.get_execution(plan)
+        elif trx:
+            transaction = server.get_transaction(trx)
+        _monitor_execution_or_transaction(
+            ctx, execution=execution, transaction=transaction
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to recover execution: {e}")
+        keyword = "plan" if plan else "transaction"
+        raise click.ClickException(f"Failed to monitor {keyword}: {e}")
 
 
-@exec.command()
-@click.argument("id")
+@exe.command()
+@click.option(
+    "--plan",
+    help="ID of the plan to recover. Either this or --trx must be provided.",
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["trx"],
+)
+@click.option(
+    "--trx",
+    "-t",
+    help="ID of the transaction to recover. Either this or --plan must be provided.",
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["plan"],
+)
 @click.pass_context
-def recover_trx(ctx: click.Context, id: str):
+def recover(ctx: click.Context, plan: str, trx: str):
     """
-    Recover a transaction. This includes all functions that are part of the
-    transaction
+    Recover a plan or transaction.
     """
     verify_login_or_prompt(ctx)
-    click.echo(f"Recovering transaction with ID '{id}'")
-    click.echo("-" * 10)
-    try:
-        server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.recover_transaction(id)
-        click.echo("Transaction recovered successfully")
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to recover transaction: {e}")
+    if plan:
+        click.echo(f"Recovering plan with ID '{plan}'")
+        click.echo("-" * 10)
+        try:
+            server: TabsdataServer = ctx.obj["tabsdataserver"]
+            server.recover_execution(plan)
+            click.echo("Plan recovered successfully")
+        except Exception as e:
+            hint_common_solutions(ctx, e)
+            raise click.ClickException(f"Failed to recover plan: {e}")
+    elif trx:
+        click.echo(f"Recovering transaction with ID '{trx}'")
+        click.echo("-" * 10)
+        try:
+            server: TabsdataServer = ctx.obj["tabsdataserver"]
+            server.recover_transaction(trx)
+            click.echo("Transaction recovered successfully")
+        except Exception as e:
+            hint_common_solutions(ctx, e)
+            raise click.ClickException(f"Failed to recover transaction: {e}")
+    else:
+        raise click.ClickException(
+            "Either a plan ID with '--plan' or a transaction ID "
+            "with '--trx' must be provided."
+        )

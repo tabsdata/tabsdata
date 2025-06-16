@@ -14,7 +14,9 @@ from rich.table import Table
 from tabsdata.api.tabsdata_server import (
     FINAL_STATUSES,
     SUCCESSFUL_FINAL_STATUSES,
+    Execution,
     TabsdataServer,
+    Transaction,
     convert_timestamp_to_string,
     function_type_to_mapping,
     status_to_mapping,
@@ -44,7 +46,7 @@ def fn():
     help="Name of the function to be deleted.",
 )
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the function belongs.",
 )
@@ -53,14 +55,14 @@ def fn():
     help="Write 'delete' to confirm deletion. Will be prompted for it if not provided.",
 )
 @click.pass_context
-def delete(ctx: click.Context, name: str, collection: str, confirm: str):
+def delete(ctx: click.Context, name: str, coll: str, confirm: str):
     """Delete a function"""
     verify_login_or_prompt(ctx)
-    click.echo(f"Deleting function '{name}' in collection '{collection}'")
+    click.echo(f"Deleting function '{name}' in collection '{coll}'")
     click.echo("-" * 10)
     name = name or logical_prompt(ctx, "Name of the function to be deleted")
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
@@ -71,7 +73,7 @@ def delete(ctx: click.Context, name: str, collection: str, confirm: str):
         )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.delete_function(collection, name)
+        server.delete_function(coll, name)
         click.echo("Function deleted successfully")
         show_hint(
             ctx,
@@ -90,7 +92,7 @@ def delete(ctx: click.Context, name: str, collection: str, confirm: str):
     help="Name of the function to be displayed.",
 )
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the function belongs.",
 )
@@ -100,23 +102,21 @@ def delete(ctx: click.Context, name: str, collection: str, confirm: str):
     help="Show the history of the function, newest first.",
 )
 @click.pass_context
-def info(ctx: click.Context, name: str, collection: str, show_history: bool):
+def info(ctx: click.Context, name: str, coll: str, show_history: bool):
     """Display a function"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be displayed")
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
     try:
         if show_history:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
-            function_list = server.list_function_history(collection, name)
+            function_list = server.list_function_history(coll, name)
 
-            table = Table(
-                title=f"History of function '{name}' in collection '{collection}'"
-            )
+            table = Table(title=f"History of function '{name}' in collection '{coll}'")
             table.add_column("ID", style="cyan", no_wrap=True)
             table.add_column("Name")
             table.add_column("Description")
@@ -146,9 +146,9 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
 
         else:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
-            function = server.function_get(collection, name)
+            function = server.function_get(coll, name)
 
-            table = Table(title=f"Function '{name}' in collection '{collection}'")
+            table = Table(title=f"Function '{name}' in collection '{coll}'")
             table.add_column("ID", style="cyan", no_wrap=True)
             table.add_column("Description")
             table.add_column("Defined on")
@@ -179,24 +179,24 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
 
 @fn.command()
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the functions belong.",
 )
 @click.pass_context
-def list(ctx: click.Context, collection: str):
+def list(ctx: click.Context, coll: str):
     verify_login_or_prompt(ctx)
     """List all functions in a collection"""
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the functions belong")
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_functions = server.list_functions(collection)
+        list_of_functions = server.list_functions(coll)
 
-        table = Table(title=f"Functions in collection '{collection}'")
+        table = Table(title=f"Functions in collection '{coll}'")
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("Type")
         table.add_column("Description")
@@ -216,8 +216,7 @@ def list(ctx: click.Context, collection: str):
         console = Console()
         console.print(table)
         click.echo(
-            f"Number of functions in collection '{collection}':"
-            f" {len(list_of_functions)}"
+            f"Number of functions in collection '{coll}': {len(list_of_functions)}"
         )
         click.echo()
 
@@ -228,7 +227,7 @@ def list(ctx: click.Context, collection: str):
 
 @fn.command()
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the function belongs.",
 )
@@ -262,17 +261,32 @@ def list(ctx: click.Context, collection: str):
     multiple=True,
     help="Path to a local package to include in the bundle.",
 )
-@click.option("--reuse-frozen", is_flag=True, help="Reuse frozen tables.")
+@click.option(
+    "--reuse-tables",
+    is_flag=True,
+    help=(
+        "Reuse previously created tables. "
+        "If provided, any tables that the "
+        "function produces that already "
+        "exist in the system (but no "
+        "longer have a function that "
+        "generates them) will be "
+        "reused, adding to their data "
+        "history. If not provided, "
+        "those tables will be recreated "
+        "and their data history re-initialized."
+    ),
+)
 @click.pass_context
 def register(
     ctx: click.Context,
-    collection: str,
+    coll: str,
     description: str,
     path: str,
     dir_to_bundle: str,
     requirements: str,
     local_pkg: Tuple[str, ...],
-    reuse_frozen: bool,
+    reuse_tables: bool,
 ):
     """Registering a new function"""
     verify_login_or_prompt(ctx)
@@ -283,8 +297,8 @@ def register(
         local_pkg = None
     click.echo("Registering a new function")
     click.echo("-" * 10)
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
@@ -297,13 +311,13 @@ def register(
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.register_function(
-            collection,
+            coll,
             path,
             description,
             dir_to_bundle,
             requirements,
             local_pkg,
-            reuse_frozen_tables=reuse_frozen,
+            reuse_tables=reuse_tables,
         )
         click.echo("Function registered successfully")
     except Exception as e:
@@ -318,33 +332,33 @@ def register(
     help="Name of the function to be triggered.",
 )
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the function belongs.",
 )
 @click.option(
-    "--exec",
-    help="ID of the run to read.",
+    "--plan",
+    help="ID of the plan to read.",
 )
 @click.pass_context
-def read_run(ctx: click.Context, name: str, collection: str, exec: str):
+def read_run(ctx: click.Context, name: str, coll: str, plan: str):
     """Read the information of a function run"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function the run belongs to")
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
-    exec = exec or logical_prompt(ctx, "ID of the run to read")
+    plan = plan or logical_prompt(ctx, "ID of the plan to read")
     click.echo(
-        f"Reading information of run '{exec}' for function '{name}' in "
-        f"collection '{collection}'"
+        f"Reading information of plan '{plan}' for function '{name}' in "
+        f"collection '{coll}'"
     )
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        response = server.read_function_run(collection, name, exec)
+        response = server.read_function_run(coll, name, plan)
         data = response.json().get("data")
 
         table = Table(title="Run information")
@@ -395,50 +409,51 @@ def read_run(ctx: click.Context, name: str, collection: str, exec: str):
     help="Name of the function to be triggered.",
 )
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the function belongs.",
 )
 @click.option(
-    "--exec-name",
-    help="Name to be given to the execution that will be generated by the trigger.",
+    "--plan-name",
+    help="Name to be given to the plan that will be generated by the trigger.",
 )
 @click.option(
     "--show-plan",
     is_flag=True,
     default=False,
-    help="Show the generated execution plan.",
+    help="Show the generated plan.",
 )
 @click.option(
-    "--background",
+    "--detach",
+    "-d",
     is_flag=True,
     default=False,
-    help="Do not monitor the status of the execution.",
+    help="Do not monitor the status of the plan.",
 )
 @click.pass_context
 def trigger(
     ctx: click.Context,
     name: str,
-    collection: str,
-    exec_name: str,
+    coll: str,
+    plan_name: str,
     show_plan: bool,
-    background: bool,
+    detach: bool,
 ):
     """Trigger a function"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the function to be triggered")
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
-    click.echo(f"Triggering function '{name}' in collection '{collection}'")
+    click.echo(f"Triggering function '{name}' in collection '{coll}'")
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        execution = server.trigger_function(collection, name, execution_name=exec_name)
+        execution = server.trigger_function(coll, name, execution_name=plan_name)
         click.echo("Function triggered. Execution has started.")
-        click.echo(f"Execution id: {execution.id}")
+        click.echo(f"Plan id: {execution.id}")
         dot = execution.dot
         execution_real_name = execution.name or execution.id
         if dot:
@@ -454,91 +469,110 @@ def trigger(
             generate_dot_image(full_path, open_image=show_plan, ctx=ctx)
         else:
             click.echo("No DOT returned")
+        click.echo("")
         cleanup_dot_files()
-        if not background:
-            click.echo("")
-            click.echo("Waiting for the execution to finish...")
+        if not detach:
             show_hint(
                 ctx,
-                "To trigger the function without monitoring the execution, "
-                "use the '--background' option.",
+                "To trigger the function without monitoring the plan, "
+                "use the '--debug' or '-d' option.",
+                final_empty_line=True,
             )
-            while True:
-                click.echo("")
-                click.echo("-" * 10)
-                click.echo("")
-                click.echo(f"Current execution status: {execution.status}")
-
-                list_of_transactions = execution.transactions
-                list_of_workers = execution.workers
-
-                table = Table(title="Workers")
-                table.add_column("Worker ID", style="cyan", no_wrap=True)
-                table.add_column("Collection")
-                table.add_column("Function")
-                table.add_column("Transaction ID")
-                table.add_column("Status")
-
-                for worker in list_of_workers:
-                    table.add_row(
-                        worker.id,
-                        worker.collection.name,
-                        worker.function.name,
-                        worker.transaction.id,
-                        worker.status,
-                    )
-
-                click.echo()
-                console = Console()
-                console.print(table)
-                click.echo(f"Number of workers: {len(list_of_workers)}")
-                click.echo()
-
-                # TODO: Change to loop worker status or even execution status when
-                #   the API supports it.
-                if all(
-                    transaction.status in FINAL_STATUSES
-                    for transaction in list_of_transactions
-                ):
-                    click.echo("")
-                    click.echo("-" * 10)
-                    click.echo("")
-                    click.echo("Execution finished.")
-                    break
-                sleep(5)
-                execution.refresh()
-            # Note: while it would initially make more sense to write this as
-            # 'if transaction.status in FAILED_FINAL_STATUSES', this approach avoids
-            # the risk of ignoring failed transactions that are not in a recognized
-            # status due to a mismatch between the transaction status and the
-            # FINAL_STATUSES set (which ideally should not happen).
-            failed_workers = [
-                worker
-                for worker in list_of_workers
-                if worker.status not in SUCCESSFUL_FINAL_STATUSES
-            ]
-            if failed_workers:
-                click.echo("Some workers failed:")
-                for worker in failed_workers:
-                    click.echo(f"- {worker.id}")
-                show_hint(
-                    ctx,
-                    "You can check their logs with 'td exec worker-logs --worker "
-                    "<worker_id>' or with 'td exec worker-logs --exec "
-                    f"{execution.id}'",
-                )
-            else:
-                click.echo("All workers were successful.")
+            _monitor_execution_or_transaction(ctx, execution=execution)
         else:
             show_hint(
                 ctx,
-                "You can check the status of the execution with 'td exec info "
-                f"{execution.id}'",
+                "You can check the status of the plan with 'td exe info "
+                f"--plan {execution.id}', or monitor the execution of the function "
+                f"with 'td exe monitor --plan {execution.id}'",
             )
 
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to trigger function: {e}")
+
+
+def _monitor_execution_or_transaction(
+    ctx: click.Context, execution: Execution = None, transaction: Transaction = None
+):
+    """Monitor the execution of a function or a transaction"""
+    if execution and transaction:
+        raise click.ClickException(
+            "Internal error: _monitor_execution_or_transaction takes either an "
+            "execution or a transaction, but not both."
+        )
+    if not execution and not transaction:
+        raise click.ClickException(
+            "Internal error: _monitor_execution_or_transaction takes either an "
+            "execution or a transaction, but not neither."
+        )
+    keyword = "plan" if execution else "transaction"
+    supervised_entity = execution or transaction
+    click.echo(f"Waiting for the {keyword} to finish...")
+    while True:
+        click.echo("")
+        click.echo("-" * 10)
+        click.echo("")
+        click.echo(f"Current {keyword} status: {supervised_entity.status}")
+
+        list_of_workers = supervised_entity.workers
+
+        table = Table(title="Workers")
+        table.add_column("Worker ID", style="cyan", no_wrap=True)
+        table.add_column("Collection")
+        table.add_column("Function")
+        table.add_column("Transaction ID") if execution else table.add_column("Plan ID")
+        table.add_column("Status")
+
+        for worker in list_of_workers:
+            table.add_row(
+                worker.id,
+                worker.collection.name,
+                worker.function.name,
+                worker.transaction.id if execution else worker.execution.id,
+                worker.status,
+            )
+
+        click.echo()
+        console = Console()
+        console.print(table)
+        click.echo(f"Number of workers: {len(list_of_workers)}")
+        click.echo()
+
+        if supervised_entity.status in FINAL_STATUSES:
+            click.echo("")
+            click.echo("-" * 10)
+            click.echo("")
+            click.echo(f"{keyword.capitalize()} finished.")
+            break
+        sleep(5)
+        supervised_entity.refresh()
+    # Note: while it would initially make more sense to write this as
+    # 'if transaction.status in FAILED_FINAL_STATUSES', this approach avoids
+    # the risk of ignoring failed transactions that are not in a recognized
+    # status due to a mismatch between the transaction status and the
+    # FINAL_STATUSES set (which ideally should not happen).
+    failed_workers = [
+        worker
+        for worker in list_of_workers
+        if worker.status not in SUCCESSFUL_FINAL_STATUSES
+    ]
+    if failed_workers:
+        click.echo("Some workers failed:")
+        for worker in failed_workers:
+            click.echo(f"- {worker.id}")
+        complete_command = (
+            f"'td exe logs --plan {supervised_entity.id}'"
+            if execution
+            else f"'td exe logs --trx {supervised_entity.id}'"
+        )
+        show_hint(
+            ctx,
+            "You can check their logs with 'td exe logs --worker <WORKER-ID>' or with "
+            + complete_command,
+        )
+    else:
+        click.echo("All workers were successful.")
 
 
 @fn.command()
@@ -548,7 +582,7 @@ def trigger(
     help="Name of the function to be updated.",
 )
 @click.option(
-    "--collection",
+    "--coll",
     "-c",
     help="Name of the collection to which the function belongs.",
 )
@@ -581,18 +615,33 @@ def trigger(
     multiple=True,
     help="Path to a local package to include in the bundle.",
 )
-@click.option("--reuse-frozen", is_flag=True, help="Reuse frozen tables.")
+@click.option(
+    "--reuse-tables",
+    is_flag=True,
+    help=(
+        "Reuse previously created tables. "
+        "If provided, any tables that the "
+        "function produces that already "
+        "exist in the system (but no "
+        "longer have a function that "
+        "generates them) will be "
+        "reused, adding to their data "
+        "history. If not provided, "
+        "those tables will be recreated "
+        "and their data history re-initialized."
+    ),
+)
 @click.pass_context
 def update(
     ctx: click.Context,
     name: str,
-    collection: str,
+    coll: str,
     description: str,
     path: str,
     dir_to_bundle: str,
     requirements: str,
     local_pkg: Tuple[str, ...],
-    reuse_frozen: bool,
+    reuse_tables: bool,
 ):
     """Update a function"""
     verify_login_or_prompt(ctx)
@@ -602,8 +651,8 @@ def update(
     else:
         local_pkg = None
     name = name or logical_prompt(ctx, "Name of the function to be updated")
-    collection = (
-        collection
+    coll = (
+        coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
@@ -613,19 +662,19 @@ def update(
         "Must be of the form "
         "'/path/to/file.py::function_name'",
     )
-    click.echo(f"Updating function '{name}' in collection '{collection}'")
+    click.echo(f"Updating function '{name}' in collection '{coll}'")
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.function_update(
-            collection_name=collection,
+            collection_name=coll,
             function_name=name,
             function_path=path,
             description=description,
             directory_to_bundle=dir_to_bundle,
             requirements=requirements,
             local_packages=local_pkg,
-            reuse_frozen_tables=reuse_frozen,
+            reuse_tables=reuse_tables,
         )
         click.echo("Function updated successfully")
     except Exception as e:

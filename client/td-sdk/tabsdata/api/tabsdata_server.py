@@ -369,7 +369,7 @@ class Collection:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         function_name: str = None,
-        reuse_frozen_tables: bool = False,
+        reuse_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -442,7 +442,7 @@ class Collection:
             function_snippet=function_snippet,
             bundle_id=bundle_id,
             runtime_values=runtime_values,
-            reuse_frozen_tables=reuse_frozen_tables,
+            reuse_frozen_tables=reuse_tables,
             decorator=decorator_type,
             raise_for_status=raise_for_status,
         )
@@ -471,7 +471,7 @@ class Collection:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         new_function_name=None,
-        reuse_frozen_tables: bool = False,
+        reuse_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -543,7 +543,7 @@ class Collection:
             decorator=decorator_type,
             bundle_id=bundle_id,
             runtime_values=runtime_values,
-            reuse_frozen_tables=reuse_frozen_tables,
+            reuse_frozen_tables=reuse_tables,
             raise_for_status=raise_for_status,
         )
 
@@ -1212,7 +1212,7 @@ class Function:
         path_to_bundle: str = None,
         requirements: str = None,
         local_packages: List[str] | str | None = None,
-        reuse_frozen_tables: bool = False,
+        reuse_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         result = self.collection.register_function(
@@ -1222,7 +1222,7 @@ class Function:
             requirements=requirements,
             local_packages=local_packages,
             function_name=self.name,
-            reuse_frozen_tables=reuse_frozen_tables,
+            reuse_tables=reuse_tables,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -1269,8 +1269,8 @@ class Function:
         directory_to_bundle: str = None,
         requirements: str = None,
         local_packages: List[str] | str | None = None,
-        new_function_name=None,
-        reuse_frozen_tables: bool = False,
+        new_function_name: str = None,
+        reuse_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         collection = self.collection
@@ -1282,7 +1282,7 @@ class Function:
             requirements=requirements,
             local_packages=local_packages,
             new_function_name=new_function_name,
-            reuse_frozen_tables=reuse_frozen_tables,
+            reuse_tables=reuse_tables,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -2139,15 +2139,13 @@ class Worker:
         self.function = kwargs.get("function")
         self.transaction = kwargs.get("transaction_id")
         self.execution = kwargs.get("execution_id")
-        self.status = kwargs.get("status")
+        self.status = kwargs.get("function_run_status")
         self._data = None
         self.kwargs = kwargs
 
     @property
     def _data(self) -> dict:
         if self._data_dict is None:
-            # TODO: Improve this logic once we have a specific endpoint for it.
-            #  Currently it is extremely inefficient
             tabsdata_server = TabsdataServer.__new__(TabsdataServer)
             tabsdata_server.connection = self.connection
             try:
@@ -2234,7 +2232,7 @@ class Worker:
     @property
     def status(self) -> str:
         if self._status is None:
-            self.status = self._data.get("status")
+            self.status = self._data.get("function_run_status")
         return self._status
 
     @status.setter
@@ -2642,7 +2640,7 @@ class TabsdataServer:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         function_name: str = None,
-        reuse_frozen_tables: bool = False,
+        reuse_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -2680,7 +2678,7 @@ class TabsdataServer:
             requirements=requirements,
             local_packages=local_packages,
             function_name=function_name,
-            reuse_frozen_tables=reuse_frozen_tables,
+            reuse_tables=reuse_tables,
             raise_for_status=raise_for_status,
         )
 
@@ -2800,7 +2798,7 @@ class TabsdataServer:
         requirements: str = None,
         local_packages: List[str] | str | None = None,
         new_function_name: str = None,
-        reuse_frozen_tables: bool = False,
+        reuse_tables: bool = False,
         raise_for_status: bool = True,
     ) -> Function:
         """
@@ -2839,7 +2837,7 @@ class TabsdataServer:
             requirements=requirements,
             local_packages=local_packages,
             new_function_name=new_function_name,
-            reuse_frozen_tables=reuse_frozen_tables,
+            reuse_tables=reuse_tables,
             raise_for_status=raise_for_status,
         )
 
