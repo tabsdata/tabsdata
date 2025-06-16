@@ -25,7 +25,9 @@ from tabsdata.cli.cli_utils import (
     cleanup_dot_files,
     generate_dot_image,
     get_currently_pinned_object,
+    hint_common_solutions,
     logical_prompt,
+    show_hint,
     verify_login_or_prompt,
 )
 
@@ -71,7 +73,13 @@ def delete(ctx: click.Context, name: str, collection: str, confirm: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.delete_function(collection, name)
         click.echo("Function deleted successfully")
+        show_hint(
+            ctx,
+            "You do not need to delete and re-register a function to change it. "
+            "Use 'td fn update' to modify the function instead.",
+        )
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to delete function: {e}")
 
 
@@ -165,6 +173,7 @@ def info(ctx: click.Context, name: str, collection: str, show_history: bool):
             click.echo()
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display function: {e}")
 
 
@@ -213,6 +222,7 @@ def list(ctx: click.Context, collection: str):
         click.echo()
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list functions: {e}")
 
 
@@ -297,6 +307,7 @@ def register(
         )
         click.echo("Function registered successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to register function: {e}")
 
 
@@ -373,6 +384,7 @@ def read_run(ctx: click.Context, name: str, collection: str, exec: str):
         console.print(table)
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to read run information: {e}")
 
 
@@ -398,10 +410,10 @@ def read_run(ctx: click.Context, name: str, collection: str, exec: str):
     help="Show the generated execution plan.",
 )
 @click.option(
-    "--wait",
+    "--background",
     is_flag=True,
     default=False,
-    help="Monitor the status of the execution until it finishes.",
+    help="Do not monitor the status of the execution.",
 )
 @click.pass_context
 def trigger(
@@ -410,7 +422,7 @@ def trigger(
     collection: str,
     exec_name: str,
     show_plan: bool,
-    wait: bool,
+    background: bool,
 ):
     """Trigger a function"""
     verify_login_or_prompt(ctx)
@@ -439,13 +451,18 @@ def trigger(
             with open(full_path, "w") as f:
                 f.write(dot)
             click.echo(f"Plan DOT at path: {full_path}")
-            generate_dot_image(full_path, open_image=show_plan)
+            generate_dot_image(full_path, open_image=show_plan, ctx=ctx)
         else:
             click.echo("No DOT returned")
         cleanup_dot_files()
-        if wait:
+        if not background:
             click.echo("")
             click.echo("Waiting for the execution to finish...")
+            show_hint(
+                ctx,
+                "To trigger the function without monitoring the execution, "
+                "use the '--background' option.",
+            )
             while True:
                 click.echo("")
                 click.echo("-" * 10)
@@ -504,15 +521,23 @@ def trigger(
                 click.echo("Some workers failed:")
                 for worker in failed_workers:
                     click.echo(f"- {worker.id}")
-                click.echo(
+                show_hint(
+                    ctx,
                     "You can check their logs with 'td exec worker-logs --worker "
-                    "<worker_id>' or with 'td exec worker-logs --exec"
-                    f" {execution.id}'"
+                    "<worker_id>' or with 'td exec worker-logs --exec "
+                    f"{execution.id}'",
                 )
             else:
                 click.echo("All workers were successful.")
+        else:
+            show_hint(
+                ctx,
+                "You can check the status of the execution with 'td exec info "
+                f"{execution.id}'",
+            )
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to trigger function: {e}")
 
 
@@ -604,4 +629,5 @@ def update(
         )
         click.echo("Function updated successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to update function: {e}")

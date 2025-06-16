@@ -7,7 +7,11 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-from tabsdata.cli.cli_utils import logical_prompt, verify_login_or_prompt
+from tabsdata.cli.cli_utils import (
+    hint_common_solutions,
+    logical_prompt,
+    verify_login_or_prompt,
+)
 
 
 @click.group()
@@ -57,6 +61,7 @@ def create(
         )
         click.echo("User created successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to create user: {e}")
 
 
@@ -81,6 +86,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
         ctx.obj["tabsdataserver"].delete_user(name)
         click.echo("User deleted successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to delete user: {e}")
 
 
@@ -106,6 +112,7 @@ def info(ctx: click.Context, name: str):
         console.print(table)
         click.echo()
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display user: {e}")
 
 
@@ -132,6 +139,7 @@ def list(ctx: click.Context):
         click.echo(f"Number of users: {len(list_of_users)}")
         click.echo()
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list users: {e}")
 
 
@@ -169,4 +177,5 @@ def update(
         )
         click.echo("User updated successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to update user: {e}")

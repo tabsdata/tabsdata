@@ -12,6 +12,7 @@ from tabsdata.api.tabsdata_server import (
 from tabsdata.cli.cli_utils import (
     MutuallyExclusiveOption,
     get_currently_pinned_object,
+    hint_common_solutions,
     logical_prompt,
     verify_login_or_prompt,
 )
@@ -111,6 +112,7 @@ def download(
         click.echo("Table downloaded successfully")
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to download table: {e}")
 
 
@@ -192,6 +194,7 @@ def list(ctx: click.Context, collection: str, name: str, at: str, at_trx: str):
         click.echo()
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list tables: {e}")
 
 
@@ -304,6 +307,7 @@ def sample(
             click.echo("Sample saved successfully")
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to sample table: {e}")
 
 
@@ -392,6 +396,7 @@ def schema(
         click.echo()
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to obtain table schema: {e}")
 
 
@@ -445,4 +450,5 @@ def versions(ctx: click.Context, collection: str, name: str):
         click.echo(f"Number of data versions: {len(data_version_list)}")
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list data versions: {e}")

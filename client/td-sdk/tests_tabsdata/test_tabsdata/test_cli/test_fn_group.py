@@ -433,6 +433,7 @@ def test_function_trigger(testing_collection, function_path, tabsserver_connecti
             testing_collection,
             "--name",
             "test_input_plugin",
+            "--background",
         ],
     )
     logger.debug(result.output)
@@ -485,6 +486,7 @@ def test_function_trigger_execution_name(
             "test_input_plugin",
             "--exec-name",
             "test_execution_name",
+            "--background",
         ],
     )
     logger.debug(result.output)

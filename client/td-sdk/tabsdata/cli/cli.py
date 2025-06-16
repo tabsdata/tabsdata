@@ -11,9 +11,13 @@ from tabsdata.cli.auth_group import auth
 from tabsdata.cli.cli_utils import (
     DEFAULT_TABSDATA_DIRECTORY,
     get_credentials_file_path,
+    hint_common_solutions,
     initialise_tabsdata_server_connection,
+    load_cli_options,
     load_pinned_objects,
     logical_prompt,
+    set_current_cli_option,
+    store_cli_options,
     store_pinned_objects,
     utils_login,
     verify_login_or_prompt,
@@ -42,6 +46,7 @@ def cli(ctx: click.Context, no_prompt: bool):
     ctx.obj = {"tabsdata_directory": DEFAULT_TABSDATA_DIRECTORY, "no_prompt": no_prompt}
     initialise_tabsdata_server_connection(ctx)
     load_pinned_objects(ctx)
+    load_cli_options(ctx)
 
 
 cli.add_command(collection)
@@ -50,6 +55,24 @@ cli.add_command(fn)
 cli.add_command(auth)
 cli.add_command(table)
 cli.add_command(user)
+
+
+@cli.command()
+@click.pass_context
+def enable_hints(ctx: click.Context):
+    """Enable hints in the CLI"""
+    set_current_cli_option(ctx, "hints", "enabled")
+    store_cli_options(ctx)
+    click.echo("Hints enabled. You will now see hints in the CLI.")
+
+
+@cli.command()
+@click.pass_context
+def disable_hints(ctx: click.Context):
+    """Disable hints in the CLI"""
+    set_current_cli_option(ctx, "hints", "disabled")
+    store_cli_options(ctx)
+    click.echo("Hints disabled. You will no longer see hints in the CLI.")
 
 
 @cli.command()
@@ -193,6 +216,7 @@ def logout(ctx: click.Context):
         ctx.obj["tabsdataserver"].logout()
         click.echo("Logout successful.")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to logout: {e}")
     finally:
         try:
@@ -217,6 +241,7 @@ def status(ctx: click.Context):
         current_status = ctx.obj["tabsdataserver"].status
         click.echo(str(current_status))
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to get status: {e}")
 
 

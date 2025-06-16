@@ -17,7 +17,9 @@ from tabsdata.cli.cli_utils import (
     MutuallyExclusiveOption,
     convert_user_provided_status_to_api_status,
     get_currently_pinned_object,
+    hint_common_solutions,
     logical_prompt,
+    show_hint,
     verify_login_or_prompt,
 )
 
@@ -42,6 +44,7 @@ def cancel_exec(ctx: click.Context, id: str):
         server.cancel_execution(id)
         click.echo("Execution canceled successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to cancel execution: {e}")
 
 
@@ -60,6 +63,7 @@ def cancel_trx(ctx: click.Context, id: str):
         server.cancel_transaction(id)
         click.echo("Transaction canceled successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to cancel transaction: {e}")
 
 
@@ -156,7 +160,14 @@ def list_exec(
         console.print(table)
         click.echo(f"Number of executions: {len(list_of_executions)}")
         click.echo()
+        show_hint(
+            ctx,
+            "If you want to explore why an execution failed, you can "
+            "use the 'td exec worker-logs' command with the '--exec "
+            "<EXECUTION_ID>' option to see the logs.",
+        )
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list executions: {e}")
 
 
@@ -296,7 +307,14 @@ def list_trx(
         console.print(table)
         click.echo(f"Number of transactions: {len(list_of_transactions)}")
         click.echo()
+        show_hint(
+            ctx,
+            "If you want to explore why a transaction failed, you can "
+            "use the 'td exec worker-logs' command with the '--trx "
+            "<TRANSACTION_ID>' option to see the logs.",
+        )
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list transactions: {e}")
 
 
@@ -445,7 +463,14 @@ def list_worker(
         console.print(table)
         click.echo(f"Number of workers: {len(list_of_workers)}")
         click.echo()
+        show_hint(
+            ctx,
+            "If you want to explore why a worker failed, you can "
+            "use the 'td exec worker-logs' command with the '--worker "
+            "<WORKER_ID>' option to see the logs.",
+        )
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list workers: {e}")
 
 
@@ -515,6 +540,7 @@ def info(ctx: click.Context, id: str):
         click.echo()
 
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display execution: {e}")
 
 
@@ -644,6 +670,7 @@ def worker_logs(
         else:
             click.echo(generated_logs)
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to show worker logs: {e}")
 
 
@@ -723,6 +750,7 @@ def recover_exec(ctx: click.Context, id: str):
         server.recover_execution(id)
         click.echo("Execution recovered successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to recover execution: {e}")
 
 
@@ -742,4 +770,5 @@ def recover_trx(ctx: click.Context, id: str):
         server.recover_transaction(id)
         click.echo("Transaction recovered successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to recover transaction: {e}")

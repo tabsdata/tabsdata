@@ -8,11 +8,17 @@ import platform
 import shutil
 from datetime import datetime
 
+import requests
 import rich_click as click
 from PIL import Image
 from rich_click import Option, UsageError
 
-from tabsdata.api.apiserver import APIServer, obtain_connection
+from tabsdata.api.apiserver import (
+    BASE_API_URL,
+    APIServer,
+    APIServerError,
+    obtain_connection,
+)
 from tabsdata.api.tabsdata_server import STATUS_MAPPING, TabsdataServer
 
 CONNECTION_FILE = "connection.json"
@@ -61,6 +67,23 @@ def utils_login(
             credentials_file=get_credentials_file_path(ctx),
         )
     except Exception as e:
+        if isinstance(e, requests.exceptions.ConnectionError):
+            show_hint(
+                ctx,
+                "It seems like there is no Tabsdata server at the "
+                f"provided URL: {server_url}.\n "
+                "Please ensure that the URL is correct and the server is "
+                "running and reachable.\n If started locally, the status can be "
+                "checked by "
+                "executing 'tdserver status'.",
+            )
+        elif isinstance(e, APIServerError):
+            show_hint(
+                ctx,
+                "It seems like the Tabsdata server is running but refusing "
+                "to login. Please ensure that the credentials are correct and "
+                "the server is healthy.",
+            )
         raise click.ClickException(f"Failed to login: {e}")
     click.echo("Login successful.")
 
@@ -193,7 +216,9 @@ def cleanup_dot_files():
 CURRENT_CLI_PLATFORM = CurrentPlatform()
 
 
-def generate_dot_image(full_path: str, open_image: bool = False):
+def generate_dot_image(
+    full_path: str, open_image: bool = False, ctx: click.Context = None
+):
     if os.environ.get("TD_CLI_SHOW") in ["0", "False", "false", "no", "NO"]:
         click.echo("Skipping DOT file opening")
         return
@@ -202,10 +227,12 @@ def generate_dot_image(full_path: str, open_image: bool = False):
         dot_binary = "dot.exe"
     if not shutil.which(dot_binary):
         click.echo("Cannot generate DOT image file, dot binary not found")
-        click.echo(
-            "If you want to be able to convert DOT files to images, please install "
-            "the dot binary from Graphviz (https://graphviz.org/)"
-        )
+        if ctx:
+            show_hint(
+                ctx,
+                "If you want to be able to convert DOT files to images, please install "
+                "the dot binary from Graphviz (https://graphviz.org/)",
+            )
         return
     try:
         jpg_full_path = full_path[: -len(".dot")] + ".jpg"
@@ -249,3 +276,80 @@ def convert_user_provided_status_to_api_status(
         "Valid statuses are: "
         f"{valid_statuses}. Statuses are case-insensitive."
     )
+
+
+def load_cli_options(ctx: click.Context):
+    try:
+        with open(get_cli_options_file_path(ctx)) as f:
+            cli_options = json.load(f)
+        ctx.obj["cli_options"] = cli_options
+    except FileNotFoundError:
+        ctx.obj["cli_options"] = {}
+
+
+def get_cli_options_file_path(ctx: click.Context) -> str:
+    """
+    Get the path to the cli options file.
+    """
+    return os.path.join(ctx.obj["tabsdata_directory"], "options.json")
+
+
+def store_cli_options(ctx: click.Context):
+    try:
+        with open(get_cli_options_file_path(ctx), "w") as f:
+            json.dump(ctx.obj["cli_options"], f)
+    except Exception as e:
+        click.echo(f"Failed to store CLI options: {e}")
+        click.echo("This will not affect the rest of the command execution.")
+
+
+def get_current_cli_option(ctx: click.Context, option: str, default=None) -> str | None:
+    """
+    Get the current CLI option from the context.
+    """
+    cli_option = ctx.obj["cli_options"].get(option, default)
+    return cli_option
+
+
+def set_current_cli_option(ctx: click.Context, option: str, value: str):
+    """
+    Set the current CLI option in the context.
+    """
+    ctx.obj["cli_options"][option] = value
+
+
+def show_hint(ctx: click.Context, hint: str):
+    """
+    Show a hint in the CLI.
+    """
+    if get_current_cli_option(ctx, "hints", default="enabled") == "enabled":
+        click.echo(click.style("Hint: ", fg="green", bold=True), nl=False)
+        click.echo(hint)
+        click.echo("Use 'td disable-hints' command to stop seeing these hints.")
+    else:
+        pass
+
+
+def hint_common_solutions(ctx: click.Context, e: Exception):
+    """
+    Show common solutions for CLI issues.
+    """
+    if isinstance(e, requests.exceptions.ConnectionError):
+        server: TabsdataServer = ctx.obj.get("tabsdataserver")
+        server_url = server.connection.url[: -len(BASE_API_URL)] if server else None
+        if server_url:
+            show_hint(
+                ctx,
+                "It seems like there is no Tabsdata server at the "
+                f"provided URL: {server_url}.\n "
+                "Please ensure that the URL is correct and the server is "
+                "running and reachable.\n If started locally, the status can be "
+                "checked by "
+                "executing 'tdserver status'.",
+            )
+    elif isinstance(e, AttributeError):
+        show_hint(
+            ctx,
+            "It seems like you might have an expired session. You can "
+            "log in again with 'td login <SERVER-URL>'.",
+        )

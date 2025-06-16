@@ -9,6 +9,7 @@ from rich.table import Table
 
 from tabsdata.api.tabsdata_server import TabsdataServer
 from tabsdata.cli.cli_utils import (
+    hint_common_solutions,
     logical_prompt,
     store_pinned_objects,
     verify_login_or_prompt,
@@ -39,6 +40,7 @@ def create(
         server.create_collection(name, description)
         click.echo("Collection created successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to create collection: {e}")
 
 
@@ -64,6 +66,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
         server.delete_collection(name)
         click.echo("Collection deleted successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to delete collection: {e}")
 
 
@@ -95,6 +98,7 @@ def info(ctx: click.Context, name: str):
         console.print(table)
         click.echo()
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display collection: {e}")
 
 
@@ -127,6 +131,7 @@ def list(ctx: click.Context):
         click.echo(f"Number of collections: {len(list_of_collections)}")
         click.echo()
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list collections: {e}")
 
 
@@ -145,6 +150,7 @@ def pin(ctx: click.Context, name: str):
         store_pinned_objects(ctx)
         click.echo("Collection pinned successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to pin collection: {e}")
 
 
@@ -163,6 +169,7 @@ def unpin(ctx: click.Context):
             store_pinned_objects(ctx)
             click.echo("Collection unpinned successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to unpin collection: {e}")
 
 
@@ -187,4 +194,5 @@ def update(
         server.update_collection(name, new_name=new_name, new_description=description)
         click.echo("Collection updated successfully")
     except Exception as e:
+        hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to update collection: {e}")
