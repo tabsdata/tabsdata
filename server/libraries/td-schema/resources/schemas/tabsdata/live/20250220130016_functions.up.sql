@@ -466,10 +466,12 @@ CREATE TABLE worker_messages
 
 CREATE VIEW worker_messages__with_names AS
 SELECT w.*,
+       fr.status as function_run_status,
        c.name  as collection,
        e.name  as execution,
        fv.name as function
 FROM worker_messages w
          LEFT JOIN collections c ON w.collection_id = c.id
          LEFT JOIN executions e ON w.execution_id = e.id
-         LEFT JOIN functions fv ON w.function_version_id = fv.id;
+         LEFT JOIN functions fv ON w.function_version_id = fv.id
+         LEFT JOIN function_runs fr ON w.function_run_id = fr.id;

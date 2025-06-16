@@ -562,6 +562,7 @@ pub struct WorkerMessageDBWithNames {
     function_run_id: FunctionRunId,
     function_version_id: FunctionVersionId,
     status: WorkerMessageStatus,
+    function_run_status: FunctionRunStatus,
     collection: CollectionName,
     execution: Option<ExecutionName>,
     function: FunctionName,
@@ -585,6 +586,8 @@ pub struct WorkerMessage {
     function_version_id: FunctionVersionId,
     #[dto(list(filter, filter_like, order_by))]
     status: WorkerMessageStatus,
+    #[dto(list(filter, filter_like, order_by))]
+    function_run_status: FunctionRunStatus,
     #[dto(list(filter, filter_like, order_by))]
     collection: CollectionName,
     #[dto(list(filter, filter_like))]
