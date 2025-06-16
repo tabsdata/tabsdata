@@ -361,3 +361,91 @@ class TestTableFrame(unittest.TestCase):
 
         item = tf.select(td.col("numbers").mean()).item()
         assert item == 2.0
+
+    def test_first_row_empty(self):
+        lf = pl.LazyFrame(
+            {
+                "letters": [],
+                "numbers": [],
+            }
+        )
+        tf = td.TableFrame.__build__(
+            df=lf,
+            mode="raw",
+            idx=None,
+        )
+
+        first = tf.first_row()
+        assert first is None
+
+        first = tf.first_row(named=False)
+        assert first is None
+
+        first = tf.first_row(named=True)
+        assert first is None
+
+    def test_first_row(self):
+        lf = pl.LazyFrame(
+            {
+                "letters": ["a", "b", "c"],
+                "numbers": [1, 2, 3],
+            }
+        )
+        tf = td.TableFrame.__build__(
+            df=lf,
+            mode="raw",
+            idx=None,
+        )
+
+        last = tf.first_row()
+        assert last == ("a", 1)
+
+        last = tf.first_row(named=False)
+        assert last == ("a", 1)
+
+        last = tf.first_row(named=True)
+        assert last == {"letters": "a", "numbers": 1}
+
+    def test_last_row_empty(self):
+        lf = pl.LazyFrame(
+            {
+                "letters": [],
+                "numbers": [],
+            }
+        )
+        tf = td.TableFrame.__build__(
+            df=lf,
+            mode="raw",
+            idx=None,
+        )
+
+        last = tf.last_row()
+        assert last is None
+
+        last = tf.last_row(named=False)
+        assert last is None
+
+        last = tf.last_row(named=True)
+        assert last is None
+
+    def test_last_row(self):
+        lf = pl.LazyFrame(
+            {
+                "letters": ["a", "b", "c"],
+                "numbers": [1, 2, 3],
+            }
+        )
+        tf = td.TableFrame.__build__(
+            df=lf,
+            mode="raw",
+            idx=None,
+        )
+
+        last = tf.last_row()
+        assert last == ("c", 3)
+
+        last = tf.last_row(named=False)
+        assert last == ("c", 3)
+
+        last = tf.last_row(named=True)
+        assert last == {"letters": "c", "numbers": 3}

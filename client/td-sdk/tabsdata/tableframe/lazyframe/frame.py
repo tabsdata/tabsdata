@@ -1966,6 +1966,87 @@ class TableFrame:
             idx=self._idx,
         )
 
+    # status(Status.DONE)
+    @pydoc(categories="filters")
+    def last_row(
+        self,
+        named: bool = False,
+    ) -> tuple[Any, ...] | dict[str, Any] | None:
+        # noinspection PyShadowingNames
+        """
+        Return a `tuple` or `dictionary` with the last row, or None if no row.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌─────┬─────┐
+        │ A   ┆ B   │
+        │ --- ┆ --- │
+        │ str ┆ i64 │
+        ╞═════╪═════╡
+        │ a   ┆ 1   │
+        │ b   ┆ 2   │
+        │ c   ┆ 3   │
+        └─────┴─────┘
+        >>>
+        >>> tf.last_row()
+        >>>
+        ('c', 3)
+        >>>
+        >>> tf.last_row(named=True)
+        >>>
+        {'A': 'c', 'B': 3}
+        """
+
+        df = td_common.drop_system_columns(lf=self._lf.last()).collect()
+        if df.is_empty():
+            return None
+        # noinspection PyTypeChecker
+        return df.row(0, named=named)
+
+    # status(Status.DONE)
+    @pydoc(categories="filters")
+    def first_row(
+        self,
+        named: bool = False,
+    ) -> tuple[Any, ...] | dict[str, Any] | None:
+        # noinspection PyShadowingNames
+        """
+        Return a `tuple` or `dictionary` with the first row, or None if no row.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌─────┬─────┐
+        │ A   ┆ B   │
+        │ --- ┆ --- │
+        │ str ┆ i64 │
+        ╞═════╪═════╡
+        │ a   ┆ 1   │
+        │ b   ┆ 2   │
+        │ c   ┆ 3   │
+        └─────┴─────┘
+        >>>
+        >>> tf.last_row()
+        >>>
+        ('a', 1)
+        >>>
+        >>> tf.last_row(named=True)
+        >>>
+        {'A': 'a', 'B': '1'}
+        """
+        df = td_common.drop_system_columns(lf=self._lf.first()).collect()
+        if df.is_empty():
+            return None
+        # noinspection PyTypeChecker
+        return df.row(0, named=named)
+
     """> Functions Derived from DataFrame """
 
     @pydoc(categories="projection")
