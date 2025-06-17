@@ -30,6 +30,7 @@ pub async fn seed_function_requirement(
         .transaction_id(transaction.id())
         .function_run_id(function_run.id())
         .requirement_table_id(requirement_table.table_id())
+        .requirement_function_version_id(requirement_table.function_version_id())
         .requirement_table_version_id(requirement_table.id())
         .requirement_function_run_id(requirement_function_run.map(|f| *f.id()))
         .requirement_table_data_version_id(requirement_table_data_version.map(|f| *f.id()))
@@ -190,6 +191,10 @@ mod tests {
         assert_eq!(
             requirement.requirement_table_id(),
             requirement_table.table_id()
+        );
+        assert_eq!(
+            requirement.requirement_function_version_id(),
+            requirement_table.function_version_id()
         );
         assert_eq!(
             requirement.requirement_table_version_id(),

@@ -50,7 +50,7 @@ pub struct DependencyDB {
 #[dao(
     sql_table = "dependencies__with_names",
     order_by = "dep_pos",
-    partition_by = "table_id",
+    partition_by = "dependency_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "function_version_id", down = "table_function_version_id")
 )]

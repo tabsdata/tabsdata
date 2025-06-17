@@ -422,6 +422,7 @@ CREATE TABLE function_requirements
 
     function_run_id                   TEXT    NOT NULL,
     requirement_table_id              TEXT    NOT NULL,
+    requirement_function_version_id   TEXT    NOT NULL,
     requirement_table_version_id      TEXT    NOT NULL,
     requirement_function_run_id       TEXT    NULL,
     requirement_table_data_version_id TEXT    NULL,
@@ -447,7 +448,7 @@ SELECT r.*,
 FROM function_requirements__with_status r
          LEFT JOIN collections c ON r.collection_id = c.id
          LEFT JOIN tables tv ON r.requirement_table_version_id = tv.id
-         LEFT JOIN functions fv ON r.requirement_function_run_id = fv.id;
+         LEFT JOIN functions fv ON r.requirement_function_version_id = fv.id;
 
 -- Worker Messages  (table & __with_names view)
 
@@ -467,9 +468,9 @@ CREATE TABLE worker_messages
 CREATE VIEW worker_messages__with_names AS
 SELECT w.*,
        fr.status as function_run_status,
-       c.name  as collection,
-       e.name  as execution,
-       fv.name as function
+       c.name    as collection,
+       e.name    as execution,
+       fv.name   as function
 FROM worker_messages w
          LEFT JOIN collections c ON w.collection_id = c.id
          LEFT JOIN executions e ON w.execution_id = e.id

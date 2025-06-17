@@ -46,7 +46,7 @@ pub struct TriggerDB {
 #[td_type::Dao]
 #[dao(
     sql_table = "triggers__with_names",
-    partition_by = "function_id",
+    partition_by = "trigger_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "trigger_by_function_version_id", down = "function_version_id")
 )]

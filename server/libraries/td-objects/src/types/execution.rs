@@ -482,6 +482,7 @@ pub struct FunctionRequirementDB {
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
     requirement_table_id: TableId,
+    requirement_function_version_id: FunctionVersionId,
     requirement_table_version_id: TableVersionId,
     #[builder(default)]
     requirement_function_run_id: Option<FunctionRunId>,
@@ -503,6 +504,7 @@ pub struct FunctionRequirementDBWithStatus {
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
     requirement_table_id: TableId,
+    requirement_function_version_id: FunctionVersionId,
     requirement_table_version_id: TableVersionId,
     requirement_function_run_id: Option<FunctionRunId>,
     requirement_table_data_version_id: Option<TableDataVersionId>,
@@ -526,6 +528,7 @@ pub struct FunctionRequirementDBWithNames {
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
     requirement_table_id: TableId,
+    requirement_function_version_id: FunctionVersionId,
     requirement_table_version_id: TableVersionId,
     requirement_function_run_id: Option<FunctionRunId>,
     requirement_table_data_version_id: Option<TableDataVersionId>,
