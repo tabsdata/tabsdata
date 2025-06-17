@@ -15,7 +15,6 @@ from typing import Generator, List
 
 import polars as pl
 import requests
-
 from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.io.input import TableInput
 from tabsdata.io.output import TableOutput
@@ -2323,7 +2322,7 @@ class Worker:
         self.function = kwargs.get("function")
         self.transaction = kwargs.get("transaction_id")
         self.execution = kwargs.get("execution_id")
-        self.status = kwargs.get("function_run_status")
+        self.status = kwargs.get("status")
         self._data = None
         self.kwargs = kwargs
 

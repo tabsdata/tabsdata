@@ -369,7 +369,7 @@ mod tests {
             message.function_version_id(),
             function_run.function_version_id()
         );
-        assert_eq!(*message.status(), WorkerMessageStatus::Locked);
+        assert_eq!(*message.message_status(), WorkerMessageStatus::Locked);
 
         Ok(())
     }

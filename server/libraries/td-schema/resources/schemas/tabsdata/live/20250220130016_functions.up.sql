@@ -460,14 +460,14 @@ CREATE TABLE worker_messages
     transaction_id      TEXT NOT NULL,
     function_version_id TEXT NOT NULL,
     function_run_id     TEXT NOT NULL,
-    status              TEXT NOT NULL, -- Locked/Unlocked
+    message_status      TEXT NOT NULL, -- Locked/Unlocked
 
     FOREIGN KEY (function_run_id) REFERENCES function_runs (id)
 );
 
 CREATE VIEW worker_messages__with_names AS
 SELECT w.*,
-       fr.status as function_run_status,
+       fr.status as status,
        c.name    as collection,
        e.name    as execution,
        fv.name   as function

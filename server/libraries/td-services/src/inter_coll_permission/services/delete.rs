@@ -98,6 +98,7 @@ mod tests {
         AccessTokenId, CollectionIdName, CollectionName, InterCollectionPermissionIdName, RoleId,
         UserId,
     };
+    use td_objects::types::IdOrName;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

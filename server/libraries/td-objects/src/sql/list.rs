@@ -3,15 +3,16 @@
 //
 
 use crate::crudl::ListParams;
+use crate::types::basic::LikeFilter;
 use crate::types::parse::IDENTIFIER_PATTERN;
-use crate::types::ListQuery;
+use crate::types::{ListQuery, SqlEntity};
 use getset::Getters;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::collections::HashSet;
 use std::marker::PhantomData;
-use td_error::td_error;
+use std::str::FromStr;
+use td_error::{td_error, TdError};
 
 #[td_error]
 pub enum ListError {
@@ -21,21 +22,26 @@ pub enum ListError {
         "Invalid condition value, it must be <NAME><OPERATOR><VALUE> (operators are {0}): {1}"
     )]
     InvalidCondition(String, String) = 1,
+    #[error("Undefined field: {0}")]
+    UndefinedField(String) = 2,
     #[error("Undefined filter: {0}")]
-    UndefinedFilter(String) = 2,
+    UndefinedFilter(String) = 3,
     #[error("Undefined like filter: {0}")]
-    UndefinedLikeFilter(String) = 3,
+    UndefinedLikeFilter(String) = 4,
     #[error("Undefined order by: {0}")]
-    UndefinedOrderBy(String) = 4,
+    UndefinedOrderBy(String) = 5,
     #[error("Previous and Next parameters cannot be used together")]
-    PreviousAndNext = 5,
+    PreviousAndNext = 6,
     #[error("Natural Id must be use in pagination with Previous or Next parameters")]
-    MissingPaginationParams = 6,
+    MissingPaginationParams = 7,
     #[error("Invalid between condition '{0}', it must be <NAME>:btw:<min>::<max>")]
-    InvalidBetweenCondition(String) = 7,
+    InvalidBetweenCondition(String) = 8,
+
+    #[error("Error computing SQL entity value: {0}")]
+    InvalidSqlEntity(#[source] TdError) = 5000,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Order {
     Asc(String),
     Desc(String),
@@ -54,6 +60,15 @@ impl Order {
             Order::Asc(field) => field,
             Order::Desc(field) => field,
         }
+    }
+
+    pub fn value_sql_entity<D: ListQuery>(
+        &self,
+        value: &str,
+    ) -> Result<Box<dyn SqlEntity>, ListError> {
+        D::map_sql_entity_value(self.field(), value)
+            .map_err(ListError::InvalidSqlEntity)?
+            .ok_or(ListError::UndefinedField(self.field().to_string()))
     }
 
     pub fn direction(&self) -> &str {
@@ -100,59 +115,51 @@ impl Order {
     }
 }
 
-impl TryFrom<&str> for Order {
-    type Error = ListError;
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+impl FromStr for Order {
+    type Err = ListError;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Condition {
-    Eq(String, String),
-    Ne(String, String),
-    Lk(String, String),
-    Gt(String, String),
-    Ge(String, String),
-    Lt(String, String),
-    Le(String, String),
-    Btw(String, String, String),
+#[derive(Debug)]
+pub enum Condition<D> {
+    Eq(String, Box<dyn SqlEntity>),
+    Ne(String, Box<dyn SqlEntity>),
+    Lk(String, Box<LikeFilter>),
+    Gt(String, Box<dyn SqlEntity>),
+    Ge(String, Box<dyn SqlEntity>),
+    Lt(String, Box<dyn SqlEntity>),
+    Le(String, Box<dyn SqlEntity>),
+    Btw(String, Box<dyn SqlEntity>, Box<dyn SqlEntity>),
+    Phantom(PhantomData<D>),
 }
 
-impl Condition {
-    pub fn eq(field: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::Eq(field.into(), value.into())
+impl<D: ListQuery + Eq> PartialEq for Condition<D> {
+    fn eq(&self, other: &Self) -> bool {
+        use Condition::*;
+        match (self, other) {
+            (Eq(f1, v1), Eq(f2, v2))
+            | (Ne(f1, v1), Ne(f2, v2))
+            | (Gt(f1, v1), Gt(f2, v2))
+            | (Ge(f1, v1), Ge(f2, v2))
+            | (Lt(f1, v1), Lt(f2, v2))
+            | (Le(f1, v1), Le(f2, v2)) => f1 == f2 && v1.as_display() == v2.as_display(),
+            (Btw(f1, min1, max1), Btw(f2, min2, max2)) => {
+                f1 == f2
+                    && min1.as_display() == min2.as_display()
+                    && max1.as_display() == max2.as_display()
+            }
+            (Lk(f1, v1), Lk(f2, v2)) => f1 == f2 && v1.as_display() == v2.as_display(),
+            (Phantom(_), Phantom(_)) => true,
+            _ => false,
+        }
     }
+}
+impl<D: ListQuery + Eq> Eq for Condition<D> {}
 
-    pub fn ne(field: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::Ne(field.into(), value.into())
-    }
-
-    pub fn gt(field: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::Gt(field.into(), value.into())
-    }
-
-    pub fn ge(field: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::Ge(field.into(), value.into())
-    }
-
-    pub fn lt(field: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::Lt(field.into(), value.into())
-    }
-
-    pub fn le(field: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::Le(field.into(), value.into())
-    }
-
-    pub fn lk(field: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::Lk(field.into(), value.into())
-    }
-
-    pub fn btw(field: impl Into<String>, min: impl Into<String>, max: impl Into<String>) -> Self {
-        Self::Btw(field.into(), min.into(), max.into())
-    }
-
-    fn parse(s: &str) -> Result<Self, ListError> {
+impl<D: ListQuery> Condition<D> {
+    fn parse(s: &str) -> Result<Self, TdError> {
         const EQ: &str = ":eq:";
         const NE: &str = ":ne:";
         const GT: &str = ":gt:";
@@ -181,33 +188,66 @@ impl Condition {
             let operator = captures.name("operator").unwrap().as_str().to_string();
             let value = captures.name("value").unwrap().as_str().to_string();
             let condition = match operator.as_str() {
-                EQ => Self::eq(field, value),
-                NE => Self::ne(field, value),
-                GT => Self::gt(field, value),
-                GE => Self::ge(field, value),
-                LT => Self::lt(field, value),
-                LE => Self::le(field, value),
-                LK => Self::lk(field, value),
+                EQ => {
+                    let sql_value = D::map_sql_entity_value(&field, &value)?
+                        .ok_or(ListError::UndefinedField(field.clone()))?;
+                    Self::Eq(field, sql_value)
+                }
+                NE => {
+                    let sql_value = D::map_sql_entity_value(&field, &value)?
+                        .ok_or(ListError::UndefinedField(field.clone()))?;
+                    Self::Ne(field, sql_value)
+                }
+                GT => {
+                    let sql_value = D::map_sql_entity_value(&field, &value)?
+                        .ok_or(ListError::UndefinedField(field.clone()))?;
+                    Self::Gt(field, sql_value)
+                }
+                GE => {
+                    let sql_value = D::map_sql_entity_value(&field, &value)?
+                        .ok_or(ListError::UndefinedField(field.clone()))?;
+                    Self::Ge(field, sql_value)
+                }
+                LT => {
+                    let sql_value = D::map_sql_entity_value(&field, &value)?
+                        .ok_or(ListError::UndefinedField(field.clone()))?;
+                    Self::Lt(field, sql_value)
+                }
+                LE => {
+                    let sql_value = D::map_sql_entity_value(&field, &value)?
+                        .ok_or(ListError::UndefinedField(field.clone()))?;
+                    Self::Le(field, sql_value)
+                }
+                LK => {
+                    // check that it exists, but do not convert to type, as it is a LIKE filter
+                    if !D::filter_by_like_fields().contains(&field.as_str()) {
+                        Err(ListError::UndefinedLikeFilter(field.clone()))?
+                    }
+                    let converted = Box::new(Self::convert_to_like_pattern(&value).try_into()?);
+                    Self::Lk(field, converted)
+                }
                 BTW => {
                     let min_max = value.split("::").collect::<Vec<_>>();
                     if min_max.len() != 2 {
-                        return Err(ListError::InvalidBetweenCondition(s.to_string()));
+                        Err(ListError::InvalidBetweenCondition(s.to_string()))?
                     }
-                    Self::btw(field, min_max[0], min_max[1])
+                    let sql_min = D::map_sql_entity_value(&field, min_max[0])?
+                        .ok_or(ListError::UndefinedField(field.clone()))?;
+                    let sql_max = D::map_sql_entity_value(&field, min_max[1])?
+                        .ok_or(ListError::UndefinedField(field.clone()))?;
+                    Self::Btw(field, sql_min, sql_max)
                 }
-                _ => {
-                    return Err(ListError::InvalidCondition(
-                        OPERATORS.to_string(),
-                        s.to_string(),
-                    ))
-                }
+                _ => Err(ListError::InvalidCondition(
+                    OPERATORS.to_string(),
+                    s.to_string(),
+                ))?,
             };
             Ok(condition)
         } else {
             Err(ListError::InvalidCondition(
                 OPERATORS.to_string(),
                 s.to_string(),
-            ))
+            ))?
         }
     }
 
@@ -221,6 +261,7 @@ impl Condition {
             Condition::Lt(field, _) => field,
             Condition::Le(field, _) => field,
             Condition::Btw(field, _, _) => field,
+            Condition::Phantom(_) => unreachable!(),
         }
     }
 
@@ -251,16 +292,17 @@ impl Condition {
         converted_value
     }
 
-    pub fn values(&self) -> Vec<String> {
+    pub fn values(&self) -> Vec<&dyn SqlEntity> {
         match self {
-            Condition::Eq(_, value) => vec![value.to_owned()],
-            Condition::Ne(_, value) => vec![value.to_owned()],
-            Condition::Lk(_, value) => vec![Self::convert_to_like_pattern(value)],
-            Condition::Gt(_, value) => vec![value.to_owned()],
-            Condition::Ge(_, value) => vec![value.to_owned()],
-            Condition::Lt(_, value) => vec![value.to_owned()],
-            Condition::Le(_, value) => vec![value.to_owned()],
-            Condition::Btw(_, min, max) => vec![min.to_owned(), max.to_owned()],
+            Condition::Eq(_, value) => vec![&**value],
+            Condition::Ne(_, value) => vec![&**value],
+            Condition::Lk(_, value) => vec![&**value],
+            Condition::Gt(_, value) => vec![&**value],
+            Condition::Ge(_, value) => vec![&**value],
+            Condition::Lt(_, value) => vec![&**value],
+            Condition::Le(_, value) => vec![&**value],
+            Condition::Btw(_, min, max) => vec![&**min, &**max],
+            Condition::Phantom(_) => unreachable!(),
         }
     }
 
@@ -274,6 +316,7 @@ impl Condition {
             Condition::Lt(_, _) => "<",
             Condition::Le(_, _) => "<=",
             Condition::Btw(_, _, _) => "BETWEEN",
+            Condition::Phantom(_) => unreachable!(),
         }
     }
 
@@ -287,6 +330,7 @@ impl Condition {
             | Condition::Le(_, _) => "",
             Condition::Lk(_, _) => r#"ESCAPE '\'"#,
             Condition::Btw(_, _, _) => "AND",
+            Condition::Phantom(_) => unreachable!(),
         }
     }
 
@@ -300,123 +344,110 @@ impl Condition {
             | Condition::Lt(_, _)
             | Condition::Le(_, _) => 1,
             Condition::Btw(_, _, _) => 2,
+            Condition::Phantom(_) => unreachable!(),
         }
     }
 }
 
-impl TryFrom<&str> for Condition {
-    type Error = ListError;
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Self::parse(value)
+#[derive(Debug)]
+pub struct OrConditions<D>(pub Vec<Condition<D>>);
+
+impl<D: ListQuery + Eq> PartialEq for OrConditions<D> {
+    fn eq(&self, other: &Self) -> bool {
+        for condition in &self.0 {
+            if !other.0.contains(condition) {
+                return false;
+            }
+        }
+        for condition in &other.0 {
+            if !self.0.contains(condition) {
+                return false;
+            }
+        }
+        true
     }
 }
 
-#[allow(clippy::derived_hash_with_manual_eq)]
-#[derive(Debug, Clone, Eq, Hash)]
-pub struct OrConditions(pub Vec<Condition>);
-
-impl OrConditions {
-    pub fn conditions(&self) -> &[Condition] {
+impl<D> OrConditions<D> {
+    pub fn conditions(&self) -> &[Condition<D>] {
         &self.0
     }
 }
 
-/*
-Using HashSet<&Condition> creates a set of references rather than actual values.
-This results in pointer-based equality checks, which is not the desired behavior.
-Instead, we use collect into HashSet<T> by cloning the items, so that equality is based on value, not reference.
- */
-impl PartialEq for OrConditions {
+#[derive(Debug)]
+pub struct AndConditions<D>(pub Vec<OrConditions<D>>);
+
+impl<D: ListQuery + Eq> PartialEq for AndConditions<D> {
     fn eq(&self, other: &Self) -> bool {
-        let this = self.0.iter().cloned().collect::<HashSet<Condition>>();
-        let that = other.0.iter().cloned().collect::<HashSet<Condition>>();
-        this == that
+        for condition in &self.0 {
+            if !other.0.contains(condition) {
+                return false;
+            }
+        }
+        for condition in &other.0 {
+            if !self.0.contains(condition) {
+                return false;
+            }
+        }
+        true
     }
 }
 
-impl<T> From<T> for OrConditions
-where
-    T: IntoIterator<Item = Condition>,
-{
-    fn from(or_conditions: T) -> Self {
-        OrConditions(or_conditions.into_iter().collect())
-    }
-}
-
-#[allow(clippy::derived_hash_with_manual_eq)]
-#[derive(Debug, Clone, Eq, Hash)]
-pub struct AndConditions(pub Vec<OrConditions>);
-
-impl AndConditions {
-    pub fn conditions(&self) -> &[OrConditions] {
+impl<D: ListQuery> AndConditions<D> {
+    pub fn conditions(&self) -> &[OrConditions<D>] {
         &self.0
     }
 }
 
-/*
-Using HashSet<&OrCondition> creates a set of references rather than actual values.
-This results in pointer-based equality checks, which is not the desired behavior.
-Instead, we use collect into HashSet<T> by cloning the items, so that equality is based on value, not reference.
- */
-impl PartialEq for AndConditions {
-    fn eq(&self, other: &Self) -> bool {
-        let this = self.0.iter().cloned().collect::<HashSet<OrConditions>>();
-        let that = other.0.iter().cloned().collect::<HashSet<OrConditions>>();
-        this == that
-    }
-}
-
-impl<T> From<T> for AndConditions
+impl<T, D: ListQuery> From<T> for AndConditions<D>
 where
-    T: Into<Vec<OrConditions>>,
+    T: Into<Vec<OrConditions<D>>>,
 {
     fn from(or_conditions: T) -> Self {
         AndConditions(or_conditions.into())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Pagination {
-    Previous(String, String),
-    Next(String, String),
+    Previous(Box<dyn SqlEntity>, Box<dyn SqlEntity>),
+    Next(Box<dyn SqlEntity>, Box<dyn SqlEntity>),
 }
 
 impl Pagination {
-    pub fn column_value(&self) -> &str {
+    pub fn column_value(&self) -> &dyn SqlEntity {
         match self {
-            Pagination::Previous(column_value, _) => column_value,
-            Pagination::Next(column_value, _) => column_value,
+            Pagination::Previous(column_value, _) => &**column_value,
+            Pagination::Next(column_value, _) => &**column_value,
         }
     }
 
-    pub fn pagination_id(&self) -> &str {
+    pub fn pagination_id(&self) -> &dyn SqlEntity {
         match self {
-            Pagination::Previous(_, pagination_id) => pagination_id,
-            Pagination::Next(_, pagination_id) => pagination_id,
+            Pagination::Previous(_, pagination_id) => &**pagination_id,
+            Pagination::Next(_, pagination_id) => &**pagination_id,
         }
     }
 }
 
-#[derive(Debug, Clone, Getters)]
+#[derive(Getters)]
 #[getset(get = "pub")]
 pub struct ListQueryParams<D: ListQuery> {
     len: usize,
-    conditions: AndConditions,
+    conditions: AndConditions<D>,
     natural_order: Order,
     order: Option<Order>,
     pagination: Option<Pagination>,
-    phantom: PhantomData<D>,
 }
 
 impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
-    type Error = ListError;
+    type Error = TdError;
     fn try_from(value: &ListParams) -> Result<Self, Self::Error> {
         let conditions = value
             .filter()
             .iter()
             .map(String::as_str)
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<Condition>, _>>()?;
+            .map(Condition::parse)
+            .collect::<Result<Vec<Condition<D>>, _>>()?;
         conditions
             .iter()
             .map(|c| match c {
@@ -441,16 +472,15 @@ impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
             .into_iter()
             .map(|c| (c.field().to_string(), c))
             .into_group_map();
-        let conditions: AndConditions = or_condition_groups
-            .values()
-            .cloned()
-            .map(OrConditions::from)
+        let conditions: AndConditions<D> = or_condition_groups
+            .into_values()
+            .map(|c| OrConditions(c))
             .collect::<Vec<_>>()
             .into();
 
         let order = match value.order_by() {
             Some(o) => {
-                let o = o.as_str().try_into()?;
+                let o = o.parse()?;
                 match o {
                     Order::Asc(field) | Order::Desc(field)
                         if !D::order_by_fields().contains(&field.as_str()) =>
@@ -483,14 +513,22 @@ impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
             (Some(_), _, None) => Err(ListError::MissingPaginationParams),
             (_, Some(_), None) => Err(ListError::MissingPaginationParams),
             (None, None, Some(_)) => Err(ListError::MissingPaginationParams),
-            (Some(column_value), None, Some(pagination_id)) => Ok(Some(Pagination::Previous(
-                column_value.to_string(),
-                pagination_id.to_string(),
-            ))),
-            (None, Some(column_value), Some(pagination_id)) => Ok(Some(Pagination::Next(
-                column_value.to_string(),
-                pagination_id.to_string(),
-            ))),
+            (Some(column_value), None, Some(pagination_id)) => {
+                let column_value = order
+                    .as_ref()
+                    .unwrap_or(&natural_order)
+                    .value_sql_entity::<D>(column_value)?;
+                let pagination_id = natural_order.value_sql_entity::<D>(pagination_id)?;
+                Ok(Some(Pagination::Previous(column_value, pagination_id)))
+            }
+            (None, Some(column_value), Some(pagination_id)) => {
+                let column_value = order
+                    .as_ref()
+                    .unwrap_or(&natural_order)
+                    .value_sql_entity::<D>(column_value)?;
+                let pagination_id = natural_order.value_sql_entity::<D>(pagination_id)?;
+                Ok(Some(Pagination::Next(column_value, pagination_id)))
+            }
             _ => Ok(None),
         }?;
 
@@ -500,7 +538,6 @@ impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
             natural_order,
             order,
             pagination,
-            phantom: PhantomData,
         })
     }
 }
@@ -509,6 +546,40 @@ impl<D: ListQuery> TryFrom<&ListParams> for ListQueryParams<D> {
 mod tests {
     use super::*;
     use crate::crudl::ListParamsBuilder;
+
+    #[td_type::Dao]
+    struct TestDao {
+        a: String,
+    }
+
+    #[td_type::Dto]
+    #[dto(list(on = TestDao))]
+    #[td_type(builder(try_from = TestDao))]
+    struct TestDto {
+        #[dto(list(pagination_by = "+", filter_like))]
+        a: String,
+    }
+
+    impl SqlEntity for String {
+        fn push_bind<'a>(&'a self, _builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>) {
+            unreachable!()
+        }
+
+        fn push_bind_unseparated<'a>(
+            &'a self,
+            _builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
+        ) {
+            unreachable!()
+        }
+
+        fn as_display(&self) -> String {
+            self.clone()
+        }
+
+        fn from_display(s: impl ToString) -> Result<Self, TdError> {
+            Ok(s.to_string())
+        }
+    }
 
     #[test]
     fn test_order_parse() {
@@ -522,61 +593,67 @@ mod tests {
 
     #[test]
     fn test_condition_parse() {
-        assert!(Condition::parse("").is_err());
-        assert!(Condition::parse("a").is_err());
-        assert!(Condition::parse(":eq:").is_err());
-        assert!(Condition::parse("a:ff:b").is_err());
-        assert_eq!(Condition::parse("a:eq:").unwrap(), Condition::eq("a", ""));
-        assert_eq!(Condition::parse("a:eq:A").unwrap(), Condition::eq("a", "A"));
-        assert_eq!(Condition::parse("a:ne:A").unwrap(), Condition::ne("a", "A"));
-        assert_eq!(Condition::parse("a:gt:A").unwrap(), Condition::gt("a", "A"));
-        assert_eq!(Condition::parse("a:ge:A").unwrap(), Condition::ge("a", "A"));
-        assert_eq!(Condition::parse("a:lt:A").unwrap(), Condition::lt("a", "A"));
-        assert_eq!(Condition::parse("a:le:A").unwrap(), Condition::le("a", "A"));
-        assert_eq!(Condition::parse("a:lk:A").unwrap(), Condition::lk("a", "A"));
-    }
-
-    #[test]
-    fn test_or_conditions() {
-        let _: OrConditions = vec![Condition::eq("a", "A")].into();
-        let or_c1: OrConditions = vec![Condition::eq("a", "A"), Condition::eq("b", "B")].into();
-        let or_c2: OrConditions = vec![Condition::eq("b", "B"), Condition::eq("a", "A")].into();
-        assert_eq!(or_c1, or_c2);
-    }
-
-    #[test]
-    fn test_and_conditions() {
-        let or_c1: OrConditions = vec![Condition::eq("a", "A"), Condition::eq("b", "B")].into();
-        let or_c2: OrConditions = vec![Condition::eq("b", "B"), Condition::eq("a", "A")].into();
-        let _: AndConditions = Vec::<OrConditions>::new().into();
-        let _: AndConditions = vec![or_c1.clone()].into();
-        let and_c1: AndConditions = vec![or_c1.clone(), or_c2.clone()].into();
-        let and_c2: AndConditions = vec![or_c2.clone(), or_c1.clone()].into();
-        assert_eq!(and_c1, and_c2);
+        assert!(Condition::<TestDto>::parse("").is_err());
+        assert!(Condition::<TestDto>::parse("a").is_err());
+        assert!(Condition::<TestDto>::parse(":eq:").is_err());
+        assert!(Condition::<TestDto>::parse("a:ff:b").is_err());
+        assert_eq!(
+            Condition::<TestDto>::parse("a:eq:").unwrap(),
+            Condition::Eq("a".to_string(), Box::new("".to_string()))
+        );
+        assert_eq!(
+            Condition::<TestDto>::parse("a:eq:A").unwrap(),
+            Condition::Eq("a".to_string(), Box::new("A".to_string()))
+        );
+        assert_eq!(
+            Condition::<TestDto>::parse("a:ne:A").unwrap(),
+            Condition::Ne("a".to_string(), Box::new("A".to_string()))
+        );
+        assert_eq!(
+            Condition::<TestDto>::parse("a:gt:A").unwrap(),
+            Condition::Gt("a".to_string(), Box::new("A".to_string()))
+        );
+        assert_eq!(
+            Condition::<TestDto>::parse("a:ge:A").unwrap(),
+            Condition::Ge("a".to_string(), Box::new("A".to_string()))
+        );
+        assert_eq!(
+            Condition::<TestDto>::parse("a:lt:A").unwrap(),
+            Condition::Lt("a".to_string(), Box::new("A".to_string()))
+        );
+        assert_eq!(
+            Condition::<TestDto>::parse("a:le:A").unwrap(),
+            Condition::Le("a".to_string(), Box::new("A".to_string()))
+        );
+        assert_eq!(
+            Condition::<TestDto>::parse("a:lk:A").unwrap(),
+            Condition::Lk("a".to_string(), Box::new("A".try_into().unwrap()))
+        );
     }
 
     #[test]
     fn test_list_query() {
         #[td_type::Dao]
         struct DaoDef {
-            id: i64,
+            id: String,
         }
 
         #[td_type::Dto]
         #[dto(list(on = DaoDef))]
         #[td_type(builder(try_from = DaoDef))]
+        #[derive(Hash)]
         struct Def {
             #[dto(list(pagination_by = "+"))]
             #[td_type(builder(field = "id"))]
-            order: i64,
+            order: String,
             #[dto(list(filter))]
             #[td_type(builder(field = "id"))]
-            filter: i64,
+            filter: String,
             #[dto(list(filter_like))]
             #[td_type(builder(field = "id"))]
-            like: i64,
+            like: String,
 
-            id: i64, //TODO remove
+            id: String, //TODO remove
         }
 
         let list_params = ListParamsBuilder::default()
@@ -589,11 +666,16 @@ mod tests {
             .build()
             .unwrap();
         let list_query: ListQueryParams<Def> = (&list_params).try_into().unwrap();
-        let expect: AndConditions = vec![
-            Into::<OrConditions>::into(vec![Condition::eq("filter", "FILTER")]),
-            Into::<OrConditions>::into(vec![Condition::lk("like", "LIKE")]),
-        ]
-        .into();
+        let expect = AndConditions::<Def>(vec![
+            OrConditions(vec![Condition::Eq(
+                "filter".to_string(),
+                Box::new("FILTER".to_string()),
+            )]),
+            OrConditions(vec![Condition::Lk(
+                "like".to_string(),
+                Box::new("LIKE".try_into().unwrap()),
+            )]),
+        ]);
         assert_eq!(list_query.conditions(), &expect);
 
         let list_params = ListParamsBuilder::default()
@@ -605,23 +687,29 @@ mod tests {
             .order_by("order".to_string())
             .build()
             .unwrap();
-        let res: Result<ListQueryParams<Def>, ListError> = (&list_params).try_into();
-        assert!(matches!(res, Err(ListError::UndefinedFilter(_))));
+        let res: Result<ListQueryParams<Def>, TdError> = (&list_params).try_into();
+        let err = res.err().unwrap();
+        let err = err.domain_err::<ListError>();
+        assert!(matches!(err, ListError::UndefinedField(_)));
         let list_params = ListParamsBuilder::default()
             .len(0usize)
             .filter(vec!["likex:lk:LIKE".to_string()])
             .order_by("order".to_string())
             .build()
             .unwrap();
-        let res: Result<ListQueryParams<Def>, ListError> = (&list_params).try_into();
-        assert!(matches!(res, Err(ListError::UndefinedLikeFilter(_))));
+        let res: Result<ListQueryParams<Def>, TdError> = (&list_params).try_into();
+        let err = res.err().unwrap();
+        let err = err.domain_err::<ListError>();
+        assert!(matches!(err, ListError::UndefinedLikeFilter(_)));
         let list_params = ListParamsBuilder::default()
             .len(0usize)
             .order_by("orderx".to_string())
             .build()
             .unwrap();
-        let res: Result<ListQueryParams<Def>, ListError> = (&list_params).try_into();
-        assert!(matches!(res, Err(ListError::UndefinedOrderBy(_))));
+        let res: Result<ListQueryParams<Def>, TdError> = (&list_params).try_into();
+        let err = res.err().unwrap();
+        let err = err.domain_err::<ListError>();
+        assert!(matches!(err, ListError::UndefinedOrderBy(_)));
     }
 
     #[test]
@@ -658,7 +746,7 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let result = Condition::convert_to_like_pattern(input);
+            let result = Condition::<TestDto>::convert_to_like_pattern(input);
             assert_eq!(result, expected);
         }
     }

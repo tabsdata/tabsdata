@@ -24,5 +24,5 @@ pub async fn create_password_hash<P: Deref<Target = String>>(
         .unwrap()
         .to_string();
 
-    Ok(PasswordHash::try_from(hash)?)
+    PasswordHash::try_from(hash)
 }

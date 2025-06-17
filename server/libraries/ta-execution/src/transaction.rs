@@ -26,7 +26,7 @@ pub trait TransactionMapper:
     fn key(&self, node: &FunctionVersionNode) -> Result<TransactionKey, TdError>;
 
     fn transaction_by(&self) -> Result<TransactionByStr, TdError> {
-        Ok(TransactionByStr::try_from(self.to_string())?)
+        TransactionByStr::try_from(self.to_string())
     }
 }
 

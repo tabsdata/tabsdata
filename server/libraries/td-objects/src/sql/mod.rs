@@ -234,7 +234,7 @@ all_the_tuples!(impl_find_by);
 pub trait ListBy<'a, E> {
     fn list_by<T>(
         &self,
-        list_query_params: &ListQueryParams<T>,
+        list_query_params: &'a ListQueryParams<T>,
         e: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
@@ -242,7 +242,7 @@ pub trait ListBy<'a, E> {
 
     fn list_by_at<T>(
         &self,
-        list_query_params: &ListQueryParams<T>,
+        list_query_params: &'a ListQueryParams<T>,
         natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
         condition: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
         e: &'a E,
@@ -253,7 +253,7 @@ pub trait ListBy<'a, E> {
 
     fn list_versions_by_at<T>(
         &self,
-        list_query_params: &ListQueryParams<T>,
+        list_query_params: &'a ListQueryParams<T>,
         natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
         status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
         e: &'a E,
@@ -276,7 +276,7 @@ macro_rules! impl_list_by {
         {
             fn list_by<T>(
                 &self,
-                query_params: &ListQueryParams<T>,
+                query_params: &'a ListQueryParams<T>,
                 ($($E),*): &'a ($(&'a $E),*),
             ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
             where
@@ -296,7 +296,7 @@ macro_rules! impl_list_by {
 
             fn list_by_at<T>(
                 &self,
-                query_params: &ListQueryParams<T>,
+                query_params: &'a ListQueryParams<T>,
                 natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
                 status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
                 ($($E),*): &'a ($(&'a $E),*),
@@ -352,7 +352,7 @@ macro_rules! impl_list_by {
 
             fn list_versions_by_at<T>(
                 &self,
-                query_params: &ListQueryParams<T>,
+                query_params: &'a ListQueryParams<T>,
                 natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
                 status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
                 ($($E),*): &'a ($(&'a $E),*),
@@ -383,10 +383,10 @@ macro_rules! impl_list_by {
     };
 }
 
-fn query_params_where<T>(
+fn query_params_where<'a, T>(
     first: bool,
-    query_params: &ListQueryParams<T>,
-    query_builder: &mut sqlx::QueryBuilder<'_, sqlx::Sqlite>,
+    query_params: &'a ListQueryParams<T>,
+    query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
 ) -> bool
 where
     T: ListQuery,
@@ -414,7 +414,7 @@ where
                 match cond.cardinality() {
                     1 => {
                         let value = value.pop().unwrap();
-                        or_separated.push_bind_unseparated(value);
+                        value.push_bind_unseparated(&mut or_separated);
                         if !cond.connector().is_empty() {
                             let x = format!(" {} ", cond.connector());
                             or_separated.push_unseparated(x);
@@ -423,9 +423,9 @@ where
                     2 => {
                         let max = value.pop().unwrap();
                         let min = value.pop().unwrap();
-                        or_separated.push_bind_unseparated(min);
+                        min.push_bind_unseparated(&mut or_separated);
                         or_separated.push_unseparated(format!(" {} ", cond.connector()));
-                        or_separated.push_bind_unseparated(max);
+                        max.push_bind_unseparated(&mut or_separated);
                     }
                     _ => {}
                 }
@@ -463,14 +463,14 @@ where
 
         // field OP value
         query_builder.push(format!("{} {} ", pagination_field.field(), range_operator));
-        query_builder.push_bind(pagination.column_value().to_owned());
+        pagination.column_value().push_bind(query_builder);
 
         query_builder.push(" OR ");
         query_builder.push("(");
 
         // field = value
         query_builder.push(format!("{} = ", pagination_field.field()));
-        query_builder.push_bind(pagination.column_value().to_owned());
+        pagination.column_value().push_bind(query_builder);
 
         // natural_field OP value
         query_builder.push(format!(
@@ -478,7 +478,7 @@ where
             natural_order.field(),
             range_operator
         ));
-        query_builder.push_bind(pagination.pagination_id().to_owned());
+        pagination.pagination_id().push_bind(query_builder);
         query_builder.push(")");
 
         query_builder.push(")");
@@ -1650,7 +1650,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .filter(vec![
                     "name:eq:B".to_string(),
-                    "id:gt:0".to_string(),
+                    "id:gt:00000000000000000000000000".to_string(),
                     "name:ge:Z".to_string(),
                 ])
                 .build()

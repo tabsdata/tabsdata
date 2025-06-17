@@ -6,7 +6,7 @@ use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, BundleId, CollectionId, CollectionName, DataChanged, DataLocation, DependencyPos, Dot,
     ExecutionId, ExecutionName, FunctionName, FunctionRunId, FunctionVersionId, HasData, InputIdx,
-    OptionDto, Partitioned, RequirementId, SelfDependency, StorageVersion, TableDataVersionId,
+    Partitioned, RequirementId, SelfDependency, StorageVersion, TableDataVersionId,
     TableFunctionParamPos, TableId, TableName, TableVersionId, TableVersions, TransactionByStr,
     TransactionId, TransactionKey, Trigger, TriggeredOn, UserId, UserName, VersionPos,
     WorkerMessageId,
@@ -192,9 +192,9 @@ pub struct Transaction {
     #[dto(list(pagination_by = "+", filter, filter_like))]
     triggered_on: TriggeredOn,
     #[dto(list(filter, order_by))]
-    started_on: OptionDto<AtTime>,
+    started_on: Option<AtTime>,
     #[dto(list(filter, order_by))]
-    ended_on: OptionDto<AtTime>,
+    ended_on: Option<AtTime>,
     #[dto(list(filter, filter_like))]
     triggered_by_id: UserId,
     #[dto(list(filter, filter_like))]
@@ -552,7 +552,7 @@ pub struct WorkerMessageDB {
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
     function_version_id: FunctionVersionId,
-    status: WorkerMessageStatus,
+    message_status: WorkerMessageStatus,
 }
 
 #[td_type::Dao]
@@ -564,8 +564,8 @@ pub struct WorkerMessageDBWithNames {
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
     function_version_id: FunctionVersionId,
-    status: WorkerMessageStatus,
-    function_run_status: FunctionRunStatus,
+    message_status: WorkerMessageStatus,
+    status: FunctionRunStatus,
     collection: CollectionName,
     execution: Option<ExecutionName>,
     function: FunctionName,
@@ -588,9 +588,9 @@ pub struct WorkerMessage {
     #[dto(list(filter, filter_like, order_by))]
     function_version_id: FunctionVersionId,
     #[dto(list(filter, filter_like, order_by))]
-    status: WorkerMessageStatus,
+    message_status: WorkerMessageStatus,
     #[dto(list(filter, filter_like, order_by))]
-    function_run_status: FunctionRunStatus,
+    status: FunctionRunStatus,
     #[dto(list(filter, filter_like, order_by))]
     collection: CollectionName,
     #[dto(list(filter, filter_like))]
@@ -810,13 +810,13 @@ pub struct UpdateTableDataVersionDB {
 #[td_type::Dao]
 #[dao(sql_table = "worker_messages")]
 pub struct UpdateWorkerMessageDB {
-    status: WorkerMessageStatus,
+    message_status: WorkerMessageStatus,
 }
 
 impl UpdateWorkerMessageDB {
     pub fn unlocked() -> Result<Self, TdError> {
         Ok(Self::builder()
-            .status(WorkerMessageStatus::Unlocked)
+            .message_status(WorkerMessageStatus::Unlocked)
             .build()?)
     }
 }

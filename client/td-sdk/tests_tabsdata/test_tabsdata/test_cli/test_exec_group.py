@@ -205,7 +205,7 @@ def test_cli_transaction_recover(login, tabsserver_connection):
 def test_execution_list_with_status(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exe", "list-plan", "--status", "published"]
+        cli, ["--no-prompt", "exe", "list-plan", "--status", "done"]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -222,9 +222,9 @@ def test_execution_list_with_multiple_statuses(login, testing_collection_with_ta
             "exe",
             "list-plan",
             "--status",
-            "published",
+            "done",
             "--status",
-            "failed",
+            "incomplete",
         ],
     )
     logger.debug(result.output)
@@ -825,7 +825,7 @@ def test_exec_monitor(login, testing_collection_with_table, tabsserver_connectio
 def test_fn_run_list_with_status(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exe", "list-fn-run", "--status", "published"]
+        cli, ["--no-prompt", "exe", "list-fn-run", "--status", "done"]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -842,7 +842,7 @@ def test_fn_run_list_with_multiple_statuses(login, testing_collection_with_table
             "exe",
             "list-fn-run",
             "--status",
-            "published",
+            "done",
             "--status",
             "failed",
         ],

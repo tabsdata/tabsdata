@@ -7,6 +7,7 @@ use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
+use std::collections::HashMap;
 use syn::{parse_macro_input, DeriveInput, ItemStruct};
 
 pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
@@ -117,55 +118,75 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
         .and_then(|list_args| list_args.on.as_ref())
     {
         // if it is a list DTO, we need to implement the ListQuery trait and check the fields are valid
-        let (pagination_by, pagination_order, order_by_fields, filter_fields, filter_like_fields) =
-            fields.iter().fold(
-                (None, String::new(), Vec::new(), Vec::new(), Vec::new()),
-                |(
-                    mut pagination_by,
-                    mut pagination_order,
-                    mut order_by_fields,
-                    mut filter_fields,
-                    mut filter_like_fields,
-                ),
-                 f| {
-                    for args in DtoFieldArguments::from_field(f).unwrap().list {
-                        if let Some(pag) = args.pagination_by {
-                            if pagination_by.is_some() {
-                                panic!("Only one field can be marked as pagination_by");
-                            }
-                            if pag != "+" && pag != "-" && !pag.is_empty() {
-                                panic!(
-                                    "Unsupported pagination by {}. Only empty, + or - is allowed",
-                                    pag
-                                );
-                            }
-                            pagination_by = Some(f.ident.as_ref().unwrap());
-                            pagination_order = pag;
+        let (
+            pagination_by,
+            pagination_order,
+            order_by_fields,
+            filter_fields,
+            filter_like_fields,
+            field_type_map,
+        ) = fields.iter().fold(
+            (
+                None,
+                String::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                HashMap::new(),
+            ),
+            |(
+                mut pagination_by,
+                mut pagination_order,
+                mut order_by_fields,
+                mut filter_fields,
+                mut filter_like_fields,
+                mut field_type_map,
+            ),
+             f| {
+                for args in DtoFieldArguments::from_field(f).unwrap().list {
+                    if let Some(pag) = args.pagination_by {
+                        if pagination_by.is_some() {
+                            panic!("Only one field can be marked as pagination_by");
+                        }
+                        if pag != "+" && pag != "-" && !pag.is_empty() {
+                            panic!(
+                                "Unsupported pagination by {}. Only empty, + or - is allowed",
+                                pag
+                            );
+                        }
+                        pagination_by = Some(f.ident.as_ref().unwrap());
+                        pagination_order = pag;
 
-                            order_by_fields.push(f.ident.as_ref().unwrap());
-                        } else if args.order_by {
-                            order_by_fields.push(f.ident.as_ref().unwrap());
-                        }
-                        if args.filter {
-                            filter_fields.push(f.ident.as_ref().unwrap());
-                        }
-                        if args.filter_like {
-                            filter_like_fields.push(f.ident.as_ref().unwrap());
-                        }
+                        order_by_fields.push(f.ident.as_ref().unwrap());
+                    } else if args.order_by {
+                        order_by_fields.push(f.ident.as_ref().unwrap());
                     }
-                    (
-                        pagination_by,
-                        pagination_order,
-                        order_by_fields,
-                        filter_fields,
-                        filter_like_fields,
-                    )
-                },
-            );
+                    if args.filter {
+                        filter_fields.push(f.ident.as_ref().unwrap());
+                        field_type_map.insert(f.ident.as_ref().unwrap(), &f.ty);
+                    }
+                    if args.filter_like {
+                        filter_like_fields.push(f.ident.as_ref().unwrap());
+                    }
+                }
+                field_type_map.insert(f.ident.as_ref().unwrap(), &f.ty);
+                (
+                    pagination_by,
+                    pagination_order,
+                    order_by_fields,
+                    filter_fields,
+                    filter_like_fields,
+                    field_type_map,
+                )
+            },
+        );
 
         if pagination_by.is_none() {
             panic!("A field must be marked as pagination_by");
         }
+
+        let field_names = field_type_map.keys();
+        let field_types = field_type_map.values();
 
         quote! {
             impl #impl_generics crate::types::ListQuery for #ident #ty_generics #where_clause {
@@ -176,12 +197,29 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                     builder.build().map_err(Into::into)
                 }
 
+                fn map_sql_entity_value(
+                    name: &str,
+                    filter_value: &str,
+                ) -> Result<Option<Box<dyn crate::types::SqlEntity>>, td_error::TdError> {
+                    use crate::types::SqlEntity;
+                    match name {
+                        #(
+                            stringify!(#field_names) => <#field_types>::from_display(filter_value)
+                                .map(|v| Box::new(v) as Box<dyn crate::types::SqlEntity>)
+                                .map(Some)
+                                .map_err(Into::into),
+                        )*
+                        _ => Ok(None)
+                    }
+                }
+
                 fn pagination_by() -> &'static str {
                     concat!(stringify!(#pagination_by), #pagination_order)
                 }
 
                 fn pagination_value(&self) -> String {
-                    self.#pagination_by().to_string()
+                    use crate::types::SqlEntity;
+                    self.#pagination_by().as_display()
                 }
 
                 fn order_by_fields() -> &'static [&'static str] {
@@ -189,9 +227,10 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                 }
 
                 fn order_by_str_value(&self, ordered_by_field: &Option<String>) -> Option<String> {
+                    use crate::types::SqlEntity;
                     if let Some(ordered_by_field) = ordered_by_field {
                         match ordered_by_field.as_str() {
-                            #(stringify!(#order_by_fields) => Some(self.#order_by_fields().to_string()),)*
+                            #(stringify!(#order_by_fields) => Some(self.#order_by_fields().as_display()),)*
                             _ => None,
                         }
                     } else {

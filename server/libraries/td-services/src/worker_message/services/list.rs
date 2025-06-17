@@ -163,15 +163,30 @@ mod tests {
         let response = service.raw_oneshot(request).await?;
         assert_eq!(*response.len(), worker_messages.len());
         assert_eq!(response.data()[0].id(), worker_messages[0].id());
-        assert_eq!(response.data()[0].status(), worker_messages[0].status());
+        assert_eq!(
+            response.data()[0].message_status(),
+            worker_messages[0].message_status()
+        );
         assert_eq!(response.data()[1].id(), worker_messages[1].id());
-        assert_eq!(response.data()[1].status(), worker_messages[1].status());
+        assert_eq!(
+            response.data()[1].message_status(),
+            worker_messages[1].message_status()
+        );
         assert_eq!(response.data()[2].id(), worker_messages[2].id());
-        assert_eq!(response.data()[2].status(), worker_messages[2].status());
+        assert_eq!(
+            response.data()[2].message_status(),
+            worker_messages[2].message_status()
+        );
         assert_eq!(response.data()[3].id(), worker_messages[3].id());
-        assert_eq!(response.data()[3].status(), worker_messages[3].status());
+        assert_eq!(
+            response.data()[3].message_status(),
+            worker_messages[3].message_status()
+        );
         assert_eq!(response.data()[4].id(), worker_messages[4].id());
-        assert_eq!(response.data()[4].status(), worker_messages[4].status());
+        assert_eq!(
+            response.data()[4].message_status(),
+            worker_messages[4].message_status()
+        );
         Ok(())
     }
 }

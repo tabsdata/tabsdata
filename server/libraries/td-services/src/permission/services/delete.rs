@@ -109,6 +109,7 @@ mod tests {
         RoleName, UserId,
     };
     use td_objects::types::permission::PermissionCreate;
+    use td_objects::types::IdOrName;
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
     };

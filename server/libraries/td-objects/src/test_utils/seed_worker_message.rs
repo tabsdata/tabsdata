@@ -21,7 +21,7 @@ pub async fn seed_worker_message(
         .transaction_id(transaction.id())
         .function_run_id(function_run.id())
         .function_version_id(function_run.function_version_id())
-        .status(status)
+        .message_status(status)
         .build()
         .unwrap();
 
@@ -116,6 +116,9 @@ mod tests {
             worker_message.function_version_id(),
             function_run.function_version_id()
         );
-        assert_eq!(*worker_message.status(), WorkerMessageStatus::Locked);
+        assert_eq!(
+            *worker_message.message_status(),
+            WorkerMessageStatus::Locked
+        );
     }
 }

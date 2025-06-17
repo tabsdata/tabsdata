@@ -54,7 +54,7 @@ macro_rules! formatted_entity {
         )*];
         let columns = columns.join(", ");
         let values: Vec<String> = vec![$(
-            format!("{}", $E),
+            format!("{}", $E.as_display()),
         )*];
         let values = values.join(", ");
         let table = <$D>::sql_table().to_string();

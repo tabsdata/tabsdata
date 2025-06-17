@@ -276,23 +276,26 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
         }
 
         impl TryFrom<String> for #name {
-            type Error = #error_name;
+            type Error = td_error::TdError;
             fn try_from(val: String) -> Result<#name, Self::Error> {
-                #name::parse(val)
+                use crate::types::SqlEntity;
+                Self::from_display(&val)
             }
         }
 
         impl TryFrom<&String> for #name {
-            type Error = #error_name;
+            type Error = td_error::TdError;
             fn try_from(val: &String) -> Result<#name, Self::Error> {
-                #name::parse(val)
+                use crate::types::SqlEntity;
+                Self::from_display(val)
             }
         }
 
         impl TryFrom<&str> for #name {
-            type Error = #error_name;
+            type Error = td_error::TdError;
             fn try_from(val: &str) -> Result<#name, Self::Error> {
-                #name::parse(val)
+                use crate::types::SqlEntity;
+                Self::from_display(val)
             }
         }
 
@@ -326,11 +329,22 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
                 builder.push_bind(self);
             }
 
-            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+            fn push_bind_unseparated<'a>(
                 &'a self,
-                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
             ) {
                 builder.push_bind_unseparated(self);
+            }
+
+            fn from_display(s: impl ToString) -> Result<Self, td_error::TdError>
+            where
+                Self: Sized,
+            {
+                #name::parse(s.to_string()).map_err(Into::into)
+            }
+
+            fn as_display(&self) -> String {
+                self.to_string()
             }
         }
     };
@@ -351,7 +365,7 @@ pub fn typed_int<T: FromStr + ToTokens + PartialOrd>(
     input: &ItemStruct,
     typed: Option<TypedNumeric<T>>,
 ) -> proc_macro2::TokenStream {
-    let expanded = typed_numeric(input, typed);
+    let expanded = typed_numeric(input, typed, quote! { std::num::ParseIntError });
 
     let expanded = quote! {
         #[td_apiforge::apiserver_schema]
@@ -367,7 +381,7 @@ pub fn typed_float<T: FromStr + ToTokens + PartialOrd>(
     input: &ItemStruct,
     typed: Option<TypedNumeric<T>>,
 ) -> proc_macro2::TokenStream {
-    let expanded = typed_numeric(input, typed);
+    let expanded = typed_numeric(input, typed, quote! { std::num::ParseFloatError });
 
     let expanded = quote! {
         #[td_apiforge::apiserver_schema]
@@ -382,6 +396,7 @@ pub fn typed_float<T: FromStr + ToTokens + PartialOrd>(
 pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
     input: &ItemStruct,
     typed: Option<TypedNumeric<T>>,
+    parse_error: proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let type_name = type_name::<T>();
     let int_type = format_ident!("{}", type_name);
@@ -438,6 +453,8 @@ pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
             Min(#int_type, #int_type),
             #[error("Value '{0}' cannot be higher than '{1}'")]
             Max(#int_type, #int_type),
+            #[error("Error parsing numeric value: {0}")]
+            Parse(#[source] #parse_error),
         }
 
         impl Default for #name {
@@ -479,9 +496,9 @@ pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
         }
 
         impl TryFrom<#int_type> for #name {
-            type Error = #error_name;
+            type Error = td_error::TdError;
             fn try_from(val: #int_type) -> Result<#name, Self::Error> {
-                #name::parse(val)
+                #name::parse(val).map_err(Into::into)
             }
         }
 
@@ -515,11 +532,23 @@ pub fn typed_numeric<T: FromStr + ToTokens + PartialOrd>(
                 builder.push_bind(self);
             }
 
-            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+            fn push_bind_unseparated<'a>(
                 &'a self,
-                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
             ) {
                 builder.push_bind_unseparated(self);
+            }
+
+            fn from_display(s: impl ToString) -> Result<Self, td_error::TdError>
+            where
+                Self: Sized,
+            {
+                let val: #int_type = s.to_string().parse().map_err(|e| #error_name::Parse(e))?;
+                Self::parse(val).map_err(Into::into)
+            }
+
+            fn as_display(&self) -> String {
+                self.to_string()
             }
         }
     };
@@ -535,6 +564,7 @@ pub struct TypedBool {
 pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::TokenStream {
     let attrs = &input.attrs;
     let name = &input.ident;
+    let error_name = format_ident!("{}Error", name);
 
     let default = if let Some(typed) = typed {
         typed.default
@@ -568,6 +598,12 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
             }
         }
 
+        #[td_error::td_error]
+        pub enum #error_name {
+            #[error("Error parsing bool value: {0}")]
+            Parse(#[source] std::str::ParseBoolError),
+        }
+
         impl std::ops::Deref for #name {
             type Target = bool;
             fn deref(&self) -> &Self::Target {
@@ -584,6 +620,14 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
         impl From<bool> for #name {
             fn from(val: bool) -> #name {
                 Self(val)
+            }
+        }
+
+        impl TryFrom<&str> for #name {
+            type Error = td_error::TdError;
+            fn try_from(val: &str) -> Result<Self, Self::Error> {
+                use crate::types::SqlEntity;
+                Self::from_display(val)
             }
         }
 
@@ -617,11 +661,23 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
                 builder.push_bind(self);
             }
 
-            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+            fn push_bind_unseparated<'a>(
                 &'a self,
-                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
             ) {
                 builder.push_bind_unseparated(self);
+            }
+
+            fn from_display(s: impl ToString) -> Result<Self, td_error::TdError>
+            where
+                Self: Sized,
+            {
+                let val: bool = s.to_string().parse().map_err(|e| #error_name::Parse(e))?;
+                Self::parse(val)
+            }
+
+            fn as_display(&self) -> String {
+                self.to_string()
             }
         }
     };
@@ -723,24 +779,24 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
         impl TryFrom<String> for #name {
             type Error = td_error::TdError;
             fn try_from(val: String) -> Result<Self, Self::Error> {
-                let val = td_common::id::Id::try_from(&val)?;
-                #name::parse(val)
+                use crate::types::SqlEntity;
+                Self::from_display(val)
             }
         }
 
         impl TryFrom<&String> for #name {
             type Error = td_error::TdError;
             fn try_from(val: &String) -> Result<Self, Self::Error> {
-                let val = td_common::id::Id::try_from(val)?;
-                #name::parse(val)
+                use crate::types::SqlEntity;
+                Self::from_display(val)
             }
         }
 
         impl TryFrom<&str> for #name {
             type Error = td_error::TdError;
             fn try_from(val: &str) -> Result<Self, Self::Error> {
-                let val = td_common::id::Id::try_from(val)?;
-                #name::parse(val)
+                use crate::types::SqlEntity;
+                Self::from_display(val)
             }
         }
 
@@ -775,11 +831,23 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
                 builder.push_bind(self);
             }
 
-            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+            fn push_bind_unseparated<'a>(
                 &'a self,
-                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
             ) {
                 builder.push_bind_unseparated(self);
+            }
+
+            fn from_display(s: impl ToString) -> Result<Self, td_error::TdError>
+            where
+                Self: Sized,
+            {
+                let val = td_common::id::Id::try_from(&s.to_string())?;
+                #name::parse(val)
+            }
+
+            fn as_display(&self) -> String {
+                self.to_string()
             }
         }
     };
@@ -916,10 +984,8 @@ pub fn typed_timestamp(
         impl TryFrom<&str> for #name {
             type Error = td_error::TdError;
             fn try_from(val: &str) -> Result<#name, td_error::TdError> {
-                let val = val.parse::<i64>().map_err(|_| #error_name::NotAnInteger(val.to_string()))?;
-                let val = chrono::DateTime::from_timestamp_millis(val)
-                    .ok_or_else(|| #error_name::NotATimestamp(val))?;
-                Ok(#name(val))
+                use crate::types::SqlEntity;
+                Self::from_display(val)
             }
         }
 
@@ -955,11 +1021,23 @@ pub fn typed_timestamp(
                 builder.push_bind(self);
             }
 
-            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+            fn push_bind_unseparated<'a>(
                 &'a self,
-                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
             ) {
                 builder.push_bind_unseparated(self);
+            }
+
+            fn from_display(s: impl ToString) -> Result<Self, td_error::TdError>
+            where
+                Self: Sized,
+            {
+                use td_common::datetime::IntoDateTimeUtc;
+                s.to_string().datetime_utc().map(|v| #name(v)).map_err(Into::into)
+            }
+
+            fn as_display(&self) -> String {
+                self.to_string()
             }
         }
     };
@@ -988,30 +1066,11 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
             name: Option<#name>,
         }
 
-        impl #ident {
-            pub fn from_id(id: impl Into<#id>) -> Self {
-                Self { id: Some(id.into()), name: None }
-            }
-
-            pub fn from_name(name: impl Into<#name>) -> Self {
-                Self { id: None, name: Some(name.into()) }
-            }
-        }
-
         impl TryFrom<String> for #ident {
             type Error = td_error::TdError;
             fn try_from(s: String) -> Result<Self, Self::Error> {
-                if s.starts_with('~') {
-                    Ok(Self {
-                        id: Some(#id::try_from(s.trim_start_matches('~'))?),
-                        name: None,
-                    })
-                } else {
-                    Ok(Self {
-                        id: None,
-                        name: Some(#name::try_from(s)?),
-                    })
-                }
+                use crate::types::SqlEntity;
+                Self::from_display(s)
             }
         }
 
@@ -1030,12 +1089,8 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
 
         impl std::fmt::Display for #ident {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match (&self.id, &self.name) {
-                    (Some(id), None) => write!(f, "~{}", id),
-                    (None, Some(name)) => write!(f, "{}", name),
-                    _ => unreachable!(),
-                }
-
+                use crate::types::SqlEntity;
+                write!(f, "{}", self.as_display())
             }
         }
 
@@ -1045,9 +1100,17 @@ pub fn typed_id_name(input: &ItemStruct, typed: Option<TypedIdName>) -> proc_mac
                 self.id.as_ref()
             }
 
+            fn from_id(id: impl Into<Self::Id>) -> Self {
+                Self { id: Some(id.into()), name: None }
+            }
+
             type Name = #name;
             fn name(&self) -> Option<&Self::Name> {
                 self.name.as_ref()
+            }
+
+            fn from_name(name: impl Into<Self::Name>) -> Self {
+                Self { id: None, name: Some(name.into()) }
             }
         }
 
@@ -1161,16 +1224,16 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
         impl TryFrom<String> for #name {
             type Error = td_error::TdError;
             fn try_from(val: String) -> Result<Self, Self::Error> {
-                use crate::types::ComposedString;
-                Self::parse(&val)
+                use crate::types::SqlEntity;
+                Self::from_display(val)
             }
         }
 
         impl TryFrom<&str> for #name {
             type Error = td_error::TdError;
             fn try_from(val: &str) -> Result<Self, Self::Error> {
-                use crate::types::ComposedString;
-                Self::parse(val)
+                use crate::types::SqlEntity;
+                Self::from_display(val)
             }
         }
 
@@ -1185,9 +1248,9 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
             where
                 D: serde::Deserializer<'de>,
             {
-                use crate::types::ComposedString;
+                use crate::types::SqlEntity;
                 let s = String::deserialize(deserializer)?;
-                Self::parse(&s).map_err(serde::de::Error::custom)
+                Self::from_display(&s).map_err(serde::de::Error::custom)
             }
         }
 
@@ -1246,11 +1309,23 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
                 builder.push_bind(self);
             }
 
-            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+            fn push_bind_unseparated<'a>(
                 &'a self,
-                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
             ) {
                 builder.push_bind_unseparated(self);
+            }
+
+            fn from_display(s: impl ToString) -> Result<Self, td_error::TdError>
+            where
+                Self: Sized,
+            {
+                use crate::types::ComposedString;
+                Self::parse(s.to_string())
+            }
+
+            fn as_display(&self) -> String {
+                self.to_string()
             }
         }
     };
@@ -1278,9 +1353,19 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
         #[derive(
             Debug, Clone,
             PartialEq, Eq, Hash, PartialOrd, Ord,
-            strum_macros::EnumString, strum_macros::Display
+            strum::EnumString, strum::Display
+        )]
+        #[strum(
+            parse_err_fn = Self::parse_error,
+            parse_err_ty = #error_name
         )]
         #input
+
+        impl #name {
+            fn parse_error(s: &str) -> #error_name {
+                #error_name::Parse(s.to_string())
+            }
+        }
 
         #[td_error::td_error]
         pub enum #error_name {
@@ -1289,11 +1374,10 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl TryFrom<String> for #name {
-            type Error = #error_name;
-
-            fn try_from(s: String) -> Result<Self, #error_name> {
-                use std::str::FromStr;
-                #name::from_str(s.as_str()).map_err(|_| #error_name::Parse(s))
+            type Error = td_error::TdError;
+            fn try_from(s: String) -> Result<Self, td_error::TdError> {
+                use crate::types::SqlEntity;
+                Self::from_display(s)
             }
         }
 
@@ -1348,11 +1432,24 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
                 builder.push_bind(self);
             }
 
-            fn push_bind_unseparated<'a, S: std::fmt::Display>(
+            fn push_bind_unseparated<'a>(
                 &'a self,
-                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, S>,
+                builder: &mut sqlx::query_builder::Separated<'_, 'a, sqlx::Sqlite, &str>,
             ) {
                 builder.push_bind_unseparated(self);
+            }
+
+            fn from_display(s: impl ToString) -> Result<Self, td_error::TdError>
+            where
+                Self: Sized,
+            {
+                use std::str::FromStr;
+                let s = s.to_string();
+                #name::from_str(&s).map_err(|_| #error_name::Parse(s).into())
+            }
+
+            fn as_display(&self) -> String {
+                self.to_string()
             }
         }
     };

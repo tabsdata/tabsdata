@@ -62,5 +62,5 @@ pub async fn upload_function_write_to_storage(
         .await
         .map_err(UploadError::FunctionBundleSaveFailed)?; //cannot easily test this error
 
-    Ok(BundleHash::try_from(&hash)?)
+    BundleHash::try_from(&hash)
 }

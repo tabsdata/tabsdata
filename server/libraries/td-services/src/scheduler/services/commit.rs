@@ -216,7 +216,7 @@ mod tests {
             .fetch_one(&db)
             .await
             .map_err(handle_sql_err)?;
-        assert_eq!(*message.status(), WorkerMessageStatus::Unlocked);
+        assert_eq!(*message.message_status(), WorkerMessageStatus::Unlocked);
 
         Ok(())
     }

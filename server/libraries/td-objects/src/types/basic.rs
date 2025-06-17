@@ -11,15 +11,12 @@ use crate::types::table::TableDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::trigger::TriggerDBWithNames;
 use crate::types::ComposedString;
-use serde::{Deserialize, Serialize};
-use std::fmt::Display;
 use td_common::id::Id;
 use td_error::TdError;
 use td_security::{
     ADMIN_USER, ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN, SEC_ADMIN_ROLE,
     SYS_ADMIN_ROLE, USER_ROLE,
 };
-use utoipa::ToSchema;
 
 #[td_type::typed(string)]
 pub struct AccessToken;
@@ -32,63 +29,6 @@ pub struct AccessTokenId;
 
 #[td_type::typed(timestamp, try_from = TriggeredOn)]
 pub struct AtTime;
-
-/// OptionDto is a DTO for Option<T> that implements [`Display`] ([`Option`] does not) which
-/// is required for [`#[type:Dto]`] structs.
-#[derive(Clone, Debug, Eq, PartialEq, ToSchema)]
-pub enum OptionDto<T> {
-    Some(T),
-    None,
-}
-
-impl<T: Display> Display for OptionDto<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OptionDto::Some(value) => write!(f, "{}", value),
-            OptionDto::None => write!(f, "None"),
-        }
-    }
-}
-
-impl<T> From<OptionDto<T>> for Option<T> {
-    fn from(val: OptionDto<T>) -> Self {
-        match val {
-            OptionDto::Some(value) => Some(value),
-            OptionDto::None => None,
-        }
-    }
-}
-
-impl<T> From<Option<T>> for OptionDto<T> {
-    fn from(val: Option<T>) -> Self {
-        match val {
-            Some(value) => OptionDto::Some(value),
-            None => OptionDto::None,
-        }
-    }
-}
-
-impl<T: Serialize> Serialize for OptionDto<T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            OptionDto::Some(value) => <T>::serialize(value, serializer),
-            OptionDto::None => serializer.serialize_unit(),
-        }
-    }
-}
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for OptionDto<T> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let option = Option::<T>::deserialize(deserializer)?;
-        Ok(option.into())
-    }
-}
 
 #[td_type::typed(string)]
 pub struct BundleHash;
@@ -240,6 +180,9 @@ pub struct InterCollectionPermissionId;
 
 #[td_type::typed(id_name(id = InterCollectionPermissionId))]
 pub struct InterCollectionPermissionIdName;
+
+#[td_type::typed(string)]
+pub struct LikeFilter;
 
 const MIN_PASSWORD_LEN: usize = 8;
 const MAX_PASSWORD_LEN: usize = 64;

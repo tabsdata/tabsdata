@@ -215,7 +215,7 @@ pub enum AuthzError {
 }
 
 /// Enum that denotes an Entity to check authorization on.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, strum_macros::IntoStaticStr)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, strum::IntoStaticStr)]
 pub enum AuthzEntity<E> {
     /// A single entity of the used generic by its ID.
     On(E),
@@ -239,7 +239,7 @@ impl<E: Debug> Display for AuthzEntity<E> {
 }
 
 /// Enum that denotes the scope for permissions.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, strum_macros::IntoStaticStr)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, strum::IntoStaticStr)]
 pub enum AuthzScope {
     /// A system permission.
     System,

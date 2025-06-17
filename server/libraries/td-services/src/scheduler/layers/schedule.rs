@@ -319,7 +319,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                     .transaction_id(f.transaction_id())
                     .function_run_id(f.id())
                     .function_version_id(f.function_version_id())
-                    .status(WorkerMessageStatus::Locked)
+                    .message_status(WorkerMessageStatus::Locked)
                     .build()?;
 
                 // Add it to the queue
