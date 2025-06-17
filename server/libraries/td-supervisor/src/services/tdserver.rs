@@ -22,6 +22,7 @@ use crate::services::supervisor::TD_ARGUMENT_KEY;
 use clap::{command, Parser};
 use clap_derive::{Args, Subcommand};
 use getset::Getters;
+use humantime::format_duration;
 use linemux::MuxedLines;
 use num_format::{Locale, ToFormattedString};
 use std::collections::{HashMap, HashSet};
@@ -303,15 +304,16 @@ struct StartArguments {
     )]
     existing: bool,
 
-    /// Wait until the instance is fully started or after waiting for 5 minutes.
+    /// Skip waiting for the instance to fully start.
+    /// If not set, it will wait until startup completes or 5 minutes have passed.
     #[arg(
         long,
         name = "wait",
         required = false,
         default_value_t = false,
-        long_help = "Whether to wait until the instance is fully started. It defaults to false."
+        long_help = "Continue without waiting for the instance to finish starting."
     )]
-    wait: bool,
+    no_wait: bool,
 
     /// Name/Location of the Tabsdata instance.
     #[arg(
@@ -883,7 +885,24 @@ fn command_start(arguments: StartArguments) {
             set_log_level(Level::ERROR);
             match TabsDataWorker::new(describer.clone()).work(None) {
                 Ok((worker, _out, _err)) => {
-                    if arguments.wait {
+                    if arguments.no_wait {
+                        set_log_level(Level::INFO);
+                        info!(
+                            "Tabsdata instance '{}' launched with pid '{:?}'",
+                            supervisor_instance_absolute.clone().display(),
+                            worker.id().unwrap()
+                        );
+                        info!("The instance may take some additional time to fully start.");
+                        info!(
+                            "Startup time can vary depending on whether this is the first launch."
+                        );
+                        info!(
+                            "Initial launches create the base Python virtual environment, which can slow down startup."
+                        );
+                    } else {
+                        set_log_level(Level::INFO);
+                        info!("Waiting for the instance to complete startup.");
+                        info!("Use the '--no-wait' flag to skip waiting and proceed immediately.");
                         if wait(supervisor_work) {
                             set_log_level(Level::INFO);
                             info!(
@@ -894,15 +913,6 @@ fn command_start(arguments: StartArguments) {
                         } else {
                             exit(GeneralError.code())
                         }
-                    } else {
-                        set_log_level(Level::INFO);
-                        info!(
-                            "Tabsdata instance '{}' launched with pid '{:?}'",
-                            supervisor_instance_absolute.clone().display(),
-                            worker.id().unwrap()
-                        );
-                        info!("You will need to wait until it is fully started.");
-                        info!("Use flag '--wait' to wait after launching.");
                     }
                 }
                 Err(e) => {
@@ -1070,18 +1080,18 @@ fn wait(supervisor_work: PathBuf) -> bool {
             }
         }
         if Instant::now().duration_since(start_time) >= START_TIMEOUT {
-            error!(
-                "The supervisor hasn't started after {} seconds. Exiting.",
-                START_TIMEOUT.as_secs()
+            info!(
+                "The supervisor hasn't started after {}. Exiting.",
+                format_duration(START_TIMEOUT)
             );
             return false;
         }
 
         let elapsed = Instant::now().duration_since(start_time);
-        error!(
-            "The supervisor hasn’t started after {} out of {} seconds. Waiting…",
-            elapsed.as_secs(),
-            START_TIMEOUT.as_secs()
+        info!(
+            "The supervisor hasn’t started after {} out of {}. Waiting…",
+            format_duration(Duration::from_secs(elapsed.as_secs())),
+            format_duration(START_TIMEOUT)
         );
 
         sleep(START_WAIT);
