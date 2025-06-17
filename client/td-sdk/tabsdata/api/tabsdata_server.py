@@ -1059,6 +1059,23 @@ class Function:
         return self.list_history()
 
     @property
+    def runs(self):
+        raw_runs = (
+            self.connection.function_list_runs(
+                request_filter=[
+                    f"name:eq:{self.name}",
+                    f"collection:eq:{self.collection.name}",
+                ]
+            )
+            .json()
+            .get("data")
+            .get("data")
+        )
+        return [
+            FunctionRun(**{**run, "connection": self.connection}) for run in raw_runs
+        ]
+
+    @property
     def tables(self) -> List[Table]:
         if self._tables is None:
             self.tables = self._data.get("tables")
@@ -1305,6 +1322,173 @@ class Function:
     def __str__(self) -> str:
         string_representation = f"Name: {self.name!s}, collection: {self.collection!s}"
         return string_representation
+
+
+class FunctionRun:
+    """
+    This class represents a function run in the TabsdataServer.
+
+    Args:
+        id (str): The ID of the function run.
+        collection (str): The collection of the function run.
+        function (str): The function of the function run.
+        function_id (str): The ID of the function of the function run.
+        transaction_id (str): The ID of the transaction of the function run.
+        execution (str): The execution of the function run.
+        execution_id (str): The ID of the execution of the function run.
+        status (str): The status of the associated data version.
+        **kwargs: Additional keyword arguments.
+    """
+
+    def __init__(
+        self,
+        connection: APIServer,
+        id: str,
+        **kwargs,
+    ):
+        """
+        Initialize the FunctionRun object.
+
+        Args:
+            id (str): The ID of the function run.
+            collection (str): The collection of the function run.
+            function (str): The function of the function run.
+            function_id (str): The ID of the function of the function run.
+            transaction_id (str): The ID of the transaction of the function run.
+            execution (str): The execution of the function run.
+            execution_id (str): The ID of the execution of the function run.
+            data_version_id (str): The ID of the data version of the function run.
+            **kwargs: Additional keyword arguments.
+        """
+        self.connection = connection
+        self.id = id
+        self.collection = kwargs.get("collection")
+        self.function = kwargs.get("name")
+        self.transaction = kwargs.get("transaction_id")
+        self.execution = kwargs.get("execution_id")
+        self.status = kwargs.get("status")
+        self._data = None
+        self.kwargs = kwargs
+
+    @property
+    def _data(self) -> dict:
+        if self._data_dict is None:
+            tabsdata_server = TabsdataServer.__new__(TabsdataServer)
+            tabsdata_server.connection = self.connection
+            try:
+                run = tabsdata_server.list_function_runs(filter=f"id:eq:{self.id}")[0]
+            except IndexError:
+                raise ValueError(f"Function run with ID {self.id} not found.")
+            self._data = run.kwargs
+        return self._data_dict
+
+    @_data.setter
+    def _data(self, data_dict: dict | None):
+        self._data_dict = data_dict
+
+    @property
+    def collection(self) -> Collection:
+        if self._collection is None:
+            self.collection = self._data.get("collection")
+        return self._collection
+
+    @collection.setter
+    def collection(self, collection: str | Collection | None):
+        if isinstance(collection, str):
+            self._collection = Collection(self.connection, collection)
+        elif isinstance(collection, Collection):
+            self._collection = collection
+        elif collection is None:
+            self._collection = None
+        else:
+            raise TypeError(
+                "Collection must be a string or a Collection object; got"
+                f"{type(collection)} instead."
+            )
+
+    @property
+    def execution(self) -> Execution:
+        if self._execution is None:
+            self.execution = self._data.get("execution_id")
+        return self._execution
+
+    @execution.setter
+    def execution(self, execution: str | Execution | None):
+        if isinstance(execution, str):
+            self._execution = Execution(self.connection, execution)
+        elif isinstance(execution, Execution):
+            self._execution = execution
+        elif execution is None:
+            self._execution = None
+        else:
+            raise TypeError(
+                "Execution must be a string, an Execution object or None; got"
+                f"{type(execution)} instead."
+            )
+
+    @property
+    def function(self) -> Function:
+        if self._function is None:
+            self.function = self._data.get("name")
+        return self._function
+
+    @function.setter
+    def function(self, function: str | Function | None):
+        if isinstance(function, str):
+            self._function = Function(self.connection, self.collection, function)
+        elif isinstance(function, Function):
+            self._function = function
+        elif function is None:
+            self._function = None
+        else:
+            raise TypeError(
+                "Function must be a string or a Function object; got"
+                f"{type(function)} instead."
+            )
+
+    @property
+    def status(self) -> str:
+        if self._status is None:
+            self.status = self._data.get("status")
+        return self._status
+
+    @status.setter
+    def status(self, status: str | None):
+        if status is None:
+            self._status = None
+        else:
+            self._status = status_to_mapping(status)
+
+    @property
+    def transaction(self) -> Transaction:
+        if self._transaction is None:
+            self.transaction = self._data.get("transaction_id")
+        return self._transaction
+
+    @transaction.setter
+    def transaction(self, transaction: str | Transaction | None):
+        if isinstance(transaction, str):
+            self._transaction = Transaction(self.connection, transaction)
+        elif isinstance(transaction, Transaction):
+            self._transaction = transaction
+        elif transaction is None:
+            self._transaction = None
+        else:
+            raise TypeError(
+                "Transaction must be a string, a Transaction object or None; got"
+                f"{type(transaction)} instead."
+            )
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, FunctionRun):
+            return False
+        return self.id == other.id
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(id={self.id!r})"
+
+    def __str__(self) -> str:
+        return f"ID: {self.id!s}"
 
 
 class Role:
@@ -2120,7 +2304,7 @@ class Worker:
         **kwargs,
     ):
         """
-        Initialize the WorkerMessage object.
+        Initialize the Worker object.
 
         Args:
             id (str): The ID of the worker.
@@ -2368,6 +2552,18 @@ class TabsdataServer:
             List[User]: The list of users in the server.
         """
         return self.list_users()
+
+    @property
+    def workers(self) -> List[Worker]:
+        """
+        Get the list of workers in the server. This list is obtained every time the
+            property is accessed, so sequential accesses to this property in the same
+            object might yield different results.
+
+        Returns:
+            List[Worker]: The list of workers in the server.
+        """
+        return self.list_workers()
 
     def create_collection(
         self, name: str, description: str = None, raise_for_status: bool = True
@@ -2732,6 +2928,46 @@ class TabsdataServer:
         """
         function = Function(self.connection, collection_name, function_name)
         return function.history
+
+    def list_function_runs(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[FunctionRun]:
+        return list(
+            self.list_function_runs_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_function_runs_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[FunctionRun]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.function_list_runs(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_function_runs = data.get("data")
+            for raw_function_run in raw_function_runs:
+                built_function_run = FunctionRun(self.connection, **raw_function_run)
+                yield built_function_run
+            first_page = False
 
     def read_function_run(
         self,

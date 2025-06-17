@@ -23,6 +23,7 @@ from tabsdata.api.tabsdata_server import (
     DataVersion,
     Execution,
     Function,
+    FunctionRun,
     Role,
     ServerStatus,
     Table,
@@ -945,6 +946,14 @@ def test_worker_message_get(tabsserver_connection, testing_collection_with_table
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+def test_workers_property(tabsserver_connection, testing_collection_with_table):
+    workers = tabsserver_connection.workers
+    assert isinstance(workers, list)
+    assert all(isinstance(worker, Worker) for worker in workers)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
 def test_worker_messages_list_by_execution_id(
     tabsserver_connection, testing_collection_with_table
 ):
@@ -1234,3 +1243,56 @@ def test_complete_datetime():
 
     assert top_and_convert_to_timestamp(None) is None
     assert top_and_convert_to_timestamp("123456") == 123456
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_run_list_by_execution_id(
+    tabsserver_connection, testing_collection_with_table
+):
+    execution_id = tabsserver_connection.executions[0].id
+    messages = tabsserver_connection.list_function_runs(
+        filter=[f"execution_id:eq:{execution_id}"]
+    )
+    assert isinstance(messages, list)
+    assert all(isinstance(message, FunctionRun) for message in messages)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_run_list_by_transaction_id(
+    tabsserver_connection, testing_collection_with_table
+):
+    transaction_id = None
+    for element in tabsserver_connection.transactions:
+        if element.status in ("Failed", "Published"):
+            transaction_id = element.id
+            break
+    logger.debug(f"Transactions: {tabsserver_connection.transactions}")
+    logger.debug(f"Transaction ID: {transaction_id}")
+    assert transaction_id
+    messages = tabsserver_connection.list_function_runs(
+        filter=[f"transaction_id:eq:{transaction_id}"]
+    )
+    assert messages
+    assert isinstance(messages, list)
+    assert all(isinstance(message, FunctionRun) for message in messages)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_server_class_function_run_list_by_function_and_collection(
+    tabsserver_connection, testing_collection_with_table
+):
+    function_name = tabsserver_connection.list_functions(testing_collection_with_table)[
+        0
+    ].name
+    messages = tabsserver_connection.list_function_runs(
+        filter=[
+            f"name:eq:{function_name}",
+            f"collection:eq:{testing_collection_with_table}",
+        ]
+    )
+    assert messages
+    assert isinstance(messages, list)
+    assert all(isinstance(message, FunctionRun) for message in messages)

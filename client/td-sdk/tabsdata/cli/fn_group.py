@@ -17,9 +17,7 @@ from tabsdata.api.tabsdata_server import (
     Execution,
     TabsdataServer,
     Transaction,
-    convert_timestamp_to_string,
     function_type_to_mapping,
-    status_to_mapping,
 )
 from tabsdata.cli.cli_utils import (
     DOT_FOLDER,
@@ -325,81 +323,81 @@ def register(
         raise click.ClickException(f"Failed to register function: {e}")
 
 
-@fn.command()
-@click.option(
-    "--name",
-    "-n",
-    help="Name of the function to be triggered.",
-)
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
-)
-@click.option(
-    "--plan",
-    help="ID of the plan to read.",
-)
-@click.pass_context
-def read_run(ctx: click.Context, name: str, coll: str, plan: str):
-    """Read the information of a function run"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the function the run belongs to")
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
-    )
-    plan = plan or logical_prompt(ctx, "ID of the plan to read")
-    click.echo(
-        f"Reading information of plan '{plan}' for function '{name}' in "
-        f"collection '{coll}'"
-    )
-    click.echo("-" * 10)
-    try:
-        server: TabsdataServer = ctx.obj["tabsdataserver"]
-        response = server.read_function_run(coll, name, plan)
-        data = response.json().get("data")
-
-        table = Table(title="Run information")
-        table.add_column("Status", style="cyan", no_wrap=True)
-        table.add_column("Triggered on")
-        table.add_column("Started on")
-        table.add_column("Ended on")
-        table.add_column("Triggered by")
-
-        status = status_to_mapping(data.get("status"))
-        triggered_on = (
-            convert_timestamp_to_string(data.get("triggered_on"))
-            if data.get("triggered_on")
-            else "-"
-        )
-        started_on = (
-            convert_timestamp_to_string(data.get("started_on"))
-            if data.get("started_on")
-            else "-"
-        )
-        ended_on = (
-            convert_timestamp_to_string(data.get("ended_on"))
-            if data.get("ended_on")
-            else "-"
-        )
-        triggered_by = data.get("triggered_by")
-        table.add_row(
-            status,
-            triggered_on,
-            started_on,
-            ended_on,
-            triggered_by,
-        )
-
-        click.echo()
-        console = Console()
-        console.print(table)
-
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to read run information: {e}")
+# @fn.command()
+# @click.option(
+#     "--name",
+#     "-n",
+#     help="Name of the function to be triggered.",
+# )
+# @click.option(
+#     "--coll",
+#     "-c",
+#     help="Name of the collection to which the function belongs.",
+# )
+# @click.option(
+#     "--plan",
+#     help="ID of the plan to read.",
+# )
+# @click.pass_context
+# def read_run(ctx: click.Context, name: str, coll: str, plan: str):
+#     """Read the information of a function run"""
+#     verify_login_or_prompt(ctx)
+#     name = name or logical_prompt(ctx, "Name of the function the run belongs to")
+#     coll = (
+#         coll
+#         or get_currently_pinned_object(ctx, "collection")
+#         or logical_prompt(ctx, "Name of the collection to which the function belongs")
+#     )
+#     plan = plan or logical_prompt(ctx, "ID of the plan to read")
+#     click.echo(
+#         f"Reading information of plan '{plan}' for function '{name}' in "
+#         f"collection '{coll}'"
+#     )
+#     click.echo("-" * 10)
+#     try:
+#         server: TabsdataServer = ctx.obj["tabsdataserver"]
+#         response = server.read_function_run(coll, name, plan)
+#         data = response.json().get("data")
+#
+#         table = Table(title="Run information")
+#         table.add_column("Status", style="cyan", no_wrap=True)
+#         table.add_column("Triggered on")
+#         table.add_column("Started on")
+#         table.add_column("Ended on")
+#         table.add_column("Triggered by")
+#
+#         status = status_to_mapping(data.get("status"))
+#         triggered_on = (
+#             convert_timestamp_to_string(data.get("triggered_on"))
+#             if data.get("triggered_on")
+#             else "-"
+#         )
+#         started_on = (
+#             convert_timestamp_to_string(data.get("started_on"))
+#             if data.get("started_on")
+#             else "-"
+#         )
+#         ended_on = (
+#             convert_timestamp_to_string(data.get("ended_on"))
+#             if data.get("ended_on")
+#             else "-"
+#         )
+#         triggered_by = data.get("triggered_by")
+#         table.add_row(
+#             status,
+#             triggered_on,
+#             started_on,
+#             ended_on,
+#             triggered_by,
+#         )
+#
+#         click.echo()
+#         console = Console()
+#         console.print(table)
+#
+#     except Exception as e:
+#         hint_common_solutions(ctx, e)
+#         raise click.ClickException(f"Failed to read run information: {e}")
 
 
 @fn.command()

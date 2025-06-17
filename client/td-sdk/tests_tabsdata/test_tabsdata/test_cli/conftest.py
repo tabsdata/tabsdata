@@ -41,7 +41,15 @@ def atomic_login():
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["login", APISERVER_URL, "--user", "admin", "--role", "sys_admin"],
+        [
+            "login",
+            "--server",
+            APISERVER_URL,
+            "--user",
+            "admin",
+            "--role",
+            "sys_admin",
+        ],
         input="tabsdata\n",
     )
     logger.debug(result.output)

@@ -512,6 +512,10 @@ def test_function_info_error(testing_collection):
 
 
 @pytest.mark.integration
+@pytest.mark.skip(
+    "Skipping until it is decided if read-run will be shown to end "
+    "users or if it will be removed completely."
+)
 def test_function_cli_read_run(login, tabsserver_connection):
     collection = tabsserver_connection.create_collection(
         f"test_function_class_read_run_{uuid.uuid4().hex[:16]}"

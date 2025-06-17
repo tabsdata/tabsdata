@@ -510,20 +510,6 @@ def test_worker_list_with_execution_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_worker_messages_list_by_execution_id(
-    login, tabsserver_connection, testing_collection_with_table
-):
-    execution_id = tabsserver_connection.executions[0].id
-    runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--no-prompt", "exe", "list-worker", "--plan", execution_id]
-    )
-    logger.debug(result.output)
-    assert result.exit_code == 0
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
 def test_worker_messages_list_by_transaction_id(
     login, tabsserver_connection, testing_collection_with_table
 ):
@@ -832,3 +818,186 @@ def test_exec_monitor(login, testing_collection_with_table, tabsserver_connectio
     )
     logger.debug(result.output)
     assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_with_status(login, testing_collection_with_table):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["--no-prompt", "exe", "list-fn-run", "--status", "published"]
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_with_multiple_statuses(login, testing_collection_with_table):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "exe",
+            "list-fn-run",
+            "--status",
+            "published",
+            "--status",
+            "failed",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_with_wrong_status_fails(login, testing_collection_with_table):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["--no-prompt", "exe", "list-fn-run", "--status", "doesnotexist"]
+    )
+    logger.debug(result.output)
+    assert result.exit_code != 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_with_only_function_name_fails(
+    login, testing_collection_with_table
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--no-prompt", "exe", "list-fn-run", "--fn", "input_file_csv_string_format"],
+    )
+    logger.debug(result.output)
+    assert result.exit_code != 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_with_collection_name(login, testing_collection_with_table):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "exe",
+            "list-fn-run",
+            "--coll",
+            testing_collection_with_table,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_with_wildcard_execution_name(login, testing_collection_with_table):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["--no-prompt", "exe", "list-fn-run", "--plan-name", "test_*"]
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_with_execution_id(
+    login, testing_collection_with_table, tabsserver_connection
+):
+    execution_id = tabsserver_connection.executions[0].id
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["--no-prompt", "exe", "list-fn-run", "--plan", str(execution_id)]
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_by_transaction_id(
+    login, tabsserver_connection, testing_collection_with_table
+):
+    transaction_id = None
+    for element in tabsserver_connection.transactions:
+        if element.status in ("Failed", "Published"):
+            transaction_id = element.id
+            break
+    logger.debug(f"Transactions: {tabsserver_connection.transactions}")
+    logger.debug(f"Transaction ID: {transaction_id}")
+    assert transaction_id
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["--no-prompt", "exe", "list-fn-run", "--trx", transaction_id]
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_by_function_and_collection(
+    login, tabsserver_connection, testing_collection_with_table
+):
+    function_name = tabsserver_connection.list_functions(testing_collection_with_table)[
+        0
+    ].name
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "exe",
+            "list-fn-run",
+            "--fn",
+            function_name,
+            "--coll",
+            testing_collection_with_table,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_fn_run_list_by_all_options_fails(
+    login, tabsserver_connection, testing_collection_with_table
+):
+    execution_id = tabsserver_connection.executions[0].id
+    function_name = tabsserver_connection.list_functions(testing_collection_with_table)[
+        0
+    ].name
+    transaction_id = None
+    for element in tabsserver_connection.transactions:
+        if element.status in ("Failed", "Published"):
+            transaction_id = element.id
+            break
+    logger.debug(f"Transactions: {tabsserver_connection.transactions}")
+    logger.debug(f"Transaction ID: {transaction_id}")
+    assert transaction_id
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "exe",
+            "list-fn-run",
+            "--fn",
+            function_name,
+            "--trx",
+            transaction_id,
+            "--plan",
+            execution_id,
+            "--coll",
+            testing_collection_with_table,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code != 0

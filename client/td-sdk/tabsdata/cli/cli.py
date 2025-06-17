@@ -23,7 +23,7 @@ from tabsdata.cli.cli_utils import (
     verify_login_or_prompt,
 )
 from tabsdata.cli.collection_group import collection
-from tabsdata.cli.exec_group import exe
+from tabsdata.cli.exe_group import exe
 from tabsdata.cli.fn_group import fn
 from tabsdata.cli.table_group import table
 from tabsdata.cli.user_group import user
@@ -173,7 +173,11 @@ def info(third_party: bool, license: bool, release_notes: bool):
 
 
 @cli.command()
-@click.argument("server-url")
+@click.option(
+    "--server",
+    "-s",
+    help="URL of the Tabsdata Server. Will be prompted for it if not provided.",
+)
 @click.option(
     "--user",
     "-u",
@@ -195,8 +199,9 @@ def info(third_party: bool, license: bool, release_notes: bool):
     ),
 )
 @click.pass_context
-def login(ctx: click.Context, server_url: str, user: str, role: str, password: str):
+def login(ctx: click.Context, server: str, user: str, role: str, password: str):
     """Login to the Tabsdata Server"""
+    server = server or logical_prompt(ctx, "Tabsdata Server URL")
     user = user or logical_prompt(ctx, "Username for the Tabsdata Server")
     password = password or logical_prompt(
         ctx,
@@ -204,7 +209,7 @@ def login(ctx: click.Context, server_url: str, user: str, role: str, password: s
         hide_input=True,
     )
     role = role or logical_prompt(ctx, "Role", default_value="user")
-    utils_login(ctx, server_url, user, password, role)
+    utils_login(ctx, server, user, password, role)
 
 
 @cli.command()

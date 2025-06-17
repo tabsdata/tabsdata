@@ -18,6 +18,7 @@ from tabsdata.cli.cli_utils import (
     convert_user_provided_status_to_api_status,
     get_currently_pinned_object,
     hint_common_solutions,
+    is_valid_id,
     logical_prompt,
     show_hint,
     verify_login_or_prompt,
@@ -73,6 +74,165 @@ def cancel(ctx: click.Context, plan: str, trx: str):
             "Either a plan ID with '--plan' or a transaction ID "
             "with '--trx' must be provided."
         )
+
+
+@exe.command()
+@click.option(
+    "--status",
+    type=str,
+    multiple=True,
+    help=(
+        "Filter function runs by status. The status can be provided in long form, like"
+        " 'Published', or in short form, like 'P'. It is case-insensitive. "
+    ),
+)
+@click.option(
+    "--plan",
+    type=str,
+    cls=MutuallyExclusiveOption,
+    help="ID of the plan to which the function runs belong.",
+    mutually_exclusive=["plan-name", "fn", "trx", "coll"],
+)
+@click.option(
+    "--plan-name",
+    help=(
+        "A plan name wildcard to match. "
+        "For example, 'my_plan*' will match all plans "
+        "with names starting with 'my_plan'."
+    ),
+    cls=MutuallyExclusiveOption,
+    mutually_exclusive=["plan"],
+)
+@click.option(
+    "--fn",
+    type=str,
+    cls=MutuallyExclusiveOption,
+    help=(
+        "Name of the function to which the function runs belong. If this is provided, "
+        "collection must also be provided."
+    ),
+    mutually_exclusive=["plan", "trx"],
+)
+@click.option(
+    "--coll",
+    type=str,
+    cls=MutuallyExclusiveOption,
+    help="Collection of the function to which the function runs belong.",
+    mutually_exclusive=["plan", "trx"],
+)
+@click.option(
+    "--trx",
+    type=str,
+    cls=MutuallyExclusiveOption,
+    help="ID of the transaction to which the function runs belong.",
+    mutually_exclusive=["plan", "fn", "coll"],
+)
+@click.pass_context
+def list_fn_run(
+    ctx: click.Context,
+    status: List[str],
+    plan: str,
+    plan_name: str,
+    fn: str,
+    coll: str,
+    trx: str,
+):
+    """
+    List all function runs of a specific plan, function or transaction.
+    """
+    verify_login_or_prompt(ctx)
+    if fn:
+        coll = (
+            coll
+            or get_currently_pinned_object(ctx, "collection")
+            or logical_prompt(
+                ctx, "Name of the collection to which the function belongs"
+            )
+        )
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        request_filter = obtain_list_fn_run_filters(
+            status=status,
+            exe_name=plan_name,
+            execution_id=plan,
+            fn=fn,
+            collection=coll,
+            trx=trx,
+        )
+        if plan:
+            execution = server.get_execution(plan)
+            click.echo(
+                f"The current status of the plan '{plan}' is '{execution.status}'"
+            )
+        if trx:
+            transaction = server.get_transaction(trx)
+            click.echo(
+                f"The current status of the transaction '{trx}' is"
+                f" '{transaction.status}'"
+            )
+        list_of_function_runs = server.list_function_runs(filter=request_filter)
+
+        table = Table(title="Function Runs")
+        table.add_column("Function Run ID", style="cyan", no_wrap=True)
+        table.add_column("Collection")
+        table.add_column("Function")
+        table.add_column("Plan name")
+        table.add_column("Plan ID")
+        table.add_column("Transaction ID")
+        table.add_column("Status")
+
+        for fn_run in list_of_function_runs:
+            table.add_row(
+                fn_run.id,
+                fn_run.collection.name,
+                fn_run.function.name,
+                fn_run.execution.name,
+                fn_run.execution.id,
+                fn_run.transaction.id,
+                fn_run.status,
+            )
+
+        click.echo()
+        console = Console()
+        console.print(table)
+        click.echo(f"Number of function runs: {len(list_of_function_runs)}")
+        click.echo()
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to list function runs: {e}")
+
+
+def obtain_list_fn_run_filters(
+    status: List[str],
+    exe_name: str,
+    execution_id: str,
+    fn: str,
+    collection: str,
+    trx: str,
+) -> List[str]:
+    """
+    Helper function to obtain the filters for listing function runs.
+    """
+
+    request_filter = []
+    if status:
+        request_filter.append(
+            [
+                f"status:eq:{convert_user_provided_status_to_api_status(s)}"
+                for s in status
+            ]
+        )
+    if exe_name:
+        request_filter.append(f"execution:lk:{exe_name}")
+    if execution_id:
+        request_filter.append(f"execution_id:eq:{execution_id}")
+    if fn:
+        request_filter.append(f"name:eq:{fn}")
+    if collection:
+        request_filter.append(f"collection:eq:{collection}")
+    if trx:
+        request_filter.append(f"transaction_id:eq:{trx}")
+    return request_filter
 
 
 @exe.command()
@@ -646,25 +806,27 @@ def logs(
                 ctx, "Name of the collection to which the function belongs"
             )
         )
-    server: TabsdataServer = ctx.obj["tabsdataserver"]
-    request_filter = obtain_list_worker_filters(
-        status=status,
-        exe_name=plan_name,
-        execution_id=plan,
-        fn=fn,
-        collection=coll,
-        trx=trx,
-    )
-    if request_filter:
-        list_of_workers = obtain_worker_list_from_filters(server, request_filter, ctx)
-    else:
-        # If no filters are provided, we can directly use the worker ID provided
-        # by the user
-        worker = worker or logical_prompt(
-            ctx, "ID of the worker that generated the logs"
-        )
-        list_of_workers = [worker]
     try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        request_filter = obtain_list_worker_filters(
+            status=status,
+            exe_name=plan_name,
+            execution_id=plan,
+            fn=fn,
+            collection=coll,
+            trx=trx,
+        )
+        if request_filter:
+            list_of_workers = obtain_worker_list_from_filters(
+                server, request_filter, ctx
+            )
+        else:
+            # If no filters are provided, we can directly use the worker ID provided
+            # by the user
+            worker = worker or logical_prompt(
+                ctx, "ID of the worker that generated the logs"
+            )
+            list_of_workers = [worker]
         generated_logs = ""
         for w in list_of_workers:
             generated_logs = (
@@ -697,24 +859,24 @@ def obtain_worker_list_from_filters(
 
     table = Table(title="Workers")
     table.add_column("Worker ID", style="cyan", no_wrap=True)
+    table.add_column("Index", style="cyan", no_wrap=True)
     table.add_column("Collection")
     table.add_column("Function")
     table.add_column("Plan name")
     table.add_column("Plan ID")
     table.add_column("Transaction ID")
     table.add_column("Status")
-    table.add_column("Counter", no_wrap=True)
 
-    for counter, worker in enumerate(list_of_workers, 1):
+    for index, worker in enumerate(list_of_workers, 1):
         table.add_row(
             worker.id,
+            str(index),
             worker.collection.name,
             worker.function.name,
             worker.execution.name,
             worker.execution.id,
             worker.transaction.id,
             worker.status,
-            str(counter),
         )
 
     click.echo()
@@ -723,27 +885,40 @@ def obtain_worker_list_from_filters(
     click.echo(f"Number of workers: {len(list_of_workers)}")
     click.echo()
 
-    worker_counter = logical_prompt(
+    worker_id_or_index = logical_prompt(
         ctx,
-        "Counter of the worker to recover logs from. If "
+        "Index or ID of the worker to recover logs from. If "
         "none is provided (by pressing the return key without writing anything), "
         "all worker logs will be shown.",
         default_value="",
     )
-    if not worker_counter:
+    if not worker_id_or_index:
         if not list_of_workers:
             raise click.ClickException("No workers found for the provided filters.")
         list_of_workers = [w.id for w in list_of_workers]
     else:
-        try:
-            chosen_worker = list_of_workers[int(worker_counter) - 1]
-        except IndexError:
-            raise click.ClickException(
-                f"Invalid worker counter '{worker_counter}'. Please provide a valid"
-                " counter from the list (in this instance, a number between 1 and"
-                f" {len(list_of_workers)})."
-            )
-        list_of_workers = [chosen_worker.id]
+        # We must check if the provided value is an index, an ID or neither.
+        if is_valid_id(worker_id_or_index):
+            # If it's a valid ID, we can use it directly.
+            list_of_workers = [worker_id_or_index]
+        else:
+            try:
+                chosen_worker = list_of_workers[int(worker_id_or_index) - 1]
+                list_of_workers = [chosen_worker.id]
+            except IndexError:
+                raise click.ClickException(
+                    f"Invalid worker index '{worker_id_or_index}'. Please provide a"
+                    " valid index from the list (in this instance, a number between 1"
+                    f" and {len(list_of_workers)})."
+                )
+            except ValueError:
+                raise click.ClickException(
+                    f"Invalid value provided '{worker_id_or_index}'. It seems it is "
+                    "neither a valid worker ID nor a valid index. You can obtain "
+                    "one of these values from either the 'Worker ID' or the 'Index' "
+                    "column in the table above, or provide none to obtain the logs "
+                    "of all workers in the table above."
+                )
     return list_of_workers
 
 

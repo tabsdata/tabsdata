@@ -610,6 +610,24 @@ class APIServer:
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def function_list_runs(
+        self,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = "/function_runs"
+
+        params = self.get_params_dict(
+            ["len", "filter", "order_by", "pagination_id", "next"],
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def function_update(
         self,
         collection_name: str,

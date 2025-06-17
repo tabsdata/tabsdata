@@ -43,7 +43,7 @@ tdserver status
 
 ## Login
 ```
-td login localhost --user admin --password tabsdata
+td login --server localhost --user admin --password tabsdata
 ```
 
 ## Create a Collection

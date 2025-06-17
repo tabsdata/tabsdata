@@ -8,7 +8,13 @@ import uuid
 import pytest
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
-from tabsdata.api.tabsdata_server import Collection, Function, Table
+from tabsdata.api.tabsdata_server import (
+    Collection,
+    Function,
+    FunctionRun,
+    Table,
+    Worker,
+)
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -313,10 +319,32 @@ def test_function_class_workers(tabsserver_connection, testing_collection_with_t
     )
     workers = function.workers
     assert workers
+    assert isinstance(workers, list)
     worker = workers[0]
     assert worker.function == function
     assert worker.function.id == function.id
     assert worker.function.get_worker(worker.id) == worker
+    assert isinstance(worker, Worker)
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_function_class_runs(tabsserver_connection, testing_collection_with_table):
+    function_name = tabsserver_connection.list_functions(testing_collection_with_table)[
+        0
+    ].name
+    function = Function(
+        tabsserver_connection.connection,
+        collection=testing_collection_with_table,
+        name=function_name,
+    )
+    runs = function.runs
+    assert runs
+    assert isinstance(runs, list)
+    run = runs[0]
+    assert run.function == function
+    assert run.function.id == function.id
+    assert isinstance(run, FunctionRun)
 
 
 @pytest.mark.integration

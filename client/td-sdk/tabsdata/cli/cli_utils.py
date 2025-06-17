@@ -5,6 +5,7 @@
 import json
 import os
 import platform
+import re
 import shutil
 from datetime import datetime
 
@@ -26,6 +27,18 @@ DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
 
 DOT_FOLDER = os.path.join(DEFAULT_TABSDATA_DIRECTORY, "dot")
 DOT_FORMAT = "-Tjpg -Gdpi=300 -Nfontsize=10 -Nmargin=0.4 -Efontsize=10"
+
+
+def is_valid_id(possible_id: str) -> bool:
+    """
+    Check if the provided string is a valid ID for an APIServer entity,
+    for example a worker.
+    A valid ID is a 26 characters long, all capital letters and digits.
+    For now only needed in the CLI, if it ever is needed in more places it should be
+    moved to general utils.
+    """
+    id_pattern = re.compile(r"^([A-Z0-9]{26})$")
+    return bool(id_pattern.match(possible_id))
 
 
 def beautify_list(list_to_show) -> str:
@@ -353,5 +366,5 @@ def hint_common_solutions(ctx: click.Context, e: Exception):
         show_hint(
             ctx,
             "It seems like you might have an expired session. You can "
-            "log in again with 'td login <SERVER-URL>'.",
+            "log in again with 'td login'.",
         )
