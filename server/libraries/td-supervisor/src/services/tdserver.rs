@@ -30,8 +30,9 @@ use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Output};
+use std::thread::sleep;
 use std::{env, fs, io};
-use sysinfo::Signal;
+use sysinfo::{Pid, Signal};
 use ta_tableframe::api::Extension;
 use tabled::{
     settings::{
@@ -70,8 +71,11 @@ pub const APISERVER_ARGUMENT_DB_SCHEMA: &str = "--db-schema";
 
 pub const TD_KEEP: &str = ".tdkeep";
 
+const START_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const START_WAIT: Duration = Duration::from_secs(5);
+
 const STOP_TIMEOUT: Duration = Duration::from_secs(5 * 60);
-const STOP_WAIT: Duration = Duration::from_secs(1);
+const STOP_WAIT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Error)]
 pub enum TabsCliError {
@@ -295,9 +299,19 @@ struct StartArguments {
         name = "existing",
         required = false,
         default_value_t = false,
-        long_help = "Whether the instance is expected to already exist. Defaults to false."
+        long_help = "Whether the instance is expected to already exist. It defaults to false."
     )]
     existing: bool,
+
+    /// Wait until the instance is fully started or after waiting for 5 minutes.
+    #[arg(
+        long,
+        name = "wait",
+        required = false,
+        default_value_t = false,
+        long_help = "Whether to wait until the instance is fully started. It defaults to false."
+    )]
+    wait: bool,
 
     /// Name/Location of the Tabsdata instance.
     #[arg(
@@ -869,12 +883,27 @@ fn command_start(arguments: StartArguments) {
             set_log_level(Level::ERROR);
             match TabsDataWorker::new(describer.clone()).work(None) {
                 Ok((worker, _out, _err)) => {
-                    set_log_level(Level::INFO);
-                    info!(
-                        "Tabsdata instance '{}' started with pid '{:?}'",
-                        supervisor_instance_absolute.clone().display(),
-                        worker.id().unwrap()
-                    );
+                    if arguments.wait {
+                        if wait(supervisor_work) {
+                            set_log_level(Level::INFO);
+                            info!(
+                                "Tabsdata instance '{}' started with pid '{:?}'",
+                                supervisor_instance_absolute.clone().display(),
+                                worker.id().unwrap()
+                            );
+                        } else {
+                            exit(GeneralError.code())
+                        }
+                    } else {
+                        set_log_level(Level::INFO);
+                        info!(
+                            "Tabsdata instance '{}' launched with pid '{:?}'",
+                            supervisor_instance_absolute.clone().display(),
+                            worker.id().unwrap()
+                        );
+                        info!("You will need to wait until it is fully started.");
+                        info!("Use flag '--wait' to wait after launching.");
+                    }
                 }
                 Err(e) => {
                     error!("Failed to run the Tabsdata instance: {}", e);
@@ -966,11 +995,8 @@ fn command_status(arguments: ControlArguments) {
     let supervisor_workspace = get_workspace_path_for_instance(&arguments.instance().clone());
     let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
 
-    let supervisor_tracker = WorkerTracker::new(supervisor_work.clone());
-    match supervisor_tracker.check_worker_status() {
-        WorkerStatus::Running { pid } => {
-            let workers = get_process_tree(pid);
-
+    match status(supervisor_work) {
+        (WorkerStatus::Running { pid }, Some(workers)) => {
             let tabled_workers: Vec<WorkerRow> = workers
                 .into_iter()
                 .map(
@@ -1014,6 +1040,51 @@ fn command_status(arguments: ControlArguments) {
                 other
             )
         }
+    }
+}
+
+type WorkerProcess = (Pid, Pid, String, String, u64, u64);
+
+fn status(supervisor_work: PathBuf) -> (WorkerStatus, Option<Vec<WorkerProcess>>) {
+    let supervisor_tracker = WorkerTracker::new(supervisor_work.clone());
+    match supervisor_tracker.check_worker_status() {
+        WorkerStatus::Running { pid } => {
+            (WorkerStatus::Running { pid }, Some(get_process_tree(pid)))
+        }
+        other => (other, None),
+    }
+}
+
+fn wait(supervisor_work: PathBuf) -> bool {
+    let start_time = Instant::now();
+    loop {
+        let (status, tree) = status(supervisor_work.clone());
+        if let WorkerStatus::Running { .. } = status {
+            if let Some(children) = &tree {
+                if children
+                    .iter()
+                    .any(|(_, _, name, ..)| name.trim().trim_matches('"') == APISERVER)
+                {
+                    return true;
+                }
+            }
+        }
+        if Instant::now().duration_since(start_time) >= START_TIMEOUT {
+            error!(
+                "The supervisor hasn't started after {} seconds. Exiting.",
+                START_TIMEOUT.as_secs()
+            );
+            return false;
+        }
+
+        let elapsed = Instant::now().duration_since(start_time);
+        error!(
+            "The supervisor hasn’t started after {} out of {} seconds. Waiting…",
+            elapsed.as_secs(),
+            START_TIMEOUT.as_secs()
+        );
+
+        sleep(START_WAIT);
     }
 }
 
