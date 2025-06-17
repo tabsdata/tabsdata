@@ -20,7 +20,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::string::FromUtf8Error;
 use std::sync::Arc;
-use strum_macros::{AsRefStr, EnumString};
+use strum::{AsRefStr, EnumString};
 use td_error::{td_error, TdError};
 use tokio::sync::RwLock;
 

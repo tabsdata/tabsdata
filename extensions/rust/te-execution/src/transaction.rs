@@ -3,7 +3,7 @@
 //
 
 use serde::{Deserialize, Serialize};
-use strum_macros::{Display, EnumString};
+use strum::{Display, EnumString};
 use ta_execution::transaction::TransactionMapper;
 use td_error::TdError;
 use td_objects::types::basic::TransactionKey;

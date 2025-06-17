@@ -31,7 +31,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["clap", "openssl", "strum_macros"]
+ignored = ["clap", "openssl"]
 
 # Build dependencies
 
@@ -69,7 +69,7 @@ te-execution = { workspace = true }
 
 # External dependencies
 
-axum = { workspace = true}
+axum = { workspace = true }
 axum-extra = { workspace = true, features = ["query"] }
 chrono = { workspace = true }
 clap = { workspace = true }
@@ -82,8 +82,7 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
-strum = { workspace = true }
-strum_macros = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

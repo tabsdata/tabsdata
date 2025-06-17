@@ -3273,7 +3273,7 @@ dependencies = [
  "simdutf8",
  "streaming-iterator",
  "strength_reduce",
- "strum_macros",
+ "strum_macros 0.26.4",
  "version_check",
  "zstd",
 ]
@@ -3334,7 +3334,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "strum_macros",
+ "strum_macros 0.26.4",
  "thiserror 1.0.69",
  "version_check",
  "xxhash-rust",
@@ -3527,7 +3527,7 @@ dependencies = [
  "regex-syntax 0.8.5",
  "serde",
  "serde_json",
- "strum_macros",
+ "strum_macros 0.26.4",
  "unicode-reverse",
  "version_check",
 ]
@@ -3631,7 +3631,7 @@ dependencies = [
  "recursive",
  "regex",
  "serde",
- "strum_macros",
+ "strum_macros 0.26.4",
  "version_check",
 ]
 
@@ -3730,7 +3730,7 @@ dependencies = [
  "polars-utils",
  "regex",
  "serde",
- "strum_macros",
+ "strum_macros 0.26.4",
 ]
 
 [[package]]
@@ -5166,15 +5166,31 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "strum"
-version = "0.26.3"
+version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
+checksum = "f64def088c51c9510a8579e3c5d67c65349dcf755e5479ad3d010aa6454e2c32"
+dependencies = [
+ "strum_macros 0.27.1",
+]
 
 [[package]]
 name = "strum_macros"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.101",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c77a8c5abcaf0f9ce05d62342b7d298c346515365c36b673df4ebe3ced01fde8"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -5318,7 +5334,6 @@ dependencies = [
  "openssl",
  "petgraph",
  "strum",
- "strum_macros",
  "ta-execution",
  "td-error",
  "td-objects",
@@ -5424,7 +5439,6 @@ dependencies = [
  "serde_json",
  "sqlx",
  "strum",
- "strum_macros",
  "td-apiforge",
  "td-authz",
  "td-build",
@@ -5525,7 +5539,6 @@ dependencies = [
  "serde_yaml",
  "sqlx",
  "strum",
- "strum_macros",
  "sysinfo 0.32.1",
  "td-apiforge",
  "td-attach",
@@ -5573,7 +5586,7 @@ dependencies = [
  "regex",
  "serde",
  "sqlx",
- "strum_macros",
+ "strum",
  "td-common",
  "td-database",
  "td-error",
@@ -5594,7 +5607,6 @@ dependencies = [
  "itertools 0.13.0",
  "openssl",
  "strum",
- "strum_macros",
  "td-build",
  "thiserror 2.0.12",
  "tm-error",
@@ -5613,7 +5625,6 @@ dependencies = [
  "petgraph",
  "sqlx",
  "strum",
- "strum_macros",
  "ta-execution",
  "td-database",
  "td-error",
@@ -5651,7 +5662,6 @@ dependencies = [
  "serde_yaml",
  "sqlx",
  "strum",
- "strum_macros",
  "td-apiforge",
  "td-common",
  "td-database",
@@ -5676,7 +5686,7 @@ dependencies = [
  "openssl",
  "rand 0.9.1",
  "semver",
- "strum_macros",
+ "strum",
  "td-build",
  "td-common",
  "td-error",
@@ -5702,7 +5712,7 @@ dependencies = [
  "getset",
  "openssl",
  "serde",
- "strum_macros",
+ "strum",
  "td-error",
  "thiserror 2.0.12",
 ]
@@ -5724,7 +5734,6 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
- "strum_macros",
  "supports-color",
  "ta-tableframe",
  "td-apiforge",
@@ -5772,7 +5781,7 @@ dependencies = [
  "serde",
  "sha2",
  "sqlx",
- "strum_macros",
+ "strum",
  "ta-execution",
  "td-authz",
  "td-common",
@@ -5826,7 +5835,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "strum",
- "strum_macros",
  "td-build",
  "td-common",
  "td-error",
@@ -5855,7 +5863,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "strum_macros",
+ "strum",
  "td-common",
  "td-error",
  "td-objects",
@@ -5897,7 +5905,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "strum",
- "strum_macros",
  "sysinfo 0.32.1",
  "ta-tableframe",
  "tabled",
@@ -5924,7 +5931,6 @@ dependencies = [
  "openssl",
  "polars",
  "strum",
- "strum_macros",
  "ta-tableframe",
  "td-build",
  "te-tableframe",
@@ -5966,7 +5972,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
- "strum_macros",
+ "strum",
  "td-apiforge",
  "td-database",
  "td-error",
@@ -6020,7 +6026,6 @@ dependencies = [
  "petgraph",
  "serde",
  "strum",
- "strum_macros",
  "ta-execution",
  "td-error",
  "td-objects",

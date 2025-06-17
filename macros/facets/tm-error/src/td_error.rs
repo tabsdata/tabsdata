@@ -21,7 +21,7 @@ pub fn td_error_impl(input: TokenStream) -> TokenStream {
     let expanded = quote! {
 
         #[repr(u16)]
-        #[derive(Debug, thiserror::Error, strum_macros::EnumDiscriminants)]
+        #[derive(Debug, thiserror::Error, strum::EnumDiscriminants)]
         #input
 
         impl #name {

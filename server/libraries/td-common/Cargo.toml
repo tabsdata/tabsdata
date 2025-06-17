@@ -86,8 +86,7 @@ regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "macros"] }
-strum = { workspace = true }
-strum_macros = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 sysinfo = { workspace = true }
 tempfile = { workspace = true }
 testdir = { workspace = true }

@@ -29,7 +29,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum_macros", "td-build", "td-database", "thiserror", "toml"]
+ignored = ["openssl", "td-build", "td-database", "thiserror", "strum", "toml"]
 
 # Build dependencies
 
@@ -61,7 +61,7 @@ itertools = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sqlx = { workspace = true }
-strum_macros = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 testdir = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

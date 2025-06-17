@@ -42,8 +42,7 @@ td-objects = { workspace = true }
 async-trait = { workspace = true }
 petgraph = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-strum = { workspace = true }
-strum_macros = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 
 # Development dependencies
 

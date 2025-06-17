@@ -53,8 +53,7 @@ td-objects = { workspace = true }
 
 getset = { workspace = true }
 petgraph = { workspace = true }
-strum = { workspace = true }
-strum_macros = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 

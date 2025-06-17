@@ -20,7 +20,7 @@ version = { workspace = true }
 proc-macro = true
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "strum_macros", "thiserror"]
+ignored = ["openssl", "strum", "thiserror"]
 
 [features]
 

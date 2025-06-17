@@ -52,7 +52,7 @@ use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, panic, process};
-use strum_macros::{AsRefStr, EnumString};
+use strum::{AsRefStr, EnumString};
 use sysinfo::Signal::Kill;
 use sysinfo::{Pid, Signal};
 use td_common::attach::check_nowait_env;

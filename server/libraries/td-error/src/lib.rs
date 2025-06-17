@@ -8,7 +8,7 @@ pub use tm_error::td_error;
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use strum_macros::AsRefStr;
+use strum::AsRefStr;
 
 /// Error class enum for conversion to API errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, AsRefStr)]

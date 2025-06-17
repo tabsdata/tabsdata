@@ -38,7 +38,7 @@ use std::marker::PhantomData;
 use std::option::Option;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use strum_macros::{AsRefStr, Display, EnumString};
+use strum::{AsRefStr, Display, EnumString};
 use td_apiforge::apiserver_schema;
 use td_error::td_error;
 use tokio::fs;

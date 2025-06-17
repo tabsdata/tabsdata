@@ -15,7 +15,7 @@ use td_objects::types::basic::{
 ///
 /// It is an enum to allow adding URI creation strategies and using them side to side in a
 /// backwards compatible way.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, strum_macros::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, strum::Display)]
 pub enum StorageLocation {
     /// Version 2 of the storage location. produces [`SPath`] in the following format
     /// (words in uppercase are placeholders for IDs):

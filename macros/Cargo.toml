@@ -162,9 +162,7 @@ features = ["sqlite", "runtime-tokio", "macros", "chrono"]
 
 [workspace.dependencies.strum]
 version = "0.27.1"
-
-[workspace.dependencies.strum_macros]
-version = "0.27.1"
+features = ["derive"]
 
 [workspace.dependencies.syn]
 version = "2.0.101"

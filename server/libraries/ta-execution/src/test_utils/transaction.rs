@@ -3,7 +3,7 @@
 //
 
 use crate::transaction::TransactionMapper;
-use strum_macros::{Display, EnumString};
+use strum::{Display, EnumString};
 use td_error::TdError;
 use td_objects::types::basic::TransactionKey;
 use td_objects::types::execution::FunctionVersionNode;

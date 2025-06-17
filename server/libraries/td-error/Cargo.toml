@@ -55,8 +55,7 @@ tm-error = { workspace = true }
 
 anyhow = { workspace = true }
 itertools = { workspace = true }
-strum = { workspace = true }
-strum_macros = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tower = { workspace = true }
 

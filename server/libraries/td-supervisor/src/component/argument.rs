@@ -4,7 +4,7 @@
 
 use std::ffi::OsString;
 use std::path::PathBuf;
-use strum_macros::{AsRefStr, EnumIter, EnumString};
+use strum::{AsRefStr, EnumIter, EnumString};
 use td_common::env::{to_absolute, EnvironmentError};
 use td_common::server::{
     counter, BIN_FOLDER, INPUT_FOLDER, LOCK_FOLDER, LOG_FOLDER, OUTPUT_FOLDER, REQUEST_FOLDER,
