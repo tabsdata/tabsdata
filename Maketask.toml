@@ -96,7 +96,7 @@ script = [
 
     os = get_env OS
     if ${os}
-        lower_os = to_lowercase ${os}
+        lower_os = lowercase ${os}
         contains_win = contains ${lower_os} "windows"
         if ${contains_win}
             exec cls
@@ -1152,6 +1152,7 @@ script = [
     ''']
 
 [tasks.assembly]
+dependencies = ["build"]
 run_task = [
     { name = [
         "assembly_rs",
@@ -1302,6 +1303,28 @@ script = [
 
     echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    ''']
+
+[tasks.delivery]
+dependencies = ["assembly"]
+run_task = [
+    { name = [
+        "delivery_rs",
+        "delivery_py",
+    ] }
+]
+
+[tasks.delivery_rs]
+
+[tasks.delivery_py]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${ROOT_PROJECT_TABSDATA_FOLDER}"
+
+    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/delivery-wheels.py ${td-profile}
     ''']
 
 [tasks.install]

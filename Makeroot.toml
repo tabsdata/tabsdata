@@ -2,6 +2,8 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+# On Windows, you will need to create an env variable HOME pointing to your home dir before running any task.
+
 env_files = [
     { path = "${HOME}/.tabsdata-dev/test.env", defaults_only = true },
     { path = "${HOME}/.tabsdata-dev/make.env", defaults_only = true },

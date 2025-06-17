@@ -38,7 +38,14 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
         ):
             full_path = os.path.join(project_folder, path)
             logger.debug(f"✏️ Found path: '{path}'")
-            if os.path.isdir(full_path):
+            relative_path = os.path.relpath(full_path, project_folder)
+            first_component = relative_path.split(os.sep, 1)[0]
+            if first_component.startswith("."):
+                logger.debug(f"✏️    - Skipping root dot file/folder: {full_path}")
+                continue
+            elif "target" in full_path and "deps" in full_path and pattern == "*.log.*":
+                logger.debug(f"✏️    - Skipping removal of reserved file: {full_path}")
+            elif os.path.isdir(full_path):
                 logger.debug(f"✏️    - Removing directory: {full_path}")
                 shutil.rmtree(full_path)
             elif os.path.isfile(full_path):
@@ -60,9 +67,9 @@ def clean_py(project_folder):
         ".pytest_cache",
         ".tox",
         "*.egg-info",
-        "build",
+        "target/build",
         "coverage.xml",
-        "dist",
+        "target/python/dist",
         "docs/_build",
         "htmlcov",
         "*.log",
