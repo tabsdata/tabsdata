@@ -16,6 +16,13 @@ controllers:
           - repository
           - workspace
           - profile
+      - name: uvinfo
+        kind: processor
+        location: system
+        program: _tduvinfo
+        parameters:
+          - output: versions
+          - file: ${TD_PATH_INSTANCE}/workspace/work/etc/pyversions.dat
       - name: apiserver-configuration-resolver
         kind: processor
         location: system

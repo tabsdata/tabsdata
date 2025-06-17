@@ -420,13 +420,17 @@ setup(
         )
     ),
     long_description_content_type="text/markdown",
+    # On Windows, setuptools interprets license_files paths as glob patterns,
+    # and backslashes (\) are treated as escape characters, which may cause
+    # unexpected parsing errors or “invalid character” complaints. Because of
+    # this, back-slashes are replaced with forward-slashes.
     license_files=(
         os.path.join(
             "variant",
             "assets",
             "manifest",
             "LICENSE",
-        ),
+        ).replace(os.sep, "/"),
     ),
     author="Tabs Data Inc.",
     python_requires=">=3.12",
@@ -589,11 +593,12 @@ setup(
     entry_points={
         "console_scripts": [
             "td = tabsdata.cli.cli:cli",
-            "_tdvenv = tabsdata.tabsserver.pyenv_creation:main",
             "_tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
             "_tdinvoker = tabsdata.tabsserver.invoker:main",
             "_tdmntext = tabsdata.tabsserver.tools.mount_extractor:main",
             "_tdupgrader = tabsdata.tabsserver.server.upgrader:main",
+            "_tdvenv = tabsdata.tabsserver.pyenv_creation:main",
+            "_tduvinfo = tabsdata.tabsserver.tools.uv_analyzer:main",
         ]
     },
     include_package_data=True,

@@ -16,6 +16,39 @@ controllers:
           - repository
           - workspace
           - profile
+      - name: uvinfo
+        kind: processor
+        location: system
+        program: _tduvinfo
+        parameters:
+          - output: versions
+          - file: ${TD_PATH_INSTANCE}/workspace/work/etc/pyversions.dat
+      - name: apiserver-configuration-resolver
+        kind: processor
+        location: system
+        program: _tdcfgrsv
+        parameters:
+          - input: ${TD_PATH_CONFIG}/proc/regular/apiserver/config/config.yaml
+          - strategies: env,hashicorp
+          - hashicorp-url: ""
+          - hashicorp-token: ""
+          - hashicorp-namespace: ""
+          - env-hashicorp-url: ""
+          - env-hashicorp-token: ""
+          - env-hashicorp-namespace: ""
+        set-state:
+          state-type: blob
+          state-key: apiserver-configuration
+      - name: apiserver-mounts-options-extractor
+        kind: processor
+        location: system
+        program: _tdmntext
+        get-states:
+          - state-type: blob
+            state-key: apiserver-configuration
+        set-state:
+          state-type: map
+          state-key: apiserver-mounts-options
   regular:
     concurrency: 0
     workers:
@@ -24,8 +57,12 @@ controllers:
         location: relative
         program: apiserver
         parameters:
+          - stdin-config: true
           - database-url: file://${TD_URI_REPOSITORY}/database/tabsdata.db
           - storage-url: file://${TD_URI_REPOSITORY}/storage
+        get-states:
+          - state-type: blob
+            state-key: apiserver-configuration
       - name: p01
         kind: processor
         location: relative
@@ -66,6 +103,7 @@ controllers:
         concurrency: 8
         retries: 2
         arguments:
+          - work
           - locks-folder
           - logs-folder
           - bin-folder
@@ -74,6 +112,9 @@ controllers:
           - input-folder
           - output-folder
           - current-instance
+        get-states:
+          - state-type: map
+            state-key: apiserver-mounts-options
       - name: tars
         location: relative
         program: examples/tars

@@ -61,6 +61,7 @@ impl WorkerSupplier for TabsDataWorkerSupplier {
             config: worker.describer().config().clone(),
             work: worker.describer().work().clone(),
             queue: worker.describer().queue().clone(),
+            etc: worker.describer().etc().clone(),
         };
         let inf_path = worker.describer().work().join(WORKER_INF_FILE);
         let mut inf_file = File::create(inf_path)?;

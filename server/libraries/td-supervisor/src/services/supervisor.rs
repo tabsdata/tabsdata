@@ -68,8 +68,8 @@ use td_common::server::SupervisorMessagePayload::{
 use td_common::server::WorkerClass::{EPHEMERAL, INIT, REGULAR};
 use td_common::server::{
     SupervisorMessage, WorkerClass, CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE,
-    CONFIG_PATH_ENV, CONFIG_URI_ENV, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER, MSG_FOLDER,
-    PARENT_FOLDER, PROC_FOLDER, REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV,
+    CONFIG_PATH_ENV, CONFIG_URI_ENV, ETC_FOLDER, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER,
+    MSG_FOLDER, PARENT_FOLDER, PROC_FOLDER, REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV,
     REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, WORKSPACE_FOLDER, WORKSPACE_PATH_ENV,
     WORKSPACE_URI_ENV, WORK_FOLDER, WORK_PATH_ENV, WORK_URI_ENV,
 };
@@ -1319,6 +1319,7 @@ impl Supervisor {
             .config(config_folder)
             .work(work_folder)
             .queue(self.params.clone().work().join(MSG_FOLDER))
+            .etc(self.params.clone().work().join(ETC_FOLDER))
             .message(message.clone())
             .build()
             .map_err(|e| {

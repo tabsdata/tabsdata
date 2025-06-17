@@ -13,4 +13,5 @@ pub struct Inf {
     pub config: PathBuf,
     pub work: PathBuf,
     pub queue: PathBuf,
+    pub etc: PathBuf,
 }

@@ -10,6 +10,7 @@ use crate::execution_status::FunctionRunUpdateStatus;
 use crate::files::{get_files_in_folder_sorted_by_name, LOCK_EXTENSION, YAML_EXTENSION};
 use crate::logging::LOG_LOCATION;
 use crate::manifest::{Inf, WORKER_INF_FILE};
+use crate::server::EtcError::EtcStoreLocationCreationError;
 use crate::server::QueueError::{
     MessageAlreadyExisting, MessageNonExisting, QueuePlannedCreationError, QueueRootCreationError,
 };
@@ -32,7 +33,6 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::{Mapping, Value};
 use std::collections::HashMap;
 use std::fs::{create_dir_all, read_dir, remove_file, rename, File};
-use std::io;
 use std::io::{Error, Write};
 use std::marker::PhantomData;
 use std::option::Option;
@@ -41,7 +41,9 @@ use std::str::FromStr;
 use strum_macros::{AsRefStr, Display, EnumString};
 use td_apiforge::apiserver_schema;
 use td_error::td_error;
-use tracing::error;
+use tokio::fs;
+use tokio::io;
+use tracing::{error, warn};
 use url::Url;
 
 pub const AVAILABLE_ENVIRONMENTS_FOLDER: &str = "available_environments";
@@ -68,7 +70,7 @@ pub const RESPONSE_FOLDER: &str = "response";
 pub const INPUT_FOLDER: &str = "input";
 pub const OUTPUT_FOLDER: &str = "output";
 
-pub const CONFIG_NAMESPACE: &str = "td";
+pub const CONFIG_NAMESPACE: &str = "TD";
 
 pub const INSTANCE_FOLDER: &str = "instance";
 
@@ -109,7 +111,8 @@ pub const WORKSPACE_PATH_ENV: &str = "TD_PATH_WORKSPACE";
 pub const CONFIG_PATH_ENV: &str = "TD_PATH_CONFIG";
 pub const WORK_PATH_ENV: &str = "TD_PATH_WORK";
 
-pub const QUEUE_PARAMETER: &str = "--work";
+pub const QUEUE_PARAMETER: &str = "--msg";
+pub const ETC_PARAMETER: &str = "--etc";
 
 pub const EXCLUSION_PREFIX: char = '.';
 
@@ -132,6 +135,8 @@ pub const INITIAL_CALL: &str = concatcp!(RETRIES_DELIMITER, INITIAL_RUN);
 pub const REQUEST_MESSAGE_FILE_PATTERN: &str =
     concatcp!(r"^(.*)", RETRIES_DELIMITER, r"([1-9][0-9]*)(\.yaml$)");
 pub const REQUEST_MESSAGE_FORMAT: &str = concatcp!("{}", RETRIES_DELIMITER, "{}", "{}");
+
+pub const ETC_FOLDER: &str = "etc";
 
 #[td_error]
 pub enum QueueError {
@@ -602,6 +607,10 @@ impl FileWorkerMessageQueue {
     }
 }
 
+pub async fn queue_service() -> Result<FileWorkerMessageQueue, QueueError> {
+    FileWorkerMessageQueue::new().await
+}
+
 #[async_trait]
 pub trait WorkerMessageQueue: Send + Sync + Sized + 'static {
     /// Puts a message in the queue.
@@ -712,7 +721,7 @@ pub fn counter(path: &Path) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_queue {
     use super::*;
 
     #[tokio::test]
@@ -916,5 +925,155 @@ mod tests {
     fn test_multiple_underscores_extension() {
         let path = PathBuf::from("/a/b/run_work_42.t");
         assert_eq!(counter(&path), "0");
+    }
+}
+
+#[td_error]
+pub enum EtcError {
+    #[error("Error creating the etc store instance '{location}': {cause}")]
+    EtcStoreLocationCreationError { location: PathBuf, cause: Error },
+    #[error("Error reading an etc store file '{location}'")]
+    NotFoundError { location: PathBuf },
+    #[error("Error reading an etc store file '{location}': {cause}")]
+    ReadError { location: PathBuf, cause: Error },
+}
+
+#[derive(Debug, Getters)]
+#[getset(get = "pub")]
+pub struct FileEtcStore {
+    location: PathBuf,
+}
+
+pub trait IntoEtcStoreBox {
+    fn boxed(self) -> Box<dyn EtcStore + Send + Sync>;
+}
+
+impl<T> IntoEtcStoreBox for T
+where
+    T: EtcStore + Send + Sync + 'static,
+{
+    fn boxed(self) -> Box<dyn EtcStore + Send + Sync> {
+        Box::new(self)
+    }
+}
+
+impl FileEtcStore {
+    /// Creates an etc store instance to read and write interchange files.
+    pub async fn new() -> Result<Self, EtcError> {
+        // Infers the etc store base location.
+        fn obtain_etc_location() -> PathBuf {
+            if let Some(location) = obtain_etc_location_from_info_file() {
+                location
+            } else if let Some(location) = obtain_etc_location_from_arguments() {
+                location
+            } else {
+                obtain_etc_location_from_current_dir().unwrap()
+            }
+        }
+
+        // Gets the base etc store base location form standard inf file.
+        fn obtain_etc_location_from_info_file() -> Option<PathBuf> {
+            let inf_path = get_current_dir().join(WORKER_INF_FILE);
+            if inf_path.exists() {
+                if let Ok(inf_file) = File::open(&inf_path) {
+                    if let Ok(inf) = serde_yaml::from_reader::<_, Inf>(inf_file) {
+                        return Some(inf.etc);
+                    }
+                }
+            }
+            None
+        }
+
+        // Gets base etc store base location form passed arguments.
+        pub fn obtain_etc_location_from_arguments() -> Option<PathBuf> {
+            let mut arguments = Arguments::from_env();
+            let location: Option<PathBuf> =
+                arguments.opt_value_from_str(ETC_PARAMETER).unwrap_or(None);
+            let _ = arguments.finish();
+            location
+        }
+
+        // Gets base etc store base location form current folder.
+        pub fn obtain_etc_location_from_current_dir() -> Option<PathBuf> {
+            Some(get_current_dir().join(ETC_FOLDER))
+        }
+
+        let location = obtain_etc_location();
+
+        if let Err(e) = create_dir_all(location.clone()) {
+            return Err(EtcStoreLocationCreationError { location, cause: e });
+        };
+
+        Ok(Self { location })
+    }
+
+    #[cfg(feature = "td-test")]
+    pub fn with_location(location: impl Into<PathBuf>) -> Result<Self, EtcError> {
+        Ok(Self {
+            location: location.into(),
+        })
+    }
+}
+
+pub async fn etc_service() -> Result<Box<dyn EtcStore + Send + Sync>, EtcError> {
+    Ok(FileEtcStore::new().await?.boxed())
+}
+
+#[async_trait]
+pub trait EtcStore {
+    async fn read(&self, id: String) -> Result<Option<Vec<u8>>, EtcError>;
+}
+
+#[async_trait]
+impl EtcStore for FileEtcStore {
+    async fn read(&self, id: String) -> Result<Option<Vec<u8>>, EtcError> {
+        let path = self.location().join(&id);
+        match fs::read(&path).await {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                warn!(
+                    "File {} not found as an etc resource location: {}",
+                    id,
+                    path.display()
+                );
+                Ok(None)
+            }
+            Err(e) => Err(EtcError::ReadError {
+                location: path,
+                cause: e,
+            }),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests_etc {
+    use crate::server::{EtcStore, FileEtcStore};
+    use std::path::Path;
+    use testdir::testdir;
+
+    #[tokio::test]
+    async fn test_io_read() {
+        let location = testdir!();
+        let path = Path::new(&location).join("hobbit");
+        let content = "In a hole in the ground there lived a Hobbit.";
+        std::fs::write(&path, content).expect("Failed to write the test file.");
+        let etc_instance = FileEtcStore::with_location(&location);
+        assert!(
+            etc_instance.is_ok(),
+            "Failed to create the etc store instance: {:?}",
+            etc_instance
+        );
+        let result = etc_instance.unwrap().read("hobbit".to_string()).await;
+        assert!(
+            result.is_ok(),
+            "Failed to read from the etc store instance: {:?}",
+            result
+        );
+
+        let result_bytes = result.unwrap();
+        let result_string =
+            String::from_utf8(result_bytes.unwrap()).expect("Failed to convert bytes to string");
+        assert_eq!(result_string, content);
     }
 }

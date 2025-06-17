@@ -9,7 +9,6 @@ import polars as pl
 
 # noinspection PyPackageRequirements
 import pytest
-from tabsdata.utils.tableframe.builders import from_dict, from_polars, from_pandas
 from tabulate import tabulate
 
 import tabsdata as td
@@ -23,6 +22,7 @@ from tabsdata.utils.tableframe._helpers import REQUIRED_COLUMNS
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._translator import _wrap_polars_frame
+from tabsdata.utils.tableframe.builders import from_dict, from_pandas, from_polars
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

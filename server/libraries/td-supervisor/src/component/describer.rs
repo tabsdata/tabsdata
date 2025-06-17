@@ -28,6 +28,7 @@ pub trait WorkerDescriber: Display + Debug {
     fn message(&self) -> &Option<SupervisorMessage>;
     fn work(&self) -> &PathBuf;
     fn queue(&self) -> &PathBuf;
+    fn etc(&self) -> &PathBuf;
 }
 
 // Default worker describer.
@@ -72,6 +73,9 @@ pub struct TabsDataWorkerDescriber {
 
     /// Supervisor queue folder.
     queue: PathBuf,
+
+    /// Supervisor io folder.
+    etc: PathBuf,
 
     /// Messages that triggers the worker to run execution.
     #[builder(default)]
@@ -121,6 +125,12 @@ impl TabsDataWorkerDescriberBuilder {
             }
             to_absolute(queue)?;
         }
+        if let Some(etc) = &self.etc {
+            if etc.as_os_str().is_empty() {
+                return Err(MissingEtcStoreFolder);
+            }
+            to_absolute(etc)?;
+        }
         Ok(())
     }
 
@@ -158,6 +168,10 @@ impl TabsDataWorkerDescriberBuilder {
 
     pub fn get_queue(&self) -> Option<&PathBuf> {
         self.queue.as_ref()
+    }
+
+    pub fn get_etc(&self) -> Option<&PathBuf> {
+        self.etc.as_ref()
     }
 
     pub fn get_message(&self) -> Option<&Option<SupervisorMessage>> {
@@ -224,6 +238,10 @@ impl WorkerDescriber for TabsDataWorkerDescriber {
     fn queue(&self) -> &PathBuf {
         &self.queue
     }
+
+    fn etc(&self) -> &PathBuf {
+        &self.etc
+    }
 }
 
 impl Display for TabsDataWorkerDescriber {
@@ -240,7 +258,8 @@ impl Display for TabsDataWorkerDescriber {
              Config: {:?}\n\
              Message:\n{}\n\
              Work: {:?}\n\
-             Queue: {:?}",
+             Queue: {:?}\n,
+             Etc: {:?}",
             &self.class,
             &self.name,
             &self.location,
@@ -256,6 +275,7 @@ impl Display for TabsDataWorkerDescriber {
             },
             &self.work,
             &self.queue,
+            &self.etc,
         )
     }
 }
@@ -288,6 +308,8 @@ pub enum DescriberError {
     MissingQueueFolder,
     #[error("Non existing queue: {queue}")]
     NonExistingQueue { queue: PathBuf },
+    #[error("Etc store folder not provided")]
+    MissingEtcStoreFolder,
     #[error("Unexpected error from instance processing: {0}")]
     InstanceFailure(#[from] InstanceError),
     #[error("Unexpected error from environment processing: {0}")]
@@ -304,7 +326,7 @@ mod tests {
     use std::path::PathBuf;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
     use td_common::server::WorkerClass::REGULAR;
-    use td_common::server::{CONFIG_FOLDER, MSG_FOLDER, WORK_FOLDER};
+    use td_common::server::{CONFIG_FOLDER, ETC_FOLDER, MSG_FOLDER, WORK_FOLDER};
     use tempfile::tempdir;
 
     #[test]
@@ -325,6 +347,7 @@ mod tests {
             .config(config_folder)
             .work(work_folder.clone())
             .queue(work_folder.clone().join(MSG_FOLDER))
+            .etc(work_folder.clone().join(ETC_FOLDER))
             .build();
         assert!(describer.is_ok());
     }
@@ -342,6 +365,7 @@ mod tests {
             .config("".to_string())
             .work("".to_string())
             .queue("".to_string())
+            .etc("".to_string())
             .build();
         assert!(describer.is_err());
     }
@@ -359,6 +383,7 @@ mod tests {
             .config("".to_string())
             .work("".to_string())
             .queue("".to_string())
+            .etc("".to_string())
             .build();
         assert!(describer.is_err());
     }
@@ -381,6 +406,7 @@ mod tests {
             .config(config_folder)
             .work(work_folder.clone())
             .queue(work_folder.clone().join(MSG_FOLDER))
+            .etc(work_folder.clone().join(ETC_FOLDER))
             .build();
         assert!(describer.is_ok());
     }

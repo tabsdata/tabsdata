@@ -50,7 +50,7 @@ use td_common::os::{get_process_tree, name_program, terminate_process};
 use td_common::server::WorkerClass::REGULAR;
 use td_common::server::{
     AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FOLDER, DATABASE_FILE, DATABASE_FOLDER,
-    ENVIRONMENTS_FOLDER, MSG_FOLDER, STORAGE_FOLDER, WORK_FOLDER,
+    ENVIRONMENTS_FOLDER, ETC_FOLDER, MSG_FOLDER, STORAGE_FOLDER, WORK_FOLDER,
 };
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
 use td_python::upgrade::{get_source_version, get_target_version, upgrade};
@@ -1362,6 +1362,7 @@ fn build_instance_describer(
         .config(supervisor_config.clone())
         .work(supervisor_work.clone())
         .queue(supervisor_work.clone().join(MSG_FOLDER))
+        .etc(supervisor_work.clone().join(ETC_FOLDER))
         .build();
     if describer.is_err() {
         error!(

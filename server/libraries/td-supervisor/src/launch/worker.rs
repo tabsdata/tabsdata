@@ -158,7 +158,7 @@ mod tests {
     use std::fs::create_dir_all;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
     use td_common::server::WorkerClass::REGULAR;
-    use td_common::server::{CONFIG_FOLDER, MSG_FOLDER, WORK_FOLDER};
+    use td_common::server::{CONFIG_FOLDER, ETC_FOLDER, MSG_FOLDER, WORK_FOLDER};
     use tempfile::tempdir;
 
     #[test]
@@ -179,6 +179,7 @@ mod tests {
             .config(config_folder)
             .work(work_folder.clone())
             .queue(work_folder.clone().join(MSG_FOLDER))
+            .etc(work_folder.clone().join(ETC_FOLDER))
             .build();
         assert!(describer.is_ok());
         let worker = TabsDataWorker::new(describer.unwrap());
@@ -209,6 +210,7 @@ mod tests {
             .config(config_folder)
             .work(work_folder.clone())
             .queue(work_folder.clone().join(MSG_FOLDER))
+            .etc(work_folder.clone().join(ETC_FOLDER))
             .build();
         assert!(describer.is_ok());
         let worker = TabsDataWorker::new(describer.unwrap());
