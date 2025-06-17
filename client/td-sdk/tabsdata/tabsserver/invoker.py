@@ -149,10 +149,17 @@ def invoke(
         "Executing the bundled function with command: " + " ".join(command_to_execute)
     )
     with clear_environment():
+        mount_options = sys.stdin.read()
         with time_block:
             # See explanation on parameter temp_cwd
             cwd = tempfile.gettempdir() if temp_cwd else None
-            result = subprocess.run(command_to_execute, env=os.environ, cwd=cwd)
+            result = subprocess.run(
+                command_to_execute,
+                env=os.environ,
+                cwd=cwd,
+                input=mount_options,
+                text=True,
+            )
         logger.info(
             f"Result of executing the bundled function: {result}. Time taken:"
             f" {time_block.time_taken():.2f}s"

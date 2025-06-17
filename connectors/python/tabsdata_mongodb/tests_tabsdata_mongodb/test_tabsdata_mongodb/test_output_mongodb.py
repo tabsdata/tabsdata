@@ -5,6 +5,8 @@
 import inspect
 import logging
 import os
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pymongo
@@ -599,6 +601,7 @@ def test_docs_per_trx(tmp_path, testing_mongodb):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.tabsserver
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mongodb(tmp_path, testing_mongodb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     database_name = "test_output_mongodb_database"
@@ -658,6 +661,7 @@ def test_output_mongodb(tmp_path, testing_mongodb):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.tabsserver
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_multiple_outputs_mongodb(tmp_path, testing_mongodb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     database_name = "test_multiple_outputs_mongodb_database"

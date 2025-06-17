@@ -6,6 +6,8 @@ import inspect
 import logging
 import os
 import urllib.parse
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -72,6 +74,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.mariadb
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mariadb_list(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -127,6 +130,7 @@ def test_output_mariadb_list(tmp_path, testing_mariadb):
 @pytest.mark.mariadb
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -179,6 +183,7 @@ def test_output_mariadb_with_charset(tmp_path, testing_mariadb):
 @pytest.mark.mariadb
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -231,6 +236,7 @@ def test_output_mariadb_with_collation(tmp_path, testing_mariadb):
 @pytest.mark.mariadb
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -282,6 +288,7 @@ def test_output_mariadb_driver_provided(tmp_path, testing_mariadb):
 @pytest.mark.mariadb
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mariadb_list_single_element(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -333,6 +340,7 @@ def test_output_mariadb_list_single_element(tmp_path, testing_mariadb):
 @pytest.mark.mariadb
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mariadb_transaction(tmp_path, testing_mariadb):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(

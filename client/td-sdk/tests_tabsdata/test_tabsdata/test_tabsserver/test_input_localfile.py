@@ -5,6 +5,8 @@
 import inspect
 import logging
 import os
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -77,6 +79,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -120,6 +123,7 @@ def test_input_file_wildcard(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -165,6 +169,7 @@ def test_input_file_csv_string_format(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_parquet_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -211,6 +216,7 @@ def test_input_file_parquet_string_format(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_parquet_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -256,6 +262,7 @@ def test_input_file_parquet_wildcard(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_separator(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -302,6 +309,7 @@ def test_input_file_csv_separator(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_modified_path(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -348,6 +356,7 @@ def test_input_file_csv_modified_path(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_modified_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -394,6 +403,7 @@ def test_input_file_csv_modified_format(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_log_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -440,6 +450,7 @@ def test_input_file_log_string_format(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_log_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -485,6 +496,7 @@ def test_input_file_log_wildcard(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_ndjson_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -531,6 +543,7 @@ def test_input_file_ndjson_string_format(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_ndjson_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -576,7 +589,7 @@ def test_input_file_ndjson_wildcard(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.dimas
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_dtype_inference(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -611,7 +624,7 @@ def test_input_file_csv_dtype_inference(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.dimas
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_ndjson_dtype_inference(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(

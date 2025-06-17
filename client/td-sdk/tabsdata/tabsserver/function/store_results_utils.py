@@ -42,7 +42,26 @@ from tabsdata.io.output import (
 from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tabsserver.function import sql_utils
+from tabsdata.tabsserver.function.cloud_connectivity_utils import (
+    SERVER_SIDE_AWS_ACCESS_KEY_ID,
+    SERVER_SIDE_AWS_REGION,
+    SERVER_SIDE_AWS_SECRET_ACCESS_KEY,
+    SERVER_SIDE_AZURE_ACCOUNT_KEY,
+    SERVER_SIDE_AZURE_ACCOUNT_NAME,
+    obtain_and_set_azure_credentials,
+    obtain_and_set_s3_credentials,
+    set_s3_region,
+)
+from tabsdata.tabsserver.function.global_utils import (
+    CSV_EXTENSION,
+    CURRENT_PLATFORM,
+    NDJSON_EXTENSION,
+    PARQUET_EXTENSION,
+    TABSDATA_EXTENSION,
+    convert_path_to_uri,
+)
 from tabsdata.tabsserver.function.logging_utils import pad_string
+from tabsdata.tabsserver.function.native_tables_utils import sink_lf_to_location
 from tabsdata.tabsserver.function.yaml_parsing import (
     InputYaml,
     Table,
@@ -57,26 +76,6 @@ from tabsdata.utils.sql_utils import add_driver_to_uri, obtain_uri
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._translator import _unwrap_table_frame
-
-from .cloud_connectivity_utils import (
-    SERVER_SIDE_AWS_ACCESS_KEY_ID,
-    SERVER_SIDE_AWS_REGION,
-    SERVER_SIDE_AWS_SECRET_ACCESS_KEY,
-    SERVER_SIDE_AZURE_ACCOUNT_KEY,
-    SERVER_SIDE_AZURE_ACCOUNT_NAME,
-    obtain_and_set_azure_credentials,
-    obtain_and_set_s3_credentials,
-    set_s3_region,
-)
-from .global_utils import (
-    CSV_EXTENSION,
-    CURRENT_PLATFORM,
-    NDJSON_EXTENSION,
-    PARQUET_EXTENSION,
-    TABSDATA_EXTENSION,
-    convert_path_to_uri,
-    convert_uri_to_path,
-)
 
 if TYPE_CHECKING:
     from tabsdata.tabsserver.function.execution_context import ExecutionContext
@@ -162,7 +161,9 @@ def store_results(
         ):
             store_results_in_sql(results, destination, output_folder)
         elif isinstance(destination, TableOutput):
-            modified_tables = store_results_in_table(results, destination, request)
+            modified_tables = store_results_in_table(
+                results, destination, execution_context
+            )
         elif isinstance(destination, LocalFileDestination):
             store_results_in_files(results, destination, output_folder, request)
         elif isinstance(destination, AzureDestination):
@@ -188,72 +189,64 @@ def store_results(
 def store_results_in_table(
     results: ResultsCollection,
     destination: TableOutput,
-    execution_context: InputYaml,
+    execution_context: ExecutionContext,
 ) -> List[str]:
     results.convert_none_to_empty_frame()
     # Right now, source provides very little information, but we use it to do a small
     # sanity check and to ensure that everything is running properly
     # TODO: Decide if we want to add more checks here
-    execution_context_output_entry_list = execution_context.output
+    request_output_entry_list = execution_context.request.output
     logger.info(
-        f"Storing results in tables '{execution_context_output_entry_list}' and "
+        f"Storing results in tables '{request_output_entry_list}' and "
         f"matching them with destination '{destination}'"
     )
     table_list = []
     # Note: destination.table is a list of strings, it can't be a single string because
     # when we serialised it we stored it as such even if it was a single one.
-    if len(execution_context_output_entry_list) != len(destination.table):
+    if len(request_output_entry_list) != len(destination.table):
         logger.error(
             "Number of tables in the execution context output"
-            f" ({len(execution_context_output_entry_list)}) does not match the "
+            f" ({len(request_output_entry_list)}: "
+            f"{request_output_entry_list}) does not match the "
             "number"
-            f" of tables in the destination ({len(destination.table)}). No data stored."
+            f" of tables in the destination ({len(destination.table)}: "
+            f"{destination.table}). No data stored."
         )
         raise ValueError(
             "Number of tables in the execution context output"
-            f" ({len(execution_context_output_entry_list)}) does not match the "
+            f" ({len(request_output_entry_list)}: "
+            f"{request_output_entry_list}) does not match the "
             "number"
-            f" of tables in the destination ({len(destination.table)}). No data stored."
+            f" of tables in the destination ({len(destination.table)}: "
+            f"{destination.table}). No data stored."
         )
-    for execution_context_output_entry, source_table_uri in zip(
-        execution_context_output_entry_list, destination.table
+    for request_output_entry, table_name_in_decorator in zip(
+        request_output_entry_list, destination.table
     ):
-        logger.info(f"Unpacking '{execution_context_output_entry}'")
-        if isinstance(execution_context_output_entry, Table):
-            real_table_uri = obtain_table_uri_and_verify(
-                execution_context_output_entry, source_table_uri
-            )
-            table_list.append(
-                {
-                    "uri": real_table_uri,
-                    "name": execution_context_output_entry.name,
-                }
-            )
+        if isinstance(request_output_entry, Table):
+            match_tables_and_verify(request_output_entry, table_name_in_decorator)
+            table_list.append(request_output_entry)
         else:
             logger.error(
-                f"Invalid table type: {type(execution_context_output_entry)}. No data"
-                " stored."
+                f"Invalid table type: {type(request_output_entry)}. No data stored."
             )
             raise TypeError(
-                f"Invalid table type: {type(execution_context_output_entry)}. No data"
-                " stored."
+                f"Invalid table type: {type(request_output_entry)}. No data stored."
             )
     logger.debug(f"Table list obtained: {table_list}")
     logger.debug(f"Obtained a total of {len(results)} results")
     if len(results) != len(table_list):
         logger.error(
-            "Number of results obtained does not match the number of tables to store."
-            " No data stored."
+            f"Number of results obtained ({len(results)}) does not match the number of "
+            f"tables to store ({len(table_list)}). No data stored."
         )
         raise ValueError(
-            "Number of results obtained does not match the number of tables to store."
-            " No data stored."
+            f"Number of results obtained ({len(results)}) does not match the number of "
+            f"tables to store ({len(table_list)}). No data stored."
         )
     modified_tables = []
     for result, table in zip(results, table_list):
         logger.info(f"Storing result in table '{table}'")
-        table_path = convert_uri_to_path(table.get("uri"))
-        logger.debug(f"URI converted to path {table_path}")
         if isinstance(result.value, TableFrame):
             # First we create a new TableFrame where system columns to be kept are kept,
             # and those requiring regeneration are regenerated with new to persist
@@ -261,7 +254,7 @@ def store_results_in_table(
             result_value: TableFrame = result.value
             lf = result_value._to_lazy()
             tf = TableFrame.__build__(df=lf, mode="sys", idx=result_value._idx)
-            store_polars_lf_in_file(tf._to_lazy(), table_path)
+            sink_lf_to_location(tf._to_lazy(), execution_context, table.location)
         else:
             logger.error(
                 f"Invalid result type: '{type(result.value)}'. No data stored."
@@ -269,16 +262,16 @@ def store_results_in_table(
             raise TypeError(
                 f"Invalid result type: '{type(result.value)}'. No data stored."
             )
-        modified_tables.append(table.get("name"))
+        modified_tables.append(table.name)
         logger.debug(f"Result stored in table '{table}', added to modified_tables list")
     logger.info("Results stored in tables")
     logger.debug(f"Modified tables: {modified_tables}")
     return modified_tables
 
 
-def obtain_table_uri_and_verify(
+def match_tables_and_verify(
     execution_context_table: Table, destination_table_name: str
-) -> str:
+):
     # For now, we do only this small check for the table name, but we could
     # add more checks in the future.
     logger.debug(
@@ -290,9 +283,6 @@ def obtain_table_uri_and_verify(
             f"Execution context table name '{execution_context_table.name}' does not "
             f"match the destination table name '{destination_table_name}'"
         )
-    table_uri = execution_context_table.uri
-    logger.debug(f"Table URI: {table_uri}")
-    return table_uri
 
 
 def store_results_in_sql(

@@ -5,6 +5,8 @@
 import inspect
 import logging
 import os
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -45,6 +47,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_table(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -95,6 +98,7 @@ def test_input_table(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_table_uri_null(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -142,6 +146,7 @@ def test_input_table_uri_null(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_table_multiple_tables(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(

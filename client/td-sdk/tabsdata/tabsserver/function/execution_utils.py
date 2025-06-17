@@ -12,7 +12,7 @@ import pathlib
 import subprocess
 import tempfile
 from datetime import datetime
-from typing import TYPE_CHECKING, Tuple, Union
+from typing import TYPE_CHECKING, Tuple
 from urllib.parse import unquote
 
 import polars as pl
@@ -40,6 +40,11 @@ from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import build_table_uri_object
 from tabsdata.tabsserver.function import environment_import_utils
 from tabsdata.tabsserver.function.logging_utils import pad_string
+from tabsdata.tabsserver.function.native_tables_utils import (
+    scan_lf_from_location,
+    scan_tf_from_table,
+    sink_lf_to_location,
+)
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
 from tabsdata.utils.sql_utils import obtain_uri
 
@@ -54,12 +59,11 @@ from .cloud_connectivity_utils import (
 from .global_utils import (
     CURRENT_PLATFORM,
     convert_path_to_uri,
-    convert_uri_to_path,
 )
 from .offset_utils import (
     OFFSET_LAST_MODIFIED_VARIABLE_NAME,
 )
-from .yaml_parsing import Table, TableVersions
+from .yaml_parsing import Location, Table, TableVersions
 
 if TYPE_CHECKING:
     from tabsdata.io.input import Input
@@ -183,7 +187,9 @@ def trigger_non_plugin_source(
         logger.debug("Triggering TableInput")
         # When loading tabsdata tables, we return tuples of (uri, table), so that
         # coming operations can use information on the request for further processing.
-        local_sources = execute_table_importer(source, execution_context)
+        result = execute_table_importer(source, execution_context)
+        logger.info("Loaded tables successfully")
+        return result
     else:
         logger.error(f"Invalid source type: {type(source)}. No data imported.")
         raise TypeError(f"Invalid source type: {type(source)}. No data imported.")
@@ -197,7 +203,7 @@ def trigger_non_plugin_source(
 def execute_table_importer(
     source: TableInput,
     execution_context: ExecutionContext,
-) -> list[Union[TableFrameContext, list[TableFrameContext]]]:
+) -> list[TableFrame | None | list[TableFrame | None]]:
     # Right now, source provides very little information, but we use it to do a small
     # sanity check and to ensure that everything is running properly
     context_request_input = execution_context.request.input
@@ -205,7 +211,7 @@ def execute_table_importer(
         f"Importing tables '{context_request_input}' and matching them"
         f" with source '{source}'"
     )
-    table_list: list[Union[TableFrameContext, list[TableFrameContext]]] = []
+    tableframe_list: list[TableFrame | None | list[TableFrame | None]] = []
     # Note: source.uri is a list of URIs, it can't be a single URI because when we
     # serialised it we stored it as such even if it was a single one.
     if len(context_request_input) != len(source.table):
@@ -224,25 +230,30 @@ def execute_table_importer(
     for execution_context_input_entry, source_table_str in zip(
         context_request_input, source.table
     ):
-        logger.info(f"Unpacking '{execution_context_input_entry}'")
         if isinstance(execution_context_input_entry, Table):
-            real_table_uri = obtain_table_uri_and_verify(
-                execution_context_input_entry, source_table_str
+            verify_source_tables_match(execution_context_input_entry, source_table_str)
+            tf = scan_tf_from_table(
+                execution_context,
+                execution_context_input_entry,
+                fail_on_none_uri=False,
             )
-            table_list.append(
-                TableFrameContext(real_table_uri, execution_context_input_entry)
-            )
+            tableframe_list.append(tf)
         elif isinstance(execution_context_input_entry, TableVersions):
             logger.debug(
                 f"Matching TableVersions '{execution_context_input_entry}' with source"
-                f" URI '{source_table_str}'"
+                f" '{source_table_str}'"
             )
             list_of_table_objects = execution_context_input_entry.list_of_table_objects
-            list_of_table_uris: list[TableFrameContext] = []
+            versioned_tableframes_list: list[TableFrame | None] = []
             for table in list_of_table_objects:
-                real_table_uri = obtain_table_uri_and_verify(table, source_table_str)
-                list_of_table_uris.append(TableFrameContext(real_table_uri, table))
-            table_list.append(list_of_table_uris)
+                verify_source_tables_match(table, source_table_str)
+                tf = scan_tf_from_table(
+                    execution_context,
+                    table,
+                    fail_on_none_uri=False,
+                )
+                versioned_tableframes_list.append(tf)
+            tableframe_list.append(versioned_tableframes_list)
         else:
             logger.error(
                 f"Invalid table type: {type(execution_context_input_entry)}. No data"
@@ -252,31 +263,27 @@ def execute_table_importer(
                 f"Invalid table type: {type(execution_context_input_entry)}. No data"
                 " imported."
             )
-    logger.debug(f"Table list obtained: {table_list}")
-    return table_list
+    logger.debug(f"TableFrame list obtained: {tableframe_list}")
+    return tableframe_list
 
 
-def obtain_table_uri_and_verify(
-    execution_context_table: Table, source_table_str: str
-) -> str:
+def verify_source_tables_match(execution_context_table: Table, source_table_str: str):
     # For now, we do only this small check for the table name, but we could
     # add more checks in the future.
     logger.debug(
-        f"Matching table '{execution_context_table}' with source URI"
-        f" '{source_table_str}'"
+        f"Matching table '{execution_context_table}' with source '{source_table_str}'"
     )
     source_table_uri = build_table_uri_object(source_table_str)
-    logger.debug(
-        f"Source table '{source_table_str}' converted to TableURI: '{source_table_uri}'"
-    )
     if execution_context_table.name != source_table_uri.table:
+        logger.debug(
+            f"Source table '{source_table_str}' converted to TableURI:"
+            f" '{source_table_uri}'"
+        )
         logger.warning(
             f"Execution context table name '{execution_context_table.name}' does not "
             f"match the source table name '{source_table_uri.table}'"
         )
-    table_uri = execution_context_table.uri
-    logger.debug(f"Table URI: {table_uri}")
-    return table_uri
+    return
 
 
 def execute_sql_importer(
@@ -636,13 +643,13 @@ def load_source(
 
     logger.debug(f"Loading parquet file from path: {table_frame_context.path}")
     lf = pl.scan_parquet(table_frame_context.path)
-    logger.debug("Loaded parquet file successfully!")
+    logger.debug("Loaded parquet file successfully")
 
     if table_frame_context.table is None:
         return store_source_raw_data(execution_context, lf, idx)
     else:
-        return TableFrame.__build__(
-            df=lf, mode="tab", idx=table_frame_context.table.input_idx
+        raise ValueError(
+            "The code should not be reaching this point after the rework in TD-461"
         )
 
 
@@ -659,38 +666,29 @@ def store_source_raw_data(
     function_data = request.function_data
     if not function_data:
         raise ValueError("The function data location is required for publishers")
-    if function_data.uri is None:
-        raise ValueError("The uri for the function data is required")
+    elif function_data.uri is None:
+        raise ValueError("The uri for the function data is required for publishers")
 
     tf = TableFrame.__build__(df=lf, mode="raw", idx=idx)
     uri = function_data.uri
     # noinspection PyProtectedMember
     uri = uri.rstrip("/").rstrip("\\") + f"/e/{request.work}/r/{tf._idx}.t"
 
-    logger.info(f"Storing the raw data at location {uri}")
+    file_location = Location({"uri": uri, "env_prefix": function_data.env_prefix})
 
-    if uri.startswith("file://"):
-        try:
-            logger.debug("Creating the folders for the raw data")
-            logger.debug(f"Location for raw data uri: {uri}")
-            uri_folder = os.path.dirname(convert_uri_to_path(uri))
-            logger.debug(f"Folders to create: {uri_folder}")
-            os.makedirs(
-                uri_folder,
-                exist_ok=True,
-            )
-        except Exception as e:
-            logger.warning(
-                f"Error creating the folder for the raw data with uri '{uri}': {e}"
-            )
-
-    logger.debug(f"Performing sink of raw data to file {uri}")
+    logger.debug(f"Performing sink of raw data to '{file_location}'")
     # noinspection PyProtectedMember
-    tf._to_lazy().sink_parquet(
-        convert_uri_to_path(uri),
-        maintain_order=True,
-    )
-    logger.debug("File for raw data stored successfully!")
+    lf = tf._to_lazy()
+    sink_lf_to_location(lf, execution_context, file_location)
+    logger.debug("File for raw data stored successfully")
     # ToDo: this might need some adjustments if uri points to a cloud storage location.
     # noinspection PyProtectedMember
-    return TableFrame.__build__(df=pl.scan_parquet(uri), mode="tab", idx=tf._idx)
+    return TableFrame.__build__(
+        df=scan_lf_from_location(
+            execution_context,
+            file_location,
+            fail_on_none_uri=True,
+        ),
+        mode="tab",
+        idx=tf._idx,
+    )

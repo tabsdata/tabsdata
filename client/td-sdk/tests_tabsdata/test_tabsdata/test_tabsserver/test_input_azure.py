@@ -5,6 +5,8 @@
 import inspect
 import logging
 import os
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -55,6 +57,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_azure_csv(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -102,6 +105,7 @@ def test_input_azure_csv(tmp_path):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_azure_log(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -149,6 +153,7 @@ def test_input_azure_log(tmp_path):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_azure_parquet(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -196,6 +201,7 @@ def test_input_azure_parquet(tmp_path):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_azure_ndjson(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(

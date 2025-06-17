@@ -6,6 +6,8 @@ import inspect
 import logging
 import os
 import sys
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -94,6 +96,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_output_dataframe(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -139,6 +142,7 @@ def test_input_output_dataframe(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_multiple_inputs_multiple_outputs(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -196,6 +200,7 @@ def test_multiple_inputs_multiple_outputs(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_path_to_code(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -246,6 +251,7 @@ def test_path_to_code(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_custom_requirements(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     correct_requirements = {
@@ -316,6 +322,7 @@ def test_custom_requirements(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_custom_requirements_no_package_version(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     correct_requirements = {
@@ -386,6 +393,7 @@ def test_custom_requirements_no_package_version(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     correct_requirements = {
@@ -431,6 +439,7 @@ def test_custom_requirements_no_dependencies_raises_exception(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_failed_execution_returns_error_code(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -463,6 +472,7 @@ def test_failed_execution_returns_error_code(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_custom_logs_folder(tmp_path):
     context_archive = create_bundle_archive(
         multiple_inputs_multiple_outputs,
@@ -523,6 +533,7 @@ def test_custom_logs_folder(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_sequential_runs_no_error(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -581,6 +592,7 @@ def test_sequential_runs_no_error(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_sequential_registers_no_error(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     for _ in range(2):
@@ -639,6 +651,7 @@ def test_sequential_registers_no_error(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_custom_bin_folder(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -703,6 +716,7 @@ def test_custom_bin_folder(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_relative_import(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -745,6 +759,7 @@ def test_relative_import(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_failing_file_in_folder(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -790,6 +805,7 @@ def test_failing_file_in_folder(tmp_path):
 @pytest.mark.mariadb
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_initial_values_freeze(testing_mariadb, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -851,6 +867,7 @@ def test_initial_values_freeze(testing_mariadb, tmp_path):
 @pytest.mark.postgres
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_initial_values_wrong_key_type(testing_postgres, tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -933,6 +950,7 @@ def parse_exception_yaml(yaml_file: str):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_custom_execution_exception(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -972,6 +990,7 @@ def test_custom_execution_exception(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_general_execution_exception(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(

@@ -49,6 +49,7 @@ class ExecutionContext:
         function_config: dict = None,
         request: InputYaml = None,
         status: Status = None,
+        mount_options_dict: dict = None,
     ):
         self.paths = paths
         self.work = work
@@ -64,6 +65,7 @@ class ExecutionContext:
         # Parse and load the information of the request file
         self.request = parse_request_yaml(self.paths.request_file)
         self.request.work = work
+        self.mount_options = MountOptions(mount_options_dict or {})
 
     @property
     def user_provided_function(self) -> TabsdataFunction:
@@ -163,7 +165,7 @@ class ExecutionContext:
         """
         if self._status is None:
             self._status = Status()
-            self._status.load(self.request)
+            self._status.load(self.request, self)
         return self._status
 
     @status.setter
@@ -185,7 +187,7 @@ class ExecutionContext:
         """
         Store the status.
         """
-        return self.status.store(self.request)
+        return self.status.store(self.request, self)
 
 
 class FunctionConfig:
@@ -288,3 +290,29 @@ def create_folders(*args):
         if folder is not None:
             logger.debug(f"Creating folder {folder}")
             os.makedirs(folder, exist_ok=True)
+
+
+class MountOptions:
+    """
+    Class to manage the mount options for the function execution.
+    """
+
+    def __init__(self, options: dict):
+        self.options = options
+
+    def get_options_for_prefix(self, prefix: str):
+        """
+        Get a dictionary with all mount options that started with a specific prefix,
+        with the prefix already removed.
+        """
+        return {
+            k[len(prefix) + 1 :]: v
+            for k, v in self.options.items()
+            if k.startswith(prefix)
+        }
+
+    def __getitem__(self, item):
+        """
+        Get the mount option by key.
+        """
+        return self.options[item]

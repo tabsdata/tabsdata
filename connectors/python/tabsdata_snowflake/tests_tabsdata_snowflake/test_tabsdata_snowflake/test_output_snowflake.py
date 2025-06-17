@@ -6,6 +6,8 @@ import inspect
 import logging
 import os
 import uuid
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -295,6 +297,7 @@ def test_write_snowflake_replace(tmp_path, snowflake_connection):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.tabsserver
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_snowflake(tmp_path, snowflake_connection):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name = f"output_snowflake_table_{uuid.uuid4()}".replace("-", "_")
@@ -357,6 +360,7 @@ def test_output_snowflake(tmp_path, snowflake_connection):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @pytest.mark.tabsserver
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_multiple_outputs_snowflake(tmp_path, snowflake_connection):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name_0 = f"multiple_outputs_snowflake_table_0_{uuid.uuid4()}".replace(

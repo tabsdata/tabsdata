@@ -7,6 +7,8 @@ import inspect
 import logging
 import os
 import uuid
+from io import StringIO
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -71,6 +73,7 @@ pytestmark = pytest.mark.catalog
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file_0 = (
@@ -184,6 +187,7 @@ def test_output_s3_catalog(tmp_path, s3_client):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_replace(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
 
@@ -289,6 +293,7 @@ def test_output_s3_catalog_replace(tmp_path, s3_client):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_append(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
 
@@ -394,6 +399,7 @@ def test_output_s3_catalog_append(tmp_path, s3_client):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_catalog_no_auto_create_at_fails = copy.deepcopy(output_s3_catalog)
@@ -475,6 +481,7 @@ def test_output_s3_catalog_no_auto_create_at_fails(tmp_path, s3_client):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_schema_update(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_catalog_schema_update = copy.deepcopy(output_s3_catalog_schema_strategy)
@@ -583,6 +590,7 @@ def test_output_s3_catalog_schema_update(tmp_path, s3_client):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_catalog_schema_strict = copy.deepcopy(output_s3_catalog_schema_strategy)
@@ -666,6 +674,7 @@ def test_output_s3_catalog_schema_strict(tmp_path, s3_client):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_partition(tmp_path, s3_client):
 
     from tests_tabsdata.testing_resources.test_output_s3_catalog_partition.example import (
@@ -789,6 +798,7 @@ def test_output_s3_catalog_partition(tmp_path, s3_client):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_catalog_region_creds(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file_0 = (

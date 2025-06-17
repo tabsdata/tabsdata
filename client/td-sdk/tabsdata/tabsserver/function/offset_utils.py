@@ -2,15 +2,22 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import copy
 import logging
-import os
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import polars as pl
 
-from tabsdata.tabsserver.function.global_utils import convert_uri_to_path
-from tabsdata.tabsserver.function.yaml_parsing import InputYaml
+from tabsdata.tabsserver.function.native_tables_utils import (
+    scan_lf_from_location,
+    sink_lf_to_location,
+)
+
+if TYPE_CHECKING:
+    from tabsdata.tabsserver.function.execution_context import ExecutionContext
+    from tabsdata.tabsserver.function.yaml_parsing import InputYaml
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +182,9 @@ class Offset:
             f"{str(self.use_decorator_values)} >"
         )
 
-    def load_current_offset(self, request: InputYaml):
+    def load_current_offset(
+        self, request: InputYaml, execution_context: ExecutionContext
+    ):
         """
         Load the current offset from the execution context.
 
@@ -186,13 +195,15 @@ class Offset:
         system_input = request.system_input
         logger.debug(f"System input: {system_input}")
         td_offset_table = system_input[OFFSET_LIST_POSITION]
-        logger.debug(f"TD offset table name: {td_offset_table}")
+        logger.debug(f"TD offset table: {td_offset_table}")
         logger.debug(f"TD offset table location: {td_offset_table.location}")
         td_offset_uri = td_offset_table.uri
         logger.debug(f"TD offset table URI: {td_offset_uri}")
         if td_offset_uri:
             try:
-                td_offset_frame = pl.read_parquet(td_offset_uri)
+                td_offset_frame = scan_lf_from_location(
+                    execution_context, td_offset_table.location
+                ).collect()
                 logger.debug(f"TD offset value: {td_offset_frame}")
                 if len(td_offset_frame) != 1:
                     # We have more than one row, which is not allowed in the current
@@ -214,6 +225,17 @@ class Offset:
             self.current_offset = copy.deepcopy(self.loaded_offset)
             self.update_mode = NEW_MODE
             self.use_decorator_values = False
+        else:
+            # If the URI is None, we will not load any offset, and we will
+            # use the current offset as an empty dictionary.
+            logger.debug(
+                f"The URI of the offset table '{td_offset_table.name}' is None. "
+                "No values were loaded."
+            )
+            self.loaded_offset = {}
+            self.current_offset = {}
+            self.update_mode = NONE_MODE
+            self.use_decorator_values = True
         logger.debug(f"Current offset: {self.current_offset}")
 
     @property
@@ -235,21 +257,21 @@ class Offset:
             logger.debug("The offset has not changed.")
         return changed
 
-    def store(self, execution_context: InputYaml):
+    def store(self, request: InputYaml, execution_context: ExecutionContext):
         """
         Store the offset in the global variable.
 
         Args:
-            execution_context: The execution context.
+            request: The execution context.
 
         """
         logger.info(f"Storing offset {str(self)}")
-        system_output = execution_context.system_output
+        system_output = request.system_output
         offset_output_table = system_output[OFFSET_LIST_POSITION]
         self.output_table_name = offset_output_table.name
         destination_table_uri = offset_output_table.uri
         logger.info(
-            f"Found the table '{offset_output_table.name}' with "
+            f"Found the table '{offset_output_table}' with "
             f"URI '{destination_table_uri}'"
         )
 
@@ -265,26 +287,10 @@ class Offset:
                 f"'{destination_table_uri}'"
             )
 
-            if destination_table_uri.startswith("file://"):
-                try:
-                    logger.debug("Creating the directories for the offset table")
-                    logger.debug(f"Destination table URI: {destination_table_uri}")
-                    directories_to_create = os.path.dirname(
-                        convert_uri_to_path(destination_table_uri)
-                    )
-                    logger.debug(f"Directories to create: {directories_to_create}")
-                    os.makedirs(
-                        directories_to_create,
-                        exist_ok=True,
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "Error creating the directory for the offset table"
-                        f" with URI '{destination_table_uri}': {e}"
-                    )
+            lf = pl.LazyFrame(df)
 
             logger.debug(f"Performing sink to file {destination_table_uri}")
-            df.write_parquet(convert_uri_to_path(destination_table_uri))
+            sink_lf_to_location(lf, execution_context, offset_output_table.location)
             logger.debug("Offset stored successfully.")
             return
         else:

@@ -7,6 +7,8 @@ import datetime
 import inspect
 import logging
 import os
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -55,6 +57,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet = copy.deepcopy(output_s3_format_testing)
@@ -127,6 +130,7 @@ def test_output_s3_parquet(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_data_version = copy.deepcopy(output_s3_format_testing)
@@ -200,6 +204,7 @@ def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_data_version = copy.deepcopy(output_s3_format_testing)
@@ -273,6 +278,7 @@ def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_execution_id(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_data_version = copy.deepcopy(output_s3_format_testing)
@@ -345,6 +351,7 @@ def test_output_s3_parquet_with_execution_id(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_export_timestamp = copy.deepcopy(output_s3_format_testing)
@@ -428,6 +435,7 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_trigger_timestamp = copy.deepcopy(output_s3_format_testing)
@@ -512,6 +520,7 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_parquet_with_scheduler_timestamp = copy.deepcopy(output_s3_format_testing)
@@ -596,6 +605,7 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_csv(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_csv = copy.deepcopy(output_s3_format_testing)
@@ -675,6 +685,7 @@ def test_output_s3_csv(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_ndjson(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_s3_ndjson = copy.deepcopy(output_s3_format_testing)
@@ -746,6 +757,7 @@ def test_output_s3_ndjson(tmp_path, s3_client):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_s3_frame_list(tmp_path, s3_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = (

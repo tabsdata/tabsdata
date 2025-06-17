@@ -6,6 +6,8 @@ import inspect
 import logging
 import os
 import urllib.parse
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -69,6 +71,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.postgres
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_postgres_list(tmp_path, testing_postgres):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -124,6 +127,7 @@ def test_output_postgres_list(tmp_path, testing_postgres):
 @pytest.mark.postgres
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_postgres_driver_provided(tmp_path, testing_postgres):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -176,6 +180,7 @@ def test_output_postgres_driver_provided(tmp_path, testing_postgres):
 @pytest.mark.postgres
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_postgres_transaction(tmp_path, testing_postgres):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -229,6 +234,7 @@ def test_output_postgres_transaction(tmp_path, testing_postgres):
 @pytest.mark.postgres
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_postgres_table_replace(tmp_path, testing_postgres):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -282,6 +288,7 @@ def test_output_postgres_table_replace(tmp_path, testing_postgres):
 @pytest.mark.postgres
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_postgres_schema(tmp_path, testing_postgres):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(

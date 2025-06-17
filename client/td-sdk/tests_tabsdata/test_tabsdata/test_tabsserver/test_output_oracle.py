@@ -6,6 +6,8 @@ import inspect
 import logging
 import os
 import urllib.parse
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -60,6 +62,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.oracle
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_oracle_list(tmp_path, testing_oracle):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -115,6 +118,7 @@ def test_output_oracle_list(tmp_path, testing_oracle):
 @pytest.mark.oracle
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_oracle_driver_provided(tmp_path, testing_oracle):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
@@ -167,6 +171,7 @@ def test_output_oracle_driver_provided(tmp_path, testing_oracle):
 @pytest.mark.oracle
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_oracle_transaction(tmp_path, testing_oracle):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(

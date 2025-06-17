@@ -20,3 +20,6 @@ class TableFrameContext:
     ):
         self.path = path
         self.table = table
+
+    def __repr__(self):
+        return f"TableFrameContext(path={self.path}, table={self.table})"

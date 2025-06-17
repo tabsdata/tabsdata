@@ -5,6 +5,8 @@
 import inspect
 import logging
 import os
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -58,6 +60,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_file_parquet(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = os.path.join(tmp_path, "test_output_file_parquet.parquet")
@@ -120,6 +123,7 @@ def test_output_file_parquet(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_file_multiple_files(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     first_output_file = os.path.join(
@@ -200,6 +204,7 @@ def test_output_file_multiple_files(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_file_csv(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = os.path.join(tmp_path, "test_output_file_csv.csv")
@@ -268,6 +273,7 @@ def test_output_file_csv(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_file_ndjson(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = os.path.join(tmp_path, "test_output_file_ndjson.ndjson")
@@ -330,6 +336,7 @@ def test_output_file_ndjson(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_file_multiple_files_with_none(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     first_output_file = os.path.join(
@@ -407,6 +414,7 @@ def test_output_file_multiple_files_with_none(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_file_with_none(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = os.path.join(tmp_path, "test_output_file_with_none.parquet")
@@ -467,7 +475,7 @@ def test_output_file_with_none(tmp_path):
 
 @pytest.mark.requires_internet
 @pytest.mark.slow
-@pytest.mark.aleix
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_file_frame_list(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_file = os.path.join(tmp_path, "output_file_frame_list_$FRAGMENT_IDX.parquet")

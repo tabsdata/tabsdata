@@ -7,6 +7,8 @@ import datetime
 import inspect
 import logging
 import os
+from io import StringIO
+from unittest import mock
 
 import polars as pl
 import pytest
@@ -50,6 +52,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @pytest.mark.requires_internet
 @pytest.mark.integration
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_azure_parquet(tmp_path, azure_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_azure_parquet = copy.deepcopy(output_azure_format_testing)
@@ -134,6 +137,7 @@ def test_output_azure_parquet(tmp_path, azure_client):
 @pytest.mark.requires_internet
 @pytest.mark.integration
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_azure_csv(tmp_path, azure_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_azure_csv = copy.deepcopy(output_azure_format_testing)
@@ -225,6 +229,7 @@ def test_output_azure_csv(tmp_path, azure_client):
 @pytest.mark.requires_internet
 @pytest.mark.integration
 @pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_azure_ndjson(tmp_path, azure_client):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     output_azure_ndjson = copy.deepcopy(output_azure_format_testing)

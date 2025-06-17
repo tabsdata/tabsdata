@@ -35,8 +35,10 @@ def create_response(
 
     if execution_context.status.offset.changed:
         data_tables.append(Data(initial_values_table_name))
+        modified_tables.append(initial_values_table_name)
     else:
         no_data_tables.append(NoData(initial_values_table_name))
+        not_modified_tables.append(initial_values_table_name)
 
     logger.info(f"Modified tables: {modified_tables}")
     logger.info(f"Not modified tables: {not_modified_tables}")

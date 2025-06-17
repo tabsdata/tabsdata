@@ -15,14 +15,17 @@ class Location:
 
     @property
     def uri(self):
-        return self.data.get("uri")
+        return self.data.get("uri") if self.data else None
 
     @property
     def env_prefix(self):
-        return self.data.get("env_prefix")
+        return self.data.get("env_prefix") if self.data else None
 
     def __eq__(self, other):
         return isinstance(other, Location) and self.data == other.data
+
+    def __bool__(self):
+        return bool(self.data)
 
     def __repr__(self):
         return f"Location(uri={self.uri}, env_prefix={self.env_prefix})"
@@ -38,15 +41,15 @@ class Table:
 
     @property
     def location(self):
-        return self.data.get("location")
+        return Location(self.data.get("location", {}))
 
     @property
     def uri(self):
-        return self.location.get("uri") if self.location else None
+        return self.location.uri if self.location else None
 
     @property
     def env_prefix(self):
-        return self.location.get("env_prefix") if self.location else None
+        return self.location.env_prefix if self.location else None
 
     @property
     def table(self):
@@ -76,7 +79,7 @@ class Table:
         return isinstance(other, Table) and self.data == other.data
 
     def __repr__(self):
-        return f"Table(name={self.name}, uri={self.uri}, data={self.data})"
+        return f"Table(name={self.name}, {self.location}, data={self.data})"
 
 
 # Define a custom constructor for the !TableVersions tag
@@ -113,7 +116,7 @@ class InputYaml(ABC):
 
     @property
     @abstractmethod
-    def function_data(self) -> Table:
+    def function_data(self) -> Location:
         """Return the function_data section of the YAML file."""
 
     @property

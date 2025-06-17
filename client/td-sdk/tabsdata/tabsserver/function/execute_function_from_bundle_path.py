@@ -10,6 +10,8 @@ import os
 import sys
 import traceback
 
+import yaml
+
 from tabsdata.tabsserver.function.execution_context import (
     ExecutionContext,
     ExecutionPaths,
@@ -97,6 +99,8 @@ if __name__ == "__main__":
         logs_folder=arguments.logs_folder,
     )
     try:
+        raw_mount_options = sys.stdin.read()
+        mount_options_dict = yaml.safe_load(raw_mount_options)
         execution_fs = ExecutionPaths(
             bundle_folder=arguments.bundle_path,
             request_file=arguments.request_file,
@@ -106,6 +110,7 @@ if __name__ == "__main__":
         execution_context = ExecutionContext(
             paths=execution_fs,
             work=arguments.work,
+            mount_options_dict=mount_options_dict,
         )
         execute_bundled_function(execution_context)
         logger.info(pad_string("[Exiting function execution]"))

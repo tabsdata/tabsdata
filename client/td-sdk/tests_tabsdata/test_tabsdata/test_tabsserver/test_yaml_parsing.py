@@ -56,7 +56,9 @@ def test_parse_input_yaml():
     input_table = input[0]
     assert isinstance(input_table, Table)
     assert input_table.name == "$td.initial_values"
-    assert input_table.location is None
+    assert not input_table.location
+    assert input_table.location.uri is None
+    assert input_table.location.env_prefix is None
     assert input_table.uri is None
     assert input_table.env_prefix is None
     assert input_table.table is None
@@ -70,13 +72,11 @@ def test_parse_input_yaml():
     assert first_table.name == "users"
     assert first_table.table == "td://eu/users/$td.initial_values/HEAD"
     assert first_table.table_id == "td://ID1/ID2/$td.initial_values/ID4"
-    assert first_table.location == {
-        "uri": (
-            "file:///users/tucu/.tdserver/default/s/ID1"
-            "/d/ID2/v/ID3/ID4/t/.initial_values.t"
-        ),
-        "env_prefix": None,
-    }
+    assert (
+        first_table.location.uri
+        == "file:///users/tucu/.tdserver/default/s/ID1/d/ID2/v/ID3/ID4/t/.initial_values.t"
+    )
+    assert first_table.location.env_prefix is None
     assert first_table.env_prefix is None
     assert (
         first_table.uri
@@ -88,9 +88,9 @@ def test_parse_input_yaml():
     assert third_table.name == "users"
     assert third_table.table == "td://eu/users/$td.initial_values/HEAD^^"
     assert third_table.table_id is None
-    assert third_table.location is None
-    assert third_table.env_prefix is None
-    assert third_table.uri is None
+    assert not third_table.location
+    assert third_table.location.uri is None
+    assert third_table.location.env_prefix is None
 
     output = config.output
     assert isinstance(output, list)

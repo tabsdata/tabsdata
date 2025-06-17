@@ -11,6 +11,7 @@ from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.offset_utils import Offset
 
 if TYPE_CHECKING:
+    from tabsdata.tabsserver.function.execution_context import ExecutionContext
     from tabsdata.tabsserver.function.yaml_parsing import InputYaml
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class Status:
     def __str__(self):
         return f"#Status#< Offset: {str(self.offset)} ; meta: {str(self.meta)} >"
 
-    def load(self, request: InputYaml):
+    def load(self, request: InputYaml, execution_context: ExecutionContext):
         """
         Load the current status from the execution context.
 
@@ -36,10 +37,10 @@ class Status:
             request: The request information.
         """
         logger.debug("Loading current status")
-        self.offset.load_current_offset(request)
+        self.offset.load_current_offset(request, execution_context)
         logger.debug(f"Current status: {self}")
 
-    def store(self, request: InputYaml):
+    def store(self, request: InputYaml, execution_context: ExecutionContext):
         """
         Store the status.
 
@@ -49,4 +50,4 @@ class Status:
         """
         logger.info(pad_string("[Storing execution information]"))
         logger.debug(f"Storing status: {self}")
-        self.offset.store(request)
+        self.offset.store(request, execution_context)
