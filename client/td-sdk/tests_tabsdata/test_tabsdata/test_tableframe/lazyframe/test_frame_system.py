@@ -8,7 +8,10 @@ import tempfile
 import unittest
 
 import polars as pl
-import pytest
+
+from tabsdata.utils.tableframe._common import drop_inception_regenerate_system_columns
+from tabsdata.utils.tableframe._constants import TD_COL_INCEPTION, Inception
+from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS_METADATA
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._translator import (
@@ -77,3 +80,41 @@ class TestTableFrame(unittest.TestCase):
         tf_count = _unwrap_table_frame(tf).select(pl.count()).collect().item()
         self.assertEqual(lf_row_count, tf_len, "TableFrame len (3) mismatch.")
         self.assertEqual(lf_row_count, tf_count, "TableFrame count (3) mismatch.")
+
+    def test_drop_inception_regenerate_system_columns(self):
+        expected_drop = [
+            column
+            for column, metadata in SYSTEM_COLUMNS_METADATA.items()
+            if metadata.get(TD_COL_INCEPTION) == Inception.REGENERATE
+        ]
+
+        expected_kept = [
+            column
+            for column, metadata in SYSTEM_COLUMNS_METADATA.items()
+            if metadata.get(TD_COL_INCEPTION) != Inception.REGENERATE
+        ]
+
+        i_lf = self.table_frame._lf
+        o_lf = drop_inception_regenerate_system_columns(lf=i_lf, ignore_missing=True)
+
+        i_lf_columns = set(i_lf.collect_schema().names())
+        o_lf_columns = set(o_lf.collect_schema().names())
+
+        should_have_been_dropped = [
+            column for column in expected_drop if column in o_lf_columns
+        ]
+        assert not should_have_been_dropped, (
+            "These system columns should have been dropped but are still present:"
+            f" {should_have_been_dropped}"
+        )
+
+        should_have_been_kept = [
+            column for column in expected_kept if column in i_lf_columns
+        ]
+        mistakenly_dropped = [
+            col for col in should_have_been_kept if col not in o_lf_columns
+        ]
+        assert not mistakenly_dropped, (
+            "These system columns should not have been dropped but are missing:"
+            f" {mistakenly_dropped}"
+        )

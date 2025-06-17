@@ -82,11 +82,20 @@ UNSTABLE_METHODS = [
     "update",
 ]
 
+
+class Inception(Enum):
+    # When the system column is kept as is when storing the table.
+    PROPAGATE = "propagate"
+    # When the system column is computed when storing the table.
+    REGENERATE = "regenerate"
+
+
 TD_COLUMN_PREFIX = "$td."
 
 TD_COL_DEFAULT = "default"
 TD_COL_DTYPE = "dtype"
 TD_COL_GENERATOR = "generator"
+TD_COL_INCEPTION = "inception"
 
 
 class StandardSystemColumns(Enum):
@@ -95,6 +104,7 @@ class StandardSystemColumns(Enum):
 
 
 class StandardVolatileSystemColumns(Enum):
+    TD_INDEX_COLUMN = "$td._index"
     TD_ITEM_COLUMN = "$td._item"
     TD_MIN_COLUMN = "$td._min"
     TD_MAX_COLUMN = "$td._max"
@@ -106,6 +116,7 @@ class StandardSystemColumnsMetadata(Enum):
         TD_COL_DEFAULT: td_generators._id_default,
         TD_COL_DTYPE: pl.String,
         TD_COL_GENERATOR: td_generators.IdGenerator,
+        TD_COL_INCEPTION: Inception.REGENERATE,
     }
 
 

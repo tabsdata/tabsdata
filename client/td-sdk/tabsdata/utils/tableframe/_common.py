@@ -20,8 +20,18 @@ logger.setLevel(logging.DEBUG)
 
 AddSystemColumnsMode: TypeAlias = Literal[
     # TableFrame creates all the system columns, even if existing.
+    # (Normally used to create a new TableFrame from scratch. Used also in Source
+    #  functions to statically stick their values before processing.)
     "raw",
+    # TableFrame applies the inception policy defined in column.
+    # (Normally used to store a TableFrame after function execution. Columns to keep are
+    #  left with current value, and columns to regenerate are dropped and created back.
+    #   In this case, future load will use these lastly generated values.)
+    "sys",
     # TableFrame creates only the unexisting system columns.
+    # (Normally used to load a TableFrame from a non-Source function, as the stored
+    #  columns are assumed to have been stored properly with correct values to use in
+    #  future function executions using them).
     "tab",
 ]
 
@@ -70,6 +80,11 @@ def add_system_columns(
             lf=lf,
             ignore_missing=True,
         )
+    elif mode == "sys":
+        lf = drop_inception_regenerate_system_columns(
+            lf=lf,
+            ignore_missing=True,
+        )
 
     current_columns = set(lf.collect_schema().names())
     for column, metadata in td_helpers.SYSTEM_COLUMNS_METADATA.items():
@@ -105,6 +120,28 @@ def drop_system_columns(
     ignore_missing: bool = True,
 ) -> pl.LazyFrame:
     columns_to_remove = list(td_helpers.SYSTEM_COLUMNS)
+    if ignore_missing:
+        existing_columns = set(lf.collect_schema().names())
+        columns_to_remove = [
+            col for col in columns_to_remove if col in existing_columns
+        ]
+    for column in columns_to_remove:
+        lf = lf.drop(column)
+    return lf
+
+
+def drop_inception_regenerate_system_columns(
+    *,
+    lf: pl.LazyFrame,
+    ignore_missing: bool = True,
+) -> pl.LazyFrame:
+    columns_to_remove = [
+        column
+        for column, metadata in td_helpers.SYSTEM_COLUMNS_METADATA.items()
+        if metadata.get(td_constants.TD_COL_INCEPTION)
+        == td_constants.Inception.REGENERATE
+    ]
+
     if ignore_missing:
         existing_columns = set(lf.collect_schema().names())
         columns_to_remove = [

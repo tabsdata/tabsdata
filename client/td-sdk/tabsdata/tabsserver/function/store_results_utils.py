@@ -184,6 +184,7 @@ def store_results(
     return modified_tables
 
 
+# noinspection PyProtectedMember
 def store_results_in_table(
     results: ResultsCollection,
     destination: TableOutput,
@@ -254,8 +255,13 @@ def store_results_in_table(
         table_path = convert_uri_to_path(table.get("uri"))
         logger.debug(f"URI converted to path {table_path}")
         if isinstance(result.value, TableFrame):
+            # First we create a new TableFrame where system columns to be kept are kept,
+            # and those requiring regeneration are regenerated with new to persist
+            # values.
             result_value: TableFrame = result.value
-            store_polars_lf_in_file(result_value._lf, table_path)
+            lf = result_value._to_lazy()
+            tf = TableFrame.__build__(df=lf, mode="sys", idx=result_value._idx)
+            store_polars_lf_in_file(tf._to_lazy(), table_path)
         else:
             logger.error(
                 f"Invalid result type: '{type(result.value)}'. No data stored."
@@ -748,6 +754,7 @@ def store_polars_lf_in_file(
     result_file: str | os.PathLike,
     format: FileFormat | CSVFormat | ParquetFormat | NDJSONFormat = None,
 ):
+
     file_ending = result_file.split(".")[-1]
     if file_ending in FORMAT_TO_POLARS_WRITE_FUNCTION:
         # polars does not create parent folders when writing a file.
@@ -758,6 +765,7 @@ def store_polars_lf_in_file(
             # TODO: Add maintain_order as an option once we are using sink instead of
             #  write with our own dataframe
             write_format = {
+                "maintain_order": True,
                 "separator": format.separator,
                 "line_terminator": format.eol_char,
                 "quote_char": format.quote_char,
@@ -771,7 +779,9 @@ def store_polars_lf_in_file(
                 "quote_style": format.output_quote_style,
             }
         else:
-            write_format = {}
+            write_format = {
+                "maintain_order": True,
+            }
         logger.debug(
             f"Writing result to file '{result_file}' using format '{write_format}'"
         )
