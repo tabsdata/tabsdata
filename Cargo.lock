@@ -1185,6 +1185,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dir-size"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e76a7e228331a28ca06810117daf0b28eb87083fc31a8972af17b7d13024e3a"
+dependencies = [
+ "rayon",
+]
+
+[[package]]
 name = "dirs"
 version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5519,10 +5528,13 @@ dependencies = [
  "data-encoding",
  "derive-new",
  "derive_builder",
+ "dir-size",
  "dirs",
  "getset",
  "homedir",
  "http",
+ "ignore",
+ "indexmap 2.9.0",
  "itertools 0.13.0",
  "lazy_static",
  "libc",

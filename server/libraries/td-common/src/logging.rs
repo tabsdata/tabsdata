@@ -50,6 +50,7 @@ pub const LOG_CONFIG_FILE: &str = "log.yaml";
 
 pub const LOG_LOCATION: &str = "log";
 pub const LOG_FILE: &str = "td.log";
+pub const LOG_EXTENSION: &str = "log";
 
 pub const WORK_ENV: &str = "TD_URI_WORK";
 

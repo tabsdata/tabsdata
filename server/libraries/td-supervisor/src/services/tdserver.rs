@@ -23,6 +23,7 @@ use clap::{command, Parser};
 use clap_derive::{Args, Subcommand};
 use getset::Getters;
 use humantime::format_duration;
+use indexmap::IndexMap;
 use linemux::MuxedLines;
 use num_format::{Locale, ToFormattedString};
 use std::collections::{HashMap, HashSet};
@@ -47,6 +48,7 @@ use td_apiserver::config::DbSchema;
 use td_common::cli::{parse_extra_arguments, ARGUMENT_PREFIX, TRAILING_ARGUMENTS_PREFIX};
 use td_common::env::{get_home_dir, to_absolute, TABSDATA_HOME_DIR};
 use td_common::logging::set_log_level;
+use td_common::monitor::instance_space;
 use td_common::os::{get_process_tree, name_program, terminate_process};
 use td_common::server::WorkerClass::REGULAR;
 use td_common::server::{
@@ -131,7 +133,7 @@ enum Commands {
     Stop(StopArguments),
 
     #[command(about = "Show the status of a Tabsdata instance")]
-    Status(ControlArguments),
+    Status(StatusArguments),
 
     #[command(about = "Tail the logs of a Tabsdata instance")]
     Log(ControlArguments),
@@ -377,6 +379,28 @@ struct StopOptionsArguments {
     /// Option to stop forcefully.
     #[arg(long, name = "force", long_help = "Option to stop forcefully.")]
     force: bool,
+}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct StatusArguments {
+    #[command(flatten)]
+    control: ControlArguments,
+
+    #[command(flatten)]
+    options: StatusOptionsArguments,
+}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct StatusOptionsArguments {
+    /// Option to show metrics resources consumption too.
+    #[arg(
+        long,
+        name = "usage",
+        long_help = "Option to show metrics on resources consumption too."
+    )]
+    metrics: bool,
 }
 
 pub struct TabsDataCli {}
@@ -998,14 +1022,22 @@ fn command_stop(arguments: StopArguments) {
     }
 }
 
-fn command_status(arguments: ControlArguments) {
+fn command_status(arguments: StatusArguments) {
     show_mode();
     show_pip_uv_repository_mode();
-    let supervisor_instance = get_instance_path_for_instance(&arguments.instance().clone());
-    let supervisor_workspace = get_workspace_path_for_instance(&arguments.instance().clone());
+    let supervisor_instance = get_instance_path_for_instance(&arguments.control.instance().clone());
+    let supervisor_workspace =
+        get_workspace_path_for_instance(&arguments.control.instance().clone());
     let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
 
-    match status(supervisor_work) {
+    let theme = Style::modern()
+        .horizontals([(1, HorizontalLine::inherit(Style::modern()))])
+        .verticals([(1, VerticalLine::inherit(Style::modern()))])
+        .remove_horizontal();
+
+    let mut status = String::new();
+
+    match status_processes(supervisor_work) {
         (WorkerStatus::Running { pid }, Some(workers)) => {
             let tabled_workers: Vec<WorkerRow> = workers
                 .into_iter()
@@ -1023,39 +1055,56 @@ fn command_status(arguments: ControlArguments) {
                 )
                 .collect();
 
-            let theme = Style::modern()
-                .horizontals([(1, HorizontalLine::inherit(Style::modern()))])
-                .verticals([(1, VerticalLine::inherit(Style::modern()))])
-                .remove_horizontal();
             let mut table = Table::new(tabled_workers);
 
             table
-                .with((theme, Alignment::left()))
+                .with((theme.clone(), Alignment::left()))
                 .with(Modify::new(Columns::single(0)).with(Alignment::right()))
                 .with(Modify::new(Columns::single(1)).with(Alignment::right()))
                 .with(Modify::new(Columns::single(4)).with(Alignment::right()))
                 .with(Modify::new(Columns::single(5)).with(Alignment::right()));
 
-            info!(
-                "Workers and its sub-workers of instance '{}' - '{}':\n{}",
+            status.push_str(&format!(
+                "Workers and its sub-workers of instance '{}' - '{}':\n{}\n",
                 pid,
-                supervisor_instance.clone().display(),
+                supervisor_instance.display(),
                 table
-            );
+            ));
         }
         other => {
-            warn!(
+            status.push_str(&format!(
                 "Tabsdata instance '{}' not running: '{:?}'",
                 supervisor_instance.clone().display(),
                 other
-            )
+            ));
         }
     }
+
+    if arguments.options.metrics {
+        let space_folders = status_space(supervisor_instance);
+        let tabled_space: Vec<SpaceRow> = space_folders
+            .into_iter()
+            .map(|(name, (path, _, human))| SpaceRow {
+                name,
+                human,
+                path: path.display().to_string(),
+            })
+            .collect();
+        if !tabled_space.is_empty() {
+            let mut table = Table::new(tabled_space);
+            table
+                .with((theme.clone(), Alignment::left()))
+                .with(Modify::new(Columns::single(1)).with(Alignment::right()));
+
+            status.push_str(&format!("Relevant folders disk usage:\n{}", table));
+        }
+    }
+    info!("{status}");
 }
 
 type WorkerProcess = (Pid, Pid, String, String, u64, u64);
 
-fn status(supervisor_work: PathBuf) -> (WorkerStatus, Option<Vec<WorkerProcess>>) {
+fn status_processes(supervisor_work: PathBuf) -> (WorkerStatus, Option<Vec<WorkerProcess>>) {
     let supervisor_tracker = WorkerTracker::new(supervisor_work.clone());
     match supervisor_tracker.check_worker_status() {
         WorkerStatus::Running { pid } => {
@@ -1065,10 +1114,14 @@ fn status(supervisor_work: PathBuf) -> (WorkerStatus, Option<Vec<WorkerProcess>>
     }
 }
 
+fn status_space(instance: PathBuf) -> IndexMap<String, (PathBuf, u64, String)> {
+    instance_space(&instance)
+}
+
 fn wait(supervisor_work: PathBuf) -> bool {
     let start_time = Instant::now();
     loop {
-        let (status, tree) = status(supervisor_work.clone());
+        let (status, tree) = status_processes(supervisor_work.clone());
         if let WorkerStatus::Running { .. } = status {
             if let Some(children) = &tree {
                 if children
@@ -1610,6 +1663,16 @@ impl WorkerRow {
             ),
         }
     }
+}
+
+#[derive(Debug, tabled::Tabled)]
+struct SpaceRow {
+    #[tabled(rename = "Category")]
+    name: String,
+    #[tabled(rename = "Size")]
+    human: String,
+    #[tabled(rename = "Path")]
+    path: String,
 }
 
 /*

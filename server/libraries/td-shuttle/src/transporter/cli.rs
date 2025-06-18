@@ -101,6 +101,7 @@ pub fn run() {
         "transporter",
         |_config, params| async move { run_impl_report_to_file(params).await },
         None,
+        None,
     );
 }
 

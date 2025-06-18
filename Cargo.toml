@@ -318,11 +318,14 @@ version = "2.9.0"
 [workspace.dependencies.derive-new]
 version = "0.7.0"
 
+[workspace.dependencies.derive_builder]
+version = "0.20.2"
+
 [workspace.dependencies.dirs]
 version = "5.0.1"
 
-[workspace.dependencies.derive_builder]
-version = "0.20.2"
+[workspace.dependencies.dir-size]
+version = "0.1.1"
 
 [workspace.dependencies.duct]
 version = "0.13.7"
@@ -358,9 +361,6 @@ version = "2.2.0"
 version = "1.6.0"
 features = ["full"]
 
-[workspace.dependencies.indicatif]
-version = "0.17.11"
-
 [workspace.dependencies.ignore]
 version = "0.4.23"
 
@@ -369,6 +369,9 @@ version = "0.7.4"
 
 [workspace.dependencies.indexmap]
 version = "2.9.0"
+
+[workspace.dependencies.indicatif]
+version = "0.17.11"
 
 [workspace.dependencies.itertools]
 version = "0.13.0"

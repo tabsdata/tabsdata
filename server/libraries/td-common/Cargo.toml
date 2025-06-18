@@ -69,9 +69,12 @@ data-encoding = { workspace = true }
 derive_builder = { workspace = true }
 derive-new = { workspace = true }
 dirs = { workspace = true }
+dir-size = { workspace = true }
 getset = { workspace = true }
 homedir = { workspace = true }
 http = { workspace = true }
+ignore = { workspace = true }
+indexmap = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }

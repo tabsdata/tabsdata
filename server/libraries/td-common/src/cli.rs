@@ -7,12 +7,13 @@ use crate::config::Config;
 use crate::env::get_current_dir;
 use crate::manifest::Inf;
 use crate::manifest::WORKER_INF_FILE;
-use crate::monitor::{MemoryMonitor, MEMORY_CHECK_FREQUENCY};
+use crate::monitor::{MemoryMonitor, MONITOR_CHECK_FREQUENCY, TD_MONITOR_CHECK_FREQUENCY};
 use crate::status::ExitStatus;
 use clap::Parser;
 use clap_derive::{Args, ValueEnum};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
 use std::env::{args, current_dir, set_current_dir};
 use std::fmt::Debug;
 use std::future::Future;
@@ -198,12 +199,13 @@ impl<C: Config, P: Params> Cli<C, P> {
         config_name: &str,
         app: impl FnOnce(C, P) -> R,
         config_dir: Option<PathBuf>,
+        monitor_folders: Option<PathBuf>,
     ) where
         R: Future<Output = ExitStatus>,
     {
         Self::log_parameters();
         let runtime = Runtime::new().unwrap();
-        Self::monitor_memory(&runtime);
+        Self::monitor_resources(&runtime, monitor_folders);
         let result = Self::_exec_async(
             config_name,
             Self::cli_parse(config_dir.clone()),
@@ -222,13 +224,17 @@ impl<C: Config, P: Params> Cli<C, P> {
         trace!("Starting @ folder: '{:?}'", current_dir);
     }
 
-    /// Monitors memory consumption.
-    fn monitor_memory(runtime: &Runtime) {
+    /// Monitors resources (memory, disk space, etc.) consumption.
+    fn monitor_resources(runtime: &Runtime, monitor_folders: Option<PathBuf>) {
         runtime.spawn(async move {
             let mut monitor = MemoryMonitor::new();
             loop {
-                monitor.monitor();
-                let _ = sleep(Duration::from_secs(MEMORY_CHECK_FREQUENCY)).await;
+                monitor.monitor(&monitor_folders);
+                let wait_time = match env::var(TD_MONITOR_CHECK_FREQUENCY) {
+                    Ok(time) => time.parse::<u64>().unwrap_or(MONITOR_CHECK_FREQUENCY),
+                    Err(_) => MONITOR_CHECK_FREQUENCY,
+                };
+                let _ = sleep(Duration::from_secs(wait_time)).await;
             }
         });
     }

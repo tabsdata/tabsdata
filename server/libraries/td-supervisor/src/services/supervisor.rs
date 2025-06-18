@@ -1943,7 +1943,7 @@ impl Supervisor {
     }
 }
 
-fn setup(arguments: Arguments) -> Option<PathBuf> {
+fn setup(arguments: Arguments) -> (Option<PathBuf>, PathBuf) {
     let check_and_join = |option: Option<PathBuf>, profile: bool| {
         option.and_then(|mut p| {
             if profile {
@@ -1967,7 +1967,13 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
         });
         let persistent_profile_folder = profile_folder.keep();
         let profile_config = match extract_profile_config(persistent_profile_folder) {
-            Ok(config) => config?,
+            Ok(config) => match config {
+                Some(config_file) => config_file,
+                None => {
+                    error!("No profile config yaml file");
+                    exit(GeneralError.code());
+                }
+            },
             Err(e) => {
                 error!("Failed to extract profile config yaml file: {}", e);
                 exit(GeneralError.code());
@@ -2118,7 +2124,10 @@ fn setup(arguments: Arguments) -> Option<PathBuf> {
 
     prepare(&instance_dir_absolute, true);
 
-    config.and_then(|file| file.parent().map(|folder| folder.to_path_buf()))
+    (
+        config.and_then(|file| file.parent().map(|folder| folder.to_path_buf())),
+        instance_dir_absolute,
+    )
 }
 
 // It is ok to unwrap as the Supervisor can fail abruptly if paths contain invalid characters.
@@ -2136,7 +2145,7 @@ pub fn prepend_slash(path: PathBuf) -> String {
 
 pub fn start() {
     let arguments = Arguments::parse();
-    let config_dir = setup(arguments.clone());
+    let (config_folder, instance_folder) = setup(arguments.clone());
     Cli::<Configuration, Arguments>::exec_async(
         arguments.name().as_str(),
         |config, params| async move {
@@ -2148,6 +2157,7 @@ pub fn start() {
             }
             Success
         },
-        config_dir,
+        config_folder,
+        Some(instance_folder),
     );
 }

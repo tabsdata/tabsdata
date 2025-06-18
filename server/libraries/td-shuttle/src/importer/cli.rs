@@ -25,6 +25,7 @@ pub fn run() {
             ExitStatus::Success
         },
         None,
+        None,
     );
 }
 

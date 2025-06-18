@@ -183,5 +183,6 @@ fn main() {
             ExitStatus::Success
         },
         None,
+        None,
     );
 }
