@@ -13,8 +13,14 @@ use ignore::WalkBuilder;
 use indexmap::IndexMap;
 use num_format::{Locale, ToFormattedString};
 use std::fmt::Write;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt as UnixMetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt as WindowsMetadataExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::{fs, process};
+
 use sysinfo::{Pid, System};
 use tracing::debug;
 
@@ -194,21 +200,47 @@ pub fn instance_space(instance: &Path) -> IndexMap<String, (PathBuf, u64, String
     let folder = get_home_dir()
         .join(TABSDATA_HOME_DIR)
         .join(ENVIRONMENTS_FOLDER);
+    let (folder_with_hardlinks, size_with_hardlinks, human_with_hardlinks) =
+        folder_space(folder.clone());
+    let (_, size_without_hardlinks, human_without_hardlinks) =
+        folder_space_without_hardlinks(folder.clone());
     space.insert(
         "Python Virtual Environments".to_string(),
-        folder_space(folder),
+        (
+            folder_with_hardlinks,
+            size_with_hardlinks,
+            human_with_hardlinks,
+        ),
     );
+    space.insert(
+        "".to_string(),
+        (
+            PathBuf::from(""),
+            size_without_hardlinks,
+            human_without_hardlinks,
+        ),
+    );
+    let folder = get_uv_cache_dir();
+    if let Some(cache_folder) = folder {
+        space.insert("UV Packages Cache".to_string(), folder_space(cache_folder));
+    }
 
     space
 }
 
+fn get_uv_cache_dir() -> Option<PathBuf> {
+    let output = Command::new("uv").arg("cache").arg("dir").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let trimmed = stdout.trim();
+    Some(PathBuf::from(trimmed))
+}
+
 fn folder_space(folder: PathBuf) -> (PathBuf, u64, String) {
     let bytes = get_size_in_bytes(folder.as_path()).unwrap_or(0);
-    (
-        folder.clone(),
-        bytes,
-        convert_to_human_bytes(bytes as u64, false),
-    )
+    (folder.clone(), bytes, convert_to_human_bytes(bytes, false))
 }
 
 fn filtered_folder_space(folder: PathBuf) -> (PathBuf, u64, String) {
@@ -219,6 +251,35 @@ fn filtered_folder_space(folder: PathBuf) -> (PathBuf, u64, String) {
         .filter_map(|entry| fs::metadata(entry.path()).ok().map(|m| m.len()))
         .sum::<u64>();
     (folder, space, convert_to_human_bytes(space, false))
+}
+
+fn folder_space_without_hardlinks(folder: PathBuf) -> (PathBuf, u64, String) {
+    let space: u64 = WalkBuilder::new(folder.clone())
+        .build()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let metadata = fs::metadata(entry.path()).ok()?;
+            let nlink = get_nlink(&metadata);
+            if nlink == 1 {
+                Some(metadata.len())
+            } else {
+                None
+            }
+        })
+        .sum();
+    (folder, space, convert_to_human_bytes(space, false))
+}
+
+fn get_nlink(metadata: &fs::Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        metadata.nlink()
+    }
+
+    #[cfg(windows)]
+    {
+        metadata.number_of_links()
+    }
 }
 
 pub fn convert_to_human_bytes(size_in_bytes: u64, abbreviated: bool) -> String {

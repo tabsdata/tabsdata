@@ -2148,7 +2148,7 @@ def check_polars_api():
     """
     Check polars API.
     """
-    if os.environ.get(td_constants.PYTEST_CONTEXT_ACTIVE) is not None:
+    if os.environ.get(td_constants.PYTEST_CONTEXT_ACTIVE):
         logger.debug("Available TableFrame methods:")
         for method in get_class_methods(TableFrame):
             logger.debug(f"   {method}")

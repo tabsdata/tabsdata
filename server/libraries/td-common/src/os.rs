@@ -4,6 +4,7 @@
 
 #[cfg(not(target_os = "windows"))]
 use libc;
+use std::collections::HashMap;
 #[cfg(not(target_os = "windows"))]
 use std::fs;
 #[cfg(not(target_os = "windows"))]
@@ -49,6 +50,15 @@ pub enum OsProcessError {
     TerminationNotSupported(i32, Signal),
     #[error("Unable to terminate process '{0}' with signal '{1}")]
     TerminationFailure(i32, Signal),
+}
+
+const PYTHON_MODULE_ALIASES: &[(&str, &str)] = &[(
+    "tabsdata.tabsserver.function.execute_function_from_bundle_path",
+    "tdfunction",
+)];
+
+fn python_module_aliases() -> HashMap<&'static str, &'static str> {
+    PYTHON_MODULE_ALIASES.iter().cloned().collect()
 }
 
 /// Function to attach the correct extension to a program path based on platform.
@@ -193,26 +203,31 @@ fn process_tree(system: &System, pid: Pid) -> Vec<(Pid, Pid, String, String, u64
     let base_name = process
         .map(|p| format!("{:?}", p.name()))
         .unwrap_or_else(|| String::from("<unknown>"));
+    // When python, we do extra processing for better reporting:
     let name = process.map_or(base_name.clone(), |p| {
         let cmd = p.cmd();
-        // When python, we do extra processing for better reporting:
+        // If running a module, we extract its name, and alias it if existing in the aliases map.
         if base_name.trim_matches('"') == "python" {
-            match cmd.get(1) {
-                // We fall back to name as we are not to show a script.
-                Some(arg) if arg == "-c" => base_name.clone(),
-                // We extract the name of the module being executed.
-                Some(arg) if arg == "-m" => cmd
-                    .get(2)
+            if let Some(idx) = cmd.iter().position(|arg| arg == "-m") {
+                let alias_map = python_module_aliases();
+                cmd.get(idx + 1)
                     .and_then(|s| s.to_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| base_name.clone()),
-                // We extract the name of the binary registered as entry point.
-                Some(other) => Path::new(other)
-                    .file_name()
+                    .map(|modname| {
+                        alias_map
+                            .get(modname)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| modname.to_string())
+                    })
+                    .unwrap_or_else(|| base_name.clone())
+            } else {
+                // Fallback: try to infer from script/binary, only if not a flag
+                cmd.get(1)
+                    .and_then(|arg| arg.to_str())
+                    .filter(|s| !s.starts_with('-'))
+                    .and_then(|arg| Path::new(arg).file_name())
                     .and_then(|n| n.to_str())
                     .map(|s| s.to_string())
-                    .unwrap_or_else(|| base_name.clone()),
-                None => base_name.clone(),
+                    .unwrap_or_else(|| base_name.clone())
             }
         } else {
             base_name.clone()
@@ -307,7 +322,7 @@ mod tests {
             .expect("Failed to receive child process from thread") as i32
     }
 
-    // Test terminating a process with Linux/MacOS SIGINT or Windows CTRL_C_EVENT
+    // Test terminating a process with Linux/macOS SIGINT or Windows CTRL_C_EVENT
     #[test]
     fn test_terminate_process_with_sigint() {
         #[cfg(target_os = "linux")]
@@ -318,13 +333,13 @@ mod tests {
         kill_process(Signal::Kill);
     }
 
-    // Test terminating a process with Linux/MacOS SIGKILL or Windows PROCESS_TERMINATE
+    // Test terminating a process with Linux/macOS SIGKILL or Windows PROCESS_TERMINATE
     #[test]
     fn test_terminate_process_with_sigkill() {
         kill_process(Signal::Kill);
     }
 
-    // Test terminating a process with Linux/MacOS SIGTERM or Windows CTRL_BREAK_EVENT
+    // Test terminating a process with Linux/macOS SIGTERM or Windows CTRL_BREAK_EVENT
     #[test]
     fn test_terminate_process_with_sigterm() {
         #[cfg(target_os = "linux")]
