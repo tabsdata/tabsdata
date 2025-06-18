@@ -48,7 +48,7 @@ impl ArgumentKey {
         match self {
             ArgumentKey::Work => ArgumentKey::work(child_work),
             ArgumentKey::LocksFolder => ArgumentKey::locks_folder(parent_work),
-            ArgumentKey::LogsFolder => ArgumentKey::log_folder(child_work),
+            ArgumentKey::LogsFolder => ArgumentKey::logs_folder(child_work),
             ArgumentKey::BinFolder => ArgumentKey::bin_folder(child_work),
             ArgumentKey::RequestFolder => ArgumentKey::request_folder(child_work),
             ArgumentKey::ResponseFolder => ArgumentKey::response_folder(child_work),
@@ -71,7 +71,7 @@ impl ArgumentKey {
             .to_string())
     }
 
-    fn log_folder(child_work: PathBuf) -> Result<String, ArgumentError> {
+    fn logs_folder(child_work: PathBuf) -> Result<String, ArgumentError> {
         Ok(to_absolute(&child_work.join(LOG_FOLDER))?
             .as_os_str()
             .to_string_lossy()

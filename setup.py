@@ -392,6 +392,18 @@ except Exception as e:
             f" {skip_non_existing_assets}"
         )
 
+yaml_files = []
+yaml_root_folder = Path(
+    os.path.join(
+        "client",
+        "td-sdk",
+        "tabsdata",
+    )
+)
+for path in yaml_root_folder.rglob("*.yaml"):
+    relative_path = path.relative_to(yaml_root_folder)
+    yaml_files.append(str(relative_path))
+
 os.makedirs(
     os.path.join(
         "target",
@@ -573,15 +585,7 @@ setup(
                 "manifest",
                 "*",
             ),
-            os.path.join(
-                "tabsserver",
-                "*.yaml",
-            ),
-            os.path.join(
-                "tabsserver",
-                "function",
-                "*.yaml",
-            ),
+            *yaml_files,
         ],
         "tabsdata.expansions.tableframe": [
             os.path.join(
@@ -593,12 +597,16 @@ setup(
     entry_points={
         "console_scripts": [
             "td = tabsdata.cli.cli:cli",
-            "_tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
-            "_tdinvoker = tabsdata.tabsserver.invoker:main",
-            "_tdmntext = tabsdata.tabsserver.tools.mount_extractor:main",
-            "_tdupgrader = tabsdata.tabsserver.server.upgrader:main",
-            "_tdvenv = tabsdata.tabsserver.pyenv_creation:main",
-            "_tduvinfo = tabsdata.tabsserver.tools.uv_analyzer:main",
+            # Supervisor init workers
+            "tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
+            "tdmntext = tabsdata.tabsserver.tools.mount_extractor:main",
+            "tduvinfo = tabsdata.tabsserver.tools.uv_analyzer:main",
+            # Supervisor regular workers
+            "janitor = tabsdata.tabsserver.tools.janitor:main",
+            # Supervisor tools
+            "tdinvoker = tabsdata.tabsserver.invoker:main",
+            "tdupgrader = tabsdata.tabsserver.server.upgrader:main",
+            "tdvenv = tabsdata.tabsserver.pyenv_creation:main",
         ]
     },
     include_package_data=True,

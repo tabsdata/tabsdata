@@ -19,14 +19,14 @@ controllers:
       - name: uvinfo
         kind: processor
         location: system
-        program: _tduvinfo
+        program: tduvinfo
         parameters:
           - output: versions
           - file: ${TD_PATH_INSTANCE}/workspace/work/etc/pyversions.dat
       - name: apiserver-configuration-resolver
         kind: processor
         location: system
-        program: _tdcfgrsv
+        program: tdcfgrsv
         parameters:
           - input: ${TD_PATH_CONFIG}/proc/regular/apiserver/config/config.yaml
           - strategies: env,hashicorp
@@ -42,7 +42,7 @@ controllers:
       - name: apiserver-mounts-options-extractor
         kind: processor
         location: system
-        program: _tdmntext
+        program: tdmntext
         get-states:
           - state-type: blob
             state-key: apiserver-configuration
@@ -62,13 +62,24 @@ controllers:
         get-states:
           - state-type: blob
             state-key: apiserver-configuration
+      - name: janitor
+        kind: processor
+        location: system
+        program: janitor
+        parameters:
+          - instance: ${TD_PATH_INSTANCE}
+          - frequency: 900 # 15 minutes (seconds)
+          - retention: 10800000 # 3 hours (milliseconds)
+          - limit: 32
+        arguments:
+          - logs-folder
   ephemeral:
     concurrency: 8
     workers:
       - name: function
         kind: processor
         location: system
-        program: _tdinvoker
+        program: tdinvoker
         concurrency: 8
         retries: 2
         arguments:

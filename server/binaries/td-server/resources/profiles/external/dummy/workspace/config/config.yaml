@@ -49,6 +49,17 @@ controllers:
         set-state:
           state-type: map
           state-key: apiserver-mounts-options
+      - name: janitor
+        kind: processor
+        location: system
+        program: janitor
+        parameters:
+          - instance: ${TD_PATH_INSTANCE}
+          - frequency: 900 # 15 minutes (seconds)
+          - retention: 10800000 # 3 hours (milliseconds)
+          - limit: 32
+        arguments:
+          - logs-folder
   regular:
     concurrency: 0
     workers:
@@ -99,7 +110,7 @@ controllers:
       - name: function
         kind: processor
         location: system
-        program: _tdinvoker
+        program: tdinvoker
         concurrency: 8
         retries: 2
         arguments:

@@ -51,6 +51,7 @@ from tabsdata.utils.annotations import pydoc
 
 # ToDo: SDK-128: Define the logging model for SDK CLI execution
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 IndexInput = Union[int, td_generators.IdxGenerator, None]
 
@@ -2147,9 +2148,10 @@ def check_polars_api():
     """
     Check polars API.
     """
-    logger.info("Available TableFrame methods:")
-    for method in get_class_methods(TableFrame):
-        logger.debug(f"   {method}")
+    if os.environ.get(td_constants.PYTEST_CONTEXT_ACTIVE) is not None:
+        logger.debug("Available TableFrame methods:")
+        for method in get_class_methods(TableFrame):
+            logger.debug(f"   {method}")
     get_missing_methods()
 
 

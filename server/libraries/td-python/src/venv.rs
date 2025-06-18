@@ -22,7 +22,7 @@ pub const PYTHON_ARGUMENT_C: &str = "-c";
 pub const PYTHON_INTERPRETER_SCRIPT: &str =
     "import sys; print(f\"<interpreter>{sys.executable}</interpreter>\")";
 
-pub const TDVENV_PROGRAM: &str = "_tdvenv";
+pub const TDVENV_PROGRAM: &str = "tdvenv";
 pub const TDVENV_ARGUMENT_INSTANCE: &str = "--instance";
 
 #[cfg(not(target_os = "windows"))]

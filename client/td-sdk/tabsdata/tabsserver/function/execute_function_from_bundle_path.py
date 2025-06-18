@@ -49,7 +49,7 @@ def execute_bundled_function(
     return results
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description="Execute a python function from a file path"
     )
@@ -125,3 +125,7 @@ if __name__ == "__main__":
         )
         store_exception_yaml(e, exit_status, arguments.response_folder)
         sys.exit(exit_status)
+
+
+if __name__ == "__main__":
+    main()

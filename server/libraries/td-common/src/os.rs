@@ -190,16 +190,45 @@ pub fn get_process_tree(pid: i32) -> Vec<(Pid, Pid, String, String, u64, u64)> {
 /// Recursive function to get the process tree.
 fn process_tree(system: &System, pid: Pid) -> Vec<(Pid, Pid, String, String, u64, u64)> {
     let process = system.process(pid);
+    let base_name = process
+        .map(|p| format!("{:?}", p.name()))
+        .unwrap_or_else(|| String::from("<unknown>"));
+    let name = process.map_or(base_name.clone(), |p| {
+        let cmd = p.cmd();
+        // When python, we do extra processing for better reporting:
+        if base_name.trim_matches('"') == "python" {
+            match cmd.get(1) {
+                // We fall back to name as we are not to show a script.
+                Some(arg) if arg == "-c" => base_name.clone(),
+                // We extract the name of the module being executed.
+                Some(arg) if arg == "-m" => cmd
+                    .get(2)
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| base_name.clone()),
+                // We extract the name of the binary registered as entry point.
+                Some(other) => Path::new(other)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| base_name.clone()),
+                None => base_name.clone(),
+            }
+        } else {
+            base_name.clone()
+        }
+    });
+    let executable = process.map_or(String::from("<unknown>"), |p| {
+        p.exe().map_or_else(
+            || String::from("<undefined>"),
+            |exe| exe.to_str().unwrap().to_string(),
+        )
+    });
     let mut subprocesses = vec![(
         pid,
         process.and_then(|p| p.parent()).unwrap_or(Pid::from(0)),
-        process.map_or(String::from("<unknown>"), |p| format!("{:?}", p.name())),
-        process.map_or(String::from("<unknown>"), |p| {
-            p.exe().map_or_else(
-                || String::from("<undefined>"),
-                |exe| exe.to_str().unwrap().to_string(),
-            )
-        }),
+        name,
+        executable,
         physical_memory(system, pid.as_u32()),
         virtual_memory(system, pid.as_u32()),
     )];

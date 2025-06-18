@@ -1065,7 +1065,7 @@ fn command_status(arguments: StatusArguments) {
                 .with(Modify::new(Columns::single(5)).with(Alignment::right()));
 
             status.push_str(&format!(
-                "Workers and its sub-workers of instance '{}' - '{}':\n{}\n",
+                "Workers and its sub-workers of instance '{}' - '{}':\n{}",
                 pid,
                 supervisor_instance.display(),
                 table
@@ -1096,7 +1096,7 @@ fn command_status(arguments: StatusArguments) {
                 .with((theme.clone(), Alignment::left()))
                 .with(Modify::new(Columns::single(1)).with(Alignment::right()));
 
-            status.push_str(&format!("Relevant folders disk usage:\n{}", table));
+            status.push_str(&format!("\nRelevant folders disk usage:\n{}", table));
         }
     }
     info!("{status}");
