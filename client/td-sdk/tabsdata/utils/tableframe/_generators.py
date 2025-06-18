@@ -4,17 +4,23 @@
 
 from __future__ import annotations
 
-# noinspection PyPackageRequirements
-import base32hex
+import logging
+
 import polars as pl
-from uuid_v7.base import uuid7
+
+from tabsdata.utils.id import encode_id
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 
 class IdGenerator:
     def __init__(self, index: int):
         self._index = index
 
-    def __call__(self, _old_value: pl.String | None = None) -> pl.String:
+    def __call__(
+        self, _old_value: pl.String | None = None
+    ) -> pl.Expr | str:  # pl.String
         return _id(_old_value)
 
 
@@ -22,8 +28,8 @@ def _id_default() -> pl.Expr:
     return pl.lit("", pl.String)
 
 
-def _id(_old_value: pl.String | None = None) -> pl.String:
-    return base32hex.b32encode(uuid7().bytes)[:26]
+def _id(_old_value: pl.String | None = None, debug: bool | None = False) -> str:
+    return encode_id(debug=debug)[1]
 
 
 class IdxGenerator:
