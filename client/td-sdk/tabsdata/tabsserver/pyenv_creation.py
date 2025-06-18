@@ -200,6 +200,8 @@ def verify_package_installable_for_environment(
             UV_EXECUTABLE,
             "pip",
             "install",
+            "--link-mode",
+            "hardlink",
             package,
             "--dry-run",
             "--no-deps",
@@ -683,6 +685,8 @@ def atomic_environment_creation(
     command = [
         UV_EXECUTABLE,
         "venv",
+        "--link-mode",
+        "hardlink",
         "--python",
         python_version,
         os.path.join(DEFAULT_ENVIRONMENT_FOLDER, real_environment_name),
@@ -712,6 +716,8 @@ def atomic_environment_creation(
             UV_EXECUTABLE,
             "pip",
             "install",
+            "--link-mode",
+            "hardlink",
             "--upgrade",
             "pip",
         ],
@@ -828,6 +834,8 @@ def install_requirements(
             UV_EXECUTABLE,
             "pip",
             "install",
+            "--link-mode",
+            "hardlink",
         ]
         + requirements,
         real_environment_name,
@@ -923,7 +931,14 @@ def install_host_package(
         and pathlib.Path(package_archive).suffix == WHEEL_EXTENSION
     ):
         pip_install_requirements_command = add_python_target_and_join_commands(
-            [UV_EXECUTABLE, "pip", "install", package_archive],
+            [
+                UV_EXECUTABLE,
+                "pip",
+                "install",
+                "--link-mode",
+                "hardlink",
+                package_archive,
+            ],
             real_environment_name,
         )
         logger.info(
@@ -964,7 +979,18 @@ def install_host_package(
 
 def install_python_version(python_version: str) -> None:
     logger.info(f"Installing Python version {python_version}")
-    command = " ".join([UV_EXECUTABLE, "python", "install", "-v", "-n", python_version])
+    command = " ".join(
+        [
+            UV_EXECUTABLE,
+            "python",
+            "install",
+            "--link-mode",
+            "hardlink",
+            "-v",
+            "-n",
+            python_version,
+        ],
+    )
     logger.debug(f"Running command: {command}")
     result = subprocess.run(command, shell=True)
     # Check if the Python version is not found

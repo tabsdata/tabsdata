@@ -93,6 +93,8 @@ def test_found_requirements_single_package():
         command = [
             UV_EXECUTABLE,
             "venv",
+            "--link-mode",
+            "hardlink",
             "--python",
             "3.12",
             environment_folder,
@@ -122,6 +124,8 @@ def test_found_requirements_single_package_wrong_version():
         command = [
             UV_EXECUTABLE,
             "venv",
+            "--link-mode",
+            "hardlink",
             "--python",
             "3.12",
             environment_folder,
@@ -154,6 +158,8 @@ def test_found_requirements_multiple_packages():
         command = [
             UV_EXECUTABLE,
             "venv",
+            "--link-mode",
+            "hardlink",
             "--python",
             "3.12",
             environment_folder,
@@ -181,6 +187,8 @@ def test_found_requirements_all_not_found():
         command = [
             UV_EXECUTABLE,
             "venv",
+            "--link-mode",
+            "hardlink",
             "--python",
             "3.12",
             environment_folder,
@@ -211,6 +219,8 @@ def test_found_requirements_empty_list():
         command = [
             UV_EXECUTABLE,
             "venv",
+            "--link-mode",
+            "hardlink",
             "--python",
             "3.12",
             environment_folder,
@@ -241,6 +251,8 @@ def test_found_requirements_mixed():
         command = [
             UV_EXECUTABLE,
             "venv",
+            "--link-mode",
+            "hardlink",
             "--python",
             "3.12",
             environment_folder,
