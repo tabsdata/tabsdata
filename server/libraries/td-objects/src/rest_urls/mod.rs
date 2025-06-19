@@ -178,6 +178,22 @@ pub struct SampleOffsetLenParam {
     len: SampleLen,
 }
 
+#[td_type::QueryParam]
+pub struct FileFormatParam {
+    #[td_type(extractor)]
+    #[serde(default)]
+    format: FileFormat,
+}
+
+#[td_type::typed_enum]
+#[derive(Default)]
+pub enum FileFormat {
+    #[default]
+    Parquet,
+    Csv,
+    Json,
+}
+
 // Tables
 pub const TABLES: &str = url!(COLLECTION, "/tables");
 pub const TABLE: &str = url!(TABLES, "/{table}");

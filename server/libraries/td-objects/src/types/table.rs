@@ -4,7 +4,8 @@
 
 use crate::crudl::RequestContext;
 use crate::rest_urls::{
-    AtTimeParam, CollectionParam, FunctionParam, SampleOffsetLenParam, TableParam,
+    AtTimeParam, CollectionParam, FileFormat, FileFormatParam, FunctionParam, SampleOffsetLenParam,
+    TableParam,
 };
 use crate::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
@@ -151,16 +152,24 @@ pub struct TableSampleAtName {
     offset: SampleOffset,
     #[td_type(extractor)]
     len: SampleLen,
+    #[td_type(extractor)]
+    format: FileFormat,
 }
 
 impl TableSampleAtName {
-    pub fn new(table: TableParam, at: AtTimeParam, offset_len: SampleOffsetLenParam) -> Self {
+    pub fn new(
+        table: TableParam,
+        at: AtTimeParam,
+        offset_len: SampleOffsetLenParam,
+        format: FileFormatParam,
+    ) -> Self {
         Self {
             collection: table.collection().clone(),
             table: table.table().clone(),
             at: at.at().clone(),
             offset: offset_len.offset().clone(),
             len: offset_len.len().clone(),
+            format: format.format().clone(),
         }
     }
 }

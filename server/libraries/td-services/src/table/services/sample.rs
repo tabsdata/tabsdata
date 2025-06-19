@@ -7,6 +7,7 @@ use crate::table::layers::sample::get_table_sample;
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
+use td_objects::rest_urls::FileFormat;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
@@ -48,6 +49,7 @@ fn provider() {
         // Get sample.
         from_fn(With::<TableSampleAtName>::extract::<SampleOffset>),
         from_fn(With::<TableSampleAtName>::extract::<SampleLen>),
+        from_fn(With::<TableSampleAtName>::extract::<FileFormat>),
         from_fn(get_table_sample),
     )
 }
@@ -67,7 +69,7 @@ mod tests {
     use td_common::absolute_path::AbsolutePath;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
-    use td_objects::rest_urls::{AtTimeParam, SampleOffsetLenParam, TableParam};
+    use td_objects::rest_urls::{AtTimeParam, FileFormatParam, SampleOffsetLenParam, TableParam};
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -162,6 +164,7 @@ mod tests {
             // Get sample.
             type_of_val(&With::<TableSampleAtName>::extract::<SampleOffset>),
             type_of_val(&With::<TableSampleAtName>::extract::<SampleLen>),
+            type_of_val(&With::<TableSampleAtName>::extract::<FileFormat>),
             type_of_val(&get_table_sample),
         ]);
     }
@@ -310,6 +313,9 @@ mod tests {
                 SampleOffsetLenParam::builder()
                     .try_offset(offset)?
                     .try_len(len)?
+                    .build()?,
+                FileFormatParam::builder()
+                    .format(FileFormat::Parquet)
                     .build()?,
             ));
             let response = service.raw_oneshot(request).await;

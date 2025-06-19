@@ -19,7 +19,7 @@ use walkdir::WalkDir;
 
 const DEFAULT_TAGS_MACROS: &[&str] = &["apiserver_tag"];
 const DEFAULT_PATHS_ATTRIBUTES: &[&str] = &["apiserver_path"];
-const DEFAULT_SCHEMA_ATTRIBUTES: &[&str] = &["apiserver_schema", "Dto", "typed"];
+const DEFAULT_SCHEMA_ATTRIBUTES: &[&str] = &["apiserver_schema", "Dto", "typed", "typed_enum"];
 
 const CTX_STATUS_FILE: &str = include_str!("status.rs");
 

@@ -6,9 +6,12 @@ use crate::table::layers::storage::StorageServiceError;
 use bytes::Bytes;
 use futures::FutureExt;
 use polars::prelude::cloud::CloudOptions;
-use polars::prelude::{LazyFrame, ParquetWriter, PolarsError, ScanArgsParquet};
+use polars::prelude::{
+    CsvWriter, JsonWriter, LazyFrame, ParquetWriter, PolarsError, ScanArgsParquet, SerWriter,
+};
 use std::io::Cursor;
 use td_error::{td_error, TdError};
+use td_objects::rest_urls::FileFormat;
 use td_objects::types::basic::{SampleLen, SampleOffset};
 use td_objects::types::stream::BoxedSyncStream;
 use td_storage::{SPath, Storage};
@@ -23,12 +26,17 @@ enum SampleError {
     OffsetLimit(#[source] PolarsError) = 5001,
     #[error("Could not create Parquet file to get sample, error: {0}")]
     ParquetFile(#[source] PolarsError) = 5002,
+    #[error("Could not create CSV file to get sample, error: {0}")]
+    CsvFile(#[source] PolarsError) = 5003,
+    #[error("Could not create JSON file to get sample, error: {0}")]
+    JsonFile(#[source] PolarsError) = 5004,
 }
 
 pub async fn get_table_sample(
     SrvCtx(storage): SrvCtx<Storage>,
     Input(offset): Input<SampleOffset>,
     Input(len): Input<SampleLen>,
+    Input(format): Input<FileFormat>,
     Input(table_path): Input<SPath>,
 ) -> Result<BoxedSyncStream, TdError> {
     let (url, mount_def) = storage.to_external_uri(&table_path)?;
@@ -56,9 +64,24 @@ pub async fn get_table_sample(
 
                 let mut buffer = Vec::new();
                 let mut cursor = Cursor::new(&mut buffer);
-                ParquetWriter::new(&mut cursor)
-                    .finish(&mut dataframe)
-                    .map_err(SampleError::ParquetFile)?;
+
+                match &*format {
+                    FileFormat::Csv => {
+                        CsvWriter::new(&mut cursor)
+                            .finish(&mut dataframe)
+                            .map_err(SampleError::CsvFile)?;
+                    }
+                    FileFormat::Parquet => {
+                        ParquetWriter::new(&mut cursor)
+                            .finish(&mut dataframe)
+                            .map_err(SampleError::ParquetFile)?;
+                    }
+                    FileFormat::Json => {
+                        JsonWriter::new(&mut cursor)
+                            .finish(&mut dataframe)
+                            .map_err(SampleError::JsonFile)?;
+                    }
+                }
 
                 Bytes::from(buffer)
             };
