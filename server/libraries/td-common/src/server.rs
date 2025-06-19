@@ -1030,7 +1030,7 @@ pub trait EtcStore {
 #[async_trait]
 impl EtcStore for FileEtcStore {
     async fn read(&self, id: &str) -> Result<Option<Vec<u8>>, EtcError> {
-        let path = self.location().join(&id);
+        let path = self.location().join(id);
         match fs::read(&path).await {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {

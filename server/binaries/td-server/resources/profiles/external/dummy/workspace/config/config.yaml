@@ -22,7 +22,9 @@ controllers:
         program: _tduvinfo
         parameters:
           - output: versions
-          - file: ${TD_PATH_INSTANCE}/workspace/work/etc/pyversions.dat
+          - file: ${TD_PATH_INSTANCE}/workspace/work/etc/server.yaml
+          - allowed_python_versions: allowed-py.yaml
+          - allowed_packages_versions: allowed-pkg.yaml
       - name: apiserver-configuration-resolver
         kind: processor
         location: system

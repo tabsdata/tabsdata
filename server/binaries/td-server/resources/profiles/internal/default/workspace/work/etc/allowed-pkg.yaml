@@ -1,0 +1,22 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+# Allowed Python Package Versions
+#
+# You may edit this file to define which package versions are allowed.
+#
+# If the file is empty, all supported package versions are accepted by default.
+#
+# Use requirement-style syntax to specify allowed packages versions
+# (e.g. numpy>=1.24, pandas==2.2.*).
+#
+# A package version is allowed if it matches at least one of the listed entries.
+#
+# This file is never modified by the system under any circumstance. It is entirely
+# managed by system administrator.
+
+# Examples:
+#     numpy>=1.24
+#     pandas==2.2.*
+#     requests==2.31.0
