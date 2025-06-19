@@ -591,16 +591,9 @@ def load_sources(
         if isinstance(source, list):
             sources.append(load_sources_from_list(execution_context, idx, source))
         else:
-            if isinstance(source, str):
-                table_context = TableFrameContext(source)
-            elif isinstance(source, TableFrameContext):
-                table_context = source
-            else:
-                raise ValueError(
-                    "Invalid source type. Expected 'str' or 'TableFrameContext'; got"
-                    f" '{type(source).__name__}' instead"
-                )
-            sources.append(load_source(execution_context, idx, table_context))
+            sources.append(
+                load_source(execution_context, idx, make_tableframe_context(source))
+            )
     return sources
 
 
@@ -611,17 +604,27 @@ def load_sources_from_list(
 ) -> list[TableFrame]:
     sources: list[TableFrame] = []
     for source in source_list:
-        if isinstance(source, str):
-            table_context = TableFrameContext(source)
-        elif isinstance(source, TableFrameContext):
-            table_context = source
-        else:
-            raise ValueError(
-                "Invalid source type. Expected 'str' or 'TableFrameContext'; got"
-                f" '{type(source).__name__}' instead"
-            )
-        sources.append(load_source(execution_context, idx, table_context))
+        sources.append(
+            load_source(execution_context, idx, make_tableframe_context(source))
+        )
     return sources
+
+
+def make_tableframe_context(
+    source: TableFrameContext | str | None,
+) -> TableFrameContext | None:
+    if isinstance(source, str):
+        tableframe_context = TableFrameContext(source)
+    elif isinstance(source, TableFrameContext):
+        tableframe_context = source
+    elif not source:
+        tableframe_context = None
+    else:
+        raise ValueError(
+            "Invalid source type. Expected 'str', 'TableFrameContext' or None; got"
+            f" '{type(source).__name__}' instead"
+        )
+    return tableframe_context
 
 
 # When table_frame_context.table is not None, it means the table was loaded from the
@@ -631,7 +634,7 @@ def load_sources_from_list(
 def load_source(
     execution_context: ExecutionContext,
     idx: td_generators.IdxGenerator,
-    table_frame_context: TableFrameContext,
+    table_frame_context: TableFrameContext | None,
 ) -> TableFrame | None:
     if table_frame_context is None:
         logger.warning("TableFrame context to source is None. No data loaded.")
