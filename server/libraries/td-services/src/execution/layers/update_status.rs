@@ -18,6 +18,7 @@ use td_objects::types::execution::{
 use td_objects::types::worker::v2::WrittenTableV2;
 use td_objects::types::worker::FunctionOutput;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+use tracing::warn;
 
 #[td_error]
 enum UpdateStatusRunError {
@@ -49,6 +50,21 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                 }
                 (FunctionRunStatus::Done, _) => {
                     Some(Err(UpdateStatusRunError::AlreadyDone(*current.id())))
+                }
+                (
+                    FunctionRunStatus::Canceled,
+                    FunctionRunStatus::Running
+                    | FunctionRunStatus::Done
+                    | FunctionRunStatus::Error
+                    | FunctionRunStatus::Failed,
+                ) => {
+                    // Callback status transition, never returning error to avoid race condition
+                    warn!(
+                        "Function run [{0}] is already canceled, ignoring update to status [{1}].",
+                        current.id(),
+                        update.status()
+                    );
+                    None
                 }
                 (FunctionRunStatus::Canceled, _) => {
                     Some(Err(UpdateStatusRunError::AlreadyCanceled(*current.id())))
