@@ -43,6 +43,7 @@ mod internal;
 mod openapi;
 mod permissions;
 mod roles;
+mod runtime_info;
 pub mod scheduler_server;
 mod server_status;
 mod status;
@@ -72,6 +73,7 @@ use td_services::auth::session;
 use td_services::auth::session::Sessions;
 use td_services::collection::service::CollectionServices;
 use td_services::execution::services::ExecutionServices;
+pub use td_services::execution::RuntimeContext;
 use td_services::function::services::FunctionServices;
 use td_services::function_run::services::FunctionRunServices;
 use td_services::inter_coll_permission::services::InterCollectionPermissionServices;
@@ -91,6 +93,7 @@ pub struct ApiServerInstance {
     authz_context: Arc<AuthzContext>,
     auth_services: Arc<AuthServices>,
     storage: Arc<Storage>,
+    runtime_context: Arc<RuntimeContext>,
 }
 
 pub mod state {
@@ -115,7 +118,12 @@ pub mod state {
 }
 
 impl ApiServerInstance {
-    pub fn new(config: Config, db: DbPool, storage: Arc<Storage>) -> Self {
+    pub fn new(
+        config: Config,
+        db: DbPool,
+        storage: Arc<Storage>,
+        runtime_context: Arc<RuntimeContext>,
+    ) -> Self {
         let sessions: Arc<Sessions> = Arc::new(session::new(db.clone()));
 
         // to verify up front configuration is OK.
@@ -130,12 +138,14 @@ impl ApiServerInstance {
             password_hash_config,
             &config,
         ));
+
         Self {
             config,
             db,
             authz_context,
             auth_services,
             storage,
+            runtime_context,
         }
     }
 
@@ -154,6 +164,7 @@ impl ApiServerInstance {
         Arc::new(ExecutionServices::new(
             self.db.clone(),
             self.authz_context.clone(),
+            self.runtime_context.clone(),
         ))
     }
 
@@ -279,6 +290,7 @@ impl ApiServerInstance {
                     tables => { state ( self.table_state(), self.storage_state() ) },
                     transactions => { state ( self.transaction_state() ) },
                     worker_messages => { state ( self.worker_messages_state() ) },
+                    runtime_info => { state ( self.execution_state() ) },
                 }
                 .layer => from_fn_with_state(self.auth_state(), authorization_layer),
 

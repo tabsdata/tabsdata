@@ -7,16 +7,19 @@ use crate::execution::services::cancel::ExecutionCancelService;
 use crate::execution::services::execute::ExecuteFunctionService;
 use crate::execution::services::list::ExecutionListService;
 use crate::execution::services::recover::ExecutionRecoverService;
+use crate::execution::services::runtime_info::RuntimeInfoService;
+use crate::execution::RuntimeContext;
 use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::{CreateRequest, ListRequest, ListResponse, UpdateRequest};
+use td_objects::crudl::{CreateRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest};
 use td_objects::rest_urls::{ExecutionParam, FunctionParam, FunctionRunIdParam};
 use td_objects::sql::DaoQueries;
 use td_objects::types::execution::{
     CallbackRequest, Execution, ExecutionRequest, ExecutionResponse,
 };
+use td_objects::types::runtime_info::RuntimeInfo;
 use td_tower::service_provider::TdBoxService;
 use te_execution::transaction::TransactionBy;
 
@@ -25,6 +28,7 @@ mod cancel;
 pub(crate) mod execute;
 mod list;
 mod recover;
+pub mod runtime_info;
 
 pub struct ExecutionServices {
     callback: ExecutionCallbackService,
@@ -32,10 +36,15 @@ pub struct ExecutionServices {
     execute: ExecuteFunctionService,
     list: ExecutionListService,
     recover: ExecutionRecoverService,
+    info: RuntimeInfoService,
 }
 
 impl ExecutionServices {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
+    pub fn new(
+        db: DbPool,
+        authz_context: Arc<AuthzContext>,
+        runtime_context: Arc<RuntimeContext>,
+    ) -> Self {
         let queries = Arc::new(DaoQueries::default());
         let transaction_by = Arc::new(TransactionBy::default());
         Self {
@@ -53,6 +62,7 @@ impl ExecutionServices {
                 queries.clone(),
                 authz_context.clone(),
             ),
+            info: RuntimeInfoService::new(runtime_context),
         }
     }
 
@@ -79,5 +89,9 @@ impl ExecutionServices {
 
     pub async fn recover(&self) -> TdBoxService<UpdateRequest<ExecutionParam, ()>, (), TdError> {
         self.recover.service().await
+    }
+
+    pub async fn info(&self) -> TdBoxService<ReadRequest<()>, RuntimeInfo, TdError> {
+        self.info.service().await
     }
 }

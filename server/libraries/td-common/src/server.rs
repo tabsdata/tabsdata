@@ -1024,12 +1024,12 @@ pub async fn etc_service() -> Result<Box<dyn EtcStore + Send + Sync>, EtcError> 
 
 #[async_trait]
 pub trait EtcStore {
-    async fn read(&self, id: String) -> Result<Option<Vec<u8>>, EtcError>;
+    async fn read(&self, id: &str) -> Result<Option<Vec<u8>>, EtcError>;
 }
 
 #[async_trait]
 impl EtcStore for FileEtcStore {
-    async fn read(&self, id: String) -> Result<Option<Vec<u8>>, EtcError> {
+    async fn read(&self, id: &str) -> Result<Option<Vec<u8>>, EtcError> {
         let path = self.location().join(&id);
         match fs::read(&path).await {
             Ok(bytes) => Ok(Some(bytes)),
@@ -1067,7 +1067,7 @@ mod tests_etc {
             "Failed to create the etc store instance: {:?}",
             etc_instance
         );
-        let result = etc_instance.unwrap().read("hobbit".to_string()).await;
+        let result = etc_instance.unwrap().read("hobbit").await;
         assert!(
             result.is_ok(),
             "Failed to read from the etc store instance: {:?}",

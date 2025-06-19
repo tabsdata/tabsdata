@@ -5791,6 +5791,7 @@ dependencies = [
  "openssl",
  "polars",
  "serde",
+ "serde_yaml",
  "sha2",
  "sqlx",
  "strum",

@@ -258,6 +258,9 @@ pub struct Private;
 pub struct PublishedOn;
 
 #[td_type::typed(string)]
+pub struct PythonVersion;
+
+#[td_type::typed(string)]
 pub struct RefreshToken;
 
 #[td_type::typed(id)]

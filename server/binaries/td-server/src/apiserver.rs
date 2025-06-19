@@ -6,7 +6,7 @@ use std::env;
 use std::sync::Arc;
 use td_apiserver::config::{Config, DbSchema, Params};
 use td_apiserver::router::scheduler_server::SchedulerBuilder;
-use td_apiserver::router::ApiServerInstance;
+use td_apiserver::router::{ApiServerInstance, RuntimeContext};
 use td_common::attach::attach;
 use td_common::cli::Cli;
 use td_common::logging;
@@ -176,8 +176,19 @@ fn main() {
             .build()
             .await;
 
+            let runtime_context = match RuntimeContext::new().await {
+                Ok(context) => context,
+                Err(e) => {
+                    error!("Error creating runtime context: {}", e);
+                    return ExitStatus::GeneralError;
+                }
+            };
+            let runtime_context = Arc::new(runtime_context);
+
             // Create and run the API server
-            let apiserver = ApiServerInstance::new(config, db, storage).build().await;
+            let apiserver = ApiServerInstance::new(config, db, storage, runtime_context)
+                .build()
+                .await;
 
             tokio::join!(execution_server.run(), apiserver.run());
             ExitStatus::Success

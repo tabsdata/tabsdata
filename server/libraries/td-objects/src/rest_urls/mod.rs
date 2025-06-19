@@ -198,6 +198,9 @@ pub const DOWNLOAD_TABLE: &str = url!(TABLE, "/download");
 
 pub const TABLE_DELETE: &str = url!(TABLE);
 
+// Runtime info
+pub const RUNTIME_INFO: &str = url!("/runtime-info");
+
 // Executions
 pub const EXECUTIONS: &str = url!("/executions");
 pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");

@@ -152,6 +152,12 @@ pub struct Params {
     #[clap(long)]
     /// The apiserver will create or upgrade the DB schema on startup, default is false
     db_schema: Option<DbSchema>,
+    #[clap(long)]
+    /// The etc directory
+    etc: Option<String>, // not used via clap.Added for etc_service to work correctly with CLI option
+    #[clap(long)]
+    /// The supervisor message queue directory
+    msg: Option<String>, // not used via clap. Added for queue_service to work correctly with CLI option
 }
 
 impl Params {
@@ -295,6 +301,8 @@ mod tests {
             request_timeout: Some(120),
             transaction_by: Some(TransactionBy::default()),
             db_schema: None,
+            etc: None,
+            msg: None,
         };
 
         let resolved_config = params.resolve(default_config.clone()).unwrap();
@@ -340,6 +348,8 @@ mod tests {
             request_timeout: None,
             transaction_by: Some(TransactionBy::default()),
             db_schema: None,
+            etc: None,
+            msg: None,
         };
 
         let partially_resolved_config = partial_params.resolve(default_config.clone()).unwrap();
