@@ -46,7 +46,8 @@ def table():
     help=(
         "If provided, the table values at the given time will be shown. Must be "
         " either a valid timestamp in the form of a unix timestamp (milliseconds since "
-        "epoch) or a valid date-time format. The valid "
+        "epoch without a dot, e.g. '1750074554472') or a valid date-time format. "
+        "The valid "
         "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
         "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
         "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "
@@ -134,14 +135,14 @@ def download(
 @click.option(
     "--at",
     help=(
-        "If provided, the table values at the given time will be shown. Must be "
-        " either a valid timestamp in the form of a unix timestamp (milliseconds since "
-        "epoch) or a valid date-time format. The valid "
-        "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
-        "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
-        "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "
-        "'2023-10-01T12:00:00.000Z') or it can be omitted to indicate local "
-        "time (e.g., '2023-10-01T12' or '2023-10-01T12:00:00.000')."
+        "If provided, the table values at the given time will be shown. Must be  either"
+        " a valid timestamp in the form of a unix timestamp (milliseconds since epoch"
+        " without a dot, e.g. '1750074554472') or a valid date-time format. The valid"
+        " formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM',"
+        " 'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be"
+        " added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or"
+        " '2023-10-01T12:00:00.000Z') or it can be omitted to indicate local time"
+        " (e.g., '2023-10-01T12' or '2023-10-01T12:00:00.000')."
     ),
     type=str,
     cls=MutuallyExclusiveOption,
@@ -224,7 +225,8 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
     help=(
         "If provided, the table values at the given time will be shown. Must be "
         " either a valid timestamp in the form of a unix timestamp (milliseconds since "
-        "epoch) or a valid date-time format. The valid "
+        "epoch without a dot, e.g. '1750074554472') or a valid date-time format. "
+        "The valid "
         "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
         "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
         "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "
@@ -324,7 +326,8 @@ def sample(
     help=(
         "If provided, the table values at the given time will be shown. Must be "
         " either a valid timestamp in the form of a unix timestamp (milliseconds since "
-        "epoch) or a valid date-time format. The valid "
+        "epoch without a dot, e.g. '1750074554472') or a valid date-time format. "
+        "The valid "
         "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
         "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
         "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "

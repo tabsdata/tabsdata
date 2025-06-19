@@ -15,6 +15,7 @@ from typing import Generator, List
 
 import polars as pl
 import requests
+
 from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.io.input import TableInput
 from tabsdata.io.output import TableOutput
@@ -35,7 +36,7 @@ class FunctionRunStatus(Enum):
     RUN_REQUESTED = "RR"
     RESCHEDULED = "RS"
     SCHEDULED = "S"
-    UNRECOGNIZED = "U"
+    UNKNOWN = "U"
 
 
 STATUS_MAPPING = {
@@ -50,7 +51,7 @@ STATUS_MAPPING = {
     FunctionRunStatus.RUN_REQUESTED.value: "Run Requested",
     FunctionRunStatus.RESCHEDULED.value: "Rescheduled",
     FunctionRunStatus.SCHEDULED.value: "Scheduled",
-    FunctionRunStatus.UNRECOGNIZED.value: "Unrecognized",
+    FunctionRunStatus.UNKNOWN.value: "Unknown",
 }
 
 
@@ -91,7 +92,7 @@ FAILED_FINAL_STATUSES = {
     status_to_mapping(FunctionRunStatus.FAILED.value),
     status_to_mapping(FunctionRunStatus.ON_HOLD.value),
     status_to_mapping(FunctionRunStatus.INCOMPLETE.value),
-    status_to_mapping(FunctionRunStatus.UNRECOGNIZED.value),
+    status_to_mapping(FunctionRunStatus.UNKNOWN.value),
 }
 
 SUCCESSFUL_FINAL_STATUSES = {
@@ -846,6 +847,21 @@ class Execution:
             )
 
     @property
+    def function_runs(self) -> list[FunctionRun]:
+        raw_function_runs = (
+            self.connection.function_list_runs(
+                request_filter=f"execution_id:eq:{self.id}"
+            )
+            .json()
+            .get("data")
+            .get("data")
+        )
+        return [
+            FunctionRun(**{**function_run, "connection": self.connection})
+            for function_run in raw_function_runs
+        ]
+
+    @property
     def status(self) -> str:
         if self._status is None:
             self.status = self._data.get("status")
@@ -868,7 +884,7 @@ class Execution:
         return transactions
 
     @property
-    def workers(self):
+    def workers(self) -> list[Worker]:
         raw_workers = (
             self.connection.workers_list(request_filter=f"execution_id:eq:{self.id}")
             .json()
@@ -1339,6 +1355,11 @@ class FunctionRun:
         **kwargs: Additional keyword arguments.
     """
 
+    ended_on = LazyProperty("ended_on")
+    ended_on_str = LazyProperty("ended_on_str", subordinate_time_string=True)
+    started_on = LazyProperty("started_on")
+    started_on_str = LazyProperty("started_on_str", subordinate_time_string=True)
+
     def __init__(
         self,
         connection: APIServer,
@@ -1366,6 +1387,10 @@ class FunctionRun:
         self.transaction = kwargs.get("transaction_id")
         self.execution = kwargs.get("execution_id")
         self.status = kwargs.get("status")
+        self.ended_on = kwargs.get("ended_on")
+        self.ended_on_str = None
+        self.started_on = kwargs.get("started_on")
+        self.started_on_str = None
         self._data = None
         self.kwargs = kwargs
 
@@ -2077,6 +2102,21 @@ class Transaction:
             )
 
     @property
+    def function_runs(self) -> list[FunctionRun]:
+        raw_function_runs = (
+            self.connection.function_list_runs(
+                request_filter=f"transaction_id:eq:{self.id}"
+            )
+            .json()
+            .get("data")
+            .get("data")
+        )
+        return [
+            FunctionRun(**{**function_run, "connection": self.connection})
+            for function_run in raw_function_runs
+        ]
+
+    @property
     def status(self) -> str:
         if self._status is None:
             self.status = self._data.get("status")
@@ -2090,7 +2130,7 @@ class Transaction:
             self._status = status_to_mapping(status)
 
     @property
-    def workers(self):
+    def workers(self) -> list[Worker]:
         raw_workers = (
             self.connection.workers_list(request_filter=f"transaction_id:eq:{self.id}")
             .json()
@@ -2927,6 +2967,12 @@ class TabsdataServer:
         """
         function = Function(self.connection, collection_name, function_name)
         return function.history
+
+    def get_function_run(self, function_run_id: str) -> FunctionRun:
+        try:
+            return self.list_function_runs(filter=f"id:eq:{function_run_id}")[0]
+        except IndexError:
+            raise ValueError(f"Function Run with ID {function_run_id} not found.")
 
     def list_function_runs(
         self,

@@ -204,9 +204,7 @@ def test_cli_transaction_recover(login, tabsserver_connection):
 @pytest.mark.requires_internet
 def test_execution_list_with_status(login, testing_collection_with_table):
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--no-prompt", "exe", "list-plan", "--status", "done"]
-    )
+    result = runner.invoke(cli, ["--no-prompt", "exe", "list-plan", "--status", "done"])
     logger.debug(result.output)
     assert result.exit_code == 0
 
@@ -503,6 +501,22 @@ def test_worker_list_with_execution_id(
     runner = CliRunner()
     result = runner.invoke(
         cli, ["--no-prompt", "exe", "list-worker", "--plan", str(execution_id)]
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.aleix_dev
+def test_worker_list_with_function_run_id(
+    login, testing_collection_with_table, tabsserver_connection
+):
+    fn_run_id = tabsserver_connection.list_function_runs()[0].id
+    runner = CliRunner()
+    logger.debug(f"Function Run ID: {fn_run_id}")
+    result = runner.invoke(
+        cli, ["--no-prompt", "exe", "list-worker", "--fn-run", str(fn_run_id)]
     )
     logger.debug(result.output)
     assert result.exit_code == 0

@@ -177,8 +177,10 @@ def list_fn_run(
         table.add_column("Collection")
         table.add_column("Function")
         table.add_column("Plan name")
-        table.add_column("Plan ID")
-        table.add_column("Transaction ID")
+        table.add_column("Plan ID", no_wrap=True)
+        table.add_column("Transaction ID", no_wrap=True)
+        table.add_column("Started on", no_wrap=True)
+        table.add_column("Ended on", no_wrap=True)
         table.add_column("Status")
 
         for fn_run in list_of_function_runs:
@@ -189,6 +191,8 @@ def list_fn_run(
                 fn_run.execution.name,
                 fn_run.execution.id,
                 fn_run.transaction.id,
+                fn_run.started_on_str,
+                fn_run.ended_on_str,
                 fn_run.status,
             )
 
@@ -266,7 +270,8 @@ def obtain_list_fn_run_filters(
     help=(
         "If provided, only plans started before that time will be shown. Must be "
         " either a valid timestamp in the form of a unix timestamp (milliseconds since "
-        "epoch) or a valid date-time format. The valid "
+        "epoch without a dot, e.g. '1750074554472') or a valid date-time format. "
+        "The valid "
         "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
         "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
         "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "
@@ -413,7 +418,8 @@ def obtain_list_exec_filters(
         "If provided, only transactions started before that time will be shown. Must "
         "be "
         " either a valid timestamp in the form of a unix timestamp (milliseconds since "
-        "epoch) or a valid date-time format. The valid "
+        "epoch without a dot, e.g. '1750074554472') or a valid date-time format. "
+        "The valid "
         "formats are 'YYYY-MM-DD', 'YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:MM', "
         "'YYYY-MM-DDTHH:MM:SS', and 'YYYY-MM-DDTHH:MM:SS.sss'. A 'Z' character can be "
         "added at the end to indicate UTC time (e.g., '2023-10-01T12Z' or "
@@ -531,7 +537,7 @@ def obtain_list_trx_filters(
     type=str,
     cls=MutuallyExclusiveOption,
     help="ID of the plan to which the workers belong.",
-    mutually_exclusive=["plan-name", "fn", "trx", "coll"],
+    mutually_exclusive=["plan-name", "fn-run", "fn", "trx", "coll"],
 )
 @click.option(
     "--plan-name",
@@ -551,21 +557,28 @@ def obtain_list_trx_filters(
         "Name of the function to which the workers belong. If this is provided, "
         "collection must also be provided."
     ),
-    mutually_exclusive=["plan", "trx"],
+    mutually_exclusive=["fn-run", "plan", "trx"],
+)
+@click.option(
+    "--fn-run",
+    type=str,
+    cls=MutuallyExclusiveOption,
+    help="ID of the function run to which the workers belong.",
+    mutually_exclusive=["coll", "fn", "plan", "trx"],
 )
 @click.option(
     "--coll",
     type=str,
     cls=MutuallyExclusiveOption,
     help="Collection of the function to which the workers belong.",
-    mutually_exclusive=["plan", "trx"],
+    mutually_exclusive=["fn-run", "plan", "trx"],
 )
 @click.option(
     "--trx",
     type=str,
     cls=MutuallyExclusiveOption,
     help="ID of the transaction to which the workers belong.",
-    mutually_exclusive=["plan", "fn", "coll"],
+    mutually_exclusive=["fn-run", "plan", "fn", "coll"],
 )
 @click.pass_context
 def list_worker(
@@ -574,6 +587,7 @@ def list_worker(
     plan: str,
     plan_name: str,
     fn: str,
+    fn_run: str,
     coll: str,
     trx: str,
 ):
@@ -596,6 +610,7 @@ def list_worker(
             exe_name=plan_name,
             execution_id=plan,
             fn=fn,
+            fn_run=fn_run,
             collection=coll,
             trx=trx,
         )
@@ -609,6 +624,12 @@ def list_worker(
             click.echo(
                 f"The current status of the transaction '{trx}' is"
                 f" '{transaction.status}'"
+            )
+        if fn_run:
+            function_run = server.get_function_run(fn_run)
+            click.echo(
+                f"The current status of the function run '{fn_run}' is"
+                f" '{function_run.status}'"
             )
         list_of_workers = server.list_workers(filter=request_filter)
 
@@ -653,6 +674,7 @@ def obtain_list_worker_filters(
     exe_name: str,
     execution_id: str,
     fn: str,
+    fn_run: str,
     collection: str,
     trx: str,
 ) -> List[str]:
@@ -674,6 +696,8 @@ def obtain_list_worker_filters(
         request_filter.append(f"execution_id:eq:{execution_id}")
     if fn:
         request_filter.append(f"function:eq:{fn}")
+    if fn_run:
+        request_filter.append(f"function_run_id:eq:{fn_run}")
     if collection:
         request_filter.append(f"collection:eq:{collection}")
     if trx:
@@ -746,7 +770,7 @@ def info(ctx: click.Context, plan: str):
     type=str,
     cls=MutuallyExclusiveOption,
     help="ID of the plan to which the workers belong.",
-    mutually_exclusive=["plan-name", "fn", "trx"],
+    mutually_exclusive=["plan-name", "fn", "fn-run", "trx"],
 )
 @click.option(
     "--plan-name",
@@ -766,21 +790,28 @@ def info(ctx: click.Context, plan: str):
         "Name of the function to which the workers belong. If this is provided, "
         "collection must also be provided."
     ),
-    mutually_exclusive=["plan", "trx"],
+    mutually_exclusive=["fn-run", "plan", "trx"],
+)
+@click.option(
+    "--fn-run",
+    type=str,
+    cls=MutuallyExclusiveOption,
+    help="ID of the function run to which the workers belong.",
+    mutually_exclusive=["coll", "fn", "plan", "trx"],
 )
 @click.option(
     "--coll",
     type=str,
     cls=MutuallyExclusiveOption,
     help="Collection of the function to which the workers belong.",
-    mutually_exclusive=["plan", "trx"],
+    mutually_exclusive=["fn-run", "plan", "trx"],
 )
 @click.option(
     "--trx",
     type=str,
     cls=MutuallyExclusiveOption,
     help="ID of the transaction to which the workers belong.",
-    mutually_exclusive=["plan", "fn"],
+    mutually_exclusive=["fn-run", "plan", "fn"],
 )
 @click.pass_context
 def logs(
@@ -791,6 +822,7 @@ def logs(
     plan: str,
     plan_name: str,
     fn: str,
+    fn_run: str,
     coll: str,
     trx: str,
 ):
@@ -813,6 +845,7 @@ def logs(
             exe_name=plan_name,
             execution_id=plan,
             fn=fn,
+            fn_run=fn_run,
             collection=coll,
             trx=trx,
         )

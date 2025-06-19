@@ -50,3 +50,7 @@ def test_function_run_class_lazy_properties(
     assert isinstance(execution, Execution)
     transaction = lazy_function_run.transaction
     assert isinstance(transaction, Transaction)
+    assert lazy_function_run.started_on
+    assert lazy_function_run.started_on_str
+    assert isinstance(lazy_function_run.started_on, int)
+    assert isinstance(lazy_function_run.started_on_str, str)

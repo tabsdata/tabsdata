@@ -12,6 +12,7 @@ from tabsdata.api.tabsdata_server import (
     Collection,
     Execution,
     Function,
+    FunctionRun,
     Transaction,
     Worker,
 )
@@ -69,6 +70,11 @@ def test_execution_class_lazy_properties(
     assert execution.__str__()
     assert isinstance(execution.workers, list)
     assert all(isinstance(worker, Worker) for worker in execution.workers)
+    assert isinstance(execution.function_runs, list)
+    assert all(
+        isinstance(function_run, FunctionRun)
+        for function_run in execution.function_runs
+    )
 
 
 @pytest.mark.integration

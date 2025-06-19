@@ -75,8 +75,8 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
         click.echo("Function deleted successfully")
         show_hint(
             ctx,
-            "You do not need to delete and re-register a function to change it. "
-            "Use 'td fn update' to modify the function instead.",
+            "You do not need to delete and re-create a function to change it. "
+            "Use 'td fn alter' to modify the function instead.",
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -276,7 +276,7 @@ def list(ctx: click.Context, coll: str):
     ),
 )
 @click.pass_context
-def register(
+def create(
     ctx: click.Context,
     coll: str,
     description: str,
@@ -286,14 +286,14 @@ def register(
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
 ):
-    """Registering a new function"""
+    """Creating a new function"""
     verify_login_or_prompt(ctx)
     description = description or ""
     if local_pkg:
         local_pkg = [element for element in local_pkg]
     else:
         local_pkg = None
-    click.echo("Registering a new function")
+    click.echo("Creating a new function")
     click.echo("-" * 10)
     coll = (
         coll
@@ -317,10 +317,10 @@ def register(
             local_pkg,
             reuse_tables=reuse_tables,
         )
-        click.echo("Function registered successfully")
+        click.echo("Function created successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to register function: {e}")
+        raise click.ClickException(f"Failed to create function: {e}")
 
 
 # @fn.command()
@@ -513,28 +513,36 @@ def _monitor_execution_or_transaction(
         click.echo("")
         click.echo(f"Current {keyword} status: {supervised_entity.status}")
 
-        list_of_workers = supervised_entity.workers
+        list_of_runs = supervised_entity.function_runs
 
-        table = Table(title="Workers")
-        table.add_column("Worker ID", style="cyan", no_wrap=True)
+        table = Table(title="Function Runs")
+        table.add_column("Function Run ID", style="cyan", no_wrap=True)
         table.add_column("Collection")
         table.add_column("Function")
-        table.add_column("Transaction ID") if execution else table.add_column("Plan ID")
+        (
+            table.add_column("Transaction ID", no_wrap=True)
+            if execution
+            else table.add_column("Plan ID", no_wrap=True)
+        )
+        table.add_column("Started on", no_wrap=True)
+        table.add_column("Ended on", no_wrap=True)
         table.add_column("Status")
 
-        for worker in list_of_workers:
+        for function_run in list_of_runs:
             table.add_row(
-                worker.id,
-                worker.collection.name,
-                worker.function.name,
-                worker.transaction.id if execution else worker.execution.id,
-                worker.status,
+                function_run.id,
+                function_run.collection.name,
+                function_run.function.name,
+                function_run.transaction.id if execution else function_run.execution.id,
+                function_run.started_on_str,
+                function_run.ended_on_str,
+                function_run.status,
             )
 
         click.echo()
         console = Console()
         console.print(table)
-        click.echo(f"Number of workers: {len(list_of_workers)}")
+        click.echo(f"Number of function runs: {len(list_of_runs)}")
         click.echo()
 
         if supervised_entity.status in FINAL_STATUSES:
@@ -550,15 +558,15 @@ def _monitor_execution_or_transaction(
     # the risk of ignoring failed transactions that are not in a recognized
     # status due to a mismatch between the transaction status and the
     # FINAL_STATUSES set (which ideally should not happen).
-    failed_workers = [
-        worker
-        for worker in list_of_workers
-        if worker.status not in SUCCESSFUL_FINAL_STATUSES
+    failed_runs = [
+        fn_run
+        for fn_run in list_of_runs
+        if fn_run.status not in SUCCESSFUL_FINAL_STATUSES
     ]
-    if failed_workers:
-        click.echo("Some workers failed:")
-        for worker in failed_workers:
-            click.echo(f"- {worker.id}")
+    if failed_runs:
+        click.echo("Some function runs failed:")
+        for fn_run in failed_runs:
+            click.echo(f"- {fn_run.id}")
         complete_command = (
             f"'td exe logs --plan {supervised_entity.id}'"
             if execution
@@ -566,7 +574,7 @@ def _monitor_execution_or_transaction(
         )
         show_hint(
             ctx,
-            "You can check their logs with 'td exe logs --worker <WORKER-ID>' or with "
+            "You can check their logs with 'td exe logs --fn-run <FN-RUN-ID>' or with "
             + complete_command,
         )
     else:
@@ -577,7 +585,7 @@ def _monitor_execution_or_transaction(
 @click.option(
     "--name",
     "-n",
-    help="Name of the function to be updated.",
+    help="Name of the function to be altered.",
 )
 @click.option(
     "--coll",
@@ -630,7 +638,7 @@ def _monitor_execution_or_transaction(
     ),
 )
 @click.pass_context
-def update(
+def alter(
     ctx: click.Context,
     name: str,
     coll: str,
@@ -641,14 +649,14 @@ def update(
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
 ):
-    """Update a function"""
+    """Alter a function"""
     verify_login_or_prompt(ctx)
     description = description or ""
     if local_pkg:
         local_pkg = [element for element in local_pkg]
     else:
         local_pkg = None
-    name = name or logical_prompt(ctx, "Name of the function to be updated")
+    name = name or logical_prompt(ctx, "Name of the function to be altered")
     coll = (
         coll
         or get_currently_pinned_object(ctx, "collection")
@@ -674,7 +682,7 @@ def update(
             local_packages=local_pkg,
             reuse_tables=reuse_tables,
         )
-        click.echo("Function updated successfully")
+        click.echo("Function altered successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to update function: {e}")
+        raise click.ClickException(f"Failed to alter function: {e}")

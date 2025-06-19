@@ -35,7 +35,7 @@ def test_function_create_prompt(
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["fn", "register"],
+        ["fn", "create"],
         input=f"{testing_collection}\n{function_path}\n",
     )
     logger.debug(result.output)
@@ -55,7 +55,7 @@ def test_function_create_no_prompt(
         [
             "--no-prompt",
             "fn",
-            "register",
+            "create",
             "--coll",
             testing_collection,
             "--path",
@@ -79,7 +79,7 @@ def test_function_create_no_prompt_multiple_local_packages(
         [
             "--no-prompt",
             "fn",
-            "register",
+            "create",
             "--coll",
             testing_collection,
             "--path",
@@ -105,7 +105,7 @@ def test_function_delete_cli(testing_collection, function_path, tabsserver_conne
         [
             "--no-prompt",
             "fn",
-            "register",
+            "create",
             "--coll",
             testing_collection,
             "--path",
@@ -145,7 +145,7 @@ def test_function_delete_no_prompt(
         [
             "--no-prompt",
             "fn",
-            "register",
+            "create",
             "--coll",
             testing_collection,
             "--path",
@@ -201,7 +201,7 @@ def test_function_delete_wrong_options_raises_error(
         [
             "--no-prompt",
             "fn",
-            "register",
+            "create",
             "--coll",
             testing_collection,
             "--path",
@@ -263,7 +263,7 @@ def test_function_list(testing_collection, function_path, tabsserver_connection)
         [
             "--no-prompt",
             "fn",
-            "register",
+            "create",
             "--coll",
             testing_collection,
             "--path",
@@ -285,7 +285,7 @@ def test_function_update(testing_collection, function_path, tabsserver_connectio
         [
             "--no-prompt",
             "fn",
-            "register",
+            "create",
             "--coll",
             testing_collection,
             "--path",
@@ -299,7 +299,7 @@ def test_function_update(testing_collection, function_path, tabsserver_connectio
         cli,
         [
             "fn",
-            "update",
+            "alter",
             "--name",
             "test_input_plugin",
             "--coll",
@@ -326,7 +326,7 @@ def test_function_info(testing_collection, function_path, tabsserver_connection)
         [
             "--no-prompt",
             "fn",
-            "register",
+            "create",
             "--coll",
             testing_collection,
             "--path",
@@ -362,7 +362,7 @@ def test_function_info_show_versions(
         [
             "--no-prompt",
             "fn",
-            "register",
+            "create",
             "--coll",
             testing_collection,
             "--path",
@@ -396,7 +396,7 @@ def test_function_trigger(testing_collection, function_path, tabsserver_connecti
     arguments = [
         "--no-prompt",
         "fn",
-        "register",
+        "create",
         "--coll",
         testing_collection,
         "--path",
@@ -449,7 +449,7 @@ def test_function_trigger_execution_name(
     arguments = [
         "--no-prompt",
         "fn",
-        "register",
+        "create",
         "--coll",
         testing_collection,
         "--path",

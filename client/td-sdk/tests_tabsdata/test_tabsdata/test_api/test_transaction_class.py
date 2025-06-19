@@ -12,6 +12,7 @@ from tabsdata.api.tabsdata_server import (
     Collection,
     Execution,
     Function,
+    FunctionRun,
     Transaction,
     Worker,
 )
@@ -70,6 +71,11 @@ def test_transaction_class_lazy_properties(
     assert transaction.status
     assert transaction.triggered_by
     assert isinstance(transaction.collection, Collection)
+    assert isinstance(transaction.function_runs, list)
+    assert all(
+        isinstance(function_run, FunctionRun)
+        for function_run in transaction.function_runs
+    )
 
 
 @pytest.mark.integration
