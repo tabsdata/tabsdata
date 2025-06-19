@@ -412,7 +412,7 @@ def test_transaction_list_with_at(login, testing_collection_with_table):
 def test_worker_list_with_status(login, testing_collection_with_table):
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["--no-prompt", "exe", "list-worker", "--status", "published"]
+        cli, ["--no-prompt", "exe", "list-worker", "--status", "done"]
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -429,7 +429,7 @@ def test_worker_list_with_multiple_statuses(login, testing_collection_with_table
             "exe",
             "list-worker",
             "--status",
-            "published",
+            "done",
             "--status",
             "failed",
         ],
