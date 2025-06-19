@@ -32,6 +32,7 @@ from tabsdata.utils.logging import setup_tests_logging
 # flake8: noqa: E402
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def pytest_configure():

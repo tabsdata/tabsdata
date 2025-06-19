@@ -10,6 +10,13 @@ import os
 import sys
 from pathlib import Path
 
+TRACE = logging.DEBUG - 1
+
+
+def trace(msg, *args, **kwargs):
+    logging.log(TRACE, msg, *args, **kwargs)
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -29,14 +36,14 @@ TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
 def _get_root_folder() -> str:
     current_folder = os.path.dirname(__file__)
-    logging.info(f"Current conftest folder is: {current_folder}")
+    trace(f"Current conftest folder is: {current_folder}")
     while True:
         git_folder = Path(os.path.join(current_folder, ".git"))
         root_file = Path(os.path.join(current_folder, ".root"))
         git_folder_exists = git_folder.exists() and os.path.isdir(git_folder)
         root_file_exists = root_file.exists() and root_file.is_file()
         if git_folder_exists or root_file_exists:
-            logging.info(f"Root project folder for conftest is: {current_folder}")
+            trace(f"Root project folder for conftest is: {current_folder}")
             return current_folder
         else:
             parent_folder = os.path.abspath(os.path.join(current_folder, os.pardir))

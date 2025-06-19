@@ -13,7 +13,38 @@ from tabsdata.io.plugin import DestinationPlugin
 from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.tabsserver.function.global_utils import convert_path_to_uri
 
+TRACE = logging.DEBUG - 1
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+snowflake_original_logger_levels = {}
+
+
+def modify_snowflake_logger_levels():
+    for logger_name, logger_instance in logging.Logger.manager.loggerDict.items():
+        if isinstance(logger_instance, logging.PlaceHolder):
+            continue
+
+        if logger_name == "snowflake" or logger_name.startswith("snowflake."):
+            logger_object = logging.getLogger(logger_name)
+            snowflake_original_logger_levels[logger_name] = logger_object.level
+            logger_object.setLevel(logging.ERROR)
+
+    if "snowflake" not in snowflake_original_logger_levels:
+        logger_object = logging.getLogger("snowflake")
+        snowflake_original_logger_levels["snowflake"] = logger_object.level
+        logger_object.setLevel(logging.ERROR)
+
+
+def restore_snowflake_logger_levels():
+    for logger_name, logger_level in snowflake_original_logger_levels.items():
+        logging.getLogger(logger_name).setLevel(logger_level)
+
+
 try:
+    modify_snowflake_logger_levels()
+
     import warnings
 
     warnings.filterwarnings("ignore", module="snowflake")
@@ -23,9 +54,8 @@ try:
     MISSING_LIBRARIES = False
 except ImportError:
     MISSING_LIBRARIES = True
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+finally:
+    restore_snowflake_logger_levels()
 
 TABSDATA_STAGE_NAME = "tabsdata_created_stage"
 

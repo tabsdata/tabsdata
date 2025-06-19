@@ -13,7 +13,16 @@ import yaml
 
 import tabsdata.utils.tableframe._constants as td_constants
 
+TRACE = logging.DEBUG - 1
+
+
+def trace(msg, *args, **kwargs):
+    logging.log(TRACE, msg, *args, **kwargs)
+
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 
 CSV_EXTENSION = "csv"
@@ -63,9 +72,9 @@ class CurrentPlatform:
     """Just a class to get the current platform information in a simple way."""
 
     def __init__(self):
-        logger.info("Getting the current platform information.")
+        logger.debug("Getting the current platform information.")
         self.platform = platform.system()
-        logger.info(f"Platform: {self.platform}")
+        logger.debug(f"Platform: {self.platform}")
 
     def is_windows(self):
         return self.platform == "Windows"
@@ -94,14 +103,14 @@ def convert_path_to_uri(path: str) -> str:
 
 def _get_root_folder() -> str:
     current_folder = os.path.dirname(__file__)
-    logging.info(f"Current conftest folder is: {current_folder}")
+    trace(f"Current conftest folder is: {current_folder}")
     while True:
         git_folder = Path(os.path.join(current_folder, ".git"))
         root_file = Path(os.path.join(current_folder, ".root"))
         git_folder_exists = git_folder.exists() and os.path.isdir(git_folder)
         root_file_exists = root_file.exists() and root_file.is_file()
         if git_folder_exists or root_file_exists:
-            logging.info(f"Root project folder for conftest is: {current_folder}")
+            trace(f"Root project folder for conftest is: {current_folder}")
             return current_folder
         else:
             parent_folder = os.path.abspath(os.path.join(current_folder, os.pardir))

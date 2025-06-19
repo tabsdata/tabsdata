@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Dict
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 # Supported features
@@ -19,7 +20,7 @@ class FeaturesManager:
     def __init__(self) -> None:
         """Initialize the Feature Manager."""
         self._features: Dict[Feature, bool] = {}
-        logger.info("FeaturesManager instantiated")
+        logger.debug("FeaturesManager instantiated")
 
     @classmethod
     def instance(cls) -> "FeaturesManager":
@@ -37,15 +38,15 @@ class FeaturesManager:
             self._features[feature] = True
             logger.info(f"Feature '{feature.value}' enabled.")
         else:
-            logger.info(f"Feature '{feature}' not enabled: unrecognized.")
+            logger.debug(f"Feature '{feature}' not enabled: unrecognized.")
 
     def disable(self, feature: Feature):
         """Disable a feature."""
         if self.validate_feature(feature):
             self._features[feature] = False
-            logger.info(f"Feature '{feature.value}' disabled.")
+            logger.debug(f"Feature '{feature.value}' disabled.")
         else:
-            logger.info(f"Feature '{feature}' not disabled: unrecognized.")
+            logger.debug(f"Feature '{feature}' not disabled: unrecognized.")
 
     def is_enabled(self, feature: Feature) -> bool:
         if self.validate_feature(feature):
