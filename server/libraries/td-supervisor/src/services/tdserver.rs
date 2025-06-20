@@ -1044,12 +1044,14 @@ fn command_status(arguments: StatusArguments) {
         (WorkerStatus::Running { pid }, Some(workers)) => {
             let tabled_workers: Vec<WorkerRow> = workers
                 .into_iter()
-                .map(
+                .flat_map(
                     |(
                         pid,
                         parent_pid,
                         name,
                         program,
+                        cwd,
+                        cpu,
                         physical_memory,
                         virtual_memory,
                         collection,
@@ -1057,18 +1059,21 @@ fn command_status(arguments: StatusArguments) {
                         worker,
                         attempt,
                     )| {
-                        WorkerRow::new(
+                        let exe_row = WorkerRow::new(
                             pid,
                             parent_pid,
-                            name,
-                            collection,
-                            function,
-                            worker,
-                            attempt,
+                            name.clone(),
+                            collection.clone(),
+                            function.clone(),
+                            worker.clone(),
+                            attempt.clone(),
+                            cpu,
                             physical_memory,
                             virtual_memory,
-                            program,
-                        )
+                            program.clone(),
+                        );
+                        let cwd_row = WorkerRow::cwd(cwd);
+                        vec![exe_row, cwd_row]
                     },
                 )
                 .collect();
@@ -1081,7 +1086,8 @@ fn command_status(arguments: StatusArguments) {
                 .with(Modify::new(Columns::single(1)).with(Alignment::right()))
                 .with(Modify::new(Columns::single(6)).with(Alignment::right()))
                 .with(Modify::new(Columns::single(7)).with(Alignment::right()))
-                .with(Modify::new(Columns::single(8)).with(Alignment::right()));
+                .with(Modify::new(Columns::single(8)).with(Alignment::right()))
+                .with(Modify::new(Columns::single(9)).with(Alignment::right()));
 
             status.push_str(&format!(
                 "Workers and its sub-workers of instance '{}' - '{}':\n{}",
@@ -1636,9 +1642,9 @@ fn command_instances() {
 #[derive(Tabled)]
 struct WorkerRow {
     #[tabled(rename = "Process")]
-    pid: u32,
+    pid: String,
     #[tabled(rename = "Parent")]
-    ppid: u32,
+    ppid: String,
     #[tabled(rename = "Name")]
     name: String,
     #[tabled(rename = "Collection")]
@@ -1649,11 +1655,13 @@ struct WorkerRow {
     worker: String,
     #[tabled(rename = "Attempt")]
     attempt: String,
+    #[tabled(rename = "CPU")]
+    cpu: String,
     #[tabled(rename = "Physical Memory")]
     p_memory: String,
     #[tabled(rename = "Virtual Memory")]
     v_memory: String,
-    #[tabled(rename = "Program")]
+    #[tabled(rename = "Program / Working Directory")]
     program: String,
 }
 
@@ -1667,18 +1675,20 @@ impl WorkerRow {
         function: String,
         worker: String,
         attempt: String,
+        cpu: i32,
         pmem: u64,
         vmem: u64,
         program: String,
     ) -> Self {
         Self {
-            pid: pid.as_u32(),
-            ppid: ppid.as_u32(),
+            pid: format!("{}", pid.as_u32()),
+            ppid: format!("{}", ppid.as_u32()),
             name: name.replace('"', ""),
             collection,
             function,
             worker,
             attempt,
+            cpu: format!("{}%", cpu),
             p_memory: format!(
                 "{} mb",
                 (pmem / (1024 * 1024)).to_formatted_string(&Locale::en)
@@ -1691,6 +1701,26 @@ impl WorkerRow {
                 .strip_prefix('"')
                 .and_then(|n| n.strip_suffix('"'))
                 .unwrap_or(&program)
+                .to_string(),
+        }
+    }
+
+    fn cwd(cwd: String) -> Self {
+        Self {
+            pid: "".to_string(),
+            ppid: "".to_string(),
+            name: "".to_string(),
+            collection: "".to_string(),
+            function: "".to_string(),
+            worker: "".to_string(),
+            attempt: "".to_string(),
+            cpu: "".to_string(),
+            p_memory: "".to_string(),
+            v_memory: "".to_string(),
+            program: cwd
+                .strip_prefix('"')
+                .and_then(|n| n.strip_suffix('"'))
+                .unwrap_or(&cwd)
                 .to_string(),
         }
     }

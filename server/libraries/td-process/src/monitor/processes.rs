@@ -8,13 +8,16 @@ use crate::launcher::arg::MarkerKey::{TdAttempt, TdCollection, TdFunction, TdWor
 use crate::monitor::memory::{physical_memory, virtual_memory};
 
 use std::path::Path;
-use sysinfo::{Pid, System};
+use std::thread::sleep;
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 pub type ProcessDistilled = (
     Pid,
     Pid,
     String,
     String,
+    String,
+    i32,
     u64,
     u64,
     String,
@@ -36,6 +39,12 @@ fn python_module_aliases() -> HashMap<&'static str, &'static str> {
 pub fn get_process_tree(pid: i32) -> Vec<ProcessDistilled> {
     let mut system = System::new_all();
     system.refresh_all();
+    sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::new().with_cpu(),
+    );
     process_tree(&system, Pid::from_u32(pid as u32), 0, Default::default())
 }
 
@@ -59,7 +68,7 @@ fn process_tree(
 
     let base_name = process
         .map(|p| format!("{:?}", p.name()))
-        .unwrap_or_else(|| String::from("<unknown>"));
+        .unwrap_or_else(|| String::from("?"));
 
     let cmd = process
         .map(|p| {
@@ -140,18 +149,32 @@ fn process_tree(
         attempt = parent_td_attempt.clone();
     }
 
-    let executable = process.map_or(String::from("<unknown>"), |p| {
+    let executable = process.map_or(String::from("?"), |p| {
         p.exe().map_or_else(
-            || String::from("<undefined>"),
+            || String::from("!"),
             |exe| exe.to_str().unwrap().to_string(),
         )
     });
+
+    let cwd = process.map_or_else(
+        || String::from("?"),
+        |p| {
+            p.cwd()
+                .and_then(|path| path.to_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| String::from("!"))
+        },
+    );
+
+    let cpu = process.map_or_else(|| -1, |p| p.cpu_usage() as i32);
 
     let mut subprocesses = vec![(
         pid,
         process.and_then(|p| p.parent()).unwrap_or(Pid::from(0)),
         name,
         executable,
+        cwd,
+        cpu,
         physical_memory(system, pid.as_u32()),
         virtual_memory(system, pid.as_u32()),
         collection.clone(),
