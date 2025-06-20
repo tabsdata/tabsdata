@@ -17,11 +17,11 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{fs, io};
 use td_build::version::TABSDATA_VERSION;
-use td_common::cli::Cli;
-use td_common::config::Config;
 use td_common::server::{CONFIG_FOLDER, WORK_FOLDER};
 use td_common::status::ExitStatus;
 use td_common::status::ExitStatus::*;
+use td_process::launcher::cli::Cli;
+use td_process::launcher::config::Config;
 use thiserror::Error;
 use tracing::{error, info};
 

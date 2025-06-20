@@ -5,6 +5,7 @@
 use crate::types::worker::v1::{FunctionInputV1, FunctionOutputV1};
 use crate::types::worker::v2::{FunctionInputV2, FunctionOutputV2};
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use std::collections::HashSet;
 use td_apiforge::apiserver_schema;
 use url::Url;
@@ -37,6 +38,14 @@ pub enum FunctionInput {
     V0(String), // used in testing
     V1(FunctionInputV1),
     V2(FunctionInputV2),
+}
+
+impl TryFrom<Value> for FunctionInput {
+    type Error = serde_yaml::Error;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        serde_yaml::from_value(value)
+    }
 }
 
 impl Locations for FunctionInput {

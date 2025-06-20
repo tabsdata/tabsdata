@@ -59,8 +59,6 @@ td-attach = { workspace = true }
 # External dependencies
 
 async-trait = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
-clap_derive = { workspace = true }
 config = { workspace = true, features = ["yaml"] }
 console-subscriber = { workspace = true, optional = true }
 chrono = { workspace = true, features = ["serde"] }
@@ -69,17 +67,13 @@ data-encoding = { workspace = true }
 derive_builder = { workspace = true }
 derive-new = { workspace = true }
 dirs = { workspace = true }
-dir-size = { workspace = true }
 getset = { workspace = true }
 homedir = { workspace = true }
 http = { workspace = true }
-ignore = { workspace = true }
-indexmap = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true, features = ["process"] }
-num-format = { workspace = true }
 once_cell = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 opentelemetry-stdout = { workspace = true }

@@ -4,13 +4,11 @@
 
 #[cfg(not(target_os = "windows"))]
 use libc;
-use std::collections::HashMap;
 #[cfg(not(target_os = "windows"))]
 use std::fs;
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::fs::MetadataExt;
 
-use crate::monitor::{physical_memory, virtual_memory};
 #[cfg(not(target_os = "windows"))]
 use libc::pid_t;
 #[cfg(not(target_os = "windows"))]
@@ -50,15 +48,6 @@ pub enum OsProcessError {
     TerminationNotSupported(i32, Signal),
     #[error("Unable to terminate process '{0}' with signal '{1}")]
     TerminationFailure(i32, Signal),
-}
-
-const PYTHON_MODULE_ALIASES: &[(&str, &str)] = &[(
-    "tabsdata.tabsserver.function.execute_function_from_bundle_path",
-    "tdfunction",
-)];
-
-fn python_module_aliases() -> HashMap<&'static str, &'static str> {
-    PYTHON_MODULE_ALIASES.iter().cloned().collect()
 }
 
 /// Function to attach the correct extension to a program path based on platform.
@@ -186,74 +175,6 @@ pub fn signal_to_flag(signal: Signal) -> String {
         _ => "-KILL",
     }
     .to_string()
-}
-
-/// Function to get the process tree starting from a given PID.
-pub fn get_process_tree(pid: i32) -> Vec<(Pid, Pid, String, String, u64, u64)> {
-    let mut system = System::new_all();
-    system.refresh_all();
-    let mut processes = process_tree(&system, Pid::from_u32(pid as u32));
-    processes.sort_by_key(|process| process.0);
-    processes
-}
-
-/// Recursive function to get the process tree.
-fn process_tree(system: &System, pid: Pid) -> Vec<(Pid, Pid, String, String, u64, u64)> {
-    let process = system.process(pid);
-    let base_name = process
-        .map(|p| format!("{:?}", p.name()))
-        .unwrap_or_else(|| String::from("<unknown>"));
-    // When python, we do extra processing for better reporting:
-    let name = process.map_or(base_name.clone(), |p| {
-        let cmd = p.cmd();
-        // If running a module, we extract its name, and alias it if existing in the aliases map.
-        if base_name.trim_matches('"') == "python" {
-            if let Some(idx) = cmd.iter().position(|arg| arg == "-m") {
-                let alias_map = python_module_aliases();
-                cmd.get(idx + 1)
-                    .and_then(|s| s.to_str())
-                    .map(|modname| {
-                        alias_map
-                            .get(modname)
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| modname.to_string())
-                    })
-                    .unwrap_or_else(|| base_name.clone())
-            } else {
-                // Fallback: try to infer from script/binary, only if not a flag
-                cmd.get(1)
-                    .and_then(|arg| arg.to_str())
-                    .filter(|s| !s.starts_with('-'))
-                    .and_then(|arg| Path::new(arg).file_name())
-                    .and_then(|n| n.to_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| base_name.clone())
-            }
-        } else {
-            base_name.clone()
-        }
-    });
-    let executable = process.map_or(String::from("<unknown>"), |p| {
-        p.exe().map_or_else(
-            || String::from("<undefined>"),
-            |exe| exe.to_str().unwrap().to_string(),
-        )
-    });
-    let mut subprocesses = vec![(
-        pid,
-        process.and_then(|p| p.parent()).unwrap_or(Pid::from(0)),
-        name,
-        executable,
-        physical_memory(system, pid.as_u32()),
-        virtual_memory(system, pid.as_u32()),
-    )];
-    let processes = system.processes();
-    for (process_pid, process) in processes.iter() {
-        if process.parent() == Some(pid) && process.thread_kind().is_none() {
-            subprocesses.extend(process_tree(system, *process_pid));
-        }
-    }
-    subprocesses
 }
 
 #[cfg(target_os = "windows")]

@@ -7,9 +7,9 @@ use crate::importer::logic::{create_object_store, find_files_to_import, run_impo
 use std::fs::File;
 use std::io::{stdout, Write};
 use std::sync::Arc;
-use td_common::cli::{Cli, NoConfig};
 use td_common::logging;
 use td_common::status::ExitStatus;
+use td_process::launcher::cli::{Cli, NoConfig};
 use tracing::Level;
 
 /// Run the importer. This function is the entry point for the `importer` binary.

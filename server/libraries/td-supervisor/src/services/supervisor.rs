@@ -2,8 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::component::argument::InheritedArgumentKey::*;
-use crate::component::argument::{ArgumentKey, InheritedArgumentKey};
 use crate::component::describer::TabsDataWorkerDescriberBuilder;
 use crate::component::notifier::execution;
 use crate::component::parameters::render;
@@ -56,8 +54,6 @@ use strum::{AsRefStr, EnumString};
 use sysinfo::Signal::Kill;
 use sysinfo::{Pid, Signal};
 use td_common::attach::check_nowait_env;
-use td_common::cli::{parse_extra_arguments, Cli, TRAILING_ARGUMENTS_PREFIX};
-use td_common::config::Config;
 use td_common::env::to_absolute;
 use td_common::execution_status::FunctionRunUpdateStatus;
 use td_common::os::terminate_process;
@@ -75,6 +71,10 @@ use td_common::server::{
 };
 use td_common::signal::terminate;
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataError};
+use td_process::launcher::arg::InheritedArgumentKey::*;
+use td_process::launcher::arg::{ArgumentKey, InheritedArgumentKey, MarkerKey};
+use td_process::launcher::cli::{parse_extra_arguments, Cli, TRAILING_ARGUMENTS_PREFIX};
+use td_process::launcher::config::Config;
 use td_python::venv::prepare;
 use tempfile::tempdir;
 use tokio::io::AsyncReadExt;
@@ -190,6 +190,8 @@ pub struct WorkerConfig {
     inherit: Vec<String>,
     #[serde(default)]
     arguments: Vec<String>,
+    #[serde(default)]
+    markers: Vec<String>,
     #[serde(rename = "set-state")]
     set_state: Option<SetState>,
     #[serde(default, rename = "get-states")]
@@ -211,6 +213,7 @@ impl Display for WorkerConfig {
                              parameters: {:?}, \
                              inherit: {:?}, \
                              arguments: {:?}, \
+                             markers: {:?}, \
                              set_state: {:?}, \
                              get_states: {:?}, \
                              concurrency: {} }}",
@@ -221,6 +224,7 @@ impl Display for WorkerConfig {
             self.parameters,
             self.inherit,
             self.arguments,
+            self.markers,
             self.set_state,
             self.get_states,
             self.concurrency
@@ -400,6 +404,8 @@ pub struct Supervisor {
     dropping: Arc<AtomicBool>,
     state: SupervisorState,
 }
+
+type WorkerCommandLine = (String, Vec<String>, Vec<String>);
 
 impl Drop for Supervisor {
     fn drop(&mut self) {
@@ -1297,7 +1303,7 @@ impl Supervisor {
                 Err(err) => return (None, Err(err)),
             };
 
-        let (program, arguments) = match self.obtain_worker_command(
+        let (program, arguments, markers) = match self.obtain_worker_command(
             worker.clone(),
             message.clone(),
             class.clone(),
@@ -1316,6 +1322,7 @@ impl Supervisor {
             .set_state(worker.set_state().clone())
             .get_states(worker.get_states().clone())
             .arguments(arguments)
+            .markers(markers)
             .config(config_folder)
             .work(work_folder)
             .queue(self.params.clone().work().join(MSG_FOLDER))
@@ -1601,9 +1608,11 @@ impl Supervisor {
         class: WorkerClass,
         _config_folder: PathBuf,
         work_folder: PathBuf,
-    ) -> Result<(String, Vec<String>), RunnerError> {
+    ) -> Result<WorkerCommandLine, RunnerError> {
         let parent_work_folder = self.params.clone().work();
         let child_work_folder = work_folder.clone();
+
+        let mut markers = Vec::new();
 
         let forward_parameters = self
             .forward_parameters(
@@ -1632,7 +1641,7 @@ impl Supervisor {
                 .to_string(),
         };
 
-        let parameters = match class {
+        let (parameters, markers) = match class {
             EPHEMERAL => {
                 let script_path = work_folder.join(PARENT_FOLDER).join(worker.name());
                 let mut command = CommandBuilder::new().binary(
@@ -1662,12 +1671,25 @@ impl Supervisor {
                     .map(|&s| s.to_string())
                     .collect();
                 parameters.push(ScriptBuilder::script_to_platform(script_path));
-                parameters
+
+                for key in worker.markers() {
+                    match key.parse::<MarkerKey>() {
+                        Ok(marker_key) => {
+                            markers.push(format!("--{}", key));
+                            markers.push(marker_key.produce(&message, payload).unwrap());
+                        }
+                        Err(e) => {
+                            error!("Unrecognized marker '{}': {}", key, e);
+                        }
+                    }
+                }
+
+                (parameters, markers)
             }
-            _ => forward_parameters,
+            _ => (forward_parameters, markers),
         };
 
-        Ok((program, parameters))
+        Ok((program, parameters, markers))
     }
 
     async fn stop_workers(&self, signal: Signal) -> Result<(), RuntimeError> {
@@ -1925,7 +1947,7 @@ impl Supervisor {
                     );
                 }
                 Err(e) => {
-                    error!("Unrecognized argument: {}", e);
+                    error!("Unrecognized argument '{}': {}", key, e);
                 }
             }
         }

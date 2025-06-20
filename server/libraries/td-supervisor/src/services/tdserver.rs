@@ -2,8 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::component::argument::InheritedArgumentKey;
-use crate::component::argument::InheritedArgumentKey::*;
 use crate::component::describer::{
     DescriberError, TabsDataWorkerDescriber, TabsDataWorkerDescriberBuilder,
 };
@@ -34,7 +32,7 @@ use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Output};
 use std::thread::sleep;
 use std::{env, fs, io};
-use sysinfo::{Pid, Signal};
+use sysinfo::Signal;
 use ta_tableframe::api::Extension;
 use tabled::{
     settings::{
@@ -45,17 +43,22 @@ use tabled::{
     Table, Tabled,
 };
 use td_apiserver::config::DbSchema;
-use td_common::cli::{parse_extra_arguments, ARGUMENT_PREFIX, TRAILING_ARGUMENTS_PREFIX};
 use td_common::env::{get_home_dir, to_absolute, TABSDATA_HOME_DIR};
 use td_common::logging::set_log_level;
-use td_common::monitor::instance_space;
-use td_common::os::{get_process_tree, name_program, terminate_process};
+use td_common::os::{name_program, terminate_process};
 use td_common::server::WorkerClass::REGULAR;
 use td_common::server::{
     AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FOLDER, DATABASE_FILE, DATABASE_FOLDER,
     ENVIRONMENTS_FOLDER, ETC_FOLDER, MSG_FOLDER, STORAGE_FOLDER, WORK_FOLDER,
 };
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
+use td_process::launcher::arg::InheritedArgumentKey;
+use td_process::launcher::arg::InheritedArgumentKey::*;
+use td_process::launcher::cli::{
+    parse_extra_arguments, ARGUMENT_PREFIX, TRAILING_ARGUMENTS_PREFIX,
+};
+use td_process::monitor::processes::{get_process_tree, ProcessDistilled};
+use td_process::monitor::space::instance_space;
 use td_python::upgrade::{get_source_version, get_target_version, upgrade};
 use td_python::venv::prepare;
 use te_tableframe::engine::TableFrameExtension;
@@ -1042,14 +1045,29 @@ fn command_status(arguments: StatusArguments) {
             let tabled_workers: Vec<WorkerRow> = workers
                 .into_iter()
                 .map(
-                    |(pid, parent_pid, name, program, physical_memory, virtual_memory)| {
+                    |(
+                        pid,
+                        parent_pid,
+                        name,
+                        program,
+                        physical_memory,
+                        virtual_memory,
+                        collection,
+                        function,
+                        worker,
+                        attempt,
+                    )| {
                         WorkerRow::new(
                             pid,
                             parent_pid,
                             name,
-                            program,
+                            collection,
+                            function,
+                            worker,
+                            attempt,
                             physical_memory,
                             virtual_memory,
+                            program,
                         )
                     },
                 )
@@ -1061,8 +1079,9 @@ fn command_status(arguments: StatusArguments) {
                 .with((theme.clone(), Alignment::left()))
                 .with(Modify::new(Columns::single(0)).with(Alignment::right()))
                 .with(Modify::new(Columns::single(1)).with(Alignment::right()))
-                .with(Modify::new(Columns::single(4)).with(Alignment::right()))
-                .with(Modify::new(Columns::single(5)).with(Alignment::right()));
+                .with(Modify::new(Columns::single(6)).with(Alignment::right()))
+                .with(Modify::new(Columns::single(7)).with(Alignment::right()))
+                .with(Modify::new(Columns::single(8)).with(Alignment::right()));
 
             status.push_str(&format!(
                 "Workers and its sub-workers of instance '{}' - '{}':\n{}",
@@ -1102,9 +1121,7 @@ fn command_status(arguments: StatusArguments) {
     info!("{status}");
 }
 
-type WorkerProcess = (Pid, Pid, String, String, u64, u64);
-
-fn status_processes(supervisor_work: PathBuf) -> (WorkerStatus, Option<Vec<WorkerProcess>>) {
+fn status_processes(supervisor_work: PathBuf) -> (WorkerStatus, Option<Vec<ProcessDistilled>>) {
     let supervisor_tracker = WorkerTracker::new(supervisor_work.clone());
     match supervisor_tracker.check_worker_status() {
         WorkerStatus::Running { pid } => {
@@ -1126,7 +1143,7 @@ fn wait(supervisor_work: PathBuf) -> bool {
             if let Some(children) = &tree {
                 if children
                     .iter()
-                    .any(|(_, _, name, ..)| name.trim().trim_matches('"') == APISERVER)
+                    .any(|(_, _, name, ..)| name.trim().trim_matches('"').contains(APISERVER))
                 {
                     return true;
                 }
@@ -1422,6 +1439,7 @@ fn build_instance_describer(
         .set_state(None)
         .get_states(vec![])
         .arguments(forwarded_parameters)
+        .markers(vec![])
         .config(supervisor_config.clone())
         .work(supervisor_work.clone())
         .queue(supervisor_work.clone().join(MSG_FOLDER))
@@ -1623,36 +1641,44 @@ struct WorkerRow {
     ppid: u32,
     #[tabled(rename = "Name")]
     name: String,
-    #[tabled(rename = "Program")]
-    program: String,
+    #[tabled(rename = "Collection")]
+    collection: String,
+    #[tabled(rename = "Function")]
+    function: String,
+    #[tabled(rename = "Worker")]
+    worker: String,
+    #[tabled(rename = "Attempt")]
+    attempt: String,
     #[tabled(rename = "Physical Memory")]
     p_memory: String,
     #[tabled(rename = "Virtual Memory")]
     v_memory: String,
+    #[tabled(rename = "Program")]
+    program: String,
 }
 
 impl WorkerRow {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         pid: sysinfo::Pid,
         ppid: sysinfo::Pid,
         name: String,
-        program: String,
+        collection: String,
+        function: String,
+        worker: String,
+        attempt: String,
         pmem: u64,
         vmem: u64,
+        program: String,
     ) -> Self {
         Self {
             pid: pid.as_u32(),
             ppid: ppid.as_u32(),
-            name: name
-                .strip_prefix('"')
-                .and_then(|n| n.strip_suffix('"'))
-                .unwrap_or(&name)
-                .to_string(),
-            program: program
-                .strip_prefix('"')
-                .and_then(|n| n.strip_suffix('"'))
-                .unwrap_or(&program)
-                .to_string(),
+            name: name.replace('"', ""),
+            collection,
+            function,
+            worker,
+            attempt,
             p_memory: format!(
                 "{} mb",
                 (pmem / (1024 * 1024)).to_formatted_string(&Locale::en)
@@ -1661,6 +1687,11 @@ impl WorkerRow {
                 "{} mb",
                 (vmem / (1024 * 1024)).to_formatted_string(&Locale::en)
             ),
+            program: program
+                .strip_prefix('"')
+                .and_then(|n| n.strip_suffix('"'))
+                .unwrap_or(&program)
+                .to_string(),
         }
     }
 }

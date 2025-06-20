@@ -100,7 +100,7 @@ impl Display for Config {
     }
 }
 
-impl td_common::config::Config for Config {}
+impl td_process::launcher::config::Config for Config {}
 
 impl From<&Config> for JwtConfig {
     fn from(config: &Config) -> Self {

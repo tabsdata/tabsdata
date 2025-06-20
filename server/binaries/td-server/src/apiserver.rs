@@ -8,11 +8,11 @@ use td_apiserver::config::{Config, DbSchema, Params};
 use td_apiserver::router::scheduler_server::SchedulerBuilder;
 use td_apiserver::router::{ApiServerInstance, RuntimeContext};
 use td_common::attach::attach;
-use td_common::cli::Cli;
 use td_common::logging;
 use td_common::server::FileWorkerMessageQueue;
 use td_common::status::ExitStatus;
 use td_database::sql::DbError;
+use td_process::launcher::cli::Cli;
 use td_storage::Storage;
 use tracing::{error, info, Level};
 

@@ -703,7 +703,7 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
     }
 }
 
-fn base(stem: &str) -> String {
+pub fn base(stem: &str) -> String {
     stem.split(RETRIES_DELIMITER)
         .next()
         .unwrap_or(stem)

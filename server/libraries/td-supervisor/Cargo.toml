@@ -49,7 +49,6 @@ toml = { workspace = true }
 
 # Internal dependencies
 
-
 ## Macros
 
 td-build = { workspace = true }
@@ -62,6 +61,7 @@ td-common = { workspace = true }
 td-error = { workspace = true }
 te-tableframe = { workspace = true }
 ta-tableframe = { workspace = true }
+td-process = { workspace = true }
 td-python = { workspace = true }
 
 ## Extensions

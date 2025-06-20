@@ -1,14 +1,12 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
-use crate::config;
-use crate::config::Config;
-use crate::env::get_current_dir;
-use crate::manifest::Inf;
-use crate::manifest::WORKER_INF_FILE;
-use crate::monitor::{MemoryMonitor, MONITOR_CHECK_FREQUENCY, TD_MONITOR_CHECK_FREQUENCY};
-use crate::status::ExitStatus;
+use crate::launcher::config;
+use crate::launcher::config::Config;
+use crate::monitor::resources::{
+    ResourcesMonitor, RESOURCES_MONITOR_CHECK_FREQUENCY, TD_RESOURCES_MONITOR_CHECK_FREQUENCY,
+};
 use clap::Parser;
 use clap_derive::{Args, ValueEnum};
 use serde::{Deserialize, Serialize};
@@ -21,6 +19,10 @@ use std::io::{Error, ErrorKind};
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Duration;
+use td_common::env::get_current_dir;
+use td_common::manifest::Inf;
+use td_common::manifest::WORKER_INF_FILE;
+use td_common::status::ExitStatus;
 use tokio::runtime::Runtime;
 use tokio::time::sleep;
 use tracing::trace;
@@ -227,12 +229,14 @@ impl<C: Config, P: Params> Cli<C, P> {
     /// Monitors resources (memory, disk space, etc.) consumption.
     fn monitor_resources(runtime: &Runtime, monitor_folders: Option<PathBuf>) {
         runtime.spawn(async move {
-            let mut monitor = MemoryMonitor::new();
+            let mut monitor = ResourcesMonitor::new();
             loop {
                 monitor.monitor(&monitor_folders);
-                let wait_time = match env::var(TD_MONITOR_CHECK_FREQUENCY) {
-                    Ok(time) => time.parse::<u64>().unwrap_or(MONITOR_CHECK_FREQUENCY),
-                    Err(_) => MONITOR_CHECK_FREQUENCY,
+                let wait_time = match env::var(TD_RESOURCES_MONITOR_CHECK_FREQUENCY) {
+                    Ok(time) => time
+                        .parse::<u64>()
+                        .unwrap_or(RESOURCES_MONITOR_CHECK_FREQUENCY),
+                    Err(_) => RESOURCES_MONITOR_CHECK_FREQUENCY,
                 };
                 let _ = sleep(Duration::from_secs(wait_time)).await;
             }
@@ -320,16 +324,16 @@ pub fn parse_extra_arguments(
 
 #[cfg(test)]
 mod tests {
-    use crate::cli::parse_extra_arguments;
-    use crate::cli::{Cli, CliParser, NoConfig, NoParams, Params};
-    use crate::config::Config;
-    use crate::status::ExitStatus;
+    use crate::launcher::cli::parse_extra_arguments;
+    use crate::launcher::cli::{Cli, CliParser, NoConfig, NoParams, Params};
+    use crate::launcher::config::Config;
     use clap::error::Error;
     use clap::Parser;
     use clap_derive::Args;
     use getset::Getters;
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
+    use td_common::status::ExitStatus;
 
     fn simulate_cli<P: Params>(args: Vec<&str>) -> Result<CliParser<P>, Error> {
         CliParser::<P>::try_parse_from(std::iter::once("program").chain(args))

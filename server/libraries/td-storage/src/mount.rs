@@ -431,7 +431,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     use td_common::absolute_path::AbsolutePath;
-    use td_common::config::Config;
+    use td_process::launcher::config::Config;
     use td_test::reqs::{
         AzureStorageWithAccountKeyReqs, S3WithAccessKeySecretKeyReqs, TestRequirements,
     };

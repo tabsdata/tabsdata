@@ -19,11 +19,12 @@ use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::{env, fmt};
-use td_common::env::get_current_dir;
+use td_common::env::{check_flag_env, get_current_dir};
 use td_common::logging::LOG_LOCATION;
-use td_common::monitor::check_show_env;
 use td_common::server::WorkerName::FUNCTION;
-use td_common::server::{ResponseMessagePayloadBuilderError, WORKER_ERR_FILE, WORKER_OUT_FILE};
+use td_common::server::{
+    ResponseMessagePayloadBuilderError, WorkerClass, WORKER_ERR_FILE, WORKER_OUT_FILE,
+};
 use td_python::venv::{
     ENV_CONDA_PREFIX, ENV_PYENV_VERSION, ENV_PYTHONHOME, ENV_PYTHONPATH, ENV_UV_VENV,
     ENV_VIRTUAL_ENV, ENV_VIRTUAL_ENV_PROMPT,
@@ -94,11 +95,16 @@ impl WorkerRunner for TabsDataWorkerRunner {
             .append(true)
             .open(&err_path)?;
 
+        let mut args = worker.describer().arguments().to_vec();
+        if worker.describer().class() == &WorkerClass::EPHEMERAL {
+            args.extend(worker.describer().markers().iter().cloned())
+        }
+
         let mut command = Command::new(worker.describer().program());
         command
             .current_dir(worker.describer().work())
             .envs(obtain_env_vars(worker.describer().name()))
-            .args(worker.describer().arguments())
+            .args(args)
             .stdin(Stdio::piped())
             .stderr(err);
 
@@ -294,4 +300,9 @@ pub enum RunnerError {
     MissingStdIn,
     #[error("Unexpected error processing supervisor states: {0}")]
     GetSetStateError(#[from] StateError),
+}
+
+pub fn check_show_env() -> bool {
+    const TD_SHOW_ENV: &str = "TD_SHOW_ENV";
+    check_flag_env(TD_SHOW_ENV)
 }

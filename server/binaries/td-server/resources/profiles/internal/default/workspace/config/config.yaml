@@ -2,6 +2,34 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+# Modes of arguments-passing to workers:
+#
+# parameters: Arguments to pass directly to the process. The values are provided
+#             explicitly and support resolution of environment variables within
+#             them.
+#
+# inherit...: Arguments to pass to the process. The values are derived from the
+#             value passed to the same argument in the parent process, allowing
+#             inheritance across process chains.
+#
+# arguments.: Arguments to pass to the process. The values are automatically
+#             generated using an internal algorithm based on reserved keywords.
+#
+# markers...: Arguments to pass to the process. For ephemeral workers, the
+#             process is wrapped in a system shell script. As a result, all the
+#             argument types above are embedded directly into the script, not
+#             passed as command-line arguments.
+#             Marker values, however, are passed as direct arguments to the
+#             script itself, and are also generated using an internal algorithm
+#             based on reserved keywords. These values ar normally used to tag
+#             processes for easier tracking.
+#
+# get-state.: Arguments to pass to the process. The values are generated from an
+#             internal key-value map, which is populated by workers that use the
+#             'set-state' attribute. These arguments are not passed via the
+#             command line, but instead are delivered through the process’s
+#             standard input (stdin).
+
 name: tabsdata
 controllers:
   init:
@@ -71,7 +99,7 @@ controllers:
         parameters:
           - instance: ${TD_PATH_INSTANCE}
           - frequency: 900 # 15 minutes (seconds)
-          - retention: 10800000 # 3 hours (milliseconds)
+          - retention: 86400000 # 3 days (milliseconds)
           - limit: 32
         arguments:
           - logs-folder
@@ -94,6 +122,11 @@ controllers:
           - input-folder
           - output-folder
           - current-instance
+        markers:
+          - td-collection
+          - td-function
+          - td-worker
+          - td-attempt
         get-states:
           - state-type: map
             state-key: apiserver-mounts-options

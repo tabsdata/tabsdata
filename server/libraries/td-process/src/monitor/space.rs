@@ -1,128 +1,30 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
-use crate::env::{check_flag_env, get_home_dir, TABSDATA_HOME_DIR};
-use crate::logging::LOG_EXTENSION;
-use crate::server::{
-    DATABASE_FOLDER, ENVIRONMENTS_FOLDER, EPHEMERAL_FOLDER, INIT_FOLDER, LOG_FOLDER, PROC_FOLDER,
-    REGULAR_FOLDER, REPOSITORY_FOLDER, STORAGE_FOLDER, WORKSPACE_FOLDER, WORK_FOLDER,
-};
 use dir_size::get_size_in_bytes;
 use ignore::WalkBuilder;
 use indexmap::IndexMap;
-use num_format::{Locale, ToFormattedString};
-use std::fmt::Write;
+use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt as UnixMetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt as WindowsMetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::{fs, process};
-
-use sysinfo::{Pid, System};
-use tracing::debug;
+use td_common::env::{get_home_dir, TABSDATA_HOME_DIR};
+use td_common::logging::LOG_EXTENSION;
+use td_common::server::{
+    DATABASE_FOLDER, ENVIRONMENTS_FOLDER, EPHEMERAL_FOLDER, INIT_FOLDER, LOG_FOLDER, PROC_FOLDER,
+    REGULAR_FOLDER, REPOSITORY_FOLDER, STORAGE_FOLDER, WORKSPACE_FOLDER, WORK_FOLDER,
+};
 
 pub const TD_MONITOR_CHECK_FREQUENCY: &str = "TD_MONITOR_CHECK_FREQUENCY";
 pub const MONITOR_CHECK_FREQUENCY: u64 = 60 * 15;
 
-pub struct MemoryMonitor {
-    system: System,
-    locale: Locale,
-}
+pub type SpaceStats = (PathBuf, u64, String);
 
-impl MemoryMonitor {
-    pub fn new() -> Self {
-        Self {
-            system: System::new_all(),
-            locale: Locale::en,
-        }
-    }
-
-    pub fn monitor(&mut self, instance: &Option<PathBuf>) {
-        self.system = System::new_all();
-        self.system.refresh_all();
-
-        let (pm, vm, tm, um, fm) = self.memory();
-        let memory_log = format!(
-            "\t- Process Physical Memory: {} mb\n\
-             \t- Process Virtual Memory.: {} mb\n\
-             \t- System Total Memory....: {} mb\n\
-             \t- System Used Memory.....: {} mb\n\
-             \t- System Free Memory.....: {} mb",
-            pm, vm, tm, um, fm
-        );
-
-        let mut log_message = String::from("\n· Memory:\n");
-        log_message.push_str(&memory_log);
-        if instance.is_some() {
-            let mut space_log = String::new();
-            if let Some(folder) = instance {
-                for (name, (path, _, human)) in self.space(folder) {
-                    writeln!(&mut space_log, "\t- {}: {}", name, human).unwrap();
-                    writeln!(&mut space_log, "\t\t{}", path.display()).unwrap();
-                }
-            }
-            log_message.push_str("\n· Space:\n");
-            log_message.push_str(&space_log);
-        }
-        debug!(
-            "\n\
-            · Process:\n\
-            \t- PID: {}\
-            {}",
-            process::id(),
-            log_message
-        );
-    }
-
-    pub fn physical_memory(&self, pid: u32) -> u64 {
-        physical_memory(&self.system, pid)
-    }
-
-    pub fn virtual_memory(&self, pid: u32) -> u64 {
-        virtual_memory(&self.system, pid)
-    }
-
-    pub fn memory(&self) -> (String, String, String, String, String) {
-        (
-            physical_memory(&self.system, process::id() / (1024 * 1024))
-                .to_formatted_string(&self.locale),
-            (virtual_memory(&self.system, process::id()) / (1024 * 1024))
-                .to_formatted_string(&self.locale),
-            (self.system.total_memory() / (1024 * 1024)).to_formatted_string(&self.locale),
-            (self.system.used_memory() / (1024 * 1024)).to_formatted_string(&self.locale),
-            (self.system.free_memory() / (1024 * 1024)).to_formatted_string(&self.locale),
-        )
-    }
-
-    pub fn space(&self, instance: &Path) -> IndexMap<String, (PathBuf, u64, String)> {
-        instance_space(instance)
-    }
-}
-
-pub fn physical_memory(system: &System, pid: u32) -> u64 {
-    if pid > 0 {
-        let pid = Pid::from_u32(pid);
-        if let Some(process) = system.process(pid) {
-            return process.memory();
-        }
-    }
-    0
-}
-
-pub fn virtual_memory(system: &System, pid: u32) -> u64 {
-    if pid > 0 {
-        let pid = Pid::from_u32(pid);
-        if let Some(process) = system.process(pid) {
-            return process.virtual_memory();
-        }
-    }
-    0
-}
-
-pub fn instance_space(instance: &Path) -> IndexMap<String, (PathBuf, u64, String)> {
+pub fn instance_space(instance: &Path) -> IndexMap<String, SpaceStats> {
     let mut space = IndexMap::new();
 
     let folder = instance;
@@ -240,7 +142,7 @@ fn get_uv_cache_dir() -> Option<PathBuf> {
 
 fn folder_space(folder: PathBuf) -> (PathBuf, u64, String) {
     let bytes = get_size_in_bytes(folder.as_path()).unwrap_or(0);
-    (folder.clone(), bytes, convert_to_human_bytes(bytes, false))
+    (folder.clone(), bytes, convert_to_human_gib(bytes, false))
 }
 
 fn filtered_folder_space(folder: PathBuf) -> (PathBuf, u64, String) {
@@ -250,7 +152,7 @@ fn filtered_folder_space(folder: PathBuf) -> (PathBuf, u64, String) {
         .filter(|entry| entry.path().extension().is_some_and(|e| e == LOG_EXTENSION))
         .filter_map(|entry| fs::metadata(entry.path()).ok().map(|m| m.len()))
         .sum::<u64>();
-    (folder, space, convert_to_human_bytes(space, false))
+    (folder, space, convert_to_human_gib(space, false))
 }
 
 fn folder_space_without_hardlinks(folder: PathBuf) -> (PathBuf, u64, String) {
@@ -267,7 +169,7 @@ fn folder_space_without_hardlinks(folder: PathBuf) -> (PathBuf, u64, String) {
             }
         })
         .sum();
-    (folder, space, convert_to_human_bytes(space, false))
+    (folder, space, convert_to_human_gib(space, false))
 }
 
 fn get_nlink(metadata: &fs::Metadata) -> u64 {
@@ -280,6 +182,13 @@ fn get_nlink(metadata: &fs::Metadata) -> u64 {
     {
         metadata.number_of_links()
     }
+}
+
+pub fn convert_to_human_gib(size_in_bytes: u64, abbreviated: bool) -> String {
+    const GIBIBYTE: f64 = 1024.0 * 1024.0 * 1024.0;
+    let size_in_gib = size_in_bytes as f64 / GIBIBYTE;
+    let unit = if abbreviated { "G" } else { "GiB" };
+    format!("{:.3} {}", size_in_gib, unit)
 }
 
 pub fn convert_to_human_bytes(size_in_bytes: u64, abbreviated: bool) -> String {
@@ -310,15 +219,4 @@ pub fn convert_to_human_bytes(size_in_bytes: u64, abbreviated: bool) -> String {
 
     let value = size_in_bytes as f64 / EXBIBYTE as f64;
     format!("{:.3} {}", value, if abbreviated { "E" } else { "EiB" })
-}
-
-impl Default for MemoryMonitor {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub fn check_show_env() -> bool {
-    const TD_SHOW_ENV: &str = "TD_SHOW_ENV";
-    check_flag_env(TD_SHOW_ENV)
 }

@@ -42,6 +42,7 @@ members = [
     "server/libraries/td-error",
     "server/libraries/td-execution",
     "server/libraries/td-objects",
+    "server/libraries/td-process",
     "server/libraries/td-python",
     "server/libraries/td-schema",
     "server/libraries/td-security",
@@ -201,6 +202,9 @@ path = "extensions/rust/te-tableframe"
 
 [workspace.dependencies.td-objects]
 path = "server/libraries/td-objects"
+
+[workspace.dependencies.td-process]
+path = "server/libraries/td-process"
 
 [workspace.dependencies.td-python]
 path = "server/libraries/td-python"

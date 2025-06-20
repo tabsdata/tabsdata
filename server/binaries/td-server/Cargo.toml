@@ -121,6 +121,7 @@ td-common = { workspace = true }
 td-database = { workspace = true }
 te-tableframe = { workspace = true }
 ta-tableframe = { workspace = true }
+td-process = { workspace = true }
 td-shuttle = { workspace = true }
 td-storage = { workspace = true }
 td-supervisor = { workspace = true }

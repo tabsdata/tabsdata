@@ -5,9 +5,9 @@
 use clap_derive::Args;
 use getset::Getters;
 
-use td_common::cli::Cli;
-use td_common::config::Config;
 use td_common::status::ExitStatus;
+use td_process::launcher::cli::Cli;
+use td_process::launcher::config::Config;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Getters)]
 #[getset(get = "pub")]

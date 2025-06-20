@@ -1,13 +1,13 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
-use crate::cli::{move_to_dir, obtain_config_dir, obtain_current_dir};
-use crate::env::{get_current_dir, get_home_dir, get_user_name, TABSDATA_HOME_DIR};
+use crate::launcher::cli::{move_to_dir, obtain_config_dir, obtain_current_dir};
 use config::{File, FileFormat};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::path::PathBuf;
+use td_common::env::{get_current_dir, get_home_dir, get_user_name, TABSDATA_HOME_DIR};
 use tracing::{error, info};
 
 /// Marker trait to define a configuration.
@@ -131,11 +131,11 @@ pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>,
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{load_config, Config};
-    use crate::env::{create_tabsdata_home_dir, get_current_dir, get_home_dir};
+    use crate::launcher::config::{load_config, Config};
     use getset::Getters;
     use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
+    use td_common::env::{create_tabsdata_home_dir, get_current_dir, get_home_dir};
 
     #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
     #[getset(get = "pub")]
@@ -162,13 +162,13 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_invalid_config_name0() {
-        crate::config::assert_config_name("invalid name");
+        crate::launcher::config::assert_config_name("invalid name");
     }
 
     #[test]
     #[should_panic]
     fn test_invalid_config_name1() {
-        crate::config::assert_config_name("invalid_name");
+        crate::launcher::config::assert_config_name("invalid_name");
     }
 
     #[test]

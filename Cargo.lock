@@ -5456,6 +5456,7 @@ dependencies = [
  "td-database",
  "td-error",
  "td-objects",
+ "td-process",
  "td-security",
  "td-services",
  "td-storage",
@@ -5520,26 +5521,20 @@ version = "0.9.7"
 dependencies = [
  "async-trait",
  "chrono",
- "clap",
- "clap_derive",
  "config",
  "console-subscriber",
  "const_format",
  "data-encoding",
  "derive-new",
  "derive_builder",
- "dir-size",
  "dirs",
  "getset",
  "homedir",
  "http",
- "ignore",
- "indexmap 2.9.0",
  "itertools 0.13.0",
  "lazy_static",
  "libc",
  "nix",
- "num-format",
  "once_cell",
  "openssl",
  "opentelemetry-stdout",
@@ -5692,6 +5687,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "td-process"
+version = "0.9.7"
+dependencies = [
+ "clap",
+ "clap_derive",
+ "config",
+ "dir-size",
+ "getset",
+ "ignore",
+ "indexmap 2.9.0",
+ "num-format",
+ "openssl",
+ "serde",
+ "serde_yaml",
+ "strum",
+ "sysinfo 0.32.1",
+ "td-build",
+ "td-common",
+ "td-objects",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "td-python"
 version = "0.9.7"
 dependencies = [
@@ -5753,6 +5773,7 @@ dependencies = [
  "td-build",
  "td-common",
  "td-database",
+ "td-process",
  "td-shuttle",
  "td-storage",
  "td-supervisor",
@@ -5851,6 +5872,7 @@ dependencies = [
  "td-build",
  "td-common",
  "td-error",
+ "td-process",
  "testdir",
  "thiserror 2.0.12",
  "tm-workspace",
@@ -5880,6 +5902,7 @@ dependencies = [
  "td-common",
  "td-error",
  "td-objects",
+ "td-process",
  "td-test",
  "testdir",
  "thiserror 2.0.12",
@@ -5925,6 +5948,7 @@ dependencies = [
  "td-build",
  "td-common",
  "td-error",
+ "td-process",
  "td-python",
  "te-tableframe",
  "tempfile",

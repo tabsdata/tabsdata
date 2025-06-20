@@ -22,6 +22,7 @@ pub trait WorkerDescriber: Display + Debug {
     fn location(&self) -> &WorkerLocation;
     fn program(&self) -> &PathBuf;
     fn arguments(&self) -> &Vec<String>;
+    fn markers(&self) -> &Vec<String>;
     fn set_state(&self) -> &Option<SetState>;
     fn get_states(&self) -> &Vec<GetState>;
     fn config(&self) -> &PathBuf;
@@ -58,6 +59,9 @@ pub struct TabsDataWorkerDescriber {
 
     /// Arguments to pass to the program to run.
     arguments: Vec<String>,
+
+    /// Markers to pass to the program to run.
+    markers: Vec<String>,
 
     /// Emitted state in stdout.
     set_state: Option<SetState>,
@@ -215,6 +219,10 @@ impl WorkerDescriber for TabsDataWorkerDescriber {
         &self.arguments
     }
 
+    fn markers(&self) -> &Vec<String> {
+        &self.markers
+    }
+
     fn set_state(&self) -> &Option<SetState> {
         &self.set_state
     }
@@ -255,6 +263,7 @@ impl Display for TabsDataWorkerDescriber {
              SetState: {:?}\n\
              GetStates: {:?}\n\
              Arguments: {:?}\n\
+             Markers: {:?}\n\
              Config: {:?}\n\
              Message:\n{}\n\
              Work: {:?}\n\
@@ -267,6 +276,7 @@ impl Display for TabsDataWorkerDescriber {
             &self.set_state,
             &self.get_states,
             &self.arguments,
+            &self.markers,
             &self.config,
             match &self.message {
                 Some(message) => serde_yaml::to_string(&message)
@@ -344,6 +354,7 @@ mod tests {
             .set_state(None)
             .get_states(vec![])
             .arguments(vec!["--arg1".to_string(), "--arg2".to_string()])
+            .markers(vec![])
             .config(config_folder)
             .work(work_folder.clone())
             .queue(work_folder.clone().join(MSG_FOLDER))
@@ -362,6 +373,7 @@ mod tests {
             .set_state(None)
             .get_states(vec![])
             .arguments(vec!["--arg1".to_string(), "--arg2".to_string()])
+            .markers(vec![])
             .config("".to_string())
             .work("".to_string())
             .queue("".to_string())
@@ -380,6 +392,7 @@ mod tests {
             .set_state(None)
             .get_states(vec![])
             .arguments(vec!["--arg1".to_string(), "--arg2".to_string()])
+            .markers(vec![])
             .config("".to_string())
             .work("".to_string())
             .queue("".to_string())
@@ -403,6 +416,7 @@ mod tests {
             .set_state(None)
             .get_states(vec![])
             .arguments(Vec::new())
+            .markers(vec![])
             .config(config_folder)
             .work(work_folder.clone())
             .queue(work_folder.clone().join(MSG_FOLDER))
