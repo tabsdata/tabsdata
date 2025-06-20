@@ -15,6 +15,7 @@ from tabsdata.api.tabsdata_server import (
 )
 from tabsdata.cli.cli_utils import (
     MutuallyExclusiveOption,
+    beautify_time,
     convert_user_provided_status_to_api_status,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -191,8 +192,8 @@ def list_fn_run(
                 fn_run.execution.name,
                 fn_run.execution.id,
                 fn_run.transaction.id,
-                fn_run.started_on_str,
-                fn_run.ended_on_str,
+                beautify_time(fn_run.started_on_str),
+                beautify_time(fn_run.ended_on_str),
                 fn_run.status,
             )
 
@@ -322,7 +323,7 @@ def list_plan(
                 execution.name,
                 execution.collection.name,
                 execution.function.name,
-                execution.triggered_on_str,
+                beautify_time(execution.triggered_on_str),
                 execution.status,
             )
 
@@ -468,7 +469,7 @@ def list_trx(
                 transaction.id,
                 transaction.execution.id,
                 transaction.collection.name,
-                transaction.triggered_on_str,
+                beautify_time(transaction.triggered_on_str),
                 transaction.triggered_by,
                 transaction.status,
             )
@@ -728,7 +729,7 @@ def info(ctx: click.Context, plan: str):
             execution.name,
             execution.collection.name,
             execution.function.name,
-            execution.triggered_on_str,
+            beautify_time(execution.triggered_on_str),
             execution.status,
         )
 

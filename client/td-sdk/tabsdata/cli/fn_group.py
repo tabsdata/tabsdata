@@ -22,6 +22,7 @@ from tabsdata.api.tabsdata_server import (
 from tabsdata.cli.cli_utils import (
     DOT_FOLDER,
     beautify_list,
+    beautify_time,
     cleanup_dot_files,
     generate_dot_image,
     get_currently_pinned_object,
@@ -534,8 +535,8 @@ def _monitor_execution_or_transaction(
                 function_run.collection.name,
                 function_run.function.name,
                 function_run.transaction.id if execution else function_run.execution.id,
-                function_run.started_on_str,
-                function_run.ended_on_str,
+                beautify_time(function_run.started_on_str),
+                beautify_time(function_run.ended_on_str),
                 function_run.status,
             )
 
@@ -578,7 +579,7 @@ def _monitor_execution_or_transaction(
             + complete_command,
         )
     else:
-        click.echo("All workers were successful.")
+        click.echo("All function runs were successful.")
 
 
 @fn.command()

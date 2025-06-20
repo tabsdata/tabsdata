@@ -1,6 +1,10 @@
 import os
 
+from verify_environment import verify_publisher_environment
+
 import tabsdata as td
+
+verify_publisher_environment()
 
 
 @td.publisher(

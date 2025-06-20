@@ -49,6 +49,12 @@ def beautify_list(list_to_show) -> str:
     return str(list_to_show)
 
 
+def beautify_time(time: str) -> str:
+    if time == "None":
+        return "-"
+    return time
+
+
 def logical_prompt(
     ctx: click.Context, message: str, default_value=None, hide_input: bool = False
 ):

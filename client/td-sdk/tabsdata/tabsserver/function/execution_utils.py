@@ -548,15 +548,16 @@ def execute_single_file_import(
             if result:
                 for dictionary in result:
                     source_list.append(dictionary.get("to"))
+                logger.info(f"Imported files to: '{source_list}'")
             else:
                 logger.info("No files imported")
-            logger.info(f"Imported files to: '{source_list}'")
         else:
             source_list = result[0].get("to") if result else None
             if not source_list:
-                logger.info("No files imported")
+                logger.info("No file imported")
             # If the data is not a wildcard pattern, the result is a single file
-            logger.info(f"Imported file to: '{source_list}'")
+            else:
+                logger.info(f"Imported file to: '{source_list}'")
     return source_list
 
 

@@ -1,6 +1,10 @@
 import os
 
+from verify_environment import verify_subscriber_environment
+
 import tabsdata as td
+
+verify_subscriber_environment()
 
 
 @td.subscriber(

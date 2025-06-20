@@ -9,7 +9,7 @@
 This example assumes that:
 
 * You are in a command shell within the `examples` directory
- created by the `td examples` command.  
+ created by the `td example` command.  
 * `Tabsdata` server is installed locally in the current 
    Python environment. 
 
@@ -43,7 +43,7 @@ tdserver status
 
 ## Login
 ```
-td login --server localhost --user admin --password tabsdata
+td login --server localhost --user admin --password tabsdata --role sys_admin
 ```
 
 ## Create a Collection
@@ -63,11 +63,6 @@ td fn create --coll examples --path publisher.py::pub
 td fn trigger --coll examples --name pub
 ```
 
-### Check the Publisher Execution
-```
-td exe list-trx
-```
-
 ### Show Schema of Table populated by the Publisher
 ```
 td table schema --coll examples --name persons
@@ -83,10 +78,6 @@ td fn create --coll examples --path transformer.py::tfr
 ### Trigger the Transformer
 ```
 td fn trigger --coll examples --name tfr
-```
-### Check the Transformer Execution
-```
-td exe list-trx
 ```
 
 ### Show Schema of a Table populated by the Transformer
@@ -104,10 +95,6 @@ td fn create --coll examples --path subscriber.py::sub
 ### Trigger the Subscriber
 ```
 td fn trigger --coll examples --name sub
-```
-### Check the Subscriber Execution
-```
-td exe list-trx
 ```
 
 ### See the Files Exported by the Subscriber
@@ -144,11 +131,6 @@ the Publisher will trigger the execution of the 3 in order
 
 ```
 td fn trigger --coll examples --name pub
-```
-
-### Check the Transaction Execution
-```
-td exe list-trx
 ```
 
 ### See the Files Exported by the Subscriber

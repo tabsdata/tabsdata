@@ -50,6 +50,9 @@ from tests_tabsdata.testing_resources.test_input_file_ndjson_string_format.examp
 from tests_tabsdata.testing_resources.test_input_file_ndjson_wildcard.example import (
     input_file_ndjson_wildcard,
 )
+from tests_tabsdata.testing_resources.test_input_file_not_found.example import (
+    input_file_not_found,
+)
 from tests_tabsdata.testing_resources.test_input_file_parquet_string_format.example import (
     input_file_parquet_string_format,
 )
@@ -64,6 +67,7 @@ from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -656,3 +660,62 @@ def test_input_file_ndjson_dtype_inference(tmp_path):
     )
     # Actual functional checks are in the publisher function.
     assert result == 0
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_input_file_not_found(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_file_not_found,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    assert os.path.isfile(output_file)
+    output = pl.read_parquet(output_file)
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_file_not_found",
+        "expected_result.parquet",
+    )
+    expected_output = pl.read_parquet(expected_output_file)
+    # ToDo: ⚠️ Aleix: This is just a workaround...
+    #  The persisted expected output does not take into account the additional
+    #  columns in enterprise.
+    assert drop_system_columns(output).equals(drop_system_columns(expected_output))
+
+
+# ToDo: ⚠️ Aleix: This is just a workaround...
+def drop_system_columns(df: pl.DataFrame, ignore_missing: bool = True) -> pl.DataFrame:
+    columns_to_remove = list(SYSTEM_COLUMNS)
+    if ignore_missing:
+        existing_columns = set(df.collect_schema().names())
+        columns_to_remove = [
+            col for col in columns_to_remove if col in existing_columns
+        ]
+    return df.drop(columns_to_remove)

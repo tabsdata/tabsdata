@@ -17,6 +17,7 @@ from tabsdata.cli.cli_utils import (
     load_pinned_objects,
     logical_prompt,
     set_current_cli_option,
+    show_hint,
     store_cli_options,
     store_pinned_objects,
     utils_login,
@@ -44,11 +45,18 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 @click.pass_context
 def cli(ctx: click.Context, no_prompt: bool):
     """Main CLI for the Tabsdata system"""
-    os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
-    ctx.obj = {"tabsdata_directory": DEFAULT_TABSDATA_DIRECTORY, "no_prompt": no_prompt}
-    initialise_tabsdata_server_connection(ctx)
-    load_pinned_objects(ctx)
-    load_cli_options(ctx)
+    try:
+        os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
+        ctx.obj = {
+            "tabsdata_directory": DEFAULT_TABSDATA_DIRECTORY,
+            "no_prompt": no_prompt,
+        }
+        initialise_tabsdata_server_connection(ctx)
+        load_pinned_objects(ctx)
+        load_cli_options(ctx)
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to initialize CLI: {e}")
 
 
 cli.add_command(collection)
@@ -109,7 +117,14 @@ def example(ctx: click.Context, dir: str):
         shutil.copytree(examples_folder, dir, dirs_exist_ok=True)
         output_folder = os.path.join(dir, "output")
         os.makedirs(output_folder, exist_ok=True)
-        click.echo(f"Examples generated in {dir}.")
+        click.echo(f"Examples generated in '{dir}'.")
+        show_hint(
+            ctx,
+            "Remember to set environment variable 'TDX' to the path of your "
+            "'examples' directory. For more information, see section 'Set Up the "
+            "Example Directory in an Environment Variable' in the 'Tabsdata Getting "
+            "Started Example' documentation.",
+        )
     else:
         raise click.ClickException(
             "Failed to generate examples: internal error, could not find examples "
