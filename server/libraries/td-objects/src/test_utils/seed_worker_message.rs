@@ -46,8 +46,7 @@ mod tests {
     use crate::test_utils::seed_function_run::seed_function_run;
     use crate::test_utils::seed_transaction::seed_transaction;
     use crate::types::basic::TransactionKey;
-    use crate::types::basic::{BundleId, CollectionName, Decorator, UserId};
-    use crate::types::execution::FunctionRunStatus;
+    use crate::types::basic::{BundleId, CollectionName, Decorator, FunctionRunStatus, UserId};
     use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
 

@@ -1353,7 +1353,7 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
         #[derive(
             Debug, Clone,
             PartialEq, Eq, Hash, PartialOrd, Ord,
-            strum::EnumString, strum::Display
+            strum::EnumString, strum::Display, strum::EnumIter,
         )]
         #[strum(
             parse_err_fn = Self::parse_error,

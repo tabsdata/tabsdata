@@ -40,10 +40,9 @@ mod tests {
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, RoleId, TableNameDto, TransactionKey,
-        UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
+        TableNameDto, TransactionKey, UserId,
     };
-    use td_objects::types::execution::FunctionRunStatus;
     use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
 

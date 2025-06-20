@@ -86,10 +86,9 @@ mod tests {
     };
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, RoleId, StorageVersion,
-        TableName, TableNameDto, TransactionKey, UserId,
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
+        StorageVersion, TableName, TableNameDto, TransactionKey, UserId,
     };
-    use td_objects::types::execution::FunctionRunStatus;
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::table::TableDB;
     use td_storage::location::StorageLocation;
@@ -103,8 +102,9 @@ mod tests {
     async fn test_tower_metadata_sample_service(db: DbPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::tower_service::from::combine;
-        use td_objects::types::basic::{Sql, TableId, TableIdName, TableStatus};
-        use td_objects::types::execution::{TableDataVersionDBRead, TransactionStatus};
+        use td_objects::tower_service::from::TryIntoService;
+        use td_objects::types::basic::{Sql, TableId, TableIdName, TableStatus, TriggeredOn};
+        use td_objects::types::execution::TableDataVersionDBWithNames;
         use td_objects::types::table::TableDBWithNames;
 
         use td_tower::metadata::{type_of_val, Metadata};
@@ -160,10 +160,11 @@ mod tests {
                 >,
             ),
             type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-            // Only published transactions
-            type_of_val(&TransactionStatus::published),
+            // Only committed transactions, at the triggered on time
+            type_of_val(&FunctionRunStatus::committed),
+            type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
             // Find the latest data version of the table ID, at that time
-            type_of_val(&By::<TableId>::select_version::<DaoQueries, TableDataVersionDBRead>),
+            type_of_val(&By::<TableId>::select_version::<DaoQueries, TableDataVersionDBWithNames>),
             // Resolve the location of the data version. This takes into account versions without
             // data changes (in which the previous version is resolved)
             type_of_val(&resolve_table_location),
@@ -231,7 +232,7 @@ mod tests {
                 &function_version,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Done,
+                &FunctionRunStatus::Committed,
             )
             .await;
 

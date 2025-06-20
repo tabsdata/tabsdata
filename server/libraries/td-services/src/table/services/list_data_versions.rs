@@ -9,14 +9,16 @@ use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
+use td_objects::tower_service::from::{
+    combine, ExtractNameService, ExtractService, TryIntoService, With,
+};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TableStatus,
+    AtTime, CollectionId, CollectionIdName, FunctionRunStatus, TableId, TableIdName, TableStatus,
+    TriggeredOn,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::execution::TableDataVersion;
-use td_objects::types::execution::TransactionStatus;
 use td_objects::types::table::{TableAtIdName, TableDBWithNames};
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
@@ -55,8 +57,9 @@ impl TableListDataVersionsService {
                 from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
 
-                // extract attime
+                // extract at time (triggered on)
                 from_fn(With::<TableAtIdName>::extract::<AtTime>),
+                from_fn(With::<AtTime>::convert_to::<TriggeredOn, _>),
 
                 // find table ID
                 from_fn(With::<TableAtIdName>::extract::<TableIdName>),
@@ -66,7 +69,7 @@ impl TableListDataVersionsService {
                 from_fn(With::<TableDBWithNames>::extract::<TableId>),
 
                 // list
-                from_fn(TransactionStatus::published),
+                from_fn(FunctionRunStatus::committed),
                 from_fn(By::<TableId>::list_at::<TableAtIdName, DaoQueries, TableDataVersion>),
             ))
         }
@@ -94,7 +97,6 @@ mod tests {
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, RoleId, TableName,
         TableNameDto, TransactionKey, UserId,
     };
-    use td_objects::types::execution::FunctionRunStatus;
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::table::TableDB;
     use td_tower::ctx_service::RawOneshot;
@@ -124,6 +126,7 @@ mod tests {
             type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
             // extract attime
             type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
+            type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
             // find table ID
             type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
             type_of_val(&combine::<CollectionIdName, TableIdName>),
@@ -136,7 +139,7 @@ mod tests {
             ),
             type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
             // list
-            type_of_val(&TransactionStatus::published),
+            type_of_val(&FunctionRunStatus::committed),
             type_of_val(&By::<TableId>::list_at::<TableAtIdName, DaoQueries, TableDataVersion>),
         ]);
     }
@@ -179,7 +182,7 @@ mod tests {
             &function_version,
             &execution,
             &transaction,
-            &FunctionRunStatus::Done,
+            &FunctionRunStatus::Committed,
         )
         .await;
 
@@ -211,7 +214,7 @@ mod tests {
             &function_version,
             &execution,
             &transaction,
-            &FunctionRunStatus::Done,
+            &FunctionRunStatus::Committed,
         )
         .await;
 

@@ -5,7 +5,7 @@
 use polars::prelude::PolarsError;
 use td_error::{td_error, TdError};
 use td_objects::types::basic::TableName;
-use td_objects::types::execution::TableDataVersionDBRead;
+use td_objects::types::execution::TableDataVersionDBWithNames;
 use td_storage::location::StorageLocation;
 use td_storage::SPath;
 use td_tower::extractors::Input;
@@ -24,11 +24,11 @@ pub enum StorageServiceError {
 }
 
 pub async fn resolve_table_location(
-    Input(data_version): Input<TableDataVersionDBRead>,
+    Input(data_version): Input<TableDataVersionDBWithNames>,
 ) -> Result<SPath, TdError> {
     let with_data_table_data_version_id = data_version
         .with_data_table_data_version_id()
-        .ok_or_else(|| StorageServiceError::NoDataFound(data_version.table_name().clone()))?;
+        .ok_or_else(|| StorageServiceError::NoDataFound(data_version.name().clone()))?;
 
     let storage_location = data_version.storage_version();
     let (path, _) = StorageLocation::try_from(storage_location)

@@ -167,9 +167,9 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                     }
                     if args.filter_like {
                         filter_like_fields.push(f.ident.as_ref().unwrap());
+                        field_type_map.insert(f.ident.as_ref().unwrap(), &f.ty);
                     }
                 }
-                field_type_map.insert(f.ident.as_ref().unwrap(), &f.ty);
                 (
                     pagination_by,
                     pagination_order,

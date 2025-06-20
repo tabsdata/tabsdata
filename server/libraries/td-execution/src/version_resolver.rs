@@ -319,10 +319,9 @@ mod tests {
     use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, TableDataVersionId, TableName, TableNameDto,
-        TransactionKey, UserId,
+        BundleId, CollectionName, Decorator, FunctionRunStatus, TableDataVersionId, TableName,
+        TableNameDto, TransactionKey, UserId,
     };
-    use td_objects::types::execution::FunctionRunStatus;
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::table::TableDB;
     use td_security::ENCODED_ID_SYSTEM;

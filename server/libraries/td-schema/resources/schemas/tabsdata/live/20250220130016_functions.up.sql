@@ -72,7 +72,7 @@ SELECT tv.*,
        tv.function   as function_name,
        tdv.id        as last_data_version
 FROM tables__with_names tv
-         LEFT JOIN table_data_versions__with_status tdv on tv.id = tdv.table_version_id
+         LEFT JOIN table_data_versions__with_function tdv on tv.id = tdv.table_version_id
 WHERE tv.function_param_pos >= 0 -- non-system tables only
 ORDER BY tdv.triggered_on;
 
@@ -178,7 +178,7 @@ FROM triggers tv
          LEFT JOIN functions tfv ON tv.trigger_by_function_version_id = tfv.id
          LEFT JOIN tables t ON tv.trigger_by_table_version_id = t.id;
 
--- Executions  (table & __with_status view)
+-- Executions  (table & __with_names & __with_status)
 
 CREATE TABLE executions
 (
@@ -194,33 +194,26 @@ CREATE TABLE executions
     FOREIGN KEY (function_version_id) REFERENCES functions (id)
 );
 
-CREATE VIEW executions__with_status AS
-SELECT s.*,
-       MIN(t.started_on)                                         AS started_on,
-       MAX(CASE WHEN s.status IN ('D', 'I') THEN t.ended_on END) AS ended_on
-FROM (SELECT e.*,
-             CASE
-                 WHEN COUNT(CASE WHEN t.status NOT IN ('S', 'RR') THEN 1 END) = 0 THEN 'S'
-                 WHEN COUNT(CASE WHEN t.status NOT IN ('P') THEN 1 END) = 0 THEN 'D'
-                 WHEN COUNT(CASE WHEN t.status NOT IN ('C', 'P') THEN 1 END) = 0 THEN 'I'
-                 ELSE 'R'
-                 END AS status
-      FROM executions e
-               LEFT JOIN transactions__with_status t ON t.execution_id = e.id
-      GROUP BY e.id) s
-         JOIN executions e ON e.id = s.id
-         LEFT JOIN transactions__with_status t ON t.execution_id = e.id
-GROUP BY s.id;
-
 CREATE VIEW executions__with_names AS
 SELECT e.*,
        c.name                                          AS collection,
        f.name                                          AS function,
        IFNULL(u.name, '[' || e.triggered_by_id || ']') as triggered_by
-FROM executions__with_status e
+FROM executions e
          LEFT JOIN collections c ON e.collection_id = c.id
          LEFT JOIN functions f ON e.function_version_id = f.id
          LEFT JOIN users u ON e.triggered_by_id = u.id;
+
+CREATE VIEW executions__with_status AS
+SELECT e.*,
+       MIN(fr.started_on)                               AS started_on,
+       CASE WHEN ess.finished THEN MAX(fr.ended_on) END AS ended_on,
+       ess.status                                       as status,
+       ess.function_run_status_count                    as function_run_status_count
+FROM executions__with_names e
+         LEFT JOIN function_runs fr ON fr.execution_id = e.id
+         LEFT JOIN execution_status_summary ess ON ess.execution_id = e.id
+GROUP BY e.id;
 
 -- Transactions  (table & __with_status view & __with_names view)
 
@@ -240,35 +233,26 @@ CREATE TABLE transactions
     FOREIGN KEY (execution_id) REFERENCES executions (id)
 );
 
-CREATE VIEW transactions__with_status AS
-SELECT s.*,
-       MIN(fr.started_on)                                         AS started_on,
-       CASE WHEN s.status IN ('C', 'P') THEN MAX(fr.ended_on) END AS ended_on
-FROM (SELECT t.*,
-             CASE
-                 WHEN COUNT(CASE WHEN fr.status NOT IN ('S', 'RR') THEN 1 END) = 0 THEN 'S'
-                 WHEN COUNT(CASE WHEN fr.status NOT IN ('D') THEN 1 END) = 0 THEN 'P'
-                 WHEN COUNT(CASE WHEN fr.status = 'F' THEN 1 END) > 0 THEN 'F'
-                 WHEN COUNT(CASE WHEN fr.status = 'H' THEN 1 END) > 0 THEN 'H'
-                 WHEN COUNT(CASE WHEN fr.status = 'C' THEN 1 END) > 0 THEN 'C'
-                 ELSE 'R'
-                 END AS status
-      FROM transactions t
-               LEFT JOIN function_runs fr ON fr.transaction_id = t.id
-      GROUP BY t.id) s
-         JOIN transactions t ON t.id = s.id
-         LEFT JOIN function_runs fr ON fr.transaction_id = t.id
-GROUP BY s.id;
-
 CREATE VIEW transactions__with_names AS
 SELECT t.*,
        c.name                                          AS collection,
        e.name                                          AS execution,
        IFNULL(u.name, '[' || t.triggered_by_id || ']') as triggered_by
-FROM transactions__with_status t
+FROM transactions t
          LEFT JOIN collections c ON t.collection_id = c.id
          LEFT JOIN executions e ON t.execution_id = e.id
          LEFT JOIN users u ON t.triggered_by_id = u.id;
+
+CREATE VIEW transactions__with_status AS
+SELECT t.*,
+       MIN(fr.started_on)                               AS started_on,
+       CASE WHEN tss.finished THEN MAX(fr.ended_on) END AS ended_on,
+       tss.status                                       as status,
+       tss.function_run_status_count                    as function_run_status_count
+FROM transactions__with_names t
+         LEFT JOIN function_runs fr ON fr.transaction_id = t.id
+         LEFT JOIN transaction_status_summary tss ON tss.transaction_id = t.id
+GROUP BY t.id;
 
 -- Function runs (table & __with_names & executable_ views)
 
@@ -286,7 +270,7 @@ CREATE TABLE function_runs
     trigger             TEXT      NOT NULL, -- M (manual), D (dependency)
     started_on          TIMESTAMP NULL,
     ended_on            TIMESTAMP NULL,
-    status              TEXT      NOT NULL, -- Scheduled/RunRequested/ReScheduled/Running/Done/Error/Failed/Hold/Canceled
+    status              TEXT      NOT NULL,
 
     FOREIGN KEY (collection_id) REFERENCES collections (id),
     FOREIGN KEY (execution_id) REFERENCES executions (id),
@@ -295,7 +279,6 @@ CREATE TABLE function_runs
 
 CREATE VIEW function_runs__with_names AS
 SELECT f.*,
-       fv.data_location                                AS data_location,
        fv.name                                         AS name,
        c.name                                          AS collection,
        e.name                                          AS execution,
@@ -306,21 +289,128 @@ FROM function_runs f
          LEFT JOIN executions e ON f.execution_id = e.id
          LEFT JOIN users u ON f.triggered_by_id = u.id;
 
-CREATE VIEW executable_function_runs AS
+-- All function runs in S or RS and all requirements in D or C.
+CREATE VIEW function_runs__to_execute AS
 SELECT f.*,
+       fv.data_location   AS data_location,
        fv.storage_version AS storage_version,
        fv.bundle_id       AS bundle_id
 FROM function_runs__with_names f
-         LEFT JOIN collections c ON f.collection_id = c.id
          LEFT JOIN functions fv ON f.function_version_id = fv.id
-         LEFT JOIN executions e ON f.execution_id = e.id
-WHERE (f.status = 'S' OR f.status = 'RS')
-  AND NOT EXISTS (SELECT 1
-                  FROM function_requirements__with_names fr
-                  WHERE fr.function_run_id = f.id
-                    AND fr.status != 'D');
+WHERE f.status IN ('S', 'RS')
+  AND NOT EXISTS
+    (SELECT 1
+     FROM function_requirements__with_status fr
+     WHERE fr.function_run_id = f.id
+       AND fr.status NOT IN ('D', 'C'));
 
--- Data Versions  (table & __with_status & __with_names view)
+-- All function runs in D and all requirements D or C.
+CREATE VIEW function_runs__to_commit AS
+SELECT f.*
+FROM function_runs f
+         JOIN
+     (SELECT fr.transaction_id
+      FROM function_runs fr
+               LEFT JOIN function_requirements__with_status req
+                         ON fr.transaction_id = req.transaction_id
+      GROUP BY fr.transaction_id
+      HAVING COUNT(CASE WHEN fr.status IN ('D') THEN 1 END) = COUNT(fr.status)
+         AND COUNT(CASE WHEN req.status IN ('D', 'C') THEN 1 END) = COUNT(req.status)) t
+     ON f.transaction_id = t.transaction_id;
+
+-- Function Run status summary (global view & transaction view & execution view)
+-- Sqlite does not support parameters in views, so we need to repeat the logic in each view.
+-- This also allows for more flexible status management on each entity.
+
+CREATE VIEW global_status_summary AS
+SELECT CASE
+           -- All function_runs have status 'S' => 'S'
+           WHEN COUNT(CASE WHEN fr.status IN ('S') THEN 1 END) = COUNT(fr.status) THEN 'S'
+           -- All function_runs have status in ('C', 'X', 'Y') => 'F'
+           WHEN COUNT(CASE WHEN fr.status IN ('C', 'X', 'Y') THEN 1 END) =
+                COUNT(fr.status) THEN 'F'
+           -- All function_runs in ('D', 'F', 'H') and at least one in ('F', 'H') => 'L'
+           WHEN
+               COUNT(CASE WHEN fr.status IN ('D', 'F', 'H') THEN 1 END) = COUNT(fr.status)
+                   AND COUNT(CASE WHEN fr.status IN ('F', 'H') THEN 1 END) > 0 THEN 'L'
+           -- At least one function_run in ('S', 'RR', 'RS', 'R', 'D', 'E') => 'R'
+           WHEN
+               COUNT(CASE WHEN fr.status IN ('S', 'RR', 'RS', 'R', 'D', 'E') THEN 1 END) >
+               0 THEN 'R'
+           -- Default: Unexpected
+           ELSE 'U'
+           END                                                             AS status,
+       -- Finished if all function_runs are in ('C', 'X', 'Y')
+       COUNT(*) = COUNT(CASE WHEN fr.status IN ('C', 'X', 'Y') THEN 1 END) AS finished,
+       (SELECT json_group_object(inner_fr.status, inner_fr.count)
+        FROM (SELECT fr.status, COUNT(*) AS count
+              FROM function_runs fr
+              GROUP BY fr.status) AS inner_fr)                             AS function_run_status_count
+FROM function_runs fr;
+
+CREATE VIEW execution_status_summary AS
+SELECT e.id                                                                AS execution_id,
+       CASE
+           -- All function_runs have status 'S' => 'S'
+           WHEN COUNT(CASE WHEN fr.status IN ('S') THEN 1 END) = COUNT(fr.status) THEN 'S'
+           -- All function_runs have status in ('C', 'X', 'Y') => 'F'
+           WHEN COUNT(CASE WHEN fr.status IN ('C', 'X', 'Y') THEN 1 END) =
+                COUNT(fr.status) THEN 'F'
+           -- All function_runs in ('D', 'F', 'H') and at least one in ('F', 'H') => 'L'
+           WHEN
+               COUNT(CASE WHEN fr.status IN ('D', 'F', 'H') THEN 1 END) = COUNT(fr.status)
+                   AND COUNT(CASE WHEN fr.status IN ('F', 'H') THEN 1 END) > 0 THEN 'L'
+           -- At least one function_run in ('S', 'RR', 'RS', 'R', 'D', 'E') => 'R'
+           WHEN
+               COUNT(CASE WHEN fr.status IN ('S', 'RR', 'RS', 'R', 'D', 'E') THEN 1 END) >
+               0 THEN 'R'
+           -- Default: Unexpected
+           ELSE 'U'
+           END                                                             AS status,
+       -- Finished if all function_runs are in ('C', 'X', 'Y')
+       COUNT(*) = COUNT(CASE WHEN fr.status IN ('C', 'X', 'Y') THEN 1 END) AS finished,
+       (SELECT json_group_object(inner_fr.status, inner_fr.count)
+        FROM (SELECT fr.status, COUNT(*) AS count
+              FROM function_runs fr
+              WHERE fr.execution_id = e.id
+              GROUP BY fr.status) AS inner_fr)                             AS function_run_status_count
+FROM executions e
+         LEFT JOIN function_runs fr ON fr.execution_id = e.id
+GROUP BY e.id;
+
+CREATE VIEW transaction_status_summary AS
+SELECT t.id                                                                AS transaction_id,
+       CASE
+           -- All function_runs have status 'S' => 'S'
+           WHEN COUNT(CASE WHEN fr.status IN ('S') THEN 1 END) = COUNT(fr.status) THEN 'S'
+           -- All function_runs have status 'C' => 'C'
+           WHEN COUNT(CASE WHEN fr.status IN ('C') THEN 1 END) = COUNT(fr.status) THEN 'C'
+           -- All function_runs have status 'X' => 'X'
+           WHEN COUNT(CASE WHEN fr.status IN ('X') THEN 1 END) = COUNT(fr.status) THEN 'X'
+           -- All function_runs have status 'Y' => 'Y'
+           WHEN COUNT(CASE WHEN fr.status IN ('Y') THEN 1 END) = COUNT(fr.status) THEN 'Y'
+           WHEN
+               COUNT(CASE WHEN fr.status IN ('D', 'F', 'H') THEN 1 END) = COUNT(fr.status)
+                   AND COUNT(CASE WHEN fr.status IN ('F', 'H') THEN 1 END) > 0 THEN 'L'
+           -- At least one function_run in ('S', 'RR', 'RS', 'R', 'D', 'E') => 'R'
+           WHEN
+               COUNT(CASE WHEN fr.status IN ('S', 'RR', 'RS', 'R', 'D', 'E') THEN 1 END) >
+               0 THEN 'R'
+           -- Default: Unexpected
+           ELSE 'U'
+           END                                                             AS status,
+       -- Finished if all function_runs are in ('C', 'X', 'Y')
+       COUNT(*) = COUNT(CASE WHEN fr.status IN ('C', 'X', 'Y') THEN 1 END) AS finished,
+       (SELECT json_group_object(inner_fr.status, inner_fr.count)
+        FROM (SELECT fr.status, COUNT(*) AS count
+              FROM function_runs fr
+              WHERE fr.transaction_id = t.id
+              GROUP BY fr.status) AS inner_fr)                             AS function_run_status_count
+FROM transactions t
+         LEFT JOIN function_runs fr ON fr.transaction_id = t.id
+GROUP BY t.id;
+
+-- Data Versions  (table & __with_function & __with_names view)
 
 CREATE TABLE table_data_versions
 (
@@ -345,52 +435,41 @@ CREATE TABLE table_data_versions
     FOREIGN KEY (function_run_id) REFERENCES function_runs (id)
 );
 
-CREATE VIEW table_data_versions__with_status AS
+CREATE VIEW table_data_versions__with_function AS
 SELECT tdv.*,
        fr.triggered_on    as triggered_on,
        fr.triggered_by_id as triggered_by_id,
+       fr.started_on      as started_on,
+       fr.ended_on        as ended_on,
        fr.status          as status,
-       tv.partitioned     as partitioned
+       fv.data_location   as data_location,
+       fv.storage_version as storage_version,
+       (SELECT tdv2.id
+        FROM table_data_versions tdv2
+                 LEFT JOIN function_runs fr2 ON tdv2.function_run_id = fr2.id
+        WHERE tdv2.table_id = tdv.table_id
+          AND tdv2.has_data = TRUE
+          AND fr2.triggered_on <= fr.triggered_on
+        ORDER BY fr2.triggered_on DESC
+        LIMIT 1)          as with_data_table_data_version_id
 FROM table_data_versions tdv
-         LEFT JOIN function_runs fr ON tdv.function_run_id = fr.id
-         LEFT JOIN tables tv ON tdv.table_version_id = tv.id;
+         LEFT JOIN functions fv ON tdv.function_version_id = fv.id
+         LEFT JOIN function_runs fr ON tdv.function_run_id = fr.id;
 
 CREATE VIEW table_data_versions__active AS
 SELECT tdv.*
-FROM table_data_versions__with_status tdv
-WHERE tdv.status NOT IN ('C');
+FROM table_data_versions__with_function tdv
+WHERE tdv.status NOT IN ('Y', 'X');
 
 CREATE VIEW table_data_versions__with_names AS
 SELECT tdv.*,
        c.name                                            as collection,
        fv.name                                           as function,
-
-       IFNULL(u.name, '[' || tdv.triggered_by_id || ']') as triggered_by
-FROM table_data_versions__with_status tdv
+       IFNULL(u.name, '[' || tdv.triggered_by_id || ']') as created_by
+FROM table_data_versions__with_function tdv
          LEFT JOIN collections c ON tdv.collection_id = c.id
          LEFT JOIN functions fv ON tdv.function_version_id = fv.id
          LEFT JOIN users u ON tdv.triggered_by_id = u.id;
-
-CREATE VIEW table_data_versions__read AS
-SELECT tdv.*,
-       tdv.collection     as collection_name,
-       tdv.name           as table_name,
-       tdv.function       as function_name,
-       tdv.has_data       as data_changed,
-       tdv.triggered_on   as created_at,
-       t.status           as transaction_status,
-       fv.data_location   as data_location,
-       fv.storage_version as storage_version,
-       (SELECT tdv2.id
-        FROM table_data_versions__with_names tdv2
-        WHERE tdv2.table_id = tdv.table_id
-          AND tdv2.has_data = TRUE
-          AND tdv2.triggered_on <= tdv.triggered_on
-        ORDER BY tdv2.triggered_on DESC
-        LIMIT 1)          as with_data_table_data_version_id
-FROM table_data_versions__with_names tdv
-         LEFT JOIN transactions__with_status t ON tdv.transaction_id = t.id
-         LEFT JOIN functions fv ON tdv.function_version_id = fv.id;
 
 -- Partitions  (table & __with_names view)
 
@@ -434,11 +513,11 @@ CREATE TABLE function_requirements
 CREATE VIEW function_requirements__with_status AS
 SELECT r.*,
        CASE
-           WHEN r.requirement_table_data_version_id IS NULL THEN 'D'
+           WHEN r.requirement_table_data_version_id IS NULL THEN 'C'
            ELSE tdv.status
            END AS status
 FROM function_requirements r
-         LEFT JOIN table_data_versions__with_status tdv ON r.requirement_table_data_version_id = tdv.id;
+         LEFT JOIN table_data_versions__with_function tdv ON r.requirement_table_data_version_id = tdv.id;
 
 CREATE VIEW function_requirements__with_names AS
 SELECT r.*,

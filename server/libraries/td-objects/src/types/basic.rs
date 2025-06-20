@@ -11,6 +11,9 @@ use crate::types::table::TableDBWithNames;
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
 use crate::types::trigger::TriggerDBWithNames;
 use crate::types::ComposedString;
+use std::collections::HashMap;
+use strum::IntoEnumIterator;
+use td_common::execution_status::FunctionRunUpdateStatus;
 use td_common::id::Id;
 use td_error::TdError;
 use td_security::{
@@ -47,6 +50,16 @@ pub struct CollectionName;
 
 #[td_type::typed(bool)]
 pub struct DataChanged;
+
+impl From<Option<HasData>> for DataChanged {
+    fn from(has_data: Option<HasData>) -> Self {
+        if let Some(has_data) = has_data {
+            DataChanged(*has_data)
+        } else {
+            DataChanged(false)
+        }
+    }
+}
 
 #[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
 pub struct DataLocation;
@@ -115,6 +128,20 @@ pub struct ExecutionLimit;
 #[td_type::typed(string(parser = parse_execution))]
 pub struct ExecutionName;
 
+#[td_type::typed_enum]
+pub enum ExecutionStatus {
+    #[strum(to_string = "S")]
+    Scheduled,
+    #[strum(to_string = "R")]
+    Running,
+    #[strum(to_string = "L")]
+    Stalled,
+    #[strum(to_string = "F")]
+    Finished,
+    #[strum(to_string = "U")]
+    Unexpected,
+}
+
 #[td_type::typed(i16)]
 pub struct ExecutionTry;
 
@@ -141,6 +168,99 @@ pub struct FunctionName;
 
 #[td_type::typed(id)]
 pub struct FunctionRunId;
+
+#[cfg_attr(doc, aquamarine::aquamarine)]
+/// Represents the state of a function run.
+///
+/// ```mermaid
+/// stateDiagram-v2
+///     [*] --> Scheduled
+///     Canceled --> [*]
+///     Yanked --> [*]
+///
+///     Scheduled --> RunRequested
+///     RunRequested --> Scheduled
+///     RunRequested --> Running
+///     Scheduled --> OnHold
+///     Scheduled --> Canceled
+///     Running --> Done
+///     Running --> Error
+///     Running --> Failed
+///     Running --> Canceled
+///     OnHold --> Canceled
+///     OnHold --> Scheduled
+///     Error --> Running
+///     Error --> Canceled
+///     Failed --> ReScheduled
+///     Failed --> Canceled
+///     Done --> Canceled
+///     Done --> Committed
+///     Committed --> Yanked
+/// ```
+#[td_type::typed_enum]
+pub enum FunctionRunStatus {
+    #[strum(to_string = "S")]
+    Scheduled,
+    #[strum(to_string = "RR")]
+    RunRequested,
+    #[strum(to_string = "RS")]
+    ReScheduled,
+    #[strum(to_string = "R")]
+    Running,
+    #[strum(to_string = "D")]
+    Done,
+    #[strum(to_string = "E")]
+    Error,
+    #[strum(to_string = "F")]
+    Failed,
+    #[strum(to_string = "H")]
+    OnHold,
+    #[strum(to_string = "C")]
+    Committed,
+    #[strum(to_string = "X")]
+    Canceled,
+    #[strum(to_string = "Y")]
+    Yanked,
+}
+
+impl FunctionRunStatus {
+    pub async fn committed() -> Result<Vec<Self>, TdError> {
+        Ok(vec![FunctionRunStatus::Committed])
+    }
+}
+
+impl From<FunctionRunUpdateStatus> for FunctionRunStatus {
+    fn from(value: FunctionRunUpdateStatus) -> Self {
+        match value {
+            FunctionRunUpdateStatus::Running => FunctionRunStatus::Running,
+            FunctionRunUpdateStatus::Done => FunctionRunStatus::Done,
+            FunctionRunUpdateStatus::Error => FunctionRunStatus::Error,
+            FunctionRunUpdateStatus::Failed => FunctionRunStatus::Failed,
+        }
+    }
+}
+
+#[td_apiforge::apiserver_schema]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct FunctionRunStatusCount(HashMap<FunctionRunStatus, StatusCount>);
+
+impl FunctionRunStatusCount {
+    fn new(map: HashMap<FunctionRunStatus, StatusCount>) -> Self {
+        let mut map = map;
+        // Enforce all statuses to be present in the map with count 0.
+        for status in FunctionRunStatus::iter() {
+            map.entry(status)
+                .or_insert(StatusCount::try_from(0).unwrap());
+        }
+        Self(map)
+    }
+}
+
+impl From<sqlx::types::Json<HashMap<FunctionRunStatus, StatusCount>>> for FunctionRunStatusCount {
+    fn from(value: sqlx::types::Json<HashMap<FunctionRunStatus, StatusCount>>) -> Self {
+        FunctionRunStatusCount::new(value.0)
+    }
+}
 
 // JSON blob with `version`, `envs` & `secrets` top entries.
 // info used in decorator.
@@ -170,6 +290,20 @@ pub struct FunctionVersionId;
 pub enum GrantType {
     #[strum(to_string = "refresh_token")]
     RefreshToken,
+}
+
+#[td_type::typed_enum]
+pub enum GlobalStatus {
+    #[strum(to_string = "S")]
+    Scheduled,
+    #[strum(to_string = "R")]
+    Running,
+    #[strum(to_string = "L")]
+    Stalled,
+    #[strum(to_string = "F")]
+    Finished,
+    #[strum(to_string = "U")]
+    Unknown,
 }
 
 #[td_type::typed(bool(default = false))]
@@ -352,6 +486,9 @@ pub struct Snippet;
 #[td_type::typed(string)]
 pub struct Sql;
 
+#[td_type::typed(i32)]
+pub struct StatusCount;
+
 #[td_type::typed(string(min_len = 1, max_len = 10, default = "V1"))]
 pub struct StorageVersion;
 
@@ -494,6 +631,24 @@ pub struct TransactionIdName;
 
 #[td_type::typed(string)]
 pub struct TransactionKey;
+
+#[td_type::typed_enum]
+pub enum TransactionStatus {
+    #[strum(to_string = "S")]
+    Scheduled,
+    #[strum(to_string = "R")]
+    Running,
+    #[strum(to_string = "L")]
+    Stalled,
+    #[strum(to_string = "C")]
+    Committed,
+    #[strum(to_string = "X")]
+    Canceled,
+    #[strum(to_string = "Y")]
+    Yanked,
+    #[strum(to_string = "U")]
+    Unexpected,
+}
 
 #[td_type::typed_enum]
 pub enum Trigger {

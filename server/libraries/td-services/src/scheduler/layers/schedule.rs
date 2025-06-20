@@ -17,13 +17,12 @@ use td_common::server::{
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
-use td_objects::sql::cte::CteQueries;
 use td_objects::sql::{DerefQueries, FindBy, SelectBy, UpdateBy};
-use td_objects::types::basic::{FunctionRunId, HasData, WorkerMessageId};
+use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerMessageId};
+use td_objects::types::execution::TableDataVersionDBWithNames;
 use td_objects::types::execution::{
-    ExecutableFunctionRunDB, FunctionRequirementDBWithNames, FunctionRunDB, FunctionRunStatus,
-    TableDataVersionDBWithNames, UpdateFunctionRunDB, UpdateWorkerMessageDB, WorkerMessageDB,
-    WorkerMessageStatus,
+    FunctionRequirementDBWithNames, FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB,
+    UpdateWorkerMessageDB, WorkerMessageDB, WorkerMessageStatus,
 };
 use td_objects::types::worker::v2::{
     FunctionInfoV2, FunctionInputV2, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
@@ -51,7 +50,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
     SrvCtx(storage): SrvCtx<Storage>,
     SrvCtx(server_url): SrvCtx<SocketAddr>,
     Connection(connection): Connection,
-    Input(function_runs): Input<Vec<ExecutableFunctionRunDB>>,
+    Input(function_runs): Input<Vec<FunctionRunToExecuteDB>>,
 ) -> Result<Vec<WorkerMessageDB>, TdError> {
     let futures: Vec<_> = function_runs
         .iter()
@@ -160,30 +159,30 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                                     .await
                                     .map_err(handle_sql_err)?;
 
-                                let data_version = match found_data_version.has_data() {
-                                    // We can use the data version if it has data, otherwise we need to
-                                    // find the first version with data, in the same table id, if any.
-                                    Some(has_data) if **has_data => Some(found_data_version),
-                                    _ => queries
-                                        .select_versions_at::<TableDataVersionDBWithNames>(
-                                            Some(f.triggered_on()),
-                                            Some(&[&HasData::from(true)]),
-                                            &(req.requirement_table_id()),
-                                        )?
-                                        .build_query_as()
-                                        .fetch_optional(&mut *conn)
-                                        .await
-                                        .map_err(handle_sql_err)?,
-                                };
+                                if let Some(with_data_data_version_id) =
+                                    found_data_version.with_data_table_data_version_id()
+                                {
+                                    let data_version_with_data =
+                                        if with_data_data_version_id == found_data_version.id() {
+                                            found_data_version
+                                        } else {
+                                            queries
+                                                .select_by::<TableDataVersionDBWithNames>(
+                                                    &with_data_data_version_id,
+                                                )?
+                                                .build_query_as()
+                                                .fetch_one(&mut *conn)
+                                                .await
+                                                .map_err(handle_sql_err)?
+                                        };
 
-                                if let Some(data_version) = data_version {
                                     let (path, _) = storage_location
-                                        .builder(f.data_location())
-                                        .collection(req.collection_id())
-                                        .data(data_version.id())
+                                        .builder(data_version_with_data.data_location())
+                                        .collection(data_version_with_data.collection_id())
+                                        .data(data_version_with_data.id())
                                         .table(
-                                            data_version.table_id(),
-                                            data_version.table_version_id(),
+                                            data_version_with_data.table_id(),
+                                            data_version_with_data.table_version_id(),
                                         )
                                         .build();
                                     let (external_path, mount_def) =

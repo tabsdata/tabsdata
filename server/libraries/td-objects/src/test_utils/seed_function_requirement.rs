@@ -62,9 +62,9 @@ mod tests {
     use crate::test_utils::seed_table_data_version::seed_table_data_version;
     use crate::test_utils::seed_transaction::seed_transaction;
     use crate::types::basic::{
-        BundleId, CollectionName, Decorator, TableNameDto, TransactionKey, UserId,
+        BundleId, CollectionName, Decorator, FunctionRunStatus, TableNameDto, TransactionKey,
+        UserId,
     };
-    use crate::types::execution::FunctionRunStatus;
     use crate::types::function::FunctionRegister;
     use td_database::sql::DbPool;
     use td_security::ENCODED_ID_SYSTEM;

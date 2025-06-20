@@ -14,7 +14,7 @@ use td_objects::tower_service::from::{ExtractVecService, With};
 use td_objects::tower_service::sql::{insert_vec, By, SqlSelectAllService, SqlUpdateService};
 use td_objects::types::basic::FunctionRunId;
 use td_objects::types::execution::{
-    ExecutableFunctionRunDB, FunctionRunDB, UpdateFunctionRunDB, WorkerMessageDB,
+    FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB, WorkerMessageDB,
 };
 use td_storage::Storage;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
@@ -66,7 +66,7 @@ impl<T: WorkerMessageQueue> ScheduleRequestService<T> {
             layers!(
                 // Get all function runs that are ready to execute.
                 // This is, with status scheduled and with all requirements done.
-                from_fn(By::<()>::select_all::<DaoQueries, ExecutableFunctionRunDB>),
+                from_fn(By::<()>::select_all::<DaoQueries, FunctionRunToExecuteDB>),
 
                 // Create a locked message for each function run.
                 from_fn(create_locked_worker_messages::<DaoQueries, T>),
@@ -74,7 +74,7 @@ impl<T: WorkerMessageQueue> ScheduleRequestService<T> {
                 from_fn(insert_vec::<DaoQueries, WorkerMessageDB>),
 
                 // Update statuses.
-                from_fn(With::<ExecutableFunctionRunDB>::extract_vec::<FunctionRunId>),
+                from_fn(With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
                 from_fn(UpdateFunctionRunDB::run_requested),
                 from_fn(By::<FunctionRunId>::update_all::<DaoQueries, UpdateFunctionRunDB, FunctionRunDB>)
             )
@@ -102,8 +102,9 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionRuntimeValues,
         RoleId, TableDependencyDto, TableName, TableNameDto, UserId,
     };
+    use td_objects::types::execution::ExecutionRequest;
+    use td_objects::types::execution::TableDataVersionDBWithNames;
     use td_objects::types::execution::WorkerMessageStatus;
-    use td_objects::types::execution::{ExecutionRequest, TableDataVersionDBWithNames};
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::worker::v2::{InputTable, OutputTable};
     use td_objects::types::worker::{EnvPrefix, FunctionInput};
@@ -139,13 +140,13 @@ mod tests {
         metadata.assert_service::<(), ()>(&[
             // Get all function runs that are ready to execute.
             // This is, with status scheduled and with all requirements done.
-            type_of_val(&By::<()>::select_all::<DaoQueries, ExecutableFunctionRunDB>),
+            type_of_val(&By::<()>::select_all::<DaoQueries, FunctionRunToExecuteDB>),
             // Create a locked message for each function run.
             type_of_val(&create_locked_worker_messages::<DaoQueries, FileWorkerMessageQueue>),
             // And insert generated messages.
             type_of_val(&insert_vec::<DaoQueries, WorkerMessageDB>),
             // Update statuses.
-            type_of_val(&With::<ExecutableFunctionRunDB>::extract_vec::<FunctionRunId>),
+            type_of_val(&With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
             type_of_val(&UpdateFunctionRunDB::run_requested),
             type_of_val(
                 &By::<FunctionRunId>::update_all::<DaoQueries, UpdateFunctionRunDB, FunctionRunDB>,

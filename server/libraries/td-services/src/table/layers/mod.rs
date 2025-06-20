@@ -4,10 +4,12 @@
 
 use crate::table::layers::storage::resolve_table_location;
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{combine, ExtractService, With};
+use td_objects::tower_service::from::{combine, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::basic::{AtTime, CollectionIdName, TableId, TableIdName, TableStatus};
-use td_objects::types::execution::{TableDataVersionDBRead, TransactionStatus};
+use td_objects::types::basic::{
+    AtTime, CollectionIdName, FunctionRunStatus, TableId, TableIdName, TableStatus, TriggeredOn,
+};
+use td_objects::types::execution::TableDataVersionDBWithNames;
 use td_objects::types::table::TableDBWithNames;
 use td_objects::types::Extractor;
 use td_tower::from_fn::from_fn;
@@ -19,7 +21,7 @@ pub mod schema;
 pub mod storage;
 
 // TableAtIdName -> TableDataVersionDBRead, SPath
-// Only looks for existing tables at the given time of published transactions
+// Only looks for existing tables at the given time of committed transactions
 #[layer]
 pub fn find_data_version_location_at<E>()
 where
@@ -43,10 +45,11 @@ where
             By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDBWithNames>
         ),
         from_fn(With::<TableDBWithNames>::extract::<TableId>),
-        // Only published transactions
-        from_fn(TransactionStatus::published),
+        // Only committed transactions, at the triggered on time
+        from_fn(FunctionRunStatus::committed),
+        from_fn(With::<AtTime>::convert_to::<TriggeredOn, _>),
         // Find the latest data version of the table ID, at that time
-        from_fn(By::<TableId>::select_version::<DaoQueries, TableDataVersionDBRead>),
+        from_fn(By::<TableId>::select_version::<DaoQueries, TableDataVersionDBWithNames>),
         // Resolve the location of the data version. This takes into account versions without
         // data changes (in which the previous version is resolved)
         from_fn(resolve_table_location),

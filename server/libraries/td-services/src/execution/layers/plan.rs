@@ -81,7 +81,7 @@ pub async fn build_function_runs(
         .triggered_functions()
         .iter()
         .map(|f| {
-            let (transaction_id, _) = transaction_map.get(&transaction_by.key(manual_trigger)?)?;
+            let (transaction_id, _) = transaction_map.get(&transaction_by.key(f)?)?;
             function_run_builder
                 .deref()
                 .clone()

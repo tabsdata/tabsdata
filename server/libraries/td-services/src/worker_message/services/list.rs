@@ -42,9 +42,10 @@ mod tests {
     use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::test_utils::seed_worker_message::seed_worker_message;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, RoleId, TransactionKey, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
+        TransactionKey, UserId,
     };
-    use td_objects::types::execution::{FunctionRunStatus, WorkerMessageStatus};
+    use td_objects::types::execution::WorkerMessageStatus;
     use td_objects::types::function::FunctionRegister;
     use td_tower::ctx_service::RawOneshot;
 

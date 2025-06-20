@@ -3,9 +3,9 @@
 //
 
 use crate::sql::{DaoQueries, Insert};
-use crate::types::basic::Trigger;
+use crate::types::basic::{FunctionRunStatus, Trigger};
 use crate::types::collection::CollectionDB;
-use crate::types::execution::{ExecutionDB, FunctionRunDB, FunctionRunStatus, TransactionDB};
+use crate::types::execution::{ExecutionDB, FunctionRunDB, TransactionDB};
 use crate::types::function::FunctionDB;
 use td_database::sql::DbPool;
 

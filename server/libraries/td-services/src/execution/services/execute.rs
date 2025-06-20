@@ -127,16 +127,17 @@ mod tests {
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::tower_service::authz::AuthzError;
     use td_objects::types::basic::{
-        AccessTokenId, TableDependencyDto, TableNameDto, TableTriggerDto,
+        AccessTokenId, ExecutionStatus, FunctionRunStatus, TableDependencyDto, TableNameDto,
+        TableTriggerDto, TransactionStatus,
     };
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, ExecutionName, FunctionName, FunctionRuntimeValues,
         TableName, TriggeredOn, UserId,
     };
     use td_objects::types::basic::{RoleId, ToCollectionId};
+    use td_objects::types::execution::{ExecutionDBWithStatus, TransactionDBWithStatus};
     use td_objects::types::execution::{
-        ExecutionDBWithStatus, ExecutionStatus, FunctionRequirementDBWithNames, FunctionRunStatus,
-        TableDataVersionDBWithStatus, TransactionDBWithStatus, TransactionStatus,
+        FunctionRequirementDBWithNames, TableDataVersionDBWithFunction,
     };
     use td_objects::types::function::{FunctionDBWithNames, FunctionRegister};
     use td_tower::ctx_service::RawOneshot;
@@ -427,7 +428,6 @@ mod tests {
 
         if with_permission {
             let response = response?;
-            println!("{:?}", response);
 
             // Check the response
             assert_eq!(
@@ -550,8 +550,8 @@ mod tests {
             }
 
             // TableDataVersion
-            let table_data_versions: Vec<TableDataVersionDBWithStatus> = queries
-                .select_by::<TableDataVersionDBWithStatus>(&())?
+            let table_data_versions: Vec<TableDataVersionDBWithFunction> = queries
+                .select_by::<TableDataVersionDBWithFunction>(&())?
                 .build_query_as()
                 .fetch_all(&db)
                 .await
@@ -579,7 +579,7 @@ mod tests {
                 assert_eq!(function_condition.execution_id(), response.id());
                 if *function_condition.requirement_table() == TableName::try_from("table_3")? {
                     // Self dependency on fist execution, version does not exist, requirement done.
-                    assert_eq!(*function_condition.status(), FunctionRunStatus::Done);
+                    assert_eq!(*function_condition.status(), FunctionRunStatus::Committed);
                 } else {
                     assert_eq!(*function_condition.status(), FunctionRunStatus::Scheduled);
                 }

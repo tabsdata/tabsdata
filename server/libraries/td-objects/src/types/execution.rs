@@ -5,10 +5,11 @@
 use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, BundleId, CollectionId, CollectionName, DataChanged, DataLocation, DependencyPos, Dot,
-    ExecutionId, ExecutionName, FunctionName, FunctionRunId, FunctionVersionId, HasData, InputIdx,
-    Partitioned, RequirementId, SelfDependency, StorageVersion, TableDataVersionId,
-    TableFunctionParamPos, TableId, TableName, TableVersionId, TableVersions, TransactionByStr,
-    TransactionId, TransactionKey, Trigger, TriggeredOn, UserId, UserName, VersionPos,
+    ExecutionId, ExecutionName, ExecutionStatus, FunctionName, FunctionRunId, FunctionRunStatus,
+    FunctionRunStatusCount, FunctionVersionId, GlobalStatus, HasData, InputIdx, RequirementId,
+    SelfDependency, StatusCount, StorageVersion, TableDataVersionId, TableFunctionParamPos,
+    TableId, TableName, TableVersionId, TableVersions, TransactionByStr, TransactionId,
+    TransactionKey, TransactionStatus, Trigger, TriggeredOn, UserId, UserName, VersionPos,
     WorkerMessageId,
 };
 use crate::types::dependency::DependencyDBWithNames;
@@ -17,12 +18,19 @@ use crate::types::table::TableDBWithNames;
 use crate::types::trigger::TriggerDBWithNames;
 use crate::types::worker::FunctionOutput;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use td_common::datetime::IntoDateTimeUtc;
-use td_common::execution_status::FunctionRunUpdateStatus;
 use td_common::server::ResponseMessagePayload;
 use td_error::TdError;
+
+#[td_type::Dao]
+#[dao(sql_table = "global_status_summary")]
+pub struct GlobalStatusSummaryDB {
+    status: GlobalStatus,
+    function_run_status_count: sqlx::types::Json<HashMap<FunctionRunStatus, StatusCount>>,
+}
 
 // Daos
 
@@ -50,20 +58,6 @@ pub struct ExecutionDB {
 }
 
 #[td_type::Dao]
-#[dao(sql_table = "executions__with_status")]
-pub struct ExecutionDBWithStatus {
-    id: ExecutionId,
-    name: Option<ExecutionName>,
-    collection_id: CollectionId,
-    function_version_id: FunctionVersionId,
-    triggered_on: TriggeredOn,
-    triggered_by_id: UserId,
-    started_on: Option<AtTime>,
-    ended_on: Option<AtTime>,
-    status: ExecutionStatus,
-}
-
-#[td_type::Dao]
 #[dao(sql_table = "executions__with_names")]
 pub struct ExecutionDBWithNames {
     id: ExecutionId,
@@ -72,17 +66,35 @@ pub struct ExecutionDBWithNames {
     function_version_id: FunctionVersionId,
     triggered_on: TriggeredOn,
     triggered_by_id: UserId,
-    started_on: Option<AtTime>,
-    ended_on: Option<AtTime>,
-    status: ExecutionStatus,
+
     collection: CollectionName,
     function: FunctionName,
     triggered_by: UserName,
 }
 
+#[td_type::Dao]
+#[dao(sql_table = "executions__with_status")]
+pub struct ExecutionDBWithStatus {
+    id: ExecutionId,
+    name: Option<ExecutionName>,
+    collection_id: CollectionId,
+    function_version_id: FunctionVersionId,
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+
+    collection: CollectionName,
+    function: FunctionName,
+    triggered_by: UserName,
+
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: ExecutionStatus,
+    function_run_status_count: sqlx::types::Json<HashMap<FunctionRunStatus, StatusCount>>,
+}
+
 #[td_type::Dto]
-#[td_type(builder(try_from = ExecutionDBWithNames))]
-#[dto(list(on = ExecutionDBWithNames))]
+#[td_type(builder(try_from = ExecutionDBWithStatus))]
+#[dto(list(on = ExecutionDBWithStatus))]
 pub struct Execution {
     #[dto(list(filter, filter_like, order_by))]
     id: ExecutionId,
@@ -96,18 +108,21 @@ pub struct Execution {
     triggered_on: TriggeredOn,
     #[dto(list(filter, filter_like, order_by))]
     triggered_by_id: UserId,
-    #[dto(list(filter, filter_like))]
-    started_on: Option<AtTime>,
-    #[dto(list(filter, filter_like))]
-    ended_on: Option<AtTime>,
-    #[dto(list(filter, filter_like, order_by))]
-    status: ExecutionStatus,
+
     #[dto(list(filter, filter_like, order_by))]
     collection: CollectionName,
     #[dto(list(filter, filter_like, order_by))]
     function: FunctionName,
     #[dto(list(filter, filter_like, order_by))]
     triggered_by: UserName,
+
+    #[dto(list(filter, filter_like))]
+    started_on: Option<AtTime>,
+    #[dto(list(filter, filter_like))]
+    ended_on: Option<AtTime>,
+    #[dto(list(filter, filter_like, order_by))]
+    status: ExecutionStatus,
+    function_run_status_count: FunctionRunStatusCount,
 }
 
 #[td_type::Dao]
@@ -141,6 +156,11 @@ pub struct TransactionDBWithStatus {
     started_on: Option<AtTime>,
     ended_on: Option<AtTime>,
     status: TransactionStatus,
+    collection: CollectionName,
+    execution: Option<ExecutionName>,
+    triggered_by: UserName,
+
+    function_run_status_count: sqlx::types::Json<HashMap<FunctionRunStatus, StatusCount>>,
 }
 
 #[td_type::Dto]
@@ -161,27 +181,9 @@ pub struct SynchrotronResponse {
     status: TransactionStatus,
 }
 
-#[td_type::Dao]
-#[dao(sql_table = "transactions__with_names")]
-pub struct TransactionDBWithNames {
-    id: TransactionId,
-    collection_id: CollectionId,
-    execution_id: ExecutionId,
-    transaction_by: TransactionByStr,
-    transaction_key: TransactionKey,
-    triggered_on: TriggeredOn,
-    triggered_by_id: UserId,
-    started_on: Option<AtTime>,
-    ended_on: Option<AtTime>,
-    status: TransactionStatus,
-    collection: CollectionName,
-    execution: Option<ExecutionName>,
-    triggered_by: UserName,
-}
-
 #[td_type::Dto]
-#[td_type(builder(try_from = TransactionDBWithNames))]
-#[dto(list(on = TransactionDBWithNames))]
+#[td_type(builder(try_from = TransactionDBWithStatus))]
+#[dto(list(on = TransactionDBWithStatus))]
 pub struct Transaction {
     #[dto(list(filter, filter_like, order_by))]
     id: TransactionId,
@@ -205,6 +207,8 @@ pub struct Transaction {
     execution: Option<ExecutionName>,
     #[dto(list(filter, filter_like, order_by))]
     triggered_by: UserName,
+
+    function_run_status_count: FunctionRunStatusCount,
 }
 
 #[td_type::Dao]
@@ -249,12 +253,12 @@ pub struct FunctionRunDBWithNames {
     execution_id: ExecutionId,
     transaction_id: TransactionId,
     triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
     trigger: Trigger,
     started_on: Option<AtTime>,
     ended_on: Option<AtTime>,
     status: FunctionRunStatus,
 
-    data_location: DataLocation,
     name: FunctionName,
     collection: CollectionName,
     execution: Option<ExecutionName>,
@@ -284,7 +288,6 @@ pub struct FunctionRun {
     #[dto(list(filter, filter_like, order_by))]
     status: FunctionRunStatus,
 
-    data_location: DataLocation,
     #[dto(list(filter, filter_like, order_by))]
     name: FunctionName,
     #[dto(list(filter, filter_like, order_by))]
@@ -300,8 +303,8 @@ pub struct FunctionRun {
 }
 
 #[td_type::Dao]
-#[dao(sql_table = "executable_function_runs")]
-pub struct ExecutableFunctionRunDB {
+#[dao(sql_table = "function_runs__to_execute")]
+pub struct FunctionRunToExecuteDB {
     #[td_type(extractor)]
     id: FunctionRunId,
     collection_id: CollectionId,
@@ -316,12 +319,29 @@ pub struct ExecutableFunctionRunDB {
     ended_on: Option<AtTime>,
     status: FunctionRunStatus,
 
-    data_location: DataLocation,
-    storage_version: StorageVersion,
-    bundle_id: BundleId,
     name: FunctionName,
     collection: CollectionName,
     execution: Option<ExecutionName>,
+    triggered_by: UserName,
+
+    data_location: DataLocation,
+    storage_version: StorageVersion,
+    bundle_id: BundleId,
+}
+
+#[td_type::Dao]
+#[dao(sql_table = "function_runs__to_commit")]
+pub struct FunctionRunToCommitDB {
+    id: FunctionRunId,
+    collection_id: CollectionId,
+    function_version_id: FunctionVersionId,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    triggered_on: TriggeredOn,
+    trigger: Trigger,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: FunctionRunStatus,
 }
 
 #[td_type::Dao]
@@ -345,10 +365,11 @@ pub struct TableDataVersionDB {
 }
 
 #[td_type::Dao]
-#[dao(sql_table = "table_data_versions__with_status")]
-pub struct TableDataVersionDBWithStatus {
+#[dao(sql_table = "table_data_versions__with_function")]
+pub struct TableDataVersionDBWithFunction {
     id: TableDataVersionId,
     collection_id: CollectionId,
+    table_id: TableId,
     name: TableName,
     table_version_id: TableVersionId,
     function_version_id: FunctionVersionId,
@@ -360,16 +381,49 @@ pub struct TableDataVersionDBWithStatus {
 
     triggered_on: TriggeredOn,
     triggered_by_id: UserId,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
     status: FunctionRunStatus,
-    partitioned: Partitioned,
+    data_location: DataLocation,
+    storage_version: StorageVersion,
+    with_data_table_data_version_id: Option<TableDataVersionId>,
 }
 
 #[td_type::Dao]
-// partitioned to find latest version that has_data
+#[dao(
+    sql_table = "table_data_versions__active",
+    partition_by = "table_id",
+    versioned_at(order_by = "triggered_on", condition_by = "status")
+)]
+#[derive(Hash)]
+pub struct ActiveTableDataVersionDB {
+    id: TableDataVersionId,
+    collection_id: CollectionId,
+    table_id: TableId,
+    name: TableName,
+    table_version_id: TableVersionId,
+    function_version_id: FunctionVersionId,
+    has_data: Option<HasData>,
+    execution_id: ExecutionId,
+    transaction_id: TransactionId,
+    function_run_id: FunctionRunId,
+    function_param_pos: Option<TableFunctionParamPos>,
+
+    triggered_on: TriggeredOn,
+    triggered_by_id: UserId,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: FunctionRunStatus,
+    data_location: DataLocation,
+    storage_version: StorageVersion,
+    with_data_table_data_version_id: Option<TableDataVersionId>,
+}
+
+#[td_type::Dao]
 #[dao(
     sql_table = "table_data_versions__with_names",
     partition_by = "table_id",
-    versioned_at(order_by = "triggered_on", condition_by = "has_data")
+    versioned_at(order_by = "triggered_on", condition_by = "status")
 )]
 pub struct TableDataVersionDBWithNames {
     id: TableDataVersionId,
@@ -386,90 +440,64 @@ pub struct TableDataVersionDBWithNames {
 
     triggered_on: TriggeredOn,
     triggered_by_id: UserId,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
     status: FunctionRunStatus,
-    partitioned: Partitioned,
-
-    collection: CollectionName,
-    function: FunctionName,
-    triggered_by: UserName,
-}
-
-#[td_type::Dao]
-#[dao(
-    sql_table = "table_data_versions__read",
-    partition_by = "table_id",
-    versioned_at(order_by = "created_at", condition_by = "transaction_status")
-)]
-pub struct TableDataVersionDBRead {
-    id: TableDataVersionId,
-    collection_id: CollectionId,
-    collection_name: CollectionName,
-    table_id: TableId,
-    table_version_id: TableVersionId,
-    table_name: TableName,
-    function_version_id: FunctionVersionId,
-    function_name: FunctionName,
-    execution_id: ExecutionId,
-    transaction_id: TransactionId,
-    data_changed: DataChanged,
-    created_at: AtTime,
-    transaction_status: TransactionStatus,
     data_location: DataLocation,
     storage_version: StorageVersion,
     with_data_table_data_version_id: Option<TableDataVersionId>,
+
+    collection: CollectionName,
+    function: FunctionName,
+    created_by: UserName,
 }
 
 #[td_type::Dto]
-#[dto(list(on = TableDataVersionDBRead))]
-#[td_type(builder(try_from = TableDataVersionDBRead))]
+#[dto(list(on = TableDataVersionDBWithNames))]
+#[td_type(builder(try_from = TableDataVersionDBWithNames))]
 pub struct TableDataVersion {
     #[dto(list(pagination_by = "+", filter, filter_like))]
     id: TableDataVersionId,
     #[dto(list(filter, filter_like, order_by))]
     collection_id: CollectionId,
     #[dto(list(filter, filter_like, order_by))]
-    collection_name: CollectionName,
+    table_id: TableId,
+    #[dto(list(filter, filter_like, order_by))]
+    name: TableName,
     #[dto(list(filter, filter_like, order_by))]
     table_version_id: TableVersionId,
     #[dto(list(filter, filter_like, order_by))]
-    table_name: TableName,
-    #[dto(list(filter, filter_like, order_by))]
     function_version_id: FunctionVersionId,
+    #[td_type(builder(field = "has_data"))]
     #[dto(list(filter, filter_like, order_by))]
-    function_name: FunctionName,
-    #[dto(list(filter, filter_like, order_by))]
-    execution_id: ExecutionId,
-    #[dto(list(filter, filter_like, order_by))]
-    transaction_id: TransactionId,
     data_changed: DataChanged,
     #[dto(list(filter, filter_like, order_by))]
-    created_at: AtTime,
-    #[dto(list(filter, filter_like, order_by))]
-    transaction_status: TransactionStatus,
-}
-
-#[td_type::Dao]
-#[dao(
-    sql_table = "table_data_versions__active",
-    partition_by = "table_id",
-    versioned_at(order_by = "triggered_on", condition_by = "status")
-)]
-#[derive(Hash)]
-pub struct ActiveTableDataVersionDB {
-    id: TableDataVersionId,
-    collection_id: CollectionId,
-    table_id: TableId,
-    table_version_id: TableVersionId,
-    function_version_id: FunctionVersionId,
-    has_data: Option<HasData>,
     execution_id: ExecutionId,
+    #[dto(list(filter, filter_like, order_by))]
     transaction_id: TransactionId,
+    #[dto(list(filter, filter_like, order_by))]
     function_run_id: FunctionRunId,
-    function_param_pos: TableFunctionParamPos,
-    triggered_on: TriggeredOn,
+    #[dto(list(filter, filter_like, order_by))]
+    function_param_pos: Option<TableFunctionParamPos>,
+
+    #[td_type(builder(field = "triggered_on"))]
+    #[dto(list(filter, filter_like, order_by))]
+    created_at: TriggeredOn,
+    #[dto(list(filter, filter_like, order_by))]
     triggered_by_id: UserId,
+    #[dto(list(filter, filter_like, order_by))]
+    started_on: Option<AtTime>,
+    #[dto(list(filter, filter_like, order_by))]
+    ended_on: Option<AtTime>,
+    #[dto(list(filter, filter_like, order_by))]
     status: FunctionRunStatus,
-    partitioned: Partitioned,
+
+    #[dto(list(filter, filter_like, order_by))]
+    collection: CollectionName,
+    #[dto(list(filter, filter_like, order_by))]
+    function: FunctionName,
+    #[dto(list(filter, filter_like, order_by))]
+    created_by: UserName,
 }
 
 #[td_type::Dao]
@@ -599,132 +627,6 @@ pub struct WorkerMessage {
     function: FunctionName,
 }
 
-#[cfg_attr(doc, aquamarine::aquamarine)]
-/// Represents the state of an execution.
-///
-/// ```mermaid
-/// stateDiagram-v2
-///     [*] --> Scheduled
-///     Done --> [*]
-///     Incomplete --> [*]
-///
-///     Scheduled --> Running
-///     Running --> Done
-///     Running --> Incomplete
-/// ```
-#[td_type::typed_enum]
-pub enum ExecutionStatus {
-    #[strum(to_string = "S")]
-    Scheduled,
-    #[strum(to_string = "R")]
-    Running,
-    #[strum(to_string = "D")]
-    Done,
-    #[strum(to_string = "I")]
-    Incomplete,
-}
-
-#[cfg_attr(doc, aquamarine::aquamarine)]
-/// Represents the state of a transaction.
-///
-/// ```mermaid
-/// stateDiagram-v2
-///     [*] --> Scheduled
-///     Canceled --> [*]
-///     Published --> [*]
-///
-///     Scheduled --> Running
-///     Scheduled --> OnHold
-///     Scheduled --> Canceled
-///     Running --> Published
-///     Running --> Failed
-///     Running --> Canceled
-///     OnHold --> Canceled
-///     OnHold --> Scheduled
-///     Failed --> Scheduled
-///     Failed --> Canceled
-/// ```
-#[td_type::typed_enum]
-pub enum TransactionStatus {
-    #[strum(serialize = "S")]
-    Scheduled,
-    #[strum(serialize = "R")]
-    Running,
-    #[strum(serialize = "F")]
-    Failed,
-    #[strum(serialize = "H")]
-    OnHold,
-    #[strum(serialize = "C")]
-    Canceled,
-    #[strum(serialize = "P")]
-    Published,
-}
-
-impl TransactionStatus {
-    pub async fn published() -> Result<Vec<TransactionStatus>, TdError> {
-        Ok(vec![TransactionStatus::Published])
-    }
-}
-
-#[cfg_attr(doc, aquamarine::aquamarine)]
-/// Represents the state of a function run.
-///
-/// ```mermaid
-/// stateDiagram-v2
-///     [*] --> Scheduled
-///     Canceled --> [*]
-///     Published --> [*]
-///
-///     Scheduled --> RunRequested
-///     RunRequested --> Scheduled
-///     RunRequested --> Running
-///     Scheduled --> OnHold
-///     Scheduled --> Canceled
-///     Running --> Done
-///     Running --> Error
-///     Running --> Failed
-///     Running --> Canceled
-///     OnHold --> Canceled
-///     OnHold --> Scheduled
-///     Error --> Running
-///     Error --> Canceled
-///     Failed --> Scheduled
-///     Failed --> Canceled
-///     Done --> Canceled
-/// ```
-#[td_type::typed_enum]
-pub enum FunctionRunStatus {
-    #[strum(to_string = "S")]
-    Scheduled,
-    #[strum(to_string = "RR")]
-    RunRequested,
-    #[strum(to_string = "RS")]
-    ReScheduled,
-    #[strum(to_string = "R")]
-    Running,
-    #[strum(to_string = "D")]
-    Done,
-    #[strum(to_string = "E")]
-    Error,
-    #[strum(to_string = "F")]
-    Failed,
-    #[strum(to_string = "H")]
-    OnHold,
-    #[strum(to_string = "C")]
-    Canceled,
-}
-
-impl From<FunctionRunUpdateStatus> for FunctionRunStatus {
-    fn from(value: FunctionRunUpdateStatus) -> Self {
-        match value {
-            FunctionRunUpdateStatus::Running => FunctionRunStatus::Running,
-            FunctionRunUpdateStatus::Done => FunctionRunStatus::Done,
-            FunctionRunUpdateStatus::Error => FunctionRunStatus::Error,
-            FunctionRunUpdateStatus::Failed => FunctionRunStatus::Failed,
-        }
-    }
-}
-
 #[td_type::typed_enum]
 pub enum WorkerMessageStatus {
     #[strum(to_string = "L")]
@@ -766,7 +668,6 @@ pub struct UpdateFunctionRunDB {
     #[dao(immutable)]
     #[builder(default)]
     started_on: Option<AtTime>,
-    #[dao(immutable)]
     #[builder(default)]
     ended_on: Option<AtTime>,
     status: FunctionRunStatus,
@@ -796,6 +697,21 @@ impl UpdateFunctionRunDB {
             .ended_on(AtTime::now().await)
             .status(FunctionRunStatus::Canceled)
             .build()?)
+    }
+}
+
+#[td_type::Dao]
+#[dao(sql_table = "function_runs")]
+pub struct CommitFunctionRunDB {
+    status: FunctionRunStatus,
+}
+
+impl Default for CommitFunctionRunDB {
+    fn default() -> Self {
+        Self::builder()
+            .status(FunctionRunStatus::Committed)
+            .build()
+            .unwrap()
     }
 }
 
