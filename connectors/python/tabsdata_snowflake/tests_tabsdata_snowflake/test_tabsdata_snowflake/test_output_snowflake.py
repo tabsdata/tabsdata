@@ -21,6 +21,7 @@ from tests_tabsdata.conftest import (
     write_v2_yaml_file,
 )
 from tests_tabsdata_snowflake.conftest import (
+    REAL_CONNECTION_PARAMETERS,
     TESTING_RESOURCES_FOLDER,
 )
 from tests_tabsdata_snowflake.testing_resources.test_multiple_outputs_snowflake.example import (
@@ -45,16 +46,6 @@ RESPONSE_FOLDER = "response_folder"
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 FAKE_CONNECTION_PARAMETERS = {"fake": "parameter"}
-
-REAL_CONNECTION_PARAMETERS = {
-    "account": td.EnvironmentSecret("TD_SNOWFLAKE_ACCOUNT"),
-    "user": td.EnvironmentSecret("TD_SNOWFLAKE_USER"),
-    "password": td.EnvironmentSecret("TD_SNOWFLAKE_PASSWORD"),
-    "role": "SYSADMIN",
-    "database": "TESTING_DB",
-    "schema": "PUBLIC",
-    "warehouse": "SNOWFLAKE_LEARNING_WH",
-}
 
 PREEXISTING_STAGE = "PREEXISTING_STAGE"
 

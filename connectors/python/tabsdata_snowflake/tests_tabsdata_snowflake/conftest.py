@@ -4,13 +4,14 @@
 from tests_tabsdata.bootest import enrich_sys_path
 from tests_tabsdata_snowflake.bootest import TESTING_RESOURCES_PATH
 
+import tabsdata as td
+from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.utils.logging import setup_tests_logging
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 
 import logging
-import os
 
 import pytest
 from snowflake.connector import connect
@@ -19,6 +20,16 @@ from tests_tabsdata.conftest import (
 )
 
 logger = logging.getLogger(__name__)
+
+REAL_CONNECTION_PARAMETERS = {
+    "account": td.EnvironmentSecret("TD_SNOWFLAKE_ACCOUNT"),
+    "user": td.EnvironmentSecret("TD_SNOWFLAKE_USER"),
+    "password": td.EnvironmentSecret("TD_SNOWFLAKE_PAT"),
+    "role": td.EnvironmentSecret("TD_SNOWFLAKE_ROLE"),
+    "database": td.EnvironmentSecret("TD_SNOWFLAKE_DATABASE"),
+    "schema": td.EnvironmentSecret("TD_SNOWFLAKE_SCHEMA"),
+    "warehouse": td.EnvironmentSecret("TD_SNOWFLAKE_WAREHOUSE"),
+}
 
 
 def pytest_configure():
@@ -36,16 +47,7 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.fixture(scope="session")
 def snowflake_connection():
-    connection_parameters = {
-        "account": os.environ.get("TD_SNOWFLAKE_ACCOUNT"),
-        "user": os.environ.get("TD_SNOWFLAKE_USER"),
-        "password": os.environ.get("TD_SNOWFLAKE_PASSWORD"),
-        "role": "SYSADMIN",
-        "database": "TESTING_DB",
-        "schema": "PUBLIC",
-        "warehouse": "SNOWFLAKE_LEARNING_WH",
-    }
-    conn = connect(**connection_parameters)
+    conn = connect(**_recursively_evaluate_secret(REAL_CONNECTION_PARAMETERS))
     try:
         yield conn
     finally:

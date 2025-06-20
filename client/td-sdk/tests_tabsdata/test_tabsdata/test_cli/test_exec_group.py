@@ -508,7 +508,6 @@ def test_worker_list_with_execution_id(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-@pytest.mark.aleix_dev
 def test_worker_list_with_function_run_id(
     login, testing_collection_with_table, tabsserver_connection
 ):

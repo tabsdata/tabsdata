@@ -100,6 +100,9 @@ class SnowflakeDestination(DestinationPlugin):
                 f"got {if_table_exists} instead."
             )
         self.if_table_exists = if_table_exists
+        self.warehouse = connection_parameters.get("warehouse")
+        self.database = connection_parameters.get("database")
+        self.schema = connection_parameters.get("schema")
         self.stage = stage
         self.kwargs = kwargs
         self._support_snowflake_logging_level = self.kwargs.get(
@@ -116,16 +119,22 @@ class SnowflakeDestination(DestinationPlugin):
         from the stream method, and it is not intended to be called directly.
         """
         connection_parameters = _recursively_evaluate_secret(self.connection_parameters)
+        # We need to ensure that the connection parameters are fully evaluated
+        self.warehouse = connection_parameters.get("warehouse")
+        self.database = connection_parameters.get("database")
+        self.schema = connection_parameters.get("schema")
         conn = connect(**connection_parameters)
         for file_path, table in zip(files, self.destination_table):
-            logger.info(f"Starting upload of results to table {table}")
-            logger.debug(f"Storing file {file_path} in table {table}")
+            logger.info(f"Starting upload of results to table '{table}'")
+            table = self._fully_qualify_entity(table)
+            logger.debug(f"Storing file '{file_path}' in table '{table}'")
             try:
                 self._upload_single_file_to_table(conn, file_path, table)
-                logger.info(f"Uploaded results to table {table} successfully.")
+                logger.info(f"Uploaded results to table '{table}' successfully.")
             except Exception:
                 logger.error(
-                    f"Failed to upload results from file {file_path} to table {table}"
+                    f"Failed to upload results from file '{file_path}' to table"
+                    f" '{table}'"
                 )
                 conn.close()
                 raise
@@ -133,6 +142,11 @@ class SnowflakeDestination(DestinationPlugin):
 
     def _upload_single_file_to_table(self, conn, file_path: str, table: str):
         file_name = os.path.basename(file_path)
+        if self.warehouse:
+            logger.debug(f"Using warehouse '{self.warehouse}' for the connection.")
+            command = f"USE WAREHOUSE {self.warehouse}"
+            logger.debug(f"Executing command: '{command}'")
+            conn.cursor().execute(command)
         self._create_stage_if_not_exists(conn)
         self._upload_file_to_stage(conn, file_path)
         self._create_table_if_not_exists(conn, file_name, table)
@@ -213,19 +227,20 @@ class SnowflakeDestination(DestinationPlugin):
                 "Creating it now if it doesn't exist."
             )
             cursor = conn.cursor()
+            stage = self._fully_qualify_entity(TABSDATA_STAGE_NAME)
             try:
-                cursor.execute(f"CREATE STAGE IF NOT EXISTS {TABSDATA_STAGE_NAME}")
+                cursor.execute(f"CREATE STAGE IF NOT EXISTS {stage}")
                 logger.debug(
-                    f"Stage '{TABSDATA_STAGE_NAME}' created successfully or "
-                    "already existed."
+                    f"Stage '{stage}' created successfully or already existed."
                 )
-                self.stage = TABSDATA_STAGE_NAME
+                self.stage = stage
             except Exception:
-                logger.error(f"Failed to create stage '{TABSDATA_STAGE_NAME}'")
+                logger.error(f"Failed to create stage '{stage}'")
                 raise
             finally:
                 cursor.close()
         else:
+            self.stage = self._fully_qualify_entity(self.stage)
             logger.debug(f"Using stage '{self.stage}'")
 
     def stream(self, working_dir: str, *results: pl.LazyFrame | None):
@@ -270,3 +285,53 @@ class SnowflakeDestination(DestinationPlugin):
             logger.debug(f"Chunked result in position {index} successfully")
         logger.info("All results chunked successfully")
         return list_of_files
+
+    def _fully_qualify_entity(self, entity: str) -> str:
+        """
+        Fully qualifies the entity with the database and schema if they are provided.
+        """
+
+        logger.debug(f"Fully qualifying entity: {entity}")
+        database = self.database
+        schema = self.schema
+        dots = entity.count(".")
+        if dots == 2:
+            # If the entity already has two dots, assume it's fully qualified
+            logger.debug(f"Entity '{entity}' is already fully qualified.")
+            return entity
+        elif dots == 1:
+            # If the entity has one dot, assume it is of the form schema.entity
+            logger.debug(f"Entity '{entity}' has one dot, trying to add database.")
+            if database:
+                # If database is provided, prepend it to the entity
+                logger.debug(f"Prepending database '{database}' to entity '{entity}'.")
+                return f"{database}.{entity}"
+            else:
+                # If no database is provided, return the entity as is
+                logger.debug(f"No database provided, returning entity '{entity}'.")
+                return entity
+        elif dots == 0:
+            logger.debug(
+                f"Entity '{entity}' has no dots, checking database and schema."
+            )
+            # If the entity has no dots, assume it's just the entity name
+            # If both database and schema are provided, fully qualify the entity
+            if database and schema:
+                logger.debug(
+                    f"Both database '{database}' and schema '{schema}' provided, "
+                    f"fully qualifying entity '{entity}'."
+                )
+                return f"{database}.{schema}.{entity}"
+            elif schema:
+                # If only schema is provided, qualify with schema
+                logger.debug(
+                    f"Only schema '{schema}' provided, qualifying entity '{entity}'"
+                    " with it."
+                )
+                return f"{schema}.{entity}"
+            else:
+                # If no database or schema is provided, return the entity as is
+                logger.debug(
+                    f"No database or schema provided, returning entity '{entity}'."
+                )
+                return entity
