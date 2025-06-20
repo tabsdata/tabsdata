@@ -3,7 +3,6 @@
 #
 
 import logging
-import sys
 
 import polars as pl
 import pytest
@@ -192,3 +191,31 @@ def test_assert_has_cols_exact_extra_in_expected(base_tableframe):
 def test_assert_has_cols_exact_missing_in_both(base_tableframe):
     with pytest.raises(ValueError):
         base_tableframe.assert_has_cols(["a", "d"], exact=True)
+
+@pytest.fixture
+def tf1():
+    return td.TableFrame.from_polars(pl.DataFrame({"a": ["A"], "b": [1]}))
+
+@pytest.fixture
+def tf2():
+    return td.TableFrame.from_polars(pl.DataFrame({"a": ["B"], "b": [2]}))
+
+@pytest.fixture
+def tf_diff_cols():
+    return td.TableFrame.from_polars(pl.DataFrame({"a": ["A"], "c": [1]}))
+
+@pytest.fixture
+def tf_diff_types():
+    return td.TableFrame.from_polars(pl.DataFrame({"a": ["A"], "b": ["1"]}))
+
+def test_has_same_schema_true(tf1, tf2):
+    assert tf1.has_same_schema(tf2) is True
+
+def test_has_same_schema_diff_columns(tf1, tf_diff_cols):
+    assert tf1.has_same_schema(tf_diff_cols) is False
+
+def test_has_same_schema_diff_types(tf1, tf_diff_types):
+    assert tf1.has_same_schema(tf_diff_types) is False
+
+def test_has_same_schema_self(tf1):
+    assert tf1.has_same_schema(tf1) is True

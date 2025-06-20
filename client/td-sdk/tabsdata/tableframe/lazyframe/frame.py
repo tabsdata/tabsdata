@@ -515,7 +515,71 @@ class TableFrame:
         )
 
     @pydoc(categories="tableframe")
-    def is_empty(self) -> bool:
+    def has_same_schema(self, tf: TableFrame) -> bool:
+        """
+        Verifies if the schema of the current TableFrame is same than the provided
+        TableFrame.
+
+        Args:
+            tf: The TableFrame to compare with.
+
+        Returns:
+            bool: Whether the condition is met or not.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf1: td.TableFrame ...
+        >>>
+        ┌──────┬──────┐
+        │ a    ┆ b    │
+        │ ---  ┆ ---  │
+        │ str  ┆ i64  │
+        ╞══════╪══════╡
+        │ A    ┆ 1    │
+        └──────┴──────┘
+        >>>
+        >>> tf2: td.TableFrame ...
+        >>>
+        ┌──────┬──────┐
+        │ a    ┆ c    │
+        │ ---  ┆ ---  │
+        │ str  ┆ i64  │
+        ╞══════╪══════╡
+        │ A    ┆ 1    │
+        └──────┴──────┘
+        >>> tf1.has_same_schema(tf2)
+        >>>
+        False
+        >>>
+        >>> tf1: td.TableFrame ...
+        >>>
+        ┌──────┬──────┐
+        │ a    ┆ b    │
+        │ ---  ┆ ---  │
+        │ str  ┆ i64  │
+        ╞══════╪══════╡
+        │ A    ┆ 1    │
+        └──────┴──────┘
+        >>>
+        >>> tf2: td.TableFrame ...
+        >>>
+        ┌──────┬──────┐
+        │ a    ┆ b    │
+        │ ---  ┆ ---  │
+        │ str  ┆ str  │
+        ╞══════╪══════╡
+        │ A    ┆ 1    │
+        └──────┴──────┘
+        >>> tf1.has_same_schema(tf2)
+        >>>
+        False
+        """
+        return self.schema == tf.schema
+
+    @pydoc(categories="tableframe")
+    def is_empty(self) -> (bool, set[str], set[str]):
         """
         Checks if a TableFrame has no rows.
 

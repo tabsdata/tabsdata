@@ -109,7 +109,7 @@ def add_system_columns(
             )
         else:
             generator_ = generator(idx)
-            # If a lazy frame 0 rows and 0 columns, polars will create a new
+            # If a lazy frame has 0 rows and 0 columns, polars will create a new
             # single row when assigning a literal to a new column. This tweak
             # creates a lazy frame with the correct schema through a data frane,
             # Which does not have this undesired behavior
