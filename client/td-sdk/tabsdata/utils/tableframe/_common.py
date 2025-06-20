@@ -87,6 +87,11 @@ def add_system_columns(
         )
 
     current_columns = set(lf.collect_schema().names())
+
+    is_void = False
+    if len(current_columns) == 0 and lf.limit(1).collect().height == 0:
+        is_void = True
+
     for column, metadata in td_helpers.SYSTEM_COLUMNS_METADATA.items():
         if column in current_columns:
             continue
@@ -104,13 +109,20 @@ def add_system_columns(
             )
         else:
             generator_ = generator(idx)
-            lf = lf.with_columns(default().alias(column))
+            # If a lazy frame 0 rows and 0 columns, polars will create a new
+            # single row when assigning a literal to a new column. This tweak
+            # creates a lazy frame with the correct schema through a data frane,
+            # Which does not have this undesired behavior
+            if is_void:
+                lf = pl.DataFrame(schema=[(column, dtype)]).lazy()
+            else:
+                lf = lf.with_columns(default().alias(column))
             lf = lf.with_columns_seq(
                 pl.col(column)
                 .map_elements(generator_, return_dtype=dtype)
                 .alias(column)
             )
-
+        is_void = False
     return lf
 
 

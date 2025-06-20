@@ -514,6 +514,45 @@ class TableFrame:
             idx=self._idx,
         )
 
+    @pydoc(categories="tableframe")
+    def is_empty(self) -> bool:
+        """
+        Checks if a TableFrame has no rows.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌──────┬──────┐
+        │ a    ┆ b    │
+        │ ---  ┆ ---  │
+        │ str  ┆ i64  │
+        ╞══════╪══════╡
+        │ A    ┆ 1    │
+        └──────┴──────┘
+        >>>
+        >>> tf.is_empty()
+        >>>
+        False
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌──────┬──────┐
+        │ a    ┆ b    │
+        │ ---  ┆ ---  │
+        │ str  ┆ i64  │
+        ╞══════╪══════╡
+        └──────┴──────┘
+        >>>
+        >>> tf.is_empty()
+        >>>
+        True
+        """
+        return self._lf.limit(1).collect().height == 0
+
+    @pydoc(categories="tableframe")
     def has_cols(
         self, cols: str | list[str], exact: bool | None = False
     ) -> (bool, set[str], set[str]):
@@ -592,6 +631,7 @@ class TableFrame:
             in_tf_not_in_cols,
         )
 
+    @pydoc(categories="tableframe")
     def assert_has_cols(
         self, cols: str | list[str], exact: bool | None = False
     ) -> None:

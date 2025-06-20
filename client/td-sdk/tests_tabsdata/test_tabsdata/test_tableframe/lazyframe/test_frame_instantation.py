@@ -209,3 +209,94 @@ def test_init_from_void():
 def test_init_from_dict_explicit():
     tf = TableFrame({"a": [1]}, origin=TableFrameOrigin.IMPORT)
     assert_origin(tf, TableFrameOrigin.IMPORT)
+
+
+def test_is_empty_from_empty():
+    tf = TableFrame.empty()
+    assert tf.is_empty()
+
+
+def test_from_none_dict():
+    tf = TableFrame.from_dict(None)
+    assert tf.is_empty()
+
+
+def test_from_empty_dict():
+    tf = TableFrame.from_dict({})
+    assert tf.is_empty()
+
+
+def test_from_no_row_dict():
+    tf = TableFrame.from_dict({"a": []})
+    assert tf.is_empty()
+
+
+def test_from_non_empty_dict():
+    tf = TableFrame.from_dict({"a": [1]})
+    assert not tf.is_empty()
+
+
+def test_from_none_pandas_none():
+    tf = TableFrame.from_pandas(None)
+    assert tf.is_empty()
+
+
+def test_from_empty_pandas():
+    df = pd.DataFrame()
+    tf = TableFrame.from_pandas(df)
+    assert tf.is_empty()
+
+
+def test_from_no_row_pandas():
+    df = pd.DataFrame({"a": []})
+    tf = TableFrame.from_pandas(df)
+    assert tf.is_empty()
+
+
+def test_from_non_empty_pandas():
+    df = pd.DataFrame({"a": [1]})
+    tf = TableFrame.from_pandas(df)
+    assert not tf.is_empty()
+
+
+def test_from_none_polars_none():
+    tf = TableFrame.from_polars(None)
+    assert tf.is_empty()
+
+
+def test_from_empty_polars():
+    df = pl.DataFrame()
+    tf = TableFrame.from_polars(df)
+    assert tf.is_empty()
+
+
+def test_from_no_row_polars():
+    df = pl.DataFrame({"a": []})
+    tf = TableFrame.from_polars(df)
+    assert tf.is_empty()
+
+
+def test_from_non_empty_polars():
+    df = pl.DataFrame({"a": [1]})
+    tf = TableFrame.from_polars(df)
+    assert not tf.is_empty()
+
+
+def test_from_none_tableframe_none():
+    tf = TableFrame.__build__(df=None, mode="raw", idx=None)
+    assert tf.is_empty()
+
+
+def test_from_empty_tableframe():
+    tf = TableFrame.__build__(df={}, mode="raw", idx=None)
+    assert tf.is_empty()
+
+
+def test_from_no_row_tableframe():
+    tf = TableFrame.__build__(df={"a": []}, mode="raw", idx=None)
+    assert tf.is_empty()
+
+
+def test_from_non_empty_tableframe():
+    tf = TableFrame.__build__(df={"a": [1]}, mode="raw", idx=None)
+    assert not tf.is_empty()
