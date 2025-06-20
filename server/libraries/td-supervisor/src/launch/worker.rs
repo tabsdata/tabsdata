@@ -41,6 +41,7 @@ pub trait Worker: Debug {
     fn work(
         &self,
         state: Option<String>,
+        detached: bool,
     ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError>;
 }
 
@@ -92,8 +93,9 @@ impl Worker for TabsDataWorker {
     fn work(
         &self,
         state: Option<String>,
+        detached: bool,
     ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError> {
-        match self.runner.run(self, state) {
+        match self.runner.run(self, state, detached) {
             Ok((worker, out, err)) => {
                 if let Some(id) = worker.id() {
                     let mut tracker = self.tracker().write().unwrap();

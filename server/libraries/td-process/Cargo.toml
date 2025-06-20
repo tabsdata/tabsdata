@@ -54,6 +54,7 @@ clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 config = { workspace = true, features = ["yaml"] }
 dir-size = { workspace = true }
+dunce = { workspace = true }
 getset = { workspace = true }
 ignore = { workspace = true }
 indexmap = { workspace = true }
@@ -65,6 +66,7 @@ sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
+windows = { workspace = true, features = ["Win32", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

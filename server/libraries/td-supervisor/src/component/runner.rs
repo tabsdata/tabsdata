@@ -40,6 +40,7 @@ pub trait WorkerRunner: Debug {
         &self,
         worker: &dyn Worker,
         state: Option<String>,
+        detached: bool,
     ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError>;
 }
 
@@ -64,11 +65,12 @@ impl WorkerRunner for TabsDataWorkerRunner {
         &self,
         worker: &dyn Worker,
         state: Option<String>,
+        detached: bool,
     ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError> {
         let current_dir = get_current_dir();
         debug!(
-            "Starting new worker from current directory: '{:?}'",
-            current_dir
+            "Starting new worker from current directory: '{:?}' (detached: '{}'",
+            current_dir, detached
         );
         debug!(
             "Worker current directory will be: '{:?}'",
@@ -130,6 +132,24 @@ impl WorkerRunner for TabsDataWorkerRunner {
             worker.describer().program(),
             worker.describer().arguments()
         );
+
+        #[cfg(windows)]
+        {
+            /*
+            Pending investigation. These options work but open a cmd window
+            is opened then for each sub-process, which is undesired.
+             */
+
+            /*
+            if detached {
+                use windows_sys::Win32::System::Threading::{
+                    CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, DETACHED_PROCESS,
+                };
+                command
+                    .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+            }
+             */
+        }
 
         let mut child = match command.spawn() {
             Ok(child) => child,
@@ -233,6 +253,7 @@ impl WorkerRunner for FunctionWorkerRunner {
         &self,
         _worker: &dyn Worker,
         _state: Option<String>,
+        _detached: bool,
     ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError> {
         unimplemented!()
     }

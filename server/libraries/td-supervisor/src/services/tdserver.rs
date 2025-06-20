@@ -910,7 +910,7 @@ fn command_start(arguments: StartArguments) {
             prepare(&supervisor_instance, false);
 
             set_log_level(Level::ERROR);
-            match TabsDataWorker::new(describer.clone()).work(None) {
+            match TabsDataWorker::new(describer.clone()).work(None, true) {
                 Ok((worker, _out, _err)) => {
                     if arguments.no_wait {
                         set_log_level(Level::INFO);

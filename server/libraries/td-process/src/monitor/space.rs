@@ -6,10 +6,9 @@ use dir_size::get_size_in_bytes;
 use ignore::WalkBuilder;
 use indexmap::IndexMap;
 use std::fs;
+use std::fs::Metadata;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt as UnixMetadataExt;
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt as WindowsMetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use td_common::env::{get_home_dir, TABSDATA_HOME_DIR};
@@ -137,7 +136,8 @@ fn get_uv_cache_dir() -> Option<PathBuf> {
     }
     let stdout = String::from_utf8(output.stdout).ok()?;
     let trimmed = stdout.trim();
-    Some(PathBuf::from(trimmed))
+    let path = PathBuf::from(trimmed);
+    Some(dunce::simplified(&path).to_path_buf())
 }
 
 fn folder_space(folder: PathBuf) -> (PathBuf, u64, String) {
@@ -161,7 +161,7 @@ fn folder_space_without_hardlinks(folder: PathBuf) -> (PathBuf, u64, String) {
         .filter_map(Result::ok)
         .filter_map(|entry| {
             let metadata = fs::metadata(entry.path()).ok()?;
-            let nlink = get_nlink(&metadata);
+            let nlink = get_nlink(entry.path(), &metadata);
             if nlink == 1 {
                 Some(metadata.len())
             } else {
@@ -172,15 +172,53 @@ fn folder_space_without_hardlinks(folder: PathBuf) -> (PathBuf, u64, String) {
     (folder, space, convert_to_human_gib(space, false))
 }
 
-fn get_nlink(metadata: &fs::Metadata) -> u64 {
+fn get_nlink(_path: &Path, _metadata: &Metadata) -> u64 {
     #[cfg(unix)]
     {
-        metadata.nlink()
+        _metadata.nlink()
     }
 
     #[cfg(windows)]
     {
-        metadata.number_of_links()
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PCWSTR;
+        use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+        use windows::Win32::Storage::FileSystem::{
+            CreateFileW, GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+            FILE_FLAG_BACKUP_SEMANTICS, FILE_GENERIC_READ, FILE_SHARE_READ, FILE_SHARE_WRITE,
+            OPEN_EXISTING,
+        };
+
+        let wide_path: Vec<u16> = OsStr::new(_path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        unsafe {
+            let handle = match CreateFileW(
+                PCWSTR(wide_path.as_ptr()),
+                FILE_GENERIC_READ.0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                None,
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS,
+                Some(HANDLE(std::ptr::null_mut())),
+            ) {
+                Ok(h) => h,
+                Err(_) => return 1,
+            };
+            if handle == INVALID_HANDLE_VALUE {
+                return 1;
+            }
+            let mut info = BY_HANDLE_FILE_INFORMATION::default();
+            let success = GetFileInformationByHandle(handle, &mut info).is_ok();
+            let _ = CloseHandle(handle);
+            if success {
+                info.nNumberOfLinks as u64
+            } else {
+                1
+            }
+        }
     }
 }
 

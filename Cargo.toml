@@ -334,6 +334,9 @@ version = "0.1.1"
 [workspace.dependencies.duct]
 version = "0.13.7"
 
+[workspace.dependencies.dunce]
+version = "1.0.5"
+
 [workspace.dependencies.futures]
 version = "0.3.31"
 
@@ -478,7 +481,7 @@ version = "0.27.1"
 version = "3.0.2"
 
 [workspace.dependencies.sysinfo]
-version = "0.32.1"
+version = "0.35.2"
 
 [workspace.dependencies.tempfile]
 version = "3.20.0"
@@ -560,8 +563,14 @@ version = "1.6.0"
 [workspace.dependencies.wildmatch]
 version = "2.4.0"
 
+# Update with care. There are some yanked versions after this, and 0.61.3, latesy
+# when writing this (2025.06.19) breaks the code.
 [workspace.dependencies.windows]
-version = "0.59.0"
+version = "0.60.0"
+features = ["Win32", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"]
+
+[workspace.dependencies.windows-sys]
+version = "0.60.2"
 features = ["Win32", "Win32_System_Threading"]
 
 [build-dependencies]

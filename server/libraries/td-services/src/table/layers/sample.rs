@@ -151,12 +151,22 @@ mod tests {
         let mount_def = td_storage::MountDef::builder()
             .id("root")
             .path("/")
-            .uri(format!("file://{}/", test_dir.to_str().unwrap()))
+            .uri(format!(
+                "{}{}/",
+                if cfg!(windows) { "file:///" } else { "file://" },
+                test_dir.to_str().unwrap()
+            ))
             .build()?;
         let storage = td_storage::Storage::from(vec![mount_def]).await?;
         let table_path = SPath::parse("/my_table.parquet")?;
         let (uri, _) = storage.to_external_uri(&table_path)?;
-        create_table_file(Path::new(uri.path()));
+        let raw_path = uri.path();
+        let adjusted_path = if cfg!(windows) && raw_path.starts_with('/') {
+            &raw_path[1..]
+        } else {
+            raw_path
+        };
+        create_table_file(Path::new(adjusted_path));
 
         let stream = get_table_sample(
             SrvCtx::new(storage),

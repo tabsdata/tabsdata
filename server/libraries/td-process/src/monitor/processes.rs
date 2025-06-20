@@ -43,7 +43,7 @@ pub fn get_process_tree(pid: i32) -> Vec<ProcessDistilled> {
     system.refresh_processes_specifics(
         ProcessesToUpdate::All,
         true,
-        ProcessRefreshKind::new().with_cpu(),
+        ProcessRefreshKind::default().with_cpu(),
     );
     process_tree(&system, Pid::from_u32(pid as u32), 0, Default::default())
 }
@@ -83,7 +83,7 @@ fn process_tree(
     let exec = base_name.trim_matches('"');
 
     // In some well-known case, we try to infer a best name to be more informative:
-    let mut name = if exec == "python" {
+    let mut name = if exec == "python" || exec == "python.exe" {
         // If running python, we try to infer the actual module being run.
         if let Some(idx) = cmd.iter().position(|arg| arg == "-m") {
             // If running a module, we extract its name, and alias it if existing in the aliases map.

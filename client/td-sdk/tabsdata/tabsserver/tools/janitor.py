@@ -34,6 +34,12 @@ def setup_signal_handlers():
     signal.signal(signal.SIGTERM, handle_signal)
     if sys.platform == "win32":
         signal.signal(signal.SIGBREAK, handle_signal)
+        try:
+            import win32api
+
+            win32api.SetConsoleCtrlHandler(handle_signal, True)
+        except ImportError:
+            pass
 
 
 def delete_file(file: Path):

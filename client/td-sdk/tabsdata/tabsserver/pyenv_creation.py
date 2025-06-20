@@ -13,6 +13,7 @@ import os
 import os.path
 import pathlib
 import pkgutil
+import platform
 import re
 import shutil
 import subprocess
@@ -163,6 +164,20 @@ def delete_virtual_environment(
                 "No remnants of Python virtual environment"
                 f" {logical_environment_name} with real name {real_environment_name} "
                 "found"
+            )
+        return False
+    except Exception as e:
+        if log_error_on_fail:
+            logger.error(
+                "Fatal error deleting the Python virtual environment"
+                f" {logical_environment_name} with real name"
+                f" {real_environment_name}: {e}"
+            )
+        else:
+            logger.info(
+                "The environment could be totally deleted dur to an internal error:"
+                f" {logical_environment_name} with real name {real_environment_name} - "
+                "{e}"
             )
         return False
     else:
@@ -986,9 +1001,6 @@ def install_python_version(python_version: str) -> None:
         [
             UV_EXECUTABLE,
             "python",
-            "install",
-            "--link-mode",
-            "hardlink",
             "-v",
             "-n",
             python_version,
@@ -996,10 +1008,15 @@ def install_python_version(python_version: str) -> None:
     )
     logger.debug(f"Running command: {command}")
     result = subprocess.run(command, shell=True)
+    # On Windows, exit status 2 means that the Python version is already installed,
+    ok_codes = (0, 2) if platform.system() == "Windows" else (0,)
     # Check if the Python version is not found
-    if result.returncode != 0:
+    if result.returncode not in ok_codes:
         logger.error(f"Failed to install Python version '{python_version}'.")
-        logger.error(f"ERROR: '{str(result.stderr)}'")
+        logger.error(
+            f"RESULT: '{str(result.returncode)}' - '{str(result.stdout)}' -"
+            f" '{str(result.stderr)}'"
+        )
         logger.error("Please check the Python version number provided and try again.")
         return None
     else:
@@ -1007,6 +1024,7 @@ def install_python_version(python_version: str) -> None:
             f"Python version {python_version} installed successfully or "
             "already existed."
         )
+        return None
 
 
 PackageProvider: TypeAlias = Literal[

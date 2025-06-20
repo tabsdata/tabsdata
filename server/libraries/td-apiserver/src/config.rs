@@ -315,11 +315,29 @@ mod tests {
             resolved_config.addresses(),
             &vec!["127.0.0.1:8080".parse().unwrap()]
         );
+        #[cfg(target_os = "windows")]
+        assert_eq!(
+            resolved_config.database().url().as_ref().unwrap(),
+            "file:///c:/test.db"
+        );
+        #[cfg(not(target_os = "windows"))]
         assert_eq!(
             resolved_config.database().url().as_ref().unwrap(),
             "file:///test.db"
         );
         assert!(resolved_config.clone().storage.is_some());
+        #[cfg(target_os = "windows")]
+        assert_eq!(
+            resolved_config
+                .clone()
+                .storage
+                .unwrap()
+                .url()
+                .as_ref()
+                .unwrap(),
+            "file:///c:/storage"
+        );
+        #[cfg(not(target_os = "windows"))]
         assert_eq!(
             resolved_config
                 .clone()

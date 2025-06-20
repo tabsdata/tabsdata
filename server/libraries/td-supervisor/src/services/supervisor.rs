@@ -1406,7 +1406,7 @@ impl Supervisor {
         }
 
         let td_worker = TabsDataWorker::new(describer.clone());
-        match td_worker.work(work_get_state) {
+        match td_worker.work(work_get_state, false) {
             Ok((mut child, _out, _err)) => {
                 if let Some(message) = message {
                     let start = match start {
