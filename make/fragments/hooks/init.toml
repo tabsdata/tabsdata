@@ -10,6 +10,8 @@ script = [
 
     cm_run_task splash
 
+    info "🐢 Runnning task: ${CARGO_MAKE_TASK}"
+
     os = os_family
     info "🏈 Current os: ${os}"
     if eq ${os} "windows"
@@ -75,6 +77,11 @@ script = [
     PATH = get_env PATH
     debug "✅ Real PATH: ${PATH}"
 
-    cm_run_task permit
+    make_task = get_env CARGO_MAKE_TASK
+    if eq ${make_task} "docs"
+        noop
+    else
+        cm_run_task permit
+    end
     ''']
 
