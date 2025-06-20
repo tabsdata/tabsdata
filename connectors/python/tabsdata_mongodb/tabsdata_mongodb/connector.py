@@ -151,7 +151,7 @@ class MongoDBDestination(DestinationPlugin):
         else:
             raise TypeError(
                 "The 'collections_with_ids' parameter must be a tuple or a list of "
-                f"tuples, got '{type(collections_with_ids)}0 instead."
+                f"tuples, got '{type(collections_with_ids)}' instead."
             )
 
     @property

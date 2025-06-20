@@ -77,6 +77,7 @@ from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import TableURI
 from tabsdata.tabsdatafunction import TabsdataFunction
 from tabsdata.tabsserver.function.execution_exceptions import CustomException
+from tabsdata_databricks.connector import DatabricksDestination
 from tabsdata_mongodb.connector import MongoDBDestination
 from tabsdata_salesforce.connector import SalesforceSource
 from tabsdata_snowflake.connector import SnowflakeDestination
@@ -173,6 +174,8 @@ __all__ = [
     UInt16,
     UInt32,
     UInt64,
+    # From tabsdata_databricks.connector
+    "DatabricksDestination",
     # From tabsdata_mongodb.connector
     "MongoDBDestination",
     # From tabsdata_salesforce.connector

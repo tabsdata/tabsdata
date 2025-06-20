@@ -79,6 +79,14 @@ def clean_py(project_folder):
         "tdlocal",
         "local_development_artifacts",
         "client/td-sdk/tabsdata/assets",
+        (
+            "connectors/python/tabsdata_databricks/tabsdata_databricks/"
+            "assets/manifest/BANNER"
+        ),
+        (
+            "connectors/python/tabsdata_databricks/tabsdata_databricks/"
+            "assets/manifest/LICENSE"
+        ),
         "connectors/python/tabsdata_mongodb/tabsdata_mongodb/assets/manifest/BANNER",
         "connectors/python/tabsdata_mongodb/tabsdata_mongodb/assets/manifest/LICENSE",
         (

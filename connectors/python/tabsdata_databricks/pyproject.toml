@@ -1,0 +1,40 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+[build-system]
+requires = ["psutil>=7.0", "setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+preview = true
+enable-unstable-feature = ["string_processing"]
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_also = [
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+    ]
+
+[tool.isort]
+profile = "black"
+known_first_party = [
+    "tabsdata",
+    "tabsdata_databricks",
+    "tabsdata_mongodb",
+    "tabsdata_salesforce",
+    "tabsdata_snowflake",
+    "td_features",
+    "ta_tableframe",
+    "te_tableframe",
+    "td_sdk",
+    "tests",
+]
+
+[tool.licensecheck]
+using = "requirements:requirements.txt"

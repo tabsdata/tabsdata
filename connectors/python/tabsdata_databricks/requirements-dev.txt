@@ -1,0 +1,6 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+-r requirements/requirements-dev-first-party.txt
+-r requirements/requirements-dev-third-party.txt

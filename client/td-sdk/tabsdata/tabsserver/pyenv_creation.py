@@ -47,6 +47,7 @@ from tabsdata.utils.bundle_utils import (
     PYTHON_VERSION_KEY,
 )
 from tabsdata.utils.constants import (
+    TABSDATA_DATABRICKS_MODULE_NAME,
     TABSDATA_MODULE_NAME,
     TABSDATA_MONGODB_MODULE_NAME,
     TABSDATA_SALESFORCE_MODULE_NAME,
@@ -85,6 +86,7 @@ TARGET_FOLDER = "target"
 PYTHON_BASE_VERSION = "3.12"
 
 TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
+TD_TABSDATA_DATABRICKS_DEV_PKG = "TD_TABSDATA_DATABRICKS_DEV_PKG"
 TD_TABSDATA_MONGODB_DEV_PKG = "TD_TABSDATA_MONGODB_DEV_PKG"
 TD_TABSDATA_SALESFORCE_DEV_PKG = "TD_TABSDATA_SALESFORCE_DEV_PKG"
 TD_TABSDATA_SNOWFLAKE_DEV_PKG = "TD_TABSDATA_SNOWFLAKE_DEV_PKG"
@@ -97,6 +99,7 @@ PYTHON_VERSION_LOCK_TIMEOUT = 10  # 10 seconds
 
 TABSDATA_PACKAGES = [
     TABSDATA_MODULE_NAME,
+    TABSDATA_DATABRICKS_MODULE_NAME,
     TABSDATA_MONGODB_MODULE_NAME,
     TABSDATA_SALESFORCE_MODULE_NAME,
     TABSDATA_SNOWFLAKE_MODULE_NAME,
@@ -1137,6 +1140,30 @@ def main():
         delete=False,
     ) as requirements_file:
         development_packages = []
+
+        # tabsdata-databricks connector (start)
+
+        tabsdata_databricks_provider, tabsdata_databricks_location = (
+            get_tabsdata_package_metadata(
+                TABSDATA_DATABRICKS_MODULE_NAME, TD_TABSDATA_DATABRICKS_DEV_PKG
+            )
+        )
+        logger.info(
+            "Module tabsdata_databricks classified as: "
+            f"provider: {tabsdata_databricks_provider} - "
+            f"location: {tabsdata_databricks_location}"
+        )
+
+        if tabsdata_databricks_provider in (
+            "Archive (Project)",
+            "Archive (Folder)",
+            "Archive (Wheel)",
+            "Folder (Editable)",
+            "Folder (Frozen)",
+        ):
+            development_packages.append(str(tabsdata_databricks_location))
+
+        # tabsdata-databricks connector (end)
 
         # tabsdata-mongodb connector (start)
 

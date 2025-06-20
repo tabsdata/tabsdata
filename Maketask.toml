@@ -83,7 +83,7 @@ script = [
 
     info "✂️️ Unistalling..."
     cm_run_task uninstall
-    exec --fail-on-error pip uninstall tabsdata tabsdata-mongodb tabsdata-salesforce tabsdata-snowflake --yes
+    exec --fail-on-error pip uninstall tabsdata tabsdata-databricks tabsdata-mongodb tabsdata-salesforce tabsdata-snowflake --yes
 
     info "🧹️ Cleaning..."
     cm_run_task clean
@@ -1108,6 +1108,7 @@ run_task = [
 run_task = [
     { name = [
         "package_py_tabsdata",
+        "package_py_tabsdata_databricks",
         "package_py_tabsdata_mongodb",
         "package_py_tabsdata_salesforce",
         "package_py_tabsdata_snowflake",
@@ -1122,6 +1123,16 @@ script = [
     echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
     ''']
+
+[tasks.package_py_tabsdata_databricks]
+cwd = "${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored"
+    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist --formats=tar bdist_wheel --dist-dir target/python/dist --compression stored
+    ''']
+
 
 [tasks.package_py_tabsdata_mongodb]
 cwd = "${PROJECT_PY_TABSDATA_MONGODB_FOLDER}"
@@ -1165,6 +1176,7 @@ run_task = [
 run_task = [
     { name = [
         "assembly_py_tabsdata",
+        "assembly_py_tabsdata_databricks",
         "assembly_py_tabsdata_mongodb",
         "assembly_py_tabsdata_salesforce",
         "assembly_py_tabsdata_snowflake",
@@ -1179,6 +1191,39 @@ script = [
     !include_files ./make/libraries/log.ds
 
     cd "${ROOT_PROJECT_TABSDATA_FOLDER}"
+
+    td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
+    if eq ${td_pypi_linked} ""
+        info "🔗 Unespecified link to python repository status... defaulting to true"
+        td_pypi_linked = set "true"
+    else
+        info "🔗 Specified link to python repository status: true"
+    end
+    if eq ${td_pypi_linked} "true"
+        set_env REQUIRE_SERVER_BINARIES "true"
+        set_env REQUIRE_THIRD_PARTY "true"
+        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+        set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    else
+        set_env REQUIRE_SERVER_BINARIES "false"
+        set_env REQUIRE_THIRD_PARTY "false"
+        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
+        set_env TD_SKIP_NON_EXISTING_ASSETS "true"
+    end
+    # This must be false when using a local PyPi reopsitory.
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
+
+    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+    ''']
+
+[tasks.assembly_py_tabsdata_databricks]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}"
 
     td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
     if eq ${td_pypi_linked} ""
@@ -1340,12 +1385,50 @@ run_task = [
 [tasks.install_py]
 run_task = [
     { name = [
+        "install_py_tabsdata_databricks",
         "install_py_tabsdata_mongodb",
         "install_py_tabsdata_salesforce",
         "install_py_tabsdata_snowflake",
         "install_py_tabsdata",
     ] }
 ]
+
+[tasks.install_py_tabsdata_databricks]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}"
+
+    td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
+    if eq ${td_pypi_linked} ""
+        info "🔗 Unespecified link to python repository status... defaulting to true"
+        td_pypi_linked = set "true"
+    else
+        info "🔗 Specified link to python repository status: true"
+    end
+    if eq ${td_pypi_linked} "true"
+        set_env REQUIRE_SERVER_BINARIES "true"
+        set_env REQUIRE_THIRD_PARTY "true"
+        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+        set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    else
+        set_env REQUIRE_SERVER_BINARIES "false"
+        set_env REQUIRE_THIRD_PARTY "false"
+        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
+        set_env TD_SKIP_NON_EXISTING_ASSETS "true"
+    end
+    # This must be false when using a local PyPi reopsitory.
+    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
+
+    exec --fail-on-error pip uninstall tabsdata_databricks --yes
+    wheels = glob_array ./target/python/dist/tabsdata_databricks*.whl
+    for wheel in ${wheels}
+        echo "Running command: pip install ${wheel}"
+        exec --fail-on-error pip install ${wheel}
+    end
+    ''']
 
 [tasks.install_py_tabsdata_mongodb]
 script_runner = "@duckscript"
@@ -1509,6 +1592,7 @@ run_task = [
 run_task = [
     { name = [
         "uninstall_py_tabsdata",
+        "uninstall_py_tabsdata_databricks",
         "uninstall_py_tabsdata_mongodb",
         "uninstall_py_tabsdata_salesforce",        
         "uninstall_py_tabsdata_snowflake",
@@ -1525,6 +1609,18 @@ script = [
     exec pip cache remove tabsdata
     exec python setup.py --quiet clean --all
     rm -r ${ROOT_PROJECT_TABSDATA_FOLDER}/target/python/
+    ''']
+
+[tasks.uninstall_py_tabsdata_databricks]
+cwd = "${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    exec --fail-on-error pip uninstall tabsdata_databricks --yes
+    exec uv cache clean tabsdata_databricks
+    exec pip cache remove tabsdata_databricks
+    exec python setup.py --quiet clean --all
+    rm -r ${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}/target/python/
     ''']
 
 [tasks.uninstall_py_tabsdata_mongodb]

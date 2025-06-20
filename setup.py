@@ -448,6 +448,9 @@ setup(
     python_requires=">=3.12",
     install_requires=read_requirements("requirements.txt"),
     extras_require={
+        "databricks": read_requirements(
+            "requirements/requirements-connector-databricks.txt"
+        ),
         "mongodb": read_requirements("requirements/requirements-connector-mongodb.txt"),
         "salesforce": read_requirements(
             "requirements/requirements-connector-salesforce.txt"

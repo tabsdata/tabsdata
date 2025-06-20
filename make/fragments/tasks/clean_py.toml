@@ -11,6 +11,7 @@ run_task = [
         "clean_py_ta_tableframe",
         "clean_py_te_tableframe",
         "clean_py_tabsdata",
+        "clean_py_tabsdata_databricks",
         "clean_py_tabsdata_mongodb",
         "clean_py_tabsdata_salesforce",
         "clean_py_tabsdata_snowflake",
@@ -47,6 +48,12 @@ category = "01 - Clean"
 private = true
 command = "python"
 args = ["${CLEAN_PY}", "${PROJECT_PY_TD_SDK_FOLDER}", "py"]
+
+[tasks.clean_py_tabsdata_databricks]
+category = "01 - Clean"
+private = true
+command = "python"
+args = ["${CLEAN_PY}", "${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}", "py"]
 
 [tasks.clean_py_tabsdata_mongodb]
 category = "01 - Clean"

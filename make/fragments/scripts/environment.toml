@@ -72,6 +72,7 @@ env_scripts = [
 
     root_folder = get_env ROOT_PROJECT_TABSDATA_FOLDER
     root_tabsdata_folder = set ${root_folder}
+    root_tabsdata_databricks_folder = set ${root_folder}/connectors/python/tabsdata_databricks
     root_tabsdata_mongodb_folder = set ${root_folder}/connectors/python/tabsdata_mongodb
     root_tabsdata_salesforce_folder = set ${root_folder}/connectors/python/tabsdata_salesforce
     root_tabsdata_snowflake_folder = set ${root_folder}/connectors/python/tabsdata_snowflake
@@ -144,6 +145,7 @@ env_scripts = [
     debug "✅ RUSTFLAGS environment variable is: '${rustflags}'"
 
     old_path = get_env PATH
+    new_path = concat ${root_tabsdata_databricks_folder}/target/${build-folder} ${separator} ${root_tabsdata_databricks_folder}/target/pytest/build ${separator} ${old_path}
     new_path = concat ${root_tabsdata_mongodb_folder}/target/${build-folder} ${separator} ${root_tabsdata_mongodb_folder}/target/pytest/build ${separator} ${old_path}
     new_path = concat ${root_tabsdata_salesforce_folder}/target/${build-folder} ${separator} ${root_tabsdata_salesforce_folder}/target/pytest/build ${separator} ${old_path}
     new_path = concat ${root_tabsdata_snowflake_folder}/target/${build-folder} ${separator} ${root_tabsdata_snowflake_folder}/target/pytest/build ${separator} ${old_path}

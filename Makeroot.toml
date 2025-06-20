@@ -39,6 +39,7 @@ PROJECT_PY_TA_FEATURES_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/clien
 PROJECT_PY_TA_TABLEFRAME_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/client/td-lib/ta_tableframe/", normalize = true }
 PROJECT_PY_TE_TABLEFRAME_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/extensions/python/td-lib/te_tableframe/", normalize = true }
 PROJECT_PY_TD_SDK_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/client/td-sdk/", normalize = true }
+PROJECT_PY_TABSDATA_DATABRICKS_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/connectors/python/tabsdata_databricks/", normalize = true }
 PROJECT_PY_TABSDATA_MONGODB_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/connectors/python/tabsdata_mongodb/", normalize = true }
 PROJECT_PY_TABSDATA_SALESFORCE_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/connectors/python/tabsdata_salesforce/", normalize = true }
 PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER = { value = "${ROOT_PROJECT_TABSDATA_FOLDER}/connectors/python/tabsdata_snowflake/", normalize = true }
@@ -53,6 +54,7 @@ TESTS_PY_TA_FEATURES_FOLDER = { value = "tests_ta_features/", normalize = true }
 TESTS_PY_TA_TABLEFRAME_FOLDER = { value = "tests_ta_tableframe/", normalize = true }
 TESTS_PY_TE_TABLEFRAME_FOLDER = { value = "tests_te_tableframe/", normalize = true }
 TESTS_PY_TABSDATA_FOLDER = { value = "tests_tabsdata/", normalize = true }
+TESTS_PY_TABSDATA_DATABRICKS_FOLDER = { value = "tests_tabsdata_databricks/", normalize = true }
 TESTS_PY_TABSDATA_MONGODB_FOLDER = { value = "tests_tabsdata_mongodb/", normalize = true }
 TESTS_PY_TABSDATA_SALESFORCE_FOLDER = { value = "tests_tabsdata_salesforce/", normalize = true }
 TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER = { value = "tests_tabsdata_snowflake/", normalize = true }

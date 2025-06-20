@@ -3,6 +3,7 @@
 #
 
 -r requirements-third-party.txt
+-r ../connectors/python/tabsdata_databricks/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata_mongodb/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata_salesforce/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata_snowflake/requirements/requirements-third-party.txt

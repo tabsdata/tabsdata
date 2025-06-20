@@ -204,6 +204,16 @@ def enrich_sys_path():
                 root,
                 "connectors",
                 "python",
+                "tabsdata_databricks",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "connectors",
+                "python",
                 "tabsdata_mongodb",
             )
         ),

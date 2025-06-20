@@ -260,7 +260,7 @@ class SnowflakeDestination(DestinationPlugin):
 
     def chunk(
         self, working_dir: str, *results: pl.LazyFrame | None
-    ) -> List[None | List[str]]:
+    ) -> List[None | str]:
         list_of_files = []
         logger.info("Chunking the results")
         for index, result in enumerate(results):
