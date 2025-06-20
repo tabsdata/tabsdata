@@ -5,12 +5,12 @@
 use crate::crudl::RequestContext;
 use crate::rest_urls::{
     AtTimeParam, CollectionParam, FileFormat, FileFormatParam, FunctionParam, SampleOffsetLenParam,
-    TableParam,
+    SqlParam, TableParam,
 };
 use crate::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
     FunctionName, FunctionVersionId, Partitioned, Private, SampleLen, SampleOffset,
-    SchemaFieldName, SchemaFieldType, TableDataVersionId, TableFunctionParamPos, TableId,
+    SchemaFieldName, SchemaFieldType, Sql, TableDataVersionId, TableFunctionParamPos, TableId,
     TableIdName, TableName, TableStatus, TableVersionId, UserId, UserName,
 };
 use crate::types::function::FunctionDB;
@@ -67,6 +67,7 @@ pub struct TableDBWithNames {
     collection_id: CollectionId,
     #[td_type(extractor)]
     table_id: TableId,
+    #[td_type(extractor)]
     name: TableName,
     function_id: FunctionId,
     #[td_type(extractor)]
@@ -154,6 +155,8 @@ pub struct TableSampleAtName {
     len: SampleLen,
     #[td_type(extractor)]
     format: FileFormat,
+    #[td_type(extractor)]
+    sql: Option<Sql>,
 }
 
 impl TableSampleAtName {
@@ -162,6 +165,7 @@ impl TableSampleAtName {
         at: AtTimeParam,
         offset_len: SampleOffsetLenParam,
         format: FileFormatParam,
+        sql: SqlParam,
     ) -> Self {
         Self {
             collection: table.collection().clone(),
@@ -170,6 +174,7 @@ impl TableSampleAtName {
             offset: offset_len.offset().clone(),
             len: offset_len.len().clone(),
             format: format.format().clone(),
+            sql: sql.sql().clone(),
         }
     }
 }

@@ -312,9 +312,12 @@ impl RoleName {
 #[td_type::typed(i64(min = 0, default = 0))]
 pub struct SampleOffset;
 
-#[td_type::typed(i64(min = 0, max = 1000, default = 100))]
+#[td_type::typed(i64(min = 0, max = SampleLen::MAX, default = 100))]
 pub struct SampleLen;
 
+impl SampleLen {
+    pub const MAX: i64 = 1000;
+}
 #[td_type::typed(string)]
 pub struct SchemaFieldName;
 
@@ -345,6 +348,9 @@ pub enum SessionStatus {
 
 #[td_type::typed(string(min_len = 0, max_len = 4096))]
 pub struct Snippet;
+
+#[td_type::typed(string)]
+pub struct Sql;
 
 #[td_type::typed(string(min_len = 1, max_len = 10, default = "V1"))]
 pub struct StorageVersion;

@@ -12,10 +12,12 @@ use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::basic::{CollectionId, CollectionIdName, SampleLen, SampleOffset};
+use td_objects::types::basic::{
+    CollectionId, CollectionIdName, SampleLen, SampleOffset, Sql, TableName,
+};
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::stream::BoxedSyncStream;
-use td_objects::types::table::TableSampleAtName;
+use td_objects::types::table::{TableDBWithNames, TableSampleAtName};
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -50,6 +52,8 @@ fn provider() {
         from_fn(With::<TableSampleAtName>::extract::<SampleOffset>),
         from_fn(With::<TableSampleAtName>::extract::<SampleLen>),
         from_fn(With::<TableSampleAtName>::extract::<FileFormat>),
+        from_fn(With::<TableDBWithNames>::extract::<TableName>),
+        from_fn(With::<TableSampleAtName>::extract::<Option<Sql>>),
         from_fn(get_table_sample),
     )
 }
@@ -69,7 +73,9 @@ mod tests {
     use td_common::absolute_path::AbsolutePath;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
-    use td_objects::rest_urls::{AtTimeParam, FileFormatParam, SampleOffsetLenParam, TableParam};
+    use td_objects::rest_urls::{
+        AtTimeParam, FileFormatParam, SampleOffsetLenParam, SqlParam, TableParam,
+    };
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_execution::seed_execution;
@@ -97,7 +103,7 @@ mod tests {
     async fn test_tower_metadata_sample_service(db: DbPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::tower_service::from::combine;
-        use td_objects::types::basic::{TableId, TableIdName, TableStatus};
+        use td_objects::types::basic::{Sql, TableId, TableIdName, TableStatus};
         use td_objects::types::execution::{TableDataVersionDBRead, TransactionStatus};
         use td_objects::types::table::TableDBWithNames;
 
@@ -165,6 +171,8 @@ mod tests {
             type_of_val(&With::<TableSampleAtName>::extract::<SampleOffset>),
             type_of_val(&With::<TableSampleAtName>::extract::<SampleLen>),
             type_of_val(&With::<TableSampleAtName>::extract::<FileFormat>),
+            type_of_val(&With::<TableDBWithNames>::extract::<TableName>),
+            type_of_val(&With::<TableSampleAtName>::extract::<Option<Sql>>),
             type_of_val(&get_table_sample),
         ]);
     }
@@ -317,6 +325,7 @@ mod tests {
                 FileFormatParam::builder()
                     .format(FileFormat::Parquet)
                     .build()?,
+                SqlParam::builder().sql(None).build()?,
             ));
             let response = service.raw_oneshot(request).await;
             match response {

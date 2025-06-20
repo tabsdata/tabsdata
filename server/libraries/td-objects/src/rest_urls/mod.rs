@@ -4,7 +4,7 @@
 
 use crate::types::basic::{
     AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
-    InterCollectionPermissionIdName, PermissionIdName, RoleIdName, SampleLen, SampleOffset,
+    InterCollectionPermissionIdName, PermissionIdName, RoleIdName, SampleLen, SampleOffset, Sql,
     TableIdName, TransactionIdName, UserIdName, WorkerMessageIdName,
 };
 use constcat::concat;
@@ -192,6 +192,13 @@ pub enum FileFormat {
     Parquet,
     Csv,
     Json,
+}
+
+#[td_type::QueryParam]
+pub struct SqlParam {
+    #[td_type(extractor)]
+    #[serde(default)]
+    sql: Option<Sql>,
 }
 
 // Tables

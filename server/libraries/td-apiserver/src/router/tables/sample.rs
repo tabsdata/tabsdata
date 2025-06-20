@@ -14,7 +14,7 @@ use axum_extra::extract::Query;
 use td_apiforge::{apiserver_path, apiserver_schema};
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{
-    AtTimeParam, FileFormatParam, SampleOffsetLenParam, TableParam, SAMPLE_TABLE,
+    AtTimeParam, FileFormatParam, SampleOffsetLenParam, SqlParam, TableParam, SAMPLE_TABLE,
 };
 use td_objects::types::table::TableSampleAtName;
 use td_tower::ctx_service::IntoData;
@@ -43,8 +43,15 @@ pub async fn sample(
     Query(at_param): Query<AtTimeParam>,
     Query(offset_len_param): Query<SampleOffsetLenParam>,
     Query(file_format_param): Query<FileFormatParam>,
+    Query(sql_param): Query<SqlParam>,
 ) -> Result<impl IntoResponse, GetErrorStatus> {
-    let name = TableSampleAtName::new(table_param, at_param, offset_len_param, file_format_param);
+    let name = TableSampleAtName::new(
+        table_param,
+        at_param,
+        offset_len_param,
+        file_format_param,
+        sql_param,
+    );
     let request = context.read(name);
     let sample = tables.table_sample_service().await.oneshot(request).await?;
     let stream = sample.into_data();
