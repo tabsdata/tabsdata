@@ -622,8 +622,8 @@ setup(
             "td = tabsdata.cli.cli:cli",
             # Supervisor init workers
             "tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
+            "tdsrvinf = tabsdata.tabsserver.tools.server_info:main",
             "tdmntext = tabsdata.tabsserver.tools.mount_extractor:main",
-            "tduvinfo = tabsdata.tabsserver.tools.uv_analyzer:main",
             # Supervisor regular workers
             "janitor = tabsdata.tabsserver.tools.janitor:main",
             # Supervisor tools

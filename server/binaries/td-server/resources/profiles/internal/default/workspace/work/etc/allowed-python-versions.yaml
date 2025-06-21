@@ -3,18 +3,20 @@
 #
 
 # Allowed Python Versions
-#
+
 # You may edit this file to define which specific Python versions are allowed.
-#
+
 # If the file is empty, all supported Python versions are accepted by default.
-#
+
 # Only exact version identifiers are allowed (e.g. 3.11.7, 3.10.0).
 # Wildcards, ranges, or exclusion prefixes like `!` are not supported.
-#
+
 # This file is never modified by the system under any circumstance. It is
 # entirely managed by the system administrator.
 
-# Examples:
-#     3.10.0
-#     3.11.7
-#     3.12.3
+# Example:
+
+# versions:
+#  - 3.10.0
+#  - 3.11.7
+#  - 3.12.3

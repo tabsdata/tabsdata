@@ -44,15 +44,15 @@ controllers:
           - repository
           - workspace
           - profile
-      - name: uvinfo
+      - name: server-information
         kind: processor
         location: system
-        program: tduvinfo
+        program: tdsrvinf
         parameters:
-          - output: versions
-          - file: ${TD_PATH_INSTANCE}/workspace/work/etc/server.yaml
-          - allowed_python_versions: allowed-py.yaml
-          - allowed_packages_versions: allowed-pkg.yaml
+          - etc: ${TD_PATH_INSTANCE}/workspace/work/etc
+          - available-python-versions-file: available-python-versions.yaml
+          - server-build-manifest-file: server-build-manifest.yaml
+          - server-version-file: server-version.yaml
       - name: apiserver-configuration-resolver
         kind: processor
         location: system

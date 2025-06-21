@@ -4,6 +4,7 @@
 
 use getset::Getters;
 use td_common::server::etc_service;
+use td_common::server::EtcContent::AvailablePythonVersions_yaml;
 use td_error::{td_error, TdError};
 use td_objects::types::runtime_info::RuntimeInfo;
 use tracing::warn;
@@ -17,18 +18,19 @@ pub enum RuntimeInfoError {
     ReadError(String, String) = 0,
 }
 
-const PYTHON_VERSIONS_KEY: &str = "pyversions.yaml";
-
 async fn runtime_info() -> Result<RuntimeInfo, TdError> {
-    let data = etc_service().await?.read(PYTHON_VERSIONS_KEY).await?;
+    let data = etc_service()
+        .await?
+        .read(&AvailablePythonVersions_yaml)
+        .await?;
     let info = match data {
         Some(data) => serde_yaml::from_slice::<RuntimeInfo>(&data).map_err(|err| {
-            RuntimeInfoError::ReadError(PYTHON_VERSIONS_KEY.to_string(), err.to_string())
+            RuntimeInfoError::ReadError(AvailablePythonVersions_yaml.to_string(), err.to_string())
         })?,
         None => {
             warn!(
                 "etc resource '{}' not found, using default runtime info",
-                PYTHON_VERSIONS_KEY
+                AvailablePythonVersions_yaml
             );
             RuntimeInfo::builder().build()?
         }
@@ -57,6 +59,6 @@ mod tests {
     async fn test_runtime_info() {
         let res = RuntimeContext::new().await;
         assert!(res.is_ok());
-        assert!(res.unwrap().info().python_versions().is_empty());
+        assert!(res.unwrap().info().versions().is_empty());
     }
 }

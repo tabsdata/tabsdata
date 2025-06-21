@@ -7,5 +7,5 @@ use crate::types::basic::PythonVersion;
 #[td_type::Dto]
 pub struct RuntimeInfo {
     #[builder(default)]
-    python_versions: Vec<PythonVersion>,
+    versions: Vec<PythonVersion>,
 }

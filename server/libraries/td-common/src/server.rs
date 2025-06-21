@@ -32,6 +32,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_yaml::{Mapping, Value};
 use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Formatter;
 use std::fs::{create_dir_all, read_dir, remove_file, rename, File};
 use std::io::{Error, Write};
 use std::marker::PhantomData;
@@ -931,6 +933,38 @@ mod tests_queue {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+pub enum EtcContent {
+    AllowedPythonVersions_yaml,
+    AllowedRequirements_txt,
+    AvailablePythonVersions_yaml,
+    ServerBuildManifest_yaml,
+}
+
+impl EtcContent {
+    fn file(&self) -> &'static str {
+        match self {
+            EtcContent::AllowedPythonVersions_yaml => "allowed-python-versions.yaml",
+            EtcContent::AllowedRequirements_txt => "allowed-requirements.txt",
+            EtcContent::AvailablePythonVersions_yaml => "available-python-versions.yaml",
+            EtcContent::ServerBuildManifest_yaml => "server-build-manifest.yaml",
+        }
+    }
+}
+
+impl fmt::Display for EtcContent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            EtcContent::AllowedPythonVersions_yaml => "Allowed Python Versions",
+            EtcContent::AllowedRequirements_txt => "Allowed Requirements",
+            EtcContent::AvailablePythonVersions_yaml => "Available Python Versions",
+            EtcContent::ServerBuildManifest_yaml => "Server Build Manifest",
+        };
+        write!(f, "{}", name)
+    }
+}
+
 #[td_error]
 pub enum EtcError {
     #[error("Error creating the etc store instance '{location}': {cause}")]
@@ -1024,19 +1058,19 @@ pub async fn etc_service() -> Result<Box<dyn EtcStore + Send + Sync>, EtcError> 
 
 #[async_trait]
 pub trait EtcStore {
-    async fn read(&self, id: &str) -> Result<Option<Vec<u8>>, EtcError>;
+    async fn read(&self, content: &EtcContent) -> Result<Option<Vec<u8>>, EtcError>;
 }
 
 #[async_trait]
 impl EtcStore for FileEtcStore {
-    async fn read(&self, id: &str) -> Result<Option<Vec<u8>>, EtcError> {
-        let path = self.location().join(id);
+    async fn read(&self, content: &EtcContent) -> Result<Option<Vec<u8>>, EtcError> {
+        let path = self.location().join(content.file());
         match fs::read(&path).await {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
                 warn!(
                     "File {} not found as an etc resource location: {}",
-                    id,
+                    content.file(),
                     path.display()
                 );
                 Ok(None)
@@ -1051,14 +1085,14 @@ impl EtcStore for FileEtcStore {
 
 #[cfg(test)]
 mod tests_etc {
-    use crate::server::{EtcStore, FileEtcStore};
+    use crate::server::{EtcContent, EtcStore, FileEtcStore};
     use std::path::Path;
     use testdir::testdir;
 
     #[tokio::test]
     async fn test_io_read() {
         let location = testdir!();
-        let path = Path::new(&location).join("hobbit");
+        let path = Path::new(&location).join(EtcContent::ServerBuildManifest_yaml.file());
         let content = "In a hole in the ground there lived a Hobbit.";
         std::fs::write(&path, content).expect("Failed to write the test file.");
         let etc_instance = FileEtcStore::with_location(&location);
@@ -1067,7 +1101,10 @@ mod tests_etc {
             "Failed to create the etc store instance: {:?}",
             etc_instance
         );
-        let result = etc_instance.unwrap().read("hobbit").await;
+        let result = etc_instance
+            .unwrap()
+            .read(&EtcContent::ServerBuildManifest_yaml)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to read from the etc store instance: {:?}",
