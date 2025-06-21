@@ -42,6 +42,7 @@ def atomic_login():
     result = runner.invoke(
         cli,
         [
+            "--no-prompt",
             "login",
             "--server",
             APISERVER_URL,
@@ -49,9 +50,13 @@ def atomic_login():
             "admin",
             "--role",
             "sys_admin",
+            "--password",
+            "tabsdata",
         ],
-        input="tabsdata\n",
     )
+    logger.debug(result.output)
+    # Avoid issues with pinned collections by the user before running tests
+    result = runner.invoke(cli, ["collection", "unpin"])
     logger.debug(result.output)
     assert result.exit_code == 0
 
