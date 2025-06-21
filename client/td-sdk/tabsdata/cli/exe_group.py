@@ -9,6 +9,22 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdata.api.status_utils.execution import (
+    EXECUTION_VALID_USER_PROVIDED_STATUSES,
+    user_execution_status_to_api,
+)
+from tabsdata.api.status_utils.function_run import (
+    FUNCTION_RUN_VALID_USER_PROVIDED_STATUSES,
+    user_function_run_status_to_api,
+)
+from tabsdata.api.status_utils.transaction import (
+    TRANSACTION_VALID_USER_PROVIDED_STATUSES,
+    user_transaction_status_to_api,
+)
+from tabsdata.api.status_utils.worker import (
+    WORKER_VALID_USER_PROVIDED_STATUSES,
+    user_worker_status_to_api,
+)
 from tabsdata.api.tabsdata_server import (
     TabsdataServer,
     top_and_convert_to_timestamp,
@@ -16,7 +32,6 @@ from tabsdata.api.tabsdata_server import (
 from tabsdata.cli.cli_utils import (
     MutuallyExclusiveOption,
     beautify_time,
-    convert_user_provided_status_to_api_status,
     get_currently_pinned_object,
     hint_common_solutions,
     is_valid_id,
@@ -83,8 +98,9 @@ def cancel(ctx: click.Context, plan: str, trx: str):
     type=str,
     multiple=True,
     help=(
-        "Filter function runs by status. The status can be provided in long form, like"
-        " 'Published', or in short form, like 'P'. It is case-insensitive. "
+        "Filter function runs by status. The possible statuses are "
+        f"'{FUNCTION_RUN_VALID_USER_PROVIDED_STATUSES}'. This field is "
+        "case-insensitive. "
     ),
 )
 @click.option(
@@ -222,10 +238,7 @@ def obtain_list_fn_run_filters(
     request_filter = []
     if status:
         request_filter.append(
-            [
-                f"status:eq:{convert_user_provided_status_to_api_status(s)}"
-                for s in status
-            ]
+            [f"status:eq:{user_function_run_status_to_api(s)}" for s in status]
         )
     if exe_name:
         request_filter.append(f"execution:lk:{exe_name}")
@@ -246,8 +259,9 @@ def obtain_list_fn_run_filters(
     type=str,
     multiple=True,
     help=(
-        "Filter plans by status. The status can be provided in long form, like"
-        " 'Published', or in short form, like 'P'. It is case-insensitive. "
+        "Filter plans by status. The possible statuses are "
+        f"'{EXECUTION_VALID_USER_PROVIDED_STATUSES}'. This field is "
+        "case-insensitive. "
     ),
 )
 @click.option("--fn", type=str, help="Name of the function to filter plans by.")
@@ -356,10 +370,7 @@ def obtain_list_exec_filters(
     request_filter = []
     if status:
         request_filter.append(
-            [
-                f"status:eq:{convert_user_provided_status_to_api_status(s)}"
-                for s in status
-            ]
+            [f"status:eq:{user_execution_status_to_api(s)}" for s in status]
         )
     if exe_name:
         request_filter.append(f"name:lk:{exe_name}")
@@ -382,8 +393,9 @@ def obtain_list_exec_filters(
     type=str,
     multiple=True,
     help=(
-        "Filter transactions by status. The status can be provided in long form, like"
-        " 'Published', or in short form, like 'P'. It is case-insensitive. "
+        "Filter transactions by status. The possible statuses are "
+        f"'{TRANSACTION_VALID_USER_PROVIDED_STATUSES}'. This field is "
+        "case-insensitive. "
     ),
 )
 @click.option(
@@ -503,10 +515,7 @@ def obtain_list_trx_filters(
     request_filter = []
     if status:
         request_filter.append(
-            [
-                f"status:eq:{convert_user_provided_status_to_api_status(s)}"
-                for s in status
-            ]
+            [f"status:eq:{user_transaction_status_to_api(s)}" for s in status]
         )
     if exe_name:
         request_filter.append(f"execution:lk:{exe_name}")
@@ -529,8 +538,9 @@ def obtain_list_trx_filters(
     type=str,
     multiple=True,
     help=(
-        "Filter workers by status. The status can be provided in long form, like"
-        " 'Published', or in short form, like 'P'. It is case-insensitive. "
+        "Filter workers by status. The possible statuses are "
+        f"'{WORKER_VALID_USER_PROVIDED_STATUSES}'. This field is "
+        "case-insensitive. "
     ),
 )
 @click.option(
@@ -686,10 +696,7 @@ def obtain_list_worker_filters(
     request_filter = []
     if status:
         request_filter.append(
-            [
-                f"status:eq:{convert_user_provided_status_to_api_status(s)}"
-                for s in status
-            ]
+            [f"status:eq:{user_worker_status_to_api(s)}" for s in status]
         )
     if exe_name:
         request_filter.append(f"execution:lk:{exe_name}")
@@ -762,8 +769,9 @@ def info(ctx: click.Context, plan: str):
     type=str,
     multiple=True,
     help=(
-        "Filter workers by status. The status can be provided in long form, like"
-        " 'Published', or in short form, like 'P'. It is case-insensitive. "
+        "Filter workers by status. The possible statuses are "
+        f"'{WORKER_VALID_USER_PROVIDED_STATUSES}'. This field is "
+        "case-insensitive. "
     ),
 )
 @click.option(

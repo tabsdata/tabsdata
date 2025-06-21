@@ -11,9 +11,12 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdata.api.status_utils.execution import EXECUTION_FINAL_STATUSES
+from tabsdata.api.status_utils.function_run import (
+    FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES,
+)
+from tabsdata.api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
 from tabsdata.api.tabsdata_server import (
-    FINAL_STATUSES,
-    SUCCESSFUL_FINAL_STATUSES,
     Execution,
     TabsdataServer,
     Transaction,
@@ -505,6 +508,10 @@ def _monitor_execution_or_transaction(
             "Internal error: _monitor_execution_or_transaction takes either an "
             "execution or a transaction, but not neither."
         )
+    if execution:
+        entity_final_statuses = EXECUTION_FINAL_STATUSES
+    else:
+        entity_final_statuses = TRANSACTION_FINAL_STATUSES
     keyword = "plan" if execution else "transaction"
     supervised_entity = execution or transaction
     click.echo(f"Waiting for the {keyword} to finish...")
@@ -546,7 +553,7 @@ def _monitor_execution_or_transaction(
         click.echo(f"Number of function runs: {len(list_of_runs)}")
         click.echo()
 
-        if supervised_entity.status in FINAL_STATUSES:
+        if supervised_entity.status in entity_final_statuses:
             click.echo("")
             click.echo("-" * 10)
             click.echo("")
@@ -562,7 +569,7 @@ def _monitor_execution_or_transaction(
     failed_runs = [
         fn_run
         for fn_run in list_of_runs
-        if fn_run.status not in SUCCESSFUL_FINAL_STATUSES
+        if fn_run.status not in FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES
     ]
     if failed_runs:
         click.echo("Some function runs failed:")

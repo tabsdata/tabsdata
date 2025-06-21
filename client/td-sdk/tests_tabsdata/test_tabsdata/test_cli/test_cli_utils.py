@@ -6,10 +6,10 @@ import os
 
 import pytest
 
+from tabsdata.api.status_utils.execution import user_execution_status_to_api
 from tabsdata.cli.cli_utils import (
     beautify_list,
     cleanup_dot_files,
-    convert_user_provided_status_to_api_status,
     generate_dot_image,
 )
 
@@ -44,10 +44,10 @@ def test_show_dot_file(tmp_path):
 
 
 def test_convert_user_provided_status_to_api_status():
-    assert convert_user_provided_status_to_api_status("P") == "P"
-    assert convert_user_provided_status_to_api_status("p") == "P"
-    assert convert_user_provided_status_to_api_status("pUblIshEd") == "P"
-    assert convert_user_provided_status_to_api_status(None) is None
-    assert convert_user_provided_status_to_api_status("") is None
+    assert user_execution_status_to_api("S") == "S"
+    assert user_execution_status_to_api("s") == "S"
+    assert user_execution_status_to_api("sCheDulEd") == "S"
+    assert user_execution_status_to_api(None) is None
+    assert user_execution_status_to_api("") is None
     with pytest.raises(ValueError):
-        convert_user_provided_status_to_api_status("invalid_status")
+        user_execution_status_to_api("invalid_status")

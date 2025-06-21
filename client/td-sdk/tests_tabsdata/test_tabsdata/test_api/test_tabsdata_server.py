@@ -18,6 +18,7 @@ from tests_tabsdata.conftest import (
 )
 
 from tabsdata.api.apiserver import BASE_API_URL, APIServerError
+from tabsdata.api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
 from tabsdata.api.tabsdata_server import (
     Collection,
     DataVersion,
@@ -919,9 +920,9 @@ def test_dataversion_list(tabsserver_connection, testing_collection_with_table):
 @pytest.mark.requires_internet
 def test_worker_message_get(tabsserver_connection, testing_collection_with_table):
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
@@ -971,9 +972,9 @@ def test_worker_messages_list_by_transaction_id(
     tabsserver_connection, testing_collection_with_table
 ):
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
@@ -1264,9 +1265,9 @@ def test_function_run_list_by_transaction_id(
     tabsserver_connection, testing_collection_with_table
 ):
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")

@@ -20,7 +20,7 @@ from tabsdata.api.apiserver import (
     APIServerError,
     obtain_connection,
 )
-from tabsdata.api.tabsdata_server import STATUS_MAPPING, TabsdataServer
+from tabsdata.api.tabsdata_server import TabsdataServer
 
 CONNECTION_FILE = "connection.json"
 DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
@@ -270,31 +270,6 @@ def get_credentials_file_path(ctx: click.Context) -> str:
     Get the path to the credentials file.
     """
     return os.path.join(ctx.obj["tabsdata_directory"], CONNECTION_FILE)
-
-
-def convert_user_provided_status_to_api_status(
-    user_provided_status: str | None,
-) -> str | None:
-    """
-    Convert a user-provided status string to the API status string.
-    :param user_provided_status: The user-provided status string.
-    :return: The API status string.
-    """
-    if not user_provided_status:
-        return None
-
-    user_provided_status = user_provided_status.lower()
-    for key, value in STATUS_MAPPING.items():
-        if user_provided_status == key.lower() or user_provided_status == value.lower():
-            return key
-
-    valid_statuses = ", ".join(STATUS_MAPPING.keys())
-    valid_statuses += ", " + ", ".join(STATUS_MAPPING.values())
-    raise ValueError(
-        f"Invalid status: '{user_provided_status}'. "
-        "Valid statuses are: "
-        f"{valid_statuses}. Statuses are case-insensitive."
-    )
 
 
 def load_cli_options(ctx: click.Context):

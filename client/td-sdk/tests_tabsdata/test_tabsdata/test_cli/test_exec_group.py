@@ -10,6 +10,8 @@ import pytest
 from click.testing import CliRunner
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
+from tabsdata.api.status_utils.execution import EXECUTION_FINAL_STATUSES
+from tabsdata.api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
 from tabsdata.api.tabsdata_server import Execution
 from tabsdata.cli.cli import cli
 
@@ -204,7 +206,17 @@ def test_cli_transaction_recover(login, tabsserver_connection):
 @pytest.mark.requires_internet
 def test_execution_list_with_status(login, testing_collection_with_table):
     runner = CliRunner()
-    result = runner.invoke(cli, ["--no-prompt", "exe", "list-plan", "--status", "done"])
+    first_status = list(EXECUTION_FINAL_STATUSES)[0]
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "exe",
+            "list-plan",
+            "--status",
+            first_status,
+        ],
+    )
     logger.debug(result.output)
     assert result.exit_code == 0
 
@@ -213,6 +225,9 @@ def test_execution_list_with_status(login, testing_collection_with_table):
 @pytest.mark.requires_internet
 def test_execution_list_with_multiple_statuses(login, testing_collection_with_table):
     runner = CliRunner()
+    execution_status_list = list(EXECUTION_FINAL_STATUSES)
+    first_status = execution_status_list[0]
+    second_status = execution_status_list[1]
     result = runner.invoke(
         cli,
         [
@@ -220,9 +235,9 @@ def test_execution_list_with_multiple_statuses(login, testing_collection_with_ta
             "exe",
             "list-plan",
             "--status",
-            "done",
+            first_status,
             "--status",
-            "incomplete",
+            second_status,
         ],
     )
     logger.debug(result.output)
@@ -304,8 +319,16 @@ def test_execution_list_with_at(login, testing_collection_with_table):
 @pytest.mark.requires_internet
 def test_transaction_list_with_status(login, testing_collection_with_table):
     runner = CliRunner()
+    first_status = list(TRANSACTION_FINAL_STATUSES)[0]
     result = runner.invoke(
-        cli, ["--no-prompt", "exe", "list-trx", "--status", "published"]
+        cli,
+        [
+            "--no-prompt",
+            "exe",
+            "list-trx",
+            "--status",
+            first_status,
+        ],
     )
     logger.debug(result.output)
     assert result.exit_code == 0
@@ -315,6 +338,9 @@ def test_transaction_list_with_status(login, testing_collection_with_table):
 @pytest.mark.requires_internet
 def test_transaction_list_with_multiple_statuses(login, testing_collection_with_table):
     runner = CliRunner()
+    list_of_status = list(TRANSACTION_FINAL_STATUSES)
+    first_status = list_of_status[0]
+    second_status = list_of_status[1]
     result = runner.invoke(
         cli,
         [
@@ -322,9 +348,9 @@ def test_transaction_list_with_multiple_statuses(login, testing_collection_with_
             "exe",
             "list-trx",
             "--status",
-            "published",
+            first_status,
             "--status",
-            "failed",
+            second_status,
         ],
     )
     logger.debug(result.output)
@@ -527,9 +553,9 @@ def test_worker_messages_list_by_transaction_id(
     login, tabsserver_connection, testing_collection_with_table
 ):
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
@@ -577,9 +603,9 @@ def test_worker_messages_list_by_all_options_fails(
         0
     ].name
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
@@ -609,9 +635,9 @@ def test_worker_messages_list_by_all_options_fails(
 @pytest.mark.requires_internet
 def test_exec_logs(login, testing_collection_with_table, tabsserver_connection):
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
@@ -634,9 +660,9 @@ def test_exec_logs_to_file(
 ):
     destination = os.path.join(tmp_path, "logs.txt")
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
@@ -732,9 +758,9 @@ def test_exec_logs_transaction(
     login, testing_collection_with_table, tabsserver_connection
 ):
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     assert transaction_id
     runner = CliRunner()
@@ -750,9 +776,9 @@ def test_exec_logs_transaction_to_file(
 ):
     destination = os.path.join(tmp_path, "logs.txt")
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     assert transaction_id
     runner = CliRunner()
@@ -779,9 +805,9 @@ def test_exec_logs_transaction_to_file_with_prompt(
 ):
     destination = os.path.join(tmp_path, "logs.txt")
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     assert transaction_id
     runner = CliRunner()
@@ -938,9 +964,9 @@ def test_fn_run_list_by_transaction_id(
     login, tabsserver_connection, testing_collection_with_table
 ):
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")
@@ -988,9 +1014,9 @@ def test_fn_run_list_by_all_options_fails(
         0
     ].name
     transaction_id = None
-    for element in tabsserver_connection.transactions:
-        if element.status in ("Failed", "Published"):
-            transaction_id = element.id
+    for transaction in tabsserver_connection.transactions:
+        if transaction.status in TRANSACTION_FINAL_STATUSES:
+            transaction_id = transaction.id
             break
     logger.debug(f"Transactions: {tabsserver_connection.transactions}")
     logger.debug(f"Transaction ID: {transaction_id}")

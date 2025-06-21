@@ -17,42 +17,16 @@ import polars as pl
 import requests
 
 from tabsdata.api.apiserver import APIServer, obtain_connection
+from tabsdata.api.status_utils.data_version import data_version_status_to_mapping
+from tabsdata.api.status_utils.execution import execution_status_to_mapping
+from tabsdata.api.status_utils.function_run import function_run_status_to_mapping
+from tabsdata.api.status_utils.transaction import transaction_status_to_mapping
+from tabsdata.api.status_utils.worker import worker_status_to_mapping
 from tabsdata.io.input import TableInput
 from tabsdata.io.output import TableOutput
 from tabsdata.tabsdatafunction import TabsdataFunction
 from tabsdata.utils.bundle_utils import create_bundle_archive
 from tabsdata.utils.sql_utils import verify_output_sql_drivers
-
-
-class FunctionRunStatus(Enum):
-    CANCELED = "C"
-    DONE = "D"
-    ERROR = "E"
-    FAILED = "F"
-    ON_HOLD = "H"
-    INCOMPLETE = "I"
-    PUBLISHED = "P"
-    RUNNING = "R"
-    RUN_REQUESTED = "RR"
-    RESCHEDULED = "RS"
-    SCHEDULED = "S"
-    UNKNOWN = "U"
-
-
-STATUS_MAPPING = {
-    FunctionRunStatus.CANCELED.value: "Canceled",
-    FunctionRunStatus.DONE.value: "Done",
-    FunctionRunStatus.ERROR.value: "Error",
-    FunctionRunStatus.FAILED.value: "Failed",
-    FunctionRunStatus.ON_HOLD.value: "On Hold",
-    FunctionRunStatus.INCOMPLETE.value: "Incomplete",
-    FunctionRunStatus.PUBLISHED.value: "Published",
-    FunctionRunStatus.RUNNING.value: "Running",
-    FunctionRunStatus.RUN_REQUESTED.value: "Run Requested",
-    FunctionRunStatus.RESCHEDULED.value: "Rescheduled",
-    FunctionRunStatus.SCHEDULED.value: "Scheduled",
-    FunctionRunStatus.UNKNOWN.value: "Unknown",
-}
 
 
 class FunctionType(Enum):
@@ -75,33 +49,6 @@ def function_type_to_mapping(function_type: str) -> str:
     more difficult in the future.
     """
     return FUNCTION_TYPE_MAPPING.get(function_type, function_type)
-
-
-def status_to_mapping(status: str) -> str:
-    """
-    Function to convert a status to a mapping. While currently it
-    only accesses the dictionary and returns the corresponding value, it could get
-    more difficult in the future.
-    """
-    return STATUS_MAPPING.get(status, status)
-
-
-FAILED_FINAL_STATUSES = {
-    status_to_mapping(FunctionRunStatus.CANCELED.value),
-    status_to_mapping(FunctionRunStatus.ERROR.value),
-    status_to_mapping(FunctionRunStatus.FAILED.value),
-    status_to_mapping(FunctionRunStatus.ON_HOLD.value),
-    status_to_mapping(FunctionRunStatus.INCOMPLETE.value),
-    status_to_mapping(FunctionRunStatus.UNKNOWN.value),
-}
-
-SUCCESSFUL_FINAL_STATUSES = {
-    status_to_mapping(FunctionRunStatus.DONE.value),
-    status_to_mapping(FunctionRunStatus.PUBLISHED.value),
-}
-
-
-FINAL_STATUSES = FAILED_FINAL_STATUSES | SUCCESSFUL_FINAL_STATUSES
 
 
 class LazyProperty:
@@ -606,12 +553,12 @@ class DataVersion:
         # TODO: Add lazy properties for status, triggered_on and triggered_on_str
         self.created_at = kwargs.get("created_at")
         self.created_at_str = None
-        status = kwargs.get("transaction_status") or kwargs.get("status")
-        self.status = status_to_mapping(status) if status else None
+        status = kwargs.get("status")
+        self.status = data_version_status_to_mapping(status) if status else None
         # Note: this might cause an inconsistency or a bug if function_id corresponds
         # to a different function than the one in the function attribute. Revisit this
         # if necessary.
-        self.function = kwargs.get("function_name") or kwargs.get("function")
+        self.function = kwargs.get("function")
         self.kwargs = kwargs
         self._data = None
 
@@ -673,7 +620,7 @@ class DataVersion:
     @property
     def function(self) -> Function:
         if self._function is None:
-            self.function = self._data.get("function_name")
+            self.function = self._data.get("function")
         return self._function
 
     @function.setter
@@ -872,7 +819,7 @@ class Execution:
         if status is None:
             self._status = status
         else:
-            self._status = status_to_mapping(status)
+            self._status = execution_status_to_mapping(status)
 
     @property
     def transactions(self) -> List[Transaction]:
@@ -1481,7 +1428,7 @@ class FunctionRun:
         if status is None:
             self._status = None
         else:
-            self._status = status_to_mapping(status)
+            self._status = function_run_status_to_mapping(status)
 
     @property
     def transaction(self) -> Transaction:
@@ -1866,7 +1813,6 @@ class Table:
             for raw_dataversion in raw_dataversions:
                 built_dataversion = DataVersion(
                     self.connection,
-                    collection=self.collection,
                     table=self,
                     **raw_dataversion,
                 )
@@ -2127,7 +2073,7 @@ class Transaction:
         if status is None:
             self._status = status
         else:
-            self._status = status_to_mapping(status)
+            self._status = transaction_status_to_mapping(status)
 
     @property
     def workers(self) -> list[Worker]:
@@ -2463,7 +2409,7 @@ class Worker:
         if status is None:
             self._status = None
         else:
-            self._status = status_to_mapping(status)
+            self._status = worker_status_to_mapping(status)
 
     @property
     def transaction(self) -> Transaction:

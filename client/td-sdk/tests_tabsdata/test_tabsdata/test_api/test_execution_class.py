@@ -44,7 +44,7 @@ def test_execution_class(tabsserver_connection):
     assert isinstance(execution.started_on_str, str)
     assert execution.ended_on == time_triggered
     assert isinstance(execution.ended_on_str, str)
-    assert execution.status == "Failed"
+    assert execution.status == "Finished"
     assert execution.kwargs
     assert execution.__repr__()
     assert execution.__str__()
