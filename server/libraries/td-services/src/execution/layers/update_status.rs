@@ -9,28 +9,50 @@ use td_error::TdError;
 use td_objects::crudl::{assert_one, handle_sql_err};
 use td_objects::sql::recursive::RecursiveQueries;
 use td_objects::sql::{DerefQueries, SelectBy, UpdateBy};
-use td_objects::types::basic::{FunctionRunId, FunctionRunStatus};
-use td_objects::types::execution::FunctionRunToCommitDB;
+use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
 use td_objects::types::execution::{
     CallbackRequest, CommitFunctionRunDB, FunctionRequirementDBWithNames, FunctionRunDB,
-    TableDataVersionDB, UpdateFunctionRunDB, UpdateTableDataVersionDB,
+    TableDataVersionDB, UpdateFunctionRunDB, UpdateTableDataVersionDB, WorkerDB,
 };
+use td_objects::types::execution::{FunctionRunToCommitDB, UpdateWorkerDB};
 use td_objects::types::worker::v2::WrittenTableV2;
 use td_objects::types::worker::FunctionOutput;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
 
 #[td_error]
 enum UpdateStatusRunError {
-    #[error("Cannot change final 'Published' status for function run [{0}]")]
-    AlreadyPublished(FunctionRunId) = 0,
+    #[error("Cannot change final 'Committed' status for function run [{0}]")]
+    AlreadyCommitted(FunctionRunId) = 0,
     #[error("Cannot change final 'Canceled' status for function run [{0}]")]
     AlreadyCanceled(FunctionRunId) = 1,
-    #[error("Cannot change final 'Rollback' status for function run [{0}]")]
+    #[error("Cannot change final 'Yanked' status for function run [{0}]")]
     AlreadyYanked(FunctionRunId) = 2,
     #[error("Unexpected function run status transition for function run [{0}]: {1:?} -> {2:?}")]
     UnexpectedFunctionRunStatusTransition(FunctionRunId, FunctionRunStatus, FunctionRunStatus) = 3,
     #[error("No function run status update where performed")]
     NoOpStatusUpdate = 4,
+}
+
+pub async fn update_worker_status<Q: DerefQueries>(
+    SrvCtx(queries): SrvCtx<Q>,
+    Connection(connection): Connection,
+    Input(update): Input<UpdateWorkerDB>,
+    Input(callback): Input<CallbackRequest>,
+) -> Result<(), TdError> {
+    let mut conn = connection.lock().await;
+    let conn = conn.get_mut_connection()?;
+
+    // Worker status update is never conditional, we want to know exactly what got reported,
+    // as it doesn't affect execution flow, it's just informational.
+    let worker_id = WorkerId::try_from(callback.id())?;
+    let _ = queries
+        .update_by::<_, WorkerDB>(update.deref(), &(&worker_id))?
+        .build()
+        .execute(&mut *conn)
+        .await
+        .map_err(handle_sql_err)?;
+
+    Ok(())
 }
 
 pub async fn update_function_run_status<Q: DerefQueries>(
@@ -53,7 +75,7 @@ pub async fn update_function_run_status<Q: DerefQueries>(
                 match (current.status(), update.status()) {
                     // Final status.
                     (FunctionRunStatus::Committed, _) => {
-                        Some(Err(UpdateStatusRunError::AlreadyPublished(*current.id())))
+                        Some(Err(UpdateStatusRunError::AlreadyCommitted(*current.id())))
                     }
 
                     (FunctionRunStatus::Yanked, FunctionRunStatus::Yanked) => {

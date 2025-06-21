@@ -7,7 +7,7 @@ use td_apiforge::apiserver_schema;
 
 #[apiserver_schema]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum FunctionRunUpdateStatus {
+pub enum WorkerCallbackStatus {
     Running,
     Done,
     Error,

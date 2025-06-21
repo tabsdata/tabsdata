@@ -16,7 +16,7 @@ use td_common::server::{
     WORK_FOLDER,
 };
 use td_error::{td_error, TdError};
-use td_objects::types::execution::WorkerMessageDB;
+use td_objects::types::execution::WorkerDB;
 use td_objects::types::stream::BoxedSyncStream;
 use td_tower::extractors::Input;
 use tokio::fs::File;
@@ -41,7 +41,7 @@ const PATH_SEPARATOR: &str = "-";
 const LOG_SEPARATOR: &str = "=";
 
 pub async fn resolve_worker_log_path(
-    Input(message): Input<WorkerMessageDB>,
+    Input(message): Input<WorkerDB>,
 ) -> Result<Vec<PathBuf>, TdError> {
     let worker_path = env::var(WORKSPACE_URI_ENV).map_err(ReadWorkerLogsError::EnvVar)?;
     let pattern = PathBuf::from(worker_path)

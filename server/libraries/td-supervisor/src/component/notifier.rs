@@ -16,7 +16,7 @@ use serde_yaml::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::str::FromStr;
-use td_common::execution_status::FunctionRunUpdateStatus;
+use td_common::execution_status::WorkerCallbackStatus;
 use td_common::server::MessageAction::Notify;
 use td_common::server::SupervisorMessagePayload::{
     SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
@@ -39,7 +39,7 @@ pub trait WorkerNotifier: Debug {
         request_message: SupervisorMessage,
         start: i64,
         end: Option<i64>,
-        status: FunctionRunUpdateStatus,
+        status: WorkerCallbackStatus,
         execution: u16,
         limit: Option<u16>,
         error: Option<String>,
@@ -54,7 +54,7 @@ impl WorkerNotifier for Callback {
         request_message: SupervisorMessage,
         start: i64,
         end: Option<i64>,
-        status: FunctionRunUpdateStatus,
+        status: WorkerCallbackStatus,
         execution: u16,
         limit: Option<u16>,
         error: Option<String>,
@@ -73,9 +73,9 @@ impl WorkerNotifier for Callback {
 
         // ToDo: temporarily, we omit sending notifications for errors, and we wait either for final failure (Fail) or
         //       eventual success (Done). Thus, we currently do not notify to the API Server error statuses (Error).
-        if matches!(status, FunctionRunUpdateStatus::Error) {
+        if matches!(status, WorkerCallbackStatus::Error) {
             info!("Omitting notification of finalization for state {:?} of worker:: name: '{}' - id: '{}'",
-                FunctionRunUpdateStatus::Error,
+                WorkerCallbackStatus::Error,
                 match &worker {
                     Some(worker) => worker.describer().name().to_string(),
                     None => "No worker...".to_string(),
@@ -119,7 +119,7 @@ impl WorkerNotifier for Callback {
                 let exception_payload = match worker {
                     None => ExceptionMessagePayload::default(),
                     Some(worker) => {
-                        if matches!(status, FunctionRunUpdateStatus::Running) {
+                        if matches!(status, WorkerCallbackStatus::Running) {
                             ExceptionMessagePayload::default()
                         } else {
                             let exception_file = worker
@@ -151,7 +151,7 @@ impl WorkerNotifier for Callback {
                 let mut response_payload = match worker {
                     None => ResponseMessagePayload::default(),
                     Some(worker) => {
-                        if matches!(status, FunctionRunUpdateStatus::Running) {
+                        if matches!(status, WorkerCallbackStatus::Running) {
                             ResponseMessagePayload::default()
                         } else {
                             let response_file = worker
@@ -197,7 +197,7 @@ impl WorkerNotifier for Callback {
 
                 // Exit status 202 is using to signal work termination without further retry.
                 if *exception_payload.exit_status() == ExitStatus::TabsDataError.code() {
-                    response_payload.set_status(FunctionRunUpdateStatus::Failed);
+                    response_payload.set_status(WorkerCallbackStatus::Failed);
                     failed = true;
                 }
 

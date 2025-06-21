@@ -14,4 +14,4 @@ pub mod seed_table_data_version;
 pub mod seed_transaction;
 pub mod seed_user;
 pub mod seed_user_role;
-pub mod seed_worker_message;
+pub mod seed_worker;

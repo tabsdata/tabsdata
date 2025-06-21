@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::worker_message::layers::logs::{get_worker_logs, resolve_worker_log_path};
+use crate::worker::layers::logs::{get_worker_logs, resolve_worker_log_path};
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
@@ -11,8 +11,8 @@ use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
-use td_objects::types::basic::{CollectionId, WorkerMessageIdName};
-use td_objects::types::execution::WorkerMessageDB;
+use td_objects::types::basic::{CollectionId, WorkerIdName};
+use td_objects::types::execution::WorkerDB;
 use td_objects::types::stream::BoxedSyncStream;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -20,7 +20,7 @@ use td_tower::service_provider::IntoServiceProvider;
 use td_tower::{layers, provider};
 
 #[provider(
-    name = WorkerMessageLogService,
+    name = WorkerLogService,
     request = ReadRequest<WorkerMessageParam>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
@@ -33,9 +33,9 @@ fn provider() {
         from_fn(With::<ReadRequest<WorkerMessageParam>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<WorkerMessageParam>>::extract_name::<WorkerMessageParam>),
         // find collection ID
-        from_fn(With::<WorkerMessageParam>::extract::<WorkerMessageIdName>),
-        from_fn(By::<WorkerMessageIdName>::select::<DaoQueries, WorkerMessageDB>),
-        from_fn(With::<WorkerMessageDB>::extract::<CollectionId>),
+        from_fn(With::<WorkerMessageParam>::extract::<WorkerIdName>),
+        from_fn(By::<WorkerIdName>::select::<DaoQueries, WorkerDB>),
+        from_fn(With::<WorkerDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
@@ -58,12 +58,12 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
-    async fn test_tower_metadata_read_worker_messages_logs(db: DbPool) {
+    async fn test_tower_metadata_read_workers_logs(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
-        let provider = WorkerMessageLogService::provider(db, queries, authz_context);
+        let provider = WorkerLogService::provider(db, queries, authz_context);
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -76,9 +76,9 @@ mod tests {
                 &With::<ReadRequest<WorkerMessageParam>>::extract_name::<WorkerMessageParam>,
             ),
             // find collection ID
-            type_of_val(&With::<WorkerMessageParam>::extract::<WorkerMessageIdName>),
-            type_of_val(&By::<WorkerMessageIdName>::select::<DaoQueries, WorkerMessageDB>),
-            type_of_val(&With::<WorkerMessageDB>::extract::<CollectionId>),
+            type_of_val(&With::<WorkerMessageParam>::extract::<WorkerIdName>),
+            type_of_val(&By::<WorkerIdName>::select::<DaoQueries, WorkerDB>),
+            type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
@@ -93,8 +93,8 @@ mod tests {
     // This test just asserts that the service can be created and called, as it has to compile.
     #[ignore]
     #[td_test::test(sqlx)]
-    async fn test_read_worker_messages_logs(db: DbPool) -> Result<(), TdError> {
-        let service = WorkerMessageLogService::new(
+    async fn test_read_workers_logs(db: DbPool) -> Result<(), TdError> {
+        let service = WorkerLogService::new(
             db.clone(),
             Arc::new(DaoQueries::default()),
             Arc::new(AuthzContext::default()),

@@ -15,4 +15,4 @@ pub mod table;
 pub mod transaction;
 pub mod user;
 pub mod user_role;
-pub mod worker_message;
+pub mod worker;

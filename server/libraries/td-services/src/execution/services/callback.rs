@@ -3,10 +3,8 @@
 //
 
 use crate::execution::layers::update_status::{
-    update_function_run_status, update_table_data_version_status,
+    update_function_run_status, update_table_data_version_status, update_worker_status,
 };
-use std::sync::Arc;
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::UpdateRequest;
 use td_objects::rest_urls::FunctionRunIdParam;
@@ -17,65 +15,51 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{By, SqlSelectAllService};
 use td_objects::types::basic::FunctionRunId;
 use td_objects::types::execution::{
-    CallbackRequest, FunctionRunDB, UpdateFunctionRun, UpdateFunctionRunDB,
-    UpdateFunctionRunDBBuilder,
+    CallbackRequest, FunctionRunDB, UpdateFunctionRunDB, UpdateFunctionRunDBBuilder,
+    UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution,
 };
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
-use td_tower::service_provider::{ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::{layers, provider};
 
-pub struct ExecutionCallbackService {
-    provider: ServiceProvider<UpdateRequest<FunctionRunIdParam, CallbackRequest>, (), TdError>,
-}
-
-impl ExecutionCallbackService {
-    pub fn new(db: DbPool) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>) {
-            service_provider!(layers!(
-                // Set context
-                SrvCtxProvider::new(queries),
-
-                // Extract from request.
-                from_fn(With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_name::<FunctionRunIdParam>),
-                from_fn(With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_data::<CallbackRequest>),
-
-                // Convert callback request to status update request.
-                from_fn(With::<CallbackRequest>::convert_to::<UpdateFunctionRun, _>),
-
-                // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
-                from_fn(With::<FunctionRunIdParam>::extract::<FunctionRunId>),
-
-                // DB Transaction start.
-                TransactionProvider::new(db),
-
-                // Find function run (we will always have 1).
-                from_fn(By::<FunctionRunId>::select_all::<DaoQueries, FunctionRunDB>),
-
-                // Update function requirements status.
-                from_fn(With::<UpdateFunctionRun>::convert_to::<UpdateFunctionRunDBBuilder, _>),
-                from_fn(With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
-                from_fn(update_function_run_status::<DaoQueries>),
-
-                // Update table data versions status.
-                from_fn(update_table_data_version_status::<DaoQueries>),
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<UpdateRequest<FunctionRunIdParam, CallbackRequest>, (), TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = ExecutionCallbackService,
+    request = UpdateRequest<FunctionRunIdParam, CallbackRequest>,
+    response = (),
+    connection = TransactionProvider,
+    context = DaoQueries,
+)]
+fn provider() {
+    layers!(
+        // Extract from request.
+        from_fn(
+            With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_name::<
+                FunctionRunIdParam,
+            >
+        ),
+        from_fn(
+            With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_data::<
+                CallbackRequest,
+            >
+        ),
+        // Convert callback request to status update request.
+        from_fn(With::<CallbackRequest>::convert_to::<UpdateWorkerExecution, _>),
+        // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+        from_fn(With::<FunctionRunIdParam>::extract::<FunctionRunId>),
+        // Find function run (we will always have 1).
+        from_fn(By::<FunctionRunId>::select_all::<DaoQueries, FunctionRunDB>),
+        // Update worker status.
+        from_fn(With::<UpdateWorkerExecution>::convert_to::<UpdateWorkerDBBuilder, _>),
+        from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
+        from_fn(update_worker_status::<DaoQueries>),
+        // Update function run status.
+        from_fn(With::<UpdateWorkerExecution>::convert_to::<UpdateFunctionRunDBBuilder, _>),
+        from_fn(With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
+        from_fn(update_function_run_status::<DaoQueries>),
+        // Update table data versions status.
+        from_fn(update_table_data_version_status::<DaoQueries>),
+    )
 }
 
 #[cfg(test)]
@@ -84,7 +68,8 @@ mod tests {
     use crate::execution::layers::update_status::test::{
         test_status_update, TestExecution, TestFunction, TestTransaction,
     };
-    use td_common::execution_status::FunctionRunUpdateStatus;
+    use std::sync::Arc;
+    use td_common::execution_status::WorkerCallbackStatus;
     use td_common::server::ResponseMessagePayloadBuilder;
     use td_common::server::{MessageAction, WorkerClass};
     use td_common::status::ExitStatus;
@@ -94,7 +79,7 @@ mod tests {
     use td_objects::sql::SelectBy;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, FunctionRunStatus, TableName,
-        TableNameDto, TransactionStatus, UserId,
+        TableNameDto, TransactionStatus, UserId, WorkerId,
     };
     use td_objects::types::basic::{RoleId, TableDependencyDto};
     use td_objects::types::execution::TableDataVersionDBWithNames;
@@ -128,13 +113,19 @@ mod tests {
                 >,
             ),
             // Convert callback request to status update request.
-            type_of_val(&With::<CallbackRequest>::convert_to::<UpdateFunctionRun, _>),
+            type_of_val(&With::<CallbackRequest>::convert_to::<UpdateWorkerExecution, _>),
             // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
             type_of_val(&With::<FunctionRunIdParam>::extract::<FunctionRunId>),
             // Find function run (we will always have 1).
             type_of_val(&By::<FunctionRunId>::select_all::<DaoQueries, FunctionRunDB>),
-            // Update function requirements status.
-            type_of_val(&With::<UpdateFunctionRun>::convert_to::<UpdateFunctionRunDBBuilder, _>),
+            // Update worker status.
+            type_of_val(&With::<UpdateWorkerExecution>::convert_to::<UpdateWorkerDBBuilder, _>),
+            type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
+            type_of_val(&update_worker_status::<DaoQueries>),
+            // Update function run status.
+            type_of_val(
+                &With::<UpdateWorkerExecution>::convert_to::<UpdateFunctionRunDBBuilder, _>,
+            ),
             type_of_val(&With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
             type_of_val(&update_function_run_status::<DaoQueries>),
             // Update table data versions status.
@@ -146,7 +137,7 @@ mod tests {
         db: DbPool,
         test_executions: Vec<TestExecution>,
         callback_function: &str,
-        callback_status: FunctionRunUpdateStatus,
+        callback_status: WorkerCallbackStatus,
         function_output: Option<FunctionOutput>,
     ) -> Result<(), TdError> {
         test_status_update(db.clone(), &test_executions, |_, _, _, f| {
@@ -163,7 +154,7 @@ mod tests {
 
             async move {
                 let response: CallbackRequest = ResponseMessagePayloadBuilder::default()
-                    .id("".to_string())
+                    .id(WorkerId::default().to_string())
                     .class(WorkerClass::EPHEMERAL)
                     .worker("".to_string())
                     .action(MessageAction::Notify)
@@ -194,7 +185,10 @@ mod tests {
                     response,
                 );
 
-                let service = ExecutionCallbackService::new(db.clone()).service().await;
+                let service =
+                    ExecutionCallbackService::new(db.clone(), Arc::new(DaoQueries::default()))
+                        .service()
+                        .await;
                 service.raw_oneshot(request).await
             }
         })
@@ -220,7 +214,7 @@ mod tests {
                 }],
             }],
             "f_0",
-            FunctionRunUpdateStatus::Running,
+            WorkerCallbackStatus::Running,
             None,
         )
         .await
@@ -255,7 +249,7 @@ mod tests {
                 }],
             }],
             "f_0",
-            FunctionRunUpdateStatus::Running,
+            WorkerCallbackStatus::Running,
             None,
         )
         .await
@@ -293,7 +287,7 @@ mod tests {
                 ],
             }],
             "f_0",
-            FunctionRunUpdateStatus::Running,
+            WorkerCallbackStatus::Running,
             None,
         )
         .await
@@ -328,7 +322,7 @@ mod tests {
                 }],
             }],
             "f_1",
-            FunctionRunUpdateStatus::Done,
+            WorkerCallbackStatus::Done,
             None,
         )
         .await
@@ -376,7 +370,7 @@ mod tests {
                 ],
             }],
             "f_1",
-            FunctionRunUpdateStatus::Done,
+            WorkerCallbackStatus::Done,
             None,
         )
         .await
@@ -411,7 +405,7 @@ mod tests {
                 }],
             }],
             "f_0",
-            FunctionRunUpdateStatus::Done,
+            WorkerCallbackStatus::Done,
             None,
         )
         .await
@@ -446,7 +440,7 @@ mod tests {
                 }],
             }],
             "f_1",
-            FunctionRunUpdateStatus::Failed,
+            WorkerCallbackStatus::Failed,
             None,
         )
         .await
@@ -481,7 +475,7 @@ mod tests {
                 }],
             }],
             "f_0",
-            FunctionRunUpdateStatus::Failed,
+            WorkerCallbackStatus::Failed,
             None,
         )
         .await
@@ -509,7 +503,7 @@ mod tests {
                 }],
             }],
             "f_0",
-            FunctionRunUpdateStatus::Done,
+            WorkerCallbackStatus::Done,
             Some(FunctionOutput::V2(
                 FunctionOutputV2::builder()
                     .output(vec![

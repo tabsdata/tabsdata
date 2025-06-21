@@ -6,16 +6,16 @@ use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::execution::WorkerMessage;
+use td_objects::types::execution::Worker;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
 use td_tower::{layers, provider};
 
 #[provider(
-    name = WorkerMessageListService,
+    name = WorkerListService,
     request = ListRequest<()>,
-    response = ListResponse<WorkerMessage>,
+    response = ListResponse<Worker>,
     connection = ConnectionProvider,
     context = DaoQueries,
 )]
@@ -23,8 +23,8 @@ fn provider() {
     layers!(
         // No need for authz for this service.
 
-        // List all WorkerMessages.
-        from_fn(By::<()>::list::<(), DaoQueries, WorkerMessage>),
+        // List all Workers.
+        from_fn(By::<()>::list::<(), DaoQueries, Worker>),
     )
 }
 
@@ -40,7 +40,7 @@ mod tests {
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_function_run::seed_function_run;
     use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::test_utils::seed_worker_message::seed_worker_message;
+    use td_objects::test_utils::seed_worker::seed_worker;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
         TransactionKey, UserId,
@@ -51,24 +51,24 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
-    async fn test_tower_metadata_list_worker_messages(db: DbPool) {
+    async fn test_tower_metadata_list_workers(db: DbPool) {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider = WorkerMessageListService::provider(db, queries);
+        let provider = WorkerListService::provider(db, queries);
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<ListRequest<()>, ListResponse<WorkerMessage>>(&[
-            // List all WorkerMessages.
-            type_of_val(&By::<()>::list::<(), DaoQueries, WorkerMessage>),
+        metadata.assert_service::<ListRequest<()>, ListResponse<Worker>>(&[
+            // List all Workers.
+            type_of_val(&By::<()>::list::<(), DaoQueries, Worker>),
         ]);
     }
 
     #[td_test::test(sqlx)]
-    async fn test_list_worker_messages(db: DbPool) -> Result<(), TdError> {
+    async fn test_list_workers(db: DbPool) -> Result<(), TdError> {
         let collection = seed_collection(
             &db,
             &CollectionName::try_from("collection")?,
@@ -107,8 +107,8 @@ mod tests {
         )
         .await;
 
-        let worker_messages = [
-            seed_worker_message(
+        let workers = [
+            seed_worker(
                 &db,
                 &execution,
                 &transaction,
@@ -116,7 +116,7 @@ mod tests {
                 WorkerMessageStatus::Locked,
             )
             .await,
-            seed_worker_message(
+            seed_worker(
                 &db,
                 &execution,
                 &transaction,
@@ -124,7 +124,7 @@ mod tests {
                 WorkerMessageStatus::Locked,
             )
             .await,
-            seed_worker_message(
+            seed_worker(
                 &db,
                 &execution,
                 &transaction,
@@ -132,7 +132,7 @@ mod tests {
                 WorkerMessageStatus::Locked,
             )
             .await,
-            seed_worker_message(
+            seed_worker(
                 &db,
                 &execution,
                 &transaction,
@@ -140,7 +140,7 @@ mod tests {
                 WorkerMessageStatus::Locked,
             )
             .await,
-            seed_worker_message(
+            seed_worker(
                 &db,
                 &execution,
                 &transaction,
@@ -150,7 +150,7 @@ mod tests {
             .await,
         ];
 
-        let service = WorkerMessageListService::new(db.clone(), Arc::new(DaoQueries::default()))
+        let service = WorkerListService::new(db.clone(), Arc::new(DaoQueries::default()))
             .service()
             .await;
         let request = RequestContext::with(
@@ -162,31 +162,31 @@ mod tests {
         .list((), ListParams::default());
 
         let response = service.raw_oneshot(request).await?;
-        assert_eq!(*response.len(), worker_messages.len());
-        assert_eq!(response.data()[0].id(), worker_messages[0].id());
+        assert_eq!(*response.len(), workers.len());
+        assert_eq!(response.data()[0].id(), workers[0].id());
         assert_eq!(
             response.data()[0].message_status(),
-            worker_messages[0].message_status()
+            workers[0].message_status()
         );
-        assert_eq!(response.data()[1].id(), worker_messages[1].id());
+        assert_eq!(response.data()[1].id(), workers[1].id());
         assert_eq!(
             response.data()[1].message_status(),
-            worker_messages[1].message_status()
+            workers[1].message_status()
         );
-        assert_eq!(response.data()[2].id(), worker_messages[2].id());
+        assert_eq!(response.data()[2].id(), workers[2].id());
         assert_eq!(
             response.data()[2].message_status(),
-            worker_messages[2].message_status()
+            workers[2].message_status()
         );
-        assert_eq!(response.data()[3].id(), worker_messages[3].id());
+        assert_eq!(response.data()[3].id(), workers[3].id());
         assert_eq!(
             response.data()[3].message_status(),
-            worker_messages[3].message_status()
+            workers[3].message_status()
         );
-        assert_eq!(response.data()[4].id(), worker_messages[4].id());
+        assert_eq!(response.data()[4].id(), workers[4].id());
         assert_eq!(
             response.data()[4].message_status(),
-            worker_messages[4].message_status()
+            workers[4].message_status()
         );
         Ok(())
     }

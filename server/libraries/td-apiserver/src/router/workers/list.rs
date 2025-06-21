@@ -4,7 +4,7 @@
 
 use crate::router;
 use crate::router::executions::EXECUTION_TAG;
-use crate::router::state::WorkerMessages;
+use crate::router::state::Workers;
 use crate::status::error_status::ListErrorStatus;
 use axum::extract::State;
 use axum::Extension;
@@ -16,21 +16,21 @@ use td_apiforge::{apiserver_path, list_status};
 use td_objects::crudl::{ListParams, RequestContext};
 use td_objects::crudl::{ListResponse, ListResponseBuilder};
 use td_objects::rest_urls::WORKERS_LIST;
-use td_objects::types::execution::WorkerMessage;
+use td_objects::types::execution::Worker;
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
 router! {
-    state => { WorkerMessages },
-    routes => { list_worker_messages }
+    state => { Workers },
+    routes => { list_workers }
 }
 
-list_status!(WorkerMessage);
+list_status!(Worker);
 
 #[apiserver_path(method = get, path = WORKERS_LIST, tag = EXECUTION_TAG)]
 #[doc = "List worker messages"]
-pub async fn list_worker_messages(
-    State(messages): State<WorkerMessages>,
+pub async fn list_workers(
+    State(messages): State<Workers>,
     Extension(context): Extension<RequestContext>,
     Query(query_params): Query<ListParams>,
 ) -> Result<ListStatus, ListErrorStatus> {

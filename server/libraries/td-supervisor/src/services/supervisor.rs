@@ -55,7 +55,7 @@ use sysinfo::Signal::Kill;
 use sysinfo::{Pid, Signal};
 use td_common::attach::check_nowait_env;
 use td_common::env::to_absolute;
-use td_common::execution_status::FunctionRunUpdateStatus;
+use td_common::execution_status::WorkerCallbackStatus;
 use td_common::os::terminate_process;
 use td_common::server::SupervisorMessagePayload::{
     SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
@@ -1175,7 +1175,7 @@ impl Supervisor {
         worker_run: Option<&TabsDataWorker>,
     ) -> Result<(), RunnerError> {
         let execution = execution(&message);
-        let status = FunctionRunUpdateStatus::Running;
+        let status = WorkerCallbackStatus::Running;
         match notify(
             worker_run,
             message.clone(),
@@ -1218,12 +1218,12 @@ impl Supervisor {
         let execution = execution(&message);
         let limit = worker.retries;
         let (status, error) = match &result {
-            Ok(_) => (FunctionRunUpdateStatus::Done, None),
+            Ok(_) => (WorkerCallbackStatus::Done, None),
             Err(e) => {
                 if execution <= limit {
-                    (FunctionRunUpdateStatus::Error, Some(format!("{:?}", e)))
+                    (WorkerCallbackStatus::Error, Some(format!("{:?}", e)))
                 } else {
-                    (FunctionRunUpdateStatus::Failed, Some(format!("{:?}", e)))
+                    (WorkerCallbackStatus::Failed, Some(format!("{:?}", e)))
                 }
             }
         };

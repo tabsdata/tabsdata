@@ -71,7 +71,7 @@ impl Scheduler {
 pub struct SchedulerBuilder<Q> {
     db: DbPool,
     storage: Arc<Storage>,
-    worker_message_queue: Arc<Q>,
+    worker_queue: Arc<Q>,
     server_url: Arc<SocketAddr>,
 }
 
@@ -82,24 +82,20 @@ where
     pub fn new(
         db: DbPool,
         storage: Arc<Storage>,
-        worker_message_queue: Arc<Q>,
+        worker_queue: Arc<Q>,
         server_url: Arc<SocketAddr>,
     ) -> Self {
         Self {
             db,
             storage,
-            worker_message_queue,
+            worker_queue,
             server_url,
         }
     }
 
     pub async fn build(self) -> Scheduler {
-        let services = SchedulerServices::new(
-            self.db,
-            self.storage,
-            self.worker_message_queue,
-            self.server_url,
-        );
+        let services =
+            SchedulerServices::new(self.db, self.storage, self.worker_queue, self.server_url);
 
         // TODO, bring it back to 5 seconds after adding checks following trigger/callback calls
         const CHECK_FREQUENCY: Duration = Duration::from_millis(500);

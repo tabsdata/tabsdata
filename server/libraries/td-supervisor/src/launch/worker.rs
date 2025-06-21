@@ -14,7 +14,7 @@ use getset::Getters;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::RwLock;
-use td_common::execution_status::FunctionRunUpdateStatus;
+use td_common::execution_status::WorkerCallbackStatus;
 use td_common::server::SupervisorMessage;
 use td_common::server::SupervisorMessagePayload::{
     SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
@@ -116,7 +116,7 @@ pub async fn notify(
     request_message: SupervisorMessage,
     start: i64,
     end: Option<i64>,
-    status: FunctionRunUpdateStatus,
+    status: WorkerCallbackStatus,
     execution: u16,
     limit: Option<u16>,
     error: Option<String>,

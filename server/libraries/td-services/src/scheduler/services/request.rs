@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::layers::schedule::create_locked_worker_messages;
+use crate::scheduler::layers::schedule::create_locked_workers;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use td_objects::tower_service::from::{ExtractVecService, With};
 use td_objects::tower_service::sql::{insert_vec, By, SqlSelectAllService, SqlUpdateService};
 use td_objects::types::basic::FunctionRunId;
 use td_objects::types::execution::{
-    FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB, WorkerMessageDB,
+    FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB, WorkerDB,
 };
 use td_storage::Storage;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
@@ -69,9 +69,9 @@ impl<T: WorkerMessageQueue> ScheduleRequestService<T> {
                 from_fn(By::<()>::select_all::<DaoQueries, FunctionRunToExecuteDB>),
 
                 // Create a locked message for each function run.
-                from_fn(create_locked_worker_messages::<DaoQueries, T>),
+                from_fn(create_locked_workers::<DaoQueries, T>),
                 // And insert generated messages.
-                from_fn(insert_vec::<DaoQueries, WorkerMessageDB>),
+                from_fn(insert_vec::<DaoQueries, WorkerDB>),
 
                 // Update statuses.
                 from_fn(With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
@@ -142,9 +142,9 @@ mod tests {
             // This is, with status scheduled and with all requirements done.
             type_of_val(&By::<()>::select_all::<DaoQueries, FunctionRunToExecuteDB>),
             // Create a locked message for each function run.
-            type_of_val(&create_locked_worker_messages::<DaoQueries, FileWorkerMessageQueue>),
+            type_of_val(&create_locked_workers::<DaoQueries, FileWorkerMessageQueue>),
             // And insert generated messages.
-            type_of_val(&insert_vec::<DaoQueries, WorkerMessageDB>),
+            type_of_val(&insert_vec::<DaoQueries, WorkerDB>),
             // Update statuses.
             type_of_val(&With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
             type_of_val(&UpdateFunctionRunDB::run_requested),
@@ -357,8 +357,8 @@ mod tests {
             }
         }
 
-        let message: WorkerMessageDB = queries
-            .select_by::<WorkerMessageDB>(&(function_run.id()))?
+        let message: WorkerDB = queries
+            .select_by::<WorkerDB>(&(function_run.id()))?
             .build_query_as()
             .fetch_one(&db)
             .await

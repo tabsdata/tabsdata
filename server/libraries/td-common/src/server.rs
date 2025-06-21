@@ -6,7 +6,7 @@
 //! supervisor.
 
 use crate::env::get_current_dir;
-use crate::execution_status::FunctionRunUpdateStatus;
+use crate::execution_status::WorkerCallbackStatus;
 use crate::files::{get_files_in_folder_sorted_by_name, LOCK_EXTENSION, YAML_EXTENSION};
 use crate::logging::LOG_LOCATION;
 use crate::manifest::{Inf, WORKER_INF_FILE};
@@ -297,7 +297,7 @@ where
     start: i64,
     end: Option<i64>,
     #[serde(default = "default_status")]
-    status: FunctionRunUpdateStatus,
+    status: WorkerCallbackStatus,
     #[serde(default = "default_execution")]
     execution: i16,
     limit: Option<i16>,
@@ -330,8 +330,8 @@ fn default_start() -> i64 {
     Utc::now().timestamp()
 }
 
-fn default_status() -> FunctionRunUpdateStatus {
-    FunctionRunUpdateStatus::Done
+fn default_status() -> WorkerCallbackStatus {
+    WorkerCallbackStatus::Done
 }
 
 fn default_execution() -> i16 {

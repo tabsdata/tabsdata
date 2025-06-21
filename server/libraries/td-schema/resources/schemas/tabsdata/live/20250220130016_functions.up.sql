@@ -529,29 +529,30 @@ FROM function_requirements__with_status r
          LEFT JOIN tables tv ON r.requirement_table_version_id = tv.id
          LEFT JOIN functions fv ON r.requirement_function_version_id = fv.id;
 
--- Worker Messages  (table & __with_names view)
+-- Workers  (table & __with_names view)
 
-CREATE TABLE worker_messages
+CREATE TABLE workers
 (
     id                  TEXT PRIMARY KEY,
-    collection_id       TEXT NOT NULL,
-    execution_id        TEXT NOT NULL,
-    transaction_id      TEXT NOT NULL,
-    function_version_id TEXT NOT NULL,
-    function_run_id     TEXT NOT NULL,
-    message_status      TEXT NOT NULL, -- Locked/Unlocked
+    collection_id       TEXT      NOT NULL,
+    execution_id        TEXT      NOT NULL,
+    transaction_id      TEXT      NOT NULL,
+    function_version_id TEXT      NOT NULL,
+    function_run_id     TEXT      NOT NULL,
+    message_status      TEXT      NOT NULL, -- Locked/Unlocked
+    started_on          TIMESTAMP NULL,
+    ended_on            TIMESTAMP NULL,
+    status              TEXT      NOT NULL,
 
     FOREIGN KEY (function_run_id) REFERENCES function_runs (id)
 );
 
-CREATE VIEW worker_messages__with_names AS
+CREATE VIEW workers__with_names AS
 SELECT w.*,
-       fr.status as status,
-       c.name    as collection,
-       e.name    as execution,
-       fv.name   as function
-FROM worker_messages w
+       c.name  as collection,
+       e.name  as execution,
+       fv.name as function
+FROM workers w
          LEFT JOIN collections c ON w.collection_id = c.id
          LEFT JOIN executions e ON w.execution_id = e.id
-         LEFT JOIN functions fv ON w.function_version_id = fv.id
-         LEFT JOIN function_runs fr ON w.function_run_id = fr.id;
+         LEFT JOIN functions fv ON w.function_version_id = fv.id;

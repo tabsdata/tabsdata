@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::scheduler::layers::schedule::unlock_worker_messages;
+use crate::scheduler::layers::schedule::unlock_workers;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use td_common::server::WorkerMessageQueue;
@@ -47,7 +47,7 @@ impl<T: WorkerMessageQueue> ScheduleCommitService<T> {
     l! {
         commit() {
             layers!(
-                from_fn(unlock_worker_messages::<DaoQueries, T>),
+                from_fn(unlock_workers::<DaoQueries, T>),
             )
         }
     }
@@ -74,9 +74,9 @@ mod tests {
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionRuntimeValues,
-        RoleId, TableDependencyDto, TableNameDto, UserId, WorkerMessageId,
+        RoleId, TableDependencyDto, TableNameDto, UserId, WorkerId,
     };
-    use td_objects::types::execution::{ExecutionRequest, WorkerMessageDB, WorkerMessageStatus};
+    use td_objects::types::execution::{ExecutionRequest, WorkerDB, WorkerMessageStatus};
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::worker::FunctionInput;
     use td_storage::{MountDef, Storage};
@@ -101,7 +101,7 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<(), ()>(&[type_of_val(
-            &unlock_worker_messages::<DaoQueries, FileWorkerMessageQueue>,
+            &unlock_workers::<DaoQueries, FileWorkerMessageQueue>,
         )]);
         Ok(())
     }
@@ -208,10 +208,10 @@ mod tests {
 
         // And assert db
         let queries = DaoQueries::default();
-        let message_id = WorkerMessageId::try_from(created_message.id().as_str())?;
+        let message_id = WorkerId::try_from(created_message.id().as_str())?;
 
-        let message: WorkerMessageDB = queries
-            .select_by::<WorkerMessageDB>(&(&message_id))?
+        let message: WorkerDB = queries
+            .select_by::<WorkerDB>(&(&message_id))?
             .build_query_as()
             .fetch_one(&db)
             .await

@@ -13,7 +13,7 @@ use crate::types::trigger::TriggerDBWithNames;
 use crate::types::ComposedString;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
-use td_common::execution_status::FunctionRunUpdateStatus;
+use td_common::execution_status::WorkerCallbackStatus;
 use td_common::id::Id;
 use td_error::TdError;
 use td_security::{
@@ -236,13 +236,13 @@ impl FunctionRunStatus {
     }
 }
 
-impl From<FunctionRunUpdateStatus> for FunctionRunStatus {
-    fn from(value: FunctionRunUpdateStatus) -> Self {
+impl From<WorkerCallbackStatus> for FunctionRunStatus {
+    fn from(value: WorkerCallbackStatus) -> Self {
         match value {
-            FunctionRunUpdateStatus::Running => FunctionRunStatus::Running,
-            FunctionRunUpdateStatus::Done => FunctionRunStatus::Done,
-            FunctionRunUpdateStatus::Error => FunctionRunStatus::Error,
-            FunctionRunUpdateStatus::Failed => FunctionRunStatus::Failed,
+            WorkerCallbackStatus::Running => FunctionRunStatus::Running,
+            WorkerCallbackStatus::Done => FunctionRunStatus::Done,
+            WorkerCallbackStatus::Error => FunctionRunStatus::Error,
+            WorkerCallbackStatus::Failed => FunctionRunStatus::Failed,
         }
     }
 }
@@ -729,7 +729,34 @@ pub struct InputIdx;
 pub struct VersionPos;
 
 #[td_type::typed(id)]
-pub struct WorkerMessageId;
+pub struct WorkerId;
 
-#[td_type::typed(id_name(id = WorkerMessageId))]
-pub struct WorkerMessageIdName;
+#[td_type::typed(id_name(id = WorkerId))]
+pub struct WorkerIdName;
+
+#[td_type::typed_enum]
+pub enum WorkerStatus {
+    #[typed_enum(rename = "RR")]
+    RunRequested,
+    #[typed_enum(rename = "R")]
+    Running,
+    #[typed_enum(rename = "D")]
+    Done,
+    #[typed_enum(rename = "E")]
+    Error,
+    #[typed_enum(rename = "F")]
+    Failed,
+    #[typed_enum(rename = "X")]
+    Canceled,
+}
+
+impl From<WorkerCallbackStatus> for WorkerStatus {
+    fn from(value: WorkerCallbackStatus) -> Self {
+        match value {
+            WorkerCallbackStatus::Running => WorkerStatus::Running,
+            WorkerCallbackStatus::Done => WorkerStatus::Done,
+            WorkerCallbackStatus::Error => WorkerStatus::Error,
+            WorkerCallbackStatus::Failed => WorkerStatus::Failed,
+        }
+    }
+}

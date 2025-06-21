@@ -3,38 +3,42 @@
 //
 
 use crate::sql::{DaoQueries, Insert};
+use crate::types::basic::WorkerStatus;
 use crate::types::execution::{
-    ExecutionDB, FunctionRunDB, TransactionDB, WorkerMessageDB, WorkerMessageStatus,
+    ExecutionDB, FunctionRunDB, TransactionDB, WorkerDB, WorkerMessageStatus,
 };
 use td_database::sql::DbPool;
 
-pub async fn seed_worker_message(
+pub async fn seed_worker(
     db: &DbPool,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     function_run: &FunctionRunDB,
     status: WorkerMessageStatus,
-) -> WorkerMessageDB {
-    let worker_message_db = WorkerMessageDB::builder()
+) -> WorkerDB {
+    let worker_db = WorkerDB::builder()
         .collection_id(execution.collection_id())
         .execution_id(execution.id())
         .transaction_id(transaction.id())
         .function_run_id(function_run.id())
         .function_version_id(function_run.function_version_id())
         .message_status(status)
+        .started_on(None)
+        .ended_on(None)
+        .status(WorkerStatus::RunRequested)
         .build()
         .unwrap();
 
     let queries = DaoQueries::default();
     queries
-        .insert::<WorkerMessageDB>(&worker_message_db)
+        .insert::<WorkerDB>(&worker_db)
         .unwrap()
         .build()
         .execute(db)
         .await
         .unwrap();
 
-    worker_message_db
+    worker_db
 }
 
 #[cfg(test)]
@@ -51,7 +55,7 @@ mod tests {
     use td_database::sql::DbPool;
 
     #[td_test::test(sqlx)]
-    async fn test_seed_worker_message(db: DbPool) {
+    async fn test_seed_worker(db: DbPool) {
         let collection = seed_collection(
             &db,
             &CollectionName::try_from("collection").unwrap(),
@@ -98,7 +102,7 @@ mod tests {
         )
         .await;
 
-        let worker_message = seed_worker_message(
+        let worker = seed_worker(
             &db,
             &execution,
             &transaction,
@@ -107,17 +111,14 @@ mod tests {
         )
         .await;
 
-        assert_eq!(worker_message.collection_id(), collection.id());
-        assert_eq!(worker_message.execution_id(), execution.id());
-        assert_eq!(worker_message.transaction_id(), transaction.id());
-        assert_eq!(worker_message.function_run_id(), function_run.id());
+        assert_eq!(worker.collection_id(), collection.id());
+        assert_eq!(worker.execution_id(), execution.id());
+        assert_eq!(worker.transaction_id(), transaction.id());
+        assert_eq!(worker.function_run_id(), function_run.id());
         assert_eq!(
-            worker_message.function_version_id(),
+            worker.function_version_id(),
             function_run.function_version_id()
         );
-        assert_eq!(
-            *worker_message.message_status(),
-            WorkerMessageStatus::Locked
-        );
+        assert_eq!(*worker.message_status(), WorkerMessageStatus::Locked);
     }
 }

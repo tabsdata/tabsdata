@@ -4,7 +4,7 @@
 
 use crate::router;
 use crate::router::executions::EXECUTION_TAG;
-use crate::router::state::WorkerMessages;
+use crate::router::state::Workers;
 use crate::status::error_status::ListErrorStatus;
 use axum::body::Body;
 use axum::extract::{Path, State};
@@ -20,8 +20,8 @@ use tower::ServiceExt;
 use utoipa::IntoResponses;
 
 router! {
-    state => { WorkerMessages },
-    routes => { worker_message_logs }
+    state => { Workers },
+    routes => { worker_logs }
 }
 
 /// This struct is just used to document ParquetFile in the OpenAPI schema.
@@ -39,8 +39,8 @@ pub struct LogsFile(Vec<u8>);
 
 #[apiserver_path(method = get, path = WORKER_LOGS, tag = EXECUTION_TAG, override_response = LogsFile)]
 #[doc = "Read worker message logs"]
-pub async fn worker_message_logs(
-    State(messages): State<WorkerMessages>,
+pub async fn worker_logs(
+    State(messages): State<Workers>,
     Extension(context): Extension<RequestContext>,
     Path(path_params): Path<WorkerMessageParam>,
 ) -> Result<impl IntoResponse, ListErrorStatus> {

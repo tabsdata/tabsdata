@@ -48,7 +48,7 @@ impl ExecutionServices {
         let queries = Arc::new(DaoQueries::default());
         let transaction_by = Arc::new(TransactionBy::default());
         Self {
-            callback: ExecutionCallbackService::new(db.clone()),
+            callback: ExecutionCallbackService::new(db.clone(), queries.clone()),
             cancel: ExecutionCancelService::new(db.clone(), queries.clone(), authz_context.clone()),
             execute: ExecuteFunctionService::new(
                 db.clone(),

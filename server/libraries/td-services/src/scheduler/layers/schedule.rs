@@ -18,11 +18,11 @@ use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
 use td_objects::sql::{DerefQueries, FindBy, SelectBy, UpdateBy};
-use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerMessageId};
+use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId, WorkerStatus};
 use td_objects::types::execution::TableDataVersionDBWithNames;
 use td_objects::types::execution::{
     FunctionRequirementDBWithNames, FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB,
-    UpdateWorkerMessageDB, WorkerMessageDB, WorkerMessageStatus,
+    UpdateWorkerMessageStatusDB, WorkerDB, WorkerMessageStatus,
 };
 use td_objects::types::worker::v2::{
     FunctionInfoV2, FunctionInputV2, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
@@ -44,14 +44,14 @@ pub enum ScheduleError {
     MissingRequestContext = 5002,
 }
 
-pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueue>(
+pub async fn create_locked_workers<Q: DerefQueries, T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<Q>,
     SrvCtx(storage): SrvCtx<Storage>,
     SrvCtx(server_url): SrvCtx<SocketAddr>,
     Connection(connection): Connection,
     Input(function_runs): Input<Vec<FunctionRunToExecuteDB>>,
-) -> Result<Vec<WorkerMessageDB>, TdError> {
+) -> Result<Vec<WorkerDB>, TdError> {
     let futures: Vec<_> = function_runs
         .iter()
         .map(|f| {
@@ -312,13 +312,14 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
                         .unwrap();
 
                 // Create worker message
-                let message = WorkerMessageDB::builder()
+                let message = WorkerDB::builder()
                     .collection_id(f.collection_id())
                     .execution_id(f.execution_id())
                     .transaction_id(f.transaction_id())
                     .function_run_id(f.id())
                     .function_version_id(f.function_version_id())
                     .message_status(WorkerMessageStatus::Locked)
+                    .status(WorkerStatus::RunRequested)
                     .build()?;
 
                 // Add it to the queue
@@ -338,7 +339,7 @@ pub async fn create_locked_worker_messages<Q: DerefQueries, T: WorkerMessageQueu
 
 // These layer should not fail for single messages errors, only for wider errors (system, connection, etc.).
 // All errors parsing or processing messages should be logged and the message should be removed from the queue.
-pub async fn unlock_worker_messages<Q: DerefQueries, T: WorkerMessageQueue>(
+pub async fn unlock_workers<Q: DerefQueries, T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
     SrvCtx(queries): SrvCtx<Q>,
     Connection(connection): Connection,
@@ -446,11 +447,11 @@ pub async fn unlock_worker_messages<Q: DerefQueries, T: WorkerMessageQueue>(
             let mut conn = connection.lock().await;
             let conn = conn.get_mut_connection()?;
 
-            let update = UpdateWorkerMessageDB::unlocked()?;
+            let update = UpdateWorkerMessageStatusDB::unlocked()?;
             // TODO the queue should use this typed too
-            let message_id = WorkerMessageId::try_from(message.id().as_str())?;
+            let message_id = WorkerId::try_from(message.id().as_str())?;
             match queries
-                .update_by::<_, WorkerMessageDB>(&update, &(&message_id))?
+                .update_by::<_, WorkerDB>(&update, &(&message_id))?
                 .build()
                 .execute(&mut *conn)
                 .await

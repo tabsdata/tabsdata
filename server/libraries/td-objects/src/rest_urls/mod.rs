@@ -5,7 +5,7 @@
 use crate::types::basic::{
     AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
     InterCollectionPermissionIdName, PermissionIdName, RoleIdName, SampleLen, SampleOffset, Sql,
-    TableIdName, TransactionIdName, UserIdName, WorkerMessageIdName,
+    TableIdName, TransactionIdName, UserIdName, WorkerIdName,
 };
 use constcat::concat;
 
@@ -262,7 +262,7 @@ pub const WORKER: &str = url!(WORKERS, "/{worker}");
 #[td_type::UrlParam]
 pub struct WorkerMessageParam {
     #[td_type(extractor)]
-    worker: WorkerMessageIdName,
+    worker: WorkerIdName,
 }
 
 pub const WORKERS_LIST: &str = url!(WORKERS);

@@ -10,7 +10,7 @@ use crate::types::basic::{
     SelfDependency, StatusCount, StorageVersion, TableDataVersionId, TableFunctionParamPos,
     TableId, TableName, TableVersionId, TableVersions, TransactionByStr, TransactionId,
     TransactionKey, TransactionStatus, Trigger, TriggeredOn, UserId, UserName, VersionPos,
-    WorkerMessageId,
+    WorkerId, WorkerStatus,
 };
 use crate::types::dependency::DependencyDBWithNames;
 use crate::types::function::FunctionDBWithNames;
@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use td_common::datetime::IntoDateTimeUtc;
+use td_common::execution_status::WorkerCallbackStatus;
 use td_common::server::ResponseMessagePayload;
 use td_error::TdError;
 
@@ -570,10 +571,10 @@ pub struct FunctionRequirementDBWithNames {
 }
 
 #[td_type::Dao]
-#[dao(sql_table = "worker_messages")]
-pub struct WorkerMessageDB {
+#[dao(sql_table = "workers")]
+pub struct WorkerDB {
     #[builder(default)]
-    id: WorkerMessageId,
+    id: WorkerId,
     #[td_type(extractor)]
     collection_id: CollectionId,
     execution_id: ExecutionId,
@@ -581,30 +582,38 @@ pub struct WorkerMessageDB {
     function_run_id: FunctionRunId,
     function_version_id: FunctionVersionId,
     message_status: WorkerMessageStatus,
+    #[builder(default)]
+    started_on: Option<AtTime>,
+    #[builder(default)]
+    ended_on: Option<AtTime>,
+    status: WorkerStatus,
 }
 
 #[td_type::Dao]
-#[dao(sql_table = "worker_messages__with_names")]
-pub struct WorkerMessageDBWithNames {
-    id: WorkerMessageId,
+#[dao(sql_table = "workers__with_names")]
+pub struct WorkerDBWithNames {
+    id: WorkerId,
     collection_id: CollectionId,
     execution_id: ExecutionId,
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
     function_version_id: FunctionVersionId,
     message_status: WorkerMessageStatus,
-    status: FunctionRunStatus,
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: WorkerStatus,
+
     collection: CollectionName,
     execution: Option<ExecutionName>,
     function: FunctionName,
 }
 
 #[td_type::Dto]
-#[td_type(builder(try_from = WorkerMessageDBWithNames))]
-#[dto(list(on = WorkerMessageDBWithNames))]
-pub struct WorkerMessage {
+#[td_type(builder(try_from = WorkerDBWithNames))]
+#[dto(list(on = WorkerDBWithNames))]
+pub struct Worker {
     #[dto(list(pagination_by = "+", filter, filter_like))]
-    id: WorkerMessageId,
+    id: WorkerId,
     #[dto(list(filter, filter_like, order_by))]
     collection_id: CollectionId,
     #[dto(list(filter, filter_like, order_by))]
@@ -618,7 +627,12 @@ pub struct WorkerMessage {
     #[dto(list(filter, filter_like, order_by))]
     message_status: WorkerMessageStatus,
     #[dto(list(filter, filter_like, order_by))]
-    status: FunctionRunStatus,
+    started_on: Option<AtTime>,
+    #[dto(list(filter, filter_like, order_by))]
+    ended_on: Option<AtTime>,
+    #[dto(list(filter, filter_like, order_by))]
+    status: WorkerStatus,
+
     #[dto(list(filter, filter_like, order_by))]
     collection: CollectionName,
     #[dto(list(filter, filter_like))]
@@ -638,18 +652,17 @@ pub enum WorkerMessageStatus {
 // Update Daos and Dlos
 
 #[td_type::Dlo]
-pub struct UpdateFunctionRun {
-    status: FunctionRunStatus,
+pub struct UpdateWorkerExecution {
     started_on: AtTime,
     ended_on: Option<AtTime>,
+    status: WorkerCallbackStatus,
 }
 
-impl TryFrom<&CallbackRequest> for UpdateFunctionRun {
+impl TryFrom<&CallbackRequest> for UpdateWorkerExecution {
     type Error = TdError;
 
     fn try_from(value: &CallbackRequest) -> Result<Self, Self::Error> {
-        Ok(UpdateFunctionRun::builder()
-            .status(value.status().clone())
+        Ok(UpdateWorkerExecution::builder()
             .try_started_on(value.start().datetime_utc()?)?
             .ended_on(
                 value
@@ -657,13 +670,24 @@ impl TryFrom<&CallbackRequest> for UpdateFunctionRun {
                     .map(|v| AtTime::try_from(v.datetime_utc()?))
                     .transpose()?,
             )
+            .status(value.status().clone())
             .build()?)
     }
 }
 
 #[td_type::Dao]
+#[dao(sql_table = "workers")]
+#[td_type(builder(try_from = UpdateWorkerExecution))]
+pub struct UpdateWorkerDB {
+    #[dao(immutable)]
+    started_on: Option<AtTime>,
+    ended_on: Option<AtTime>,
+    status: WorkerStatus,
+}
+
+#[td_type::Dao]
 #[dao(sql_table = "function_runs")]
-#[td_type(builder(try_from = UpdateFunctionRun))]
+#[td_type(builder(try_from = UpdateWorkerExecution))]
 pub struct UpdateFunctionRunDB {
     #[dao(immutable)]
     #[builder(default)]
@@ -724,12 +748,12 @@ pub struct UpdateTableDataVersionDB {
 }
 
 #[td_type::Dao]
-#[dao(sql_table = "worker_messages")]
-pub struct UpdateWorkerMessageDB {
+#[dao(sql_table = "workers")]
+pub struct UpdateWorkerMessageStatusDB {
     message_status: WorkerMessageStatus,
 }
 
-impl UpdateWorkerMessageDB {
+impl UpdateWorkerMessageStatusDB {
     pub fn unlocked() -> Result<Self, TdError> {
         Ok(Self::builder()
             .message_status(WorkerMessageStatus::Unlocked)
