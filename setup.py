@@ -448,15 +448,35 @@ setup(
     python_requires=">=3.12",
     install_requires=read_requirements("requirements.txt"),
     extras_require={
-        "databricks": read_requirements(
-            "requirements/requirements-connector-databricks.txt"
+        "all": read_requirements(
+            os.path.join(
+                "requirements",
+                "requirements-connector-all.txt",
+            )
         ),
-        "mongodb": read_requirements("requirements/requirements-connector-mongodb.txt"),
+        "databricks": read_requirements(
+            os.path.join(
+                "requirements",
+                "requirements-connector-databricks.txt",
+            )
+        ),
+        "mongodb": read_requirements(
+            os.path.join(
+                "requirements",
+                "requirements-connector-mongodb.txt",
+            ),
+        ),
         "salesforce": read_requirements(
-            "requirements/requirements-connector-salesforce.txt"
+            os.path.join(
+                "requirements",
+                "requirements-connector-salesforce.txt",
+            )
         ),
         "snowflake": read_requirements(
-            "requirements/requirements-connector-snowflake.txt"
+            os.path.join(
+                "requirements",
+                "requirements-connector-snowflake.txt",
+            )
         ),
         "test": read_requirements("requirements-test.txt"),
     },

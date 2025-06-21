@@ -79,31 +79,77 @@ def clean_py(project_folder):
         "tdlocal",
         "local_development_artifacts",
         "client/td-sdk/tabsdata/assets",
-        (
-            "connectors/python/tabsdata_databricks/tabsdata_databricks/"
-            "assets/manifest/BANNER"
+        os.path.join(
+            "connectors",
+            "python",
+            "tabsdata_databricks",
+            "tabsdata_databricks",
+            "assets",
+            "manifest",
+            "BANNER",
         ),
-        (
-            "connectors/python/tabsdata_databricks/tabsdata_databricks/"
-            "assets/manifest/LICENSE"
+        os.path.join(
+            "connectors",
+            "python",
+            "tabsdata_databricks",
+            "tabsdata_databricks",
+            "assets",
+            "manifest",
+            "LICENSE",
         ),
-        "connectors/python/tabsdata_mongodb/tabsdata_mongodb/assets/manifest/BANNER",
-        "connectors/python/tabsdata_mongodb/tabsdata_mongodb/assets/manifest/LICENSE",
-        (
-            "connectors/python/tabsdata_salesforce/tabsdata_salesforce/"
-            "assets/manifest/BANNER"
+        os.path.join(
+            "connectors",
+            "python",
+            "tabsdata_mongodb",
+            "tabsdata_mongodb",
+            "assets",
+            "manifest",
+            "BANNER",
         ),
-        (
-            "connectors/python/tabsdata_salesforce/tabsdata_salesforce/"
-            "assets/manifest/LICENSE"
+        os.path.join(
+            "connectors",
+            "python",
+            "tabsdata_mongodb",
+            "tabsdata_mongodb",
+            "assets",
+            "manifest",
+            "LICENSE",
         ),
-        (
-            "connectors/python/tabsdata_snowflake/tabsdata_snowflake/"
-            "assets/manifest/BANNER"
+        os.path.join(
+            "connectors",
+            "python",
+            "tabsdata_salesforce",
+            "tabsdata_salesforce",
+            "assets",
+            "manifest",
+            "BANNER",
         ),
-        (
-            "connectors/python/tabsdata_snowflake/tabsdata_snowflake/"
-            "assets/manifest/LICENSE"
+        os.path.join(
+            "connectors",
+            "python",
+            "tabsdata_salesforce",
+            "tabsdata_salesforce",
+            "assets",
+            "manifest",
+            "LICENSE",
+        ),
+        os.path.join(
+            "connectors",
+            "python",
+            "tabsdata_snowflake",
+            "tabsdata_snowflake",
+            "assets",
+            "manifest",
+            "BANNER",
+        ),
+        os.path.join(
+            "connectors",
+            "python",
+            "tabsdata_snowflake",
+            "tabsdata_snowflake",
+            "assets",
+            "manifest",
+            "LICENSE",
         ),
     ]
 

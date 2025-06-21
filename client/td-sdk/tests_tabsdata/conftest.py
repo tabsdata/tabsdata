@@ -91,10 +91,30 @@ ROOT_PROJECT_DIR = os.path.dirname(
 )
 LOCAL_PACKAGES_LIST = [
     ROOT_PROJECT_DIR,
-    os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_databricks"),
-    os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_mongodb"),
-    os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_salesforce"),
-    os.path.join(ROOT_PROJECT_DIR, "connectors", "python", "tabsdata_snowflake"),
+    os.path.join(
+        ROOT_PROJECT_DIR,
+        "connectors",
+        "python",
+        "tabsdata_databricks",
+    ),
+    os.path.join(
+        ROOT_PROJECT_DIR,
+        "connectors",
+        "python",
+        "tabsdata_mongodb",
+    ),
+    os.path.join(
+        ROOT_PROJECT_DIR,
+        "connectors",
+        "python",
+        "tabsdata_salesforce",
+    ),
+    os.path.join(
+        ROOT_PROJECT_DIR,
+        "connectors",
+        "python",
+        "tabsdata_snowflake",
+    ),
 ]
 
 TESTING_AWS_ACCESS_KEY_ID = "TRANSPORTER_AWS_ACCESS_KEY_ID"

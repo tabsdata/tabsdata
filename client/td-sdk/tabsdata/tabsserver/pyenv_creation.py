@@ -48,11 +48,11 @@ from tabsdata.utils.bundle_utils import (
     PYTHON_VERSION_KEY,
 )
 from tabsdata.utils.constants import (
-    TABSDATA_DATABRICKS_MODULE_NAME,
+    TABSDATA_CONNECTOR_DATABRICKS_MODULE_NAME,
+    TABSDATA_CONNECTOR_MONGODB_MODULE_NAME,
+    TABSDATA_CONNECTOR_SALESFORCE_MODULE_NAME,
+    TABSDATA_CONNECTOR_SNOWFLAKE_MODULE_NAME,
     TABSDATA_MODULE_NAME,
-    TABSDATA_MONGODB_MODULE_NAME,
-    TABSDATA_SALESFORCE_MODULE_NAME,
-    TABSDATA_SNOWFLAKE_MODULE_NAME,
     TRUE_VALUES,
 )
 from tabsdata.utils.debug import debug_enabled
@@ -100,10 +100,10 @@ PYTHON_VERSION_LOCK_TIMEOUT = 10  # 10 seconds
 
 TABSDATA_PACKAGES = [
     TABSDATA_MODULE_NAME,
-    TABSDATA_DATABRICKS_MODULE_NAME,
-    TABSDATA_MONGODB_MODULE_NAME,
-    TABSDATA_SALESFORCE_MODULE_NAME,
-    TABSDATA_SNOWFLAKE_MODULE_NAME,
+    TABSDATA_CONNECTOR_DATABRICKS_MODULE_NAME,
+    TABSDATA_CONNECTOR_MONGODB_MODULE_NAME,
+    TABSDATA_CONNECTOR_SALESFORCE_MODULE_NAME,
+    TABSDATA_CONNECTOR_SNOWFLAKE_MODULE_NAME,
 ]
 TD_INHERIT_TABSDATA_PACKAGES = "TD_INHERIT_TABSDATA_PACKAGES"
 
@@ -265,7 +265,8 @@ def found_requirements(
             if module in TABSDATA_PACKAGES:
                 if inherit_tabsdata_packages:
                     td_provider, td_location = get_tabsdata_package_metadata(
-                        module, None
+                        module,
+                        None,
                     )
                     logger.info(
                         f"Package {package} determined as: "
@@ -1163,7 +1164,8 @@ def main():
 
         tabsdata_databricks_provider, tabsdata_databricks_location = (
             get_tabsdata_package_metadata(
-                TABSDATA_DATABRICKS_MODULE_NAME, TD_TABSDATA_DATABRICKS_DEV_PKG
+                TABSDATA_CONNECTOR_DATABRICKS_MODULE_NAME,
+                TD_TABSDATA_DATABRICKS_DEV_PKG,
             )
         )
         logger.info(
@@ -1187,7 +1189,8 @@ def main():
 
         tabsdata_mongodb_provider, tabsdata_mongodb_location = (
             get_tabsdata_package_metadata(
-                TABSDATA_MONGODB_MODULE_NAME, TD_TABSDATA_MONGODB_DEV_PKG
+                TABSDATA_CONNECTOR_MONGODB_MODULE_NAME,
+                TD_TABSDATA_MONGODB_DEV_PKG,
             )
         )
         logger.info(
@@ -1211,7 +1214,8 @@ def main():
 
         tabsdata_salesforce_provider, tabsdata_salesforce_location = (
             get_tabsdata_package_metadata(
-                TABSDATA_SALESFORCE_MODULE_NAME, TD_TABSDATA_SALESFORCE_DEV_PKG
+                TABSDATA_CONNECTOR_SALESFORCE_MODULE_NAME,
+                TD_TABSDATA_SALESFORCE_DEV_PKG,
             )
         )
         logger.info(
@@ -1235,7 +1239,8 @@ def main():
 
         tabsdata_snowflake_provider, tabsdata_snowflake_location = (
             get_tabsdata_package_metadata(
-                TABSDATA_SNOWFLAKE_MODULE_NAME, TD_TABSDATA_SNOWFLAKE_DEV_PKG
+                TABSDATA_CONNECTOR_SNOWFLAKE_MODULE_NAME,
+                TD_TABSDATA_SNOWFLAKE_DEV_PKG,
             )
         )
         logger.info(
@@ -1261,7 +1266,8 @@ def main():
         # tabsdata (start)
 
         tabsdata_provider, tabsdata_location = get_tabsdata_package_metadata(
-            TABSDATA_MODULE_NAME, TD_TABSDATA_DEV_PKG
+            TABSDATA_MODULE_NAME,
+            TD_TABSDATA_DEV_PKG,
         )
         logger.info(
             "Module tabsdata classified as: "
