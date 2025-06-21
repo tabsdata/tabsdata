@@ -9,6 +9,7 @@ import time
 import unittest
 
 import polars as pl
+import pytest
 
 import tabsdata as td
 from tabsdata.exceptions import TableFrameError
@@ -449,3 +450,61 @@ class TestTableFrame(unittest.TestCase):
 
         last = tf.last_row(named=True)
         assert last == {"letters": "c", "numbers": 3}
+
+
+@pytest.fixture
+def tf_sample():
+    df = pl.DataFrame({"a": ["A", "B", "C"], "b": [1, 2, 3]})
+    return td.TableFrame.from_polars(df)
+
+
+def test_extract_as_rows_basic(tf_sample):
+    rows = tf_sample.extract_as_rows(offset=0, length=2)
+    assert rows == [{"a": "A", "b": 1}, {"a": "B", "b": 2}]
+
+
+def test_extract_as_rows_offset(tf_sample):
+    rows = tf_sample.extract_as_rows(offset=1, length=2)
+    assert rows == [{"a": "B", "b": 2}, {"a": "C", "b": 3}]
+
+
+def test_extract_as_rows_too_many(tf_sample):
+    rows = tf_sample.extract_as_rows(offset=2, length=5)
+    assert rows == [{"a": "C", "b": 3}]
+
+
+def test_extract_as_rows_empty():
+    tf = td.TableFrame.from_polars(pl.DataFrame({"a": [], "b": []}))
+    rows = tf.extract_as_rows(offset=0, length=2)
+    assert rows == []
+
+
+def test_extract_as_rows_offset_out_of_bounds(tf_sample):
+    rows = tf_sample.extract_as_rows(offset=10, length=2)
+    assert rows == []
+
+
+def test_extract_as_columns_basic(tf_sample):
+    cols = tf_sample.extract_as_columns(offset=0, length=2)
+    assert cols == {"a": ["A", "B"], "b": [1, 2]}
+
+
+def test_extract_as_columns_offset(tf_sample):
+    cols = tf_sample.extract_as_columns(offset=1, length=2)
+    assert cols == {"a": ["B", "C"], "b": [2, 3]}
+
+
+def test_extract_as_columns_too_many(tf_sample):
+    cols = tf_sample.extract_as_columns(offset=2, length=5)
+    assert cols == {"a": ["C"], "b": [3]}
+
+
+def test_extract_as_columns_empty():
+    tf = td.TableFrame.from_polars(pl.DataFrame({"a": [], "b": []}))
+    cols = tf.extract_as_columns(offset=0, length=2)
+    assert cols == {"a": [], "b": []}
+
+
+def test_extract_as_columns_offset_out_of_bounds(tf_sample):
+    cols = tf_sample.extract_as_columns(offset=10, length=2)
+    assert cols == {"a": [], "b": []}

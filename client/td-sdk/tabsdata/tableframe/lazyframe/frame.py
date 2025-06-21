@@ -2186,6 +2186,103 @@ class TableFrame:
         # noinspection PyProtectedMember
         return td_frame.DataFrame.item(td_translator._unwrap_table_frame(self))
 
+    @pydoc(categories="filters")
+    def extract_as_rows(self, offset: int, length: int) -> list[dict[str, Any]]:
+        """
+        Extract a slice of rows from the TableFrame as a list of dictionaries.
+
+        Each dictionary represents one row, where keys are column names
+        and values are the corresponding cell values.
+
+        Parameters:
+            offset (int): The starting row index of the slice.
+            length (int): The number of rows to include in the slice.
+
+        Returns:
+            list[dict[str, Any]]: A list of row dictionaries.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌─────┬─────┐
+        │ a   ┆ b   │
+        │ --- ┆ --- │
+        │ str ┆ i64 │
+        ╞═════╪═════╡
+        │ A   ┆ 1   │
+        │ X   ┆ 10  │
+        │ C   ┆ 3   │
+        │ D   ┆ 5   │
+        │ M   ┆ 9   │
+        └─────┴─────┘
+        >>>
+        >>> tf.extract_as_rows(offset=0, length=2)
+        [
+        >>>
+        >>> tf.extract_as_rows(offset=0, length=2)
+            [
+                {"a": "A", "b": 1},
+                {"a": "X", "b": 10},
+            ]
+        """
+        # noinspection PyProtectedMember
+        return (
+            td_translator._unwrap_table_frame(self)
+            .slice(offset, length)
+            .collect()
+            .to_dicts()
+        )
+
+    @pydoc(categories="filters")
+    def extract_as_columns(self, offset: int, length: int) -> dict[str, list[Any]]:
+        """
+        Extract a slice of rows from the table as a column-oriented dictionary.
+
+        The result is a mapping of column names to lists of values from the selected rows.
+
+        Parameters:
+            offset (int): The starting row index of the slice.
+            length (int): The number of rows to include in the slice.
+
+        Returns:
+            dict[str, list[Any]]: A dictionary where each key is a column name,
+            and its value is a list of values from the selected slice.
+
+        Example:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌─────┬─────┐
+        │ a   ┆ b   │
+        │ --- ┆ --- │
+        │ str ┆ i64 │
+        ╞═════╪═════╡
+        │ A   ┆ 1   │
+        │ X   ┆ 10  │
+        │ C   ┆ 3   │
+        │ D   ┆ 5   │
+        │ M   ┆ 9   │
+        └─────┴─────┘
+        >>>
+        >>> tf.extract_as_columns(offset=0, length=2)
+            {
+                "a": ["A", 1],
+                "b": ["X", 10]
+            }
+        """
+        # noinspection PyProtectedMember
+        return (
+            td_translator._unwrap_table_frame(self)
+            .slice(offset, length)
+            .collect()
+            .to_dict(as_series=False)
+        )
+
 
 TdType = TypeVar("TdType", TableFrame, Series, td_expr.Expr)
 

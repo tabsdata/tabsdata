@@ -36,7 +36,7 @@ def _wrap_polars_frame(f: pl.LazyFrame | pl.DataFrame) -> td_frame.TableFrame:
         raise TableFrameError(ErrorCode.TF7, type(f))
 
 
-def _unwrap_table_frame(tf: td_frame.TableFrame):
+def _unwrap_table_frame(tf: td_frame.TableFrame) -> pl.LazyFrame:
     # noinspection PyProtectedMember
     return td_common.drop_system_columns(lf=tf._to_lazy())
 
