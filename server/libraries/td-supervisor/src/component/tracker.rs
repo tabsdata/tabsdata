@@ -247,6 +247,8 @@ mod tests {
     use std::sync::mpsc::channel;
     use std::time::Duration;
     use std::{fs, thread};
+    use td_common::env::check_flag_env;
+    use td_common::server::TD_DETACHED_SUBPROCESSES;
     use tempfile::tempdir;
     use tracing::info;
 
@@ -318,7 +320,17 @@ mod tests {
         let (sender, receiver) = channel();
         thread::spawn(move || {
             let mut child = if cfg!(target_os = "windows") {
-                Command::new(WAIT_PROGRAM)
+                let mut command = Command::new(WAIT_PROGRAM);
+                if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+                    #[cfg(windows)]
+                    {
+                        use std::os::windows::process::CommandExt;
+                        use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+                        command.creation_flags(CREATE_NO_WINDOW);
+                    }
+                }
+                command
                     .arg("-Command")
                     .arg("Start-Sleep -Seconds 60")
                     .spawn()

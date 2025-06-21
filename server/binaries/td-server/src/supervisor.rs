@@ -8,8 +8,9 @@ use std::env;
 use std::env::set_var;
 use std::ffi::OsString;
 use td_common::attach::attach;
+use td_common::env::check_flag_env;
 use td_common::logging;
-use td_common::server::{INSTANCE_PATH_ENV, INSTANCE_URI_ENV};
+use td_common::server::{INSTANCE_PATH_ENV, INSTANCE_URI_ENV, TD_DETACHED_SUBPROCESSES};
 use td_supervisor::services::supervisor;
 use td_supervisor::services::supervisor::{prepend_slash, Arguments};
 use tracing::{info, Level};
@@ -34,6 +35,15 @@ pub fn main() {
                     .into_owned(),
             ),
         );
+    }
+
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::Console::FreeConsole;
+
+            let _ = FreeConsole();
+        }
     }
 
     logging::start(Level::INFO, None, true);

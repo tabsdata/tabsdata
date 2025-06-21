@@ -11,11 +11,12 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt as UnixMetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use td_common::env::{get_home_dir, TABSDATA_HOME_DIR};
+use td_common::env::{check_flag_env, get_home_dir, TABSDATA_HOME_DIR};
 use td_common::logging::LOG_EXTENSION;
 use td_common::server::{
     DATABASE_FOLDER, ENVIRONMENTS_FOLDER, EPHEMERAL_FOLDER, INIT_FOLDER, LOG_FOLDER, PROC_FOLDER,
-    REGULAR_FOLDER, REPOSITORY_FOLDER, STORAGE_FOLDER, WORKSPACE_FOLDER, WORK_FOLDER,
+    REGULAR_FOLDER, REPOSITORY_FOLDER, STORAGE_FOLDER, TD_DETACHED_SUBPROCESSES, WORKSPACE_FOLDER,
+    WORK_FOLDER,
 };
 
 pub const TD_MONITOR_CHECK_FREQUENCY: &str = "TD_MONITOR_CHECK_FREQUENCY";
@@ -130,7 +131,18 @@ pub fn instance_space(instance: &Path) -> IndexMap<String, SpaceStats> {
 }
 
 fn get_uv_cache_dir() -> Option<PathBuf> {
-    let output = Command::new("uv").arg("cache").arg("dir").output().ok()?;
+    let mut command = Command::new("uv");
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+    }
+    command.arg("cache").arg("dir");
+    let output = command.output().ok()?;
     if !output.status.success() {
         return None;
     }

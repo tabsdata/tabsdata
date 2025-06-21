@@ -9,21 +9,21 @@ use std::fs;
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::fs::MetadataExt;
 
+#[cfg(target_os = "windows")]
+use crate::env::check_flag_env;
+#[cfg(target_os = "windows")]
+use crate::server::TD_DETACHED_SUBPROCESSES;
 #[cfg(not(target_os = "windows"))]
 use libc::pid_t;
 #[cfg(not(target_os = "windows"))]
 use libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use std::env::consts::OS;
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use sysinfo::{Pid, Process, Signal, System};
 use tracing::info;
 #[cfg(not(target_os = "windows"))]
 use tracing::warn;
-#[cfg(target_os = "windows")]
-use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 
 #[allow(dead_code)]
 const OS_LINUX: &str = "linux";
@@ -96,11 +96,16 @@ pub fn terminate_process(pid: i32, signal: Signal) -> Result<(), OsProcessError>
 #[cfg(target_os = "windows")]
 pub fn kill_with(process: &Process, _signal: Signal) -> Option<bool> {
     let mut kill = process::Command::new("taskkill.exe");
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+        kill.creation_flags(CREATE_NO_WINDOW);
+    }
     kill.arg("/PID")
         .arg(process.pid().to_string())
         .arg("/T")
         .arg("/F");
-    kill.creation_flags(CREATE_NO_WINDOW.0);
     match kill.output() {
         Ok(output) => Some(output.status.success()),
         Err(_) => Some(false),
@@ -222,11 +227,20 @@ mod tests {
         let (sender, receiver) = channel();
         thread::spawn(move || {
             let mut child = if cfg!(target_os = "windows") {
-                Command::new(WAIT_PROGRAM)
+                let mut command = Command::new(WAIT_PROGRAM);
+                #[cfg(windows)]
+                if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+                    use std::os::windows::process::CommandExt;
+                    use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+                    command.creation_flags(CREATE_NO_WINDOW);
+                }
+                let command = command
                     .arg("-Command")
                     .arg("Start-Sleep -Seconds 600")
                     .spawn()
-                    .expect("Failed to start the dummy process")
+                    .expect("Failed to start the dummy process");
+                command
             } else {
                 Command::new("sleep")
                     .arg("600")

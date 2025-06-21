@@ -12,7 +12,9 @@ use crate::io::log_std_out_and_err;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Output};
+use td_common::env::check_flag_env;
 use td_common::os::name_program;
+use td_common::server::TD_DETACHED_SUBPROCESSES;
 use td_common::status::ExitStatus::GeneralError;
 use td_error::TdError;
 use tracing::{debug, error};
@@ -52,7 +54,17 @@ pub fn set(instance: &PathBuf, dump_std: bool) -> Result<PathBuf, TdError> {
 
 pub fn get(dump_std: bool) -> Result<PathBuf, TdError> {
     let python = name_program(&PathBuf::from(PYTHON_PROGRAM));
-    let output = Command::new(python)
+    let mut command = Command::new(python);
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+    }
+    let output = command
         .arg(PYTHON_ARGUMENT_C)
         .arg(PYTHON_INTERPRETER_SCRIPT)
         .output()
@@ -81,7 +93,17 @@ pub fn get(dump_std: bool) -> Result<PathBuf, TdError> {
 
 pub fn create(instance: &PathBuf, dump_std: bool) -> Result<PathBuf, TdError> {
     let tdvenv = name_program(&PathBuf::from(TDVENV_PROGRAM));
-    let output = Command::new(tdvenv)
+    let mut command = Command::new(tdvenv);
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+    }
+    let output = command
         .arg(TDVENV_ARGUMENT_INSTANCE)
         .arg(instance)
         .output()

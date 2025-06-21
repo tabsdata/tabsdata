@@ -12,7 +12,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use td_build::version::TABSDATA_VERSION;
+use td_common::env::check_flag_env;
 use td_common::os::name_program;
+use td_common::server::TD_DETACHED_SUBPROCESSES;
 use td_error::TdError;
 use tracing::error;
 
@@ -25,7 +27,17 @@ pub const TDUPGRADER_ARGUMENT_EXECUTE: &str = "--execute";
 
 pub fn perform(instance: &PathBuf, execute: bool) -> Result<(), TdError> {
     let tdupgrader = name_program(&PathBuf::from(TDUPGRADER_PROGRAM));
-    let output = Command::new(tdupgrader)
+    let mut command = Command::new(tdupgrader);
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+    }
+    let output = command
         .arg(TDUPGRADER_ARGUMENT_INSTANCE)
         .arg(instance)
         .args(execute.then_some(TDUPGRADER_ARGUMENT_EXECUTE).iter())

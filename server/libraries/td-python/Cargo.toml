@@ -28,7 +28,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "thiserror", "strum", "toml"]
+ignored = ["openssl", "td-build", "thiserror", "strum", "toml", "windows", "windows-sys"]
 
 # Build dependencies
 
@@ -55,6 +55,8 @@ semver = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+windows = { workspace = true, features = ["Win32", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+windows-sys = { workspace = true, features = ["Win32", "Win32_System_Threading", "Win32_System_Console"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

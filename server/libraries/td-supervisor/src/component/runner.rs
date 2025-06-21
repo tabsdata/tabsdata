@@ -103,6 +103,17 @@ impl WorkerRunner for TabsDataWorkerRunner {
         }
 
         let mut command = Command::new(worker.describer().program());
+
+        #[cfg(windows)]
+        {
+            use td_common::server::TD_DETACHED_SUBPROCESSES;
+            if check_flag_env(TD_DETACHED_SUBPROCESSES) || detached {
+                use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+                command.creation_flags(CREATE_NO_WINDOW);
+            }
+        }
+
         command
             .current_dir(worker.describer().work())
             .envs(obtain_env_vars(worker.describer().name()))
@@ -132,24 +143,6 @@ impl WorkerRunner for TabsDataWorkerRunner {
             worker.describer().program(),
             worker.describer().arguments()
         );
-
-        #[cfg(windows)]
-        {
-            /*
-            Pending investigation. These options work but open a cmd window
-            is opened then for each sub-process, which is undesired.
-             */
-
-            /*
-            if detached {
-                use windows_sys::Win32::System::Threading::{
-                    CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, DETACHED_PROCESS,
-                };
-                command
-                    .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
-            }
-             */
-        }
 
         let mut child = match command.spawn() {
             Ok(child) => child,

@@ -3,6 +3,7 @@
 #
 
 import logging
+import platform
 import sys
 
 from rich.console import Console
@@ -16,15 +17,17 @@ class NewlineOnFirstLog(logging.Filter):
 
     def filter(self, record):
         if self.first:
-            sys.stderr.write("\n")
-            sys.stderr.flush()
             self.first = False
-        return True
+            record.msg = "\n" + str(record.msg)
+        if platform.system() == "Windows":
+            return False
+        else:
+            return record.levelno >= logging.CRITICAL
 
 
 def setup_tests_logging() -> logging.Logger:
     logger = logging.getLogger(None)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.ERROR)
     logger.propagate = True
     logger.handlers.clear()
     handler = RichHandler(

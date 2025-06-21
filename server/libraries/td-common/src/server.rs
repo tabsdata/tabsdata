@@ -143,6 +143,8 @@ pub const REQUEST_MESSAGE_FORMAT: &str = concatcp!("{}", RETRIES_DELIMITER, "{}"
 
 pub const ETC_FOLDER: &str = "etc";
 
+pub const TD_DETACHED_SUBPROCESSES: &str = "TD_DETACHED_SUBPROCESSES";
+
 #[td_error]
 pub enum QueueError {
     #[error("Error creating the queue folder '{queue}': {cause}")]

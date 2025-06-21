@@ -89,7 +89,7 @@ test_tower_metadata = ["td-tower/test_tower_metadata"]
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "clap_derive", "getset", "http", "paste", "serde", "serde_json", "strum", "toml", "utoipa-axum"]
+ignored = ["openssl", "clap_derive", "getset", "http", "paste", "serde", "serde_json", "strum", "toml", "utoipa-axum", "windows", "windows-sys"]
 
 # Build dependencies
 
@@ -153,6 +153,8 @@ tracing = { workspace = true }
 tracing-futures = { workspace = true }
 utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
 utoipa-axum = { workspace = true }
+windows = { workspace = true, features = ["Win32", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+windows-sys = { workspace = true, features = ["Win32", "Win32_System_Threading", "Win32_System_Console"] }
 
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }

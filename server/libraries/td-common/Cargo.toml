@@ -30,7 +30,7 @@ test-utils = []
 tokio_console = ["console-subscriber"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "td-build", "toml", "utoipa"]
+ignored = ["openssl", "strum", "td-build", "toml", "utoipa", "windows", "windows-sys"]
 
 # Build dependencies
 
@@ -96,6 +96,7 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 whoami = { workspace = true }
 windows = { workspace = true, features = ["Win32", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+windows-sys = { workspace = true, features = ["Win32", "Win32_System_Threading", "Win32_System_Console"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

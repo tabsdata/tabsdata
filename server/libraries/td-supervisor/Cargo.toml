@@ -30,7 +30,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "ignore", "indicatif", "strum", "toml", "tm-workspace"]
+ignored = ["openssl", "ignore", "indicatif", "strum", "toml", "tm-workspace", "windows", "windows-sys"]
 
 # Build dependencies
 
@@ -100,7 +100,8 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-windows-sys = { workspace = true, features = ["Win32", "Win32_System_Threading"] }
+windows = { workspace = true, features = ["Win32", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+windows-sys = { workspace = true, features = ["Win32", "Win32_System_Threading", "Win32_System_Console"] }
 walkdir = { workspace = true }
 
 [dev-dependencies]

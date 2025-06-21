@@ -5587,6 +5587,7 @@ dependencies = [
  "uuid",
  "whoami",
  "windows 0.60.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5734,6 +5735,7 @@ dependencies = [
  "tokio",
  "tracing",
  "windows 0.60.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5749,6 +5751,8 @@ dependencies = [
  "td-error",
  "thiserror 2.0.12",
  "tracing",
+ "windows 0.60.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5815,6 +5819,8 @@ dependencies = [
  "tracing-futures",
  "utoipa",
  "utoipa-axum",
+ "windows 0.60.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5984,6 +5990,7 @@ dependencies = [
  "tracing",
  "url",
  "walkdir",
+ "windows 0.60.0",
  "windows-sys 0.60.2",
 ]
 

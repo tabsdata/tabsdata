@@ -3,13 +3,15 @@
 //
 
 use colored::*;
-use std::fs;
 use std::io::Write;
+use std::{env, fs};
 use td_build::version::TABSDATA_VERSION;
 use td_common::attach::attach;
 use td_common::env::{get_home_dir, TABSDATA_HOME_DIR};
 use td_common::logging;
 use td_common::logging::LogOutput;
+use td_common::server::TD_DETACHED_SUBPROCESSES;
+use td_common::settings::TRUE;
 use td_supervisor::services::tdserver;
 use terminal_size::{terminal_size, Width};
 use textwrap::fill;
@@ -88,5 +90,9 @@ fn show_banner() -> Result<(), std::io::Error> {
 async fn main() {
     logging::start(Level::INFO, Some(LogOutput::StdOut), false);
     let _ = check_banner();
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        env::set_var(TD_DETACHED_SUBPROCESSES, TRUE);
+    }
     tdserver::start().await;
 }

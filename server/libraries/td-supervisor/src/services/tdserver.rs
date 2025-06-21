@@ -43,13 +43,14 @@ use tabled::{
     Table, Tabled,
 };
 use td_apiserver::config::DbSchema;
-use td_common::env::{get_home_dir, to_absolute, TABSDATA_HOME_DIR};
+use td_common::env::{check_flag_env, get_home_dir, to_absolute, TABSDATA_HOME_DIR};
 use td_common::logging::set_log_level;
 use td_common::os::{name_program, terminate_process};
 use td_common::server::WorkerClass::REGULAR;
 use td_common::server::{
     AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FOLDER, DATABASE_FILE, DATABASE_FOLDER,
-    ENVIRONMENTS_FOLDER, ETC_FOLDER, MSG_FOLDER, STORAGE_FOLDER, WORK_FOLDER,
+    ENVIRONMENTS_FOLDER, ETC_FOLDER, MSG_FOLDER, STORAGE_FOLDER, TD_DETACHED_SUBPROCESSES,
+    WORK_FOLDER,
 };
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
 use td_process::launcher::arg::InheritedArgumentKey;
@@ -559,6 +560,15 @@ fn create_instance(instance: &Option<PathBuf>, profile: &Option<PathBuf>) {
 
     let bootloader = name_program(&PathBuf::from(BOOTLOADER));
     let mut binary = Command::new(bootloader);
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+            binary.creation_flags(CREATE_NO_WINDOW);
+        }
+    }
     let mut command = binary
         .arg(BOOTLOADER_ARGUMENT_INSTANCE)
         .arg(supervisor_instance_absolute.clone())
@@ -622,6 +632,15 @@ fn create_database(instance: &Option<PathBuf>) {
 
     let apiserver = name_program(&PathBuf::from(APISERVER));
     let mut binary = Command::new(apiserver);
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+            binary.creation_flags(CREATE_NO_WINDOW);
+        }
+    }
     let command = binary
         .arg(APISERVER_ARGUMENT_DATABASE_URL)
         .arg(supervisor_database_url.clone().to_string())
@@ -720,6 +739,15 @@ fn command_upgrade(arguments: UpgradeArguments) {
 
             let apiserver = name_program(&PathBuf::from(APISERVER));
             let mut binary = Command::new(apiserver);
+            if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+                    binary.creation_flags(CREATE_NO_WINDOW);
+                }
+            }
             set_log_level(Level::ERROR);
             let command = binary
                 .arg(APISERVER_ARGUMENT_DATABASE_URL)
@@ -1543,6 +1571,15 @@ fn clean_envs(arguments: CleanArguments) {
 fn clean_cache(_: CleanArguments) {
     let mut ok: bool = true;
     let mut binary = Command::new("uv");
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+            binary.creation_flags(CREATE_NO_WINDOW);
+        }
+    }
     let command = binary.arg("cache").arg("clean");
     let result = command.output();
     match result {
@@ -1555,6 +1592,15 @@ fn clean_cache(_: CleanArguments) {
         }
     }
     let mut binary = Command::new("pip");
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+            binary.creation_flags(CREATE_NO_WINDOW);
+        }
+    }
     let command = binary.arg("cache").arg("purge");
     let result = command.output();
     match result {
