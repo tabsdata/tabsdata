@@ -629,9 +629,9 @@ pub struct WorkerMessage {
 
 #[td_type::typed_enum]
 pub enum WorkerMessageStatus {
-    #[strum(to_string = "L")]
+    #[typed_enum(rename = "L")]
     Locked,
-    #[strum(to_string = "U")]
+    #[typed_enum(rename = "U")]
     Unlocked,
 }
 

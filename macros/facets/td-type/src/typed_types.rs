@@ -1334,26 +1334,65 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
 }
 
 #[derive(Debug, Default, FromMeta)]
-pub struct TypedEnum {
-    #[darling(default)]
-    skip_serde: bool,
-}
+pub struct TypedEnum {}
 
 pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
-    let args = parse_meta!(TypedEnum, args).unwrap();
-    let input = parse_macro_input!(item as ItemEnum);
+    let _args = parse_meta!(TypedEnum, args).unwrap();
+    let mut input = parse_macro_input!(item as ItemEnum);
 
     let name = &input.ident;
     let error_name = format_ident!("{}Error", name);
 
-    let skip_serde = args.skip_serde;
+    // TODO I am pretty sure there is a better way to do this...
+    // Add #[strum(to_string = "...")] and #[serde(rename = "...")] attributes to each variant
+    // if the #[typed_enum(rename = "...")] attribute is present
+    for variant in &mut input.variants {
+        let original_attrs = variant.attrs.clone();
 
-    let mut expanded = quote! {
+        // Look for #[typed_enum(rename = "...")]
+        for attr in &original_attrs {
+            if attr.path().is_ident("typed_enum") {
+                // Parse the attribute as MetaNameValue, e.g., rename = "X"
+                if let Ok(syn::MetaNameValue {
+                    path,
+                    value:
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Str(lit_str),
+                            ..
+                        }),
+                    ..
+                }) = attr.parse_args()
+                {
+                    if path.is_ident("rename") {
+                        let rename = lit_str.value();
+
+                        // Add #[strum(to_string = "...")] and #[serde(rename = "...")]
+                        let strum_attr: syn::Attribute = syn::parse_quote!(
+                            #[strum(to_string = #rename)]
+                        );
+                        let serde_attr: syn::Attribute = syn::parse_quote!(
+                            #[serde(rename = #rename)]
+                        );
+
+                        variant.attrs.push(strum_attr);
+                        variant.attrs.push(serde_attr);
+                    }
+                }
+            }
+        }
+        // Strip all #[typed_enum(...)] attributes
+        variant
+            .attrs
+            .retain(|attr| !attr.path().is_ident("typed_enum"));
+    }
+
+    let expanded = quote! {
         #[td_apiforge::apiserver_schema]
         #[derive(
             Debug, Clone,
             PartialEq, Eq, Hash, PartialOrd, Ord,
             strum::EnumString, strum::Display, strum::EnumIter,
+            serde::Serialize, serde::Deserialize,
         )]
         #[strum(
             parse_err_fn = Self::parse_error,
@@ -1453,32 +1492,6 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     };
-
-    if !skip_serde {
-        expanded = quote! {
-            #expanded
-
-            impl<'de> serde::Deserialize<'de> for #name {
-                    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-                    where
-                    D: serde::Deserializer<'de>,
-                {
-                    let s = String::deserialize(deserializer)?;
-                    Self::try_from(s).map_err(serde::de::Error::custom)
-                }
-            }
-
-            impl serde::Serialize for #name {
-                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-                where
-                S: serde::Serializer,
-                {
-                self.to_string().serialize(serializer)
-                }
-            }
-
-        }
-    }
 
     expanded.into()
 }

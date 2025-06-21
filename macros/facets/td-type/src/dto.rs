@@ -158,8 +158,10 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                         pagination_order = pag;
 
                         order_by_fields.push(f.ident.as_ref().unwrap());
+                        field_type_map.insert(f.ident.as_ref().unwrap(), &f.ty);
                     } else if args.order_by {
                         order_by_fields.push(f.ident.as_ref().unwrap());
+                        field_type_map.insert(f.ident.as_ref().unwrap(), &f.ty);
                     }
                     if args.filter {
                         filter_fields.push(f.ident.as_ref().unwrap());

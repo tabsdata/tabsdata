@@ -66,11 +66,11 @@ pub struct DataLocation;
 
 #[td_type::typed_enum]
 pub enum Decorator {
-    #[strum(to_string = "P")]
+    #[typed_enum(rename = "P")]
     Publisher,
-    #[strum(to_string = "T")]
+    #[typed_enum(rename = "T")]
     Transformer,
-    #[strum(to_string = "S")]
+    #[typed_enum(rename = "S")]
     Subscriber,
 }
 
@@ -82,9 +82,9 @@ pub struct DependencyPos;
 
 #[td_type::typed_enum]
 pub enum DependencyStatus {
-    #[strum(to_string = "A")]
+    #[typed_enum(rename = "A")]
     Active,
-    #[strum(to_string = "D")]
+    #[typed_enum(rename = "D")]
     Deleted,
 }
 
@@ -128,17 +128,24 @@ pub struct ExecutionLimit;
 #[td_type::typed(string(parser = parse_execution))]
 pub struct ExecutionName;
 
+/// Represents the status of an execution.
+/// It is a summary of the statuses of all function runs within the execution.
 #[td_type::typed_enum]
 pub enum ExecutionStatus {
-    #[strum(to_string = "S")]
+    /// All function runs are scheduled.
+    #[typed_enum(rename = "S")]
     Scheduled,
-    #[strum(to_string = "R")]
+    /// At least one function run is still running (or able to do so).
+    #[typed_enum(rename = "R")]
     Running,
-    #[strum(to_string = "L")]
+    /// All functions are in a finished state, but at least one is Failed or OnHold.
+    #[typed_enum(rename = "L")]
     Stalled,
-    #[strum(to_string = "F")]
+    /// All function runs are finished (either successfully or with issues).
+    #[typed_enum(rename = "F")]
     Finished,
-    #[strum(to_string = "U")]
+    /// Unexpected status used as fallback.
+    #[typed_enum(rename = "U")]
     Unexpected,
 }
 
@@ -199,27 +206,27 @@ pub struct FunctionRunId;
 /// ```
 #[td_type::typed_enum]
 pub enum FunctionRunStatus {
-    #[strum(to_string = "S")]
+    #[typed_enum(rename = "S")]
     Scheduled,
-    #[strum(to_string = "RR")]
+    #[typed_enum(rename = "RR")]
     RunRequested,
-    #[strum(to_string = "RS")]
+    #[typed_enum(rename = "RS")]
     ReScheduled,
-    #[strum(to_string = "R")]
+    #[typed_enum(rename = "R")]
     Running,
-    #[strum(to_string = "D")]
+    #[typed_enum(rename = "D")]
     Done,
-    #[strum(to_string = "E")]
+    #[typed_enum(rename = "E")]
     Error,
-    #[strum(to_string = "F")]
+    #[typed_enum(rename = "F")]
     Failed,
-    #[strum(to_string = "H")]
+    #[typed_enum(rename = "H")]
     OnHold,
-    #[strum(to_string = "C")]
+    #[typed_enum(rename = "C")]
     Committed,
-    #[strum(to_string = "X")]
+    #[typed_enum(rename = "X")]
     Canceled,
-    #[strum(to_string = "Y")]
+    #[typed_enum(rename = "Y")]
     Yanked,
 }
 
@@ -269,11 +276,11 @@ pub struct FunctionRuntimeValues;
 
 #[td_type::typed_enum]
 pub enum FunctionStatus {
-    #[strum(to_string = "A")]
+    #[typed_enum(rename = "A")]
     Active,
-    #[strum(to_string = "F")]
+    #[typed_enum(rename = "F")]
     Frozen,
-    #[strum(to_string = "D")]
+    #[typed_enum(rename = "D")]
     Deleted,
 }
 
@@ -288,21 +295,21 @@ pub struct FunctionVersionId;
 
 #[td_type::typed_enum]
 pub enum GrantType {
-    #[strum(to_string = "refresh_token")]
+    #[typed_enum(rename = "refresh_token")]
     RefreshToken,
 }
 
 #[td_type::typed_enum]
 pub enum GlobalStatus {
-    #[strum(to_string = "S")]
+    #[typed_enum(rename = "S")]
     Scheduled,
-    #[strum(to_string = "R")]
+    #[typed_enum(rename = "R")]
     Running,
-    #[strum(to_string = "L")]
+    #[typed_enum(rename = "L")]
     Stalled,
-    #[strum(to_string = "F")]
+    #[typed_enum(rename = "F")]
     Finished,
-    #[strum(to_string = "U")]
+    #[typed_enum(rename = "U")]
     Unknown,
 }
 
@@ -347,9 +354,9 @@ pub struct PasswordMustChange;
 
 #[td_type::typed_enum]
 pub enum PermissionEntityType {
-    #[strum(to_string = "s")]
+    #[typed_enum(rename = "s")]
     System,
-    #[strum(to_string = "c")]
+    #[typed_enum(rename = "c")]
     Collection,
 }
 
@@ -361,17 +368,17 @@ pub struct PermissionIdName;
 
 #[td_type::typed_enum]
 pub enum PermissionType {
-    #[strum(to_string = "sa")]
+    #[typed_enum(rename = "sa")]
     SysAdmin,
-    #[strum(to_string = "ss")]
+    #[typed_enum(rename = "ss")]
     SecAdmin,
-    #[strum(to_string = "ca")]
+    #[typed_enum(rename = "ca")]
     CollectionAdmin,
-    #[strum(to_string = "cd")]
+    #[typed_enum(rename = "cd")]
     CollectionDev,
-    #[strum(to_string = "cx")]
+    #[typed_enum(rename = "cx")]
     CollectionExec,
-    #[strum(to_string = "cr")]
+    #[typed_enum(rename = "cr")]
     CollectionRead,
 }
 
@@ -466,17 +473,17 @@ pub struct SessionId;
 
 #[td_type::typed_enum]
 pub enum SessionStatus {
-    #[strum(to_string = "a")]
+    #[typed_enum(rename = "a")]
     Active,
-    #[strum(to_string = "i_pc")]
+    #[typed_enum(rename = "i_pc")]
     InvalidPasswordChange,
-    #[strum(to_string = "i_nt")]
+    #[typed_enum(rename = "i_nt")]
     InvalidNewToken,
-    #[strum(to_string = "i_rc")]
+    #[typed_enum(rename = "i_rc")]
     InvalidRoleChange,
-    #[strum(to_string = "i_l")]
+    #[typed_enum(rename = "i_l")]
     InvalidLogout,
-    #[strum(to_string = "i_ud")]
+    #[typed_enum(rename = "i_ud")]
     InvalidUserDisabled,
 }
 
@@ -556,11 +563,11 @@ impl TableNameDto {
 
 #[td_type::typed_enum]
 pub enum TableStatus {
-    #[strum(to_string = "A")]
+    #[typed_enum(rename = "A")]
     Active,
-    #[strum(to_string = "F")]
+    #[typed_enum(rename = "F")]
     Frozen,
-    #[strum(to_string = "D")]
+    #[typed_enum(rename = "D")]
     Deleted,
 }
 
@@ -632,29 +639,40 @@ pub struct TransactionIdName;
 #[td_type::typed(string)]
 pub struct TransactionKey;
 
+/// Represents the status of a transaction. Note transactions are atomic status wise.
+/// So final status (e.g., Committed, Canceled, Yanked) means all function runs within the transaction
+/// do have the same status.
+/// It is a summary of the statuses of all function runs within the transaction.
 #[td_type::typed_enum]
 pub enum TransactionStatus {
-    #[strum(to_string = "S")]
+    /// All function runs are scheduled.
+    #[typed_enum(rename = "S")]
     Scheduled,
-    #[strum(to_string = "R")]
+    /// At least one function run is still running (or able to do so).
+    #[typed_enum(rename = "R")]
     Running,
-    #[strum(to_string = "L")]
+    /// All functions are in a finished state, but at least one is Failed or OnHold.
+    #[typed_enum(rename = "L")]
     Stalled,
-    #[strum(to_string = "C")]
+    /// All function runs are Committed.
+    #[typed_enum(rename = "C")]
     Committed,
-    #[strum(to_string = "X")]
+    /// All function runs are Canceled.
+    #[typed_enum(rename = "X")]
     Canceled,
-    #[strum(to_string = "Y")]
+    /// All function runs are Yanked.
+    #[typed_enum(rename = "Y")]
     Yanked,
-    #[strum(to_string = "U")]
+    /// Unexpected status used as fallback.
+    #[typed_enum(rename = "U")]
     Unexpected,
 }
 
 #[td_type::typed_enum]
 pub enum Trigger {
-    #[strum(to_string = "M")]
+    #[typed_enum(rename = "M")]
     Manual,
-    #[strum(to_string = "D")]
+    #[typed_enum(rename = "D")]
     Dependency,
 }
 
@@ -668,9 +686,9 @@ pub struct TriggerId;
 #[derive(Default)]
 pub enum TriggerStatus {
     #[default]
-    #[strum(to_string = "A")]
+    #[typed_enum(rename = "A")]
     Active,
-    #[strum(to_string = "D")]
+    #[typed_enum(rename = "D")]
     Deleted,
 }
 
