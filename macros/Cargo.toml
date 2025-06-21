@@ -116,7 +116,7 @@ version = "0.20.2"
 version = "0.13.7"
 
 [workspace.dependencies.getset]
-version = "0.1.5"
+version = "0.1.6"
 
 [workspace.dependencies.heck]
 version = "0.5.0"
@@ -165,20 +165,20 @@ version = "0.27.1"
 features = ["derive"]
 
 [workspace.dependencies.syn]
-version = "2.0.101"
+version = "2.0.104"
 features = ["full"]
 
 [workspace.dependencies.tokio]
 version = "1.45.1"
 
 [workspace.dependencies.toml]
-version = "0.8.22"
+version = "0.8.23"
 
 [workspace.dependencies.thiserror]
 version = "2.0.12"
 
 [workspace.dependencies.utoipa]
-version = "5.3.1"
+version = "5.4.0"
 features = ["axum_extras", "preserve_order"]
 
 [workspace.dependencies.walkdir]

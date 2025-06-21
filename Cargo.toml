@@ -282,11 +282,11 @@ features = ["serde"]
 version = "1.10.1"
 
 [workspace.dependencies.clap]
-version = "4.5.39"
+version = "4.5.40"
 features = ["derive"]
 
 [workspace.dependencies.clap_derive]
-version = "4.5.32"
+version = "4.5.40"
 
 [workspace.dependencies.chrono]
 version = "0.4.41"
@@ -295,7 +295,7 @@ version = "0.4.41"
 version = "2.2.0"
 
 [workspace.dependencies.color-eyre]
-version = "0.6.4"
+version = "0.6.5"
 
 [workspace.dependencies.config]
 version = "0.14.1"
@@ -344,7 +344,7 @@ version = "0.3.31"
 version = "0.3.31"
 
 [workspace.dependencies.getset]
-version = "0.1.5"
+version = "0.1.6"
 
 [workspace.dependencies.hex]
 version = "0.4.3"
@@ -353,7 +353,7 @@ version = "0.4.3"
 version = "0.3.2"
 
 [workspace.dependencies.graphviz-rust]
-version = "0.9.4"
+version = "0.9.5"
 
 [workspace.dependencies.homedir]
 version = "0.3.4"
@@ -393,7 +393,7 @@ version = "1.5.0"
 version = "0.3.0"
 
 [workspace.dependencies.libc]
-version = "0.2.172"
+version = "0.2.174"
 
 [workspace.dependencies.nix]
 version = "0.29.0"
@@ -446,7 +446,7 @@ version = "0.28.1"
 version = "1.11.1"
 
 [workspace.dependencies.reqwest]
-version = "0.12.18"
+version = "0.12.20"
 
 [workspace.dependencies.rust-embed]
 version = "8.7.2"
@@ -506,7 +506,7 @@ features = ["full"]
 version = "0.7.15"
 
 [workspace.dependencies.toml]
-version = "0.8.22"
+version = "0.8.23"
 
 [workspace.dependencies.tower]
 version = "0.5.2"
@@ -519,7 +519,7 @@ version = "0.3.3"
 version = "0.3.3"
 
 [workspace.dependencies.tower-http]
-version = "0.6.4"
+version = "0.6.6"
 features = ["cors", "timeout", "trace"]
 
 [workspace.dependencies.tabled]
@@ -536,7 +536,7 @@ version = "0.3.19"
 features = ["env-filter"]
 
 [workspace.dependencies.utoipa]
-version = "5.3.1"
+version = "5.4.0"
 features = ["axum_extras", "preserve_order"]
 
 [workspace.dependencies.utoipa-axum]
