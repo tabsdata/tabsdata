@@ -18,7 +18,7 @@ from tabsdata.secret import DirectSecret, Secret
 try:
     import databricks.sdk as dbsdk
     import databricks.sql as dbsql
-    from databricks.sdk.core import Config, oauth_service_principal
+    from databricks.sdk.core import Config, pat_auth
 
     MISSING_LIBRARIES = False
 except ImportError:
@@ -33,8 +33,7 @@ class DatabricksDestination(DestinationPlugin):
     def __init__(
         self,
         host_url: str,
-        client_id: str | Secret,
-        client_secret: str | Secret,
+        token: str | Secret,
         tables: list[str] | str,
         volume: str,
         catalog: str | None = None,
@@ -58,8 +57,7 @@ class DatabricksDestination(DestinationPlugin):
                 "can get them by installing 'tabsdata['databricks']'"
             )
         self.host_url = host_url
-        self.client_id = client_id
-        self.client_secret = client_secret
+        self.token = token
         self.volume = volume
         self.tables = tables
         self.catalog = catalog
@@ -119,35 +117,18 @@ class DatabricksDestination(DestinationPlugin):
         )
 
     @property
-    def client_id(self) -> Secret:
-        return self._client_id
+    def token(self) -> Secret:
+        return self._token
 
-    @client_id.setter
-    def client_id(self, client_id: str | Secret):
-        if isinstance(client_id, Secret):
-            self._client_id = client_id
-        elif isinstance(client_id, str):
-            self._client_id = DirectSecret(client_id)
+    @token.setter
+    def token(self, token: str | Secret):
+        if isinstance(token, Secret):
+            self._token = token
+        elif isinstance(token, str):
+            self._token = DirectSecret(token)
         else:
             raise TypeError(
-                "The client_id must be a string or a Secret, got"
-                f" {type(client_id)} instead."
-            )
-
-    @property
-    def client_secret(self) -> Secret:
-        return self._client_secret
-
-    @client_secret.setter
-    def client_secret(self, client_secret: str | Secret):
-        if isinstance(client_secret, Secret):
-            self._client_secret = client_secret
-        elif isinstance(client_secret, str):
-            self._client_secret = DirectSecret(client_secret)
-        else:
-            raise TypeError(
-                "The client_secret must be a string or a Secret, got"
-                f" {type(client_secret)} instead."
+                f"The token must be a string or a Secret, got {type(token)} instead."
             )
 
     @property
@@ -522,8 +503,7 @@ class DatabricksDestination(DestinationPlugin):
     def _get_connections(self) -> tuple[dbsdk.WorkspaceClient, dbsql.Connection]:
         ws_client = dbsdk.WorkspaceClient(
             host=self.host_url,
-            client_id=self.client_id.secret_value,
-            client_secret=self.client_secret.secret_value,
+            token=self.token.secret_value,
         )
         logger.debug(f"Workspace client created: {ws_client}")
         if self.warehouse_id is None:
@@ -535,10 +515,9 @@ class DatabricksDestination(DestinationPlugin):
         def credentials_provider():
             config = Config(
                 host=self.host_url,
-                client_id=self.client_id.secret_value,
-                client_secret=self.client_secret.secret_value,
+                token=self.token.secret_value,
             )
-            return oauth_service_principal(config)
+            return pat_auth(config)
 
         sql_connection = dbsql.connect(
             server_hostname=self.host_url,  # Note: it looks like the host for the

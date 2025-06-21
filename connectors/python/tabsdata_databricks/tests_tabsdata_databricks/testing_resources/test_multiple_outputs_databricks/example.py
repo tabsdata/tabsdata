@@ -32,8 +32,7 @@ DEFAULT_SAVE_LOCATION = TDLOCAL_FOLDER
     tables="collection/table",
     destination=td.DatabricksDestination(
         DATABRICKS_HOST,
-        td.EnvironmentSecret("TD_DATABRICKS_CLIENT_ID"),
-        td.EnvironmentSecret("TD_DATABRICKS_CLIENT_SECRET"),
+        td.EnvironmentSecret("TD_DATABRICKS_TOKEN"),
         [
             (
                 f"{DATABRICKS_CATALOG}."

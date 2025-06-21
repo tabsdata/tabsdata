@@ -16,7 +16,7 @@ import os
 import databricks.sdk as dbsdk
 import databricks.sql as dbsql
 import pytest
-from databricks.sdk.core import Config, oauth_service_principal
+from databricks.sdk.core import Config, pat_auth
 from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
     pytest_addoption,
@@ -26,10 +26,9 @@ from tests_tabsdata.conftest import (
 logger = logging.getLogger(__name__)
 
 DATABRICKS_CATALOG = os.environ.get("TD_DATABRICKS_CATALOG")
-DATABRICKS_CLIENT_ID = os.environ.get("TD_DATABRICKS_CLIENT_ID")
-DATABRICKS_CLIENT_SECRET = os.environ.get("TD_DATABRICKS_CLIENT_SECRET")
 DATABRICKS_HOST = os.environ.get("TD_DATABRICKS_HOST")
 DATABRICKS_SCHEMA = os.environ.get("TD_DATABRICKS_SCHEMA")
+DATABRICKS_TOKEN = os.environ.get("TD_DATABRICKS_TOKEN")
 DATABRICKS_VOLUME = os.environ.get("TD_DATABRICKS_VOLUME")
 DATABRICKS_WAREHOUSE_NAME = os.environ.get("TD_DATABRICKS_WAREHOUSE_NAME")
 
@@ -51,8 +50,7 @@ def pytest_sessionfinish(session, exitstatus):
 def databricks_client() -> dbsdk.WorkspaceClient:
     ws_client = dbsdk.WorkspaceClient(
         host=DATABRICKS_HOST,
-        client_id=DATABRICKS_CLIENT_ID,
-        client_secret=DATABRICKS_CLIENT_SECRET,
+        token=DATABRICKS_TOKEN,
     )
     yield ws_client
 
@@ -73,10 +71,9 @@ def sql_conn(databricks_client):
     def credentials_provider():
         config = Config(
             host=DATABRICKS_HOST,
-            client_id=DATABRICKS_CLIENT_ID,
-            client_secret=DATABRICKS_CLIENT_SECRET,
+            token=DATABRICKS_TOKEN,
         )
-        return oauth_service_principal(config)
+        return pat_auth(config)
 
     sql_conn = dbsql.connect(
         server_hostname=DATABRICKS_HOST,

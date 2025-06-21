@@ -23,10 +23,9 @@ from tests_tabsdata.conftest import (
 )
 from tests_tabsdata_databricks.conftest import (
     DATABRICKS_CATALOG,
-    DATABRICKS_CLIENT_ID,
-    DATABRICKS_CLIENT_SECRET,
     DATABRICKS_HOST,
     DATABRICKS_SCHEMA,
+    DATABRICKS_TOKEN,
     DATABRICKS_VOLUME,
     DATABRICKS_WAREHOUSE_NAME,
     TESTING_RESOURCES_FOLDER,
@@ -59,15 +58,13 @@ def test_class_initialization_default_options():
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     output = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         tables,
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
     )
     assert output.host_url == DATABRICKS_HOST
-    assert output.client_id == DirectSecret(DATABRICKS_CLIENT_ID)
-    assert output.client_secret == DirectSecret(DATABRICKS_CLIENT_SECRET)
+    assert output.token == DirectSecret(DATABRICKS_TOKEN)
     assert output.tables == tables
     assert output.volume == DATABRICKS_VOLUME
     assert output.warehouse == DATABRICKS_WAREHOUSE_NAME
@@ -83,8 +80,7 @@ def test_class_initialization_single_table():
     table = "catalog.schema.table1"
     output = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         table,
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -98,8 +94,7 @@ def test_class_initialization_single_table_no_catalog_fails():
     with pytest.raises(ValueError):
         td.DatabricksDestination(
             DATABRICKS_HOST,
-            DATABRICKS_CLIENT_ID,
-            DATABRICKS_CLIENT_SECRET,
+            DATABRICKS_TOKEN,
             table,
             DATABRICKS_VOLUME,
             warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -112,8 +107,7 @@ def test_class_initialization_single_table_no_schema_fails():
     with pytest.raises(ValueError):
         td.DatabricksDestination(
             DATABRICKS_HOST,
-            DATABRICKS_CLIENT_ID,
-            DATABRICKS_CLIENT_SECRET,
+            DATABRICKS_TOKEN,
             table,
             DATABRICKS_VOLUME,
             warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -126,8 +120,7 @@ def test_class_initialization_tables_no_catalog_fails():
     with pytest.raises(ValueError):
         td.DatabricksDestination(
             DATABRICKS_HOST,
-            DATABRICKS_CLIENT_ID,
-            DATABRICKS_CLIENT_SECRET,
+            DATABRICKS_TOKEN,
             tables,
             DATABRICKS_VOLUME,
             warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -140,8 +133,7 @@ def test_class_initialization_tables_no_schema_fails():
     with pytest.raises(ValueError):
         td.DatabricksDestination(
             DATABRICKS_HOST,
-            DATABRICKS_CLIENT_ID,
-            DATABRICKS_CLIENT_SECRET,
+            DATABRICKS_TOKEN,
             tables,
             DATABRICKS_VOLUME,
             warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -158,8 +150,7 @@ def test_class_initialization_tables_catalog():
     ]
     output = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         tables,
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -178,8 +169,7 @@ def test_class_initialization_tables_catalog_and_schema():
     ]
     output = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         tables,
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -194,8 +184,7 @@ def test_class_initialization_all_options():
     tables = ["table1", "table2"]
     output = td.DatabricksDestination(
         DATABRICKS_HOST,
-        EnvironmentSecret("DATABRICKS_CLIENT_ID"),
-        EnvironmentSecret("DATABRICKS_CLIENT_SECRET"),
+        EnvironmentSecret("DATABRICKS_TOKEN"),
         tables,
         DATABRICKS_VOLUME,
         catalog=DATABRICKS_CATALOG,
@@ -205,8 +194,7 @@ def test_class_initialization_all_options():
         warehouse_id="fake_id",
     )
     assert output.host_url == DATABRICKS_HOST
-    assert output.client_id == EnvironmentSecret("DATABRICKS_CLIENT_ID")
-    assert output.client_secret == EnvironmentSecret("DATABRICKS_CLIENT_SECRET")
+    assert output.token == EnvironmentSecret("DATABRICKS_TOKEN")
     assert output.tables == [
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table}" for table in tables
     ]
@@ -224,8 +212,7 @@ def test_class_initialization_support_options():
     tables = ["catalog.schema.table1", "catalog.schema.table2"]
     output = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         tables,
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -241,8 +228,7 @@ def test_no_warehouse():
     with pytest.raises(ValueError):
         td.DatabricksDestination(
             DATABRICKS_HOST,
-            DATABRICKS_CLIENT_ID,
-            DATABRICKS_CLIENT_SECRET,
+            DATABRICKS_TOKEN,
             tables,
             DATABRICKS_VOLUME,
         )
@@ -254,8 +240,7 @@ def test_both_warehouse():
     with pytest.raises(ValueError):
         td.DatabricksDestination(
             DATABRICKS_HOST,
-            DATABRICKS_CLIENT_ID,
-            DATABRICKS_CLIENT_SECRET,
+            DATABRICKS_TOKEN,
             tables,
             DATABRICKS_VOLUME,
             warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -267,8 +252,7 @@ def test_both_warehouse():
 def test_databricks_chunk(tmp_path):
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         "table",
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -298,8 +282,7 @@ def test_stream(tmp_path, size, databricks_client, sql_conn):
     ).replace("-", "_")
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         table_name,
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -332,8 +315,7 @@ def test_stream_append(tmp_path, size, databricks_client, sql_conn):
     ).replace("-", "_")
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         table_name,
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -367,8 +349,7 @@ def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
     ).replace("-", "_")
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         table_name,
         DATABRICKS_VOLUME,
         if_table_exists="replace",
@@ -401,8 +382,7 @@ def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
     table_name_2 = (f"test_stream_multiple_lf_table_2_{uuid.uuid4()}").replace("-", "_")
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         [table_name_1, table_name_2],
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -440,8 +420,7 @@ def test_stream_different_len_raises_error(tmp_path, databricks_client):
     lf = get_lf(size)
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         ["table1", "table2"],
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
@@ -480,8 +459,7 @@ def test_single_element_table_list(tmp_path, size, databricks_client, sql_conn):
     ).replace("-", "_")
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
-        DATABRICKS_CLIENT_ID,
-        DATABRICKS_CLIENT_SECRET,
+        DATABRICKS_TOKEN,
         [table_name],
         DATABRICKS_VOLUME,
         warehouse=DATABRICKS_WAREHOUSE_NAME,
