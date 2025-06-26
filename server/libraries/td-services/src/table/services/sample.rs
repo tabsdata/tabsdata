@@ -164,7 +164,9 @@ mod tests {
             type_of_val(&FunctionRunStatus::committed),
             type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
             // Find the latest data version of the table ID, at that time
-            type_of_val(&By::<TableId>::select_version::<DaoQueries, TableDataVersionDBWithNames>),
+            type_of_val(
+                &By::<TableId>::select_version_optional::<DaoQueries, TableDataVersionDBWithNames>,
+            ),
             // Resolve the location of the data version. This takes into account versions without
             // data changes (in which the previous version is resolved)
             type_of_val(&resolve_table_location),
@@ -341,7 +343,7 @@ mod tests {
 
         // No data before the first function run
         // With IDs
-        let response = get_sample(
+        let bytes_with_ids = get_sample(
             db.clone(),
             storage.clone(),
             format!("~{}", collection.id()).as_str(),
@@ -350,11 +352,10 @@ mod tests {
             0,
             2,
         )
-        .await;
-        assert!(response.is_err());
+        .await?;
 
         // With names
-        let response = get_sample(
+        let bytes_with_names = get_sample(
             db.clone(),
             storage.clone(),
             collection.name(),
@@ -363,8 +364,14 @@ mod tests {
             0,
             2,
         )
-        .await;
-        assert!(response.is_err());
+        .await?;
+
+        assert_eq!(bytes_with_ids, bytes_with_names);
+        let df = ParquetReader::new(Cursor::new(&bytes_with_names))
+            .finish()
+            .unwrap();
+        let expected = DataFrame::default();
+        assert_eq!(df, expected);
 
         // Sample named 0 at first function run
         // With IDs

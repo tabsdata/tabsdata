@@ -35,7 +35,7 @@ router! {
 pub struct CsvFile(Vec<u8>);
 
 #[apiserver_path(method = get, path = SAMPLE_TABLE, tag = TABLES_TAG, override_response = CsvFile)]
-#[doc = "Get a sample of a table as CSV"]
+#[doc = "Get a sample of a table"]
 pub async fn sample(
     State(tables): State<Tables>,
     Extension(context): Extension<RequestContext>,

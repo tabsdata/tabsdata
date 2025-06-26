@@ -19,23 +19,9 @@ enum SchemaError {
 
 pub async fn get_table_schema(
     SrvCtx(storage): SrvCtx<Storage>,
-    Input(table_path): Input<SPath>,
+    Input(table_path): Input<Option<SPath>>,
 ) -> Result<TableSchema, TdError> {
-    let (url, mount_def) = storage.to_external_uri(&table_path)?;
-    let url_str = url.to_string();
-    let cloud_config = CloudOptions::from_untyped_config(&url_str, mount_def.options())
-        .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
-    let parquet_config = ScanArgsParquet {
-        cloud_options: Some(cloud_config),
-        ..ScanArgsParquet::default()
-    };
-    let schema: Result<_, TdError> = tokio::task::block_in_place(move || {
-        let lazy_frame = LazyFrame::scan_parquet(&url_str, parquet_config)
-            .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
-
-        let mut lazy_frame = drop_system_columns(lazy_frame)
-            .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
-
+    fn get_schema(mut lazy_frame: LazyFrame) -> Result<TableSchema, TdError> {
         let schema = lazy_frame
             .collect_schema()
             .map_err(SchemaError::CouldNotGetSchema)?;
@@ -44,6 +30,31 @@ pub async fn get_table_schema(
             .map(Field::try_into)
             .collect::<Result<_, _>>()?;
         Ok(TableSchema::builder().fields(schema).build()?)
-    });
-    schema
+    }
+
+    if let Some(table_path) = &*table_path {
+        let (url, mount_def) = storage.to_external_uri(table_path)?;
+        let url_str = url.to_string();
+        let cloud_config = CloudOptions::from_untyped_config(&url_str, mount_def.options())
+            .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
+        let parquet_config = ScanArgsParquet {
+            cloud_options: Some(cloud_config),
+            ..ScanArgsParquet::default()
+        };
+
+        tokio::task::block_in_place(move || {
+            let lazy_frame = LazyFrame::scan_parquet(&url_str, parquet_config)
+                .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
+
+            let lazy_frame = drop_system_columns(lazy_frame)
+                .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
+
+            get_schema(lazy_frame)
+        })
+    } else {
+        tokio::task::block_in_place(move || {
+            let lazy_frame = LazyFrame::default();
+            get_schema(lazy_frame)
+        })
+    }
 }

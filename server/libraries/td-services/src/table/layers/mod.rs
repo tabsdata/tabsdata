@@ -49,7 +49,7 @@ where
         from_fn(FunctionRunStatus::committed),
         from_fn(With::<AtTime>::convert_to::<TriggeredOn, _>),
         // Find the latest data version of the table ID, at that time
-        from_fn(By::<TableId>::select_version::<DaoQueries, TableDataVersionDBWithNames>),
+        from_fn(By::<TableId>::select_version_optional::<DaoQueries, TableDataVersionDBWithNames>),
         // Resolve the location of the data version. This takes into account versions without
         // data changes (in which the previous version is resolved)
         from_fn(resolve_table_location),

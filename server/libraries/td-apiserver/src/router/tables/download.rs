@@ -18,7 +18,7 @@ use td_error::TdError;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{AtTimeParam, TableParam, DOWNLOAD_TABLE};
 use td_objects::types::table::TableAtIdName;
-use tower::ServiceExt;
+use td_tower::ctx_service::RawOneshot;
 use utoipa::IntoResponses;
 
 router! {
@@ -52,8 +52,13 @@ pub async fn download(
     let path = tables
         .table_download_service()
         .await
-        .oneshot(request)
+        .raw_oneshot(request)
         .await?;
-    let stream = storage.read_stream(&path).await.map_err(TdError::from)?;
-    Ok(Body::from_stream(stream))
+    match path {
+        Some(path) => {
+            let stream = storage.read_stream(&path).await.map_err(TdError::from)?;
+            Ok(Body::from_stream(stream))
+        }
+        None => Ok(Body::empty()),
+    }
 }

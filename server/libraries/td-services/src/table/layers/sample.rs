@@ -4,11 +4,11 @@
 
 use crate::table::layers::storage::StorageServiceError;
 use bytes::Bytes;
-use futures::FutureExt;
+use futures_util::FutureExt;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
-    CsvWriter, IdxSize, JsonWriter, LazyFrame, ParquetWriter, PolarsError, ScanArgsParquet,
-    SerWriter,
+    CsvWriter, DataFrame, IdxSize, JsonWriter, LazyFrame, ParquetWriter, PolarsError,
+    ScanArgsParquet, SerWriter,
 };
 use polars::sql::SQLContext;
 use std::io::Cursor;
@@ -42,19 +42,42 @@ pub async fn get_table_sample(
     Input(format): Input<FileFormat>,
     Input(sql): Input<Option<Sql>>,
     Input(table_name): Input<TableName>,
-    Input(table_path): Input<SPath>,
+    Input(table_path): Input<Option<SPath>>,
 ) -> Result<BoxedSyncStream, TdError> {
-    let (url, mount_def) = storage.to_external_uri(&table_path)?;
-    let url_str = url.to_string();
-    let cloud_config = CloudOptions::from_untyped_config(&url_str, mount_def.options())
-        .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
-    let parquet_config = ScanArgsParquet {
-        cloud_options: Some(cloud_config),
-        ..ScanArgsParquet::default()
-    };
+    fn write_sample(mut dataframe: DataFrame, format: &FileFormat) -> Result<Bytes, SampleError> {
+        let mut buffer = Vec::new();
+        let mut cursor = Cursor::new(&mut buffer);
+        match format {
+            FileFormat::Csv => {
+                CsvWriter::new(&mut cursor)
+                    .finish(&mut dataframe)
+                    .map_err(SampleError::CsvFile)?;
+            }
+            FileFormat::Parquet => {
+                ParquetWriter::new(&mut cursor)
+                    .finish(&mut dataframe)
+                    .map_err(SampleError::ParquetFile)?;
+            }
+            FileFormat::Json => {
+                JsonWriter::new(&mut cursor)
+                    .finish(&mut dataframe)
+                    .map_err(SampleError::JsonFile)?;
+            }
+        }
+        Ok(Bytes::from(buffer))
+    }
 
-    let bytes = tokio::task::block_in_place(move || {
-        let bytes = {
+    let bytes = if let Some(table_path) = &*table_path {
+        let (url, mount_def) = storage.to_external_uri(table_path)?;
+        let url_str = url.to_string();
+        let cloud_config = CloudOptions::from_untyped_config(&url_str, mount_def.options())
+            .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
+        let parquet_config = ScanArgsParquet {
+            cloud_options: Some(cloud_config),
+            ..ScanArgsParquet::default()
+        };
+
+        tokio::task::block_in_place(move || {
             let lazy_frame = LazyFrame::scan_parquet(&url_str, parquet_config)
                 .map_err(SampleError::LazyFrameError)?;
 
@@ -75,35 +98,15 @@ pub async fn get_table_sample(
 
             // set the length of the sample to return
             let lazy_frame = lazy_frame.slice(0, **len as IdxSize);
-
-            // collect teh sample data
-            let mut dataframe = lazy_frame.collect().map_err(SampleError::LazyFrameError)?;
-
-            // write the sample into the requested format
-            let mut buffer = Vec::new();
-            let mut cursor = Cursor::new(&mut buffer);
-            match &*format {
-                FileFormat::Csv => {
-                    CsvWriter::new(&mut cursor)
-                        .finish(&mut dataframe)
-                        .map_err(SampleError::CsvFile)?;
-                }
-                FileFormat::Parquet => {
-                    ParquetWriter::new(&mut cursor)
-                        .finish(&mut dataframe)
-                        .map_err(SampleError::ParquetFile)?;
-                }
-                FileFormat::Json => {
-                    JsonWriter::new(&mut cursor)
-                        .finish(&mut dataframe)
-                        .map_err(SampleError::JsonFile)?;
-                }
-            }
-
-            Bytes::from(buffer)
-        };
-        Ok::<_, TdError>(bytes)
-    })?;
+            let dataframe = lazy_frame.collect().map_err(SampleError::LazyFrameError)?;
+            write_sample(dataframe, &format)
+        })?
+    } else {
+        tokio::task::block_in_place(move || {
+            let dataframe = DataFrame::default();
+            write_sample(dataframe, &format)
+        })?
+    };
 
     let stream = async move { Ok(bytes) }.into_stream();
     Ok(BoxedSyncStream::new(stream))
@@ -175,7 +178,7 @@ mod tests {
             Input::new(format),
             Input::new(sql),
             Input::new(TableName::try_from("my_table").unwrap()),
-            Input::new(table_path),
+            Input::new(Some(table_path)),
         )
         .await?;
 
@@ -365,6 +368,94 @@ mod tests {
                 }
             }
         };
+        Ok(())
+    }
+
+    async fn test_get_table_sample_not_found(
+        format: FileFormat,
+        sql: Option<Sql>,
+    ) -> Result<PathBuf, TdError> {
+        let test_dir = testdir!();
+        let mount_def = td_storage::MountDef::builder()
+            .id("root")
+            .path("/")
+            .uri(format!(
+                "{}{}/",
+                if cfg!(windows) { "file:///" } else { "file://" },
+                test_dir.to_str().unwrap()
+            ))
+            .build()?;
+        let storage = td_storage::Storage::from(vec![mount_def]).await?;
+
+        let stream = get_table_sample(
+            SrvCtx::new(storage),
+            Input::new(SampleOffset::default()),
+            Input::new(SampleLen::default()),
+            Input::new(format),
+            Input::new(sql),
+            Input::new(TableName::try_from("my_table").unwrap()),
+            Input::new(None),
+        )
+        .await?;
+
+        let stream = stream.into_inner();
+        let bytes = stream.try_collect::<Vec<_>>().await?;
+        let bytes = bytes
+            .iter()
+            .flat_map(|b| b.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+        let file_out = test_dir.join("output");
+        File::create_new(&file_out)
+            .unwrap()
+            .write_all(&bytes)
+            .unwrap();
+        Ok(file_out)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_table_sample_csv_not_found() -> Result<(), TdError> {
+        let file = test_get_table_sample_not_found(FileFormat::Csv, None).await?;
+
+        let content = std::fs::read_to_string(&file).unwrap();
+        assert!(content.trim().is_empty());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_table_sample_json_not_found() -> Result<(), TdError> {
+        let file = test_get_table_sample_not_found(FileFormat::Json, None).await?;
+
+        let content = std::fs::read_to_string(&file).unwrap();
+        assert!(content.trim().is_empty());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_table_sample_parquet_not_found() -> Result<(), TdError> {
+        let file = test_get_table_sample_not_found(FileFormat::Parquet, None).await?;
+
+        // Parquet is never empty, so we check the schema is empty.
+        let file = File::open(file).unwrap();
+        let df = ParquetReader::new(file).finish().unwrap();
+        assert!(df.get_column_names().is_empty());
+        assert_eq!(df.height(), 0);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_table_sample_sql_not_found() -> Result<(), TdError> {
+        let file = test_get_table_sample_not_found(
+            FileFormat::Csv,
+            Some(Sql::try_from(
+                "select id, name from my_table where id in (1,2,5,6)",
+            )?),
+        )
+        .await?;
+
+        let content = std::fs::read_to_string(&file).unwrap();
+        println!("Content: {}", content);
+        assert!(content.trim().is_empty());
         Ok(())
     }
 }

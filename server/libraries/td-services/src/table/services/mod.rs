@@ -85,7 +85,7 @@ impl TableServices {
 
     pub async fn table_download_service(
         &self,
-    ) -> TdBoxService<ReadRequest<TableAtIdName>, SPath, TdError> {
+    ) -> TdBoxService<ReadRequest<TableAtIdName>, Option<SPath>, TdError> {
         self.table_download.service().await
     }
 

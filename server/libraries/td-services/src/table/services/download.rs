@@ -23,7 +23,7 @@ use td_tower::service_provider::IntoServiceProvider;
 #[provider(
     name = TableDownloadService,
     request = ReadRequest<TableAtIdName>,
-    response = SPath,
+    response = Option<SPath>,
     connection = ConnectionProvider,
     context = DaoQueries,
     context = AuthzContext,
@@ -102,7 +102,7 @@ mod tests {
         let service = provider.make().await;
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
-        metadata.assert_service::<ReadRequest<TableAtIdName>, SPath>(&[
+        metadata.assert_service::<ReadRequest<TableAtIdName>, Option<SPath>>(&[
             // Extract parameters
             type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
             type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
@@ -133,7 +133,9 @@ mod tests {
             type_of_val(&FunctionRunStatus::committed),
             type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
             // Find the latest data version of the table ID, at that time
-            type_of_val(&By::<TableId>::select_version::<DaoQueries, TableDataVersionDBWithNames>),
+            type_of_val(
+                &By::<TableId>::select_version_optional::<DaoQueries, TableDataVersionDBWithNames>,
+            ),
             // Resolve the location of the data version. This takes into account versions without
             // data changes (in which the previous version is resolved)
             type_of_val(&resolve_table_location),
@@ -281,37 +283,40 @@ mod tests {
             ));
             let response = service.raw_oneshot(request).await;
             match response {
-                Ok(path) => {
-                    let mut stream = storage.read_stream(&path).await.map_err(TdError::from)?;
-                    let bytes = stream.next().await.unwrap();
-                    Ok(bytes.unwrap())
-                }
+                Ok(path) => match path {
+                    Some(path) => {
+                        let mut stream = storage.read_stream(&path).await.map_err(TdError::from)?;
+                        let bytes = stream.next().await.unwrap();
+                        Ok(bytes.unwrap())
+                    }
+                    None => Ok(Bytes::new()),
+                },
                 Err(err) => Err(err),
             }
         }
 
         // No data before the first function run
         // With IDs
-        let response = get_download(
+        let bytes_with_ids = get_download(
             db.clone(),
             storage.clone(),
             format!("~{}", collection.id()).as_str(),
             created_tables[0].as_str(),
             &at_times[0],
         )
-        .await;
-        assert!(response.is_err());
+        .await?;
+        assert!(bytes_with_ids.is_empty());
 
         // With names
-        let response = get_download(
+        let bytes_with_names = get_download(
             db.clone(),
             storage.clone(),
             collection.name(),
             created_tables[0].as_str(),
             &at_times[0],
         )
-        .await;
-        assert!(response.is_err());
+        .await?;
+        assert!(bytes_with_names.is_empty());
 
         // Download named 0 at first function run
         // With IDs

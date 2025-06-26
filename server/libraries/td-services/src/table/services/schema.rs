@@ -146,7 +146,9 @@ mod tests {
             type_of_val(&FunctionRunStatus::committed),
             type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
             // Find the latest data version of the table ID, at that time
-            type_of_val(&By::<TableId>::select_version::<DaoQueries, TableDataVersionDBWithNames>),
+            type_of_val(
+                &By::<TableId>::select_version_optional::<DaoQueries, TableDataVersionDBWithNames>,
+            ),
             // Resolve the location of the data version. This takes into account versions without
             // data changes (in which the previous version is resolved)
             type_of_val(&resolve_table_location),
@@ -300,26 +302,28 @@ mod tests {
 
         // No data before the first function run
         // With IDs
-        let response = get_schema(
+        let response_with_ids = get_schema(
             db.clone(),
             storage.clone(),
             format!("~{}", collection.id()).as_str(),
             created_tables[0].as_str(),
             &at_times[0],
         )
-        .await;
-        assert!(response.is_err());
+        .await?;
+        let response = response_with_ids.fields();
+        assert_eq!(*response, vec![]);
 
         // With names
-        let response = get_schema(
+        let response_with_names = get_schema(
             db.clone(),
             storage.clone(),
             collection.name(),
             created_tables[0].as_str(),
             &at_times[0],
         )
-        .await;
-        assert!(response.is_err());
+        .await?;
+        let response = response_with_names.fields();
+        assert_eq!(*response, vec![]);
 
         // Schema named 0 at first function run
         // With IDs

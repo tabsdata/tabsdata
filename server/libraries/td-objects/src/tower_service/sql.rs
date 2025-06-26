@@ -131,6 +131,17 @@ pub trait SqlSelectService<E> {
     where
         Q: DerefQueries,
         D: DataAccessObject + PartitionBy + VersionedAt;
+
+    async fn select_version_optional<Q, D>(
+        connection: Connection,
+        queries: SrvCtx<Q>,
+        natural_order_by: Input<D::Order>,
+        status: Input<Vec<D::Condition>>,
+        by: Input<E>,
+    ) -> Result<Option<D>, TdError>
+    where
+        Q: DerefQueries,
+        D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
 macro_rules! impl_select {
@@ -194,6 +205,40 @@ macro_rules! impl_select {
                     )?
                     .build_query_as()
                     .fetch_one(&mut *conn)
+                    .await
+                    .map_err(|e| {
+                        formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
+                            TdError::from(SqlError::SelectError(columns, values, table, e))
+                        })
+                    })
+                    .map_err(|e| e.unwrap_or_else(|e| e))?;
+
+                Ok(result)
+            }
+
+            async fn select_version_optional<Q, D>(
+                Connection(connection): Connection,
+                SrvCtx(queries): SrvCtx<Q>,
+                Input(natural_order_by): Input<D::Order>,
+                Input(status): Input<Vec<D::Condition>>,
+                Input(by): Input<($($E),*)>,
+            ) -> Result<Option<D>, TdError>
+            where
+                Q: DerefQueries,
+                D: DataAccessObject + PartitionBy + VersionedAt,
+            {
+                let mut conn = connection.lock().await;
+                let conn = conn.get_mut_connection()?;
+
+                let ($($E),*) = by.deref();
+                let result = queries
+                    .select_versions_at::<D>(
+                        Some(&*natural_order_by),
+                        Some(&status.iter().collect::<Vec<_>>()[..]),
+                        &($($E),*)
+                    )?
+                    .build_query_as()
+                    .fetch_optional(&mut *conn)
                     .await
                     .map_err(|e| {
                         formatted_entity!(D; $($E),*).map(|(columns, values, table)| {
