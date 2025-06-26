@@ -79,23 +79,35 @@ pub struct DependencyDBWithNames {
     defined_by: UserName,
 }
 
-#[td_type::Dto]
-#[td_type(builder(try_from = DependencyDBWithNames))]
-pub struct DependencyRead {
+#[td_type::Dao]
+#[dao(
+    sql_table = "dependencies__read",
+    order_by = "dep_pos",
+    partition_by = "dependency_id",
+    versioned_at(order_by = "defined_on", condition_by = "status"),
+    recursive(up = "function_version_id", down = "table_function_version_id")
+)]
+pub struct DependencyDBRead {
     id: DependencyVersionId,
     collection_id: CollectionId,
     dependency_id: DependencyId,
     function_id: FunctionId,
     function_version_id: FunctionVersionId,
     table_collection_id: CollectionId,
+    table_function_version_id: FunctionVersionId,
     table_id: TableId,
+    table_version_id: TableVersionId,
     table_name: TableName,
     table_versions: TableVersions,
     dep_pos: DependencyPos,
+    status: DependencyStatus,
     defined_on: AtTime,
     defined_by_id: UserId,
 
     collection: CollectionName,
     function: FunctionName,
+    trigger_by_collection: CollectionName,
+    table_collection: CollectionName,
+    table_function: FunctionName,
     defined_by: UserName,
 }

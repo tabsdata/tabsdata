@@ -84,6 +84,46 @@ pub struct TableDBWithNames {
     function: FunctionName,
 }
 
+#[td_type::Dao]
+#[dao(
+    sql_table = "tables__read",
+    partition_by = "table_id",
+    versioned_at(order_by = "defined_on", condition_by = "status")
+)]
+pub struct TableDBRead {
+    id: TableVersionId,
+    name: TableName,
+    table_id: TableId,
+    collection_id: CollectionId,
+    collection_name: CollectionName,
+    function_version_id: FunctionVersionId,
+    function_name: FunctionName,
+    last_data_version: Option<TableDataVersionId>,
+    // last_data_changed_version: Option<TableDataVersionId>,
+    status: TableStatus,
+    defined_on: AtTime,
+}
+
+#[td_type::Dto]
+#[dto(list(on = TableDBRead))]
+#[td_type(builder(try_from = TableDBRead))]
+pub struct Table {
+    #[dto(list(pagination_by = "+"))]
+    id: TableVersionId,
+    #[dto(list(filter, filter_like, order_by))]
+    name: TableName,
+    collection_id: CollectionId,
+    #[dto(list(filter, filter_like, order_by))]
+    collection_name: CollectionName,
+    table_id: TableId,
+    function_version_id: FunctionVersionId,
+    #[dto(list(filter, filter_like, order_by))]
+    function_name: FunctionName,
+    last_data_version: Option<TableDataVersionId>,
+    // last_data_changed_version: Option<TableDataVersionId>,
+    defined_on: AtTime,
+}
+
 #[td_type::Dlo]
 pub struct CollectionAtName {
     #[td_type(extractor)]
@@ -177,46 +217,6 @@ impl TableSampleAtName {
             sql: sql.sql().clone(),
         }
     }
-}
-
-#[td_type::Dao]
-#[dao(
-    sql_table = "tables__read",
-    partition_by = "table_id",
-    versioned_at(order_by = "defined_on", condition_by = "status")
-)]
-pub struct TableDBRead {
-    id: TableVersionId,
-    name: TableName,
-    table_id: TableId,
-    collection_id: CollectionId,
-    collection_name: CollectionName,
-    function_version_id: FunctionVersionId,
-    function_name: FunctionName,
-    last_data_version: Option<TableDataVersionId>,
-    // last_data_changed_version: Option<TableDataVersionId>,
-    status: TableStatus,
-    defined_on: AtTime,
-}
-
-#[td_type::Dto]
-#[dto(list(on = TableDBRead))]
-#[td_type(builder(try_from = TableDBRead))]
-pub struct Table {
-    #[dto(list(pagination_by = "+"))]
-    id: TableVersionId,
-    #[dto(list(filter, filter_like, order_by))]
-    name: TableName,
-    collection_id: CollectionId,
-    #[dto(list(filter, filter_like, order_by))]
-    collection_name: CollectionName,
-    table_id: TableId,
-    function_version_id: FunctionVersionId,
-    #[dto(list(filter, filter_like, order_by))]
-    function_name: FunctionName,
-    last_data_version: Option<TableDataVersionId>,
-    // last_data_changed_version: Option<TableDataVersionId>, // TODO this is hard to get in a view
-    defined_on: AtTime,
 }
 
 #[td_type::Dto()]

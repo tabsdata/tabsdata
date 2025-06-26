@@ -71,6 +71,7 @@ SELECT tv.*,
        tv.collection as collection_name,
        tv.function   as function_name,
        tdv.id        as last_data_version
+--        tdv.with_data_table_data_version_id as last_data_changed_version
 FROM tables__with_names tv
          LEFT JOIN table_data_versions__with_function tdv on tv.id = tdv.table_version_id
 WHERE tv.function_param_pos >= 0 -- non-system tables only
@@ -135,7 +136,14 @@ FROM dependencies dv
          LEFT JOIN collections tc ON dv.table_collection_id = tc.id
          LEFT JOIN functions tfv ON dv.table_function_version_id = tfv.id;
 
--- Triggers  (table & __with_names view)
+CREATE VIEW dependencies__read AS
+SELECT dv.*
+FROM dependencies__with_names dv
+         LEFT JOIN tables t ON dv.table_version_id = t.id
+WHERE t.function_param_pos >= 0 -- non-system tables only
+;
+
+-- Triggers  (table & __with_names view & __read view)
 
 CREATE TABLE triggers
 (
@@ -177,6 +185,13 @@ FROM triggers tv
          LEFT JOIN collections tc ON tv.trigger_by_collection_id = tc.id
          LEFT JOIN functions tfv ON tv.trigger_by_function_version_id = tfv.id
          LEFT JOIN tables t ON tv.trigger_by_table_version_id = t.id;
+
+CREATE VIEW triggers__read AS
+SELECT tv.*
+FROM triggers__with_names tv
+         LEFT JOIN tables t ON tv.trigger_by_table_version_id = t.id
+WHERE t.function_param_pos >= 0 -- non-system tables only
+;
 
 -- Executions  (table & __with_names & __with_status)
 

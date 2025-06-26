@@ -73,9 +73,14 @@ pub struct TriggerDBWithNames {
     defined_by: UserName,
 }
 
-#[td_type::Dto]
-#[td_type(builder(try_from = TriggerDBWithNames))]
-pub struct TriggerRead {
+#[td_type::Dao]
+#[dao(
+    sql_table = "triggers__read",
+    partition_by = "trigger_id",
+    versioned_at(order_by = "defined_on", condition_by = "status"),
+    recursive(up = "trigger_by_function_version_id", down = "function_version_id")
+)]
+pub struct TriggerDBRead {
     id: TriggerVersionId,
     collection_id: CollectionId,
     trigger_id: TriggerId,
@@ -85,12 +90,15 @@ pub struct TriggerRead {
     trigger_by_function_id: FunctionId,
     trigger_by_function_version_id: FunctionVersionId,
     trigger_by_table_id: TableId,
+    trigger_by_table_version_id: TableVersionId,
+    status: TriggerStatus,
     defined_on: AtTime,
     defined_by_id: UserId,
 
     collection: CollectionName,
     function: FunctionName,
     trigger_by_collection: CollectionName,
+    trigger_by_table_name: TableName,
     trigger_by_function: FunctionName,
     defined_by: UserName,
 }

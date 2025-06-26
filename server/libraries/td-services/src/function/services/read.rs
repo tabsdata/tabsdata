@@ -19,12 +19,12 @@ use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, FunctionIdName, FunctionStatus, FunctionVersionId,
     TableDependency, TableName, TableTrigger,
 };
-use td_objects::types::dependency::DependencyDBWithNames;
+use td_objects::types::dependency::DependencyDBRead;
 use td_objects::types::function::{
     Function, FunctionBuilder, FunctionDBWithNames, FunctionWithTables, FunctionWithTablesBuilder,
 };
-use td_objects::types::table::TableDBWithNames;
-use td_objects::types::trigger::TriggerDBWithNames;
+use td_objects::types::table::TableDBRead;
+use td_objects::types::trigger::TriggerDBRead;
 use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
@@ -81,18 +81,18 @@ impl ReadFunctionService {
                 from_fn(With::<Function>::set::<FunctionWithTablesBuilder>),
 
                 // Read triggers
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
-                from_fn(With::<TriggerDBWithNames>::vec_convert_to::<TableTrigger, _>),
+                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBRead>),
+                from_fn(With::<TriggerDBRead>::vec_convert_to::<TableTrigger, _>),
                 from_fn(With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
 
                 // Read dependencies
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBWithNames>),
-                from_fn(With::<DependencyDBWithNames>::vec_convert_to::<TableDependency, _>),
+                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBRead>),
+                from_fn(With::<DependencyDBRead>::vec_convert_to::<TableDependency, _>),
                 from_fn(With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
 
                 // Read tables
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDBWithNames>),
-                from_fn(With::<TableDBWithNames>::vec_convert_to::<TableName, _>),
+                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDBRead>),
+                from_fn(With::<TableDBRead>::vec_convert_to::<TableName, _>),
                 from_fn(With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
 
                 // Build
@@ -163,16 +163,16 @@ mod tests {
             type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
             type_of_val(&With::<Function>::set::<FunctionWithTablesBuilder>),
             // Read trigger
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
-            type_of_val(&With::<TriggerDBWithNames>::vec_convert_to::<TableTrigger, _>),
+            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBRead>),
+            type_of_val(&With::<TriggerDBRead>::vec_convert_to::<TableTrigger, _>),
             type_of_val(&With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
             // Read dependencies
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBWithNames>),
-            type_of_val(&With::<DependencyDBWithNames>::vec_convert_to::<TableDependency, _>),
+            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBRead>),
+            type_of_val(&With::<DependencyDBRead>::vec_convert_to::<TableDependency, _>),
             type_of_val(&With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
             // Read tables
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TableDBWithNames>),
-            type_of_val(&With::<TableDBWithNames>::vec_convert_to::<TableName, _>),
+            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TableDBRead>),
+            type_of_val(&With::<TableDBRead>::vec_convert_to::<TableName, _>),
             type_of_val(&With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
             // Build
             type_of_val(&With::<FunctionWithTablesBuilder>::build::<FunctionWithTables, _>),
