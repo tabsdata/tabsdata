@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::type_builder::{parse_input_item_struct, td_type};
+use crate::type_builder::{parse_input_item_struct, td_type, TdTypeFields};
 use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
@@ -125,6 +125,7 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
             filter_fields,
             filter_like_fields,
             field_type_map,
+            field_dao_mapping,
         ) = fields.iter().fold(
             (
                 None,
@@ -132,6 +133,7 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
+                HashMap::new(),
                 HashMap::new(),
             ),
             |(
@@ -141,8 +143,23 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                 mut filter_fields,
                 mut filter_like_fields,
                 mut field_type_map,
+                mut field_dao_mapping,
             ),
              f| {
+                // Field mapping inverse path, from type to builder field
+                let td_type_args = TdTypeFields::from_field(f).unwrap();
+
+                // Given that try_from Dao Builder is required for list(on) DTOs,
+                // we need to do the inverse builder mapping for query fields.
+                for builder_arg in &td_type_args.builder {
+                    if builder_arg.try_from.as_ref().is_none_or(|t| t == list_on) {
+                        if let Some(name) = &builder_arg.field {
+                            field_dao_mapping.insert(f.ident.as_ref().unwrap(), name.to_string());
+                        }
+                    }
+                }
+
+                // List arguments
                 for args in DtoFieldArguments::from_field(f).unwrap().list {
                     if let Some(pag) = args.pagination_by {
                         if pagination_by.is_some() {
@@ -179,6 +196,7 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                     filter_fields,
                     filter_like_fields,
                     field_type_map,
+                    field_dao_mapping,
                 )
             },
         );
@@ -190,6 +208,9 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
         let field_names = field_type_map.keys();
         let field_types = field_type_map.values();
 
+        let field_dao_names = field_dao_mapping.keys();
+        let field_dao_mapping = field_dao_mapping.values();
+
         quote! {
             impl #impl_generics crate::types::ListQuery for #ident #ty_generics #where_clause {
                 type Dao = #list_on;
@@ -197,6 +218,15 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                 fn try_from_dao(dao: &Self::Dao) -> Result<Self, td_error::TdError> {
                     let builder = <#ident as crate::types::DataTransferObject>::Builder::try_from(dao)?;
                     builder.build().map_err(Into::into)
+                }
+
+                fn map_dao_field(name: &str) -> String {
+                    match name {
+                        #(
+                            stringify!(#field_dao_names) => #field_dao_mapping.to_string(),
+                        )*
+                        _ => name.to_string(),
+                    }
                 }
 
                 fn map_sql_entity_value(

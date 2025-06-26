@@ -204,6 +204,7 @@ pub trait ListQuery: DataTransferObject {
     fn try_from_dao(dao: &Self::Dao) -> Result<Self, td_error::TdError>
     where
         Self: Sized;
+    fn map_dao_field(name: &str) -> String;
     fn pagination_by() -> &'static str;
     fn pagination_value(&self) -> String;
     fn order_by_fields() -> &'static [&'static str];

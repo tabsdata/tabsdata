@@ -45,9 +45,9 @@ struct TdTypeArg {
 #[allow(dead_code)]
 #[derive(FromField)]
 #[darling(attributes(td_type))]
-struct TdTypeFields {
+pub struct TdTypeFields {
     #[darling(multiple)]
-    builder: Vec<TdTryFromField>,
+    pub builder: Vec<TdTryFromField>,
     #[darling(multiple)]
     updater: Vec<TdTryFromField>,
     #[darling(default)]
@@ -59,13 +59,13 @@ struct TdTypeFields {
 }
 
 #[derive(FromMeta)]
-struct TdTryFromField {
-    try_from: Option<Ident>,
+pub struct TdTryFromField {
+    pub try_from: Option<Ident>,
     #[darling(default)]
     skip: bool,
     #[darling(default)]
     include: bool,
-    field: Option<String>,
+    pub field: Option<String>,
 }
 
 pub fn td_type(input: &DeriveInput, item: &ItemStruct) -> proc_macro2::TokenStream {

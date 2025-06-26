@@ -462,20 +462,24 @@ where
         }
 
         // field OP value
-        query_builder.push(format!("{} {} ", pagination_field.field(), range_operator));
+        query_builder.push(format!(
+            "{} {} ",
+            T::map_dao_field(pagination_field.field()),
+            range_operator
+        ));
         pagination.column_value().push_bind(query_builder);
 
         query_builder.push(" OR ");
         query_builder.push("(");
 
         // field = value
-        query_builder.push(format!("{} = ", pagination_field.field()));
+        query_builder.push(format!("{} = ", T::map_dao_field(pagination_field.field()),));
         pagination.column_value().push_bind(query_builder);
 
         // natural_field OP value
         query_builder.push(format!(
             " AND {} {} ",
-            natural_order.field(),
+            T::map_dao_field(natural_order.field()),
             range_operator
         ));
         pagination.pagination_id().push_bind(query_builder);
@@ -488,12 +492,16 @@ where
     let mut separated = query_builder.separated(", ");
 
     if let Some(order) = order {
-        separated.push(format!("{} {}", order.field(), order.direction()));
+        separated.push(format!(
+            "{} {}",
+            T::map_dao_field(order.field()),
+            order.direction()
+        ));
     }
 
     separated.push(format!(
         "{} {}",
-        natural_order.field(),
+        T::map_dao_field(natural_order.field()),
         natural_order.direction()
     ));
 
@@ -1172,6 +1180,41 @@ mod tests {
                 name: TestName,
                 #[dto(list(pagination_by = "-"))]
                 modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .order_by("name".to_string())
+                .build()
+                .unwrap();
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table ORDER BY name ASC, modified_on ASC LIMIT ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            let mut expected = FIXTURE_DAOS.clone();
+            expected.sort_by(|a, b| a.name.cmp(&b.name).then(a.modified_on.cmp(&b.modified_on)));
+            assert_eq!(result, expected);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_order_by_mapping(db: DbPool) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                id: TestId,
+                #[dto(list(order_by))]
+                name: TestName,
+                #[td_type(builder(field = "modified_on"))]
+                #[dto(list(pagination_by = "-"))]
+                created_at: TestModifiedOn,
             }
 
             let list_params = ListParamsBuilder::default()
