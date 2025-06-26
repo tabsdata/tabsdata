@@ -127,7 +127,7 @@ fn process_tree(
         base_name.clone()
     };
 
-    name = format!("{}· {}", "  ".repeat(level), name);
+    name = format!("{}► {}", "  ".repeat(level), name);
 
     let (parent_td_collection, parent_td_function, parent_td_worker, parent_td_attempt) =
         parent_markers;

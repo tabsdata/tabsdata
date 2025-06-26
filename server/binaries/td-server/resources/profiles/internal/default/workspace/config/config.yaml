@@ -51,6 +51,8 @@ controllers:
         parameters:
           - etc: ${TD_PATH_INSTANCE}/workspace/work/etc
           - available-python-versions-file: available-python-versions.yaml
+          - allowed-python-versions-file: allowed-python-versions.yaml
+          - valid-python-versions-file: valid-python-versions.yaml
           - server-build-manifest-file: server-build-manifest.yaml
           - server-version-file: server-version.yaml
       - name: apiserver-configuration-resolver
