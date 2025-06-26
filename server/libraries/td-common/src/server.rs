@@ -938,18 +938,20 @@ mod tests_queue {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 pub enum EtcContent {
+    ServerVersion_yaml,
     AllowedPythonVersions_yaml,
-    AllowedRequirements_txt,
     AvailablePythonVersions_yaml,
+    ValidPythonVersions_yaml,
     ServerBuildManifest_yaml,
 }
 
 impl EtcContent {
     fn file(&self) -> &'static str {
         match self {
+            EtcContent::ServerVersion_yaml => "server-version.yaml",
             EtcContent::AllowedPythonVersions_yaml => "allowed-python-versions.yaml",
-            EtcContent::AllowedRequirements_txt => "allowed-requirements.txt",
             EtcContent::AvailablePythonVersions_yaml => "available-python-versions.yaml",
+            EtcContent::ValidPythonVersions_yaml => "valid-python-versions.yaml",
             EtcContent::ServerBuildManifest_yaml => "server-build-manifest.yaml",
         }
     }
@@ -958,9 +960,10 @@ impl EtcContent {
 impl fmt::Display for EtcContent {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let name = match self {
+            EtcContent::ServerVersion_yaml => "Server Version",
             EtcContent::AllowedPythonVersions_yaml => "Allowed Python Versions",
-            EtcContent::AllowedRequirements_txt => "Allowed Requirements",
             EtcContent::AvailablePythonVersions_yaml => "Available Python Versions",
+            EtcContent::ValidPythonVersions_yaml => "Valid Python Versions",
             EtcContent::ServerBuildManifest_yaml => "Server Build Manifest",
         };
         write!(f, "{}", name)

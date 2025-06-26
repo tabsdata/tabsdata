@@ -33,6 +33,9 @@ pub struct AccessTokenId;
 #[td_type::typed(timestamp, try_from = TriggeredOn)]
 pub struct AtTime;
 
+#[td_type::typed(string(default = "<unavailable>"))]
+pub struct BuildManifest;
+
 #[td_type::typed(string)]
 pub struct BundleHash;
 
@@ -617,6 +620,9 @@ pub struct TableVersionId;
 
 #[td_type::typed(composed(inner = "Versions"))]
 pub struct TableVersions;
+
+#[td_type::typed(string)]
+pub struct TabsdataVersion;
 
 #[td_type::typed(id, try_from = CollectionId)]
 pub struct ToCollectionId;
