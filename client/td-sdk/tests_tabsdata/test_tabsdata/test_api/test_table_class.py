@@ -8,6 +8,10 @@ from datetime import datetime, timedelta, timezone
 
 import polars as pl
 import pytest
+from tests_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
+)
 
 from tabsdata.api.tabsdata_server import Collection, DataVersion, Table
 
@@ -586,4 +590,59 @@ def test_table_class_get_schema_more_than_one_option_fails(
             at=next_day,
             at_trx=trx,
             version=version.id,
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsserver_class_table_delete(tabsserver_connection):
+    try:
+        tabsserver_connection.create_collection(
+            name="test_tabsserver_class_table_delete_collection",
+            description="test_collection_description",
+        )
+        function = tabsserver_connection.register_function(
+            collection_name="test_tabsserver_class_table_delete_collection",
+            description="test_table_delete_description",
+            function_path=f"""{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, 
+                                  "testing_resources", 
+                                  "test_input_plugin", 
+                                  "example.py")}::input_plugin""",
+            local_packages=LOCAL_PACKAGES_LIST,
+        )
+        functions = tabsserver_connection.list_functions(
+            "test_tabsserver_class_table_delete_collection"
+        )
+        assert any(function.name == "test_input_plugin" for function in functions)
+        assert any(
+            table.name == "output"
+            for table in tabsserver_connection.list_tables(
+                "test_tabsserver_class_table_delete_collection"
+            )
+        )
+        table = function.get_table("output")
+        tabsserver_connection.delete_function(
+            "test_tabsserver_class_table_delete_collection",
+            "test_input_plugin",
+        )
+        functions = tabsserver_connection.list_functions(
+            "test_tabsserver_class_table_delete_collection"
+        )
+        assert not any(function.name == "test_input_plugin" for function in functions)
+        table.delete()
+        assert not any(
+            table.name == "output"
+            for table in tabsserver_connection.list_tables(
+                "test_tabsserver_class_table_delete_collection"
+            )
+        )
+    finally:
+        tabsserver_connection.delete_function(
+            "test_tabsserver_class_table_delete_collection",
+            "test_input_plugin",
+            raise_for_status=False,
+        )
+        tabsserver_connection.delete_collection(
+            "test_tabsserver_class_table_delete_collection",
+            raise_for_status=False,
         )

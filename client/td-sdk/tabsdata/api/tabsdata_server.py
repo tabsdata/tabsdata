@@ -1642,9 +1642,8 @@ class Table:
     This class represents a table in the TabsdataServer.
 
     Args:
-        id (str): The ID of the table.
+        collection (str | Collection): The collection where the table is stored.
         name (str): The name of the table.
-        function(str): The function that generated the table.
         **kwargs: Additional keyword arguments.
     """
 
@@ -1722,6 +1721,11 @@ class Table:
                 "Function must be a string, a Function object or None; got"
                 f"{type(function)} instead."
             )
+
+    def delete(self, raise_for_status: bool = True) -> None:
+        self.connection.table_delete(
+            self.collection.name, self.name, raise_for_status=raise_for_status
+        )
 
     def download(
         self,
@@ -3268,6 +3272,24 @@ class TabsdataServer:
             description=new_description,
             raise_for_status=raise_for_status,
         )
+
+    def delete_table(
+        self, collection_name: str, table_name: str, raise_for_status: bool = True
+    ) -> None:
+        """
+        Delete a table in the server.
+
+        Args:
+            collection_name (str): The name of the collection.
+            table_name (str): The name of the table.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the table could not be deleted.
+        """
+        table = Table(self.connection, collection_name, table_name)
+        table.delete(raise_for_status=raise_for_status)
 
     def download_table(
         self,

@@ -60,14 +60,14 @@ def fn():
 def delete(ctx: click.Context, name: str, coll: str, confirm: str):
     """Delete a function"""
     verify_login_or_prompt(ctx)
-    click.echo(f"Deleting function '{name}' in collection '{coll}'")
-    click.echo("-" * 10)
     name = name or logical_prompt(ctx, "Name of the function to be deleted")
     coll = (
         coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
+    click.echo(f"Deleting function '{name}' in collection '{coll}'")
+    click.echo("-" * 10)
     confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
     if confirm != "delete":
         raise click.ClickException(

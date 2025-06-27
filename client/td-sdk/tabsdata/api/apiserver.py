@@ -744,6 +744,16 @@ class APIServer:
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def table_delete(
+        self,
+        collection_name: str,
+        table_name: str,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/collections/{collection_name}/tables/{table_name}"
+        response = self.delete(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def table_download(
         self,
         collection_name: str,

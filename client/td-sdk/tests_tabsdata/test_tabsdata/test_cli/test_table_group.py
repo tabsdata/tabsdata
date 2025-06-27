@@ -10,6 +10,10 @@ from datetime import datetime, timedelta, timezone
 import polars as pl
 import pytest
 from click.testing import CliRunner
+from tests_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
+)
 
 from tabsdata.api.tabsdata_server import Table
 from tabsdata.cli.cli import cli
@@ -740,3 +744,74 @@ def test_table_list_with_at_transaction_id(
     )
     logger.debug(result.output)
     assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_cli_table_delete(
+    tabsserver_connection,
+    login,
+):
+    try:
+        tabsserver_connection.create_collection(
+            name="test_cli_table_delete_collection",
+            description="test_collection_description",
+        )
+        tabsserver_connection.register_function(
+            collection_name="test_cli_table_delete_collection",
+            description="test_table_delete_description",
+            function_path=(
+                f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
+                                "test_input_plugin", "example.py")}::input_plugin"
+            ),
+            local_packages=LOCAL_PACKAGES_LIST,
+        )
+        functions = tabsserver_connection.list_functions(
+            "test_cli_table_delete_collection"
+        )
+        assert any(function.name == "test_input_plugin" for function in functions)
+        assert any(
+            table.name == "output"
+            for table in tabsserver_connection.list_tables(
+                "test_cli_table_delete_collection"
+            )
+        )
+        tabsserver_connection.delete_function(
+            "test_cli_table_delete_collection", "test_input_plugin"
+        )
+        functions = tabsserver_connection.list_functions(
+            "test_cli_table_delete_collection"
+        )
+        assert not any(function.name == "test_input_plugin" for function in functions)
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--no-prompt",
+                "table",
+                "delete",
+                "--coll",
+                "test_cli_table_delete_collection",
+                "--name",
+                "output",
+                "--confirm",
+                "delete",
+            ],
+        )
+        logger.debug(result.output)
+        assert result.exit_code == 0
+        assert not any(
+            table.name == "output"
+            for table in tabsserver_connection.list_tables(
+                "test_cli_table_delete_collection"
+            )
+        )
+    finally:
+        tabsserver_connection.delete_function(
+            "test_cli_table_delete_collection",
+            "test_input_plugin",
+            raise_for_status=False,
+        )
+        tabsserver_connection.delete_collection(
+            "test_cli_table_delete_collection", raise_for_status=False
+        )

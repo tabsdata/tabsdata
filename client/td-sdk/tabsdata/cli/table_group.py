@@ -27,6 +27,52 @@ def table():
 @table.command()
 @click.option(
     "--name",
+    "-n",
+    help="Name of the table to be deleted.",
+)
+@click.option(
+    "--coll",
+    "-c",
+    help="Name of the collection to which the table belongs.",
+)
+@click.option(
+    "--confirm",
+    help="Write 'delete' to confirm deletion. Will be prompted for it if not provided.",
+)
+@click.pass_context
+def delete(ctx: click.Context, name: str, coll: str, confirm: str):
+    """Delete a table"""
+    verify_login_or_prompt(ctx)
+    name = name or logical_prompt(ctx, "Name of the table to be deleted")
+    coll = (
+        coll
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the table belongs")
+    )
+    click.echo(f"Deleting table '{name}' in collection '{coll}'")
+    click.echo("-" * 10)
+    confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
+    if confirm != "delete":
+        raise click.ClickException(
+            "Deletion not confirmed. The confirmation word is 'delete'."
+        )
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.delete_table(coll, name)
+        click.echo("Table deleted successfully")
+        show_hint(
+            ctx,
+            "You do not need to delete and re-create a table to change it. "
+            "Use 'td fn alter' to modify the table instead.",
+        )
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to delete table: {e}")
+
+
+@table.command()
+@click.option(
+    "--name",
     help="Name of the table.",
 )
 @click.option(
