@@ -14,6 +14,9 @@ import tabsdata as td
 from tabsdata.exceptions import ErrorCode, TabsDataException
 
 # noinspection PyProtectedMember
+from tabsdata.tableframe.expr.expr import Expr
+
+# noinspection PyProtectedMember
 from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
 
 # noinspection PyProtectedMember
@@ -106,7 +109,7 @@ def test__gt__():
 
 def test__invert__():
     expr = td.col("a")
-    assert str(~expr) == str(td.Expr(~expr._expr))
+    assert str(~expr) == str(Expr(~expr._expr))
 
 
 def test__le__():
@@ -153,7 +156,7 @@ def test__ne__():
 
 def test__neg__():
     expr = td.col("a")
-    assert str(-expr) == str(td.Expr(-expr._expr))
+    assert str(-expr) == str(Expr(-expr._expr))
 
 
 def test__or__():
@@ -170,7 +173,7 @@ def test__ror__():
 
 def test__pos__():
     expr = td.col("a")
-    assert str(+expr) == str(td.Expr(expr._expr + expr._expr))
+    assert str(+expr) == str(Expr(expr._expr + expr._expr))
 
 
 def test__pow__():

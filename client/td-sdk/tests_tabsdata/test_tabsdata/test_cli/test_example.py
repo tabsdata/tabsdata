@@ -12,9 +12,9 @@ import pytest
 from click.testing import CliRunner
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
 
-from tabsdata import TabsdataFunction
 from tabsdata.cli.cli import cli
 from tabsdata.extensions.tableframe.extension_test import instance as checker
+from tabsdata.tabsdatafunction import TabsdataFunction
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

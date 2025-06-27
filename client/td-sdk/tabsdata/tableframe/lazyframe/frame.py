@@ -2284,7 +2284,7 @@ class TableFrame:
         )
 
 
-TdType = TypeVar("TdType", TableFrame, Series, td_expr.Expr)
+TdType = TypeVar("TdType", "TableFrame", Series, "td_expr.Expr")
 
 """> Internal Private Functions """
 

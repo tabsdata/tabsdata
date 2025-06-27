@@ -32,13 +32,6 @@ from polars import (
     UInt64,
 )
 
-from tabsdata.api.tabsdata_server import (
-    Collection,
-    DataVersion,
-    Execution,
-    TabsdataServer,
-    User,
-)
 from tabsdata.credentials import (
     AzureAccountKeyCredentials,
     S3AccessKeyCredentials,
@@ -69,13 +62,10 @@ from tabsdata.io.output import (
 )
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.secret import EnvironmentSecret, HashiCorpSecret
-from tabsdata.tableframe.expr.expr import Expr as Expr
 from tabsdata.tableframe.functions.col import col as col
 from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
-from tabsdata.tableuri import TableURI
-from tabsdata.tabsdatafunction import TabsdataFunction
 from tabsdata.tabsserver.function.execution_exceptions import CustomException
 from tabsdata_databricks.connector import DatabricksDestination
 from tabsdata_mongodb.connector import MongoDBDestination
@@ -88,9 +78,6 @@ logging.basicConfig(
 )
 
 __all__ = [
-    # from tabsdatafunction.py
-    "AWSGlue",
-    "TabsdataFunction",
     # from tabsdatafunction.py Inputs
     "AzureSource",
     "LocalFileSource",
@@ -101,6 +88,7 @@ __all__ = [
     "S3Source",
     "TableInput",
     # from tabsdatafunction.py Outputs
+    "AWSGlue",
     "AzureDestination",
     "LocalFileDestination",
     "MariaDBDestination",
@@ -129,33 +117,14 @@ __all__ = [
     # from secret.py
     "EnvironmentSecret",
     "HashiCorpSecret",
-    # from uri.py
-    "TableURI",
-    # from tabsdata_server.py
-    "Collection",
-    "DataVersion",
-    "Execution",
-    "TabsdataServer",
-    "User",
     # from tabsserver.function.execution_exceptions.py
     "CustomException",
     # from tableframe....
     "col",
     "concat",
     "lit",
-    "Expr",
     "TableFrame",
-    # from tabsdata.utils.tableframe.builders
-    # ToDo: Pending deciding if they should be included in __all__
-    # "empty",
-    # "from_dict",
-    # "from_pandas",
-    # "from_polars",
-    # "to_dict",
-    # "to_pandas",
-    # "to_polars_df",
-    # "to_polars_lf",
-    # from polars"...
+    # from polars...
     Boolean,
     Date,
     Datetime,
