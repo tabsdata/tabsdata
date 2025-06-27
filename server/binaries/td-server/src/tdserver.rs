@@ -4,6 +4,7 @@
 
 use colored::*;
 use std::io::Write;
+use std::process::{exit, Command, Stdio};
 use std::{env, fs};
 use td_build::version::TABSDATA_VERSION;
 use td_common::attach::attach;
@@ -23,6 +24,11 @@ const ACK: &str = ".ack";
 const BANNER: &str = include_str!(concat!(
     workspace_root!(),
     "/variant/assets/manifest/BANNER"
+));
+
+const COMPATIBILITY_PY: &str = include_str!(concat!(
+    workspace_root!(),
+    "/client/td-sdk/tabsdata/utils/compatibility.py"
 ));
 
 fn check_banner() -> std::io::Result<()> {
@@ -85,11 +91,34 @@ fn show_banner() -> Result<(), std::io::Error> {
     Ok(())
 }
 
+fn check_polars() {
+    let mut py = Command::new("python")
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Failed to start python process");
+
+    {
+        let stdin = py.stdin.as_mut().expect("Failed to open python stdin");
+        stdin
+            .write_all(COMPATIBILITY_PY.as_bytes())
+            .expect("Failed to write python script");
+    }
+    let status = py.wait().expect("Failed to execute python script");
+    if !status.success() {
+        eprintln!("!!! Polars compatibility check failed: {}", status);
+        exit(1);
+    }
+}
+
 #[tokio::main]
 #[attach(signal = "tdserver")]
 async fn main() {
     logging::start(Level::INFO, Some(LogOutput::StdOut), false);
     let _ = check_banner();
+    check_polars();
     // Setting env vars is not thread-safe; use with care.
     unsafe {
         env::set_var(TD_DETACHED_SUBPROCESSES, TRUE);
