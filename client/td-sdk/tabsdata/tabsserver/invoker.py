@@ -30,6 +30,9 @@ from tabsdata.tabsserver.utils import (
 )
 from tabsdata.utils.bundle_utils import REQUIREMENTS_FILE_NAME
 
+# noinspection PyProtectedMember
+from tabsdata.utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
+
 logger = logging.getLogger(__name__)
 time_block = TimeBlock()
 
@@ -51,6 +54,21 @@ def clear_environment():
     finally:
         sys.path = original_sys_path
         os.environ = original_env
+
+
+# This is meant to be used when running pytest tests in development stages
+# To avoid copying binaries to each local packages bundle, therefore alleviating
+# their weight, we instead add this folder to the PATH when running pytest tests.
+def find_binaries_root() -> str | None:
+    # noinspection PyBroadException
+    try:
+        current = Path.cwd()
+        for parent in [current, *current.parents]:
+            if Path(os.path.join(parent, ".root")).is_file():
+                return os.path.join(parent, "target", "debug")
+        return None
+    except Exception:
+        return None
 
 
 def invoke(
@@ -127,8 +145,11 @@ def invoke(
             f" {uncompressed_bundle_folder}. Time taken: {time_block.time_taken():.2f}s"
         )
 
+    python_bin_file = get_path_to_environment_bin(python_environment)
+    python_bin_folder = os.path.dirname(python_bin_file)
+
     command_to_execute = [
-        get_path_to_environment_bin(python_environment),
+        python_bin_file,
         "-m",
         tabsdata.tabsserver.function.execute_function_from_bundle_path.__name__,
         "--work",
@@ -142,6 +163,17 @@ def invoke(
         "--output-folder",
         output_folder,
     ]
+    env = os.environ.copy()
+
+    # When running pytest tests, specially because tabsdata can be delivered as
+    # a local package, we ensure the bin folder of the running virtual
+    # environment is added to the PATH, so that the binaries coming from the
+    # Rust build side and Python entry points side are properly found.
+    if os.environ.get(PYTEST_CONTEXT_ACTIVE) is not None:
+        env["PATH"] = env.get("PATH", "") + os.pathsep + python_bin_folder
+        project_bin_folder = find_binaries_root()
+        if project_bin_folder:
+            env["PATH"] = env.get("PATH", "") + os.pathsep + project_bin_folder
 
     if logs_folder:
         command_to_execute.extend(["--logs-folder", logs_folder])
@@ -155,7 +187,7 @@ def invoke(
             cwd = tempfile.gettempdir() if temp_cwd else None
             result = subprocess.run(
                 command_to_execute,
-                env=os.environ,
+                env=env,
                 cwd=cwd,
                 input=mount_options,
                 text=True,

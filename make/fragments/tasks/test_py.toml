@@ -57,6 +57,9 @@ script = [
 
     cd "${PROJECT_PY_TA_FEATURES_FOLDER}"
 
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+
     if eq ${verbose} "false"
         debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
@@ -96,6 +99,9 @@ script = [
 
     cd "${PROJECT_PY_TA_TABLEFRAME_FOLDER}"
 
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+
     if eq ${verbose} "false"
         debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
@@ -133,6 +139,9 @@ script = [
     compile = get_env TD_COMPILE
 
     cd ${PROJECT_PY_TE_TABLEFRAME_FOLDER}
+
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
     if eq ${verbose} "false"
         debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
@@ -172,6 +181,9 @@ script = [
 
     cd ${PROJECT_PY_TD_SDK_FOLDER}
 
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+
     if eq ${verbose} "false"
         debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
@@ -209,6 +221,9 @@ script = [
     compile = get_env TD_COMPILE
 
     cd ${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}
+
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
     if eq ${verbose} "false"
         debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_DATABRICKS_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
@@ -248,6 +263,9 @@ script = [
 
     cd ${PROJECT_PY_TABSDATA_MONGODB_FOLDER}
 
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+
     if eq ${verbose} "false"
         debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
@@ -286,6 +304,9 @@ script = [
 
     cd ${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}
 
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+
     if eq ${verbose} "false"
         debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
@@ -323,6 +344,9 @@ script = [
     compile = get_env TD_COMPILE
 
     cd ${PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER}
+
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
     if eq ${verbose} "false"
         debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""

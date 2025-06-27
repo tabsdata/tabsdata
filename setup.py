@@ -274,7 +274,11 @@ target_release_folder = os.path.join(
 )
 logger.debug(f"Using tabsdata target release folder: '{target_release_folder}'")
 
-# noinspection DuplicatedCode
+# Caution!: This list is replicated in project python file
+# 'client/td-sdk/tabsdata/utils/bundle_utils.py' to ensure that when testing
+# with pytest, the binaries are distributed and available from tabsdata as a
+# local package.
+# Please, make sure you update this list in both places.
 base_binaries = [
     "apiserver",
     "bootloader",
@@ -317,6 +321,7 @@ if missing_binaries and require_server_binaries:
         f"{target_release_folder}: {', '.join(missing_binaries)}"
     )
 
+# noinspection DuplicatedCode
 datafiles = [
     (
         get_binaries_folder(),

@@ -57,6 +57,9 @@ from tabsdata.utils.constants import (
 )
 from tabsdata.utils.debug import debug_enabled
 
+# noinspection PyProtectedMember
+from tabsdata.utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 time_block = TimeBlock()
@@ -425,7 +428,17 @@ def get_current_tabsdata_version():
 
 def inject_tabsdata_version(required_modules: list[str]) -> list[str]:
     """Inject the tabsdata version into the list of required modules"""
-    tabsdata_version = get_current_tabsdata_version()
+    try:
+        tabsdata_version = get_current_tabsdata_version()
+    except ValueError as e:
+        # Package tabsdata can be injected as a local package when running
+        # pytest tests; in this case, current version is not available as
+        # usual. We will use the version in the required modules' specification.
+        if os.environ.get(PYTEST_CONTEXT_ACTIVE) is not None:
+            tabsdata_version = None
+        else:
+            raise
+
     previous_tabsdata_version = [
         module
         for module in required_modules
@@ -439,21 +452,27 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:
     logger.debug(f"Injecting tabsdata version {tabsdata_version} into the requirements")
     new_tabsdata_version = f"{TABSDATA_MODULE_NAME}=={tabsdata_version}"
     required_modules.append(new_tabsdata_version)
-    if previous_tabsdata_version:
-        previous_tabsdata_version = previous_tabsdata_version[0]
-        if previous_tabsdata_version != new_tabsdata_version:
-            logger.warning(
-                f"Found previous tabsdata version '{previous_tabsdata_version}' in the"
-                " requirements. Replacing it with the current version."
-            )
+    if tabsdata_version is not None:
+        if previous_tabsdata_version:
+            previous_tabsdata_version = previous_tabsdata_version[0]
+            if previous_tabsdata_version != new_tabsdata_version:
+                logger.warning(
+                    f"Found previous tabsdata version '{previous_tabsdata_version}' in"
+                    " the requirements. Replacing it with the current version."
+                )
+            else:
+                logger.info(
+                    "Injected tabsdata version is the same as the one already "
+                    "present in the requirements."
+                )
         else:
-            logger.info(
-                "Injected tabsdata version is the same as the one already "
-                "present in the requirements."
+            logger.warning(
+                "Could not find the tabsdata module in the requirements. Injecting it"
+                " now."
             )
     else:
         logger.warning(
-            "Could not find the tabsdata module in the requirements. Injecting it now."
+            "No tabsdata current version. Skipping version regularization..."
         )
     return required_modules
 

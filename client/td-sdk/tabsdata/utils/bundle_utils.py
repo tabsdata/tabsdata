@@ -20,7 +20,8 @@ import yaml
 from tabsdata.exceptions import ErrorCode, RegistrationError
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.tabsdatafunction import Input, Output, TabsdataFunction
-from tabsdata.utils.constants import TABSDATA_MODULE_NAME
+from tabsdata.utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES
+from tabsdata.utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
 
 # Importing like this to ensure backwards compatibility with Python 3.7 and prior
 if sys.version_info >= (3, 8):
@@ -38,16 +39,35 @@ CONFIG_FILE_NAME = "configuration.json"
 CONFIG_INPUTS_KEY = "inputs"
 CONFIG_OUTPUT_KEY = "output"
 IGNORED_FOLDERS = (
-    ".venv",
+    ".cargo",
     ".git",
-    "__pycache__",
+    ".github",
+    ".idea",
+    ".pytest_cache",
+    ".run",
+    ".tach",
+    ".venv",
+    "books",
     "build",
+    "devutils",
+    "macros",
+    "make",
+    "server",
     "target",
+    "__pycache__",
     "test",
     "testing_resources",
     "tests",
     "venv",
 )
+BASE_BINARIES = [
+    "apiserver",
+    "bootloader",
+    "_importer",
+    "supervisor",
+    "tdserver",
+    "transporter",
+]
 LOCAL_PACKAGES_FOLDER = "local_packages"
 PLUGINS_FOLDER = "plugins"
 
@@ -58,6 +78,8 @@ PYTHON_PUBLIC_PACKAGES_KEY = "publicPackages"
 PYTHON_INSTALL_DEPENDENCIES_KEY = "installPackagesDependencies"
 PYTHON_VERSION_KEY = "pythonVersion"
 REQUIREMENTS_FILE_NAME = "requirements.yaml"
+
+LOCAL_PACKAGES_WITH_BINARIES = "TD_LOCAL_PACKAGES_WITH_BINARIES"
 
 
 class CustomJSONEncoder(json.JSONEncoder):
@@ -253,11 +275,11 @@ def store_folder_contents(path_to_persist: str, save_location: str):
     os.makedirs(save_location, exist_ok=True)
 
     def ignorePath(path):
-        # We ignore 2 kinds of folders: the original folder (to avoid infinite
-        # recursion issues when the folder is stored inside itself), and folders with
-        # names that begin with a . like .venv, since those should generally be ignored.
-        # If facing issues regarding folders not being properly loaded, this might be
-        # the place to look.
+        # We ignore folders that:
+        # - Their name begins with a . (since those should generally be ignored.)
+        # - Are generated folders byproducts of a build or test process.
+        # If facing issues regarding folders or files not being properly loaded,
+        # this might be the place to look.
         def ignoref(directory, contents):
             result = [
                 f
@@ -270,12 +292,53 @@ def store_folder_contents(path_to_persist: str, save_location: str):
         return ignoref
 
     os.makedirs(save_location, exist_ok=True)
+
+    # Step 1: Regular copy, excluding unwanted folders.
     shutil.copytree(
         path_to_persist,
         save_location,
         ignore=ignorePath(save_location),
         dirs_exist_ok=True,
     )
+
+    # Step 2: Extra pass to find binaries under ignored folder "target".
+    # This is only allowed when running pytest tests, in order to simplify
+    # the setup for test executions from terminal or PyCharm.
+    if os.environ.get(PYTEST_CONTEXT_ACTIVE) is not None:
+        local_packages_with_binaries = (
+            os.getenv(
+                LOCAL_PACKAGES_WITH_BINARIES,
+                "False",
+            ).lower()
+            in TRUE_VALUES
+        )
+        # Anyway, as local packages with binaries can become quite large, this
+        # is only done when environment variable TD_LOCAL_PACKAGES_WITH_BINARIES
+        # is enabled. The invoker also takes care of placing the binaries
+        # folder in the PATH when running pytest test. Therefore, this capability
+        # should not be necessary in normal circumstances.
+        if local_packages_with_binaries:
+            target_folder = Path(os.path.join(path_to_persist, "target"))
+            if target_folder.exists():
+                for root, _, files in os.walk(target_folder):
+                    root_path = Path(root)
+                    relative_root_path = root_path.relative_to(path_to_persist)
+                    for file in files:
+                        file_path = root_path / file
+                        file_stem = file_path.stem
+                        if file_stem in BASE_BINARIES and file_path.suffix in (
+                            "",
+                            ".exe",
+                        ):
+                            destination_file_path = Path(
+                                os.path.join(
+                                    save_location,
+                                    relative_root_path,
+                                    file,
+                                )
+                            )
+                            os.makedirs(destination_file_path.parent, exist_ok=True)
+                            shutil.copy2(file_path, destination_file_path)
 
 
 def store_function_codebase(path_to_persist: str, save_location: str):
