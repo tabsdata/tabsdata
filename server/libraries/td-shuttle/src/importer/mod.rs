@@ -2,6 +2,6 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-mod args;
+pub mod args;
 pub mod cli;
-mod logic;
+pub mod logic;

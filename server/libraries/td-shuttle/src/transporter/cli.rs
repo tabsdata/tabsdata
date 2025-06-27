@@ -144,7 +144,7 @@ async fn run_impl(
         TransporterRequest::ImportV1(request) => import(request)
             .await
             .map(TransporterReport::ImportV1)
-            .map_err(TransporterReport::ErrorV1),
+            .map_err(|err| TransporterReport::ErrorV1(ErrorReport::new(err.to_string()))),
 
         TransporterRequest::CopyV1(request) => copy(request)
             .await

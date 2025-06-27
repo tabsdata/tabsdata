@@ -34,7 +34,7 @@ name = "apiserver"
 path = "src/apiserver.rs"
 
 [[bin]]
-name = "importer"
+name = "_importer"
 path = "src/importer.rs"
 
 [[bin]]

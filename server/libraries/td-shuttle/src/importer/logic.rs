@@ -4,6 +4,7 @@
 
 use crate::importer::args::{Format, ImporterOptions, ToFormat};
 use chrono::{DateTime, Duration, Utc};
+use derive_builder::Builder;
 use getset::Getters;
 use itertools::Itertools;
 use object_store::path::Path;
@@ -76,7 +77,7 @@ fn filter_matching_files(importer_options: &ImporterOptions) -> impl Fn(&ObjectM
 /// Fails an iterator if the number of files exceeds the maximum file limit.
 type LimiterFn<T, E> = fn((usize, T)) -> Result<(usize, T), E>;
 
-fn take_files_limit() -> LimiterFn<ObjectMeta, ImportError> {
+pub fn take_files_limit() -> LimiterFn<ObjectMeta, ImportError> {
     |(idx, o)| {
         if idx <= MAX_FILE_LIMIT {
             Ok((idx, o))
@@ -89,7 +90,7 @@ fn take_files_limit() -> LimiterFn<ObjectMeta, ImportError> {
 type LastModifiedObjectMeta = (usize, ObjectMeta);
 
 /// Comparator for sorting [`ObjectMeta`] by last modified time.
-fn file_last_modified_comparator() -> impl Fn(
+pub fn file_last_modified_comparator() -> impl Fn(
     &Result<LastModifiedObjectMeta, ImportError>,
     &Result<LastModifiedObjectMeta, ImportError>,
 ) -> std::cmp::Ordering {
@@ -103,7 +104,7 @@ fn file_last_modified_comparator() -> impl Fn(
 }
 
 /// Maps a [`ObjectMeta`] to a [`FileToImport`].
-fn to_file_to_import_instructions(
+pub fn to_file_to_import_instructions(
     importer_options: &Arc<ImporterOptions>,
 ) -> impl Fn(Result<(usize, ObjectMeta), ImportError>) -> Result<FileImportInstructions, ImportError>
 {
@@ -143,7 +144,8 @@ pub async fn find_files_to_import(
 }
 
 /// Import details for a single file import.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
+#[builder(setter(into))]
 pub struct FileImportInstructions {
     idx: usize,
     from_url: Url,

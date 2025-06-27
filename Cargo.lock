@@ -5885,10 +5885,13 @@ dependencies = [
 name = "td-shuttle"
 version = "0.9.7"
 dependencies = [
+ "async-trait",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "clap",
  "clap_derive",
+ "derive_builder",
  "futures-util",
  "getset",
  "itertools 0.13.0",

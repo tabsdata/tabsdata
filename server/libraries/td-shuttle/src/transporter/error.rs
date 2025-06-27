@@ -30,8 +30,23 @@ pub enum TransporterError {
     #[error("The environment variable '{0}' is not set")]
     EnvironmentVariableNotFound(String) = 7,
 
+    #[error("Could not encode '{0}' info: {0}")]
+    CouldNotEncodeInfo(String, String) = 8,
+    #[error("Could not decode '{0}' info: {0}")]
+    CouldNotDecodeInfo(String, String) = 9,
+    #[error("Importer file URL does not have a path or file name: {0}")]
+    InvalidImporterFileUrl(String) = 10,
+    #[error("The URL patter '{0}' and the File '{1}' have different base paths")]
+    UrlPatternAndFileHaveDifferentBasePaths(String, String) = 11,
+
+    #[error("Could not list files at '{0}' to import, error: {1}")]
+    CouldListFilesToImport(String, object_store::Error) = 12,
+
+    #[error("Could not create import instructions: {0}")]
+    CouldNotCreateImportInstructions(String) = 13,
+
     #[error("Could not create object store for '{0}', error: {1}")]
-    CouldNotCreateObjectStore(String, Box<object_store::Error>) = 5000,
+    CouldNotCreateObjectStore(String, object_store::Error) = 5000,
     #[error("Could not get file metadata for '{0}', error: {1}")]
     CouldNotGetFileMetadata(String, Box<object_store::Error>) = 5001,
     #[error("Could not get file metadata for '{0}', error: {1}")]

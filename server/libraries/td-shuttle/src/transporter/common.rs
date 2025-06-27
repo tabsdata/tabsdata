@@ -15,5 +15,5 @@ where
 {
     let url = location.url();
     parse_url_opts(&url, location.cloud_configs())
-        .map_err(|err| TransporterError::CouldNotCreateObjectStore(url.to_string(), Box::new(err)))
+        .map_err(|err| TransporterError::CouldNotCreateObjectStore(url.to_string(), err))
 }

@@ -4,6 +4,7 @@
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use clap_derive::{Args, ValueEnum};
+use derive_builder::Builder;
 use getset::Getters;
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
@@ -93,7 +94,7 @@ fn slashed_tmp_file() -> String {
     }
 }
 
-fn root_folder() -> String {
+pub fn root_folder() -> String {
     if cfg!(target_os = "windows") {
         "file:///c:/".to_string()
     } else {
@@ -505,7 +506,8 @@ impl Format {
 }
 
 /// Importer options capturing all the necessary information to import data
-#[derive(Debug, Clone, Getters)]
+#[derive(Debug, Clone, Builder, Getters)]
+#[builder(setter(into))]
 #[get = "pub"]
 pub struct ImporterOptions {
     base_url: Url,
@@ -524,6 +526,10 @@ pub struct ImporterOptions {
 #[cfg(test)]
 #[allow(dead_code)]
 impl ImporterOptions {
+    pub fn builder() -> ImporterOptionsBuilder {
+        ImporterOptionsBuilder::default()
+    }
+
     pub fn set_base_path(&mut self, base_path: &str) {
         self.base_path = base_path.to_string();
     }

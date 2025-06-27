@@ -8,3 +8,5 @@ mod common;
 mod copy;
 mod error;
 mod import;
+
+mod files_importer;
