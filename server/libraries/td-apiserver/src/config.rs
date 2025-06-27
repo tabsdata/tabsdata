@@ -4,12 +4,12 @@
 
 //! API Server CLI configuration and parameters.
 
-use crate::addresses_default;
 use clap_derive::{Args, ValueEnum};
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::net::{AddrParseError, SocketAddr};
+use std::net::{AddrParseError, Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use strum::{Display, EnumString, ParseError};
 use td_database::sql::SqliteConfig;
 use td_error::td_error;
@@ -20,16 +20,29 @@ use te_execution::transaction::TransactionBy;
 #[derive(Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct Config {
-    #[serde(default)]
+    #[serde(default = "addresses_default")]
     addresses: Vec<SocketAddr>,
+    #[serde(default = "internal_addresses_default")]
+    internal_addresses: Vec<SocketAddr>,
     password: PasswordHashConfig,
     jwt: JwtConfig,
     request_timeout: i64, // in seconds
+    ssl_folder: PathBuf,
     database: SqliteConfig,
     #[serde(default)]
     storage: Option<StorageConfig>,
     #[serde(default)]
     transaction_by: TransactionBy,
+}
+
+pub fn addresses_default() -> Vec<SocketAddr> {
+    const DEFAULT_PORT: u16 = 2457;
+    vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), DEFAULT_PORT)]
+}
+
+pub fn internal_addresses_default() -> Vec<SocketAddr> {
+    const DEFAULT_PORT: u16 = 2458;
+    vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), DEFAULT_PORT)]
 }
 
 #[derive(Clone, Serialize, Deserialize, Getters, Debug)]
@@ -72,9 +85,11 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             addresses: addresses_default(),
+            internal_addresses: internal_addresses_default(),
             password: PasswordHashConfig::default(),
             jwt: JwtConfig::default(),
             request_timeout: 60,
+            ssl_folder: PathBuf::default(),
             database: SqliteConfig::default(),
             storage: Some(StorageConfig::default()),
             transaction_by: TransactionBy::default(),
@@ -94,8 +109,8 @@ impl Display for Config {
         // hide sensitive configs from displaying
         write!(
             f,
-            "{{ addresses: {:?}, database: {:?}, storage {} }}",
-            self.addresses, self.database, storage_url
+            "{{ addresses: {:?}, internal_address: {:?}, database: {:?}, storage {} }}",
+            self.addresses, self.internal_addresses, self.database, storage_url
         )
     }
 }
@@ -137,6 +152,12 @@ pub struct Params {
     #[clap(short, long, value_parser = parse_socket_addr, num_args = 1.., value_delimiter = ',')]
     /// List of addresses to bind the server to
     address: Option<Vec<SocketAddr>>,
+    #[clap(short, long, value_parser = parse_socket_addr, num_args = 1.., value_delimiter = ',')]
+    /// List of internal addresses to bind the server to
+    internal_address: Option<Vec<SocketAddr>>,
+    #[clap(long)]
+    /// SSL folder path
+    ssl_folder: Option<PathBuf>,
     #[clap(long)]
     /// JWT Secret
     jwt_secret: Option<String>,
@@ -173,20 +194,14 @@ impl Params {
         }
         let resolved_storage = Some(resolved_storage);
         let config = Config {
-            database: self
-                .database_url
-                .as_ref()
-                .map(|db_url| {
-                    let mut database_config_builder = config.database().to_builder();
-                    database_config_builder.url(Some(db_url.to_string()));
-                    database_config_builder.build().unwrap()
-                })
-                .unwrap_or_else(|| config.database().clone()),
-            storage: resolved_storage,
             addresses: self
                 .address
                 .clone()
                 .unwrap_or_else(|| config.addresses().clone()),
+            internal_addresses: self
+                .internal_address
+                .clone()
+                .unwrap_or_else(|| config.internal_addresses().clone()),
             password: config.password().clone(),
             jwt: {
                 let secret = self
@@ -201,6 +216,20 @@ impl Params {
             request_timeout: self
                 .request_timeout
                 .unwrap_or_else(|| *config.request_timeout()),
+            ssl_folder: self
+                .ssl_folder
+                .clone()
+                .unwrap_or_else(|| config.ssl_folder().clone()),
+            database: self
+                .database_url
+                .as_ref()
+                .map(|db_url| {
+                    let mut database_config_builder = config.database().to_builder();
+                    database_config_builder.url(Some(db_url.to_string()));
+                    database_config_builder.build().unwrap()
+                })
+                .unwrap_or_else(|| config.database().clone()),
+            storage: resolved_storage,
             transaction_by: self
                 .transaction_by
                 .clone()
@@ -270,7 +299,7 @@ mod tests {
         assert_eq!(config.database().url(), &None);
         assert_eq!(
             config.addresses(),
-            &vec![SocketAddr::from(([127, 0, 0, 1], 0))]
+            &vec![SocketAddr::from(([127, 0, 0, 1], 2457))]
         );
         id::Id::try_from(config.jwt().secret().as_ref().unwrap()).unwrap();
         assert!(config.storage.is_some());
@@ -296,6 +325,8 @@ mod tests {
             #[cfg(not(target_os = "windows"))]
             storage_url: Some(String::from("file:///storage")),
             address: Some(vec!["127.0.0.1:8080".parse().unwrap()]),
+            internal_address: Some(vec!["127.0.0.1:8081".parse().unwrap()]),
+            ssl_folder: Some(PathBuf::from("file:///ssl")),
             jwt_secret: Some(String::from("NEW_SECRET")),
             access_jwt_expiration: Some(7200),
             request_timeout: Some(120),
@@ -361,6 +392,8 @@ mod tests {
             #[cfg(not(target_os = "windows"))]
             storage_url: Some(String::from("file:///storage")),
             address: None,
+            internal_address: None,
+            ssl_folder: None,
             jwt_secret: Some(String::from("NEW_SECRET")),
             access_jwt_expiration: Some(1800),
             request_timeout: None,
@@ -375,6 +408,10 @@ mod tests {
         assert_eq!(
             partially_resolved_config.addresses(),
             default_config.addresses()
+        );
+        assert_eq!(
+            partially_resolved_config.internal_addresses(),
+            default_config.internal_addresses()
         );
         assert_eq!(
             resolved_config.jwt().secret(),

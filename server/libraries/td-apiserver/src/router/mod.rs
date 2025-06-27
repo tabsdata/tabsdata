@@ -55,16 +55,17 @@ mod workers;
 
 use crate::config::Config;
 use crate::layers::cors::CorsService;
-use crate::layers::timeout::TimeoutService;
 use crate::layers::tracing::TraceService;
 use crate::layers::uri_filter::LoopbackIpFilterService;
 use crate::router::auth::authorization_layer::authorization_layer;
 use crate::router::auth::{auth_secure, auth_unsecure};
 use crate::router::status::StatusLogic;
-use crate::{apiserver, ApiServer};
+use crate::{Server, ServerBuilder, ServerError};
 use axum::middleware::{from_fn, from_fn_with_state};
-use chrono::Duration;
+use std::error::Error;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_security::config::PasswordHashingConfig;
@@ -86,15 +87,7 @@ use td_services::user_role::services::UserRoleServices;
 use td_services::worker::services::WorkerServices;
 use td_storage::Storage;
 use te_apiserver::{ExtendedRouter, RouterExtension};
-
-pub struct ApiServerInstance {
-    config: Config,
-    db: DbPool,
-    authz_context: Arc<AuthzContext>,
-    auth_services: Arc<AuthServices>,
-    storage: Arc<Storage>,
-    runtime_context: Arc<RuntimeContext>,
-}
+use tower_http::timeout::TimeoutLayer;
 
 pub mod state {
     use super::*;
@@ -117,7 +110,45 @@ pub mod state {
     pub type StorageRef = Arc<Storage>;
 }
 
+pub struct ApiServerInstance {
+    internal: Box<dyn Server>,
+    api_v1: Box<dyn Server>,
+}
+
 impl ApiServerInstance {
+    pub async fn api_v1_addresses(&self) -> Result<Vec<SocketAddr>, Box<dyn Error>> {
+        self.api_v1
+            .listeners()
+            .iter()
+            .map(|listener| listener.local_addr())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub async fn internal_addresses(&self) -> Result<Vec<SocketAddr>, Box<dyn Error>> {
+        self.internal
+            .listeners()
+            .iter()
+            .map(|listener| listener.local_addr())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub async fn run(self) -> Result<(), Box<dyn Error>> {
+        tokio::try_join!(self.internal.run(), self.api_v1.run()).map(|_| ())
+    }
+}
+
+pub struct ApiServerInstanceBuilder {
+    config: Config,
+    db: DbPool,
+    authz_context: Arc<AuthzContext>,
+    auth_services: Arc<AuthServices>,
+    storage: Arc<Storage>,
+    runtime_context: Arc<RuntimeContext>,
+}
+
+impl ApiServerInstanceBuilder {
     pub fn new(
         config: Config,
         db: DbPool,
@@ -220,10 +251,6 @@ impl ApiServerInstance {
         ))
     }
 
-    fn timeout_service(&self) -> TimeoutService {
-        TimeoutService::new(Duration::seconds(*self.config.request_timeout()))
-    }
-
     fn transaction_state(&self) -> state::Transactions {
         Arc::new(TransactionServices::new(
             self.db.clone(),
@@ -253,60 +280,87 @@ impl ApiServerInstance {
         ))
     }
 
-    pub async fn build(&self) -> ApiServer {
-        apiserver! {
-            apiserver {
-                // Server Addresses
-                addresses => self.config.addresses(),
+    pub async fn build(&self) -> Result<ApiServerInstance, ServerError> {
+        let api_v1 = {
+            // API router
+            let router = axum::Router::new()
+                // unsecure endpoints
+                .merge(axum::Router::new().merge(auth_unsecure::router(self.auth_state())))
+                // secure endpoints
+                .merge(
+                    axum::Router::new()
+                        .merge(auth_secure::router(self.auth_state()))
+                        .merge(collections::router(self.collection_state()))
+                        .merge(executions::router(self.execution_state()))
+                        .merge(functions::router(self.function_state()))
+                        .merge(function_runs::router(self.function_run_state()))
+                        .merge(inter_collection_permissions::router(
+                            self.inter_collection_permissions_state(),
+                        ))
+                        .merge(permissions::router(self.permissions_state()))
+                        .merge(roles::router(self.roles_state()))
+                        .merge(server_status::router(self.status_state()))
+                        .merge(user_roles::router(self.user_roles_state()))
+                        .merge(users::router(self.users_state()))
+                        .merge(tables::router(self.table_state(), self.storage_state()))
+                        .merge(transactions::router(self.transaction_state()))
+                        .merge(workers::router(self.workers_state()))
+                        .merge(runtime_info::router(self.execution_state()))
+                        // authorization layer
+                        .layer(from_fn_with_state(self.auth_state(), authorization_layer)),
+                );
 
-                // Base URL
-                base_url => td_objects::rest_urls::BASE_URL,
+            // Nest the router in the V1 address.
+            let router = axum::Router::new().nest(td_objects::rest_urls::BASE_URL_V1, router);
 
-                // OpenAPI
-                #[cfg(feature = "api-docs")]
-                openapi => openapi,
+            // Add any router extensions (not part of the API).
+            let mut router = router.merge(ExtendedRouter::router());
 
-                // Extended
-                extension => ExtendedRouter,
-
-                // Open Routes
-                router => {
-                    auth_unsecure => { state ( self.auth_state() ) },
-                },
-
-                // JWT Secured Routes
-                router => {
-                    auth_secure => { state ( self.auth_state() ) },
-                    collections => { state ( self.collection_state() ) },
-                    executions => { state ( self.execution_state() ) },
-                    functions => { state ( self.function_state() ) },
-                    function_runs => { state ( self.function_run_state() ) },
-                    inter_collection_permissions => { state ( self.inter_collection_permissions_state() ) },
-                    permissions => { state ( self.permissions_state() ) },
-                    roles => { state ( self.roles_state() ) },
-                    server_status => { state ( self.status_state() ) },
-                    user_roles => { state ( self.user_roles_state() ) },
-                    users => { state ( self.users_state() ) },
-                    tables => { state ( self.table_state(), self.storage_state() ) },
-                    transactions => { state ( self.transaction_state() ) },
-                    workers => { state ( self.workers_state() ) },
-                    runtime_info => { state ( self.execution_state() ) },
-                }
-                .layer => from_fn_with_state(self.auth_state(), authorization_layer),
-
-                router => {
-                    // Specific endpoint reachable from localhost only, non-secured, for execution update.
-                    internal => { state ( self.execution_state() ) },
-                }
-                .layer => from_fn(LoopbackIpFilterService::layer),
+            // Add docs endpoints if the feature is enabled.
+            #[cfg(feature = "api-docs")]
+            {
+                router = router.merge(openapi::router());
             }
 
-            // Global layer
-            .layer => self.timeout_service().layer(),
-            .layer => CorsService::layer(),
-            .layer => TraceService::layer(),
-        }
+            // Default layers
+            let router = router
+                .layer(TimeoutLayer::new(Duration::from_secs(
+                    *self.config.request_timeout() as u64,
+                )))
+                .layer(CorsService::layer())
+                .layer(TraceService::layer());
 
-        apiserver
+            ServerBuilder::new(self.config.addresses().clone(), router)
+                .tls(self.config.ssl_folder())
+                .build()
+                .await
+        }?;
+
+        let internal = {
+            // Internal router, only accessible from loopback IPs
+            let router = axum::Router::new().merge(
+                axum::Router::new()
+                    .merge(internal::router(self.execution_state()))
+                    // internal authorization layer
+                    .layer(from_fn(LoopbackIpFilterService::layer)),
+            );
+
+            // Nest the router in the V1 address.
+            let router = axum::Router::new().nest(td_objects::rest_urls::BASE_URL_V1, router);
+
+            // Default layers
+            let router = router
+                .layer(TimeoutLayer::new(Duration::from_secs(
+                    *self.config.request_timeout() as u64,
+                )))
+                .layer(CorsService::layer())
+                .layer(TraceService::layer());
+
+            ServerBuilder::new(self.config.internal_addresses().clone(), router)
+                .build()
+                .await
+        }?;
+
+        Ok(ApiServerInstance { internal, api_v1 })
     }
 }

@@ -29,6 +29,7 @@ ignore = [
 [bans]
 
 deny = [{ crate = "log", reason = "We use 'tracing' crate instead, which has equivalent macros to the ones in 'log' crate", wrappers = [
+    "bindgen",
     "globset",
     "iana-time-zone",
     "ignore",
@@ -37,6 +38,7 @@ deny = [{ crate = "log", reason = "We use 'tracing' crate instead, which has equ
     "native-tls",
     "opentelemetry-appender-log",
     "reqwest",
+    "rustls",
     "sqlparser",
     "sqlx-core",
     "sqlx-sqlite",

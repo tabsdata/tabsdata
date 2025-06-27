@@ -3,58 +3,36 @@
 //
 
 use crate::scheduler::layers::schedule::unlock_workers;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use td_common::server::WorkerMessageQueue;
-use td_database::sql::DbPool;
+use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_error::TdError;
 use td_objects::sql::DaoQueries;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
-use td_tower::service_provider::{ServiceProvider, TdBoxService};
-use td_tower::{l, layers, p, service_provider};
+use td_tower::{layer, layers, provider};
 
-pub struct ScheduleCommitService<T> {
-    provider: ServiceProvider<(), (), TdError>,
-    phantom: PhantomData<T>,
+#[provider(
+    name = ScheduleCommitService,
+    request = (),
+    response = (),
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = FileWorkerMessageQueue,
+)]
+fn provider() {
+    layers!(commit::<_, FileWorkerMessageQueue>())
 }
 
-impl<T: WorkerMessageQueue> ScheduleCommitService<T> {
-    pub fn new(db: DbPool, message_queue: Arc<T>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db.clone(), queries.clone(), message_queue.clone()),
-            phantom: PhantomData,
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, message_queue: Arc<T>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(message_queue),
-                TransactionProvider::new(db),
-                Self::commit()
-            ))
-        }
-    }
-
-    // Requires:
-    // - Transaction connection
-    // - DaoQueries
-    // - T(MessageQueue)
-    l! {
-        commit() {
-            layers!(
-                from_fn(unlock_workers::<DaoQueries, T>),
-            )
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<(), (), TdError> {
-        self.provider.make().await
-    }
+// Requires:
+// - Transaction connection
+// - DaoQueries
+// - T(MessageQueue)
+#[layer]
+pub fn commit<T>()
+where
+    T: WorkerMessageQueue,
+{
+    layers!(from_fn(unlock_workers::<DaoQueries, T>))
 }
 
 #[cfg(test)]
@@ -63,6 +41,7 @@ mod tests {
     use crate::execution::services::execute::ExecuteFunctionService;
     use crate::scheduler::services::request::ScheduleRequestService;
     use std::net::SocketAddr;
+    use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_common::files::{get_files_in_folder_sorted_by_name, YAML_EXTENSION};
     use td_common::server::{FileWorkerMessageQueue, PayloadType, SupervisorMessage};
@@ -150,7 +129,7 @@ mod tests {
         let authz_context = Arc::new(AuthzContext::default());
         let transaction_by = Arc::new(TransactionBy::default());
         let service =
-            ExecuteFunctionService::new(db.clone(), queries, authz_context, transaction_by)
+            ExecuteFunctionService::new(db.clone(), queries.clone(), authz_context, transaction_by)
                 .service()
                 .await;
         let _ = service.raw_oneshot(request).await?;
@@ -166,6 +145,7 @@ mod tests {
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 8080)));
         ScheduleRequestService::new(
             db.clone(),
+            queries.clone(),
             storage.clone(),
             message_queue.clone(),
             server_url,
@@ -180,7 +160,7 @@ mod tests {
         let created_message = &created_messages[0];
 
         // Actual test
-        ScheduleCommitService::new(db.clone(), message_queue.clone())
+        ScheduleCommitService::new(db.clone(), queries.clone(), message_queue.clone())
             .service()
             .await
             .oneshot(())

@@ -2,10 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use td_common::server::WorkerMessageQueue;
+use td_common::server::FileWorkerMessageQueue;
 use td_common::signal::terminate;
 use td_database::sql::DbPool;
 use td_services::scheduler::services::SchedulerServices;
@@ -33,7 +34,7 @@ impl Scheduler {
         Ok(())
     }
 
-    pub async fn run(self) {
+    pub async fn run(self) -> Result<(), Box<dyn Error>> {
         let this = Arc::new(self);
 
         let scheduler = this.clone();
@@ -62,27 +63,25 @@ impl Scheduler {
 
         select! {
             _ = terminate() => {
-                trace!("Stopping Scheduler");
+                trace!("Stopping Scheduler Server");
+                Ok(())
             }
         }
     }
 }
 
-pub struct SchedulerBuilder<Q> {
+pub struct SchedulerBuilder {
     db: DbPool,
     storage: Arc<Storage>,
-    worker_queue: Arc<Q>,
+    worker_queue: Arc<FileWorkerMessageQueue>,
     server_url: Arc<SocketAddr>,
 }
 
-impl<Q> SchedulerBuilder<Q>
-where
-    Q: WorkerMessageQueue,
-{
+impl SchedulerBuilder {
     pub fn new(
         db: DbPool,
         storage: Arc<Storage>,
-        worker_queue: Arc<Q>,
+        worker_queue: Arc<FileWorkerMessageQueue>,
         server_url: Arc<SocketAddr>,
     ) -> Self {
         Self {

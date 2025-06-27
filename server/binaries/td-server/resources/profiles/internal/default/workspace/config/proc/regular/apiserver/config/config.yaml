@@ -5,6 +5,8 @@
 # storage_url: null # by default given by supervisor
 addresses:
   - 127.0.0.1:2457
+internal_addresses:
+  - 127.0.0.1:2458
 password:
   algorithm: argon2id
   version: 19

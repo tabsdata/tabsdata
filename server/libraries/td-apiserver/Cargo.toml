@@ -70,8 +70,10 @@ te-execution = { workspace = true }
 
 # External dependencies
 
-axum = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["macros"] }
 axum-extra = { workspace = true, features = ["query"] }
+axum-server = { workspace = true, features = ["tls-rustls"] }
 chrono = { workspace = true }
 clap = { workspace = true }
 clap_derive = { workspace = true }
@@ -80,6 +82,7 @@ getset = { workspace = true }
 http = { workspace = true }
 paste = { workspace = true }
 reqwest = { workspace = true }
+rustls = { workspace = true, features = ["aws-lc-rs"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
@@ -95,6 +98,7 @@ utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
 
 [dev-dependencies]
 td-objects = { workspace = true, features = ["td-test"] }
+testdir = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

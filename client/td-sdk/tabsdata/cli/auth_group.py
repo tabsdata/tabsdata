@@ -30,12 +30,12 @@ def auth():
 
 @auth.command()
 @click.option("--server", "-s", help="Tabsdata Server URL")
-@click.option("--path", help="Path to the certificate file")
+@click.option("--pem", help="Path to the certificate PEM file")
 @click.pass_context
-def add_cert(ctx: click.Context, server: str, path: str):
-    """Add a certificate for a Tabsdata Server"""
+def add_cert(ctx: click.Context, server: str, pem: str):
+    """Add a certificate for a Tabsdata Server, only needed for self-signed certificates."""
     server = server or logical_prompt(ctx, "Tabsdata Server URL")
-    path = path or logical_prompt(ctx, "Path to the certificate file")
+    pem = pem or logical_prompt(ctx, "Path to the certificate PEM file")
     click.echo("Adding certificate")
     click.echo("-" * 10)
     try:
@@ -45,7 +45,7 @@ def add_cert(ctx: click.Context, server: str, path: str):
             server = HTTPS_PROTOCOL + server
         certificate_path = _obtain_certificate_file_path(server)
         os.makedirs(DEFAULT_TABSDATA_CERTIFICATE_FOLDER, exist_ok=True)
-        shutil.copy(path, certificate_path)
+        shutil.copy(pem, certificate_path)
         click.echo(f"Certificate added successfully for server '{server}'")
         click.echo(f"Certificate stored at '{certificate_path}'")
     except Exception as e:

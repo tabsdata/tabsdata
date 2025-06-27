@@ -3,7 +3,8 @@
 //
 
 use crate::counter::Counter;
-use td_apiserver::{apiserver, localhost_address, ApiServer};
+use std::net::{Ipv4Addr, SocketAddr};
+use td_apiserver::{Server, ServerBuilder};
 
 /// This example just demonstrate how to create a simple server with a thread safe counter
 /// incremented on each request to the `/count` endpoint.
@@ -11,22 +12,18 @@ use td_apiserver::{apiserver, localhost_address, ApiServer};
 #[tokio::main]
 async fn main() {
     let server = init_server().await;
-    server.run().await;
+    server.run().await.unwrap();
 }
 
-async fn init_server() -> ApiServer {
+async fn init_server() -> Box<dyn Server> {
     let counter = Counter::create();
-
-    apiserver! {
-        simple_server {
-            addresses => vec![localhost_address(0)],
-            router => {
-                endpoint => { state ( counter ) },
-            }
-        }
-    }
-
-    simple_server
+    ServerBuilder::new(
+        vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)],
+        endpoint::router(counter).into(),
+    )
+    .build()
+    .await
+    .unwrap()
 }
 
 mod endpoint {
@@ -81,17 +78,18 @@ mod tests {
     #[tokio::test]
     async fn test_simple_server() {
         let server = super::init_server().await;
-        let addr = server.listeners().first().unwrap().local_addr().unwrap();
+        let addr = server.listeners()[0].local_addr().unwrap();
+        let scheme = server.scheme();
 
         tokio::spawn(async {
-            server.run().await;
+            server.run().await.unwrap();
         });
 
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         let client = Client::new();
         for i in 0..10 {
             let response = client
-                .get(format!("http://{}:{}/count", addr.ip(), addr.port()))
+                .get(format!("{}://{}:{}/count", scheme, addr.ip(), addr.port()))
                 .send()
                 .await
                 .expect("Failed to send request");

@@ -68,12 +68,7 @@ pub async fn create_locked_workers<Q: DerefQueries, T: WorkerMessageQueue>(
                 // This is loopback address, because this endpoint is only available to the server.
                 let function_run_id = f.id().to_string();
                 let endpoint = UPDATE_FUNCTION_RUN.replace("{function_run_id}", &function_run_id);
-                let callback_url = format!(
-                    "http://127.0.0.1:{}{}{}",
-                    server_url.port(),
-                    BASE_URL,
-                    endpoint
-                );
+                let callback_url = format!("http://{server_url}{BASE_URL}{endpoint}");
                 let callback_url =
                     Url::parse(&callback_url).map_err(ScheduleError::CallbackUrlParseError)?;
 

@@ -87,6 +87,9 @@ pub const DATABASE_FILE: &str = "tabsdata.db";
 
 pub const STORAGE_FOLDER: &str = "storage";
 
+pub const SSL_KEY_PEM_FILE: &str = "key.pem";
+pub const SSL_CERT_PEM_FILE: &str = "cert.pem";
+
 pub const CONFIG_FILE_STEM: &str = "config";
 pub const CONFIG_FILE: &str = "config.yaml";
 

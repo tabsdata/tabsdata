@@ -6,7 +6,7 @@ use std::env;
 use std::sync::Arc;
 use td_apiserver::config::{Config, DbSchema, Params};
 use td_apiserver::router::scheduler_server::SchedulerBuilder;
-use td_apiserver::router::{ApiServerInstance, RuntimeContext};
+use td_apiserver::router::{ApiServerInstanceBuilder, RuntimeContext};
 use td_common::attach::attach;
 use td_common::logging;
 use td_common::server::FileWorkerMessageQueue;
@@ -166,32 +166,56 @@ fn main() {
             };
             let worker_message_queue = Arc::new(worker_message_queue);
 
-            // Create execution server
-            let execution_server = SchedulerBuilder::new(
-                db.clone(),
-                storage.clone(),
-                worker_message_queue.clone(),
-                Arc::new(*config.addresses().first().unwrap()),
-            )
-            .build()
-            .await;
-
             let runtime_context = match RuntimeContext::new().await {
-                Ok(context) => context,
+                Ok(context) => Arc::new(context),
                 Err(e) => {
                     error!("Error creating runtime context: {}", e);
                     return ExitStatus::GeneralError;
                 }
             };
-            let runtime_context = Arc::new(runtime_context);
 
             // Create and run the API server
-            let apiserver = ApiServerInstance::new(config, db, storage, runtime_context)
-                .build()
-                .await;
+            let api_server = match ApiServerInstanceBuilder::new(
+                config,
+                db.clone(),
+                storage.clone(),
+                runtime_context,
+            )
+            .build()
+            .await
+            {
+                Ok(api_server) => api_server,
+                Err(e) => {
+                    error!("Error creating API Server: {}", e);
+                    return ExitStatus::GeneralError;
+                }
+            };
 
-            tokio::join!(execution_server.run(), apiserver.run());
-            ExitStatus::Success
+            // Create execution server
+            let loopback_address = match api_server.internal_addresses().await {
+                Ok(address) => Arc::new(address[0]),
+                Err(e) => {
+                    error!("Error getting loopback address: {}", e);
+                    return ExitStatus::GeneralError;
+                }
+            };
+
+            let execution_server = SchedulerBuilder::new(
+                db.clone(),
+                storage.clone(),
+                worker_message_queue.clone(),
+                loopback_address,
+            )
+            .build()
+            .await;
+
+            match tokio::try_join!(execution_server.run(), api_server.run()) {
+                Ok(_) => ExitStatus::Success,
+                Err(e) => {
+                    error!("Error running API Server: {}", e);
+                    ExitStatus::GeneralError
+                }
+            }
         },
         None,
         None,

@@ -3,11 +3,8 @@
 //
 
 use crate::scheduler::layers::schedule::create_locked_workers;
-use std::marker::PhantomData;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use td_common::server::WorkerMessageQueue;
-use td_database::sql::DbPool;
+use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_error::TdError;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractVecService, With};
@@ -17,79 +14,57 @@ use td_objects::types::execution::{
     FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB, WorkerDB,
 };
 use td_storage::Storage;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
-use td_tower::service_provider::{ServiceProvider, TdBoxService};
-use td_tower::{l, layers, p, service_provider};
+use td_tower::{layer, layers, provider};
 
-pub struct ScheduleRequestService<T> {
-    provider: ServiceProvider<(), (), TdError>,
-    phantom: PhantomData<T>,
+// TODO make provider accept generics so scheduler services can be used with different message queues.
+#[provider(
+    name = ScheduleRequestService,
+    request = (),
+    response = (),
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = Storage,
+    context = FileWorkerMessageQueue,
+    context = SocketAddr,
+)]
+fn provider() {
+    layers!(request::<_, FileWorkerMessageQueue>())
 }
 
-impl<T: WorkerMessageQueue> ScheduleRequestService<T> {
-    pub fn new(
-        db: DbPool,
-        storage: Arc<Storage>,
-        message_queue: Arc<T>,
-        server_url: Arc<SocketAddr>,
-    ) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, storage, message_queue, server_url),
-            phantom: PhantomData,
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, storage: Arc<Storage>, message_queue: Arc<T>, server_url: Arc<SocketAddr>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(message_queue),
-                SrvCtxProvider::new(storage),
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(server_url),
-                Self::request(),
-            ))
-        }
-    }
-
-    // Requires:
-    // - Transaction connection
-    // - DaoQueries
-    // - Storage
-    // - T(MessageQueue)
-    // - SocketAddr server URL
-    l! {
-        request() {
-            layers!(
-                // Get all function runs that are ready to execute.
-                // This is, with status scheduled and with all requirements done.
-                from_fn(By::<()>::select_all::<DaoQueries, FunctionRunToExecuteDB>),
-
-                // Create a locked message for each function run.
-                from_fn(create_locked_workers::<DaoQueries, T>),
-                // And insert generated messages.
-                from_fn(insert_vec::<DaoQueries, WorkerDB>),
-
-                // Update statuses.
-                from_fn(With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
-                from_fn(UpdateFunctionRunDB::run_requested),
-                from_fn(By::<FunctionRunId>::update_all::<DaoQueries, UpdateFunctionRunDB, FunctionRunDB>)
-            )
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<(), (), TdError> {
-        self.provider.make().await
-    }
+// Requires:
+// - Transaction connection
+// - DaoQueries
+// - Storage
+// - T(MessageQueue)
+// - SocketAddr server URL
+#[layer]
+pub fn request<T>()
+where
+    T: WorkerMessageQueue,
+{
+    layers!(
+        // Get all function runs that are ready to execute.
+        // This is, with status scheduled and with all requirements done.
+        from_fn(By::<()>::select_all::<DaoQueries, FunctionRunToExecuteDB>),
+        // Create a locked message for each function run.
+        from_fn(create_locked_workers::<DaoQueries, T>),
+        // And insert generated messages.
+        from_fn(insert_vec::<DaoQueries, WorkerDB>),
+        // Update statuses.
+        from_fn(With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
+        from_fn(UpdateFunctionRunDB::run_requested),
+        from_fn(By::<FunctionRunId>::update_all::<DaoQueries, UpdateFunctionRunDB, FunctionRunDB>)
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::execution::services::execute::ExecuteFunctionService;
+    use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_common::server::{FileWorkerMessageQueue, SupervisorMessagePayload};
     use td_database::sql::DbPool;
@@ -199,7 +174,7 @@ mod tests {
         let authz_context = Arc::new(AuthzContext::default());
         let transaction_by = Arc::new(TransactionBy::default());
         let service =
-            ExecuteFunctionService::new(db.clone(), queries, authz_context, transaction_by)
+            ExecuteFunctionService::new(db.clone(), queries.clone(), authz_context, transaction_by)
                 .service()
                 .await;
         let execution = service.raw_oneshot(request).await?;
@@ -216,6 +191,7 @@ mod tests {
         let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 8080)));
         ScheduleRequestService::new(
             db.clone(),
+            queries.clone(),
             storage.clone(),
             message_queue.clone(),
             server_url,
