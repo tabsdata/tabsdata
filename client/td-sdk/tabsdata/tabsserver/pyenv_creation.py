@@ -1021,6 +1021,7 @@ def install_python_version(python_version: str) -> None:
         [
             UV_EXECUTABLE,
             "python",
+            "install",
             "-v",
             "-n",
             python_version,

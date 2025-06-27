@@ -3,6 +3,7 @@
 #
 
 import io
+import json
 import logging
 import os
 import platform
@@ -21,6 +22,7 @@ from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# noinspection PyBroadException
 try:
     from setuptools.command.build_py import _IncludePackageDataAbuse
 
@@ -255,6 +257,31 @@ def read_requirements(path, root=None, token=None, visited=None):  # noqa: C901
     return requirements
 
 
+# noinspection PyBroadException
+def load_console_scripts() -> list[str]:
+    setup_json = Path("setup.json")
+    if not setup_json.exists():
+        return []
+
+    try:
+        with setup_json.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return []
+
+    scripts = []
+    try:
+        for entry in data.get("entry_points", {}).get("console_scripts", []):
+            name = entry.get("name")
+            function = entry.get("function")
+            if name and function:
+                scripts.append(f"{name} = {function}")
+    except Exception:
+        pass
+
+    return scripts
+
+
 # noinspection DuplicatedCode
 if platform.python_implementation() != "CPython":
     raise RuntimeError("The Tabsdata package requires CPython to function correctly.")
@@ -417,6 +444,22 @@ os.makedirs(
     ),
     exist_ok=True,
 )
+
+console_scripts: list[str] = [
+    # Tabsdata CLI
+    "td = tabsdata.cli.cli:cli",
+    # Supervisor init workers
+    "tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
+    "tdsrvinf = tabsdata.tabsserver.tools.server_info:main",
+    "tdmntext = tabsdata.tabsserver.tools.mount_extractor:main",
+    # Supervisor regular workers
+    "janitor = tabsdata.tabsserver.tools.janitor:main",
+    # Supervisor tools
+    "tdinvoker = tabsdata.tabsserver.invoker:main",
+    "tdupgrader = tabsdata.tabsserver.server.upgrader:main",
+    "tdvenv = tabsdata.tabsserver.pyenv_creation:main",
+]
+console_scripts.extend(load_console_scripts())
 
 setup(
     name="tabsdata",
@@ -622,20 +665,6 @@ setup(
         ],
     },
     data_files=datafiles,
-    entry_points={
-        "console_scripts": [
-            "td = tabsdata.cli.cli:cli",
-            # Supervisor init workers
-            "tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
-            "tdsrvinf = tabsdata.tabsserver.tools.server_info:main",
-            "tdmntext = tabsdata.tabsserver.tools.mount_extractor:main",
-            # Supervisor regular workers
-            "janitor = tabsdata.tabsserver.tools.janitor:main",
-            # Supervisor tools
-            "tdinvoker = tabsdata.tabsserver.invoker:main",
-            "tdupgrader = tabsdata.tabsserver.server.upgrader:main",
-            "tdvenv = tabsdata.tabsserver.pyenv_creation:main",
-        ]
-    },
+    entry_points={"console_scripts": console_scripts},
     include_package_data=True,
 )
