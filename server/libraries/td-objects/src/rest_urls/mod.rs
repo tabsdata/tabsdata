@@ -50,6 +50,8 @@ pub const AUTH_LOGOUT: &str = concat!(AUTH, "/logout");
 pub const AUTH_USER_INFO: &str = concat!(AUTH, "/info");
 pub const AUTH_PASSWORD_CHANGE: &str = concat!(AUTH, "/password_change");
 
+pub const CERT_DOWNLOAD: &str = concat!("/ssl-cert");
+
 // Users
 pub const USERS: &str = url!("/users");
 pub const USER: &str = url!("/{user}");

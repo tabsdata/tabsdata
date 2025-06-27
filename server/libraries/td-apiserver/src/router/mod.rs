@@ -167,7 +167,8 @@ impl ApiServerInstanceBuilder {
             &db,
             sessions.clone(),
             password_hash_config,
-            &config,
+            config.jwt().clone(),
+            config.ssl_folder().clone(),
         ));
 
         Self {

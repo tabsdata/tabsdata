@@ -2,6 +2,7 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
+use crate::auth::services::cert_download::CertDownloadService;
 use crate::auth::services::login::LoginService;
 use crate::auth::services::logout::LogoutService;
 use crate::auth::services::password_change::PasswordChangeService;
@@ -13,6 +14,7 @@ use argon2::{Argon2, Params, PasswordHasher, Version};
 use getset::Getters;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use td_common::id;
@@ -23,8 +25,10 @@ use td_objects::sql::DaoQueries;
 use td_objects::types::auth::UserInfo;
 use td_objects::types::auth::{Login, PasswordChange, RoleChange, TokenResponseX};
 use td_objects::types::basic::RefreshToken;
+use td_objects::types::stream::BoxedSyncStream;
 use td_tower::service_provider::TdBoxService;
 
+mod cert_download;
 mod login;
 mod logout;
 mod password_change;
@@ -139,6 +143,7 @@ pub struct AuthServices {
     user_info: UserInfoService,
     role_change: RoleChangeService,
     password_change: PasswordChangeService,
+    cert_download: CertDownloadService,
 }
 
 impl AuthServices {
@@ -147,11 +152,13 @@ impl AuthServices {
         sessions: impl Into<Arc<Sessions<'static>>>,
         password_settings: impl Into<PasswordHashConfig>,
         jwt_settings: impl Into<JwtConfig>,
+        ssl_folder: impl Into<PathBuf>,
     ) -> Self {
         let queries = Arc::new(DaoQueries::default());
+        let sessions = sessions.into();
         let password_settings = Arc::new(password_settings.into());
         let jwt_settings = Arc::new(jwt_settings.into());
-        let sessions = sessions.into();
+        let ssl_folder = Arc::new(ssl_folder.into());
         Self {
             jwt_settings: jwt_settings.clone(),
             sessions: sessions.clone(),
@@ -181,6 +188,7 @@ impl AuthServices {
                 password_settings.clone(),
                 sessions.clone(),
             ),
+            cert_download: CertDownloadService::new(ssl_folder),
         }
     }
 
@@ -212,6 +220,10 @@ impl AuthServices {
         self.password_change.service().await
     }
 
+    pub async fn cert_download(&self) -> TdBoxService<(), BoxedSyncStream, TdError> {
+        self.cert_download.service().await
+    }
+
     pub fn jwt_settings(&self) -> &JwtConfig {
         &self.jwt_settings
     }
@@ -227,6 +239,7 @@ pub mod tests {
     use crate::auth::session;
     use crate::auth::session::Sessions;
     use sqlx::FromRow;
+    use std::path::PathBuf;
     use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_objects::types::auth::SessionDB;
@@ -236,7 +249,8 @@ pub mod tests {
         let sessions: Arc<Sessions> = Arc::new(session::new(db.clone()));
         let password_hash_config: PasswordHashConfig = PasswordHashConfig::default();
         let jwt_config: JwtConfig = JwtConfig::default();
-        AuthServices::new(db, sessions, password_hash_config, jwt_config)
+        let ssl_folder = PathBuf::default();
+        AuthServices::new(db, sessions, password_hash_config, jwt_config, ssl_folder)
     }
 
     pub async fn assert_session(db: &DbPool, access_token_id: &Option<AccessTokenId>) {
