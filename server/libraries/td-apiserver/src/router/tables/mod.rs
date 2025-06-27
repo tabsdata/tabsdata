@@ -6,6 +6,7 @@ use crate::router::state::{StorageRef, Tables};
 use crate::routers;
 use td_apiforge::apiserver_tag;
 
+pub mod delete;
 pub mod download;
 pub mod list;
 pub mod list_table_data_versions;
@@ -22,5 +23,6 @@ routers! {
         list_table_data_versions => { state ( Tables ) },
         sample => { state ( Tables ) },
         schema => { state ( Tables ) },
+        delete => { state ( Tables ) },
     }
 }

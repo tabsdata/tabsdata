@@ -9,6 +9,7 @@ mod list_data_versions;
 mod sample;
 mod schema;
 
+use crate::table::services::delete::TableDeleteService;
 use crate::table::services::download::TableDownloadService;
 use crate::table::services::list::TableListService;
 use crate::table::services::list_data_versions::TableListDataVersionsService;
@@ -18,7 +19,8 @@ use std::sync::Arc;
 use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
-use td_objects::crudl::{ListRequest, ListResponse, ReadRequest};
+use td_objects::crudl::{DeleteRequest, ListRequest, ListResponse, ReadRequest};
+use td_objects::rest_urls::TableParam;
 use td_objects::sql::DaoQueries;
 use td_objects::types::execution::TableDataVersion;
 use td_objects::types::stream::BoxedSyncStream;
@@ -34,6 +36,7 @@ pub struct TableServices {
     table_schema: TableSchemaService,
     table_download: TableDownloadService,
     table_sample: TableSampleService,
+    table_delete: TableDeleteService,
 }
 
 impl TableServices {
@@ -62,6 +65,7 @@ impl TableServices {
                 authz_context.clone(),
                 storage.clone(),
             ),
+            table_delete: TableDeleteService::new(db, authz_context),
         }
     }
 
@@ -93,6 +97,12 @@ impl TableServices {
         &self,
     ) -> TdBoxService<ReadRequest<TableSampleAtName>, BoxedSyncStream, TdError> {
         self.table_sample.service().await
+    }
+
+    pub async fn table_delete_service(
+        &self,
+    ) -> TdBoxService<DeleteRequest<TableParam>, (), TdError> {
+        self.table_delete.service().await
     }
 }
 
