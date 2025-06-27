@@ -535,8 +535,11 @@ class DataVersion:
         **kwargs: Additional keyword arguments.
     """
 
+    column_count = LazyProperty("column_count")
     created_at = LazyProperty("created_at")
     created_at_str = LazyProperty("created_at_str", subordinate_time_string=True)
+    row_count = LazyProperty("row_count")
+    schema_hash = LazyProperty("schema_hash")
 
     # TODO: Make a first class citizen, with links to transaction and execution
     def __init__(
@@ -565,8 +568,11 @@ class DataVersion:
 
         self.execution = kwargs.get("execution_id")
         # TODO: Add lazy properties for status, triggered_on and triggered_on_str
+        self.column_count = kwargs.get("column_count")
         self.created_at = kwargs.get("created_at")
         self.created_at_str = None
+        self.row_count = kwargs.get("row_count")
+        self.schema_hash = kwargs.get("schema_hash")
         status = kwargs.get("status")
         self.status = data_version_status_to_mapping(status) if status else None
         # Note: this might cause an inconsistency or a bug if function_id corresponds

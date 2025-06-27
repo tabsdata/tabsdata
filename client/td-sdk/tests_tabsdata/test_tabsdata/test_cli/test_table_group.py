@@ -607,6 +607,32 @@ def test_data_version(login, testing_collection_with_table, tabsserver_connectio
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+def test_data_version_with_details(
+    login, testing_collection_with_table, tabsserver_connection
+):
+    table_name = tabsserver_connection.list_tables(testing_collection_with_table)[
+        0
+    ].name
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "table",
+            "versions",
+            "--coll",
+            testing_collection_with_table,
+            "--name",
+            table_name,
+            "--details",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
 @pytest.mark.slow
 def test_table_list_with_wildcard(login, testing_collection_with_table):
     runner = CliRunner()

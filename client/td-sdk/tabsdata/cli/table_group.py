@@ -14,6 +14,7 @@ from tabsdata.cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
+    show_hint,
     verify_login_or_prompt,
 )
 
@@ -411,8 +412,17 @@ def schema(
     "--name",
     help="The name of the table to which the data belongs.",
 )
+@click.option(
+    "--details",
+    is_flag=True,
+    help=(
+        "If provided, the command will show detailed information about each data "
+        "version, including the number of rows, number of columns (ignoring system "
+        "columns) and hash of the schema."
+    ),
+)
 @click.pass_context
-def versions(ctx: click.Context, coll: str, name: str):
+def versions(ctx: click.Context, coll: str, name: str, details: bool):
     """
     List all versions of the data of a table.
     """
@@ -435,20 +445,48 @@ def versions(ctx: click.Context, coll: str, name: str):
         table.add_column("Plan ID")
         table.add_column("Created at")
         table.add_column("Status")
+        if details:
+            table.add_column("Rows")
+            table.add_column("Columns")
+            table.add_column("Schema Hash")
 
         for data_version in data_version_list:
-            table.add_row(
+            row_content = [
                 data_version.id,
                 data_version.function.id,
                 data_version.execution.id,
                 data_version.created_at_str,
                 data_version.status,
-            )
+            ]
+            if details:
+                row_content.extend(
+                    [
+                        (
+                            str(data_version.row_count)
+                            if data_version.row_count is not None
+                            else "-"
+                        ),
+                        (
+                            str(data_version.column_count)
+                            if data_version.column_count is not None
+                            else "-"
+                        ),
+                        data_version.schema_hash,
+                    ]
+                )
+            table.add_row(*row_content)
 
         click.echo()
         console = Console()
         console.print(table)
         click.echo(f"Number of data versions: {len(data_version_list)}")
+        if not details:
+            show_hint(
+                ctx,
+                "Use the --details option to see more information about each data "
+                "version, including the number of rows, the number of columns and the "
+                "hash of the schema.",
+            )
 
     except Exception as e:
         hint_common_solutions(ctx, e)
