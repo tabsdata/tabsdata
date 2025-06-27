@@ -70,7 +70,6 @@ def check_columns(columns: Any, *more_columns: Any):
 
 
 def add_system_columns(
-    *,
     lf: pl.LazyFrame,
     mode: AddSystemColumnsMode,
     idx: int | None = None,
@@ -127,7 +126,6 @@ def add_system_columns(
 
 
 def drop_system_columns(
-    *,
     lf: pl.LazyFrame,
     ignore_missing: bool = True,
 ) -> pl.LazyFrame:

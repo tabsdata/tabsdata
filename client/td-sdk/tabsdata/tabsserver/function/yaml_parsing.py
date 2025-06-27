@@ -284,11 +284,29 @@ def parse_request_yaml(yaml_file: str) -> InputYaml:
 
 
 class Data:
-    def __init__(self, table):
-        self.table = table
+    def __init__(
+        self,
+        table: str,
+        column_count: int = None,
+        row_count: int = None,
+        schema_hash: str = None,
+    ):
+        self.content = {
+            "table": table,
+        }
+        if column_count is not None:
+            # Ensure that the info dictionary exists before adding column_count
+            self.content["info"] = self.content.get("info", {})
+            self.content["info"]["column_count"] = column_count
+        if row_count is not None:
+            self.content["info"] = self.content.get("info", {})
+            self.content["info"]["row_count"] = row_count
+        if schema_hash is not None:
+            self.content["info"] = self.content.get("info", {})
+            self.content["info"]["schema_hash"] = schema_hash
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(table={self.table})"
+        return f"{self.__class__.__name__}(content={self.content})"
 
 
 class NoData:
@@ -326,7 +344,7 @@ def v2_response_format_representer(
 
 def v2_data_representer(dumper: yaml.SafeDumper, data: Data) -> yaml.nodes.MappingNode:
     """Represent a Data instance as a YAML mapping node."""
-    return dumper.represent_mapping("!Data", {"table": data.table})
+    return dumper.represent_mapping("!Data", data.content)
 
 
 def v2_no_data_representer(

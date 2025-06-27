@@ -14,6 +14,7 @@ from tabsdata.tabsserver.function.native_tables_utils import (
     scan_lf_from_location,
     sink_lf_to_location,
 )
+from tabsdata.tabsserver.function.store_results_utils import get_table_meta_info_from_lf
 
 if TYPE_CHECKING:
     from tabsdata.tabsserver.function.execution_context import ExecutionContext
@@ -49,6 +50,7 @@ class Offset:
         self.update_mode = NONE_MODE
         self.output_table_name = None
         self.use_decorator_values = True
+        self.meta_info = {}
 
     @property
     def loaded_offset(
@@ -288,6 +290,8 @@ class Offset:
             )
 
             lf = pl.LazyFrame(df)
+
+            self.meta_info = get_table_meta_info_from_lf(lf)
 
             logger.debug(f"Performing sink to file {destination_table_uri}")
             sink_lf_to_location(lf, execution_context, offset_output_table.location)

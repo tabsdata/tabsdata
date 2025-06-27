@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import datetime
 import glob
+import hashlib
 import logging
 import os
 import re
@@ -17,6 +18,7 @@ from typing import TYPE_CHECKING, List, Tuple
 
 import polars as pl
 import pyarrow
+import pyarrow as pa
 import pyarrow.parquet as pq
 import sqlalchemy
 from pyiceberg.catalog import load_catalog
@@ -73,6 +75,9 @@ from tabsdata.tabsserver.function.yaml_parsing import (
     store_copy_as_yaml,
 )
 from tabsdata.utils.sql_utils import add_driver_to_uri, obtain_uri
+
+# noinspection PyProtectedMember
+from tabsdata.utils.tableframe._common import drop_system_columns
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._translator import _unwrap_table_frame
@@ -136,7 +141,7 @@ def replace_placeholders_in_path(path: str, request: InputYaml) -> str:
 def store_results(
     execution_context: ExecutionContext,
     results: ResultsCollection,
-) -> List[str]:
+) -> List[dict]:
     logger.info(pad_string("[Storing results]"))
     logger.info(
         f"Storing results in destination '{execution_context.function_config.output}'"
@@ -190,7 +195,7 @@ def store_results_in_table(
     results: ResultsCollection,
     destination: TableOutput,
     execution_context: ExecutionContext,
-) -> List[str]:
+) -> List[dict]:
     results.convert_none_to_empty_frame()
     # Right now, source provides very little information, but we use it to do a small
     # sanity check and to ensure that everything is running properly
@@ -255,6 +260,8 @@ def store_results_in_table(
             lf = result_value._to_lazy()
             tf = TableFrame.__build__(df=lf, mode="sys", idx=result_value._idx)
             sink_lf_to_location(tf._to_lazy(), execution_context, table.location)
+            table_meta_info = get_table_meta_info_from_lf(lf)
+            table_info = {"name": table.name, "meta_info": table_meta_info}
         else:
             logger.error(
                 f"Invalid result type: '{type(result.value)}'. No data stored."
@@ -262,11 +269,46 @@ def store_results_in_table(
             raise TypeError(
                 f"Invalid result type: '{type(result.value)}'. No data stored."
             )
-        modified_tables.append(table.name)
-        logger.debug(f"Result stored in table '{table}', added to modified_tables list")
+        modified_tables.append(table_info)
+        logger.debug(
+            f"Result stored in table '{table}', added to modified_tables "
+            f"list with information '{table_info}'"
+        )
     logger.info("Results stored in tables")
     logger.debug(f"Modified tables: {modified_tables}")
     return modified_tables
+
+
+def get_table_meta_info_from_lf(lf: pl.LazyFrame) -> dict:
+    """
+    Extracts table information from a Polars LazyFrame.
+    This function retrieves the schema and other metadata from the LazyFrame.
+
+    :param lf: Polars LazyFrame
+    :return: Dictionary containing table information
+    """
+    lf = drop_system_columns(lf)
+    columns = lf.width
+    rows = lf.select(pl.len()).collect().to_series().item()
+    schema_hash = arrow_schema_hash(get_arrow_schema(lf), sort_schema=True)
+    return {"column_count": columns, "row_count": rows, "schema_hash": schema_hash}
+
+
+# Get the user's schema of a Tabsdata Parquet file as an Arrow schema
+def get_arrow_schema(lazy_frame: pl.LazyFrame) -> pa.Schema:
+    polars_schema = lazy_frame.collect_schema()
+    polars_dataframe = polars_schema.to_frame(eager=True)
+    return polars_dataframe.to_arrow().schema
+
+
+# Computes the hash of an Arrow schema, optionally sorting the schema fields first.
+# (going sorted allows to find equivalent schemas with different field order)
+def arrow_schema_hash(schema: pa.Schema, sort_schema=True) -> str:
+    if sort_schema:
+        sorted_fields = sorted(schema, key=lambda field: field.name)
+        schema = pa.schema(sorted_fields)
+    serialized_schema = schema.serialize()
+    return hashlib.sha256(serialized_schema).hexdigest()
 
 
 def match_tables_and_verify(

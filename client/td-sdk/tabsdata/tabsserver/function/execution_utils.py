@@ -604,8 +604,16 @@ def execute_single_file_import(
         [binary] + arguments.split(), capture_output=True, text=True
     )
     if subprocess_result.returncode != 0:
-        logger.error(f"Error importing file: {subprocess_result.stderr}")
-        raise Exception(f"Error importing file: {subprocess_result.stderr}")
+        logger.error(
+            "Error importing file (return code "
+            f"'{subprocess_result.returncode}'):"
+            f" {subprocess_result.stderr}"
+        )
+        raise Exception(
+            "Error importing file (return code "
+            f"'{subprocess_result.returncode}'):"
+            f" {subprocess_result.stderr}"
+        )
 
     result = parse_import_report_yaml(report_file)
     files = result.files
