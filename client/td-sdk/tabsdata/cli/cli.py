@@ -7,9 +7,9 @@ import shutil
 
 import rich_click as click
 
+from tabsdata.api.apiserver import DEFAULT_TABSDATA_DIRECTORY
 from tabsdata.cli.auth_group import auth
 from tabsdata.cli.cli_utils import (
-    DEFAULT_TABSDATA_DIRECTORY,
     get_credentials_file_path,
     hint_common_solutions,
     initialise_tabsdata_server_connection,

@@ -16,6 +16,7 @@ from rich_click import Option, UsageError
 
 from tabsdata.api.apiserver import (
     BASE_API_URL,
+    DEFAULT_TABSDATA_DIRECTORY,
     APIServer,
     APIServerError,
     obtain_connection,
@@ -23,7 +24,6 @@ from tabsdata.api.apiserver import (
 from tabsdata.api.tabsdata_server import TabsdataServer
 
 CONNECTION_FILE = "connection.json"
-DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
 
 DOT_FOLDER = os.path.join(DEFAULT_TABSDATA_DIRECTORY, "dot")
 DOT_FORMAT = "-Tjpg -Gdpi=300 -Nfontsize=10 -Nmargin=0.4 -Efontsize=10"

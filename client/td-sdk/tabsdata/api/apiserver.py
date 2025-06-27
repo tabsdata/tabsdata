@@ -17,10 +17,17 @@ from tabsdata.utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
 
 DEFAULT_APISERVER_PORT = "2457"
 HTTP_PROTOCOL = "http://"
+HTTPS_PROTOCOL = "https://"
 PORT_SEPARATOR = ":"
 
 BASE_API_URL_V1 = "/api/v1"
 BASE_API_URL = BASE_API_URL_V1
+
+DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
+DEFAULT_TABSDATA_CERTIFICATE_FOLDER = os.path.join(
+    DEFAULT_TABSDATA_DIRECTORY, "client", "https"
+)
+
 
 CONNECTION_TIMEOUT = 60 * 5
 READ_TIMEOUT = 60 * 5
@@ -94,6 +101,25 @@ def configure_request_connection_pool():
 DEFAULT_HTTP_SESSION, GET_HTTP_SESSION = configure_request_connection_pool()
 
 
+def _obtain_certificate_file_path(url: str) -> str:
+    try:
+        parsed_url = urlparse(url)
+        if parsed_url.port is None:
+            port = DEFAULT_APISERVER_PORT
+        else:
+            port = str(parsed_url.port)
+        file_name = (
+            f"{parsed_url.hostname.replace('.', '_')}_{port.replace('.', '_')}_cert.pem"
+        )
+        full_path = os.path.join(DEFAULT_TABSDATA_CERTIFICATE_FOLDER, file_name)
+        return full_path
+    except Exception as e:
+        raise ValueError(
+            f"Invalid URL '{url}' for obtaining certificate file path. Please ensure "
+            f"that it is a valid URL, with a hostname and a port: {e}"
+        )
+
+
 class APIServerError(Exception):
 
     def __init__(self, dictionary: dict):
@@ -110,7 +136,7 @@ def process_url(url: str) -> str:
     A helper function to process the url string. It adds the protocol and the
         default port if missing
     """
-    if not url.startswith(HTTP_PROTOCOL):
+    if not url.startswith(HTTP_PROTOCOL) and not url.startswith(HTTPS_PROTOCOL):
         url = HTTP_PROTOCOL + url
     parsed_url = urlparse(url)
     if not parsed_url.port:
@@ -131,6 +157,16 @@ class APIServer:
         self.expires_in = None
         self.expiration_time = None
         self.credentials_file = credentials_file
+
+    @property
+    def certificate_file(self) -> str | None:
+        if not self.url.startswith(HTTPS_PROTOCOL):
+            return None
+        full_path = _obtain_certificate_file_path(self.url)
+        if os.path.isfile(full_path):
+            return full_path
+        else:
+            return None
 
     def _refresh_token_if_needed(self):
         if not self.refresh_token or not self.expiration_time:
@@ -167,6 +203,7 @@ class APIServer:
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 params=params,
+                verify=self.certificate_file,
             )
         else:
             return GET_HTTP_SESSION.get(
@@ -174,6 +211,7 @@ class APIServer:
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 params=params,
+                verify=self.certificate_file,
             )
 
     def post(
@@ -202,6 +240,7 @@ class APIServer:
                 json=json,
                 data=data,
                 params=params,
+                verify=self.certificate_file,
             )
         else:
             return DEFAULT_HTTP_SESSION.post(
@@ -211,6 +250,7 @@ class APIServer:
                 json=json,
                 data=data,
                 params=params,
+                verify=self.certificate_file,
             )
 
     def post_binary(self, path, data, refresh_if_needed=True):
@@ -228,6 +268,7 @@ class APIServer:
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 data=data,
+                verify=self.certificate_file,
             )
         else:
             return DEFAULT_HTTP_SESSION.post(
@@ -235,6 +276,7 @@ class APIServer:
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 data=data,
+                verify=self.certificate_file,
             )
 
     def delete(self, path, refresh_if_needed=True):
@@ -250,12 +292,14 @@ class APIServer:
                 self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                verify=self.certificate_file,
             )
         else:
             return DEFAULT_HTTP_SESSION.delete(
                 self.url + path,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                verify=self.certificate_file,
             )
 
     def _store_in_file(self, file_path: str):

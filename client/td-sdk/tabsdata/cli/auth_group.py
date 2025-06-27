@@ -2,10 +2,19 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+import os
+import shutil
+
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdata.api.apiserver import (
+    DEFAULT_TABSDATA_CERTIFICATE_FOLDER,
+    HTTP_PROTOCOL,
+    HTTPS_PROTOCOL,
+    _obtain_certificate_file_path,
+)
 from tabsdata.api.tabsdata_server import TabsdataServer
 from tabsdata.cli.cli_utils import (
     beautify_list,
@@ -17,6 +26,56 @@ from tabsdata.cli.cli_utils import (
 @click.group()
 def auth():
     """User session management commands"""
+
+
+@auth.command()
+@click.option("--server", "-s", help="Tabsdata Server URL")
+@click.option("--path", help="Path to the certificate file")
+@click.pass_context
+def add_cert(ctx: click.Context, server: str, path: str):
+    """Add a certificate for a Tabsdata Server"""
+    server = server or logical_prompt(ctx, "Tabsdata Server URL")
+    path = path or logical_prompt(ctx, "Path to the certificate file")
+    click.echo("Adding certificate")
+    click.echo("-" * 10)
+    try:
+        if not server.startswith(HTTP_PROTOCOL) and not server.startswith(
+            HTTPS_PROTOCOL
+        ):
+            server = HTTPS_PROTOCOL + server
+        certificate_path = _obtain_certificate_file_path(server)
+        os.makedirs(DEFAULT_TABSDATA_CERTIFICATE_FOLDER, exist_ok=True)
+        shutil.copy(path, certificate_path)
+        click.echo(f"Certificate added successfully for server '{server}'")
+        click.echo(f"Certificate stored at '{certificate_path}'")
+    except Exception as e:
+        raise click.ClickException(f"Failed to add certificate for server: {e}")
+
+
+@auth.command()
+@click.option("--server", "-s", help="Tabsdata Server URL")
+@click.pass_context
+def delete_cert(ctx: click.Context, server: str):
+    """Delete a certificate for a Tabsdata Server"""
+    server = server or logical_prompt(ctx, "Tabsdata Server URL")
+    click.echo("Deleting certificate")
+    click.echo("-" * 10)
+    try:
+        if not server.startswith(HTTP_PROTOCOL) and not server.startswith(
+            HTTPS_PROTOCOL
+        ):
+            server = HTTPS_PROTOCOL + server
+        certificate_path = _obtain_certificate_file_path(server)
+        if os.path.exists(certificate_path):
+            os.remove(certificate_path)
+            click.echo(f"Certificate deleted successfully for server '{server}'")
+        else:
+            click.echo(
+                "No certificate found for the specified server. It should be "
+                f"stored at '{certificate_path}'."
+            )
+    except Exception as e:
+        raise click.ClickException(f"Failed to delete certificate for server: {e}")
 
 
 @auth.command()
