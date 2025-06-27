@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::importer::args::{Format, ImporterOptions, ToFormat};
+use crate::transporter::args::{Format, ImporterOptions, ToFormat};
 use chrono::{DateTime, Duration, Utc};
 use derive_builder::Builder;
 use getset::Getters;
@@ -429,8 +429,8 @@ fn write_imported_lazy_frame(
 
 #[cfg(test)]
 mod tests {
-    use crate::importer::args::Params;
-    use crate::importer::logic::{
+    use crate::transporter::args::Params;
+    use crate::transporter::logic::{
         file_last_modified_comparator, get_files_from_object_store, take_files_limit,
         to_file_to_import_instructions, MAX_FILE_LIMIT,
     };

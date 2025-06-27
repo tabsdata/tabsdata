@@ -63,7 +63,6 @@ IGNORED_FOLDERS = (
 BASE_BINARIES = [
     "apiserver",
     "bootloader",
-    "_importer",
     "supervisor",
     "tdserver",
     "transporter",

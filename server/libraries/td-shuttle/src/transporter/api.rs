@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::importer::args::ImporterCsvReadOptions;
+use crate::transporter::args::ImporterCsvReadOptions;
 use crate::transporter::error::TransporterError;
 use base64::prelude::BASE64_STANDARD_NO_PAD;
 use base64::Engine;
@@ -133,7 +133,7 @@ fn split_base_path_and_name(path: &str) -> (String, Option<String>) {
 
 #[cfg(not(target_os = "windows"))]
 fn is_rooted(path: &str) -> bool {
-    path.len() >= 1 && path.starts_with("/")
+    !path.is_empty() && path.starts_with("/")
 }
 
 #[cfg(target_os = "windows")]

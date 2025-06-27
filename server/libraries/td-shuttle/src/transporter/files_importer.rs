@@ -2,15 +2,15 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::importer::args::{
-    Format, ImporterLogReadOptions, ImporterNdJsonReadOptions, ImporterOptions,
-    ImporterOptionsBuilder, ImporterParquetReadOptions, ToFormat,
-};
-use crate::importer::logic::to_file_to_import_instructions;
 use crate::transporter::api::{
     FileImportReport, FileImportReportBuilder, ImportFormat, ImportRequest, ImportSource,
 };
+use crate::transporter::args::{
+    Format, ImporterLogReadOptions, ImporterNdJsonReadOptions, ImporterOptions,
+    ImporterOptionsBuilder, ImporterParquetReadOptions, ToFormat,
+};
 use crate::transporter::error::TransporterError;
+use crate::transporter::logic::to_file_to_import_instructions;
 use async_trait::async_trait;
 use itertools::Itertools;
 use object_store::ObjectMeta;
@@ -43,7 +43,7 @@ fn extract_from_url<T>(url: &Url, extractor: impl Fn(&Url) -> T) -> T {
 fn base_url(source: &ImportSource) -> Url {
     let url = source.location().url();
     extract_from_url(&url, |url| match url.scheme() {
-        "file" => Url::parse(&crate::importer::args::root_folder()).unwrap(),
+        "file" => Url::parse(&crate::transporter::args::root_folder()).unwrap(),
         "s3" => Url::parse(&format!("s3://{}", url.authority())).unwrap(),
         "az" => Url::parse(&format!("az://{}", url.authority())).unwrap(),
         _ => unreachable!(),
@@ -114,15 +114,15 @@ impl From<&ImportRequest> for ImporterOptions {
 fn create_file_import_instructions(
     import_request: &ImportRequest,
     files_to_import: Vec<(Url, ObjectMeta)>,
-) -> Result<Vec<crate::importer::logic::FileImportInstructions>, TransporterError> {
+) -> Result<Vec<crate::transporter::logic::FileImportInstructions>, TransporterError> {
     let importer_options: Arc<ImporterOptions> = Arc::new(import_request.into());
 
     files_to_import
         .into_iter()
         .enumerate()
         .map(|(idx, (_url, meta))| (idx, meta))
-        .map(crate::importer::logic::take_files_limit())
-        .sorted_by(crate::importer::logic::file_last_modified_comparator())
+        .map(crate::transporter::logic::take_files_limit())
+        .sorted_by(crate::transporter::logic::file_last_modified_comparator())
         .map(to_file_to_import_instructions(&importer_options))
         .map(|res| {
             res.map_err(|e| TransporterError::CouldNotCreateImportInstructions(e.to_string()))
@@ -130,8 +130,8 @@ fn create_file_import_instructions(
         .collect()
 }
 
-impl From<crate::importer::logic::FileImportReport> for FileImportReport {
-    fn from(file_import_report: crate::importer::logic::FileImportReport) -> Self {
+impl From<crate::transporter::logic::FileImportReport> for FileImportReport {
+    fn from(file_import_report: crate::transporter::logic::FileImportReport) -> Self {
         FileImportReportBuilder::default()
             .idx(*file_import_report.idx())
             .from(Url::parse(file_import_report.from()).unwrap())
@@ -159,13 +159,13 @@ impl Importer for FilesImporter {
         let import_reports: Vec<_> = tokio::task::spawn_blocking(move || {
             import_instructions
                 .into_iter()
-                .map(crate::importer::logic::run_import)
+                .map(crate::transporter::logic::run_import)
                 .collect::<Vec<_>>()
         })
         .await
         .expect("Could not run import files")
         .into_iter()
-        .collect::<Result<_, crate::importer::logic::ImportError>>()
+        .collect::<Result<_, crate::transporter::logic::ImportError>>()
         .expect("Could not import files");
 
         let import_reports = import_reports

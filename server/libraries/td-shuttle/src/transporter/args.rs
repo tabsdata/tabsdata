@@ -1,5 +1,5 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2025 Tabs Data Inc.
 //
 
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -667,7 +667,7 @@ impl ToFormat {
 
 #[cfg(test)]
 mod tests {
-    use crate::importer::args::{root_folder, slashed_tmp_file, tmp_file, tmp_path, ToFormat};
+    use crate::transporter::args::{root_folder, slashed_tmp_file, tmp_file, tmp_path, ToFormat};
     use std::collections::HashMap;
     use td_common::env;
     use td_common::time::UniqueUtc;
