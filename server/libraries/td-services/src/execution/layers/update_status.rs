@@ -258,15 +258,20 @@ pub async fn update_table_data_version_status<Q: DerefQueries>(
                         let function_run_id = function_run_id.clone();
                         async move {
                             let (table_name, has_data) = match written {
-                                WrittenTableV2::NoData { table } => (table, false),
-                                WrittenTableV2::Data { table } => (table, true),
+                                WrittenTableV2::NoData { table } => (table, None),
+                                WrittenTableV2::Data { table, info } => (table, Some(info)),
                                 // TODO partitions should be handled differently, creating partitions and setting
                                 // the table to has_data = true and partition = true.
-                                WrittenTableV2::Partitions { table, .. } => (table, true),
+                                WrittenTableV2::Partitions { table, info, .. } => {
+                                    (table, Some(info))
+                                }
                             };
 
                             let update = UpdateTableDataVersionDB::builder()
-                                .has_data(Some(has_data.into()))
+                                .has_data(Some(has_data.is_some().into()))
+                                .column_count(has_data.map(|info| info.column_count().into()))
+                                .row_count(has_data.map(|info| info.row_count().into()))
+                                .schema_hash(has_data.map(|info| info.schema_hash().into()))
                                 .build()?;
 
                             let mut conn = connection.lock().await;

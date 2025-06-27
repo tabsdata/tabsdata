@@ -3,9 +3,10 @@
 //
 
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, DependencyPos, ExecutionId, ExecutionName, FunctionName,
-    FunctionRunId, FunctionVersionId, InputIdx, TableDataVersionId, TableFunctionParamPos, TableId,
-    TableName, TableVersionId, TransactionId, VersionPos,
+    AtTime, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId, ExecutionName,
+    FunctionName, FunctionRunId, FunctionVersionId, InputIdx, RowCount, SchemaHash,
+    TableDataVersionId, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
+    VersionPos,
 };
 use crate::types::worker::{Location, Locations};
 use serde::{Deserialize, Serialize};
@@ -185,6 +186,13 @@ pub struct FunctionOutputV2 {
     output: Vec<WrittenTableV2>,
 }
 
+#[td_type::Dto]
+pub struct TableInfo {
+    column_count: ColumnCount,
+    row_count: RowCount,
+    schema_hash: SchemaHash,
+}
+
 #[apiserver_schema]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WrittenTableV2 {
@@ -193,9 +201,11 @@ pub enum WrittenTableV2 {
     },
     Data {
         table: TableName,
+        info: TableInfo,
     },
     Partitions {
         table: TableName,
+        info: TableInfo,
         partitions: HashMap<PartitionName, PartitionFileName>,
     },
 }
@@ -371,6 +381,11 @@ mod tests {
             .output(vec![
                 WrittenTableV2::Data {
                     table: TableName::try_from("table_1")?,
+                    info: TableInfo {
+                        column_count: ColumnCount::try_from(1i64)?,
+                        row_count: RowCount::try_from(2i64)?,
+                        schema_hash: SchemaHash::try_from("hash")?,
+                    },
                 },
                 WrittenTableV2::NoData {
                     table: TableName::try_from("table_2")?,

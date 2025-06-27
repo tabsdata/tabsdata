@@ -4,13 +4,13 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionName, DataChanged, DataLocation, DependencyPos, Dot,
-    ExecutionId, ExecutionName, ExecutionStatus, FunctionName, FunctionRunId, FunctionRunStatus,
-    FunctionRunStatusCount, FunctionVersionId, GlobalStatus, HasData, InputIdx, RequirementId,
-    SelfDependency, StatusCount, StorageVersion, TableDataVersionId, TableFunctionParamPos,
-    TableId, TableName, TableVersionId, TableVersions, TransactionByStr, TransactionId,
-    TransactionKey, TransactionStatus, Trigger, TriggeredOn, UserId, UserName, VersionPos,
-    WorkerId, WorkerStatus,
+    AtTime, BundleId, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation,
+    DependencyPos, Dot, ExecutionId, ExecutionName, ExecutionStatus, FunctionName, FunctionRunId,
+    FunctionRunStatus, FunctionRunStatusCount, FunctionVersionId, GlobalStatus, HasData, InputIdx,
+    RequirementId, RowCount, SchemaHash, SelfDependency, StatusCount, StorageVersion,
+    TableDataVersionId, TableFunctionParamPos, TableId, TableName, TableVersionId, TableVersions,
+    TransactionByStr, TransactionId, TransactionKey, TransactionStatus, Trigger, TriggeredOn,
+    UserId, UserName, VersionPos, WorkerId, WorkerStatus,
 };
 use crate::types::dependency::DependencyDBWithNames;
 use crate::types::function::FunctionDBWithNames;
@@ -359,6 +359,12 @@ pub struct TableDataVersionDB {
     function_version_id: FunctionVersionId,
     #[builder(default)]
     has_data: Option<HasData>,
+    #[builder(default)]
+    column_count: Option<ColumnCount>,
+    #[builder(default)]
+    row_count: Option<RowCount>,
+    #[builder(default)]
+    schema_hash: Option<SchemaHash>,
     execution_id: ExecutionId,
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
@@ -375,6 +381,9 @@ pub struct TableDataVersionDBWithFunction {
     table_version_id: TableVersionId,
     function_version_id: FunctionVersionId,
     has_data: Option<HasData>,
+    column_count: Option<ColumnCount>,
+    row_count: Option<RowCount>,
+    schema_hash: Option<SchemaHash>,
     execution_id: ExecutionId,
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
@@ -434,6 +443,9 @@ pub struct TableDataVersionDBWithNames {
     table_version_id: TableVersionId,
     function_version_id: FunctionVersionId,
     has_data: Option<HasData>,
+    column_count: Option<ColumnCount>,
+    row_count: Option<RowCount>,
+    schema_hash: Option<SchemaHash>,
     execution_id: ExecutionId,
     transaction_id: TransactionId,
     function_run_id: FunctionRunId,
@@ -469,6 +481,10 @@ pub struct TableDataVersion {
     table_version_id: TableVersionId,
     #[dto(list(filter, filter_like, order_by))]
     function_version_id: FunctionVersionId,
+    column_count: Option<ColumnCount>,
+    row_count: Option<RowCount>,
+    #[dto(list(filter))]
+    schema_hash: Option<SchemaHash>,
     #[td_type(builder(field = "has_data"))]
     #[dto(list(filter, filter_like, order_by))]
     data_changed: DataChanged,
@@ -746,6 +762,15 @@ pub struct UpdateTableDataVersionDB {
     #[dao(immutable)]
     #[builder(default)]
     has_data: Option<HasData>,
+    #[dao(immutable)]
+    #[builder(default)]
+    column_count: Option<ColumnCount>,
+    #[dao(immutable)]
+    #[builder(default)]
+    row_count: Option<RowCount>,
+    #[dao(immutable)]
+    #[builder(default)]
+    schema_hash: Option<SchemaHash>,
 }
 
 #[td_type::Dao]

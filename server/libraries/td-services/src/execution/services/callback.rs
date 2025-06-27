@@ -78,13 +78,14 @@ mod tests {
     use td_objects::crudl::{handle_sql_err, RequestContext};
     use td_objects::sql::SelectBy;
     use td_objects::types::basic::{
-        AccessTokenId, CollectionName, ExecutionStatus, FunctionName, FunctionRunStatus, TableName,
-        TableNameDto, TransactionStatus, UserId, WorkerId,
+        AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
+        FunctionRunStatus, RowCount, SchemaHash, TableName, TableNameDto, TransactionStatus,
+        UserId, WorkerId,
     };
     use td_objects::types::basic::{RoleId, TableDependencyDto};
     use td_objects::types::execution::TableDataVersionDBWithNames;
     use td_objects::types::execution::{FunctionRunDB, FunctionRunDBWithNames};
-    use td_objects::types::worker::v2::{FunctionOutputV2, WrittenTableV2};
+    use td_objects::types::worker::v2::{FunctionOutputV2, TableInfo, WrittenTableV2};
     use td_objects::types::worker::FunctionOutput;
     use td_tower::ctx_service::RawOneshot;
 
@@ -512,6 +513,12 @@ mod tests {
                         },
                         WrittenTableV2::Data {
                             table: TableName::try_from("t_1")?,
+                            info: TableInfo::builder()
+                                .column_count(ColumnCount::try_from(1i64)?)
+                                .row_count(RowCount::try_from(2i64)?)
+                                .schema_hash(SchemaHash::try_from("hash")?)
+                                .build()
+                                .unwrap(),
                         },
                     ])
                     .build()?,
@@ -568,6 +575,18 @@ mod tests {
         );
         assert_eq!(table_data_version.status(), function_run.status());
         assert_eq!(*table_data_version.has_data(), Some(true.into()));
+        assert_eq!(
+            *table_data_version.column_count(),
+            Some(ColumnCount::try_from(1i64)?)
+        );
+        assert_eq!(
+            *table_data_version.row_count(),
+            Some(RowCount::try_from(2i64)?)
+        );
+        assert_eq!(
+            *table_data_version.schema_hash(),
+            Some(SchemaHash::try_from("hash")?)
+        );
 
         Ok(())
     }

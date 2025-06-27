@@ -51,6 +51,9 @@ pub struct CollectionIdName;
 #[td_type::typed(string(parser = parse_collection), try_from = ToCollectionName)]
 pub struct CollectionName;
 
+#[td_type::typed(i64)]
+pub struct ColumnCount;
+
 #[td_type::typed(bool)]
 pub struct DataChanged;
 
@@ -456,6 +459,9 @@ impl RoleName {
     }
 }
 
+#[td_type::typed(i64)]
+pub struct RowCount;
+
 #[td_type::typed(i64(min = 0, default = 0))]
 pub struct SampleOffset;
 
@@ -470,6 +476,9 @@ pub struct SchemaFieldName;
 
 #[td_type::typed(string)]
 pub struct SchemaFieldType;
+
+#[td_type::typed(string)]
+pub struct SchemaHash;
 
 #[td_type::typed(bool)]
 pub struct SelfDependency;

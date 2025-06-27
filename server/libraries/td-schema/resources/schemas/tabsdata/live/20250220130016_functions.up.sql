@@ -438,6 +438,10 @@ CREATE TABLE table_data_versions
 
     has_data            BOOLEAN NULL, -- only true/false when finished
 
+    column_count        INTEGER NULL, -- only when has_data is true
+    row_count           INTEGER NULL, -- only when has_data is true
+    schema_hash         TEXT    NULL, -- only when has_data is true
+
     execution_id        TEXT    NOT NULL,
     transaction_id      TEXT    NOT NULL,
     function_run_id     TEXT    NOT NULL,
