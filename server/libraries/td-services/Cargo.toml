@@ -97,6 +97,7 @@ url = { workspace = true }
 td-common = { workspace = true, features = ["td-test"] }
 td-objects = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true, features = ["td-test"] }
+temp-env = { workspace = true, features = ["async_closure"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

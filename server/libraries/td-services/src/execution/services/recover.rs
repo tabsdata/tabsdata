@@ -51,7 +51,7 @@ fn provider() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::layers::update_status::test::{
+    use crate::execution::layers::update_status::tests::{
         test_status_update, TestExecution, TestFunction, TestTransaction,
     };
     use std::sync::Arc;

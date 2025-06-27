@@ -296,7 +296,7 @@ pub async fn update_table_data_version_status<Q: DerefQueries>(
 }
 
 #[cfg(test)]
-pub(crate) mod test {
+pub(crate) mod tests {
     use itertools::Itertools;
     use std::collections::{HashMap, HashSet};
     use std::future::Future;

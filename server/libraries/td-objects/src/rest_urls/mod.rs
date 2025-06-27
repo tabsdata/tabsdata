@@ -4,10 +4,12 @@
 
 use crate::types::basic::{
     AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
-    InterCollectionPermissionIdName, PermissionIdName, RoleIdName, SampleLen, SampleOffset, Sql,
-    TableIdName, TransactionIdName, UserIdName, WorkerIdName,
+    InterCollectionPermissionIdName, LogsCastNumber, PermissionIdName, RoleIdName, SampleLen,
+    SampleOffset, Sql, TableIdName, TransactionIdName, UserIdName, WorkerIdName,
 };
 use constcat::concat;
+use td_common::logging::LOG_EXTENSION;
+use td_common::server::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
 
 macro_rules! url {
     ($( $path:expr $(,)? )*) => {
@@ -260,13 +262,103 @@ pub const WORKERS: &str = url!("/workers");
 pub const WORKER: &str = url!(WORKERS, "/{worker}");
 
 #[td_type::UrlParam]
-pub struct WorkerMessageParam {
+pub struct WorkerParam {
     #[td_type(extractor)]
     worker: WorkerIdName,
 }
 
 pub const WORKERS_LIST: &str = url!(WORKERS);
 pub const WORKER_LOGS: &str = url!(WORKER, "/logs");
+
+#[td_type::typed_enum]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+#[derive(Default)]
+pub enum LogsExtension {
+    #[default]
+    All,
+    Err,
+    Fn,
+    Out,
+    Td,
+}
+
+impl LogsExtension {
+    pub fn glob_pattern(&self) -> String {
+        match self {
+            LogsExtension::All => format!("*.{LOG_EXTENSION}"), // Note that it might get more than the "known" log files.
+            LogsExtension::Err => format!("{ERR_LOG_FILE_NAME}*.{LOG_EXTENSION}"),
+            LogsExtension::Fn => format!("{FN_LOG_FILE_NAME}*.{LOG_EXTENSION}"),
+            LogsExtension::Out => format!("{OUT_LOG_FILE_NAME}*.{LOG_EXTENSION}"),
+            LogsExtension::Td => format!("{TD_LOG_FILE_NAME}*.{LOG_EXTENSION}"),
+        }
+    }
+
+    #[cfg(feature = "test-utils")]
+    pub fn files(&self, rotations: usize) -> Vec<std::path::PathBuf> {
+        fn log_file(name: &str, rotation: usize) -> std::path::PathBuf {
+            let ext = if rotation == 1 {
+                format!(".{LOG_EXTENSION}")
+            } else {
+                format!("_{}.{}", rotation - 1, LOG_EXTENSION)
+            };
+            format!("{name}{ext}").into()
+        }
+
+        let mut log_files = Vec::new();
+        for rotation in 1..=rotations {
+            match self {
+                LogsExtension::All => {
+                    log_files.push(log_file(ERR_LOG_FILE_NAME, rotation));
+                    log_files.push(log_file(FN_LOG_FILE_NAME, rotation));
+                    log_files.push(log_file(OUT_LOG_FILE_NAME, rotation));
+                    log_files.push(log_file(TD_LOG_FILE_NAME, rotation));
+                }
+                LogsExtension::Err => log_files.push(log_file(ERR_LOG_FILE_NAME, rotation)),
+                LogsExtension::Fn => log_files.push(log_file(FN_LOG_FILE_NAME, rotation)),
+                LogsExtension::Out => log_files.push(log_file(OUT_LOG_FILE_NAME, rotation)),
+                LogsExtension::Td => log_files.push(log_file(TD_LOG_FILE_NAME, rotation)),
+            }
+        }
+
+        log_files
+    }
+}
+
+#[td_type::QueryParam]
+pub struct WorkerLogsQueryParams {
+    #[td_type(extractor)]
+    #[serde(default = "extension_default")]
+    extension: Vec<LogsExtension>,
+    #[td_type(extractor)]
+    #[serde(default)]
+    /// Empty means all retries available.
+    retry: Vec<LogsCastNumber>,
+}
+
+fn extension_default() -> Vec<LogsExtension> {
+    vec![LogsExtension::All]
+}
+
+#[td_type::Dlo]
+pub struct WorkerLogsParams {
+    #[td_type(extractor)]
+    worker: WorkerIdName,
+    #[td_type(extractor)]
+    extension: Vec<LogsExtension>,
+    #[td_type(extractor)]
+    retry: Vec<LogsCastNumber>,
+}
+
+impl WorkerLogsParams {
+    pub fn new(path: WorkerParam, query: WorkerLogsQueryParams) -> Self {
+        Self {
+            worker: path.worker,
+            extension: query.extension,
+            retry: query.retry,
+        }
+    }
+}
 
 // Function runs
 pub const FUNCTION_RUNS: &str = url!(FUNCTION, "/executions");

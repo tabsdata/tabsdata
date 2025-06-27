@@ -574,6 +574,7 @@ pub struct FunctionRequirementDBWithNames {
 #[dao(sql_table = "workers")]
 pub struct WorkerDB {
     #[builder(default)]
+    #[td_type(extractor)]
     id: WorkerId,
     #[td_type(extractor)]
     collection_id: CollectionId,

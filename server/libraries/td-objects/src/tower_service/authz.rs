@@ -802,7 +802,7 @@ impl<
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::crudl::RequestContext;
     use crate::tower_service::authz::{
         AuthzContextT, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,

@@ -12,7 +12,7 @@ use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, ReadRequest};
-use td_objects::rest_urls::WorkerMessageParam;
+use td_objects::rest_urls::WorkerLogsParams;
 use td_objects::sql::DaoQueries;
 use td_objects::types::execution::Worker;
 use td_objects::types::stream::BoxedSyncStream;
@@ -38,7 +38,7 @@ impl WorkerServices {
 
     pub async fn logs(
         &self,
-    ) -> TdBoxService<ReadRequest<WorkerMessageParam>, BoxedSyncStream, TdError> {
+    ) -> TdBoxService<ReadRequest<WorkerLogsParams>, BoxedSyncStream, TdError> {
         self.logs.service().await
     }
 }

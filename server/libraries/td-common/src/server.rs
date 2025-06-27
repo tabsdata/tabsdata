@@ -98,8 +98,10 @@ pub const WORKER_PID_FILE: &str = "pid";
 pub const WORKER_OUT_FILE: &str = "out.log";
 pub const WORKER_ERR_FILE: &str = "err.log";
 
-pub const MESSAGE_PATTERN: &str = "_*";
-pub const LOG_PATTERN: &str = "*.log";
+pub const ERR_LOG_FILE_NAME: &str = "err";
+pub const FN_LOG_FILE_NAME: &str = "fn";
+pub const OUT_LOG_FILE_NAME: &str = "out";
+pub const TD_LOG_FILE_NAME: &str = "td";
 
 // These environment variables are meant to be used as URI locations. Therefore, in Windows they will have a
 // leading slash (/), resulting in, for example, '/c:\folder\file' instead of 'c:\folder\file'

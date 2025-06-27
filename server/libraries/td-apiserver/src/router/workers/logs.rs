@@ -10,13 +10,13 @@ use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::Extension;
+use axum_extra::extract::Query;
 #[allow(unused_imports)]
 use serde_json::json;
 use td_apiforge::{apiserver_path, apiserver_schema};
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{WorkerMessageParam, WORKER_LOGS};
-use td_tower::ctx_service::IntoData;
-use tower::ServiceExt;
+use td_objects::rest_urls::{WorkerLogsParams, WorkerLogsQueryParams, WorkerParam, WORKER_LOGS};
+use td_tower::ctx_service::RawOneshot;
 use utoipa::IntoResponses;
 
 router! {
@@ -42,10 +42,11 @@ pub struct LogsFile(Vec<u8>);
 pub async fn worker_logs(
     State(messages): State<Workers>,
     Extension(context): Extension<RequestContext>,
-    Path(path_params): Path<WorkerMessageParam>,
+    Path(path_params): Path<WorkerParam>,
+    Query(query_params): Query<WorkerLogsQueryParams>,
 ) -> Result<impl IntoResponse, ListErrorStatus> {
-    let request = context.read(path_params);
-    let response = messages.logs().await.oneshot(request).await?;
-    let stream = response.into_data();
-    Ok(Body::from_stream(stream.into_inner()))
+    let params = WorkerLogsParams::new(path_params, query_params);
+    let request = context.read(params);
+    let response = messages.logs().await.raw_oneshot(request).await?;
+    Ok(Body::from_stream(response.into_inner()))
 }

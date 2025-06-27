@@ -413,6 +413,9 @@ pub struct RefreshTokenId;
 #[td_type::typed(id)]
 pub struct RequirementId;
 
+#[td_type::typed(i16(min = 1))]
+pub struct LogsCastNumber;
+
 #[td_type::typed(bool)]
 pub struct ReuseFrozen;
 

@@ -483,6 +483,9 @@ version = "3.0.2"
 [workspace.dependencies.sysinfo]
 version = "0.35.2"
 
+[workspace.dependencies.temp-env]
+version = "0.3.6"
+
 [workspace.dependencies.tempfile]
 version = "3.20.0"
 
