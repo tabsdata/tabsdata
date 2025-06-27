@@ -514,6 +514,9 @@ pub struct StatusCount;
 #[td_type::typed(string(min_len = 1, max_len = 10, default = "V1"))]
 pub struct StorageVersion;
 
+#[td_type::typed(bool)]
+pub struct System;
+
 #[td_type::typed(id)]
 pub struct TableDataId;
 

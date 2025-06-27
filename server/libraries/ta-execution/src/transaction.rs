@@ -38,11 +38,18 @@ pub struct TransactionMap<T: TransactionMapper> {
 }
 
 impl<T: TransactionMapper> TransactionMap<T> {
-    pub fn new(mapper: T) -> Self {
+    pub fn empty(mapper: T) -> Self {
         Self {
             map: HashMap::new(),
             mapper,
         }
+    }
+
+    pub fn from_map(
+        map: HashMap<TransactionKey, (TransactionId, CollectionId)>,
+        mapper: T,
+    ) -> Self {
+        Self { map, mapper }
     }
 
     pub fn mapper(&self) -> &T {
@@ -84,7 +91,7 @@ mod tests {
     #[test]
     fn test_add() -> Result<(), TdError> {
         let transaction_by = TestTransactionBy::default();
-        let mut transaction_map = TransactionMap::new(transaction_by);
+        let mut transaction_map = TransactionMap::empty(transaction_by);
         let function = function_node(&FUNCTION_NAMES[0]);
 
         let id = *transaction_map.add(&function)?;
@@ -96,7 +103,7 @@ mod tests {
     #[test]
     fn test_get_missing_key() -> Result<(), TdError> {
         let transaction_by = TestTransactionBy::default();
-        let mut transaction_map = TransactionMap::new(transaction_by);
+        let mut transaction_map = TransactionMap::empty(transaction_by);
         let function = function_node(&FUNCTION_NAMES[0]);
 
         transaction_map.add(&function)?;
@@ -108,7 +115,7 @@ mod tests {
     #[test]
     fn test_mapper() {
         let transaction_by = TestTransactionBy::default();
-        let transaction_map = TransactionMap::new(transaction_by);
+        let transaction_map = TransactionMap::empty(transaction_by);
 
         let mapper = transaction_map.mapper();
         assert!(matches!(mapper, TestTransactionBy::Name));
@@ -117,7 +124,7 @@ mod tests {
     #[test]
     fn test_iter() -> Result<(), TdError> {
         let transaction_by = TestTransactionBy::default();
-        let mut transaction_map = TransactionMap::new(transaction_by);
+        let mut transaction_map = TransactionMap::empty(transaction_by);
         let function = function_node(&FUNCTION_NAMES[0]);
 
         transaction_map.add(&function)?;

@@ -92,6 +92,7 @@ pub fn table_node(table: &TableName) -> TableVersionNode {
         .table_id(TABLE_IDS.get(table).unwrap())
         .table_version_id(TABLE_VERSION_IDS.get(table).unwrap())
         .name(table)
+        .system(false)
         .build()
         .unwrap()
 }
@@ -110,6 +111,7 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNam
         .defined_on(AtTime::now().await)
         .defined_by_id(UserId::default())
         .status(TableStatus::Active)
+        .system(false)
         .collection(COLLECTION_NAME.deref())
         .function(function)
         .defined_by(UserName::try_from("joaquin").unwrap())
@@ -145,6 +147,7 @@ pub async fn dependency(table: &TableName, function: &FunctionName) -> Dependenc
         .table_collection(&*COLLECTION_NAME)
         .table_function(table_function)
         .defined_by(UserName::try_from("joaquin").unwrap())
+        .system(false)
         .build()
         .unwrap()
 }
@@ -175,6 +178,7 @@ pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWit
         .trigger_by_table_name(table)
         .trigger_by_function(FunctionName::try_from("test").unwrap())
         .defined_by(UserName::try_from("joaquin").unwrap())
+        .system(false)
         .build()
         .unwrap()
 }

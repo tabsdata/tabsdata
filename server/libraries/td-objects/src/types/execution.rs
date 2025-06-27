@@ -7,7 +7,7 @@ use crate::types::basic::{
     AtTime, BundleId, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation,
     DependencyPos, Dot, ExecutionId, ExecutionName, ExecutionStatus, FunctionName, FunctionRunId,
     FunctionRunStatus, FunctionRunStatusCount, FunctionVersionId, GlobalStatus, HasData, InputIdx,
-    RequirementId, RowCount, SchemaHash, SelfDependency, StatusCount, StorageVersion,
+    RequirementId, RowCount, SchemaHash, SelfDependency, StatusCount, StorageVersion, System,
     TableDataVersionId, TableFunctionParamPos, TableId, TableName, TableVersionId, TableVersions,
     TransactionByStr, TransactionId, TransactionKey, TransactionStatus, Trigger, TriggeredOn,
     UserId, UserName, VersionPos, WorkerId, WorkerStatus,
@@ -18,7 +18,7 @@ use crate::types::table::TableDBWithNames;
 use crate::types::trigger::TriggerDBWithNames;
 use crate::types::worker::FunctionOutput;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use td_common::datetime::IntoDateTimeUtc;
@@ -51,8 +51,10 @@ pub struct ExecutionDB {
     #[td_type(extractor, builder(include))]
     collection_id: CollectionId,
     #[td_type(builder(field = "id"))]
+    #[td_type(extractor)]
     function_version_id: FunctionVersionId,
     #[td_type(updater(try_from = RequestContext, include, field = "time"))]
+    #[td_type(extractor)]
     triggered_on: TriggeredOn,
     #[td_type(updater(try_from = RequestContext, field = "user_id"))]
     triggered_by_id: UserId,
@@ -796,15 +798,22 @@ pub struct ExecutionRequest {
 
 #[td_type::Dto]
 pub struct ExecutionResponse {
+    // plan info
     id: ExecutionId,
     name: Option<ExecutionName>,
-    all_functions: Vec<FunctionVersionResponse>,
-    triggered_functions: Vec<FunctionVersionResponse>,
-    manual_trigger: FunctionVersionResponse,
-    all_tables: Vec<TableVersionResponse>,
-    created_tables: Vec<TableVersionResponse>,
     triggered_on: TriggeredOn,
     dot: Dot,
+    // functions info
+    all_functions: HashMap<FunctionVersionId, FunctionVersionResponse>,
+    triggered_functions: HashSet<FunctionVersionId>,
+    manual_trigger: FunctionVersionId,
+    // transactions info
+    transactions: HashMap<TransactionId, HashSet<FunctionVersionId>>,
+    // tables info
+    all_tables: HashMap<TableVersionId, TableVersionResponse>,
+    created_tables: HashSet<TableVersionId>,
+    system_tables: HashSet<TableVersionId>,
+    user_tables: HashSet<TableVersionId>,
 }
 
 #[td_type::Dto]
@@ -856,6 +865,7 @@ pub struct TableVersionNode {
     #[td_type(builder(field = "id"))]
     table_version_id: TableVersionId,
     name: TableName,
+    system: System,
 }
 
 /// Adds contextual information to dependency graph edges.
@@ -1011,6 +1021,7 @@ impl GraphNode {
                     .table_id(table.table_id())
                     .table_version_id(table.id())
                     .name(table.name())
+                    .system(table.system())
                     .build()?,
             ),
         ))
@@ -1026,6 +1037,7 @@ impl GraphNode {
                     .table_id(dep.table_id())
                     .table_version_id(dep.table_version_id())
                     .name(dep.table_name())
+                    .system(dep.system())
                     .build()?,
             ),
             GraphNode::Function(
@@ -1049,6 +1061,7 @@ impl GraphNode {
                     .table_id(trigger.trigger_by_table_id())
                     .table_version_id(trigger.trigger_by_table_version_id())
                     .name(trigger.trigger_by_table_name())
+                    .system(trigger.system())
                     .build()?,
             ),
             GraphNode::Function(

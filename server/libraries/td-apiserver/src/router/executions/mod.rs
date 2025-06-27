@@ -9,6 +9,7 @@ use td_apiforge::apiserver_tag;
 pub mod cancel;
 pub mod execute;
 pub mod list;
+pub mod read;
 pub mod recover;
 
 apiserver_tag!(name = "Execution", description = "Execution API");
@@ -19,6 +20,7 @@ routers! {
         cancel => { state ( Executions ) },
         execute => { state ( Executions ) },
         list => { state ( Executions ) },
+        read => { state ( Executions ) },
         recover => { state ( Executions ) },
     }
 }

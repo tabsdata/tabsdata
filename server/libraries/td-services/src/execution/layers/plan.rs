@@ -2,8 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use itertools::{Either, Itertools};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use ta_execution::graphs::ExecutionGraph;
 use ta_execution::transaction::{TransactionMap, TransactionMapper};
@@ -25,7 +26,7 @@ pub async fn build_transaction_map(
     SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Input(template): Input<ExecutionGraph<Versions>>,
 ) -> Result<TransactionMap<TransactionBy>, TdError> {
-    let mut transaction_map = TransactionMap::new(transaction_by.deref().clone());
+    let mut transaction_map = TransactionMap::empty(transaction_by.deref().clone());
 
     let manual_trigger = template.manual_trigger_function();
     transaction_map.add(manual_trigger)?;
@@ -224,43 +225,84 @@ pub async fn build_function_requirements(
 }
 
 pub async fn build_response(
+    SrvCtx(transaction_by): SrvCtx<TransactionBy>,
+    Input(transaction_map): Input<TransactionMap<TransactionBy>>,
     Input(execution): Input<ExecutionDB>,
     Input(plan): Input<ExecutionGraph<ResolvedVersion>>,
 ) -> Result<ExecutionResponse, TdError> {
-    let all_functions: Result<Vec<_>, TdError> = plan
-        .functions()
+    // function info
+    let plan_functions_set = plan.functions();
+    let all_functions = plan_functions_set
         .iter()
-        .map(|f| Ok(FunctionVersionResponseBuilder::try_from(*f)?.build()?))
-        .collect();
-    let triggered_functions: Result<Vec<_>, TdError> = plan
-        .triggered_functions()
+        .map(|f| {
+            Ok((
+                *f.function_version_id(),
+                FunctionVersionResponseBuilder::try_from(*f)?.build()?,
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, TdError>>()?;
+
+    let triggered_functions_set = plan.triggered_functions();
+    let triggered_functions = triggered_functions_set
         .iter()
-        .map(|f| Ok(FunctionVersionResponseBuilder::try_from(*f)?.build()?))
-        .collect();
-    let manual_trigger =
-        FunctionVersionResponseBuilder::try_from(plan.manual_trigger_function())?.build()?;
-    let all_tables: Result<Vec<_>, TdError> = plan
-        .tables()
+        .map(|f| *f.function_version_id())
+        .collect::<HashSet<_>>();
+
+    let manual_trigger = plan.manual_trigger_function();
+
+    // transactions info
+    let transactions = triggered_functions_set
+        .into_iter()
+        .chain(std::iter::once(manual_trigger))
+        .try_fold(HashMap::new(), |mut acc, f| {
+            let (transaction_id, _) = transaction_map.get(&transaction_by.key(f)?)?;
+            let entry: &mut HashSet<_> = acc.entry(*transaction_id).or_default();
+            entry.insert(*f.function_version_id());
+            Ok::<_, TdError>(acc)
+        })?;
+
+    // tables info
+    let all_tables_set = plan.tables();
+    let all_tables = all_tables_set
         .iter()
-        .map(|t| Ok(TableVersionResponseBuilder::try_from(*t)?.build()?))
-        .collect();
-    let created_tables: Result<Vec<_>, TdError> = plan
-        .output_tables()
+        .map(|t| {
+            Ok((
+                *t.table_version_id(),
+                TableVersionResponseBuilder::try_from(*t)?.build()?,
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, TdError>>()?;
+
+    let output_tables_set = plan.output_tables();
+    let created_tables = output_tables_set
         .iter()
-        .map(|(_, t, _)| Ok(TableVersionResponseBuilder::try_from(*t)?.build()?))
-        .collect();
+        .map(|(_, t, _)| *t.table_version_id())
+        .collect::<HashSet<_>>();
+
+    let (system_tables, user_tables): (HashSet<_>, HashSet<_>) =
+        all_tables_set.iter().partition_map(|t| {
+            if **t.system() {
+                Either::Left(*t.table_version_id())
+            } else {
+                Either::Right(*t.table_version_id())
+            }
+        });
+
     let triggered_on = execution.triggered_on();
     let dot = Dot::try_from(plan.dot().to_string())?;
     let response = ExecutionResponse::builder()
         .id(execution.id())
         .name(execution.name().clone())
-        .all_functions(all_functions?)
-        .triggered_functions(triggered_functions?)
-        .manual_trigger(manual_trigger)
-        .all_tables(all_tables?)
-        .created_tables(created_tables?)
         .triggered_on(triggered_on)
         .dot(dot)
+        .all_functions(all_functions)
+        .triggered_functions(triggered_functions)
+        .manual_trigger(manual_trigger.function_version_id())
+        .transactions(transactions)
+        .all_tables(all_tables)
+        .created_tables(created_tables)
+        .system_tables(system_tables)
+        .user_tables(user_tables)
         .build()?;
     Ok(response)
 }

@@ -4,8 +4,9 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, TableId,
-    TableName, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
+    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, System,
+    TableId, TableName, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId,
+    UserName,
 };
 use crate::types::function::FunctionDB;
 
@@ -71,6 +72,7 @@ pub struct TriggerDBWithNames {
     trigger_by_table_name: TableName,
     trigger_by_function: FunctionName,
     defined_by: UserName,
+    system: System,
 }
 
 #[td_type::Dao]

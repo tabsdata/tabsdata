@@ -29,12 +29,12 @@ create_status!(ExecutionResponse);
 #[apiserver_path(method = post, path = FUNCTION_EXECUTE, tag = EXECUTION_TAG)]
 #[doc = "Executes a function"]
 pub async fn execute(
-    State(function_state): State<Executions>,
+    State(executions): State<Executions>,
     Extension(context): Extension<RequestContext>,
     Path(function_param): Path<FunctionParam>,
     Json(request): Json<ExecutionRequest>,
 ) -> Result<CreateStatus, CreateErrorStatus> {
     let request = context.create(function_param, request);
-    let response = function_state.execute().await.oneshot(request).await?;
+    let response = executions.execute().await.oneshot(request).await?;
     Ok(CreateStatus::CREATED(response.into()))
 }

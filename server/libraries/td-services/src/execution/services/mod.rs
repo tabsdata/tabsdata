@@ -6,6 +6,7 @@ use crate::execution::services::callback::ExecutionCallbackService;
 use crate::execution::services::cancel::ExecutionCancelService;
 use crate::execution::services::execute::ExecuteFunctionService;
 use crate::execution::services::list::ExecutionListService;
+use crate::execution::services::read::ExecutionReadService;
 use crate::execution::services::recover::ExecutionRecoverService;
 use crate::execution::services::runtime_info::RuntimeInfoService;
 use crate::execution::RuntimeContext;
@@ -27,6 +28,7 @@ pub(crate) mod callback;
 mod cancel;
 pub(crate) mod execute;
 mod list;
+mod read;
 mod recover;
 pub mod runtime_info;
 
@@ -35,6 +37,7 @@ pub struct ExecutionServices {
     cancel: ExecutionCancelService,
     execute: ExecuteFunctionService,
     list: ExecutionListService,
+    read: ExecutionReadService,
     recover: ExecutionRecoverService,
     info: RuntimeInfoService,
 }
@@ -57,6 +60,7 @@ impl ExecutionServices {
                 transaction_by.clone(),
             ),
             list: ExecutionListService::new(db.clone(), queries.clone()),
+            read: ExecutionReadService::new(db.clone(), queries.clone(), transaction_by.clone()),
             recover: ExecutionRecoverService::new(
                 db.clone(),
                 queries.clone(),
@@ -85,6 +89,12 @@ impl ExecutionServices {
 
     pub async fn list(&self) -> TdBoxService<ListRequest<()>, ListResponse<Execution>, TdError> {
         self.list.service().await
+    }
+
+    pub async fn read(
+        &self,
+    ) -> TdBoxService<ReadRequest<ExecutionParam>, ExecutionResponse, TdError> {
+        self.read.service().await
     }
 
     pub async fn recover(&self) -> TdBoxService<UpdateRequest<ExecutionParam, ()>, (), TdError> {

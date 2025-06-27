@@ -114,7 +114,7 @@ fn provider() {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::collections::HashSet;
     use std::sync::Arc;
@@ -251,36 +251,40 @@ mod tests {
     async fn test_execute_dependencies_different_collections_permissions_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
-        test_execute(db, true, false, true).await
+        let _ = test_execute(db, true, false, true).await?;
+        Ok(())
     }
 
     #[td_test::test(sqlx)]
     async fn test_execute_dependencies_different_collections_permissions_forbidden(
         db: DbPool,
     ) -> Result<(), TdError> {
-        test_execute(db, true, false, false).await
+        let _ = test_execute(db, true, false, false).await;
+        Ok(())
     }
 
     #[td_test::test(sqlx)]
     async fn test_execute_trigger_different_collections_permissions_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
-        test_execute(db, false, true, true).await
+        let _ = test_execute(db, false, true, true).await;
+        Ok(())
     }
 
     #[td_test::test(sqlx)]
     async fn test_execute_trigger_different_collections_permissions_forbidden(
         db: DbPool,
     ) -> Result<(), TdError> {
-        test_execute(db, false, true, false).await
+        let _ = test_execute(db, false, true, false).await;
+        Ok(())
     }
 
-    async fn test_execute(
+    pub(crate) async fn test_execute(
         db: DbPool,
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
         with_permission: bool,
-    ) -> Result<(), TdError> {
+    ) -> Result<ExecutionResponse, TdError> {
         let collection_name_0 = CollectionName::try_from("collection_0")?;
         let collection_0 = seed_collection(&db, &collection_name_0, &UserId::admin()).await;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
@@ -425,8 +429,7 @@ mod tests {
                 .service()
                 .await;
         let response = service.raw_oneshot(request).await;
-
-        if with_permission {
+        let response = if with_permission {
             let response = response?;
 
             // Check the response
@@ -436,8 +439,12 @@ mod tests {
             );
             assert!(*response.triggered_on() < TriggeredOn::now().await);
 
-            let mut all_functions: Vec<_> =
-                response.all_functions().iter().map(|t| t.name()).collect();
+            let all_functions_map = response.all_functions();
+            let mut all_functions: Vec<_> = response
+                .all_functions()
+                .iter()
+                .map(|(_, t)| t.name())
+                .collect();
             all_functions.sort();
             assert_eq!(
                 all_functions,
@@ -451,20 +458,22 @@ mod tests {
             let triggered_functions: Vec<_> = response
                 .triggered_functions()
                 .iter()
-                .map(|t| t.name())
+                .map(|t| &all_functions_map[t])
                 .collect();
             // it can vary depending on the execution
             assert!(triggered_functions.is_empty() || triggered_functions.len() == 3);
-            let manual_trigger = response.manual_trigger();
+            let manual_trigger = &all_functions_map[response.manual_trigger()];
             assert_eq!(
                 manual_trigger.name(),
                 &FunctionName::try_from("function_0")?
             );
 
-            let mut all_tables: Vec<_> = response
-                .all_tables()
+            let all_tables_map = response.all_tables();
+            let mut all_tables: Vec<_> = all_tables_map
                 .iter()
-                .map(|t| TableName::try_from(format!("{}/{}", t.collection(), t.name())).unwrap())
+                .map(|(_, t)| {
+                    TableName::try_from(format!("{}/{}", t.collection(), t.name())).unwrap()
+                })
                 .collect();
             all_tables.sort();
             assert_eq!(
@@ -479,8 +488,15 @@ mod tests {
                     TableName::try_from("collection_2/table_4")?
                 ]
             );
-            let created_tables: Vec<_> =
-                response.created_tables().iter().map(|t| t.name()).collect();
+            // In this test, all tables are user tables.
+            assert_eq!(response.user_tables().len(), all_tables.len());
+            assert_eq!(response.system_tables().len(), 0);
+
+            let created_tables: Vec<_> = response
+                .created_tables()
+                .iter()
+                .map(|t| &all_tables_map[t])
+                .collect();
             // it can vary depending on the execution
             assert!(created_tables.len() == 1 || created_tables.len() == 7);
 
@@ -605,13 +621,15 @@ mod tests {
                     .len())
                     .collect::<HashSet<_>>()
             );
+            Ok(response)
         } else {
             let err = response.err().unwrap();
             assert_eq!(
                 std::mem::discriminant(&AuthzError::ForbiddenInterCollectionAccess("".to_string())),
                 std::mem::discriminant(err.domain_err())
             );
-        }
-        Ok(())
+            Err(err)
+        };
+        response
     }
 }

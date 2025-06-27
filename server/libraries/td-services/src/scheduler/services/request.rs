@@ -245,7 +245,7 @@ mod tests {
         // Info
         let info = message.info();
         let function_runs: Vec<FunctionRunDB> = queries
-            .select_by::<FunctionRunDB>(&(execution.manual_trigger().function_version_id()))?
+            .select_by::<FunctionRunDB>(&(execution.manual_trigger()))?
             .build_query_as()
             .fetch_all(&db)
             .await
@@ -259,7 +259,7 @@ mod tests {
             info.function_version_id(),
             function_run.function_version_id()
         );
-        assert_eq!(info.function(), execution.manual_trigger().name());
+        assert_eq!(info.function_version_id(), execution.manual_trigger());
         assert_eq!(info.function_run_id(), function_run.id());
 
         let function_path = SPath::parse(format!(

@@ -22,11 +22,11 @@ router! {
 #[apiserver_path(method = post, path = EXECUTION_CANCEL, tag = EXECUTION_TAG)]
 #[doc = "Cancel all transactions in the given execution"]
 pub async fn cancel_execution(
-    State(execution): State<Executions>,
+    State(executions): State<Executions>,
     Extension(context): Extension<RequestContext>,
     Path(param): Path<ExecutionParam>,
 ) -> Result<EmptyUpdateStatus, UpdateErrorStatus> {
     let request = context.update(param, ());
-    let response = execution.cancel().await.oneshot(request).await?;
+    let response = executions.cancel().await.oneshot(request).await?;
     Ok(EmptyUpdateStatus::OK(response.into()))
 }

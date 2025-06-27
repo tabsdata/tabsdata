@@ -5,7 +5,7 @@
 use crate::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyStatus,
-    DependencyVersionId, FunctionId, FunctionName, FunctionVersionId, TableId, TableName,
+    DependencyVersionId, FunctionId, FunctionName, FunctionVersionId, System, TableId, TableName,
     TableVersionId, TableVersions, UserId, UserName,
 };
 use crate::types::function::FunctionDB;
@@ -77,6 +77,7 @@ pub struct DependencyDBWithNames {
     table_collection: CollectionName,
     table_function: FunctionName,
     defined_by: UserName,
+    system: System,
 }
 
 #[td_type::Dao]

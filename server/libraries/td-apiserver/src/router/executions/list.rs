@@ -30,11 +30,11 @@ list_status!(Execution);
 #[apiserver_path(method = get, path = EXECUTION_LIST, tag = EXECUTION_TAG)]
 #[doc = "List executions"]
 pub async fn list_executions(
-    State(execution): State<Executions>,
+    State(executions): State<Executions>,
     Extension(context): Extension<RequestContext>,
     Query(query_params): Query<ListParams>,
 ) -> Result<ListStatus, ListErrorStatus> {
     let request = context.list((), query_params);
-    let response = execution.list().await.oneshot(request).await?;
+    let response = executions.list().await.oneshot(request).await?;
     Ok(ListStatus::OK(response.into()))
 }

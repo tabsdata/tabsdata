@@ -57,6 +57,7 @@ CREATE TABLE tables
 
 CREATE VIEW tables__with_names AS
 SELECT tv.*,
+       tv.function_param_pos < 0                      as system,
        -- If the user is deleted, we show the internal id
        IFNULL(u.name, '[' || tv.defined_by_id || ']') as defined_by,
        c.name                                         as collection,
@@ -74,7 +75,7 @@ SELECT tv.*,
 --        tdv.with_data_table_data_version_id as last_data_changed_version
 FROM tables__with_names tv
          LEFT JOIN table_data_versions__with_function tdv on tv.id = tdv.table_version_id
-WHERE tv.function_param_pos >= 0 -- non-system tables only
+WHERE NOT tv.system -- non-system tables only
 ORDER BY tdv.triggered_on;
 
 -- Bundles
@@ -127,6 +128,7 @@ SELECT dv.*,
        tc.name                                        as trigger_by_collection,
        tc.name                                        as table_collection,
        tfv.name                                       as table_function,
+       t.system                                       as system,
 
        IFNULL(u.name, '[' || fv.defined_by_id || ']') as defined_by
 FROM dependencies dv
@@ -134,13 +136,13 @@ FROM dependencies dv
          LEFT JOIN functions fv ON dv.function_version_id = fv.id
          LEFT JOIN users u ON dv.defined_by_id = u.id
          LEFT JOIN collections tc ON dv.table_collection_id = tc.id
-         LEFT JOIN functions tfv ON dv.table_function_version_id = tfv.id;
+         LEFT JOIN functions tfv ON dv.table_function_version_id = tfv.id
+         LEFT JOIN tables__with_names t ON dv.table_version_id = t.id;
 
 CREATE VIEW dependencies__read AS
 SELECT dv.*
 FROM dependencies__with_names dv
-         LEFT JOIN tables t ON dv.table_version_id = t.id
-WHERE t.function_param_pos >= 0 -- non-system tables only
+WHERE NOT dv.system -- non-system tables only
 ;
 
 -- Triggers  (table & __with_names view & __read view)
@@ -176,6 +178,7 @@ SELECT tv.*,
        tc.name                                        as trigger_by_collection,
        tfv.name                                       as trigger_by_function,
        t.name                                         as trigger_by_table_name,
+       t.system                                       as system,
 
        IFNULL(u.name, '[' || fv.defined_by_id || ']') as defined_by
 FROM triggers tv
@@ -184,13 +187,12 @@ FROM triggers tv
          LEFT JOIN users u ON tv.defined_by_id = u.id
          LEFT JOIN collections tc ON tv.trigger_by_collection_id = tc.id
          LEFT JOIN functions tfv ON tv.trigger_by_function_version_id = tfv.id
-         LEFT JOIN tables t ON tv.trigger_by_table_version_id = t.id;
+         LEFT JOIN tables__with_names t ON tv.trigger_by_table_version_id = t.id;
 
 CREATE VIEW triggers__read AS
 SELECT tv.*
 FROM triggers__with_names tv
-         LEFT JOIN tables t ON tv.trigger_by_table_version_id = t.id
-WHERE t.function_param_pos >= 0 -- non-system tables only
+WHERE NOT tv.system -- non-system tables only
 ;
 
 -- Executions  (table & __with_names & __with_status)

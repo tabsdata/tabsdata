@@ -10,8 +10,8 @@ use crate::rest_urls::{
 use crate::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
     FunctionName, FunctionVersionId, Partitioned, Private, SampleLen, SampleOffset,
-    SchemaFieldName, SchemaFieldType, Sql, TableDataVersionId, TableFunctionParamPos, TableId,
-    TableIdName, TableName, TableStatus, TableVersionId, UserId, UserName,
+    SchemaFieldName, SchemaFieldType, Sql, System, TableDataVersionId, TableFunctionParamPos,
+    TableId, TableIdName, TableName, TableStatus, TableVersionId, UserId, UserName,
 };
 use crate::types::function::FunctionDB;
 use polars::prelude::Field;
@@ -79,6 +79,7 @@ pub struct TableDBWithNames {
     defined_by_id: UserId,
     status: TableStatus,
 
+    system: System,
     defined_by: UserName,
     collection: CollectionName,
     function: FunctionName,
