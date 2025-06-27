@@ -430,6 +430,26 @@ impl<L: AsUrl> Location<L> {
                     "azure_storage_account_key".into(),
                     configs.account_key.value().unwrap(),
                 );
+
+                const ACCOUNT_NAME_ENV: &str = "AZURE_STORAGE_ACCOUNT_NAME";
+                const ACCOUNT_KEY_ENV: &str = "AZURE_STORAGE_ACCOUNT_KEY";
+
+                // We need to do this for Polars JSON reader to work with Azure.
+                // polars: crates/polars-plan/src/plans/conversion/dsl_to_ir.rs:165 does not propagate cloud_options
+                // Setting env vars is not thread-safe, it is OK to do it here because this is a single-threaded operation
+                //
+                // TD-534 is there to remove this once we upgrade to a newer version of Polars.
+                unsafe {
+                    std::env::set_var(
+                        ACCOUNT_NAME_ENV,
+                        options.get("azure_storage_account_name").unwrap(),
+                    );
+                    std::env::set_var(
+                        ACCOUNT_KEY_ENV,
+                        options.get("azure_storage_account_key").unwrap(),
+                    );
+                }
+
                 if let Some(configs) = &configs.extra_configs {
                     options.extend(configs.clone());
                 }

@@ -183,7 +183,8 @@ class ErrorCode(Enum):
         "code": "ICE-005",
         "message": (
             "The 'initial_last_modified' parameter in a FileInput must be a"
-            " string in ISO 8601 format or a datetime object. Got the string '{}', "
+            " string in ISO 8601 format or a datetime object with timezone "
+            "information. Got the string '{}', "
             "but it was not in ISO 8601 format. Ensure that it can be parsed by using"
             " datetime.datetime.fromisoformat()."
         ),
@@ -418,6 +419,15 @@ class ErrorCode(Enum):
         "message": (
             "The 'initial_values' parameter must be a dictionary where all keys are "
             "of type 'str', got a key of type '{}' instead."
+        ),
+    }
+    ICE41 = {
+        "code": "ICE-041",
+        "message": (
+            "The 'initial_last_modified' parameter in a FileInput must be a"
+            " string in ISO 8601 format or a datetime object with timezone "
+            "information. Got '{}', which does not have timezone information. "
+            "Ensure that it does by checking that 'last_modified.tzinfo' is not None."
         ),
     }
     OCE1 = {

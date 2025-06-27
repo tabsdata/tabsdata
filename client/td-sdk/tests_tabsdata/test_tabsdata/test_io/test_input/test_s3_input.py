@@ -376,7 +376,32 @@ def test_initial_last_modified_none():
 def test_initial_last_modified_valid_string():
     uri = "s3://path/to/data/data"
     format = "csv"
-    time = "2024-09-05T01:01:00.01"
+    time = "2024-09-05T01:01:00.01Z"
+    input = S3Source(uri, S3_CREDENTIALS, format=format, initial_last_modified=time)
+    assert input.initial_last_modified == datetime.datetime.fromisoformat(
+        time
+    ).isoformat(timespec="microseconds")
+    assert isinstance(input, S3Source)
+    assert isinstance(input, Input)
+    expected_dict = {
+        S3Source.IDENTIFIER: {
+            S3Source.URI_KEY: [uri],
+            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
+            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
+            "initial_last_modified": (
+                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
+            ),
+            S3Source.REGION_KEY: None,
+        }
+    }
+    assert input.to_dict() == expected_dict
+    assert isinstance(build_input(input.to_dict()), S3Source)
+
+
+def test_initial_last_modified_valid_string_hour_timezone():
+    uri = "s3://path/to/data/data"
+    format = "csv"
+    time = "2024-09-05T01:01:00.01+02:00"
     input = S3Source(uri, S3_CREDENTIALS, format=format, initial_last_modified=time)
     assert input.initial_last_modified == datetime.datetime.fromisoformat(
         time
@@ -407,10 +432,19 @@ def test_initial_last_modified_invalid_string():
     assert e.value.error_code == ErrorCode.ICE5
 
 
+def test_initial_last_modified_invalid_string_no_timezone():
+    uri = "s3://path/to/data/data"
+    format = "csv"
+    time = "2024-09-05T01:01:00.01"
+    with pytest.raises(InputConfigurationError) as e:
+        S3Source(uri, S3_CREDENTIALS, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.ICE41
+
+
 def test_initial_last_modified_valid_datetime():
     uri = "s3://path/to/data/data"
     format = "csv"
-    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000)
+    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000, tzinfo=datetime.timezone.utc)
     input = S3Source(uri, S3_CREDENTIALS, format=format, initial_last_modified=time)
     assert input.initial_last_modified == time.isoformat(timespec="microseconds")
     assert isinstance(input, S3Source)
@@ -426,6 +460,15 @@ def test_initial_last_modified_valid_datetime():
     }
     assert input.to_dict() == expected_dict
     assert isinstance(build_input(input.to_dict()), S3Source)
+
+
+def test_initial_last_modified_invalid_datetime():
+    uri = "s3://path/to/data/data"
+    format = "csv"
+    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000)
+    with pytest.raises(InputConfigurationError) as e:
+        S3Source(uri, S3_CREDENTIALS, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.ICE41
 
 
 def test_initial_last_modified_invalid_type():

@@ -2,10 +2,17 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import yaml
+
+from tabsdata.format import CSVFormat
+
+logger = logging.getLogger(__name__)
 
 
 # Define a custom constructor for basic locations-like entries
@@ -369,6 +376,95 @@ class V1CopyFormat(CopyYaml):
         return f"{self.__class__.__name__}(content={self.content})"
 
 
+class ImportYaml(ABC):
+    """Just an abstract class to help with type hinting."""
+
+
+class V1ImportFormat(ImportYaml):
+    """
+    Simple class to enable us to generate import yaml files for the transporter
+    """
+
+    def __init__(
+        self,
+        source: TransporterAzure | TransporterS3 | TransporterLocalFile,
+        format: (
+            TransporterLogFormat
+            | TransporterCSVFormat
+            | TransporterParquetFormat
+            | TransporterJsonFormat
+        ),
+        target: TransporterAzure | TransporterS3 | TransporterLocalFile,
+        initial_lastmod=None,
+        lastmod_info=None,
+    ):
+        self.content = {
+            "source": {
+                "location": source,
+                "initial_lastmod": initial_lastmod,
+                "lastmod_info": lastmod_info,
+            },
+            "format": format,
+            "target": {"location": target},
+            "parallelism": 1,
+        }
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(content={self.content})"
+
+
+class TransporterCSVFormat:
+    def __init__(self, file_format: CSVFormat):
+        config_dict = {
+            "parse_options": {
+                "separator": ord(
+                    file_format.separator
+                ),  # Default for the polars importer, it
+                # expects its Unicode value of 44 as an integer
+                "quote_char": ord(
+                    file_format.quote_char
+                ),  # Default for the polars importer, it
+                # expects its Unicode value of 34 as an integer
+                "eol_char": ord(file_format.eol_char),
+                # Default for the polars importer, it
+                # expects its Unicode value of 10 as an integer
+                # Default encoding for the polars importer
+                "encoding": file_format.input_encoding,
+                "null_values": file_format.input_null_values,
+                "missing_is_null": file_format.input_missing_is_null,
+                "truncate_ragged_lines": file_format.input_truncate_ragged_lines,
+                "comment_prefix": file_format.input_comment_prefix,
+                "try_parse_dates": file_format.input_try_parse_dates,
+                "decimal_comma": file_format.input_decimal_comma,
+            },
+            "has_header": file_format.input_has_header,
+            "skip_rows": file_format.input_skip_rows,
+            "skip_rows_after_header": file_format.input_skip_rows_after_header,
+            "raise_if_empty": file_format.input_raise_if_empty,
+            "ignore_errors": file_format.input_ignore_errors,
+        }
+        logger.debug(f"CSV format config: {config_dict}")
+        self.content = config_dict
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(content={self.content})"
+
+
+class TransporterParquetFormat:
+    def __init__(self):
+        self.content = {}
+
+
+class TransporterLogFormat:
+    def __init__(self):
+        self.content = {}
+
+
+class TransporterJsonFormat:
+    def __init__(self):
+        self.content = {}
+
+
 class TransporterEnv:
     def __init__(self, name: str):
         self.name = name
@@ -487,6 +583,59 @@ def get_copy_dumper():
     return safe_dumper
 
 
+def get_import_dumper():
+    """Add representers to a YAML serializer."""
+
+    class ImportDumper(yaml.SafeDumper):
+        pass
+
+    ImportDumper.add_representer(V1ImportFormat, v1_import_format_representer)
+    return ImportDumper
+
+
+def v1_import_format_representer(
+    dumper: yaml.SafeDumper, v1_copy_format: V1ImportFormat
+) -> yaml.nodes.MappingNode:
+    dumper.add_representer(TransporterEnv, v1_env_representer)
+    dumper.add_representer(TransporterLiteral, v1_literal_representer)
+    dumper.add_representer(TransporterLocalFile, v1_local_file_representer)
+    dumper.add_representer(TransporterAzure, v1_azure_representer)
+    dumper.add_representer(TransporterS3, v1_s3_representer)
+    dumper.add_representer(TransporterCSVFormat, v1_csv_format_representer)
+    dumper.add_representer(TransporterLogFormat, v1_log_format_representer)
+    dumper.add_representer(TransporterParquetFormat, v1_parquet_format_representer)
+    dumper.add_representer(TransporterJsonFormat, v1_ndjson_format_representer)
+    return dumper.represent_mapping("!ImportV1", v1_copy_format.content)
+
+
+def v1_csv_format_representer(
+    dumper: yaml.SafeDumper, csv_format: TransporterCSVFormat
+) -> yaml.nodes.MappingNode:
+    """Represent an S3 instance as a YAML mapping node."""
+    return dumper.represent_mapping("!Csv", csv_format.content)
+
+
+def v1_log_format_representer(
+    dumper: yaml.SafeDumper, log_format: TransporterLogFormat
+) -> yaml.nodes.ScalarNode:
+    """Represent an S3 instance as a YAML mapping node."""
+    return dumper.represent_str("Log")
+
+
+def v1_parquet_format_representer(
+    dumper: yaml.SafeDumper, parquet_format: TransporterParquetFormat
+) -> yaml.nodes.ScalarNode:
+    """Represent an S3 instance as a YAML mapping node."""
+    return dumper.represent_str("Parquet")
+
+
+def v1_ndjson_format_representer(
+    dumper: yaml.SafeDumper, ndjson_format: TransporterJsonFormat
+) -> yaml.nodes.ScalarNode:
+    """Represent an S3 instance as a YAML mapping node."""
+    return dumper.represent_str("Json")
+
+
 def store_copy_as_yaml(copy: V1CopyFormat, copy_file: str):
     with open(copy_file, "w") as file:
         yaml.dump(
@@ -494,3 +643,66 @@ def store_copy_as_yaml(copy: V1CopyFormat, copy_file: str):
             file,
             Dumper=get_copy_dumper(),
         )
+
+
+def store_import_as_yaml(copy: V1ImportFormat, import_request_file: str):
+    with open(import_request_file, "w") as file:
+        yaml.dump(
+            copy,
+            file,
+            Dumper=get_import_dumper(),
+        )
+
+
+class ImportReportYaml(ABC):
+    """Just an abstract class to help with type hinting."""
+
+    @property
+    @abstractmethod
+    def files(self) -> list[dict]:
+        """Return the files section of the YAML file."""
+
+    @property
+    @abstractmethod
+    def lastmod_info(self) -> str | None:
+        """Return the lastmod_info section of the YAML file."""
+
+
+class V1ImportReportFormat(ImportReportYaml):
+    """
+    Simple class to parse import report yaml files for the transporter.
+    """
+
+    def __init__(self, content: dict):
+        self.content = content
+
+    @property
+    def files(self) -> list[dict]:
+        """Return the files section of the YAML file."""
+        return self.content.get("files", [])
+
+    @property
+    def lastmod_info(self) -> str | None:
+        """Return the lastmod_info section of the YAML file."""
+        return self.content.get("lastmod_info")
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(content={self.content})"
+
+
+def v1_import_report_constructor(loader, node):
+    return V1ImportReportFormat(loader.construct_mapping(node))
+
+
+def get_import_report_yaml_loader():
+    """Add constructors to PyYAML loader."""
+    loader = yaml.SafeLoader
+    # When more versions are added, they will be listed here, and each will have its
+    # own constructor.
+    loader.add_constructor("!ImportV1", v1_import_report_constructor)
+    return loader
+
+
+def parse_import_report_yaml(yaml_file: str) -> ImportReportYaml:
+    with open(yaml_file, "r") as file:
+        return yaml.load(file, Loader=get_import_report_yaml_loader())

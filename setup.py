@@ -278,7 +278,7 @@ logger.debug(f"Using tabsdata target release folder: '{target_release_folder}'")
 base_binaries = [
     "apiserver",
     "bootloader",
-    "importer",
+    "_importer",
     "supervisor",
     "tdserver",
     "transporter",

@@ -99,6 +99,7 @@ def main():
         logs_folder=arguments.logs_folder,
     )
     try:
+        logger.info(pad_string("[Starting function execution]"))
         raw_mount_options = sys.stdin.read()
         mount_options_dict = yaml.safe_load(raw_mount_options)
         execution_fs = ExecutionPaths(

@@ -97,7 +97,7 @@ def test_examples(login, tabsserver_connection):
     log_and_assert(result)
     result = runner.invoke(
         cli,
-        ["fn", "trigger", "--coll", "examples", "--name", "pub", "--detach"],
+        ["fn", "trigger", "--coll", "examples", "--name", "pub"],
     )
     log_and_assert(result)
     result = runner.invoke(cli, ["exe", "list-trx"])
@@ -138,7 +138,7 @@ def test_examples(login, tabsserver_connection):
     log_and_assert(result)
     result = runner.invoke(
         cli,
-        ["fn", "trigger", "--coll", "examples", "--name", "tfr", "--detach"],
+        ["fn", "trigger", "--coll", "examples", "--name", "tfr"],
     )
     log_and_assert(result)
     result = runner.invoke(cli, ["exe", "list-trx"])
@@ -179,7 +179,7 @@ def test_examples(login, tabsserver_connection):
     log_and_assert(result)
     result = runner.invoke(
         cli,
-        ["fn", "trigger", "--coll", "examples", "--name", "sub", "--detach"],
+        ["fn", "trigger", "--coll", "examples", "--name", "sub"],
     )
     log_and_assert(result)
     result = runner.invoke(cli, ["exe", "list-trx"])
@@ -209,7 +209,7 @@ def test_examples(login, tabsserver_connection):
     # Multitrigger
     result = runner.invoke(
         cli,
-        ["fn", "trigger", "--coll", "examples", "--name", "pub", "--detach"],
+        ["fn", "trigger", "--coll", "examples", "--name", "pub"],
     )
     log_and_assert(result)
     result = runner.invoke(cli, ["exe", "list-trx"])

@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_single_file_last_mod_finder_not_file() {
+    async fn test_single_file_last_mod_finder_no_file() {
         let dir = testdir!();
         let file = dir.join("file.csv");
         let url = Url::from_file_path(&file).unwrap();
@@ -446,7 +446,7 @@ mod tests {
         let file = dir.join("file.csv");
         let url = Url::from_file_path(&file).unwrap();
         create_file(&file);
-        sleep(Duration::from_secs(1)).await; // Ensure the file is older than the last modified time
+        sleep(Duration::from_millis(1200)).await;
         let last_mod = UniqueUtc::now_millis();
 
         let info = test_single_file_last_mod_finder(url.clone(), last_mod, vec![]).await;
@@ -459,7 +459,7 @@ mod tests {
         let file = dir.join("file.csv");
 
         let last_mod = UniqueUtc::now_millis();
-        sleep(Duration::from_secs(1)).await; // Ensure the file is older than the last modified time
+        sleep(Duration::from_millis(1200)).await;
         create_file(&file);
 
         let url = Url::from_file_path(&file).unwrap();
@@ -496,14 +496,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_pattern_file_last_mod_finder_not_file() {
+    async fn test_pattern_file_last_mod_finder_no_file() {
         let dir = testdir!();
         let file1 = dir.join("file1.csv");
         let file2 = dir.join("file2.csv");
 
         create_file(&file1);
         create_file(&file2);
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_millis(1200)).await;
         let last_mod = UniqueUtc::now_millis();
 
         let file = dir.join("file*.csv");
@@ -521,7 +521,7 @@ mod tests {
 
         create_file(&file1);
         create_file(&file2);
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_millis(1200)).await;
         let last_mod = UniqueUtc::now_millis();
 
         let file = dir.join("file*.csv");
@@ -538,8 +538,9 @@ mod tests {
         let file2 = dir.join("file2.csv");
 
         create_file(&file1);
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_millis(1200)).await;
         let last_mod = UniqueUtc::now_millis();
+        sleep(Duration::from_millis(1200)).await;
         create_file(&file2);
 
         let file = dir.join("file*.csv");

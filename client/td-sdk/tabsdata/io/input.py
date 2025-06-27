@@ -303,10 +303,10 @@ class AzureSource(Input):
         """
         if initial_last_modified:
             if isinstance(initial_last_modified, datetime.datetime):
-                self._initial_last_modified = initial_last_modified
+                processed_initial_last_modified = initial_last_modified
             else:
                 try:
-                    self._initial_last_modified = datetime.datetime.fromisoformat(
+                    processed_initial_last_modified = datetime.datetime.fromisoformat(
                         initial_last_modified
                     )
                 except ValueError:
@@ -315,6 +315,8 @@ class AzureSource(Input):
                     raise InputConfigurationError(
                         ErrorCode.ICE6, type(initial_last_modified)
                     )
+            _raise_exception_if_no_tzinfo(processed_initial_last_modified)
+            self._initial_last_modified = processed_initial_last_modified
         else:
             self._initial_last_modified = None
 
@@ -533,10 +535,10 @@ class LocalFileSource(Input):
         """
         if initial_last_modified:
             if isinstance(initial_last_modified, datetime.datetime):
-                self._initial_last_modified = initial_last_modified
+                processed_initial_last_modified = initial_last_modified
             else:
                 try:
-                    self._initial_last_modified = datetime.datetime.fromisoformat(
+                    processed_initial_last_modified = datetime.datetime.fromisoformat(
                         initial_last_modified
                     )
                 except ValueError:
@@ -545,6 +547,8 @@ class LocalFileSource(Input):
                     raise InputConfigurationError(
                         ErrorCode.ICE6, type(initial_last_modified)
                     )
+            _raise_exception_if_no_tzinfo(processed_initial_last_modified)
+            self._initial_last_modified = processed_initial_last_modified
         else:
             self._initial_last_modified = None
 
@@ -1484,10 +1488,10 @@ class S3Source(Input):
         """
         if initial_last_modified:
             if isinstance(initial_last_modified, datetime.datetime):
-                self._initial_last_modified = initial_last_modified
+                processed_initial_last_modified = initial_last_modified
             else:
                 try:
-                    self._initial_last_modified = datetime.datetime.fromisoformat(
+                    processed_initial_last_modified = datetime.datetime.fromisoformat(
                         initial_last_modified
                     )
                 except ValueError:
@@ -1496,6 +1500,8 @@ class S3Source(Input):
                     raise InputConfigurationError(
                         ErrorCode.ICE6, type(initial_last_modified)
                     )
+            _raise_exception_if_no_tzinfo(processed_initial_last_modified)
+            self._initial_last_modified = processed_initial_last_modified
         else:
             self._initial_last_modified = None
 
@@ -1647,3 +1653,8 @@ def build_input_from_dict(input: dict) -> Input:
     for input_class in existing_inputs:
         if identifier == input_class.IDENTIFIER:
             return input_class(**configuration)
+
+
+def _raise_exception_if_no_tzinfo(user_input_datetime: datetime.datetime):
+    if user_input_datetime.tzinfo is None:
+        raise InputConfigurationError(ErrorCode.ICE41, user_input_datetime)

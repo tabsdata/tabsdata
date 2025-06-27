@@ -381,7 +381,35 @@ def test_initial_last_modified_none():
 def test_initial_last_modified_valid_string():
     uri = "az://path/to/data/data"
     format = "csv"
-    time = "2024-09-05T01:01:00.01"
+    time = "2024-09-05T01:01:00.01Z"
+    input = AzureSource(
+        uri, AZURE_CREDENTIALS, format=format, initial_last_modified=time
+    )
+    assert input.initial_last_modified == datetime.datetime.fromisoformat(
+        time
+    ).isoformat(timespec="microseconds")
+    assert isinstance(input, AzureSource)
+    assert isinstance(input, Input)
+    expected_dict = {
+        AzureSource.IDENTIFIER: {
+            AzureSource.URI_KEY: [uri],
+            AzureSource.FORMAT_KEY: {
+                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
+            },
+            AzureSource.CREDENTIALS_KEY: CREDENTIALS_DICT,
+            "initial_last_modified": (
+                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
+            ),
+        }
+    }
+    assert input.to_dict() == expected_dict
+    assert isinstance(build_input(input.to_dict()), AzureSource)
+
+
+def test_initial_last_modified_valid_string_minus_timezone():
+    uri = "az://path/to/data/data"
+    format = "csv"
+    time = "2024-09-05T01:01:00.01-02:00"
     input = AzureSource(
         uri, AZURE_CREDENTIALS, format=format, initial_last_modified=time
     )
@@ -415,10 +443,19 @@ def test_initial_last_modified_invalid_string():
     assert e.value.error_code == ErrorCode.ICE5
 
 
+def test_initial_last_modified_invalid_string_no_timezone():
+    uri = "az://path/to/data/data"
+    format = "csv"
+    time = "2024-09-05T01:01:00.01"
+    with pytest.raises(InputConfigurationError) as e:
+        AzureSource(uri, AZURE_CREDENTIALS, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.ICE41
+
+
 def test_initial_last_modified_valid_datetime():
     uri = "az://path/to/data/data"
     format = "csv"
-    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000)
+    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000, tzinfo=datetime.timezone.utc)
     input = AzureSource(
         uri, AZURE_CREDENTIALS, format=format, initial_last_modified=time
     )
@@ -437,6 +474,15 @@ def test_initial_last_modified_valid_datetime():
     }
     assert input.to_dict() == expected_dict
     assert isinstance(build_input(input.to_dict()), AzureSource)
+
+
+def test_initial_last_modified_invalid_datetime():
+    uri = "az://path/to/data/data"
+    format = "csv"
+    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000)
+    with pytest.raises(InputConfigurationError) as e:
+        AzureSource(uri, AZURE_CREDENTIALS, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.ICE41
 
 
 def test_initial_last_modified_invalid_type():

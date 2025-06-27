@@ -1,16 +1,14 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
 import os
 from typing import List
 
-import polars as pl
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 import tabsdata as td
-from tabsdata.extensions.tableframe.extension import SystemColumns
 from tabsdata.utils.bundle_utils import create_bundle_archive
 
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
@@ -35,42 +33,32 @@ s3_credentials = td.S3AccessKeyCredentials(
 # and expected_result.json contains the expected output of applying the function to the
 # input data.
 @td.publisher(
-    name="input_s3_select_datetime",
+    name="input_s3_select_datetime_timezone",
     source=td.S3Source(
         "s3://tabsdata-testing-bucket/testing_nested_import/*.csv",
         s3_credentials,
-        initial_last_modified="2024-09-05T01:01:00.01Z",
+        initial_last_modified="2024-09-05T01:01:00.01-02:00",
     ),
     tables="output",
 )
-def input_s3_select_datetime(df: List[td.TableFrame]):
+def input_s3_select_datetime_timezone(df: List[td.TableFrame]):
     len_df = len(df)
-    if len_df == 1:
-        df = df[0]
-        new_df = df.drop_nulls()
-        return new_df
-    elif len_df == 0:
-        # Note: do NOT do this in production code, this is just for testing purposes.
-        return td.TableFrame.__build__(
-            df=pl.LazyFrame(
-                {"answer": 42, SystemColumns.TD_IDENTIFIER.value: "fake_id"}
-            ),
-            mode="raw",
-            idx=0,
-        )
-    else:
+    if len_df != 1:
         # Note: this exception is raised for the sake of testing, in a real
-        # environment, it is perfectly plausible and acceptable to receive multiple
-        # files in an incremental import, and that would not cause an error.
+        # environment, it is perfectly plausible and acceptable to receive 0 files in
+        # an incremental import, and that would not cause an error.
         raise ValueError(
-            f"Expected exactly one file or none to be imported, {len_df} found instead."
+            f"Expected exactly one file to be imported, {len_df} found instead."
         )
+    df = df[0]
+    new_df = df.drop_nulls()
+    return new_df
 
 
 if __name__ == "__main__":
     os.makedirs(DEFAULT_SAVE_LOCATION, exist_ok=True)
     create_bundle_archive(
-        input_s3_select_datetime,
+        input_s3_select_datetime_timezone,
         local_packages=LOCAL_PACKAGES_LIST,
         save_location=DEFAULT_SAVE_LOCATION,
     )

@@ -259,7 +259,30 @@ def test_initial_last_modified_none():
 def test_initial_last_modified_valid_string():
     path = "file://path/to/data/data"
     format = "csv"
-    time = "2024-09-05T01:01:00.01"
+    time = "2024-09-05T01:01:00.01Z"
+    input = LocalFileSource(path, format=format, initial_last_modified=time)
+    assert input.initial_last_modified == datetime.datetime.fromisoformat(
+        time
+    ).isoformat(timespec="microseconds")
+    assert isinstance(input, LocalFileSource)
+    assert isinstance(input, Input)
+    expected_dict = {
+        LocalFileSource.IDENTIFIER: {
+            LocalFileSource.PATH_KEY: [path],
+            "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
+            "initial_last_modified": (
+                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
+            ),
+        }
+    }
+    assert input.to_dict() == expected_dict
+    assert isinstance(build_input(input.to_dict()), LocalFileSource)
+
+
+def test_initial_last_modified_valid_string_plus_timezone():
+    path = "file://path/to/data/data"
+    format = "csv"
+    time = "2024-09-05T01:01:00.01+12:37"
     input = LocalFileSource(path, format=format, initial_last_modified=time)
     assert input.initial_last_modified == datetime.datetime.fromisoformat(
         time
@@ -282,7 +305,7 @@ def test_initial_last_modified_valid_string():
 def test_same_input_eq():
     path = "file://path/to/data/data"
     format = "csv"
-    time = "2024-09-05T01:01:00.01"
+    time = "2024-09-05T01:01:00.01Z"
     input = LocalFileSource(path, format=format, initial_last_modified=time)
     input2 = LocalFileSource(path, format=format, initial_last_modified=time)
     assert input == input2
@@ -291,10 +314,10 @@ def test_same_input_eq():
 def test_different_input_not_eq():
     path = "file://path/to/data/data"
     format = "csv"
-    time = "2024-09-05T01:01:00.01"
+    time = "2024-09-05T01:01:00.01Z"
     input = LocalFileSource(path, format=format, initial_last_modified=time)
     input2 = LocalFileSource(
-        path, format=format, initial_last_modified="2024-09-05T01:01:00.02"
+        path, format=format, initial_last_modified="2024-09-05T01:01:00.02Z"
     )
     assert input != input2
 
@@ -302,7 +325,7 @@ def test_different_input_not_eq():
 def test_input_not_eq_dict():
     path = "file://path/to/data/data"
     format = "csv"
-    time = "2024-09-05T01:01:00.01"
+    time = "2024-09-05T01:01:00.01Z"
     input = LocalFileSource(path, format=format, initial_last_modified=time)
     assert input.to_dict() != input
 
@@ -316,10 +339,19 @@ def test_initial_last_modified_invalid_string():
     assert e.value.error_code == ErrorCode.ICE5
 
 
+def test_initial_last_modified_invalid_string_no_timezone():
+    path = "file://path/to/data/data"
+    format = "csv"
+    time = "2024-09-05T01:01:00.01"
+    with pytest.raises(InputConfigurationError) as e:
+        LocalFileSource(path, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.ICE41
+
+
 def test_initial_last_modified_valid_datetime():
     path = "file://path/to/data/data"
     format = "csv"
-    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000)
+    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000, tzinfo=datetime.timezone.utc)
     input = LocalFileSource(path, format=format, initial_last_modified=time)
     assert input.initial_last_modified == time.isoformat(timespec="microseconds")
     assert isinstance(input, LocalFileSource)
@@ -333,6 +365,15 @@ def test_initial_last_modified_valid_datetime():
     }
     assert input.to_dict() == expected_dict
     assert isinstance(build_input(input.to_dict()), LocalFileSource)
+
+
+def test_initial_last_modified_invalid_datetime_no_timezone():
+    path = "file://path/to/data/data"
+    format = "csv"
+    time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000)
+    with pytest.raises(InputConfigurationError) as e:
+        LocalFileSource(path, format=format, initial_last_modified=time)
+    assert e.value.error_code == ErrorCode.ICE41
 
 
 def test_initial_last_modified_invalid_type():

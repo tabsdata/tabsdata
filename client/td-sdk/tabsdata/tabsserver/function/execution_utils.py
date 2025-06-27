@@ -4,14 +4,11 @@
 
 from __future__ import annotations
 
-import ast
-import json
 import logging
 import os
-import pathlib
 import subprocess
-import tempfile
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Tuple
 from urllib.parse import unquote
 
@@ -39,6 +36,16 @@ from tabsdata.io.input import (
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import build_table_uri_object
 from tabsdata.tabsserver.function import environment_import_utils
+from tabsdata.tabsserver.function.cloud_connectivity_utils import (
+    SERVER_SIDE_AWS_ACCESS_KEY_ID,
+    SERVER_SIDE_AWS_REGION,
+    SERVER_SIDE_AWS_SECRET_ACCESS_KEY,
+    SERVER_SIDE_AZURE_ACCOUNT_KEY,
+    SERVER_SIDE_AZURE_ACCOUNT_NAME,
+    obtain_and_set_azure_credentials,
+    obtain_and_set_s3_credentials,
+    set_s3_region,
+)
 from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.native_tables_utils import (
     scan_lf_from_location,
@@ -46,16 +53,27 @@ from tabsdata.tabsserver.function.native_tables_utils import (
     sink_lf_to_location,
 )
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
+from tabsdata.tabsserver.function.yaml_parsing import (
+    Location,
+    Table,
+    TableVersions,
+    TransporterAzure,
+    TransporterCSVFormat,
+    TransporterEnv,
+    TransporterJsonFormat,
+    TransporterLocalFile,
+    TransporterLogFormat,
+    TransporterParquetFormat,
+    TransporterS3,
+    V1ImportFormat,
+    parse_import_report_yaml,
+    store_import_as_yaml,
+)
 from tabsdata.utils.sql_utils import obtain_uri
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._context import TableFrameContext
 
-from .cloud_connectivity_utils import (
-    obtain_and_set_azure_credentials,
-    obtain_and_set_s3_credentials,
-    set_s3_region,
-)
 from .global_utils import (
     CURRENT_PLATFORM,
     convert_path_to_uri,
@@ -63,7 +81,6 @@ from .global_utils import (
 from .offset_utils import (
     OFFSET_LAST_MODIFIED_VARIABLE_NAME,
 )
-from .yaml_parsing import Location, Table, TableVersions
 
 if TYPE_CHECKING:
     from tabsdata.io.input import Input
@@ -356,7 +373,7 @@ def execute_sql_query(
         logger.error(f"Invalid SQL source type: {type(source)}. No data imported.")
         raise TypeError(f"Invalid SQL source type: {type(source)}. No data imported.")
     destination_file = os.path.join(
-        destination, f"{datetime.now().timestamp()}.parquet"
+        destination, f"{datetime.now(tz=timezone.utc).timestamp()}.parquet"
     )
     loaded_frame.write_parquet(destination_file)
     logger.info(f"Imported SQL query to: {destination_file}")
@@ -365,7 +382,7 @@ def execute_sql_query(
 
 def execute_file_importer(
     source: AzureSource | LocalFileSource | S3Source,
-    destination: str,
+    destination_folder: str,
     initial_values: Offset = None,
 ) -> list:
     """
@@ -378,40 +395,84 @@ def execute_file_importer(
     """
     if isinstance(source, LocalFileSource):
         # noinspection PyProtectedMember
-        location_list = [convert_path_to_uri(path) for path in source._path_list]
+        # Unquote the uri, since the pathlib.Path.as_uri() method encodes the path
+        # with percent-encoding, and some wildcard characters are encoded.
+        location_list = [
+            unquote(convert_path_to_uri(path)) for path in source._path_list
+        ]
     elif isinstance(source, (S3Source, AzureSource)):
         # noinspection PyProtectedMember
         location_list = source._uri_list
     else:
         logger.error(f"Invalid source type: {type(source)}. No data imported.")
         raise TypeError(f"Invalid source type: {type(source)}. No data imported.")
-    destination = destination if destination.endswith(os.sep) else destination + os.sep
-    destination = pathlib.Path(destination).as_uri()
+    destination_folder = (
+        destination_folder
+        if destination_folder.endswith(os.sep)
+        else destination_folder + os.sep
+    )
     last_modified = None
+    lastmod_info = None
     if source.initial_last_modified:
+        last_modified = source.initial_last_modified
+        processed_initial_last_modified = datetime.fromisoformat(last_modified)
+        logger.debug(
+            f"Last modified time '{last_modified}' converted to "
+            f"datetime object '{processed_initial_last_modified}'."
+        )
+        if processed_initial_last_modified.tzinfo is None:
+            logger.error(
+                f"Last modified time '{last_modified}', converted to "
+                f"datetime object '{processed_initial_last_modified}' "
+                "is not timezone-aware, but having a timezone is a "
+                "requirement "
+                "for initial_last_modified."
+            )
+            raise ValueError(
+                f"Last modified time '{last_modified}', converted to "
+                f"datetime object '{processed_initial_last_modified}' "
+                "is not timezone-aware, but having a timezone is a "
+                "requirement "
+                "for initial_last_modified."
+            )
+        utc_initial_last_modified = processed_initial_last_modified.astimezone(
+            timezone.utc
+        )
+        logger.debug(
+            f"Last modified time '{last_modified}' converted to "
+            f" UTC datetime object '{utc_initial_last_modified}'."
+        )
+        utc_last_modified_string = utc_initial_last_modified.isoformat(
+            timespec="microseconds"
+        )
+        logger.debug(
+            f"Last modified time '{last_modified}' converted to "
+            f"UTC string '{utc_last_modified_string}'."
+        )
+        last_modified = utc_last_modified_string
         if initial_values.use_decorator_values:
             logger.debug("Using decorator last modified value")
-            last_modified = source.initial_last_modified
         else:
             logger.debug("Using stored last modified value")
-            last_modified = initial_values.current_offset.get(
+            lastmod_info = initial_values.current_offset.get(
                 OFFSET_LAST_MODIFIED_VARIABLE_NAME
             )
-    logger.debug(f"Last modified: {last_modified}")
+    logger.debug(f"Last modified: '{last_modified}'; lastmod_info: '{lastmod_info}'")
     source_list = []
     for location in location_list:
-        source_list.append(
-            execute_single_file_import(
-                location=location,
-                destination=destination,
-                file_format=source.format,
-                initial_last_modified=last_modified,
-            )
+        sources, lastmod_info = execute_single_file_import(
+            origin_location_uri=location,
+            destination_folder=destination_folder,
+            file_format=source.format,
+            initial_last_modified=last_modified,
+            user_source=source,
+            lastmod_info=lastmod_info,
         )
+        source_list.append(sources)
     if source.initial_last_modified:
-        new_last_modified = datetime.now().isoformat()
+        logger.debug("Capturing new last modified information")
         initial_values.update_new_values(
-            {OFFSET_LAST_MODIFIED_VARIABLE_NAME: new_last_modified}
+            {OFFSET_LAST_MODIFIED_VARIABLE_NAME: lastmod_info}
         )
     return source_list
 
@@ -438,65 +499,81 @@ def format_object_to_string(file_format: FileFormat) -> str:
         raise TypeError(f"Invalid format type: {type(file_format)}")
 
 
-def format_object_to_config_dict(file_format: FileFormat) -> dict:
-    logger.debug(f"Converting format object to config dict: {file_format}")
-    if isinstance(file_format, CSVFormat):
-        config_dict = {
-            "parse_options": {
-                "separator": (
-                    file_format.separator
-                ),  # Default for the polars importer, it
-                # expects its Unicode value of 44 as an integer
-                "quote_char": (
-                    file_format.quote_char
-                ),  # Default for the polars importer, it
-                # expects its Unicode value of 34 as an integer
-                "eol_char": file_format.eol_char,  # Default for the polars importer, it
-                # expects its Unicode value of 10 as an integer
-                # Default encoding for the polars importer
-                "encoding": file_format.input_encoding,
-                "null_values": file_format.input_null_values,
-                "missing_is_null": file_format.input_missing_is_null,
-                "truncate_ragged_lines": file_format.input_truncate_ragged_lines,
-                "comment_prefix": file_format.input_comment_prefix,
-                "try_parse_dates": file_format.input_try_parse_dates,
-                "decimal_comma": file_format.input_decimal_comma,
-            },
-            "has_header": file_format.input_has_header,
-            "skip_rows": file_format.input_skip_rows,
-            "skip_rows_after_header": file_format.input_skip_rows_after_header,
-            "raise_if_empty": file_format.input_raise_if_empty,
-            "ignore_errors": file_format.input_ignore_errors,
-        }
-        logger.debug(f"CSV format config: {config_dict}")
-        return config_dict
-    elif isinstance(file_format, ParquetFormat):
-        # Currently we only allow loading parquet files with the default configuration.
-        # In the future, this piece might be extended to support more options.
-        config_dict = {}
-        logger.debug(f"Parquet format config: {config_dict}")
-        return config_dict
-    elif isinstance(file_format, LogFormat):
-        # Currently we only allow loading log files with the default configuration.
-        # In the future, this piece might be extended to support more options.
-        config_dict = {}
-        logger.debug(f"Log format config: {config_dict}")
-        return config_dict
-    elif isinstance(file_format, NDJSONFormat):
-        # Currently we only allow loading json files with the default configuration.
-        # In the future, this piece might be extended to support more options.
-        config_dict = {}
-        logger.debug(f"NDJSON format config: {config_dict}")
-        return config_dict
+def obtain_transporter_import(
+    origin_location_uri: str,
+    destination_folder: str,
+    file_format: FileFormat,
+    initial_last_modified: str | None,
+    user_source: LocalFileSource | S3Source | AzureSource,
+    lastmod_info: str = None,
+):
+    # Create the transporter source object
+    if isinstance(user_source, S3Source):
+        transporter_source = TransporterS3(
+            origin_location_uri,
+            access_key=TransporterEnv(SERVER_SIDE_AWS_ACCESS_KEY_ID),
+            secret_key=TransporterEnv(SERVER_SIDE_AWS_SECRET_ACCESS_KEY),
+            region=(
+                TransporterEnv(SERVER_SIDE_AWS_REGION) if user_source.region else None
+            ),
+        )
+    elif isinstance(user_source, AzureSource):
+        transporter_source = TransporterAzure(
+            origin_location_uri,
+            account_name=TransporterEnv(SERVER_SIDE_AZURE_ACCOUNT_NAME),
+            account_key=TransporterEnv(SERVER_SIDE_AZURE_ACCOUNT_KEY),
+        )
+    elif isinstance(user_source, LocalFileSource):
+        transporter_source = TransporterLocalFile(origin_location_uri)
     else:
-        logger.error(f"Invalid format type: {type(file_format)}")
-        raise TypeError(f"Invalid format type: {type(file_format)}")
+        logger.error(f"Importing from '{user_source}' not supported.")
+        raise TypeError(f"Importing from '{user_source}' not supported.")
+    logger.debug(f"Source config: {transporter_source}")
+
+    # Create the transporter format object
+    if isinstance(file_format, CSVFormat):
+        transporter_format = TransporterCSVFormat(file_format)
+    elif isinstance(file_format, LogFormat):
+        transporter_format = TransporterLogFormat()
+    elif isinstance(file_format, NDJSONFormat):
+        transporter_format = TransporterJsonFormat()
+    elif isinstance(file_format, ParquetFormat):
+        transporter_format = TransporterParquetFormat()
+    else:
+        logger.error(f"Invalid file format: {type(file_format)}. No data imported.")
+        raise TypeError(f"Invalid file format: {type(file_format)}. No data imported.")
+    logger.debug(f"Format config: {transporter_format}")
+
+    # Create transporter target object
+    transporter_target = TransporterLocalFile(convert_path_to_uri(destination_folder))
+    logger.debug(f"Target config: {transporter_target}")
+
+    logger.debug(
+        f"Using initial_lastmod: '{initial_last_modified}' "
+        f"and lastmod_info: '{lastmod_info}'"
+    )
+
+    transporter_import = V1ImportFormat(
+        source=transporter_source,
+        target=transporter_target,
+        format=transporter_format,
+        initial_lastmod=initial_last_modified,
+        lastmod_info=lastmod_info,
+    )
+
+    logger.debug(f"Transporter import config: {transporter_import}")
+    return transporter_import
 
 
 # noinspection DuplicatedCode
 def execute_single_file_import(
-    location: str, destination: str, file_format: FileFormat, initial_last_modified: str
-) -> list | str:
+    origin_location_uri: str,
+    destination_folder: str,
+    file_format: FileFormat,
+    initial_last_modified: str | None,
+    user_source: LocalFileSource | S3Source | AzureSource,
+    lastmod_info: str = None,
+) -> (list[str] | str, str | None):
     """
     Import a file from a location to a destination with a specific format. The file is
         imported using a binary, and the result returned is always a list of parquet
@@ -504,61 +581,52 @@ def execute_single_file_import(
         contain one or more elements.
     :return: list of imported files if using a wildcard pattern, single file if not.
     """
-    with (
-        tempfile.NamedTemporaryFile() as temporary_out_file,
-        tempfile.TemporaryDirectory() as temporary_destination,
-    ):
-        basedir, data = os.path.split(location)
-        # Unquote the data, since the pathlib.Path.as_uri() method encodes the path
-        # with percent-encoding, and some wildcard characters are encoded.
-        data = unquote(data)
-        arguments = (
-            f"--location {basedir} --file-pattern {data} --to"
-            f" {destination} --format"
-            f" {format_object_to_string(file_format)} --out"
-            f" {temporary_out_file.name}"
-        )
-        if initial_last_modified:
-            arguments += f" --modified-since {initial_last_modified}"
-        format_config = format_object_to_config_dict(file_format)
-        format_config = convert_characters_to_ascii(format_config)
-        if format_config:  # Check if there are other keys in the format dict
-            logger.debug(f"Format config: {format_config}")
-            with open(
-                os.path.join(temporary_destination, "format_config.json"), "w"
-            ) as temporary_format_config_file:
-                json.dump(format_config, temporary_format_config_file)
-                arguments += f" --format-config {temporary_format_config_file.name}"
-        binary = "importer.exe" if CURRENT_PLATFORM.is_windows() else "importer"
-        # Both make tools and supervisor dataset launchers take care of ensuring
-        # importer can be located in the PATH environment variable.
-        path_to_binary = binary
-        # TODO: Reformat once a decision about the binary packaging is made
-        #  https://tabsdata.atlassian.net/browse/TAB-27
-        logger.debug(f"Importing files with command: {path_to_binary} {arguments}")
-        result = subprocess.run(
-            [path_to_binary] + arguments.split(), capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            logger.error(f"Error importing file: {result.stderr}")
-            raise Exception(f"Error importing file: {result.stderr}")
-        result = ast.literal_eval(temporary_out_file.read().decode("utf-8"))
-        if is_wildcard_pattern(data):
-            source_list = []
-            if result:
-                for dictionary in result:
-                    source_list.append(dictionary.get("to"))
-                logger.info(f"Imported files to: '{source_list}'")
-            else:
-                logger.info("No files imported")
+    transporter_import = obtain_transporter_import(
+        origin_location_uri,
+        destination_folder,
+        file_format,
+        initial_last_modified,
+        user_source,
+        lastmod_info,
+    )
+
+    yaml_request_file = os.path.join(destination_folder, f"request_{uuid.uuid4()}.yaml")
+    store_import_as_yaml(
+        transporter_import,
+        yaml_request_file,
+    )
+
+    binary = "transporter.exe" if CURRENT_PLATFORM.is_windows() else "transporter"
+    report_file = os.path.join(destination_folder, f"report_{uuid.uuid4()}.yaml")
+    arguments = f"--request {yaml_request_file} --report {report_file}"
+    logger.debug(f"Importing files with command: {binary} {arguments}")
+    subprocess_result = subprocess.run(
+        [binary] + arguments.split(), capture_output=True, text=True
+    )
+    if subprocess_result.returncode != 0:
+        logger.error(f"Error importing file: {subprocess_result.stderr}")
+        raise Exception(f"Error importing file: {subprocess_result.stderr}")
+
+    result = parse_import_report_yaml(report_file)
+    files = result.files
+    logger.debug(f"Parsed import report: {result}")
+    if is_wildcard_pattern(origin_location_uri):
+        source_list = []
+        if files:
+            for dictionary in files:
+                source_list.append(dictionary.get("to"))
+            logger.info(f"Imported files to: '{source_list}'")
         else:
-            source_list = result[0].get("to") if result else None
-            if not source_list:
-                logger.info("No file imported")
-            # If the data is not a wildcard pattern, the result is a single file
-            else:
-                logger.info(f"Imported file to: '{source_list}'")
-    return source_list
+            logger.info("No files imported")
+    else:
+        source_list = files[0].get("to") if files else None
+        if not source_list:
+            logger.info("No file imported")
+        # If the data is not a wildcard pattern, the result is a single file
+        else:
+            logger.info(f"Imported file to: '{source_list}'")
+    logger.debug(f"New lastmod_info: '{result.lastmod_info}'")
+    return source_list, result.lastmod_info
 
 
 def convert_characters_to_ascii(dictionary: dict) -> dict:

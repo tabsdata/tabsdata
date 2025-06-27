@@ -25,6 +25,10 @@ import yaml
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
 
+from tabsdata.api.status_utils.data_version import (
+    DataVersionStatus,
+    data_version_status_to_mapping,
+)
 from tabsdata.utils.logging import setup_tests_logging
 
 # The following non-import code must execute early to set up the environment correctly.
@@ -1003,18 +1007,38 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
     tabsserver_connection.trigger_function(
         collection_name, "input_file_csv_string_format"
     )
+    table = tabsserver_connection.get_collection(collection_name).get_table("output")
     retry = 0
     while True:
-        try:
-            tabsserver_connection.sample_table(collection_name, "output")
+        dataversion = table.dataversions[0] if table.dataversions else None
+        if dataversion and dataversion.status == data_version_status_to_mapping(
+            DataVersionStatus.COMMITED.value
+        ):
+            logger.debug(
+                f"Dataversion '{dataversion}' is in status '"
+                f"{dataversion.status}', indicating that the data is ready "
+                "to be consumed."
+            )
             break
-        except APIServerError as e:
-            logger.debug(f"Error sampling table '{random_id}' - '{file_path}': {e}")
+        else:
+            if dataversion:
+                logger.debug(
+                    f"Dataversion '{dataversion}' is in status '"
+                    f"{dataversion.status}', indicating that the data is NOT "
+                    "ready to be consumed yet."
+                )
+            else:
+                logger.debug(
+                    f"No dataversions found for table yet: '{table.dataversions}'"
+                )
+            logger.debug(f"Table '{random_id}' - '{file_path}' does not have data yet")
             logger.debug(f"Retrying '{random_id}' - '{file_path}' in {retry} seconds")
             retry += 1
             # Waiting for up to 10' & 30'', as young Gauss already knew.
             if retry == MAXIMUM_RETRY_COUNT:
-                raise e
+                raise ValueError(
+                    f"Failed to get data from the table after {retry} retries."
+                )
             else:
                 sleep(retry)
     try:
