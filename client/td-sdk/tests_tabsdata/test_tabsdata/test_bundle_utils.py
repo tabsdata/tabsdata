@@ -5,7 +5,7 @@
 import json
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -40,7 +40,6 @@ from tabsdata.utils.bundle_utils import (
     create_configuration,
     create_requirements,
     generate_entry_point_field,
-    obtain_ordered_dists,
     store_file_contents,
     store_folder_contents,
     store_function_codebase,
@@ -153,7 +152,7 @@ def test_generate_entry_point_field_json():
 def test_create_requirements_yaml(mock_obtain_ordered_dists, tmp_path):
     save_location = tmp_path / "save_location"
     save_location.mkdir()
-    result = create_requirements(str(save_location))
+    result, _ = create_requirements(str(save_location))
     expected = ["package1==1.0.0", "package2==2.0.0"]
     assert result == expected
     with open(save_location / REQUIREMENTS_FILE_NAME) as f:
@@ -208,7 +207,7 @@ def test_create_requirements_yaml_no_local_packages(
 ):
     save_location = tmp_path / "save_location"
     save_location.mkdir()
-    result = create_requirements(str(save_location))
+    result, _ = create_requirements(str(save_location))
     expected = ["package1==1.0.0", "package2==2.0.0"]
     assert result == expected
     with open(save_location / REQUIREMENTS_FILE_NAME) as f:
@@ -236,7 +235,7 @@ def test_create_requirements_yaml_with_local_packages(
     save_location.mkdir()
     local_package_path = tmp_path / "local_package"
     local_package_path.mkdir()
-    result = create_requirements(str(save_location), [str(local_package_path)])
+    result, _ = create_requirements(str(save_location), [str(local_package_path)])
     expected = ["package1==1.0.0", "package2==2.0.0"]
     assert result == expected
     with open(save_location / REQUIREMENTS_FILE_NAME) as f:
@@ -271,7 +270,7 @@ def test_create_requirements_yaml_with_multiple_local_packages(
     local_package_path1.mkdir()
     local_package_path2 = tmp_path / "local_package2"
     local_package_path2.mkdir()
-    result = create_requirements(
+    result, _ = create_requirements(
         str(save_location), [str(local_package_path1), str(local_package_path2)]
     )
     expected = ["package1==1.0.0", "package2==2.0.0"]
@@ -712,3 +711,98 @@ def test_tabsets_connection_register_multiple_times(tmp_path):
             foo_multiple_times,
             save_location=tmp_path,
         )
+
+
+def test_register_valid_python_version(tmp_path):
+    @td.transformer(
+        name="dataset_name",
+        input_tables=CORRECT_SOURCE,
+        output_tables=CORRECT_DESTINATION,
+    )
+    def foo_valid_python_version(a1, a2):
+        return a1, a2
+
+    python_version = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
+
+    create_bundle_archive(
+        foo_valid_python_version,
+        save_location=tmp_path,
+        valid_python_versions=[python_version, "3.9.2"],
+    )
+
+
+def test_register_invalid_python_version(tmp_path):
+    @td.transformer(
+        name="dataset_name",
+        input_tables=CORRECT_SOURCE,
+        output_tables=CORRECT_DESTINATION,
+    )
+    def foo_invalid_python_version(a1, a2):
+        return a1, a2
+
+    with pytest.raises(RegistrationError) as e:
+        # Using a Python version that is not supported
+        create_bundle_archive(
+            foo_invalid_python_version,
+            save_location=tmp_path,
+            valid_python_versions=["3.1.2"],
+        )
+    assert e.value.error_code == ErrorCode.RE12
+
+
+@pytest.mark.slow
+def test_register_valid_python_version_with_custom_requirements(tmp_path):
+    correct_requirements = {
+        PYTHON_LOCAL_PACKAGES_KEY: [os.getcwd()],
+        PYTHON_VERSION_KEY: "3.10",
+        PYTHON_PUBLIC_PACKAGES_KEY: [
+            "connectorx==0.3.3",
+            "mysql-connector-python==9.0.0",
+            "polars==1.4.1",
+            "pyarrow==17.0.0",
+            "base32hex==1.0.2",
+            "uuid-v7==1.0.0",
+        ],
+    }
+    correct_custom_requirements_path = os.path.join(
+        tmp_path, "correct_custom_requirements.yaml"
+    )
+    with open(correct_custom_requirements_path, "w") as f:
+        yaml.dump(correct_requirements, f)
+    create_bundle_archive(
+        custom_requirements,
+        save_location=tmp_path,
+        requirements=correct_custom_requirements_path,
+        valid_python_versions=["3.10", "3.9.2"],
+    )
+
+
+@pytest.mark.slow
+def test_register_invalid_python_version_with_custom_requirements(tmp_path):
+    correct_requirements = {
+        PYTHON_LOCAL_PACKAGES_KEY: [os.getcwd()],
+        PYTHON_VERSION_KEY: "3.10",
+        PYTHON_PUBLIC_PACKAGES_KEY: [
+            "connectorx==0.3.3",
+            "mysql-connector-python==9.0.0",
+            "polars==1.4.1",
+            "pyarrow==17.0.0",
+            "base32hex==1.0.2",
+            "uuid-v7==1.0.0",
+        ],
+    }
+    correct_custom_requirements_path = os.path.join(
+        tmp_path, "correct_custom_requirements.yaml"
+    )
+    with open(correct_custom_requirements_path, "w") as f:
+        yaml.dump(correct_requirements, f)
+    with pytest.raises(RegistrationError) as e:
+        create_bundle_archive(
+            custom_requirements,
+            save_location=tmp_path,
+            requirements=correct_custom_requirements_path,
+            valid_python_versions=["3.9.2"],
+        )
+    assert e.value.error_code == ErrorCode.RE12

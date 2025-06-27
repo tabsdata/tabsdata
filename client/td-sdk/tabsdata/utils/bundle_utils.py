@@ -130,7 +130,7 @@ def create_tarball(source_dir: str, output_filename: str):
 
 def create_requirements(
     save_location: str | os.PathLike, local_packages: List[str] | str | None = None
-) -> List[str]:
+) -> (List[str], str):
     """Infers the requirements of the current environment and saves them to a YAML
     file. Furthermore, it saves the local packages to the save location if provided."""
     os.makedirs(save_location, exist_ok=True)
@@ -160,7 +160,7 @@ def create_requirements(
     # Write the YAML file to disk
     with open(os.path.join(save_location, REQUIREMENTS_FILE_NAME), "w") as file:
         file.write(yaml_output)
-    return requirements
+    return requirements, python_version
 
 
 def bundle_local_packages(local_packages, save_location):
@@ -176,7 +176,7 @@ def bundle_local_packages(local_packages, save_location):
 
 def copy_and_verify_requirements_file(
     save_location: str | os.PathLike, requirements_file: str
-) -> List[str]:
+) -> (List[str], str):
     try:
         with open(requirements_file, "r") as file:
             data = yaml.safe_load(file)
@@ -207,7 +207,7 @@ def copy_and_verify_requirements_file(
     # Copy the local packages to the save location
     if data.get(PYTHON_LOCAL_PACKAGES_KEY):
         bundle_local_packages(data.get(PYTHON_LOCAL_PACKAGES_KEY), save_location)
-    return requirements
+    return requirements, data.get(PYTHON_VERSION_KEY)
 
 
 def obtain_ordered_dists() -> List[str]:
@@ -298,6 +298,7 @@ def create_bundle_archive(
     requirements: str = None,
     save_location: str | Path | None = None,
     save_target: Literal["file", "folder"] | None = None,
+    valid_python_versions: list[str] | None = None,
 ) -> str:
     """
     Register a function in the Tabsdata platform.
@@ -346,9 +347,19 @@ def create_bundle_archive(
 
     # Create a requirements.yaml file with the dependencies and Python version
     if requirements:
-        copy_and_verify_requirements_file(uncompressed_context_location, requirements)
+        _, python_version = copy_and_verify_requirements_file(
+            uncompressed_context_location, requirements
+        )
     else:
-        create_requirements(uncompressed_context_location, local_packages)
+        _, python_version = create_requirements(
+            uncompressed_context_location, local_packages
+        )
+    if valid_python_versions:
+        # Verify that the requirements are compatible with the server
+        if python_version not in valid_python_versions:
+            raise RegistrationError(
+                ErrorCode.RE12, python_version, valid_python_versions
+            )
 
     # Create a configuration.json with the inputs and store all required files
     create_configuration(function, uncompressed_context_location)

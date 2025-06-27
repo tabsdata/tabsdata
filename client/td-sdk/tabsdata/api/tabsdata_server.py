@@ -346,6 +346,12 @@ class Collection:
         """
 
         temporary_directory = tempfile.TemporaryDirectory()
+        valid_python_versions = (
+            self.connection.runtime_info_get()
+            .json()
+            .get("data", {})
+            .get("python_versions")
+        )
         (
             tables,
             string_dependencies,
@@ -360,6 +366,7 @@ class Collection:
             path_to_bundle,
             requirements,
             local_packages,
+            valid_python_versions,
         )
 
         function_name = function_name or decorator_function_name
@@ -448,6 +455,12 @@ class Collection:
             APIServerError: If the function could not be updated.
         """
         temporary_directory = tempfile.TemporaryDirectory()
+        valid_python_versions = (
+            self.connection.runtime_info_get()
+            .json()
+            .get("data", {})
+            .get("python_versions")
+        )
         (
             tables,
             string_dependencies,
@@ -462,6 +475,7 @@ class Collection:
             directory_to_bundle,
             requirements,
             local_packages,
+            valid_python_versions,
         )
 
         with open(context_location, "rb") as file:
@@ -2539,6 +2553,21 @@ class TabsdataServer:
         return self.list_users()
 
     @property
+    def valid_python_versions(self) -> list[str]:
+        """
+        Get the list of valid Python versions supported by the server.
+
+        Returns:
+            List[str]: The list of valid Python versions.
+        """
+        return (
+            self.connection.runtime_info_get()
+            .json()
+            .get("data", {})
+            .get("python_versions")
+        )
+
+    @property
     def workers(self) -> List[Worker]:
         """
         Get the list of workers in the server. This list is obtained every time the
@@ -3645,6 +3674,7 @@ def create_archive(
     path_to_bundle=None,
     requirements=None,
     local_packages=None,
+    valid_python_versions: list[str] = None,
 ):
     function = dynamic_import_function_from_path(function_path)
     function_name: str = function.name
@@ -3668,6 +3698,7 @@ def create_archive(
         path_to_code=path_to_bundle,
         requirements=requirements,
         local_packages=local_packages,
+        valid_python_versions=valid_python_versions,
     )
 
     function_type_to_api_type = {

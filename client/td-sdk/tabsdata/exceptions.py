@@ -871,6 +871,18 @@ class ErrorCode(Enum):
             " Got '{}' instead."
         ),
     }
+    RE12 = {
+        "code": "RE-012",
+        "message": (
+            "The Python version in the requirements file is '{}', which is not "
+            "supported. The supported Python versions are: {}. If you are using a "
+            "custom requirements file, please ensure that the Python version key "
+            "is set to one of the supported versions. If the requirements file "
+            "is being automatically generated, please ensure that the Python version "
+            "of the environment in which you are currently is one of the supported "
+            "versions."
+        ),
+    }
     SDKE1 = {
         "code": "SDKE-001",
         "message": (

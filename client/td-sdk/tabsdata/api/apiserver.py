@@ -734,6 +734,11 @@ class APIServer:
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def runtime_info_get(self, raise_for_status: bool = True):
+        endpoint = "/runtime-info"
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def status_get(self, raise_for_status: bool = True):
         endpoint = "/status"
         response = self.get(endpoint)

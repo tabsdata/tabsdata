@@ -108,6 +108,13 @@ def test_status_get(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
+def test_runtime_info_get(apiserver_connection):
+    response = apiserver_connection.runtime_info_get()
+    assert response.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
 def test_collection_list(apiserver_connection):
     response = apiserver_connection.collection_list()
     assert response.status_code == 200

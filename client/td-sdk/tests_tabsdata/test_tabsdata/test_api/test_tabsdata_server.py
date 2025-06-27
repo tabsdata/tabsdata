@@ -1297,3 +1297,11 @@ def test_tabsdata_server_class_function_run_list_by_function_and_collection(
     assert messages
     assert isinstance(messages, list)
     assert all(isinstance(message, FunctionRun) for message in messages)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_tabsdata_valid_python_versions(tabsserver_connection):
+    python_versions = tabsserver_connection.valid_python_versions
+    assert isinstance(python_versions, list)
+    assert all(isinstance(version, str) for version in python_versions)
