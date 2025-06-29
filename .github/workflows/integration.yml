@@ -51,19 +51,19 @@ on:
         required: false
         type: choice
         options: [ 'true', 'false' ]
-        default: 'true'
+        default: 'false'
       run_on_macos_arm_64:
         description: "Run on macOS (arm_64)"
         required: false
         type: choice
         options: [ 'true', 'false' ]
-        default: 'true'
+        default: 'false'
       run_on_windows_x86_64:
         description: "Run on Windows (x86_64)"
         required: false
         type: choice
         options: [ 'true', 'false' ]
-        default: 'true'
+        default: 'false'
       run_on_windows_arm_64:
         description: "Run on Windows (arm_64)"
         required: false
