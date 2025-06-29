@@ -17,45 +17,58 @@ on:
   workflow_dispatch:
     inputs:
       job_timeout:
-        description: "Time in minutes before cancelling the job"
+        description: "Minutes before job cancellation"
         required: true
         type: number
         default: 240
       dump_server:
-        description: "Dump full server instance contents for hard investigations"
+        description: "Dump all instances contents"
         required: false
-        type: string
-        default: "false"
+        type: choice
+        options: [ 'true', 'false' ]
+        default: 'false'
+      runner_action:
+        description: 'Action'
+        required: true
+        type: choice
+        options: [ 'build', 'lock' ]
+        default: 'build'
       run_on_linux_x86_64:
         description: "Run on Ubuntu (x86_64)"
         required: false
-        type: string
-        default: "true"
+        type: choice
+        options: [ 'true', 'false' ]
+        default: 'true'
       run_on_linux_arm_64:
         description: "Run on Ubuntu (arm_64)"
         required: false
-        type: string
-        default: "false"
+        type: choice
+        options: [ 'true', 'false' ]
+        default: 'false'
       run_on_macos_x86_64:
         description: "Run on macOS (x86_64)"
         required: false
-        type: string
-        default: "true"
+        type: choice
+        options: [ 'true', 'false' ]
+        default: 'true'
       run_on_macos_arm_64:
         description: "Run on macOS (arm_64)"
         required: false
-        type: string
-        default: "true"
+        type: choice
+        options: [ 'true', 'false' ]
+        default: 'true'
       run_on_windows_x86_64:
         description: "Run on Windows (x86_64)"
         required: false
-        type: string
-        default: "true"
+        type: choice
+        options: [ 'true', 'false' ]
+        default: 'true'
       run_on_windows_arm_64:
         description: "Run on Windows (arm_64)"
         required: false
-        type: string
-        default: "false"
+        type: choice
+        options: [ 'true', 'false' ]
+        default: 'false'
 
   schedule:
      # Run at 02:00 UTC (03:00 AM Spain time) Monday to Friday
@@ -85,6 +98,7 @@ jobs:
         shell: bash
         working-directory: .
     outputs:
+      runner_action: ${{ steps.set-outputs.outputs.runner_action }}
       run_on_linux_x86_64: ${{ steps.set-outputs.outputs.run_on_linux_x86_64 }}
       run_on_linux_arm_64: ${{ steps.set-outputs.outputs.run_on_linux_arm_64 }}
       run_on_macos_x86_64: ${{ steps.set-outputs.outputs.run_on_macos_x86_64 }}
@@ -160,6 +174,7 @@ jobs:
         id: show-outputs
         run: |
           echo "Workflow Outputs:"
+          echo "- runner_action: ${{ steps.set-outputs.outputs.runner_action }}"          
           echo "- run_on_linux_x86_64: ${{ steps.set-outputs.outputs.run_on_linux_x86_64 }}"
           echo "- run_on_linux_arm_64: ${{ steps.set-outputs.outputs.run_on_linux_arm_64 }}"
           echo "- run_on_macos_x86_64: ${{ steps.set-outputs.outputs.run_on_macos_x86_64 }}"
@@ -199,12 +214,12 @@ jobs:
       TD_SNOWFLAKE_SCHEMA: ${{ secrets.TD_SNOWFLAKE_SCHEMA }}
       TD_SNOWFLAKE_USER: ${{ secrets.TD_SNOWFLAKE_USER }}
       TD_SNOWFLAKE_WAREHOUSE: ${{ secrets.TD_SNOWFLAKE_WAREHOUSE }}
-
     with:
       job_timeout: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
       td_product: "standard"
-      runner_mode: "release"
       dump_server: ${{ inputs.dump_server }}
+      runner_mode: "release"
+      runner_action: ${{ needs.describe-job.outputs.runner_action }}
       run_on_linux_x86_64: ${{ needs.describe-job.outputs.run_on_linux_x86_64 }}
       run_on_linux_arm_64: ${{ needs.describe-job.outputs.run_on_linux_arm_64 }}
       run_on_macos_x86_64: ${{ needs.describe-job.outputs.run_on_macos_x86_64 }}

@@ -2,6 +2,7 @@
   "inputs": {
     "td_product": "standard",
     "runner_mode": "integration",
+    "runner_action": "build",
     "dump_server": "false",
     "run_on_linux_x86_64": "false",
     "run_on_linux_arm_64": "false",
