@@ -5,6 +5,7 @@
 ```mermaid
 flowchart TD
     requirements(["requirements"]):::requirements
+    requirements-connector-all(["requirements-connector-all"]):::requirements
     requirements-all(["requirements_all"]):::requirements
 
     requirements-dev(["requirements-dev"]):::requirements-dev    
@@ -50,6 +51,8 @@ flowchart TD
     requirements-dev --> requirements-dev-third-party
     requirements-dev --> requirements-third-party-connectors
     requirements-dev --> requirements-dev-third-party-connectors
+
+    requirements-connector-all --> tabsdata-connectors-deps
     
     classDef requirements fill:#1E90FF,stroke:#E0E0E0,stroke-width:2px,color:#E0E0E0;
     classDef requirements-all fill:#1E90FF,stroke:#E0E0E0,stroke-width:2px,color:#E0E0E0;

@@ -33,7 +33,10 @@ def auth():
 @click.option("--pem", help="Path to the certificate PEM file")
 @click.pass_context
 def add_cert(ctx: click.Context, server: str, pem: str):
-    """Add a certificate for a Tabsdata Server, only needed for self-signed certificates."""
+    """
+    Add a certificate for a Tabsdata Server.
+    Only needed for self-signed certificates.
+    """
     server = server or logical_prompt(ctx, "Tabsdata Server URL")
     pem = pem or logical_prompt(ctx, "Path to the certificate PEM file")
     click.echo("Adding certificate")
