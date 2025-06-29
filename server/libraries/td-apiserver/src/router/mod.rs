@@ -315,6 +315,7 @@ impl ApiServerInstanceBuilder {
             let router = axum::Router::new().nest(td_objects::rest_urls::BASE_URL_V1, router);
 
             // Add any router extensions (not part of the API).
+            #[allow(unused_mut)]
             let mut router = router.merge(ExtendedRouter::router());
 
             // Add docs endpoints if the feature is enabled.

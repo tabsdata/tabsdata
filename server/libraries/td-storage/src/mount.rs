@@ -112,8 +112,7 @@ impl MountDefBuilder {
             #[cfg(target_os = "windows")]
             if !uri_str.ends_with('\\') && !uri_str.ends_with('/') {
                 return Err(StorageError::ConfigurationError(format!(
-                    "Invalid URI {}, must end with '\\' or '/'",
-                    uri_str
+                    "Invalid URI {uri_str}, must end with '\\' or '/'"
                 )));
             }
             let uri = Url::parse(uri_str).map_err(|e| {

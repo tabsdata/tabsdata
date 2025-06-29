@@ -111,21 +111,26 @@ fn split_base_path_and_name(path: &str) -> (String, Option<String>) {
 
 /// Splits a file path into base_path and file_name
 #[cfg(target_os = "windows")]
-fn split_base_path_and_name(path: &str) -> (String, Option<String>) {
+fn split_base_path_and_name_2(path: &str) -> (String, Option<String>) {
     let path = path.replace('/', "\\");
     match path.rsplit_once('\\') {
-        None => ("C:\\".to_uppercase(), None),
+        None => ("C:\\".to_string(), None),
         Some((base_path, file_name)) => {
-            let base_path = if !is_rooted(base_path) {
-                format!("C:\\{}", base_path)
+            let mut base_path = if !is_rooted(base_path) {
+                format!("C:\\{}\\", base_path)
             } else {
-                base_path.to_owned()
+                format!("{}\\", base_path)
             };
+            while base_path.ends_with("\\\\") {
+                base_path.pop();
+            }
+
             let file_name = if file_name.is_empty() {
                 None
             } else {
                 Some(file_name.to_owned())
             };
+
             (base_path, file_name)
         }
     }
@@ -138,10 +143,7 @@ fn is_rooted(path: &str) -> bool {
 
 #[cfg(target_os = "windows")]
 fn is_rooted(path: &str) -> bool {
-    path.len() >= 3
-        && path.as_bytes()[0].is_ascii_alphabetic()
-        && path.as_bytes()[1] == b':'
-        && (path.as_bytes()[2] == b'\\' || path.as_bytes()[2] == b'/')
+    path.len() >= 2 && path.as_bytes()[0].is_ascii_alphabetic() && path.as_bytes()[1] == b':'
 }
 
 /// Trait for types that can provide last modified information for files.
@@ -1142,8 +1144,16 @@ mod tests {
             assert_eq!(base_path, "C:\\");
             assert_eq!(file_name, None);
 
+            let (base_path, file_name) = split_base_path_and_name("C:");
+            assert_eq!(base_path, "C:\\");
+            assert_eq!(file_name, None);
+
+            let (base_path, file_name) = split_base_path_and_name("C:\\");
+            assert_eq!(base_path, "C:\\");
+            assert_eq!(file_name, None);
+
             let (base_path, file_name) = split_base_path_and_name("C:\\dir\\");
-            assert_eq!(base_path, "C:\\dir");
+            assert_eq!(base_path, "C:\\dir\\");
             assert_eq!(file_name, None);
 
             let (base_path, file_name) = split_base_path_and_name("C:\\file");
@@ -1151,11 +1161,11 @@ mod tests {
             assert_eq!(file_name, Some("file".to_string()));
 
             let (base_path, file_name) = split_base_path_and_name("C:\\dir\\file");
-            assert_eq!(base_path, "C:\\dir");
+            assert_eq!(base_path, "C:\\dir\\");
             assert_eq!(file_name, Some("file".to_string()));
 
             let (base_path, file_name) = split_base_path_and_name("C:\\dir0\\dir1\\file");
-            assert_eq!(base_path, "C:\\dir0\\dir1");
+            assert_eq!(base_path, "C:\\dir0\\dir1\\");
             assert_eq!(file_name, Some("file".to_string()));
         }
     }
