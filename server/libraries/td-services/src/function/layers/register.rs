@@ -79,7 +79,7 @@ pub async fn build_table_versions(
         .map(|prefix| {
             // system tables are the same for the same function
             // TODO we need to make sure these names are not going to conflict with user tables
-            let table_name = format!("{}__{}", prefix, function_id);
+            let table_name = format!("{prefix}__{function_id}");
             TableName::try_from(table_name)
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -206,7 +206,7 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
         .map(|prefix| {
             // system tables are the same for the same function
             // TODO we need to make sure these names are not going to conflict with user tables
-            let table_name = format!("{}__{}", prefix, function_id);
+            let table_name = format!("{prefix}__{function_id}");
             TableDependency::try_from(table_name)
         })
         .collect::<Result<Vec<_>, _>>()?;

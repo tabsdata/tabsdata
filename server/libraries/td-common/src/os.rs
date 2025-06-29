@@ -305,10 +305,7 @@ mod tests {
             thread::sleep(Duration::from_secs(1));
             attempts -= 1;
         }
-        panic!(
-            "The dummy process should be terminated after '{}' signal",
-            signal
-        );
+        panic!("The dummy process should be terminated after '{signal}' signal");
     }
 
     // Test program extension with no previous extension.

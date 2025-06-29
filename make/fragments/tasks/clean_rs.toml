@@ -22,8 +22,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
     ''']
 
 [tasks.clean_rs_modules]
@@ -34,8 +34,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
     ''']
 
 [tasks.clean_rs_expansions]
@@ -46,8 +46,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}
     ''']
 
 [tasks.clean_rs_all]

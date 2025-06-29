@@ -52,7 +52,7 @@ pub fn set_cargo_features() -> Result<(), Box<dyn Error>> {
             serde_yaml::from_str(&features_content).unwrap_or(Feature { features: vec![] });
         for feature in features.features {
             let configuration = format!("cargo:rustc-cfg=feature=\"{feature}\"");
-            println!("{}", configuration);
+            println!("{configuration}");
         }
     }
 
@@ -78,8 +78,7 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
         })
         .unwrap_or_else(|_| {
             panic!(
-                "⛔️ Failed to get workspace Cargo.toml file. Both '{}' and '{}' are unset.",
-                ENV_CARGO_MANIFEST_PATH, ENV_CARGO_MANIFEST_DIR
+                "⛔️ Failed to get workspace Cargo.toml file. Both '{ENV_CARGO_MANIFEST_PATH}' and '{ENV_CARGO_MANIFEST_DIR}' are unset."
             )
         });
 
@@ -100,7 +99,7 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
     let descriptor_features = workspace_descriptor_content
         .get(TAG_FEATURES)
         .and_then(|f| f.as_table())
-        .ok_or(format!("⛔️ No [{}] section in Manifest.toml", TAG_FEATURES))
+        .ok_or(format!("⛔️ No [{TAG_FEATURES}] section in Manifest.toml"))
         .expect("⛔️ Failed to extract metadata from Manifest.toml");
     let descriptor_features_map: HashMap<String, Vec<String>> = descriptor_features
         .iter()
@@ -147,16 +146,14 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
             .get(TAG_FEATURES)
             .and_then(|f| f.as_table())
             .ok_or(format!(
-                "⛔️ No [{}] section in {:?}",
-                TAG_FEATURES, member_cargo_file
+                "⛔️ No [{TAG_FEATURES}] section in {member_cargo_file:?}"
             ))
             .expect("⛔️ Failed to extract metadata from member Cargo.toml");
 
         for (descriptor_feature, descriptor_subfeatures) in &descriptor_features_map {
             if !member_features.contains_key(descriptor_feature) {
                 missing_features_report.push(format!(
-                    "⛔️ Crate '{:?}' is missing feature '{}'",
-                    workspace_member, descriptor_feature
+                    "⛔️ Crate '{workspace_member:?}' is missing feature '{descriptor_feature}'"
                 ));
                 continue;
             }
@@ -173,8 +170,7 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
 
             if member_subfeatures != *descriptor_subfeatures {
                 missing_features_report.push(format!(
-                    "⛔️ Crate '{:?}': Feature '{}' has mismatched subfeatures. Expected: {:?}, Found: {:?}",
-                    workspace_member, descriptor_feature, descriptor_subfeatures, member_subfeatures
+                    "⛔️ Crate '{workspace_member:?}': Feature '{descriptor_feature}' has mismatched subfeatures. Expected: {descriptor_subfeatures:?}, Found: {member_subfeatures:?}"
                 ));
             }
         }

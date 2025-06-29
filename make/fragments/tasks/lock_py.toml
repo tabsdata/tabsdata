@@ -1,0 +1,51 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.lock_py]
+category = "01 - Clean"
+description = "Task 'lock' for Python projects"
+run_task = [
+    { name = [
+        "lock_py_ta_features",
+        "lock_py_ta_tableframe",
+        "lock_py_te_tableframe",
+        "lock_py_tabsdata",
+        "lock_py_tabsdata_databricks",
+        "lock_py_tabsdata_mongodb",
+        "lock_py_tabsdata_salesforce",
+        "lock_py_tabsdata_snowflake",
+    ] }
+]
+
+[tasks.lock_py_ta_features]
+category = "01 - Clean"
+private = true
+
+[tasks.lock_py_ta_tableframe]
+category = "01 - Clean"
+private = true
+
+[tasks.lock_py_te_tableframe]
+category = "01 - Clean"
+private = true
+
+[tasks.lock_py_tabsdata]
+category = "01 - Clean"
+private = true
+
+[tasks.lock_py_tabsdata_databricks]
+category = "01 - Clean"
+private = true
+
+[tasks.lock_py_tabsdata_mongodb]
+category = "01 - Clean"
+private = true
+
+[tasks.lock_py_tabsdata_salesforce]
+category = "01 - Clean"
+private = true
+
+[tasks.lock_py_tabsdata_snowflake]
+category = "01 - Clean"
+private = true

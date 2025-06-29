@@ -51,10 +51,7 @@ async fn test_user_cannot_enable_disable_themselves(db: DbPool) {
 
     assert_service_error(service, request, |err| match err {
         UserError::UserCannotEnableDisableThemselves => {}
-        other => panic!(
-            "Expected 'UserCannotEnableDisableThemselves', got {:?}",
-            other
-        ),
+        other => panic!("Expected 'UserCannotEnableDisableThemselves', got {other:?}"),
     })
     .await;
 }

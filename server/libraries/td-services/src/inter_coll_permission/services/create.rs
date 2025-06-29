@@ -268,7 +268,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             InterCollectionPermissionError::CannotGivePermissionToItself => {}
-            other => panic!("Expected 'CannotGivePermissionToItself', got {:?}", other),
+            other => panic!("Expected 'CannotGivePermissionToItself', got {other:?}"),
         })
         .await;
         Ok(())
@@ -303,7 +303,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             AuthzError::UnAuthorized(_) => {}
-            other => panic!("Expected 'UnAuthorized', got {:?}", other),
+            other => panic!("Expected 'UnAuthorized', got {other:?}"),
         })
         .await;
         Ok(())

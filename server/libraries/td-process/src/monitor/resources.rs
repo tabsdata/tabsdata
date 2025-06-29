@@ -45,18 +45,17 @@ impl ResourcesMonitor {
 
             let (pm, vm, tm, um, fm) = self.memory();
             let memory_log = format!(
-                "\t- Process Physical Memory: {} mb\n\
-                 \t- Process Virtual Memory.: {} mb\n\
-                 \t- System Total Memory....: {} mb\n\
-                 \t- System Used Memory.....: {} mb\n\
-                 \t- System Free Memory.....: {} mb",
-                pm, vm, tm, um, fm
+                "\t- Process Physical Memory: {pm} mb\n\
+                 \t- Process Virtual Memory.: {vm} mb\n\
+                 \t- System Total Memory....: {tm} mb\n\
+                 \t- System Used Memory.....: {um} mb\n\
+                 \t- System Free Memory.....: {fm} mb"
             );
             log_message.push_str(&memory_log);
 
             let mut space_log = String::new();
             for (name, (path, _, human)) in self.space(folder) {
-                writeln!(&mut space_log, "\t- {}: {}", name, human).unwrap();
+                writeln!(&mut space_log, "\t- {name}: {human}").unwrap();
                 writeln!(&mut space_log, "\t\t{}", path.display()).unwrap();
             }
             log_message.push_str("\n· Space:\n");

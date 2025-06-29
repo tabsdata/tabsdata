@@ -73,9 +73,9 @@ fn show_banner() -> Result<(), std::io::Error> {
     } else {
         format!("╰{}╯", "─".repeat(width + 2))
     };
-    println!("\n{}", top_border);
+    println!("\n{top_border}");
     for line in wrapped_text.lines() {
-        let padded_line = format!("{:^width$}", line, width = width);
+        let padded_line = format!("{line:^width$}");
         if use_colors {
             println!(
                 "{} {} {}",
@@ -84,10 +84,10 @@ fn show_banner() -> Result<(), std::io::Error> {
                 "│".blue().bold()
             );
         } else {
-            println!("│ {} │", padded_line);
+            println!("│ {padded_line} │");
         }
     }
-    println!("{}", bottom_border);
+    println!("{bottom_border}");
     Ok(())
 }
 
@@ -108,7 +108,7 @@ fn check_polars() {
     }
     let status = py.wait().expect("Failed to execute python script");
     if !status.success() {
-        eprintln!("!!! Polars compatibility check failed: {}", status);
+        eprintln!("!!! Polars compatibility check failed: {status}");
         exit(1);
     }
 }

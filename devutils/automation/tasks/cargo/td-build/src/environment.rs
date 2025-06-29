@@ -24,7 +24,7 @@ const INDEX_HTML_FILE: &str = "index.html";
 pub fn set_environment_variables() -> Result<(), Box<dyn Error>> {
     let ui_mode =
         env::var(ENV_TD_UI_MODE).unwrap_or_else(|_| ENV_VALUE_TD_UI_MODE_EXTERNAL.to_string());
-    println!("cargo:rustc-env=TD_UI_MODE={}", ui_mode);
+    println!("cargo:rustc-env=TD_UI_MODE={ui_mode}");
     let root = find_workspace_root();
     let ui_dir_path = root
         .join(PARENT_FOLDER)
@@ -43,8 +43,8 @@ pub fn set_environment_variables() -> Result<(), Box<dyn Error>> {
             .ok_or("Failed to convert ui_index_path to string")?
             .to_owned()
     };
-    println!("cargo:rustc-env={}={}", ENV_TD_UI_DIR, ui_dir);
-    println!("cargo:rustc-env={}={}", ENV_TD_UI_INDEX, ui_index);
+    println!("cargo:rustc-env={ENV_TD_UI_DIR}={ui_dir}");
+    println!("cargo:rustc-env={ENV_TD_UI_INDEX}={ui_index}");
 
     Ok(())
 }

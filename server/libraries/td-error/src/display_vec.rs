@@ -39,7 +39,7 @@ impl<T> Deref for DisplayVec<T> {
 
 impl<T: Display> Debug for DisplayVec<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -84,13 +84,13 @@ mod tests {
     #[test]
     fn test_display_trait() {
         let vec = DisplayVec::new(vec![1, 2, 3]);
-        assert_eq!(format!("{}", vec), "1, 2, 3");
+        assert_eq!(format!("{vec}"), "1, 2, 3");
     }
 
     #[test]
     fn test_debug_trait() {
         let vec = DisplayVec::new(vec![1, 2, 3]);
-        assert_eq!(format!("{:?}", vec), "1, 2, 3");
+        assert_eq!(format!("{vec:?}"), "1, 2, 3");
     }
 
     #[test]
@@ -117,6 +117,6 @@ mod tests {
         }
 
         let vec = DisplayVec::new(vec![CustomStruct, CustomStruct]);
-        assert_eq!(format!("{}", vec), "display, display");
+        assert_eq!(format!("{vec}"), "display, display");
     }
 }

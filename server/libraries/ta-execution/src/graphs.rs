@@ -192,7 +192,7 @@ impl<V: Display> ExecutionGraph<V> {
                 GraphEdge::Output { .. } => String::new(),
                 GraphEdge::Trigger { .. } => String::new(),
                 GraphEdge::Dependency { versions, .. } => {
-                    format!("label=\"{}\"", versions)
+                    format!("label=\"{versions}\"")
                 }
             },
             &|_, (_, node)| match node {

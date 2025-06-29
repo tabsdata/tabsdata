@@ -22,7 +22,7 @@ pub fn wait_for_attach(signal: &str) {
     if !check_attach_env() && !check_attach_config(signal) {
         return;
     }
-    println!("Entering into Wait for Attach function... '{}'", signal);
+    println!("Entering into Wait for Attach function... '{signal}'");
     println!("Waiting for debugger to attach...: '{}'", id());
     let mut condition = false;
     let max_wait = Duration::from_secs(MAX_WAIT);

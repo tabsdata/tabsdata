@@ -72,7 +72,7 @@ pub fn get_source_version(instance: &Path) -> Result<Version, TdError> {
                     .map_err(|_| InvalidVersionFormat(version.to_string()).into())
             }
             Err(err) => {
-                eprintln!("Failed to read .version file: {}", err);
+                eprintln!("Failed to read .version file: {err}");
                 Err(TdError::new(InvalidVersionFile(err)))
             }
         }

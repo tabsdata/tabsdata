@@ -47,10 +47,7 @@ async fn test_update_collection_validate(db: DbPool) {
         #[allow(unreachable_patterns)]
         match err {
             CollectionError::UpdateRequestHasNothingToUpdate => {}
-            other => panic!(
-                "Expected 'UpdateRequestHasNothingToUpdate', got {:?}",
-                other
-            ),
+            other => panic!("Expected 'UpdateRequestHasNothingToUpdate', got {other:?}"),
         }
     })
     .await;

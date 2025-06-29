@@ -481,7 +481,7 @@ where
                     .map_err(|e| {
                         Error::new(
                             io::ErrorKind::InvalidData,
-                            format!("Error deserializing request message {:?}: {}", message, e),
+                            format!("Error deserializing request message {message:?}: {e}"),
                         )
                     })?;
                 SupervisorRequestMessagePayload(request_payload)
@@ -491,7 +491,7 @@ where
                     serde_yaml::from_reader(&file).map_err(|e| {
                         Error::new(
                             io::ErrorKind::InvalidData,
-                            format!("Error parsing response message {:?}: {}", message, e),
+                            format!("Error parsing response message {message:?}: {e}"),
                         )
                     })?;
                 let response_context_value_cleaned = strip_tags(response_context_value);
@@ -499,7 +499,7 @@ where
                     .map_err(|e| {
                         Error::new(
                             io::ErrorKind::InvalidData,
-                            format!("Error deserializing response message {:?}: {}", message, e),
+                            format!("Error deserializing response message {message:?}: {e}"),
                         )
                     })?;
                 let mut response_payload = ResponseMessagePayload::default();
@@ -511,7 +511,7 @@ where
                     .map_err(|e| {
                         Error::new(
                             io::ErrorKind::InvalidData,
-                            format!("Error deserializing exception message {:?}: {}", message, e),
+                            format!("Error deserializing exception message {message:?}: {e}"),
                         )
                     })?;
                 SupervisorExceptionMessagePayload(exception_payload)
@@ -653,8 +653,8 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
         if self.check(&id) {
             return Err(MessageAlreadyExisting { id });
         };
-        let work = format!("{}{}", id, INITIAL_CALL);
-        let file = format!("{}.{}", work, LOCK_EXTENSION);
+        let work = format!("{id}{INITIAL_CALL}");
+        let file = format!("{work}.{LOCK_EXTENSION}");
         let message_path = self.location.join(file);
         let mut message_file = File::create(message_path.clone())?;
         let message_yaml = serde_yaml::to_string(&payload)?;
@@ -674,10 +674,10 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
         };
         let lock_message_path = self
             .location
-            .join(format!("{}{}.{}", id, INITIAL_CALL, LOCK_EXTENSION));
+            .join(format!("{id}{INITIAL_CALL}.{LOCK_EXTENSION}"));
         let yaml_message_path = self
             .location
-            .join(format!("{}{}.{}", id, INITIAL_CALL, YAML_EXTENSION));
+            .join(format!("{id}{INITIAL_CALL}.{YAML_EXTENSION}"));
         rename(&lock_message_path, &yaml_message_path)?;
         Ok(())
     }
@@ -688,7 +688,7 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
         };
         let lock_message_path = self
             .location
-            .join(format!("{}{}.{}", id, INITIAL_CALL, LOCK_EXTENSION));
+            .join(format!("{id}{INITIAL_CALL}.{LOCK_EXTENSION}"));
         remove_file(&lock_message_path)?;
         Ok(())
     }
@@ -752,10 +752,10 @@ mod tests_queue {
 
         let lock_message_path = get_current_dir()
             .join(MSG_FOLDER)
-            .join(format!("planned/{}{}.lock", id, INITIAL_CALL));
+            .join(format!("planned/{id}{INITIAL_CALL}.lock"));
         let yaml_message_path = get_current_dir()
             .join(MSG_FOLDER)
-            .join(format!("planned/{}{}.yaml", id, INITIAL_CALL));
+            .join(format!("planned/{id}{INITIAL_CALL}.yaml"));
 
         assert!(
             !lock_message_path.exists(),
@@ -805,10 +805,10 @@ mod tests_queue {
 
         let lock_message_path = get_current_dir()
             .join(MSG_FOLDER)
-            .join(format!("planned/{}{}.lock", id, INITIAL_CALL));
+            .join(format!("planned/{id}{INITIAL_CALL}.lock"));
         let yaml_message_path = get_current_dir()
             .join(MSG_FOLDER)
-            .join(format!("planned/{}{}.yaml", id, INITIAL_CALL));
+            .join(format!("planned/{id}{INITIAL_CALL}.yaml"));
 
         assert!(
             !lock_message_path.exists(),
@@ -971,7 +971,7 @@ impl fmt::Display for EtcContent {
             EtcContent::ValidPythonVersions_yaml => "Valid Python Versions",
             EtcContent::ServerBuildManifest_yaml => "Server Build Manifest",
         };
-        write!(f, "{}", name)
+        write!(f, "{name}")
     }
 }
 
@@ -1108,8 +1108,7 @@ mod tests_etc {
         let etc_instance = FileEtcStore::with_location(&location);
         assert!(
             etc_instance.is_ok(),
-            "Failed to create the etc store instance: {:?}",
-            etc_instance
+            "Failed to create the etc store instance: {etc_instance:?}"
         );
         let result = etc_instance
             .unwrap()
@@ -1117,8 +1116,7 @@ mod tests_etc {
             .await;
         assert!(
             result.is_ok(),
-            "Failed to read from the etc store instance: {:?}",
-            result
+            "Failed to read from the etc store instance: {result:?}"
         );
 
         let result_bytes = result.unwrap();

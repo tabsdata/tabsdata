@@ -26,10 +26,7 @@ pub fn workspace_root(_: TokenStream) -> TokenStream {
 
     if let Some(workspace_root) = get_workspace_root(id.clone(), log_crate_tm_workspace) {
         if log_crate_tm_workspace {
-            eprintln!(
-                "📒 - {} · Setting workspace_root to {:?}",
-                id, workspace_root
-            );
+            eprintln!("📒 - {id} · Setting workspace_root to {workspace_root:?}");
         }
         let workspace_root = workspace_root.to_str().unwrap();
         let expanded = quote! {
@@ -37,10 +34,7 @@ pub fn workspace_root(_: TokenStream) -> TokenStream {
         };
         TokenStream::from(expanded)
     } else {
-        panic!(
-            "📕 - {} · Unable to determine the workspace root. Compilation cannot proceed...",
-            id
-        );
+        panic!("📕 - {id} · Unable to determine the workspace root. Compilation cannot proceed...");
     }
 }
 
@@ -51,35 +45,30 @@ fn get_workspace_root(id: String, log_crate_tm_workspace: bool) -> Option<PathBu
         if let Ok(value) = env::var(var) {
             let path = PathBuf::from(value);
             if log_crate_tm_workspace {
-                eprintln!(
-                    "📗 {} · Found environment variable {} = {:?}",
-                    id, var, path
-                );
+                eprintln!("📗 {id} · Found environment variable {var} = {path:?}");
             }
             if path.exists() {
                 build_roots.push(path);
             } else if log_crate_tm_workspace {
                 eprintln!(
-                    "📙 {} · Path from environment variable {} does not exist: {:?}",
-                    id, var, path
+                    "📙 {id} · Path from environment variable {var} does not exist: {path:?}"
                 );
             }
         } else if log_crate_tm_workspace {
-            eprintln!("📙 {} · Environment variable {} is not set", id, var);
+            eprintln!("📙 {id} · Environment variable {var} is not set");
         }
     }
     if build_roots.is_empty() {
         let env_dump = env::vars()
-            .map(|(k, v)| format!("- {}={}", k, v))
+            .map(|(k, v)| format!("- {k}={v}"))
             .collect::<Vec<_>>()
             .join("\n");
         panic!(
-            "📕 - {} · \
+            "📕 - {id} · \
             Neither OUT_DIR \
             nor ROOT_PROJECT_TABSDATA_FOLDER \
             nor CARGO_MANIFEST_DIR is set. \
-            Compilation cannot proceed...\n{}",
-            id, env_dump
+            Compilation cannot proceed...\n{env_dump}"
         );
     }
 
@@ -87,7 +76,7 @@ fn get_workspace_root(id: String, log_crate_tm_workspace: bool) -> Option<PathBu
     for mut build_root in build_roots {
         loop {
             if log_crate_tm_workspace {
-                eprintln!("📗 {} · Exploring folder: {:?}", id, build_root);
+                eprintln!("📗 {id} · Exploring folder: {build_root:?}");
             }
             match fs::read_dir(&build_root) {
                 Ok(entries) => {
@@ -96,19 +85,16 @@ fn get_workspace_root(id: String, log_crate_tm_workspace: bool) -> Option<PathBu
                         let file = path.file_name().unwrap_or_default().to_string_lossy();
                         if log_crate_tm_workspace {
                             if file == ROOT_FILE || file == GIT_FOLDER || file == CARGO_FILE {
-                                eprintln!("   🔥 - {} · Entry: {:?}", id, path);
+                                eprintln!("   🔥 - {id} · Entry: {path:?}");
                             } else if log_crate_tm_workspace {
-                                eprintln!("   📘 - {} · Entry: {:?}", id, path);
+                                eprintln!("   📘 - {id} · Entry: {path:?}");
                             }
                         }
                     }
                 }
                 Err(e) => {
                     if log_crate_tm_workspace {
-                        eprintln!(
-                            "📕 - {} · Failed to read directory {:?}: {}",
-                            id, build_root, e
-                        );
+                        eprintln!("📕 - {id} · Failed to read directory {build_root:?}: {e}");
                     }
                 }
             }

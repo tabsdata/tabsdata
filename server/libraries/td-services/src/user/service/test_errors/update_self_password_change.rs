@@ -55,10 +55,7 @@ async fn test_update_user_self(db: DbPool) {
 
     assert_service_error(service, request, |err| match err {
         UserError::PasswordChangeNotAllowed => {}
-        other => panic!(
-            "Expected 'MustUsePasswordChangeEndpointForSelf', got {:?}",
-            other
-        ),
+        other => panic!("Expected 'MustUsePasswordChangeEndpointForSelf', got {other:?}"),
     })
     .await;
 }

@@ -191,8 +191,7 @@ mod tests {
         assert_eq!(
             name,
             &get_current_exe_name().unwrap(),
-            "Describer error: {:?}",
-            name
+            "Describer error: {name:?}"
         );
     }
     #[test]

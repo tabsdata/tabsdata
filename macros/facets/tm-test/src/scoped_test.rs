@@ -181,5 +181,5 @@ fn get_fn_args(func_sig: &Signature, kind: &Ident) -> (Ident, TypePath) {
             }
             None
         })
-        .unwrap_or_else(|| panic!("Function must have a {} parameter", kind))
+        .unwrap_or_else(|| panic!("Function must have a {kind} parameter"))
 }

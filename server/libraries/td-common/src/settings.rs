@@ -167,7 +167,7 @@ impl SettingsManager {
             "No instance settings specified.".to_string()
         } else {
             map.iter()
-                .map(|(key, value)| format!("- '{}': '{}'", key, value))
+                .map(|(key, value)| format!("- '{key}': '{value}'"))
                 .collect::<Vec<String>>()
                 .join("\n")
         }
@@ -203,11 +203,11 @@ fn dump() {
                 }
                 if let Some(parent) = target.parent() {
                     fs::create_dir_all(parent).unwrap_or_else(|e| {
-                        panic!("Unable to prepare instance settings seed: {}", e)
+                        panic!("Unable to prepare instance settings seed: {e}")
                     });
                 }
                 move_file(&source, &target)
-                    .unwrap_or_else(|e| panic!("Unable to relocate instance settings seed: {}", e));
+                    .unwrap_or_else(|e| panic!("Unable to relocate instance settings seed: {e}"));
             }
         }
     }
@@ -396,7 +396,7 @@ mod tests {
             sleep(Duration::from_millis(SLEEP_TIME));
             fs::rename(
                 instance.join(SETTINGS_FILE),
-                instance.join(format!("{}_", SETTINGS_FILE)),
+                instance.join(format!("{SETTINGS_FILE}_")),
             )
             .expect("Rename error");
             sleep(Duration::from_millis(SLEEP_TIME));
@@ -415,7 +415,7 @@ mod tests {
             let value_file_ins = value();
             sleep(Duration::from_millis(SLEEP_TIME));
             fs::rename(
-                instance.join(format!("{}_", SETTINGS_FILE)),
+                instance.join(format!("{SETTINGS_FILE}_")),
                 instance.join(SETTINGS_FILE),
             )
             .expect("Rename error");
@@ -500,7 +500,7 @@ mod tests {
             sleep(Duration::from_millis(SLEEP_TIME));
             fs::rename(
                 instance.join(SETTINGS_FILE),
-                instance.join(format!("{}_", SETTINGS_FILE)),
+                instance.join(format!("{SETTINGS_FILE}_")),
             )
             .expect("Rename error");
             sleep(Duration::from_millis(SLEEP_TIME));
@@ -516,7 +516,7 @@ mod tests {
 
             sleep(Duration::from_millis(SLEEP_TIME));
             fs::rename(
-                instance.join(format!("{}_", SETTINGS_FILE)),
+                instance.join(format!("{SETTINGS_FILE}_")),
                 instance.join(SETTINGS_FILE),
             )
             .expect("Rename error");
@@ -579,14 +579,14 @@ mod tests {
 
             println!("\nEnvironment variables:\n");
             for (key, value) in env::vars() {
-                println!("   - '{}': '{}'", key, value);
+                println!("   - '{key}': '{value}'");
             }
 
             let file = instance.join(SETTINGS_FILE);
             if file.exists() {
                 match fs::read_to_string(file) {
-                    Ok(contents) => println!("\nSettings file:\n\n{}", contents),
-                    Err(e) => println!("Wrong contents in virtual instance settings: {}", e),
+                    Ok(contents) => println!("\nSettings file:\n\n{contents}"),
+                    Err(e) => println!("Wrong contents in virtual instance settings: {e}"),
                 }
             } else {
                 println!("No tabsdata virtual instance settings");

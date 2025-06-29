@@ -165,7 +165,7 @@ pub async fn check_private_tables<T: ReferencedTable + Send + Sync>(
         if !out_of_reach_private_tables.is_empty() {
             let out_of_reach_private_tables = out_of_reach_private_tables
                 .into_iter()
-                .map(|(collection, table)| format!("'{}/{}'", collection, table))
+                .map(|(collection, table)| format!("'{collection}/{table}'"))
                 .join(", ");
             Err(PrivateTableError::PrivateTableCannotBeUsed(
                 out_of_reach_private_tables,

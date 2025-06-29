@@ -231,7 +231,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             AuthError::AuthenticationFailed => {}
-            other => panic!("Expected 'AuthenticationFailed', got {:?}", other),
+            other => panic!("Expected 'AuthenticationFailed', got {other:?}"),
         })
         .await;
 
@@ -253,7 +253,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             AuthError::AuthenticationFailed => {}
-            other => panic!("Expected 'AuthenticationFailed', got {:?}", other),
+            other => panic!("Expected 'AuthenticationFailed', got {other:?}"),
         })
         .await;
         Ok(())
@@ -273,7 +273,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             AuthError::AuthenticationFailed => {}
-            other => panic!("Expected 'AuthenticationFailed', got {:?}", other),
+            other => panic!("Expected 'AuthenticationFailed', got {other:?}"),
         })
         .await;
         Ok(())

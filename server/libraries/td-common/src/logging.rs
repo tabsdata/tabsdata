@@ -96,9 +96,9 @@ where
         let mut message = String::new();
         event.record(&mut |field: &Field, value: &dyn Debug| {
             if field.name() == LOG_MESSAGE_FIELD {
-                message.push_str(&format!("{:?}", value));
+                message.push_str(&format!("{value:?}"));
             }
-            forward = forward && !format!("{:?}", value).contains(SENSITIVE_MARKER);
+            forward = forward && !format!("{value:?}").contains(SENSITIVE_MARKER);
         });
         forward
     }
@@ -139,7 +139,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
                         ),
                         |filter, directive| {
                             filter.add_directive(directive.parse().unwrap_or_else(|_| {
-                                panic!("Unable to parse log directive `{}`", directive)
+                                panic!("Unable to parse log directive `{directive}`")
                             }))
                         },
                     );
@@ -332,8 +332,7 @@ pub fn load() -> Option<LogConfig> {
         }
         Err(e) => {
             panic!(
-                "Failed to read log configuration file '{}' in working folder: {}",
-                LOG_CONFIG_FILE, e
+                "Failed to read log configuration file '{LOG_CONFIG_FILE}' in working folder: {e}"
             );
         }
     };
@@ -341,8 +340,7 @@ pub fn load() -> Option<LogConfig> {
         Ok(config) => Some(config),
         Err(e) => {
             panic!(
-                "Failed to parse log configuration file '{}' in working folder: {}",
-                LOG_CONFIG_FILE, e
+                "Failed to parse log configuration file '{LOG_CONFIG_FILE}' in working folder: {e}"
             )
         }
     }
@@ -355,8 +353,8 @@ pub fn result<V: Debug, E: Debug>(
     msg: &str,
 ) -> impl Fn(&Result<V, E>) -> Option<String> + use<'_, V, E> {
     move |res: &Result<V, E>| match res {
-        Ok(v) => Some(format!("{} - Ok: {:?}", msg, v)),
-        Err(e) => Some(format!("{} - Err: {:?}", msg, e)),
+        Ok(v) => Some(format!("{msg} - Ok: {v:?}")),
+        Err(e) => Some(format!("{msg} - Err: {e:?}")),
     }
 }
 
@@ -367,7 +365,7 @@ pub fn ok<V: Debug, E: Debug>(
     msg: &str,
 ) -> impl Fn(&Result<V, E>) -> Option<String> + use<'_, V, E> {
     move |res: &Result<V, E>| match res {
-        Ok(v) => Some(format!("{} - Ok: {:?}", msg, v)),
+        Ok(v) => Some(format!("{msg} - Ok: {v:?}")),
         Err(_) => None,
     }
 }
@@ -380,7 +378,7 @@ pub fn err<V: Debug, E: Debug>(
 ) -> impl Fn(&Result<V, E>) -> Option<String> + use<'_, V, E> {
     move |res: &Result<V, E>| match res {
         Ok(_) => None,
-        Err(e) => Some(format!("{} - Err: {:?}", msg, e)),
+        Err(e) => Some(format!("{msg} - Err: {e:?}")),
     }
 }
 

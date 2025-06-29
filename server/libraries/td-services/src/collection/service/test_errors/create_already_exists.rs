@@ -38,7 +38,7 @@ async fn test_create_already_existing(db: DbPool) {
 
     assert_service_error(service, request, |err| match err {
         SqlError::InsertError(_, _) => {}
-        other => panic!("Expected 'InsertError', got {:?}", other),
+        other => panic!("Expected 'InsertError', got {other:?}"),
     })
     .await;
 }

@@ -28,8 +28,7 @@ fn assert_config_name(config_name: &str) {
     // check config_name is a valid word.
     if !config_name.chars().all(|c| c.is_alphanumeric() || c == '-') {
         panic!(
-            "Invalid config name, must be an alphanumeric word, it may have '-' dashes: {}",
-            config_name
+            "Invalid config name, must be an alphanumeric word, it may have '-' dashes: {config_name}"
         );
     }
 }
@@ -74,7 +73,7 @@ pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>,
 
     // app user config file in the current directory
     let app_user_config_file = current_dir
-        .join(format!("{}_{}", CONFIG, user_name))
+        .join(format!("{CONFIG}_{user_name}"))
         .with_extension(EXTENSION);
 
     // app config in user home's .tabsdata directory.
@@ -122,7 +121,7 @@ pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>,
     match move_to_dir(current_folder) {
         Ok(_) => {}
         Err(e) => {
-            panic!("Fatal error moving back to current dir: {}", e);
+            panic!("Fatal error moving back to current dir: {e}");
         }
     }
 

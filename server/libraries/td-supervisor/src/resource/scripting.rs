@@ -155,7 +155,7 @@ impl ScriptBuilder {
 
     pub fn comment(mut self, comment: &str) -> Self {
         #[cfg(not(windows))]
-        self.lines.push(format!("# {}", comment));
+        self.lines.push(format!("# {comment}"));
         #[cfg(windows)]
         self.lines.push(format!("rem {}", comment));
         self
@@ -323,13 +323,13 @@ impl CommandBuilder {
             }
             ArgumentPrefix::Short => {
                 #[cfg(not(windows))]
-                self.tokens.push(format!("-{}", key));
+                self.tokens.push(format!("-{key}"));
                 #[cfg(windows)]
                 self.tokens.push(format!("-{}", key));
             }
             ArgumentPrefix::Long => {
                 #[cfg(not(windows))]
-                self.tokens.push(format!("--{}", key));
+                self.tokens.push(format!("--{key}"));
                 #[cfg(windows)]
                 self.tokens.push(format!("--{}", key));
             }

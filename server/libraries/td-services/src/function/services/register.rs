@@ -811,14 +811,14 @@ mod tests {
         };
 
         let dependencies = Some(vec![
-            TableDependencyDto::try_from(format!("{}/table_1", deps_collection))?,
-            TableDependencyDto::try_from(format!("{}/table_2", deps_collection))?,
+            TableDependencyDto::try_from(format!("{deps_collection}/table_1"))?,
+            TableDependencyDto::try_from(format!("{deps_collection}/table_2"))?,
             TableDependencyDto::try_from("collection_2/output_1")?,
             TableDependencyDto::try_from("output_2")?,
         ]);
         let triggers = Some(vec![
             TableTriggerDto::try_from("collection_1/table_1")?,
-            TableTriggerDto::try_from(format!("{}/table_2", triggers_collection))?,
+            TableTriggerDto::try_from(format!("{triggers_collection}/table_2"))?,
         ]);
         let tables = Some(vec![
             TableNameDto::try_from("output_1")?,
@@ -1000,11 +1000,11 @@ mod tests {
         };
 
         let dependencies = Some(vec![
-            TableDependencyDto::try_from(format!("{}/_table_1", deps_collection))?,
+            TableDependencyDto::try_from(format!("{deps_collection}/_table_1"))?,
             TableDependencyDto::try_from("_table_2")?,
         ]);
         let triggers = Some(vec![
-            TableTriggerDto::try_from(format!("{}/_table_1", triggers_collection))?,
+            TableTriggerDto::try_from(format!("{triggers_collection}/_table_1"))?,
             TableTriggerDto::try_from("_table_2")?,
         ]);
         let tables = Some(vec![TableNameDto::try_from("output_1")?]);

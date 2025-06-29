@@ -261,7 +261,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             AuthError::UserDoesNotBelongToRole => {}
-            other => panic!("Expected 'UserDoesNotBelongToRole', got {:?}", other),
+            other => panic!("Expected 'UserDoesNotBelongToRole', got {other:?}"),
         })
         .await;
         Ok(())

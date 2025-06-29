@@ -92,7 +92,7 @@ pub struct Cli<C: Config, P: Params> {
 impl<C: Config, P: Params> Cli<C, P> {
     fn print_config(config_name: &str, config_type: &str, config: &C) {
         println!();
-        println!("# {} configuration for {}", config_type, config_name);
+        println!("# {config_type} configuration for {config_name}");
         println!("#--------------------------------------------");
         println!("{}", config.as_yaml());
         println!("#--------------------------------------------");
@@ -174,7 +174,7 @@ impl<C: Config, P: Params> Cli<C, P> {
         match move_to_dir(current_dir) {
             Ok(_) => {}
             Err(e) => {
-                panic!("Fatal error moving back to current dir: {}", e);
+                panic!("Fatal error moving back to current dir: {e}");
             }
         }
         cli_parser
@@ -265,8 +265,7 @@ pub fn move_to_dir(folder: Option<PathBuf>) -> std::io::Result<()> {
         match set_current_dir(&folder) {
             Ok(_) => Ok(()),
             Err(e) => Err(Error::other(format!(
-                "Failed to set current folder '{:?}' for this worker: {}",
-                folder, e
+                "Failed to set current folder '{folder:?}' for this worker: {e}"
             ))),
         }
     } else {
@@ -307,16 +306,13 @@ pub fn parse_extra_arguments(
                         .unwrap()
                         .insert(argument_name, argument_value);
                 } else {
-                    return Err(format!("Expected a value after argument: '{}'", argument));
+                    return Err(format!("Expected a value after argument: '{argument}'"));
                 }
             } else {
-                return Err(format!(
-                    "Unexpected argument without a flag: '{}'",
-                    argument
-                ));
+                return Err(format!("Unexpected argument without a flag: '{argument}'"));
             }
         } else {
-            return Err(format!("Unexpected argument: '{}'", argument));
+            return Err(format!("Unexpected argument: '{argument}'"));
         }
     }
     Ok(arguments_map)

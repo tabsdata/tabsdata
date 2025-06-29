@@ -36,7 +36,7 @@ async fn test_not_allowed_to_delete_themselves() {
 
     assert_service_error(service, request, |err| match err {
         UserError::NotAllowedToDeleteThemselves => {}
-        other => panic!("Expected 'NotAllowedToDeleteThemselves', got {:?}", other),
+        other => panic!("Expected 'NotAllowedToDeleteThemselves', got {other:?}"),
     })
     .await;
 }

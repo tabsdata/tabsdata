@@ -412,9 +412,9 @@ mod tests {
         );
 
         let id = id::id();
-        let versions = parse_versions(format!("{}", id)).unwrap();
+        let versions = parse_versions(format!("{id}")).unwrap();
         assert_eq!(versions, Versions::Single(Version::Fixed(id.into())));
-        let versions = parse_versions(format!("{},HEAD~2", id)).unwrap();
+        let versions = parse_versions(format!("{id},HEAD~2")).unwrap();
         assert_eq!(
             versions,
             Versions::List(vec![Version::Fixed(id.into()), Version::Head(-2)])
@@ -451,7 +451,7 @@ mod tests {
         let valid_tables = vec!["table", "collection/table"];
         valid_tables.into_iter().for_each(|table| {
             let parsed = parse_table_ref::<TableNameDto, _>(table.to_string()).unwrap();
-            println!("{} -> {}", table, parsed);
+            println!("{table} -> {parsed}");
         });
     }
 

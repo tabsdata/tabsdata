@@ -167,8 +167,7 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                         }
                         if pag != "+" && pag != "-" && !pag.is_empty() {
                             panic!(
-                                "Unsupported pagination by {}. Only empty, + or - is allowed",
-                                pag
+                                "Unsupported pagination by {pag}. Only empty, + or - is allowed"
                             );
                         }
                         pagination_by = Some(f.ident.as_ref().unwrap());

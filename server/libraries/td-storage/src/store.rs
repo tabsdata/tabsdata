@@ -52,8 +52,7 @@ impl MountsStorage {
         } else {
             let dup_ids = dup_ids.join(",");
             Err(StorageError::ConfigurationError(format!(
-                "There are mounts with duplicate IDs: {}",
-                dup_ids
+                "There are mounts with duplicate IDs: {dup_ids}"
             )))
         }
     }

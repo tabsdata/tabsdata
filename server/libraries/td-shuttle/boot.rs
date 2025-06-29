@@ -46,20 +46,11 @@ fn set_rust_environment() {
                 .and_then(|dep| dep.get(TAG_VERSION))
                 .and_then(|v| v.as_str())
                 .expect("Unable to find object_store version");
-            println!(
-                "cargo:rustc-env=OBJECT_STORE_VERSION={}",
-                object_store_version
-            );
+            println!("cargo:rustc-env=OBJECT_STORE_VERSION={object_store_version}");
         } else {
-            panic!(
-                "No .git folder found in the project root folder: {:?}",
-                root_folder
-            );
+            panic!("No .git folder found in the project root folder: {root_folder:?}");
         }
     } else {
-        panic!(
-            "No Cargo.toml file found in the project root folder: {:?}",
-            root_folder
-        );
+        panic!("No Cargo.toml file found in the project root folder: {root_folder:?}");
     }
 }

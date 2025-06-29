@@ -204,7 +204,7 @@ pub fn write_pid_file(pid_path: PathBuf, pid: i32) -> Result<(), TrackerError> {
             pid_path: pid_path.clone(),
             cause: e,
         })?;
-    write!(pid_file, "{}", pid).map_err(|e| TrackerError::WorkerPidFileWriteError {
+    write!(pid_file, "{pid}").map_err(|e| TrackerError::WorkerPidFileWriteError {
         pid_path: pid_path.clone(),
         cause: e,
     })?;

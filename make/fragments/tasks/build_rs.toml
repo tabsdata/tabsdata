@@ -34,8 +34,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples
     ''']
 
 [tasks.build_all_rs_modules]
@@ -47,8 +47,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples
     ''']
 
 [tasks.build_all_rs_expansions]
@@ -60,8 +60,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples
     ''']
 
 [tasks.build_none_rs]
@@ -84,8 +84,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins
     ''']
 
 [tasks.build_none_rs_modules]
@@ -97,8 +97,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --lib --bins"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --lib --bins
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --lib --bins"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --lib --bins
     ''']
 
 [tasks.build_none_rs_expansions]
@@ -110,6 +110,6 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins
     ''']

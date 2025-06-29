@@ -58,10 +58,7 @@ async fn test_update_request_has_nothing_to_update(db: DbPool) {
 
     assert_service_error(service, request, |err| match err {
         UserError::UpdateRequestHasNothingToUpdate => {}
-        other => panic!(
-            "Expected 'UpdateRequestHasNothingToUpdate', got {:?}",
-            other
-        ),
+        other => panic!("Expected 'UpdateRequestHasNothingToUpdate', got {other:?}"),
     })
     .await;
 }

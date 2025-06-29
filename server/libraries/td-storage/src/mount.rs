@@ -93,25 +93,20 @@ impl MountDefBuilder {
         if self.path.is_some() {
             let mount_path = self.path.as_ref().unwrap();
             SPath::parse(mount_path).map_err(|e| {
-                StorageError::ConfigurationError(format!(
-                    "Invalid mount path {} : {}",
-                    mount_path, e
-                ))
+                StorageError::ConfigurationError(format!("Invalid mount path {mount_path} : {e}"))
             })?;
         }
         if self.uri.is_some() {
             let uri_str = self.uri.as_ref().unwrap();
             if uri_str.len() != uri_str.trim().len() {
                 return Err(StorageError::ConfigurationError(format!(
-                    "URI cannot have leading or trailing spaces: '{}'",
-                    uri_str
+                    "URI cannot have leading or trailing spaces: '{uri_str}'"
                 )));
             }
             #[cfg(not(target_os = "windows"))]
             if !uri_str.ends_with('/') {
                 return Err(StorageError::ConfigurationError(format!(
-                    "Invalid URI {}, must end with '/'",
-                    uri_str
+                    "Invalid URI {uri_str}, must end with '/'"
                 )));
             }
             #[cfg(target_os = "windows")]
@@ -122,14 +117,13 @@ impl MountDefBuilder {
                 )));
             }
             let uri = Url::parse(uri_str).map_err(|e| {
-                StorageError::ConfigurationError(format!("Invalid URI {} : {}", uri_str, e))
+                StorageError::ConfigurationError(format!("Invalid URI {uri_str} : {e}"))
             })?;
             match uri.scheme() {
                 "file" => {
                     if !is_valid_file_scheme(uri_str) {
                         return Err(StorageError::ConfigurationError(format!(
-                            "Invalid file URI, path must be absolute: {}",
-                            uri_str
+                            "Invalid file URI, path must be absolute: {uri_str}"
                         )));
                     }
                 }

@@ -274,7 +274,7 @@ mod tests {
             Ok(Some(TransporterReport::ImportV1(_))) => panic!("Unexpected import report"),
             Ok(Some(TransporterReport::ErrorV1(_))) => panic!("Unexpected error report"),
             Ok(None) => panic!("Expected a report"),
-            Err(report) => panic!("Error: {:?}", report),
+            Err(report) => panic!("Error: {report:?}"),
         }
     }
 

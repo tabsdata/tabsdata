@@ -79,7 +79,7 @@ fn link(
     } else {
         profile
     };
-    println!("Using profile folder '{}'", profile_folder);
+    println!("Using profile folder '{profile_folder}'");
     if program.is_none() {
         println!("No program provided; skipping linking");
         return Ok(());
@@ -98,19 +98,19 @@ fn link(
         println!("No symlinks provided; skipping linking");
         return Ok(());
     }
-    println!("Using program '{}'", program);
+    println!("Using program '{program}'");
     println!("Using symlinks '{}'", symlinks.join(", "));
-    let target = format!("{}{}", TARGET, profile_folder);
-    let program = format!("{}{}", program, EXTENSION);
+    let target = format!("{TARGET}{profile_folder}");
+    let program = format!("{program}{EXTENSION}");
     for link in symlinks {
         if link.trim().is_empty() {
             continue;
         }
-        println!("Read symlink: '{:?}'", link);
-        let link = format!("{}{}", link, EXTENSION);
+        println!("Read symlink: '{link:?}'");
+        let link = format!("{link}{EXTENSION}");
         let link_path = PathBuf::from(&target.clone()).join(&link);
         if link_path.exists() {
-            println!("Deleting symlink: '{:?}'", link_path);
+            println!("Deleting symlink: '{link_path:?}'");
             remove_file(&link_path)?;
         }
         println!("Creating symlink: '{:?}' to '{:?}'", &program, link_path);

@@ -316,10 +316,8 @@ impl DbPool {
     }
 
     pub async fn check_db_version(&self) -> Result<(), DbError> {
-        let select_version_sql = format!(
-            "SELECT name, value FROM tabsdata_system WHERE name = '{}'",
-            DB_VERSION_NAME
-        );
+        let select_version_sql =
+            format!("SELECT name, value FROM tabsdata_system WHERE name = '{DB_VERSION_NAME}'");
         let res: SystemValue = sqlx::query_as(&select_version_sql)
             .fetch_one(&self.ro_pool)
             .await

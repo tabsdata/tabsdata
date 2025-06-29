@@ -9,6 +9,9 @@ extend = [
     { path = "./make/fragments/tasks/clean_rs.toml" },
     { path = "./make/fragments/tasks/clean_py.toml" },
 
+    { path = "./make/fragments/tasks/lock_rs.toml" },
+    { path = "./make/fragments/tasks/lock_py.toml" },
+
     { path = "./make/fragments/tasks/build_rs.toml" },
     { path = "./make/fragments/tasks/build_py.toml" },
 
@@ -37,6 +40,16 @@ run_task = [
     { name = [
         "clean_rs",
         "clean_py",
+    ] }
+]
+
+[tasks.lock]
+category = "01 - Clean"
+description = "Generated de dependencies lock file"
+run_task = [
+    { name = [
+        "lock_rs",
+        "lock_py",
     ] }
 ]
 
@@ -291,11 +304,6 @@ run_task = [
     ] }
 ]
 
-
-
-
-
-
 [tasks.rstest]
 alias = "rstest_modules"
 
@@ -308,22 +316,22 @@ alias = "rstest_modules_tower"
 [tasks.rstest_macros]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 command = "cargo"
-args = ["test", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}", "--features", "${macros-test-features}", "--", "--nocapture"]
+args = ["test", "--locked", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}", "--features", "${macros-test-features}", "--", "--nocapture"]
 
 [tasks.rstest_modules]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 command = "cargo"
-args = ["test", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features}", "--", "--nocapture"]
+args = ["test", "--locked", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features}", "--", "--nocapture"]
 
 [tasks.rstest_modules_logging]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 command = "cargo"
-args = ["test", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_logging}", "--", "test_logging", "--", "--nocapture"]
+args = ["test", "--locked", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_logging}", "--", "test_logging", "--", "--nocapture"]
 
 [tasks.rstest_modules_tower]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 command = "cargo"
-args = ["test", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_tower_metadata}", "--", "test_tower_metadata", "--", "--nocapture"]
+args = ["test", "--locked", "@@split(CARGO_MAKE_TASK_ARGS, ;)", "--profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_tower_metadata}", "--", "test_tower_metadata", "--", "--nocapture"]
 
 [tasks.rsnext]
 alias = "rsnext_modules"
@@ -337,22 +345,22 @@ alias = "rsnext_modules_tower"
 [tasks.rsnext_macros]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 command = "cargo"
-args = ["nextest", "run", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}", "--features", "${macros-test-features}", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
+args = ["nextest", "run", "--locked", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}", "--features", "${macros-test-features}", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
 
 [tasks.rsnext_modules]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 command = "cargo"
-args = ["nextest", "run", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features}", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
+args = ["nextest", "run", "--locked", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features}", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
 
 [tasks.rsnext_modules_logging]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 command = "cargo"
-args = ["nextest", "run", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_logging}", "--", "test_logging", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
+args = ["nextest", "run", "--locked", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_logging}", "--", "test_logging", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
 
 [tasks.rsnext_modules_tower]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 command = "cargo"
-args = ["nextest", "run", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_tower_metadata}", "--", "test_tower_metadata", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
+args = ["nextest", "run", "--locked", "--nocapture", "--cargo-profile", "${td-profile}", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--features", "${modules-test-features-test_tower_metadata}", "--", "test_tower_metadata", "@@split(CARGO_MAKE_TASK_ARGS, ;)"]
 
 [tasks.pytest]
 dependencies = ["set_mode_test_py"]
@@ -414,15 +422,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} check --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} check --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} check --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} +${td-toolchain} check --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} check --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} check --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} check --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} +${td-toolchain} check --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
         end
     end
     ''']
@@ -435,15 +443,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} check --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} check --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} check --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} +${td-toolchain} check --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} check --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} check --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} check --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} +${td-toolchain} check --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
         end
     end
     ''']
@@ -619,15 +627,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+            exec --fail-on-error cargo deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
         else
-            exec --fail-on-error cargo +${td-toolchain} deny --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+            exec --fail-on-error cargo +${td-toolchain} deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+            exec --fail-on-error cargo deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
         else
-            exec --fail-on-error cargo +${td-toolchain} deny --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+            exec --fail-on-error cargo +${td-toolchain} deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
         end
     end
     ''']
@@ -645,15 +653,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+            exec --fail-on-error cargo deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
         else
-            exec --fail-on-error cargo +${td-toolchain} deny --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+            exec --fail-on-error cargo +${td-toolchain} deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+            exec --fail-on-error cargo deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
         else
-            exec --fail-on-error cargo +${td-toolchain} deny --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
+            exec --fail-on-error cargo +${td-toolchain} deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
         end
     end
     ''']
@@ -767,15 +775,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+            exec --fail-on-error cargo deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
         else
-            exec --fail-on-error cargo +${td-toolchain} deny --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+            exec --fail-on-error cargo +${td-toolchain} deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+            exec --fail-on-error cargo deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
         else
-            exec --fail-on-error cargo +${td-toolchain} deny --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+            exec --fail-on-error cargo +${td-toolchain} deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
         end
     end
     ''']
@@ -788,15 +796,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+            exec --fail-on-error cargo deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
         else
-            exec --fail-on-error cargo +${td-toolchain} deny --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+            exec --fail-on-error cargo +${td-toolchain} deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+            exec --fail-on-error cargo deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
         else
-            exec --fail-on-error cargo +${td-toolchain} deny --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+            exec --fail-on-error cargo +${td-toolchain} deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
         end
     end
     ''']
@@ -901,15 +909,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} clippy --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} clippy --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
         end
     end
     ''']
@@ -922,15 +930,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} clippy --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} clippy --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
         end
     end
     ''']
@@ -961,15 +969,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} clippy --locked --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} clippy --locked --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} -- -D warnings
         end
     end
     ''']
@@ -982,15 +990,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} clippy --locked --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --fix --allow-dirty --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} clippy --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} clippy --locked --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
+            exec --fail-on-error ${td-cargo} +${td-toolchain} clippy --locked --fix --allow-dirty --target ${td-target} --workspace --all-targets --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} -- -D warnings
         end
     end
     ''']
@@ -1028,15 +1036,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} doc --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} doc --locked --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --locked --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} doc --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} doc --locked --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --locked --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML}
         end
     end
     ''']
@@ -1049,15 +1057,15 @@ script = [
     '''
     if is_empty ${td-target}
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} doc --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} doc --locked --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --locked --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
        end
     else
         if is_empty ${td-toolchain}
-            exec --fail-on-error ${td-cargo} doc --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} doc --locked --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
         else
-            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
+            exec --fail-on-error ${td-cargo} +${td-toolchain} doc --locked --target ${td-target} --workspace --all-features --profile ${td-profile} --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML}
         end
     end
     ''']
@@ -1482,6 +1490,7 @@ script = [
     message = array_join ${lines} "\n"
     info ${message}
     ''']
+
 [tasks.wheels_rs]
 private = true
 

@@ -171,7 +171,7 @@ impl Server for PlainServer {
     async fn handles(self: Box<Self>) -> Vec<JoinHandle<Result<(), ServerError>>> {
         let mut handles = Vec::new();
         for listener in self.listeners {
-            let dbg_listener = format!("{:?}", listener);
+            let dbg_listener = format!("{listener:?}");
 
             let router = self.router.clone();
             let handle = tokio::spawn(async move {
@@ -213,7 +213,7 @@ impl Server for TlsServer {
     async fn handles(self: Box<Self>) -> Vec<JoinHandle<Result<(), ServerError>>> {
         let mut handles = Vec::new();
         for listener in self.listeners {
-            let dbg_listener = format!("{:?}", listener);
+            let dbg_listener = format!("{listener:?}");
 
             let handle = Handle::new();
             let _shutdown_future = graceful_shutdown(dbg_listener.clone(), {
@@ -286,7 +286,7 @@ pub(crate) mod tests {
                 Ok(client) => return Ok(client),
                 Err(e) => {
                     if retries == 0 {
-                        panic!("Failed to connect to {}: {}", addr, e);
+                        panic!("Failed to connect to {addr}: {e}");
                     }
                     retries -= 1;
                     tokio::time::sleep(wait_time).await;

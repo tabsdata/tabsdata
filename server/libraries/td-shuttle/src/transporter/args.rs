@@ -211,7 +211,7 @@ fn parse_uri(url: &str) -> Result<Url, ParamsError> {
     let url = if url.ends_with('/') {
         url.to_string()
     } else {
-        format!("{}/", url)
+        format!("{url}/")
     };
     #[cfg(target_os = "windows")]
     let url = if url.ends_with('/') {
@@ -301,11 +301,11 @@ impl Params {
             "file" => Url::parse(&root_folder()).unwrap(),
             "s3" => {
                 let bucket = self.location.authority();
-                Url::parse(&format!("s3://{}", bucket)).unwrap()
+                Url::parse(&format!("s3://{bucket}")).unwrap()
             }
             "az" => {
                 let container = self.location.authority();
-                Url::parse(&format!("az://{}", container)).unwrap()
+                Url::parse(&format!("az://{container}")).unwrap()
             }
             _ => panic!("Unsupported scheme: {}", self.location.scheme()),
         }
@@ -427,7 +427,7 @@ impl Params {
             let res = reqwest::Client::builder()
                 .build()
                 .unwrap()
-                .head(format!("https://{}.s3.amazonaws.com", bucket))
+                .head(format!("https://{bucket}.s3.amazonaws.com"))
                 .send()
                 .await
                 .unwrap();

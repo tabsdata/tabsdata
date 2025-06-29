@@ -61,8 +61,8 @@ mod tests {
         let deserialized: TypedType = serde_json::from_str(&serialized).unwrap();
         assert_eq!(*deserialized, id);
 
-        let display = format!("{}", typed);
-        assert_eq!(display, format!("{}", id));
+        let display = format!("{typed}");
+        assert_eq!(display, format!("{id}"));
         Ok(())
     }
 
@@ -86,7 +86,7 @@ mod tests {
         let deserialized: TypedType = serde_json::from_str(&serialized).unwrap();
         assert_eq!(*deserialized, chrono::DateTime::<chrono::Utc>::default());
 
-        let display = format!("{}", typed);
+        let display = format!("{typed}");
         assert_eq!(
             display,
             format!("{}", chrono::DateTime::<chrono::Utc>::default())

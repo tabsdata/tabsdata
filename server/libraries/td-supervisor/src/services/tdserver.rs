@@ -1149,7 +1149,7 @@ fn command_status(arguments: StatusArguments) {
                 .with((theme.clone(), Alignment::left()))
                 .with(Modify::new(Columns::single(1)).with(Alignment::right()));
 
-            status.push_str(&format!("\nRelevant folders disk usage:\n{}", table));
+            status.push_str(&format!("\nRelevant folders disk usage:\n{table}"));
         }
     }
     info!("{status}");
@@ -1405,7 +1405,7 @@ fn forward_parameters(
         forward_arguments.push(ARGUMENT_PREFIX.to_string());
         forward_arguments.push(key.clone());
         for (sub_key, sub_value) in value {
-            forward_arguments.push(format!("--{}", sub_key));
+            forward_arguments.push(format!("--{sub_key}"));
             forward_arguments.push(sub_value);
         }
     }
@@ -1734,7 +1734,7 @@ impl WorkerRow {
             function,
             worker,
             attempt,
-            cpu: format!("{}%", cpu),
+            cpu: format!("{cpu}%"),
             p_memory: format!(
                 "{} mb",
                 (pmem / (1024 * 1024)).to_formatted_string(&Locale::en)

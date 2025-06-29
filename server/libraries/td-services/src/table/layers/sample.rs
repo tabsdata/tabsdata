@@ -364,7 +364,7 @@ mod tests {
             Ok(_) => panic!("Should return an error"),
             Err(e) => {
                 if !matches!(e.domain_err(), SampleError::SqlError(_)) {
-                    panic!("Expected SqlError, got: {}", e)
+                    panic!("Expected SqlError, got: {e}")
                 }
             }
         };
@@ -454,7 +454,7 @@ mod tests {
         .await?;
 
         let content = std::fs::read_to_string(&file).unwrap();
-        println!("Content: {}", content);
+        println!("Content: {content}");
         assert!(content.trim().is_empty());
         Ok(())
     }

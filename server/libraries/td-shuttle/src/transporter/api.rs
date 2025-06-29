@@ -95,7 +95,7 @@ fn split_base_path_and_name(path: &str) -> (String, Option<String>) {
         None => ("/".to_string(), None),
         Some((base_path, file_name)) => {
             let base_path = if !is_rooted(base_path) {
-                format!("/{}", base_path)
+                format!("/{base_path}")
             } else {
                 base_path.to_owned()
             };
@@ -347,9 +347,9 @@ impl<L> Location<L> {
 impl<L: Display> Display for Location<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Location::LocalFile { url } => write!(f, "LocalFile({})", url),
-            Location::S3 { url, .. } => write!(f, "S3({})", url),
-            Location::Azure { url, .. } => write!(f, "Azure({})", url),
+            Location::LocalFile { url } => write!(f, "LocalFile({url})"),
+            Location::S3 { url, .. } => write!(f, "S3({url})"),
+            Location::Azure { url, .. } => write!(f, "Azure({url})"),
         }
     }
 }
@@ -624,10 +624,7 @@ impl ErrorReport {
 
 fn write_yaml<T: Serialize>(v: &T, comment: &str) -> String {
     let yaml = serde_yaml::to_string(v).unwrap();
-    format!(
-        "---------------------------------\n{}\n\n{}\n",
-        comment, yaml
-    )
+    format!("---------------------------------\n{comment}\n\n{yaml}\n")
 }
 
 impl TransporterReport {

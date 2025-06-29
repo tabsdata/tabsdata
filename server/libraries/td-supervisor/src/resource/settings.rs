@@ -112,7 +112,7 @@ pub fn extract_default_settings<P: AsRef<Path>>(
     create_dir_all(&folder)?;
     let file_name = match instance {
         None => SETTINGS_FILE.to_string(),
-        Some(name) => format!("settings_{}.yaml", name),
+        Some(name) => format!("settings_{name}.yaml"),
     };
     let settings_path = folder.join(file_name);
     let mut settings_file = File::create(&settings_path)?;

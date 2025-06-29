@@ -78,7 +78,7 @@ fn test_identifier(vars: &HashMap<String, String>, prefix: Option<u8>) -> String
     if let Some(prefix) = prefix {
         hash = hash.chars().take(prefix as usize).collect()
     };
-    format!("{}__{}__{}", user, timestamp, hash)
+    format!("{user}__{timestamp}__{hash}")
 }
 
 pub struct ReqsTestSetup<'a, R> {
@@ -162,7 +162,7 @@ pub(crate) struct TestRequirementsInEnv {}
 
 impl TestRequirementsInEnv {
     pub(crate) fn namespace_key(name_space: &str, key: &str) -> String {
-        format!("{}__{}", name_space, key)
+        format!("{name_space}__{key}")
     }
 
     fn env_var_name(name: &str) -> String {
@@ -260,8 +260,7 @@ impl TestRequirementsInEnv {
             Ok(reqs) => Some(reqs),
             Err(msg) => {
                 println!(
-                    "SKIPPING {}. Requirements for {}({}) not met: {}",
-                    test_name, requirements_name, namespace, msg
+                    "SKIPPING {test_name}. Requirements for {requirements_name}({namespace}) not met: {msg}"
                 );
                 None
             }
@@ -377,20 +376,20 @@ mod tests {
         let test_path_pathbuf = reqs.test_path();
         let test_path_pathbuf_check = test_path_pathbuf
             .to_slash()
-            .unwrap_or_else(|| panic!("Invalid characters in test path: {:?}", test_path_pathbuf));
+            .unwrap_or_else(|| panic!("Invalid characters in test path: {test_path_pathbuf:?}"));
 
         let test_dir_pathbuf = PathBuf::from(test_dir);
         let test_dir_pathbuf_check = test_dir_pathbuf
             .to_slash()
-            .unwrap_or_else(|| panic!("Invalid characters in test dir: {:?}", test_path_pathbuf));
+            .unwrap_or_else(|| panic!("Invalid characters in test dir: {test_path_pathbuf:?}"));
 
         assert_eq!(
             test_path_pathbuf_check.as_ref(),
-            &format!("{}/{}/{}", user, timestamp, test_dir_pathbuf_check)
+            &format!("{user}/{timestamp}/{test_dir_pathbuf_check}")
         );
         assert_eq!(
             reqs.test_identifier(None),
-            format!("{}__{}__{}", user, timestamp, hash)
+            format!("{user}__{timestamp}__{hash}")
         );
     }
 

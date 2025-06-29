@@ -908,7 +908,7 @@ impl<V: Display> Display for GraphEdge<V> {
             GraphEdge::Output { .. } => Ok(()),
             GraphEdge::Trigger { .. } => Ok(()),
             GraphEdge::Dependency { versions, .. } => {
-                write!(f, "{}", versions)
+                write!(f, "{versions}")
             }
         }
     }

@@ -296,12 +296,12 @@ mod tests {
     fn create_source_target(name: &str) -> (Location<Url>, Location<Url>, Vec<u8>) {
         let data = name.repeat(10).as_bytes().to_vec();
         let dir = testdir!();
-        let source_file = dir.join(format!("input-{}", name));
+        let source_file = dir.join(format!("input-{name}"));
         File::create(&source_file)
             .unwrap()
             .write_all(data.as_slice())
             .unwrap();
-        let target_file = dir.join(format!("output-{}", name));
+        let target_file = dir.join(format!("output-{name}"));
         let source = Location::LocalFile {
             url: Url::from_file_path(&source_file).unwrap(),
         };

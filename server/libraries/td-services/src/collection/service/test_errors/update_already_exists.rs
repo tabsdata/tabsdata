@@ -48,7 +48,7 @@ async fn test_update_already_existing(db: DbPool) {
 
     assert_service_error(service, request, |err| match err {
         SqlError::UpdateError(_, _, _, _) => {}
-        other => panic!("Expected 'UpdateError', got {:?}", other),
+        other => panic!("Expected 'UpdateError', got {other:?}"),
     })
     .await;
 }

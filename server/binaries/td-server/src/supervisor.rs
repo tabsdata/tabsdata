@@ -30,7 +30,7 @@ pub fn main() {
                     .clone()
                     .to_slash()
                     .unwrap_or_else(|| {
-                        panic!("Invalid characters in instance path: {:?}", instance_path)
+                        panic!("Invalid characters in instance path: {instance_path:?}")
                     })
                     .into_owned(),
             ),

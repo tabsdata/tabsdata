@@ -55,10 +55,7 @@ async fn test_cannot_change_self_password() {
 
     assert_service_error(service, request, |err| match err {
         UserError::PasswordChangeNotAllowed => {}
-        other => panic!(
-            "Expected 'MustUsePasswordChangeEndpointForSelf', got {:?}",
-            other
-        ),
+        other => panic!("Expected 'MustUsePasswordChangeEndpointForSelf', got {other:?}"),
     })
     .await;
 }

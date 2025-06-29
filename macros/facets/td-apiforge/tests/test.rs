@@ -44,7 +44,7 @@ mod tests {
             let operation = path_item.get.clone().unwrap();
             assert_test_path(&operation);
         } else {
-            panic!("Path {} not found", TEST_GET);
+            panic!("Path {TEST_GET} not found");
         }
 
         if let Some(path_item) = &openapi.paths.paths.get(TEST_POST) {
@@ -52,7 +52,7 @@ mod tests {
             let operation = path_item.post.clone().unwrap();
             assert_test_path(&operation);
         } else {
-            panic!("Path {} not found", TEST_GET);
+            panic!("Path {TEST_GET} not found");
         }
     }
 

@@ -238,7 +238,7 @@ pub fn convert_to_human_gib(size_in_bytes: u64, abbreviated: bool) -> String {
     const GIBIBYTE: f64 = 1024.0 * 1024.0 * 1024.0;
     let size_in_gib = size_in_bytes as f64 / GIBIBYTE;
     let unit = if abbreviated { "G" } else { "GiB" };
-    format!("{:.3} {}", size_in_gib, unit)
+    format!("{size_in_gib:.3} {unit}")
 }
 
 pub fn convert_to_human_bytes(size_in_bytes: u64, abbreviated: bool) -> String {

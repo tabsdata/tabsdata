@@ -387,13 +387,12 @@ pub(crate) mod tests {
             .try_snippet("foo snippet")?
             .decorator(Decorator::Publisher)
             .dependencies(vec![
-                TableDependencyDto::try_from(format!("{}/table_1", deps_collection))?,
-                TableDependencyDto::try_from(format!("{}/table_2", deps_collection))?,
+                TableDependencyDto::try_from(format!("{deps_collection}/table_1"))?,
+                TableDependencyDto::try_from(format!("{deps_collection}/table_2"))?,
                 TableDependencyDto::try_from("table_3")?,
             ])
             .triggers(vec![TableTriggerDto::try_from(format!(
-                "{}/table_1",
-                triggers_collection
+                "{triggers_collection}/table_1"
             ))?])
             .tables(vec![
                 TableNameDto::try_from("table_3")?,
@@ -442,8 +441,8 @@ pub(crate) mod tests {
             let all_functions_map = response.all_functions();
             let mut all_functions: Vec<_> = response
                 .all_functions()
-                .iter()
-                .map(|(_, t)| t.name())
+                .values()
+                .map(|t| t.name())
                 .collect();
             all_functions.sort();
             assert_eq!(
@@ -470,10 +469,8 @@ pub(crate) mod tests {
 
             let all_tables_map = response.all_tables();
             let mut all_tables: Vec<_> = all_tables_map
-                .iter()
-                .map(|(_, t)| {
-                    TableName::try_from(format!("{}/{}", t.collection(), t.name())).unwrap()
-                })
+                .values()
+                .map(|t| TableName::try_from(format!("{}/{}", t.collection(), t.name())).unwrap())
                 .collect();
             all_tables.sort();
             assert_eq!(

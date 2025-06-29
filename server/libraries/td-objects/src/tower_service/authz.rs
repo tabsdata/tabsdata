@@ -232,7 +232,7 @@ impl<E> AuthzEntity<E> {
 impl<E: Debug> Display for AuthzEntity<E> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::On(e) => write!(f, "On({:?})", e),
+            Self::On(e) => write!(f, "On({e:?})"),
             Self::All => write!(f, "All"),
         }
     }
@@ -265,11 +265,11 @@ impl Display for AuthzScope {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::System => write!(f, "All"),
-            Self::Collection(c) => write!(f, "Collection({:?})", c),
-            Self::User(u) => write!(f, "User({:?})", u),
-            Self::Role(u) => write!(f, "Role({:?})", u),
-            Self::SystemOrUser(u) => write!(f, "SystemOrUser({:?})", u),
-            Self::SystemOrRole(u) => write!(f, "SystemOrRole({:?})", u),
+            Self::Collection(c) => write!(f, "Collection({c:?})"),
+            Self::User(u) => write!(f, "User({u:?})"),
+            Self::Role(u) => write!(f, "Role({u:?})"),
+            Self::SystemOrUser(u) => write!(f, "SystemOrUser({u:?})"),
+            Self::SystemOrRole(u) => write!(f, "SystemOrRole({u:?})"),
         }
     }
 }
@@ -1058,7 +1058,7 @@ mod tests {
         match res {
             Ok(()) => {}
             Err(err) => {
-                panic!("Check failed with {:?}", err);
+                panic!("Check failed with {err:?}");
             }
         }
     }
@@ -1091,19 +1091,14 @@ mod tests {
         .await;
         match res {
             Ok(()) => {
-                panic!(
-                    "Check passed, it should have failed with {:?}",
-                    expected_err
-                );
+                panic!("Check passed, it should have failed with {expected_err:?}");
             }
             Err(err) => {
                 let authz_err: &AuthzError = err.domain_err();
                 assert_eq!(
                     std::mem::discriminant(&expected_err),
                     std::mem::discriminant(authz_err),
-                    "Expected {}, Got {}",
-                    expected_err,
-                    authz_err
+                    "Expected {expected_err}, Got {authz_err}"
                 );
             }
         }

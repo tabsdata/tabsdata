@@ -111,15 +111,15 @@ impl UtoipaDocsArguments {
         vec![
             CrateDir {
                 name: "crate".to_string(),
-                dir: format!("{}/server/libraries/td-apiserver/src", base_root_dir),
+                dir: format!("{base_root_dir}/server/libraries/td-apiserver/src"),
             },
             CrateDir {
                 name: "td_objects".to_string(),
-                dir: format!("{}/server/libraries/td-objects/src", base_root_dir),
+                dir: format!("{base_root_dir}/server/libraries/td-objects/src"),
             },
             CrateDir {
                 name: "td_services".to_string(),
-                dir: format!("{}/server/libraries/td-services/src", base_root_dir),
+                dir: format!("{base_root_dir}/server/libraries/td-services/src"),
             },
         ]
     }
@@ -277,7 +277,7 @@ fn find_in_file(
                     let schema_struct = syn::parse::<syn::Ident>(input.into()).unwrap();
                     let schema_ident =
                         format_ident!("{}{}{}", CTX_PREFIX, macro_name, schema_struct);
-                    let path = syn::parse_str(&format!("{}::{}", module, schema_ident)).unwrap();
+                    let path = syn::parse_str(&format!("{module}::{schema_ident}")).unwrap();
                     found_schemas.push(path);
                 }
             }
@@ -294,11 +294,11 @@ fn find_in_file(
 
         for attr in attrs {
             if is_last_segment_path(attr.path(), paths_attribute) {
-                let path = syn::parse_str(&format!("{}::{}", module, ident)).unwrap();
+                let path = syn::parse_str(&format!("{module}::{ident}")).unwrap();
                 found_paths.push(path);
             }
             if is_last_segment_path(attr.path(), schemas_attributes) {
-                let path = syn::parse_str(&format!("{}::{}", module, ident)).unwrap();
+                let path = syn::parse_str(&format!("{module}::{ident}")).unwrap();
                 found_schemas.push(path);
             }
         }

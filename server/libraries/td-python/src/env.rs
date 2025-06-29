@@ -113,10 +113,7 @@ mod tests {
         let old_path = env::var(&env_path_name).unwrap_or_default();
         // Setting env vars is not thread-safe; use with care.
         unsafe {
-            env::set_var(
-                &env_path_name,
-                format!("{}{}{}", path, PATH_SEPARATOR, old_path),
-            );
+            env::set_var(&env_path_name, format!("{path}{PATH_SEPARATOR}{old_path}"));
         }
         let result = prepend_in_path(path, Some(env_path_name.to_string())).unwrap();
         let new_path = env::var(&env_path_name).unwrap();
@@ -147,7 +144,7 @@ mod tests {
     fn test_prepend_in_path_with_invalid_characters() {
         let reserved_chars = r#"\ / : * ? " < > | "#;
         let control_chars: String = (0x00..=0x1F).map(|c| c as u8 as char).collect();
-        let invalid_chars = format!("{}{}", reserved_chars, control_chars);
+        let invalid_chars = format!("{reserved_chars}{control_chars}");
 
         let env_path_name = env_path();
         let path = invalid_chars;

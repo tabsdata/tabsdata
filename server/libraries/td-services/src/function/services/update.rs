@@ -1450,11 +1450,11 @@ mod tests {
         };
 
         let dependencies = Some(vec![
-            TableDependencyDto::try_from(format!("{}/_table_1", deps_collection))?,
+            TableDependencyDto::try_from(format!("{deps_collection}/_table_1"))?,
             TableDependencyDto::try_from("_table_2")?,
         ]);
         let triggers = Some(vec![
-            TableTriggerDto::try_from(format!("{}/_table_1", triggers_collection))?,
+            TableTriggerDto::try_from(format!("{triggers_collection}/_table_1"))?,
             TableTriggerDto::try_from("_table_2")?,
         ]);
         let tables = Some(vec![TableNameDto::try_from("output_1")?]);

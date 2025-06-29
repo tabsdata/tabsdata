@@ -145,7 +145,7 @@ fn concrete_enum(
                 .iter()
                 .enumerate()
                 .map(|(i, _)| {
-                    let var_name = Ident::new(&format!("x{}", i), variant_name.span());
+                    let var_name = Ident::new(&format!("x{i}"), variant_name.span());
                     quote! { #var_name }
                 })
                 .collect::<Vec<_>>();
@@ -273,7 +273,7 @@ fn concrete_struct(
         }
     }
 
-    let builder_name = Ident::new(&format!("{}Builder", name), name.span());
+    let builder_name = Ident::new(&format!("{name}Builder"), name.span());
     let to_impl_definition = {
         quote! {
             impl From<#alias_name> for #name<#(#concrete_types,)*> {
@@ -304,7 +304,7 @@ fn concrete_struct(
         }
     }
 
-    let builder_name = Ident::new(&format!("{}Builder", alias_name), alias_name.span());
+    let builder_name = Ident::new(&format!("{alias_name}Builder"), alias_name.span());
     let from_impl_definition = {
         let mut field_assignments = Vec::new();
         for field in fields {

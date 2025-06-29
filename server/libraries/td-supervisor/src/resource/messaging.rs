@@ -84,27 +84,21 @@ impl SupervisorMessageQueue {
             .ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Message parent directory for not found for '{:?}'", message),
+                    format!("Message parent directory for not found for '{message:?}'"),
                 )
             })?
             .parent()
             .ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!(
-                        "Message grandparent directory not found for '{:?}'",
-                        message
-                    ),
+                    format!("Message grandparent directory not found for '{message:?}'"),
                 )
             })?
             .parent()
             .ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!(
-                        "Message grand grandparent directory not found for '{:?}'",
-                        message
-                    ),
+                    format!("Message grand grandparent directory not found for '{message:?}'"),
                 )
             })?;
         let target = root.join(PLANNED_FOLDER).join(name);
@@ -152,10 +146,7 @@ impl SupervisorMessageQueue {
         }
         Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!(
-                "Message couldn't be moved to the to error folder '{:?}'",
-                message
-            ),
+            format!("Message couldn't be moved to the to error folder '{message:?}'"),
         ))
     }
 
@@ -167,17 +158,14 @@ impl SupervisorMessageQueue {
             .ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Message parent directory not found for '{:?}'", message),
+                    format!("Message parent directory not found for '{message:?}'"),
                 )
             })?
             .parent()
             .ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!(
-                        "Message grandparent directory not found for '{:?}'",
-                        message
-                    ),
+                    format!("Message grandparent directory not found for '{message:?}'"),
                 )
             })?;
         let target = root
@@ -185,7 +173,7 @@ impl SupervisorMessageQueue {
             .join(message.file().file_name().ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Message file name not found for '{:?}'", message),
+                    format!("Message file name not found for '{message:?}'"),
                 )
             })?);
         fs::rename(source, target)?;
@@ -199,14 +187,14 @@ impl SupervisorMessageQueue {
             .ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Parent directory not found for '{:?}'", message),
+                    format!("Parent directory not found for '{message:?}'"),
                 )
             })?
             .parent()
             .ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Grandparent directory not found for '{:?}'", message),
+                    format!("Grandparent directory not found for '{message:?}'"),
                 )
             })?;
         let target = root
@@ -214,7 +202,7 @@ impl SupervisorMessageQueue {
             .join(message.file().file_name().ok_or_else(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("File name not found for '{:?}'", message),
+                    format!("File name not found for '{message:?}'"),
                 )
             })?);
         let mut message = message.clone();
@@ -247,7 +235,7 @@ impl SupervisorMessageQueue {
         }
         Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Error relocating message to error folder '{:?}'", message),
+            format!("Error relocating message to error folder '{message:?}'"),
         ))
     }
 

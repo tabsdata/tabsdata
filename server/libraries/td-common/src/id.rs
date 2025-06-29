@@ -41,7 +41,7 @@ impl Id {
 
 impl Debug for Id {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Id({})", self)
+        write!(f, "Id({self})")
     }
 }
 
@@ -68,7 +68,7 @@ pub fn id_time(id: &Id) -> SystemTime {
         // System epoch for default ids
         SystemTime::UNIX_EPOCH
     } else {
-        panic!("Invalid Id {}, not a UUID v7", id);
+        panic!("Invalid Id {id}, not a UUID v7");
     }
 }
 
@@ -151,7 +151,7 @@ mod tests {
         let time = id_time(&id);
         assert!(now.duration_since(time).unwrap().as_secs() < 1);
 
-        assert_eq!(format!("{:#?}", id), format!("Id({})", id.to_string()));
+        assert_eq!(format!("{id:#?}"), format!("Id({})", id.to_string()));
     }
 
     #[test]

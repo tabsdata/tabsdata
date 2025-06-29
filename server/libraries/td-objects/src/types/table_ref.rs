@@ -22,7 +22,7 @@ pub enum Version {
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Version::Fixed(id) => write!(f, "{}", id),
+            Version::Fixed(id) => write!(f, "{id}"),
             Version::Head(back) => {
                 if *back == 0 {
                     write!(f, "HEAD")
@@ -97,16 +97,16 @@ impl Display for Versions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Versions::None => write!(f, ""),
-            Versions::Single(version) => write!(f, "{}", version),
+            Versions::Single(version) => write!(f, "{version}"),
             Versions::List(versions) => {
                 let versions = versions
                     .iter()
-                    .map(|v| format!("{}", v))
+                    .map(|v| format!("{v}"))
                     .collect::<Vec<_>>()
                     .join(",");
-                write!(f, "{}", versions)
+                write!(f, "{versions}")
             }
-            Versions::Range(from, to) => write!(f, "{}..{}", from, to),
+            Versions::Range(from, to) => write!(f, "{from}..{to}"),
         }
     }
 }
@@ -254,7 +254,7 @@ mod tests {
         let versions = Versions::parse("HEAD^^..HEAD").unwrap();
         assert_eq!(versions.to_string(), "HEAD~2..HEAD");
         let id = id::id();
-        let versions = Versions::parse(format!("{}", id)).unwrap();
-        assert_eq!(versions.to_string(), format!("{}", id));
+        let versions = Versions::parse(format!("{id}")).unwrap();
+        assert_eq!(versions.to_string(), format!("{id}"));
     }
 }

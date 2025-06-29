@@ -204,7 +204,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             AuthzError::UnAuthorized(_) => {}
-            other => panic!("Expected 'UnAuthorized', got {:?}", other),
+            other => panic!("Expected 'UnAuthorized', got {other:?}"),
         })
         .await;
         Ok(())

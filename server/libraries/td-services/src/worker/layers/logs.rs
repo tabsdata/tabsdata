@@ -63,7 +63,7 @@ pub async fn resolve_worker_log_path(
         for extension in extensions.iter() {
             let pattern = pattern
                 .clone()
-                .join(format!("{}_{}", worker_id, cast_pattern))
+                .join(format!("{worker_id}_{cast_pattern}"))
                 .join(WORK_FOLDER)
                 .join(LOG_FOLDER)
                 .join(extension.glob_pattern());

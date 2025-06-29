@@ -57,10 +57,7 @@ impl StorageLocation {
     pub fn parse<'a>(version: impl Into<&'a str>) -> Result<Self, String> {
         match version.into() {
             "V1" => Ok(Self::V2),
-            unknown_version => Err(format!(
-                "Unknown StorageLocation version {}",
-                unknown_version
-            )),
+            unknown_version => Err(format!("Unknown StorageLocation version {unknown_version}")),
         }
     }
 }
@@ -428,7 +425,7 @@ impl VersionLocationBuilder for V2LocationBuilder {
                 path = path
                     .child("f")
                     .unwrap()
-                    .child(&format!("{}.tgz", bundle))
+                    .child(&format!("{bundle}.tgz"))
                     .unwrap();
             } else if let Some(data_version) = &info.data_version {
                 // function always is present if data is present
@@ -442,10 +439,10 @@ impl VersionLocationBuilder for V2LocationBuilder {
                             .unwrap()
                             .child("p")
                             .unwrap()
-                            .child(&format!("{}.p", partition))
+                            .child(&format!("{partition}.p"))
                             .unwrap();
                     } else {
-                        path = path.child(&format!("{}.t", table_version)).unwrap();
+                        path = path.child(&format!("{table_version}.t")).unwrap();
                     }
                 }
             } else if let Some(transaction) = &info.transaction {
@@ -460,7 +457,7 @@ impl VersionLocationBuilder for V2LocationBuilder {
             path = path
                 .parent()
                 .unwrap()
-                .child(&format!("{}-{}", name, postfix))
+                .child(&format!("{name}-{postfix}"))
                 .unwrap()
         }
         (path, StorageLocation::V2)
@@ -512,17 +509,17 @@ mod tests {
             .collection(&collection);
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/L/c/{}", collection))?
+            SPath::parse(format!("/L/c/{collection}"))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse(format!("/L/c/{}-foo.meta", collection)).unwrap()
+            SPath::parse(format!("/L/c/{collection}-foo.meta")).unwrap()
         );
         let collection = CollectionId::default();
         builder.collection(&collection);
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/L/c/{}", collection))?
+            SPath::parse(format!("/L/c/{collection}"))?
         );
         Ok(())
     }
@@ -538,21 +535,18 @@ mod tests {
             .function(&bundle);
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/bundles/c/{}/f/{}.tgz", collection, bundle))?
+            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz"))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse(format!(
-                "/bundles/c/{}/f/{}.tgz-foo.meta",
-                collection, bundle
-            ))?
+            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz-foo.meta"))?
         );
 
         let bundle = BundleId::default();
         builder.function(&bundle);
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/bundles/c/{}/f/{}.tgz", collection, bundle))?
+            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz"))?
         );
         Ok(())
     }
@@ -569,20 +563,17 @@ mod tests {
 
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/L/c/{}/d/{}", collection, table_data_version))?
+            SPath::parse(format!("/L/c/{collection}/d/{table_data_version}"))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse(format!(
-                "/L/c/{}/d/{}-foo.meta",
-                collection, table_data_version
-            ))?
+            SPath::parse(format!("/L/c/{collection}/d/{table_data_version}-foo.meta"))?
         );
         let table_data_version = TableDataVersionId::default();
         builder.data(&table_data_version);
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/L/c/{}/d/{}", collection, table_data_version))?
+            SPath::parse(format!("/L/c/{collection}/d/{table_data_version}"))?
         );
         Ok(())
     }
@@ -603,15 +594,13 @@ mod tests {
         assert_eq!(
             builder.build().0,
             SPath::parse(format!(
-                "/L/c/{}/d/{}/t/{}/{}.t",
-                collection, table_data_version, table, table_version
+                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}.t"
             ))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
             SPath::parse(format!(
-                "/L/c/{}/d/{}/t/{}/{}.t-foo.meta",
-                collection, table_data_version, table, table_version
+                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}.t-foo.meta"
             ))?
         );
 
@@ -621,8 +610,7 @@ mod tests {
         assert_eq!(
             builder.build().0,
             SPath::parse(format!(
-                "/L/c/{}/d/{}/t/{}/{}.t",
-                collection, table_data_version, table, table_version
+                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}.t"
             ))?
         );
 
@@ -631,15 +619,13 @@ mod tests {
         assert_eq!(
             builder.build().0,
             SPath::parse(format!(
-                "/L/c/{}/d/{}/t/{}/{}/p/{}.p",
-                collection, table_data_version, table, table_version, partition
+                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}/p/{partition}.p"
             ))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
             SPath::parse(format!(
-                "/L/c/{}/d/{}/t/{}/{}/p/{}.p-foo.meta",
-                collection, table_data_version, table, table_version, partition
+                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}/p/{partition}.p-foo.meta"
             ))?
         );
 
@@ -650,8 +636,7 @@ mod tests {
         assert_eq!(
             builder.build().0,
             SPath::parse(format!(
-                "/L/c/{}/d/{}/t/{}/{}/p/{}.p",
-                collection, table_data_version, table, table_version, partition
+                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}/p/{partition}.p"
             ))?
         );
         Ok(())
@@ -671,15 +656,13 @@ mod tests {
         assert_eq!(
             builder.build().0,
             SPath::parse(format!(
-                "/L/c/{}/x/{}/f/{}",
-                collection, transaction, function_version
+                "/L/c/{collection}/x/{transaction}/f/{function_version}"
             ))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
             SPath::parse(format!(
-                "/L/c/{}/x/{}/f/{}-foo.meta",
-                collection, transaction, function_version
+                "/L/c/{collection}/x/{transaction}/f/{function_version}-foo.meta"
             ))?
         );
         Ok(())

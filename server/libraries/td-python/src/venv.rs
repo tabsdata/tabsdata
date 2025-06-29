@@ -169,7 +169,7 @@ pub fn activate(venv: &PathBuf) -> Result<(), TdError> {
     }
     // Setting env vars is not thread-safe; use with care.
     unsafe {
-        env::set_var(ENV_VIRTUAL_ENV_PROMPT, format!("({})", instance));
+        env::set_var(ENV_VIRTUAL_ENV_PROMPT, format!("({instance})"));
     }
     Ok(())
 }

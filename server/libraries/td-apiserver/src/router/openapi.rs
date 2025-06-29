@@ -44,9 +44,10 @@ pub fn router() -> Router {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::router;
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
+    use td_objects::rest_urls::{DOCS_URL, OPENAPI_JSON_URL};
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -57,7 +58,7 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(format!("{}/", DOCS_URL))
+                    .uri(format!("{DOCS_URL}/"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -69,7 +70,7 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(format!("{}/", DOCS_URL))
+                    .uri(format!("{DOCS_URL}/"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -184,8 +185,7 @@ mod tests {
         for schema_name in &referenced_schemas {
             assert!(
                 schemas.contains_key(schema_name),
-                "Schema {} is referenced but not defined",
-                schema_name
+                "Schema {schema_name} is referenced but not defined"
             );
         }
 
@@ -193,8 +193,7 @@ mod tests {
         for schema_name in schemas.keys() {
             assert!(
                 referenced_schemas.contains(schema_name),
-                "Schema {} is defined but not used",
-                schema_name
+                "Schema {schema_name} is defined but not used"
             );
         }
     }
@@ -263,18 +262,13 @@ mod tests {
         for tag in &used_tags {
             assert!(
                 defined_tags.contains(tag),
-                "Tag {} is used but not defined",
-                tag
+                "Tag {tag} is used but not defined"
             );
         }
 
         // Check that all defined tags are used
         for tag in &defined_tags {
-            assert!(
-                used_tags.contains(tag),
-                "Tag {} is defined but not used",
-                tag
-            );
+            assert!(used_tags.contains(tag), "Tag {tag} is defined but not used");
         }
     }
 
@@ -348,8 +342,7 @@ mod tests {
                             .collect();
                         assert_eq!(
                             url_param_names, url_params_defined,
-                            "URL parameter names do not match parameters for path {} and method {}",
-                            path, method
+                            "URL parameter names do not match parameters for path {path} and method {method}"
                         );
                     }
                 }

@@ -611,12 +611,11 @@ impl Supervisor {
                     if let Some(worker) = worker {
                         if retry <= *worker.retries() {
                             let retry = retry + 1;
-                            let name = format!("{}{}{}{}", id, RETRIES_DELIMITER, retry, ext);
+                            let name = format!("{id}{RETRIES_DELIMITER}{retry}{ext}");
                             return if let Err(e) =
                                 SupervisorMessageQueue::planned(message.clone(), name)
                             {
-                                let error =
-                                    format!("Error retrying message '{:?}': {}", message, e);
+                                let error = format!("Error retrying message '{message:?}': {e}");
                                 error!("{}", error);
                                 Err(RuntimeError::new(error))
                             } else {
@@ -629,7 +628,7 @@ impl Supervisor {
             }
         }
         if let Err(e) = SupervisorMessageQueue::fail(message.clone()) {
-            let error = format!("Error failing message '{:?}': {}", message, e);
+            let error = format!("Error failing message '{message:?}': {e}");
             error!("{}", error);
             return Err(RuntimeError::new(error));
         } else {
@@ -653,14 +652,14 @@ impl Supervisor {
         }
         for message in messages {
             if let Err(e) = SupervisorMessageQueue::queued(message.clone()) {
-                let error = format!("Error queuing message '{:?}': {}", message, e);
+                let error = format!("Error queuing message '{message:?}': {e}");
                 error!("{}", error);
                 return Err(RuntimeError::new(error));
             } else {
                 info!("Sent message to controllers queue: {:?}", message);
             }
             if let Err(e) = sender.send(message.clone()).await {
-                let error = format!("Error dispatching message '{:?}': {}", message, e);
+                let error = format!("Error dispatching message '{message:?}': {e}");
                 error!("{}", error);
                 return Err(RuntimeError::new(error));
             } else {
@@ -710,7 +709,7 @@ impl Supervisor {
                             }
                         },
                         Err(e) => {
-                            let error = format!("Controller task completed unexpectedly: {:?}", e);
+                            let error = format!("Controller task completed unexpectedly: {e:?}");
                             error!(error);
                             return Err(RuntimeError::new(error));
                         }
@@ -735,7 +734,7 @@ impl Supervisor {
                             debug!("Message '{:?}' sent successfully!", message);
                         }
                         Err(e) => {
-                            let error = format!("Failed to send message '{:?}': {:?}", message, e);
+                            let error = format!("Failed to send message '{message:?}': {e:?}");
                             error!(error);
                             return Err(RuntimeError::new(error));
                         }
@@ -815,21 +814,21 @@ impl Supervisor {
                 info!("Init controller task completed. Leaving...: '{:?}'", result);
                 match result {
                     Ok(_) => Ok(()),
-                    Err(e) => Err(RuntimeError::new(format!("Init controller error: '{:?}'", e)))
+                    Err(e) => Err(RuntimeError::new(format!("Init controller error: '{e:?}'")))
                 }
             },
             result = regular_controller_handle => {
                 info!("Regular controller task completed. Leaving...: '{:?}'", result);
                 match result {
                     Ok(_) => Ok(()),
-                    Err(e) => Err(RuntimeError::new(format!("Regular controller error: '{:?}'", e)))
+                    Err(e) => Err(RuntimeError::new(format!("Regular controller error: '{e:?}'")))
                 }
             },
             result = ephemeral_controller_handle => {
                 info!("Ephemeral controller task completed. Leaving...: '{:?}'", result);
                 match result {
                     Ok(_) => Ok(()),
-                    Err(e) => Err(RuntimeError::new(format!("Ephemeral controller error: '{:?}'", e)))
+                    Err(e) => Err(RuntimeError::new(format!("Ephemeral controller error: '{e:?}'")))
                 }
             },
         }
@@ -942,7 +941,7 @@ impl Supervisor {
                 arc_self
                     .start_init_worker(worker, message)
                     .await
-                    .map_err(|e| RuntimeError::new(format!("Init worker error: {:?}", e)))
+                    .map_err(|e| RuntimeError::new(format!("Init worker error: {e:?}")))
             },
             "Init".to_string(),
         )
@@ -963,7 +962,7 @@ impl Supervisor {
                 arc_self
                     .start_regular_worker(worker, message)
                     .await
-                    .map_err(|e| RuntimeError::new(format!("Regular worker error: {:?}", e)))
+                    .map_err(|e| RuntimeError::new(format!("Regular worker error: {e:?}")))
             },
             "Regular".to_string(),
         )
@@ -984,7 +983,7 @@ impl Supervisor {
                 arc_self
                     .start_ephemeral_worker(worker, message)
                     .await
-                    .map_err(|e| RuntimeError::new(format!("Ephemeral worker error: {:?}", e)))
+                    .map_err(|e| RuntimeError::new(format!("Ephemeral worker error: {e:?}")))
             },
             "Ephemeral".to_string(),
         )
@@ -1040,12 +1039,12 @@ impl Supervisor {
                             }
                         }
                         Ok(Err(e)) => {
-                            let message = format!("{} task finished unexpectedly with error: {:?}", controller_class, e);
+                            let message = format!("{controller_class} task finished unexpectedly with error: {e:?}");
                             error!(message);
                             return Err(RuntimeError::new(message));
                         }
                         Err(e) => {
-                            let message = format!("{} task finished abruptly with error: {:?}", controller_class, e);
+                            let message = format!("{controller_class} task finished abruptly with error: {e:?}");
                             error!(message);
                             return Err(RuntimeError::new(message));
                         }
@@ -1057,7 +1056,7 @@ impl Supervisor {
                     let log_prefix_clone = controller_class.clone();
                     let handle = tokio::spawn(async move {
                         let outcome = start_worker_function(self_arc, worker_clone.clone(), None).await
-                            .map_err(|e| RuntimeError::new(format!("{} RunnerError: {:?} - {:?}", log_prefix_clone, e, worker_clone)));
+                            .map_err(|e| RuntimeError::new(format!("{log_prefix_clone} RunnerError: {e:?} - {worker_clone:?}")));
                         Ok((worker_clone, outcome))
                     });
                     running_tasks.push(handle);
@@ -1097,13 +1096,13 @@ impl Supervisor {
                             let log_prefix_clone = controller_class.clone();
                             let handle = tokio::spawn(async move {
                                 let outcome = start_worker_function(self_arc, worker_clone.clone(), Some(message)).await
-                                    .map_err(|e| RuntimeError::new(format!("{} RunnerError: {:?} - {:?}", log_prefix_clone, e, worker_clone)));
+                                    .map_err(|e| RuntimeError::new(format!("{log_prefix_clone} RunnerError: {e:?} - {worker_clone:?}")));
                                 Ok((worker_clone, outcome))
                             });
                             running_tasks.push(handle);
                         }
                         None => {
-                            let message = format!("Unrecognized worker name in message. Discarding it. - '{:?}'", message);
+                            let message = format!("Unrecognized worker name in message. Discarding it. - '{message:?}'");
                             error!(message);
                             return Err(RuntimeError::new(message));
                         }
@@ -1221,9 +1220,9 @@ impl Supervisor {
             Ok(_) => (WorkerCallbackStatus::Done, None),
             Err(e) => {
                 if execution <= limit {
-                    (WorkerCallbackStatus::Error, Some(format!("{:?}", e)))
+                    (WorkerCallbackStatus::Error, Some(format!("{e:?}")))
                 } else {
-                    (WorkerCallbackStatus::Failed, Some(format!("{:?}", e)))
+                    (WorkerCallbackStatus::Failed, Some(format!("{e:?}")))
                 }
             }
         };
@@ -1675,7 +1674,7 @@ impl Supervisor {
                 for key in worker.markers() {
                     match key.parse::<MarkerKey>() {
                         Ok(marker_key) => {
-                            markers.push(format!("--{}", key));
+                            markers.push(format!("--{key}"));
                             markers.push(marker_key.produce(&message, payload).unwrap());
                         }
                         Err(e) => {
@@ -1913,7 +1912,7 @@ impl Supervisor {
             match key.parse::<InheritedArgumentKey>() {
                 Ok(_) => {
                     if let Some(value) = common_arguments.get(key) {
-                        parameters.push(format!("--{}", key));
+                        parameters.push(format!("--{key}"));
                         parameters.push(value.to_string());
                     }
                 }
@@ -1924,7 +1923,7 @@ impl Supervisor {
         }
 
         for (key, value) in worker.parameters() {
-            parameters.push(format!("--{}", key));
+            parameters.push(format!("--{key}"));
             parameters.push(
                 render(value)
                     .map_err(|error| RuntimeError::new(error.to_string()))?
@@ -1935,7 +1934,7 @@ impl Supervisor {
         for key in worker.arguments() {
             match key.parse::<ArgumentKey>() {
                 Ok(argument_key) => {
-                    parameters.push(format!("--{}", key));
+                    parameters.push(format!("--{key}"));
                     parameters.push(
                         argument_key
                             .produce(
@@ -1953,7 +1952,7 @@ impl Supervisor {
         }
 
         for (key, value) in program_arguments.iter() {
-            parameters.push(format!("--{}", key));
+            parameters.push(format!("--{key}"));
             parameters.push(value.to_string());
         }
 
@@ -2065,10 +2064,7 @@ fn setup(arguments: Arguments) -> (Option<PathBuf>, PathBuf) {
                     .clone()
                     .to_slash()
                     .unwrap_or_else(|| {
-                        panic!(
-                            "Invalid characters in instance path: {:?}",
-                            instance_dir_absolute
-                        )
+                        panic!("Invalid characters in instance path: {instance_dir_absolute:?}")
                     })
                     .into_owned(),
             ),
@@ -2083,10 +2079,7 @@ fn setup(arguments: Arguments) -> (Option<PathBuf>, PathBuf) {
                     .clone()
                     .to_slash()
                     .unwrap_or_else(|| {
-                        panic!(
-                            "Invalid characters in repository path: {:?}",
-                            repository_dir_absolute
-                        )
+                        panic!("Invalid characters in repository path: {repository_dir_absolute:?}")
                     })
                     .into_owned(),
             ),
@@ -2101,10 +2094,7 @@ fn setup(arguments: Arguments) -> (Option<PathBuf>, PathBuf) {
                     .clone()
                     .to_slash()
                     .unwrap_or_else(|| {
-                        panic!(
-                            "Invalid characters in workspace path: {:?}",
-                            work_dir_absolute
-                        )
+                        panic!("Invalid characters in workspace path: {work_dir_absolute:?}")
                     })
                     .into_owned(),
             ),
@@ -2119,10 +2109,7 @@ fn setup(arguments: Arguments) -> (Option<PathBuf>, PathBuf) {
                     .clone()
                     .to_slash()
                     .unwrap_or_else(|| {
-                        panic!(
-                            "Invalid characters in config path: {:?}",
-                            config_dir_absolute
-                        )
+                        panic!("Invalid characters in config path: {config_dir_absolute:?}")
                     })
                     .into_owned(),
             ),
@@ -2137,7 +2124,7 @@ fn setup(arguments: Arguments) -> (Option<PathBuf>, PathBuf) {
                     .clone()
                     .to_slash()
                     .unwrap_or_else(|| {
-                        panic!("Invalid characters in work path: {:?}", work_dir_absolute)
+                        panic!("Invalid characters in work path: {work_dir_absolute:?}")
                     })
                     .into_owned(),
             ),

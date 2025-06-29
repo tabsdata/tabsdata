@@ -246,7 +246,7 @@ fn type_for_field<'a>(fields: &'a Fields, field_name: &str) -> &'a Type {
                 None
             }
         })
-        .unwrap_or_else(|| panic!("Field {} not found in struct", field_name));
+        .unwrap_or_else(|| panic!("Field {field_name} not found in struct"));
 
     if let Type::Path(type_path) = field_type {
         if let Some(segment) = type_path.path.segments.last() {

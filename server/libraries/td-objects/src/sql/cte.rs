@@ -261,7 +261,7 @@ where
             versions,
         );
 
-        let select = format!("SELECT rn FROM {}", LATEST_VERSIONS_CTE);
+        let select = format!("SELECT rn FROM {LATEST_VERSIONS_CTE}");
         query_builder.push(select);
 
         trace!("find_relative_offset: sql: {}", query_builder.sql());

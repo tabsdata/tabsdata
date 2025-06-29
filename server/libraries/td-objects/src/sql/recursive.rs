@@ -300,7 +300,7 @@ mod tests {
 
     fn time(i: usize) -> AtTime {
         AtTime::try_from(
-            format!("2025-04-02T08:19:5{}.543+00:00", i)
+            format!("2025-04-02T08:19:5{i}.543+00:00")
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
         )
@@ -657,9 +657,9 @@ mod tests {
         let mut daos = vec![];
         for i in 0..size {
             let reference = RecursionReference {
-                id: TestId::try_from(format!("YYY{:04}", i))?,
-                partition_id: TestPartition::try_from(format!("x_p_{:04}", i))?,
-                reference_id: TestRecursion::try_from(format!("x_ref_{:04}", i))?,
+                id: TestId::try_from(format!("YYY{i:04}"))?,
+                partition_id: TestPartition::try_from(format!("x_p_{i:04}"))?,
+                reference_id: TestRecursion::try_from(format!("x_ref_{i:04}"))?,
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
@@ -670,10 +670,10 @@ mod tests {
                 .await
                 .unwrap();
             let dao = TestDao {
-                id: TestId::try_from(format!("ZZZ{:04}", i))?,
-                partition_id: TestPartition::try_from(format!("x_p_{:04}", i))?,
+                id: TestId::try_from(format!("ZZZ{i:04}"))?,
+                partition_id: TestPartition::try_from(format!("x_p_{i:04}"))?,
                 status: TestStatus::try_from("A")?,
-                current: TestRecursion::try_from(format!("x_ref_{:04}", i))?,
+                current: TestRecursion::try_from(format!("x_ref_{i:04}"))?,
                 downstream: TestRecursion::try_from(format!("x_ref_{:04}", i + 1))?,
                 defined_on: time(5),
             };

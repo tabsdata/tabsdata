@@ -270,7 +270,7 @@ mod tests {
             .await;
         assert_service_error(service, request, |err| match err {
             AuthzError::UnAuthorized(_) => {}
-            other => panic!("Expected 'UnAuthorized', got {:?}", other),
+            other => panic!("Expected 'UnAuthorized', got {other:?}"),
         })
         .await;
         Ok(())
@@ -315,7 +315,7 @@ mod tests {
             .await;
         assert_service_error(service, request, |err| match err {
             AuthzError::UnAuthorized(_) => {}
-            other => panic!("Expected 'UnAuthorized', got {:?}", other),
+            other => panic!("Expected 'UnAuthorized', got {other:?}"),
         })
         .await;
         Ok(())
@@ -401,7 +401,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             PermissionError::RolePermissionMismatch => {}
-            other => panic!("Expected 'RolePermissionMismatch', got {:?}", other),
+            other => panic!("Expected 'RolePermissionMismatch', got {other:?}"),
         })
         .await;
         Ok(())
@@ -447,7 +447,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             AuthzError::UnAuthorized(_) => {}
-            other => panic!("Expected 'Unauthorized', got {:?}", other),
+            other => panic!("Expected 'Unauthorized', got {other:?}"),
         })
         .await;
         Ok(())
@@ -483,7 +483,7 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             AuthzError::UnAuthorized(_) => {}
-            other => panic!("Expected 'Unauthorized', got {:?}", other),
+            other => panic!("Expected 'Unauthorized', got {other:?}"),
         })
         .await;
         Ok(())
@@ -524,7 +524,7 @@ mod tests {
             if fixed_permissions.contains(permission.id().to_string().as_str()) {
                 assert_service_error(service, request, |err| match err {
                     PermissionError::PermissionIsFixed => {}
-                    other => panic!("Expected 'PermissionIsFixed', got {:?}", other),
+                    other => panic!("Expected 'PermissionIsFixed', got {other:?}"),
                 })
                 .await;
             } else {
