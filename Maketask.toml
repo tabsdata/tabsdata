@@ -110,6 +110,8 @@ script = [
     info ${message}
 
     lines = array
+    array_push ${lines} ""
+    array_push ${lines} ""
     array_push ${lines} "❗ Set the environment variables below for a better user experience:"
     array_push ${lines} ""
     array_push ${lines} "export PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=true"
@@ -1349,18 +1351,142 @@ script = [
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
-[tasks.delivery]
+[tasks.wheels_4repo]
 dependencies = ["assembly"]
 run_task = [
     { name = [
-        "delivery_rs",
-        "delivery_py",
+        "wheels_4repo_setup",
+        "wheels_rs",
+        "wheels_py",
+        "wheels_4repo_teardown"
     ] }
 ]
 
-[tasks.delivery_rs]
+[tasks.wheels_4repo_setup]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
 
-[tasks.delivery_py]
+    set_env TD_PYTHON_LINKED_TO_REPOSITORY "true"
+
+    set_env REQUIRE_SERVER_BINARIES "true"
+    set_env REQUIRE_THIRD_PARTY "true"
+    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    ''']
+
+[tasks.wheels_4repo_teardown]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    os = get_env OS
+    if ${os}
+        lower_os = lowercase ${os}
+        contains_win = contains ${lower_os} "windows"
+        if ${contains_win}
+            exec cls
+        else
+            exec clear
+        end
+    else
+        exec clear
+    end
+
+    lines = array
+    array_push ${lines} "🎊 Local tabsdata wheels successfully generated!"
+    message = array_join ${lines} "\n"
+    info ${message}
+
+    lines = array
+    array_push ${lines} ""
+    array_push ${lines} ""
+    array_push ${lines} "❗ The generated wheels are intended for use via a PyPI-compliant repository."
+    array_push ${lines} "❗ Upload them using the standard 'twine upload <wheel>'."
+    array_push ${lines} "❗ If you are using our devpi setup (http://localhost:3141/tabsdata/dev), be sure to set the environment variables below before installing."
+    array_push ${lines} "❗ These variables must be set in every terminal where you will run the tabsdata cli or the tabsdata server."
+    array_push ${lines} ""
+    array_push ${lines} "export PIP_INDEX_URL=http://localhost:3141/tabsdata/dev/"
+    array_push ${lines} "export UV_EXTRA_INDEX_URL=http://localhost:3141/tabsdata/dev/"
+    array_push ${lines} ""
+    array_push ${lines} "❗ Then install the packages using the standard 'pip install <package>' command."
+    array_push ${lines} "❗ If you are using multiple environments, remember to install the packages in each of them separately."
+    message = array_join ${lines} "\n"
+    info ${message}
+    ''']
+
+[tasks.wheels_4whl]
+dependencies = ["assembly"]
+run_task = [
+    { name = [
+        "wheels_4whl_setup",
+        "wheels_rs",
+        "wheels_py",
+        "wheels_4whl_teardown"
+    ] }
+]
+
+[tasks.wheels_4whl_setup]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    set_env TD_PYTHON_LINKED_TO_REPOSITORY "false"
+
+    set_env REQUIRE_SERVER_BINARIES "true"
+    set_env REQUIRE_THIRD_PARTY "true"
+    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    ''']
+
+[tasks.wheels_4whl_teardown]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    os = get_env OS
+    if ${os}
+        lower_os = lowercase ${os}
+        contains_win = contains ${lower_os} "windows"
+        if ${contains_win}
+            exec cls
+        else
+            exec clear
+        end
+    else
+        exec clear
+    end
+
+    lines = array
+    array_push ${lines} "🎊 Local tabsdata wheels successfully generated!"
+    message = array_join ${lines} "\n"
+    info ${message}
+
+    lines = array
+    array_push ${lines} ""
+    array_push ${lines} ""
+    array_push ${lines} "❗ The generated wheels are not suitable for distribution via a PyPI-compliant repository."
+    array_push ${lines} "❗ Installing them through such a repository will result in an incomplete or incorrect setup."
+    array_push ${lines} "❗ You must install all wheels directly using 'pip install <wheel>' for each file."
+    array_push ${lines} "❗ If you are using multiple environments, remember to install the packages in each of them separately."
+    array_push ${lines} "❗ Note: Dependencies between TabsData packages are not preserved in this mode; each wheel must be installed explicitly."
+
+    message = array_join ${lines} "\n"
+    info ${message}
+    ''']
+[tasks.wheels_rs]
+private = true
+
+[tasks.wheels_py]
+private = true
 script_runner = "@duckscript"
 script = [
     '''
@@ -1368,7 +1494,7 @@ script = [
 
     cd "${ROOT_PROJECT_TABSDATA_FOLDER}"
 
-    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/delivery-wheels.py ${td-profile}
+    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/wheels.py ${td-profile}
     ''']
 
 [tasks.install]
