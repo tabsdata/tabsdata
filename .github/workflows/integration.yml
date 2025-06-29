@@ -21,7 +21,7 @@ on:
         description: "Minutes before job cancellation"
         required: true
         type: number
-        default: 240
+        default: 180
       dump_server:
         description: "Dump all instances contents"
         required: false
@@ -242,7 +242,7 @@ jobs:
       dump_server: ${{ inputs.dump_server }}
       td_product: "standard"
       runner_mode: "integration"
-      runner_action: ${{ needs.describe-job.outputs.runner_action }}
+      runner_action: ${{ inputs.runner_action }}
       run_on_linux_x86_64: ${{ needs.describe-job.outputs.run_on_linux_x86_64 }}
       run_on_linux_arm_64: ${{ needs.describe-job.outputs.run_on_linux_arm_64 }}
       run_on_macos_x86_64: ${{ needs.describe-job.outputs.run_on_macos_x86_64 }}

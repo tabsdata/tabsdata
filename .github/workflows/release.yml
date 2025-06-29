@@ -216,10 +216,10 @@ jobs:
       TD_SNOWFLAKE_WAREHOUSE: ${{ secrets.TD_SNOWFLAKE_WAREHOUSE }}
     with:
       job_timeout: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
-      td_product: "standard"
       dump_server: ${{ inputs.dump_server }}
+      td_product: "standard"
       runner_mode: "release"
-      runner_action: ${{ needs.describe-job.outputs.runner_action }}
+      runner_action: ${{ inputs.runner_action }}
       run_on_linux_x86_64: ${{ needs.describe-job.outputs.run_on_linux_x86_64 }}
       run_on_linux_arm_64: ${{ needs.describe-job.outputs.run_on_linux_arm_64 }}
       run_on_macos_x86_64: ${{ needs.describe-job.outputs.run_on_macos_x86_64 }}
