@@ -111,19 +111,27 @@ fn split_base_path_and_name(path: &str) -> (String, Option<String>) {
 
 /// Splits a file path into base_path and file_name
 #[cfg(target_os = "windows")]
-fn split_base_path_and_name_2(path: &str) -> (String, Option<String>) {
-    let path = path.replace('/', "\\");
-    match path.rsplit_once('\\') {
-        None => ("C:\\".to_string(), None),
-        Some((base_path, file_name)) => {
-            let mut base_path = if !is_rooted(base_path) {
-                format!("C:\\{}\\", base_path)
+fn split_base_path_and_name(path: &str) -> (String, Option<String>) {
+    let normal = path.replace('/', "\\").trim_start_matches('\\').to_string();
+
+    let (mut folder, mut file) = match normal.rsplit_once('\\') {
+        None => {
+            if normal.is_empty() {
+                ("C:\\".to_owned(), None)
+            } else if is_rooted(&normal) {
+                (format!("{normal}\\"), None)
             } else {
-                format!("{}\\", base_path)
-            };
-            while base_path.ends_with("\\\\") {
-                base_path.pop();
+                ("C:\\".to_owned(), Some(normal))
             }
+        }
+        Some((base_path, file_name)) => {
+            let base_path = if is_rooted(base_path) {
+                format!("{base_path}\\")
+            } else if base_path.is_empty() {
+                "C:\\".to_owned()
+            } else {
+                format!("C:\\{base_path}\\")
+            };
 
             let file_name = if file_name.is_empty() {
                 None
@@ -133,7 +141,26 @@ fn split_base_path_and_name_2(path: &str) -> (String, Option<String>) {
 
             (base_path, file_name)
         }
+    };
+
+    while folder.contains("\\\\") {
+        folder = folder.replace("\\\\", "\\");
     }
+    folder = folder.replace("\\", "/");
+
+    if let Some(mut f) = file {
+        while f.contains("\\\\") {
+            f = f.replace("\\\\", "\\");
+        }
+        f = f
+            .trim_start_matches('\\')
+            .trim_end_matches('\\')
+            .to_string();
+        f = f.replace("\\", "/");
+        file = if f.is_empty() { None } else { Some(f) };
+    }
+
+    (folder, file)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1137,35 +1164,35 @@ mod tests {
         #[cfg(target_os = "windows")]
         {
             let (base_path, file_name) = split_base_path_and_name("");
-            assert_eq!(base_path, "C:\\");
+            assert_eq!(base_path, "C:/");
             assert_eq!(file_name, None);
 
             let (base_path, file_name) = split_base_path_and_name("/");
-            assert_eq!(base_path, "C:\\");
+            assert_eq!(base_path, "C:/");
             assert_eq!(file_name, None);
 
             let (base_path, file_name) = split_base_path_and_name("C:");
-            assert_eq!(base_path, "C:\\");
+            assert_eq!(base_path, "C:/");
             assert_eq!(file_name, None);
 
             let (base_path, file_name) = split_base_path_and_name("C:\\");
-            assert_eq!(base_path, "C:\\");
+            assert_eq!(base_path, "C:/");
             assert_eq!(file_name, None);
 
             let (base_path, file_name) = split_base_path_and_name("C:\\dir\\");
-            assert_eq!(base_path, "C:\\dir\\");
+            assert_eq!(base_path, "C:/dir/");
             assert_eq!(file_name, None);
 
             let (base_path, file_name) = split_base_path_and_name("C:\\file");
-            assert_eq!(base_path, "C:\\");
+            assert_eq!(base_path, "C:/");
             assert_eq!(file_name, Some("file".to_string()));
 
             let (base_path, file_name) = split_base_path_and_name("C:\\dir\\file");
-            assert_eq!(base_path, "C:\\dir\\");
+            assert_eq!(base_path, "C:/dir/");
             assert_eq!(file_name, Some("file".to_string()));
 
             let (base_path, file_name) = split_base_path_and_name("C:\\dir0\\dir1\\file");
-            assert_eq!(base_path, "C:\\dir0\\dir1\\");
+            assert_eq!(base_path, "C:/dir0/dir1/");
             assert_eq!(file_name, Some("file".to_string()));
         }
     }
