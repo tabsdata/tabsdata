@@ -219,7 +219,7 @@ jobs:
       dump_server: ${{ inputs.dump_server }}
       td_product: "standard"
       runner_mode: "release"
-      runner_action: ${{ inputs.runner_action }}
+      runner_action: ${{ inputs.runner_action || 'build' }}
       run_on_linux_x86_64: ${{ needs.describe-job.outputs.run_on_linux_x86_64 }}
       run_on_linux_arm_64: ${{ needs.describe-job.outputs.run_on_linux_arm_64 }}
       run_on_macos_x86_64: ${{ needs.describe-job.outputs.run_on_macos_x86_64 }}
