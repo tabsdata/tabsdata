@@ -12,6 +12,7 @@ import polars as pl
 from tabsdata.io.plugin import DestinationPlugin
 from tabsdata.secret import _recursively_evaluate_secret
 from tabsdata.tabsserver.function.global_utils import convert_path_to_uri
+from tabsdata.utils.id import encode_id
 
 TRACE = logging.DEBUG - 1
 
@@ -56,8 +57,6 @@ except ImportError:
     MISSING_LIBRARIES = True
 finally:
     restore_snowflake_logger_levels()
-
-TABSDATA_STAGE_NAME = "tabsdata_created_stage"
 
 
 class SnowflakeDestination(DestinationPlugin):
@@ -223,13 +222,14 @@ class SnowflakeDestination(DestinationPlugin):
     def _create_stage_if_not_exists(self, conn):
         if not self.stage:
             logger.debug(
-                f"No stage provided, using '{TABSDATA_STAGE_NAME}'. "
-                "Creating it now if it doesn't exist."
+                f"No stage provided. A new temporary unique stage will be created."
             )
+            stage = f"td_{encode_id(debug=False)}"
+            logger.debug(f"Using stage name '{stage}'. Creating it now.")
             cursor = conn.cursor()
-            stage = self._fully_qualify_entity(TABSDATA_STAGE_NAME)
+            stage = self._fully_qualify_entity(stage)
             try:
-                cursor.execute(f"CREATE STAGE IF NOT EXISTS {stage}")
+                cursor.execute(f"CREATE TEMP STAGE IF NOT EXISTS {stage}")
                 logger.debug(
                     f"Stage '{stage}' created successfully or already existed."
                 )
