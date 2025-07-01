@@ -51,7 +51,12 @@ def copy_assets():
         raise FileNotFoundError(
             f"The THIRD-PARTY file is missing in {client_assets_folder}."
         )
-    shutil.copytree(variant_assets_folder, client_assets_folder, dirs_exist_ok=True)
+    shutil.copytree(
+        variant_assets_folder,
+        client_assets_folder,
+        dirs_exist_ok=True,
+        symlinks=False,
+    )
 
 
 copy_assets()

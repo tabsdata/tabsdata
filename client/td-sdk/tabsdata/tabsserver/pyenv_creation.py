@@ -112,6 +112,7 @@ TD_INHERIT_TABSDATA_PACKAGES = "TD_INHERIT_TABSDATA_PACKAGES"
 
 DEBUG_PACKAGES = [
     "gTTS",
+    "pydevd",
     "pydevd_pycharm",
     "pygame",
 ]

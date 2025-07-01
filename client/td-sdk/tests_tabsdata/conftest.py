@@ -12,16 +12,27 @@ import sys
 from time import sleep
 from typing import Any
 
+# noinspection PyPackageRequirements
 import boto3
+
+# noinspection PyPackageRequirements
 import cx_Oracle
+
+# noinspection PyPackageRequirements
 import docker
 import hvac
+
+# noinspection PyPackageRequirements
 import mysql.connector
 import numpy as np
 import polars as pl
 import psycopg2
+
+# noinspection PyPackageRequirements
 import pytest
 import yaml
+
+# noinspection PyPackageRequirements
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
 
@@ -43,6 +54,9 @@ def pytest_configure():
     setup_tests_logging()
 
 
+TABSDATA_OS = "tabsdata-os"
+TABSDATA_EE = "tabsdata-ee"
+
 TESTS_ROOT_FOLDER = os.path.dirname(__file__)
 
 sys.path.insert(0, TESTS_ROOT_FOLDER)
@@ -53,8 +67,11 @@ TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 check_assets()
 
+import tabsdata as _td
+
+# noinspection PyProtectedMember
 import tabsdata.utils.tableframe._constants as td_constants
-from tabsdata.api.apiserver import APIServer, APIServerError, obtain_connection
+from tabsdata.api.apiserver import APIServer, obtain_connection
 from tabsdata.api.tabsdata_server import TabsdataServer
 from tabsdata.secret import HashiCorpSecret
 from tabsdata.tabsdatafunction import TableInput, TableOutput
@@ -63,9 +80,23 @@ from tabsdata.tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
     delete_virtual_environment,
 )
+
+# noinspection PyProtectedMember
 from tabsdata.utils.tableframe._generators import _id
 
+module_path = str(_td.__file__)
+
 ABSOLUTE_TEST_FOLDER_LOCATION = os.path.dirname(os.path.abspath(__file__))
+
+if TABSDATA_OS in module_path:
+    ABSOLUTE_TEST_FOLDER_LOCATION = ABSOLUTE_TEST_FOLDER_LOCATION.replace(
+        TABSDATA_EE, TABSDATA_OS
+    )
+elif TABSDATA_EE in module_path:
+    ABSOLUTE_TEST_FOLDER_LOCATION = ABSOLUTE_TEST_FOLDER_LOCATION.replace(
+        TABSDATA_OS, TABSDATA_EE
+    )
+
 ABSOLUTE_ROOT_FOLDER_LOCATION = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
@@ -290,6 +321,7 @@ def testing_mysql(tmp_path_factory, worker_id):
 
 
 def create_docker_postgres_database():
+    mydb = None
     remove_docker_containers(DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME)
     logger.info("Starting Postgres container")
     client = docker.from_env()
@@ -423,6 +455,7 @@ def azure_client():
 
 
 def create_docker_mysql_database():
+    mydb = None
     remove_docker_containers(DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME)
     logger.info("Starting MySQL container")
     client = docker.from_env()
@@ -587,6 +620,7 @@ def create_docker_hashicorp_vault():
 
 
 def create_docker_mariadb_database():
+    mydb = None
     remove_docker_containers(DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME)
     logger.info("Starting MariaDB container")
     client = docker.from_env()
@@ -674,6 +708,7 @@ def create_docker_mariadb_database():
 
 
 def create_docker_oracle_database():
+    mydb = None
     remove_docker_containers(DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME)
     logger.info("Starting Oracle container")
     client = docker.from_env()
@@ -754,7 +789,7 @@ def create_docker_oracle_database():
         return
 
 
-def pytest_sessionfinish(session, exitstatus):
+def pytest_sessionfinish(session, _exitstatus):
     # Based on the following discussion:
     # https://github.com/pytest-dev/pytest-xdist/issues/271
     if getattr(session.config, "workerinput", None) is not None:
@@ -850,7 +885,7 @@ def v1_mock_table_representer(
 
 def v1_mock_table_versions_representer(
     dumper: yaml.SafeDumper, mock_table_versions: MockTableVersions
-) -> yaml.nodes.MappingNode:
+) -> yaml.nodes.SequenceNode:
     """Represent a MockTable instance as a YAML mapping node."""
     return dumper.represent_sequence("!TableVersions", mock_table_versions.content)
 

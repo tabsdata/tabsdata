@@ -761,7 +761,6 @@ def store_source_raw_data(
     lf = tf._to_lazy()
     sink_lf_to_location(lf, execution_context, file_location)
     logger.debug("File for raw data stored successfully")
-    # ToDo: this might need some adjustments if uri points to a cloud storage location.
     # noinspection PyProtectedMember
     return TableFrame.__build__(
         df=scan_lf_from_location(

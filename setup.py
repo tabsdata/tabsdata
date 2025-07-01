@@ -405,7 +405,12 @@ if (
 
 logger.debug(f"Copying contents of {variant_assets_folder} to {package_assets_folder}")
 try:
-    shutil.copytree(variant_assets_folder, package_assets_folder, dirs_exist_ok=True)
+    shutil.copytree(
+        variant_assets_folder,
+        package_assets_folder,
+        dirs_exist_ok=True,
+        symlinks=False,
+    )
 except Exception as e:
     logger.warning(
         f"🦠 Warning: Failed to copy {variant_assets_folder} to"

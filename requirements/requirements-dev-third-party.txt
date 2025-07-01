@@ -34,6 +34,7 @@ pipdeptree==2.25.1
 pip-tools==7.4.1
 psutil==7.0.0
 psycopg2-binary==2.9.10
+pydevd
 pydevd_pycharm
 pygame
 pytest==8.3.5

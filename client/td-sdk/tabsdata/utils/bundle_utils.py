@@ -298,6 +298,7 @@ def store_folder_contents(path_to_persist: str, save_location: str):
         save_location,
         ignore=ignorePath(save_location),
         dirs_exist_ok=True,
+        symlinks=False,
     )
 
     # Step 2: Extra pass to find binaries under ignored folder "target".
