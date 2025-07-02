@@ -222,7 +222,7 @@ class SnowflakeDestination(DestinationPlugin):
     def _create_stage_if_not_exists(self, conn):
         if not self.stage:
             logger.debug(
-                f"No stage provided. A new temporary unique stage will be created."
+                "No stage provided. A new temporary unique stage will be created."
             )
             stage = f"td_{encode_id(debug=False)}"
             logger.debug(f"Using stage name '{stage}'. Creating it now.")

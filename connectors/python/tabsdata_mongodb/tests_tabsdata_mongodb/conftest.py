@@ -171,7 +171,8 @@ def testing_mongodb_with_replica_set(tmp_path_factory, worker_id):
             yield create_docker_mongodb_database_with_replica_set()
 
 
-def pytest_sessionfinish(session, _exitstatus):
+# noinspection PyUnusedLocal
+def pytest_sessionfinish(session, exitstatus):
     # Based on the following discussion:
     # https://github.com/pytest-dev/pytest-xdist/issues/271
     if getattr(session.config, "workerinput", None) is not None:

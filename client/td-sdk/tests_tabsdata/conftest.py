@@ -789,7 +789,8 @@ def create_docker_oracle_database():
         return
 
 
-def pytest_sessionfinish(session, _exitstatus):
+# noinspection PyUnusedLocal
+def pytest_sessionfinish(session, exitstatus):
     # Based on the following discussion:
     # https://github.com/pytest-dev/pytest-xdist/issues/271
     if getattr(session.config, "workerinput", None) is not None:
