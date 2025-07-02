@@ -3,7 +3,6 @@
 //
 
 use crate::boot::boot;
-
 mod boot;
 
 fn main() {
