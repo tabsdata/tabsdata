@@ -13,8 +13,9 @@ use td_error::TdError;
 use td_objects::crudl::RequestContext;
 use td_objects::types::basic::AccessTokenId;
 use td_services::auth::services::AuthServices;
-use td_services::auth::session::SessionProvider;
+use td_services::auth::session::{Session, SessionProvider};
 use td_services::auth::{decode_token, AuthError};
+use tracing::{span, Instrument, Level, Span};
 
 pub async fn authorization_layer(
     State(auth_services): State<Arc<AuthServices>>,
@@ -78,5 +79,98 @@ pub async fn authorization_layer(
     request.extensions_mut().insert(request_context);
 
     // Let the request continue
-    Ok(next.run(request).await)
+    // TODO this could be a separate layer
+    let log_span = log_span(&session);
+    let future = next.run(request).instrument(log_span);
+    Ok(future.await)
+}
+
+fn log_span(session: &Session) -> Span {
+    span!(
+        Level::INFO,
+        "authorized",
+        user_name = %session.user_name(),
+        role_name = %session.role_name(),
+        access_token_id = %session.access_token_id().log(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{self, Write};
+    use std::sync::{Arc, Mutex};
+    use td_objects::types::basic::{
+        AtTime, RefreshTokenId, RoleId, RoleName, SessionStatus, UserId, UserName,
+    };
+    use td_services::auth::session::Session;
+    use tracing::info;
+    use tracing::subscriber::set_default;
+    use tracing_subscriber::{fmt, layer::SubscriberExt, registry};
+
+    struct WriterGuard {
+        buffer: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl Write for WriterGuard {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            let mut lock = self.buffer.lock().unwrap();
+            lock.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_auth_span() {
+        // Collect logs in a buffer
+        let logs = Arc::new(Mutex::new(Vec::new()));
+
+        // Custom layer to capture span data
+        let logs_clone = logs.clone();
+        let layer = fmt::layer()
+            .with_writer(move || WriterGuard {
+                buffer: logs_clone.clone(),
+            })
+            .with_ansi(false)
+            .with_level(true);
+
+        let subscriber = registry().with(layer);
+        let _guard = set_default(subscriber);
+
+        // Create some logs
+        let role_name = RoleName::sys_admin();
+        let user_name = UserName::admin();
+        let access_token_id = AccessTokenId::default();
+        let session = Session::builder()
+            .access_token_id(access_token_id)
+            .refresh_token_id(RefreshTokenId::default())
+            .user_id(UserId::admin())
+            .role_id(RoleId::sys_admin())
+            .created_on(AtTime::default())
+            .expires_on(AtTime::default())
+            .status_change_on(AtTime::default())
+            .status(SessionStatus::Active)
+            .user_name(&user_name)
+            .role_name(&role_name)
+            .build()
+            .unwrap();
+        let log_span = log_span(&session);
+
+        async {
+            info!("This is a test log message");
+        }
+        .instrument(log_span)
+        .await;
+
+        // Inspect the logs
+        let logs = logs.lock().unwrap().to_vec();
+        let log_output = String::from_utf8_lossy(&logs);
+        let trace_auth_id = access_token_id.log();
+        assert!(log_output.contains(&format!(
+            "authorized{{user_name={user_name} role_name={role_name} access_token_id={trace_auth_id}}}"
+        )));
+    }
 }

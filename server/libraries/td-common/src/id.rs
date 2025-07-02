@@ -16,6 +16,8 @@ use td_error::td_error;
 use td_security::DEFAULT_IDS;
 use uuid::{Bytes, Uuid};
 
+pub const ID_LENGTH: usize = 26;
+
 #[td_error]
 pub enum IdError {
     #[error("Invalid String representation, not BASE32HEX_NOPAD: {0}")]
@@ -83,7 +85,7 @@ impl TryFrom<&str> for Id {
     type Error = IdError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         let input = s.as_bytes();
-        if input.len() != 26 {
+        if input.len() != ID_LENGTH {
             return Err(IdError::InvalidBase32HexValue(input.len()));
         }
         let mut bytes = vec![0; 16];
@@ -158,7 +160,7 @@ mod tests {
     fn test_to_string_try_from_string() {
         let id = id();
         let s = id.to_string();
-        assert_eq!(s.len(), 26);
+        assert_eq!(s.len(), ID_LENGTH);
         let id2 = Id::try_from(&s).unwrap();
         assert_eq!(id, id2);
     }

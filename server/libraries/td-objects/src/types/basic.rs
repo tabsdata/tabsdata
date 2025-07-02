@@ -14,7 +14,7 @@ use crate::types::ComposedString;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 use td_common::execution_status::WorkerCallbackStatus;
-use td_common::id::Id;
+use td_common::id::{Id, ID_LENGTH};
 use td_error::TdError;
 use td_security::{
     ADMIN_USER, ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN, SEC_ADMIN_ROLE,
@@ -29,6 +29,15 @@ pub struct AccessTokenExpiration;
 
 #[td_type::typed(id)]
 pub struct AccessTokenId;
+
+impl AccessTokenId {
+    pub fn log(&self) -> String {
+        // half the token as trace
+        let s = self.to_string();
+        let mid = ID_LENGTH / 2;
+        s[mid..].to_string()
+    }
+}
 
 #[td_type::typed(timestamp, try_from = TriggeredOn)]
 pub struct AtTime;

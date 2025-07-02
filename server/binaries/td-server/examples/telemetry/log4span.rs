@@ -6,7 +6,7 @@ use td_common::logging;
 use tracing::{info, span, Level};
 use tracing_futures::Instrument;
 
-// MDC (Mapped Diagnostic Context) simple exampes.
+// MDC (Mapped Diagnostic Context) simple examples.
 
 #[tokio::main]
 async fn main() {

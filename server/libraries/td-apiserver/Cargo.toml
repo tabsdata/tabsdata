@@ -99,6 +99,7 @@ utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
 [dev-dependencies]
 td-objects = { workspace = true, features = ["td-test"] }
 testdir = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

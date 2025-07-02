@@ -14,7 +14,7 @@ use td_storage::Storage;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
 use tokio::select;
 use tower::{BoxError, ServiceBuilder, ServiceExt};
-use tracing::{error, trace};
+use tracing::{error, span, trace, Instrument, Level};
 
 pub struct Scheduler {
     request_service: ServiceProvider<(), (), BoxError>,
@@ -36,9 +36,11 @@ impl Scheduler {
 
     pub async fn run(self) -> Result<(), Box<dyn Error>> {
         let this = Arc::new(self);
+        // TODO make span part of the service, not the futures
+        let log_span = span!(Level::INFO, "scheduler");
 
         let scheduler = this.clone();
-        tokio::spawn(async move {
+        let request_future = async move {
             loop {
                 match scheduler.request().await {
                     Ok(_) => trace!("Execution plan scheduler executed successfully"),
@@ -47,10 +49,12 @@ impl Scheduler {
                     }
                 };
             }
-        });
+        }
+        .instrument(log_span.clone());
+        tokio::spawn(request_future);
 
         let scheduler = this.clone();
-        tokio::spawn(async move {
+        let commit_future = async move {
             loop {
                 match scheduler.commit().await {
                     Ok(_) => trace!("Execution plan scheduler commit executed successfully"),
@@ -59,7 +63,9 @@ impl Scheduler {
                     }
                 };
             }
-        });
+        }
+        .instrument(log_span.clone());
+        tokio::spawn(commit_future);
 
         select! {
             _ = terminate() => {

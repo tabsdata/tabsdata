@@ -75,6 +75,22 @@ pub struct SessionDB {
 }
 
 #[td_type::Dao]
+#[dao(sql_table = "sessions__with_names")]
+pub struct SessionDBWithNames {
+    access_token_id: AccessTokenId,
+    refresh_token_id: RefreshTokenId,
+    user_id: UserId,
+    role_id: RoleId,
+    created_on: AtTime,
+    expires_on: AtTime,
+    status_change_on: AtTime,
+    status: SessionStatus,
+
+    user_name: UserName,
+    role_name: RoleName,
+}
+
+#[td_type::Dao]
 #[dao(sql_table = "sessions")]
 pub struct SessionLogoutDB {
     #[td_type(setter)]

@@ -13,14 +13,14 @@ use td_database::sql::DbPool;
 use td_error::{td_error, TdError};
 use td_objects::crudl::{handle_delete_error, handle_select_error};
 use td_objects::sql::{DaoQueries, DeleteBy, SelectBy};
-use td_objects::types::auth::SessionDB;
+use td_objects::types::auth::{SessionDB, SessionDBWithNames};
 use td_objects::types::basic::{AccessTokenId, AtTime, SessionStatus};
 use tracing::debug;
 
-pub type Session = SessionDB;
+pub type Session = SessionDBWithNames;
 
 #[td_error]
-pub enum SessionError {
+enum SessionError {
     #[error("Session not found: {0}")]
     NotFound(AccessTokenId) = 4000,
 
@@ -82,7 +82,7 @@ impl<'a> Provider<'a, HashMap<AccessTokenId, Arc<Session>>, Option<&'a mut Sqlit
         conn: Option<&'a mut SqliteConnection>,
     ) -> Result<Arc<HashMap<AccessTokenId, Arc<Session>>>, TdError> {
         let status = &(&SessionStatus::Active);
-        let mut query_builder = self.queries.select_by::<SessionDB>(status)?;
+        let mut query_builder = self.queries.select_by::<SessionDBWithNames>(status)?;
 
         // if we get a connection in the call we use it, else we use one from the DbPool
         // we have to acquire one regardless

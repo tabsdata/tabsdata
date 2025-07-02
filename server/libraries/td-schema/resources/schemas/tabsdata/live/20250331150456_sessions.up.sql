@@ -13,3 +13,11 @@ CREATE TABLE sessions
     status_change_on TIMESTAMP   NOT NULL,
     status           TEXT        NOT NULL
 );
+
+CREATE VIEW sessions__with_names AS
+SELECT s.*,
+       u.name AS user_name,
+       r.name AS role_name
+FROM sessions s
+         JOIN users u ON s.user_id = u.id
+         JOIN roles r ON s.role_id = r.id;

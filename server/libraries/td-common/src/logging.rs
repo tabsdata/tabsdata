@@ -21,7 +21,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::field::Field;
 use tracing::{debug, error, info, trace, warn, Event, Level, Subscriber};
-use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
@@ -115,8 +114,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
 
     let tabsdata_layer = tracing_subscriber::fmt::layer()
         .with_ansi(log_with_ansi)
-        .with_writer(writer)
-        .with_span_events(FmtSpan::FULL);
+        .with_writer(writer);
 
     let env_filter = match load() {
         Some(log_config) => {

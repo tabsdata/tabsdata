@@ -12,6 +12,7 @@ use td_error::td_error;
 use td_error::TdError;
 use td_objects::crudl::RequestContext;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+use tracing::{span, Instrument, Level};
 
 #[derive(Default)]
 pub struct LoopbackIpFilterService;
@@ -42,7 +43,9 @@ impl LoopbackIpFilterService {
             let mut request = request;
             request.extensions_mut().insert(request_context);
 
-            Ok(next.run(request).await)
+            let log_span = span!(Level::INFO, "authorized_internal");
+            let future = next.run(request).instrument(log_span);
+            Ok(future.await)
         } else {
             Err(TdError::from(UriFilterError::Unauthorized))?
         }
@@ -50,7 +53,7 @@ impl LoopbackIpFilterService {
 }
 
 #[td_error]
-pub enum UriFilterError {
+enum UriFilterError {
     #[error("Unauthorized")]
     Unauthorized = 4000,
 }

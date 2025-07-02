@@ -60,6 +60,7 @@ use crate::layers::uri_filter::LoopbackIpFilterService;
 use crate::router::auth::authorization_layer::authorization_layer;
 use crate::router::auth::{auth_secure, auth_unsecure};
 use crate::router::status::StatusLogic;
+use crate::status::error_status::ServerErrorStatus;
 use crate::{Server, ServerBuilder, ServerError};
 use axum::middleware::{from_fn, from_fn_with_state};
 use std::error::Error;
@@ -68,6 +69,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use td_authz::AuthzContext;
 use td_database::sql::DbPool;
+use td_error::{td_error, TdError};
 use td_security::config::PasswordHashingConfig;
 use td_services::auth::services::{AuthServices, PasswordHashConfig};
 use td_services::auth::session;
@@ -108,6 +110,12 @@ pub mod state {
     pub type Workers = Arc<WorkerServices>;
 
     pub type StorageRef = Arc<Storage>;
+}
+
+#[td_error]
+enum ApiServerError {
+    #[error("API endpoint not found")]
+    ApiEndpointNotFound = 1000,
 }
 
 pub struct ApiServerInstance {
@@ -282,6 +290,10 @@ impl ApiServerInstanceBuilder {
     }
 
     pub async fn build(&self) -> Result<ApiServerInstance, ServerError> {
+        async fn api_not_found_handler() -> ServerErrorStatus {
+            TdError::from(ApiServerError::ApiEndpointNotFound).into()
+        }
+
         let api_v1 = {
             // API router
             let router = axum::Router::new()
@@ -312,7 +324,12 @@ impl ApiServerInstanceBuilder {
                 );
 
             // Nest the router in the V1 address.
-            let router = axum::Router::new().nest(td_objects::rest_urls::BASE_URL_V1, router);
+            let router = axum::Router::new()
+                .nest(td_objects::rest_urls::V1, router)
+                // Everything going to /api and is not found, is a not found. Only non /api calls get through.
+                .fallback(api_not_found_handler);
+            // Nest the router in the base API URL.
+            let router = axum::Router::new().nest(td_objects::rest_urls::BASE_API_URL, router);
 
             // Add any router extensions (not part of the API).
             #[allow(unused_mut)]
@@ -348,7 +365,12 @@ impl ApiServerInstanceBuilder {
             );
 
             // Nest the router in the V1 address.
-            let router = axum::Router::new().nest(td_objects::rest_urls::BASE_URL_V1, router);
+            let router = axum::Router::new()
+                .nest(td_objects::rest_urls::V1, router)
+                // Everything going to /api and is not found, is a not found. Only non /api calls get through.
+                .fallback(api_not_found_handler);
+            // Nest the router in the base API URL.
+            let router = axum::Router::new().nest(td_objects::rest_urls::BASE_API_URL, router);
 
             // Default layers
             let router = router

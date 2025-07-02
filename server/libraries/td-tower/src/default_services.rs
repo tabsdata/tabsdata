@@ -18,7 +18,7 @@ use std::sync::Arc;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use tower::{Layer, Service};
-use tracing::error;
+use tracing::{error, trace};
 
 /// Utility trait to ensure that the type is Send + Sync + 'static
 pub trait Share: Send + Sync + 'static {}
@@ -123,9 +123,12 @@ where
 
             // And send it to the next service, awaiting the completion
             let mut handler = match inner.call(handler).await {
-                Ok(handler) => Ok(handler),
+                Ok(handler) => {
+                    trace!("Service completed successfully");
+                    Ok(handler)
+                }
                 Err(e) => {
-                    error!("Inner service error: {}", e);
+                    error!("{e}");
                     Err(e)
                 }
             }?;

@@ -22,7 +22,7 @@ use td_apiforge::apiserver_schema;
 use td_apiforge::status;
 
 pub type AuthorizeErrorStatus = DefaultErrorStatus;
-pub type ServerErrorStatus = DefaultErrorStatus;
+pub type ServerErrorStatus = DefaultAndNotFoundErrorStatus;
 pub type ListErrorStatus = DefaultAndNotFoundErrorStatus;
 pub type GetErrorStatus = DefaultAndNotFoundErrorStatus;
 pub type CreateErrorStatus = DefaultAndNotFoundErrorStatus;
