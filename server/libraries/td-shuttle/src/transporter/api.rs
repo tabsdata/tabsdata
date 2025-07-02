@@ -387,7 +387,16 @@ pub trait AsUrl {
     fn as_url(&self) -> Url;
 
     fn base_path(&self) -> String {
-        split_base_path_and_name(self.as_url().path()).0
+        let url = self.as_url();
+        let (mut base_path, _) = split_base_path_and_name(url.path());
+        if url.scheme() != "file"
+            && base_path.len() >= 2
+            && base_path.as_bytes()[1] == b':'
+            && base_path.as_bytes()[0].is_ascii_alphabetic()
+        {
+            base_path = base_path[2..].to_string();
+        }
+        base_path
     }
 
     fn file_name(&self) -> Option<String> {

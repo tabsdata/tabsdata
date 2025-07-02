@@ -233,6 +233,7 @@ def test_write_snowflake_append(tmp_path, snowflake_connection):
     )
     try:
         for i in range(2):
+            destination.stage = None
             destination.write([mock_parquet_table])
             cursor = snowflake_connection.cursor()
             cursor.execute(f"SELECT * FROM {table_name}")
@@ -266,6 +267,7 @@ def test_write_snowflake_replace(tmp_path, snowflake_connection):
     )
     try:
         for _ in range(2):
+            destination.stage = None
             destination.write([mock_parquet_table])
             cursor = snowflake_connection.cursor()
             cursor.execute(f"SELECT * FROM {table_name}")

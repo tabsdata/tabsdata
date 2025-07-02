@@ -8,7 +8,7 @@ use td_common::attach::attach;
 use td_common::logging;
 use tracing::{info, Level};
 
-#[attach(signal = "hal")]
+#[attach(signal = "tars")]
 pub fn main() {
     logging::start(Level::DEBUG, None, false);
 

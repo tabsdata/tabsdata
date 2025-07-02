@@ -224,7 +224,8 @@ class SnowflakeDestination(DestinationPlugin):
             logger.debug(
                 "No stage provided. A new temporary unique stage will be created."
             )
-            stage = f"td_{encode_id(debug=False)}"
+            id_uuid, id_code = encode_id(debug=False)
+            stage = f"td_{id_code.lower()}"
             logger.debug(f"Using stage name '{stage}'. Creating it now.")
             cursor = conn.cursor()
             stage = self._fully_qualify_entity(stage)
