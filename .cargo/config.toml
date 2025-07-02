@@ -14,4 +14,7 @@ xtask = "run --locked --manifest-path ./devutils/automation/tasks/makers/td-xtas
 # target = "x86_64-pc-windows-gnu"
 
 [env]
+RUST_BACKTRACE = "1"
+RUST_LOG = "error"
+RUSTDOC_LOG = "error"
 SWAGGER_UI_OVERWRITE_FOLDER = { value = "server/binaries/td-server/resources/swagger", relative = true, force = true }

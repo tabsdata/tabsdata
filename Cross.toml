@@ -5,10 +5,21 @@
 [build]
 
 pre-build = [
-    "echo Showing croos docker container current folder contents...",
+    "echo Showing croos docker container and tree current folder contents...",
     "echo _____",
     "pwd",
-    "echo _____",
+    "echo _____ (/)",
     "ls -lah .",
-    "echo _____",
+    "echo _____ (/home)",
+    "ls -lah /home",
+    "echo _____ (/home/runner)",
+    "ls -lah /home/runner",
+    "echo _____ (/home/runner/work)",
+    "ls -lah /home/runner/work",
+    "echo _____ (/home/runner/work/tabsdata-ee)",
+    "ls -lah /home/runner/work/tabsdata-ee",
+    "echo _____ (/home/runner/work/tabsdata-ee/tabsdata-ee)",
+    "ls -lah /home/runner/work/tabsdata-ee/tabsdata-ee",
+    "echo _____ (/home/runner/work/tabsdata-ee/tabsdata-ee/tabsdata)",
+    "ls -lah /home/runner/work/tabsdata-ee/tabsdata-ee/tabsdata",
 ]
