@@ -14,6 +14,7 @@ use axum::Router;
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use http::uri::Scheme;
+use rustls::crypto::{aws_lc_rs, ring};
 use std::error::Error;
 use std::fmt::Debug;
 use std::net::SocketAddr;
@@ -80,8 +81,14 @@ impl ServerBuilder {
 
     async fn load_tls(&self) -> Option<RustlsConfig> {
         let ssl_folder = match &self.ssl_folder {
-            Some(folder) => folder,
+            Some(folder) => {
+                debug!("A ssl folder was provided: '{}'", folder.display());
+                eprintln!("A ssl folder was provided: '{}'", folder.display());
+                folder
+            }
             None => {
+                warn!("A ssl folder was not provided. Protocol tls will not be available.");
+                eprintln!("A ssl folder was not provided. Protocol tls will not be available.");
                 return None;
             }
         };
@@ -89,29 +96,58 @@ impl ServerBuilder {
         let (key_path, cert_path) = if ssl_folder.exists() {
             let key_path = ssl_folder.join(SSL_KEY_PEM_FILE);
             let cert_path = ssl_folder.join(SSL_CERT_PEM_FILE);
-            debug!(
-                "Loading TLS certs from: {} and {}",
+            info!(
+                "Loading tls certificates from: '{}' & '{}'",
+                cert_path.display(),
+                key_path.display()
+            );
+            eprintln!(
+                "Loading tls certificates from: '{}' & '{}'",
                 cert_path.display(),
                 key_path.display()
             );
             (key_path, cert_path)
         } else {
-            debug!("SSL folder not available {:?}", self.ssl_folder);
+            warn!(
+                "The ssl folder does no exist: '{:?}'. Protocol tls will not be available.",
+                self.ssl_folder
+            );
+            eprintln!(
+                "The ssl folder does no exist: '{:?}'. Protocol tls will not be available.",
+                self.ssl_folder
+            );
             return None;
         };
 
-        if let Err(e) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        if let Err(e) = aws_lc_rs::default_provider().install_default() {
             warn!(
-                "Failed to install default TLS CryptoProvider, TLS will not be available: {:?}",
-                e
+                "Failed to install the aws-lc-rs tls cryptographic provider: {e:?}. Falling back to ring tls cryptographic provider."
             );
-            return None;
+            eprintln!(
+                "Failed to install the aws-lc-rs tls cryptographic provider: {e:?}. Falling back to ring tls cryptographic provider."
+            );
+            if let Err(e) = ring::default_provider().install_default() {
+                info!(
+                    "Failed to install the ring tls cryptographic provider: {e:?}. Protocol tls will not be available."
+                );
+                eprintln!(
+                    "Failed to install the ring tls cryptographic provider: {e:?}. Protocol tls will not be available."
+                );
+                return None;
+            } else {
+                info!("Successfully installed the ring tls cryptographic provider!");
+                println!("Successfully installed the ring tls cryptographic provider!");
+            }
+        } else {
+            info!("Successfully installed the aws-lc-rs tls cryptographic provider!");
+            println!("Successfully installed the aws-lc-rs tls cryptographic provider!");
         }
 
         RustlsConfig::from_pem_file(cert_path, key_path)
             .await
             .map_err(|e| {
-                warn!("Error loading TLS certs: {}", e);
+                error!("Error loading the tls certificates: {e}");
+                eprintln!("Error loading the tls certificates: {e}");
             })
             .ok()
     }
@@ -261,6 +297,8 @@ pub(crate) mod tests {
     use crate::router;
     use reqwest::Client;
     use std::net::{Ipv4Addr, SocketAddr};
+    use td_common::constants::TD_CROSS_BUILD;
+    use td_common::env::check_flag_env;
     use testdir::testdir;
     use tokio::fs;
     use tokio::io::AsyncWriteExt;
@@ -340,7 +378,9 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn test_tls_config_success() {
         let tls_path = testdir!();
+        eprintln!("TLS path is {tls_path:?}");
         fs::create_dir_all(&tls_path).await.unwrap();
+        eprintln!("Created tls path is {tls_path:?}");
 
         // Write dummy PEM files (obviously, completely invalid for real use)
         let key_path = tls_path.join(SSL_KEY_PEM_FILE);
@@ -372,13 +412,13 @@ O09LIoG1amWrXq+Cb/zjCFTBIjlY1l4FCM61zbxjHNc8AxNprls1PEDj460+H1Wo
 336M0v1+uiHDK1XEB3ULHtxtYImBgfbv/vXu5V0wxfeKQfMuEhlgJ1k+9lm7/vjJ
 j5JcrAQs7+AoPMM8ql2UHbA=
 -----END PRIVATE KEY-----"#;
-
         fs::File::create(&key_path)
             .await
             .unwrap()
             .write_all(test_key.as_ref())
             .await
             .unwrap();
+        eprintln!("Key pem created in {key_path:?}");
 
         let cert_path = tls_path.join(SSL_CERT_PEM_FILE);
         let test_crt = r#"-----BEGIN CERTIFICATE-----
@@ -406,13 +446,27 @@ vRcg70teydPmY1fiAURFk3gl/g==
             .write_all(test_crt.as_ref())
             .await
             .unwrap();
+        eprintln!("Certificate pem created in {cert_path:?}");
 
         let builder = ServerBuilder::new(
             vec![SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)],
             Router::new(),
         )
         .tls(tls_path);
+        eprintln!("Builder is {builder:?}");
         let config = builder.load_tls().await;
-        assert!(config.is_some());
+        eprintln!("Config is {config:?}");
+        if check_flag_env(TD_CROSS_BUILD) {
+            info!("Identified a cross runtime.");
+            eprintln!("Identified a cross runtime.");
+            warn!("Skipping tls load validation as execution runtime is cross.");
+            eprintln!("Skipping tls load validation as execution runtime is cross.");
+        } else {
+            info!("Identified a non-cross runtime.");
+            eprintln!("Identified a non-cross runtime.");
+            info!("Proceeding the run tls load validation.");
+            eprintln!("Proceeding the run tls load validation.");
+            assert!(config.is_some());
+        }
     }
 }

@@ -353,14 +353,14 @@ version = "0.3.31"
 [workspace.dependencies.getset]
 version = "0.1.6"
 
-[workspace.dependencies.hex]
-version = "0.4.3"
-
 [workspace.dependencies.glob]
 version = "0.3.2"
 
 [workspace.dependencies.graphviz-rust]
 version = "0.9.5"
+
+[workspace.dependencies.hex]
+version = "0.4.3"
 
 [workspace.dependencies.homedir]
 version = "0.3.6"
@@ -385,7 +385,7 @@ version = "0.7.4"
 version = "2.10.0"
 
 [workspace.dependencies.indicatif]
-version = "0.17.11"
+version = "0.17.12"
 features = ["default", "improved_unicode"]
 
 [workspace.dependencies.itertools]
@@ -454,7 +454,10 @@ version = "0.28.1"
 version = "1.11.1"
 
 [workspace.dependencies.reqwest]
-version = "0.12.20"
+version = "0.12.22"
+
+[workspace.dependencies.ring]
+version = "0.17.14"
 
 [workspace.dependencies.rustls]
 version = "0.23.28"
@@ -513,7 +516,7 @@ version = "0.4.2"
 version = "2.0.12"
 
 [workspace.dependencies.tokio]
-version = "1.45.1"
+version = "1.46.0"
 features = ["full"]
 
 [workspace.dependencies.tokio-util]
@@ -610,3 +613,7 @@ ta-tableframe = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
+
+# Version 0.17.12 has been flagged as yanked, but we cannot easily downgrade to version 0.17.11.
+[patch.crates-io]
+indicatif = { git = "https://github.com/console-rs/indicatif.git", tag = "0.17.12" }

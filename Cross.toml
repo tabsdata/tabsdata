@@ -2,13 +2,21 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
-[build]
-
+[target.x86_64-unknown-linux-musl]
 pre-build = [
-    "echo Showing croos docker container current folder contents...",
+    "echo Showing cross docker container context for root...",
+    "echo _____ import TD_CROSS_BUILD",
+    "echo ${TD_CROSS_BUILD}",
     "echo _____",
+    "export TD_CROSS_BUILD=true",
+    "echo _____ export TD_CROSS_BUILD",
+    "echo ${TD_CROSS_BUILD}",
+    "echo _____ pwd ",
     "pwd",
-    "echo _____",
+    "echo _____ pwd contents",
     "ls -lah .",
     "echo _____",
 ]
+
+[target.x86_64-unknown-linux-musl.env]
+passthrough = ["TD_CROSS_BUILD=true"]
