@@ -10,16 +10,13 @@ script = [
 
     cm_run_task splash
 
-    info "🐢 Runnning task: ${CARGO_MAKE_TASK}"
-
     project_tabsdata_root_folder = get_env PROJECT_TABSDATA_ROOT_FOLDER
     ko = starts_with ${project_tabsdata_root_folder} "\${"
     if ${ko}
-        error "🛟 Environment is only partially initialized. Aborting."
-        error "🛟 You may have tried to run a non-existent task."
-        error "🛟 Or your environment setup may be incomplete."
         exit 0
     end
+
+    info "🐢 Runnning task: ${CARGO_MAKE_TASK}"
 
     os = os_family
     info "🏈 Current os: ${os}"
