@@ -1,5 +1,3 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-
-tabsdata_mongodb[deps]==1.0.0

@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-tabsdata_databricks==0.9.7
-tabsdata_mongodb==0.9.7
-tabsdata_salesforce==0.9.7
-tabsdata_snowflake==0.9.7
+tabsdata_databricks==1.0.0
+tabsdata_mongodb==1.0.0
+tabsdata_salesforce==1.0.0
+tabsdata_snowflake==1.0.0

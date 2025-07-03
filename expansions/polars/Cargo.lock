@@ -3830,7 +3830,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -3846,7 +3846,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "td-apiforge"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "axum",
  "darling",
@@ -3869,7 +3869,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "darling",
  "openssl",
@@ -3881,7 +3881,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "duct",
  "openssl",
@@ -3893,7 +3893,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3944,7 +3944,7 @@ dependencies = [
 
 [[package]]
 name = "td-concrete"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "darling",
  "derive_builder",
@@ -3959,7 +3959,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "itertools",
@@ -3974,7 +3974,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -3988,7 +3988,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "darling",
  "duct",
@@ -4000,7 +4000,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -4120,7 +4120,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "openssl",
  "quote",
@@ -4129,7 +4129,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "openssl",
  "quote",
@@ -4324,7 +4324,7 @@ dependencies = [
 
 [[package]]
 name = "ty-expansions"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -4335,7 +4335,7 @@ dependencies = [
 
 [[package]]
 name = "ty-tableframe"
-version = "0.9.7"
+version = "1.0.0"
 dependencies = [
  "openssl",
  "polars",

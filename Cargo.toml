@@ -6,7 +6,7 @@
 description = "Tabsdata is a publish-subscribe (pub/sub) server for tables."
 name = "tabsdata"
 edition = "2021"
-version = "0.9.7"
+version = "1.0.0"
 license = "Apache 2.0"
 build = "build.rs"
 
@@ -26,7 +26,7 @@ publish = false
 readme = "README.md"
 repository = "https://github.com/tabsdata/tabsdata"
 rust-version = "1.88.0"
-version = "0.9.7"
+version = "1.0.0"
 
 [workspace]
 members = [
