@@ -83,12 +83,10 @@ impl ServerBuilder {
         let ssl_folder = match &self.ssl_folder {
             Some(folder) => {
                 debug!("A ssl folder was provided: '{}'", folder.display());
-                eprintln!("A ssl folder was provided: '{}'", folder.display());
                 folder
             }
             None => {
                 warn!("A ssl folder was not provided. Protocol tls will not be available.");
-                eprintln!("A ssl folder was not provided. Protocol tls will not be available.");
                 return None;
             }
         };
@@ -101,18 +99,9 @@ impl ServerBuilder {
                 cert_path.display(),
                 key_path.display()
             );
-            eprintln!(
-                "Loading tls certificates from: '{}' & '{}'",
-                cert_path.display(),
-                key_path.display()
-            );
             (key_path, cert_path)
         } else {
             warn!(
-                "The ssl folder does no exist: '{:?}'. Protocol tls will not be available.",
-                self.ssl_folder
-            );
-            eprintln!(
                 "The ssl folder does no exist: '{:?}'. Protocol tls will not be available.",
                 self.ssl_folder
             );
@@ -123,14 +112,8 @@ impl ServerBuilder {
             warn!(
                 "Failed to install the aws-lc-rs tls cryptographic provider: {e:?}. Falling back to ring tls cryptographic provider."
             );
-            eprintln!(
-                "Failed to install the aws-lc-rs tls cryptographic provider: {e:?}. Falling back to ring tls cryptographic provider."
-            );
             if let Err(e) = ring::default_provider().install_default() {
                 info!(
-                    "Failed to install the ring tls cryptographic provider: {e:?}. Protocol tls will not be available."
-                );
-                eprintln!(
                     "Failed to install the ring tls cryptographic provider: {e:?}. Protocol tls will not be available."
                 );
                 return None;
@@ -147,7 +130,6 @@ impl ServerBuilder {
             .await
             .map_err(|e| {
                 error!("Error loading the tls certificates: {e}");
-                eprintln!("Error loading the tls certificates: {e}");
             })
             .ok()
     }
@@ -378,7 +360,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn test_tls_config_success() {
         let tls_path = testdir!();
-        eprintln!("TLS path is {tls_path:?}");
+        eprintln!("The tls path is {tls_path:?}");
         fs::create_dir_all(&tls_path).await.unwrap();
         eprintln!("Created tls path is {tls_path:?}");
 
@@ -457,14 +439,10 @@ vRcg70teydPmY1fiAURFk3gl/g==
         let config = builder.load_tls().await;
         eprintln!("Config is {config:?}");
         if check_flag_env(TD_CROSS_BUILD) {
-            info!("Identified a cross runtime.");
             eprintln!("Identified a cross runtime.");
-            warn!("Skipping tls load validation as execution runtime is cross.");
             eprintln!("Skipping tls load validation as execution runtime is cross.");
         } else {
-            info!("Identified a non-cross runtime.");
             eprintln!("Identified a non-cross runtime.");
-            info!("Proceeding the run tls load validation.");
             eprintln!("Proceeding the run tls load validation.");
             assert!(config.is_some());
         }
