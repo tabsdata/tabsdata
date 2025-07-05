@@ -230,7 +230,7 @@ def verify_package_installable_for_environment(
         ],
         real_environment_name,
     )
-    logger.debug(f"Running command: '{pip_install_dry_run}'")
+    logger.info(f"Running command: '{pip_install_dry_run}'")
     with time_block:
         result = subprocess.run(
             pip_install_dry_run,
@@ -728,10 +728,9 @@ def atomic_environment_creation(
         "hardlink",
         "--python",
         python_version,
-        "--seed",
         os.path.join(DEFAULT_ENVIRONMENT_FOLDER, real_environment_name),
     ]
-    logger.debug(f"Running command: {' '.join(command)}")
+    logger.info(f"Running command: {' '.join(command)}")
     with time_block:
         result = subprocess.run(
             " ".join(command),
@@ -758,7 +757,6 @@ def atomic_environment_creation(
             "install",
             "--link-mode",
             "hardlink",
-            "--upgrade",
             "pip",
         ],
         real_environment_name,
@@ -766,7 +764,7 @@ def atomic_environment_creation(
     logger.info(
         f"Upgrading pip version for the virtual environment {logical_environment_name}"
     )
-    logger.debug(f"Running command: '{pip_upgrade_command}'")
+    logger.info(f"Running command: '{pip_upgrade_command}'")
     with time_block:
         result = subprocess.run(
             pip_upgrade_command,
@@ -889,7 +887,7 @@ def install_requirements(
         f"Installing the requirements {requirements} for the virtual environment"
         f" {logical_environment_name}"
     )
-    logger.debug(f"Running command: '{pip_install_requirements_command}'")
+    logger.info(f"Running command: '{pip_install_requirements_command}'")
     with time_block:
         result = subprocess.run(
             pip_install_requirements_command,
@@ -985,7 +983,7 @@ def install_host_package(
             f"Installing the host package in {package_archive} for the virtual "
             f"environment {logical_environment_name}"
         )
-        logger.debug(f"Running command: '{pip_install_requirements_command}'")
+        logger.info(f"Running command: '{pip_install_requirements_command}'")
         result = subprocess.run(
             pip_install_requirements_command,
             shell=True,
@@ -1029,7 +1027,7 @@ def install_python_version(python_version: str) -> None:
             python_version,
         ],
     )
-    logger.debug(f"Running command: {command}")
+    logger.info(f"Running command: {command}")
     result = subprocess.run(command, shell=True)
     # On Windows, exit status 2 means that the Python version is already installed,
     ok_codes = (0, 2) if platform.system() == "Windows" else (0,)

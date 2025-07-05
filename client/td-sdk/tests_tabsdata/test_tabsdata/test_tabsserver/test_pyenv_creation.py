@@ -97,7 +97,6 @@ def test_found_requirements_single_package():
             "hardlink",
             "--python",
             "3.12",
-            "--seed",
             environment_folder,
         ]
         result = subprocess.run(
@@ -129,7 +128,6 @@ def test_found_requirements_single_package_wrong_version():
             "hardlink",
             "--python",
             "3.12",
-            "--seed",
             environment_folder,
         ]
         result = subprocess.run(
@@ -164,7 +162,6 @@ def test_found_requirements_multiple_packages():
             "hardlink",
             "--python",
             "3.12",
-            "--seed",
             environment_folder,
         ]
         result = subprocess.run(
@@ -194,7 +191,6 @@ def test_found_requirements_all_not_found():
             "hardlink",
             "--python",
             "3.12",
-            "--seed",
             environment_folder,
         ]
         result = subprocess.run(
@@ -227,7 +223,6 @@ def test_found_requirements_empty_list():
             "hardlink",
             "--python",
             "3.12",
-            "--seed",
             environment_folder,
         ]
         result = subprocess.run(
@@ -260,7 +255,6 @@ def test_found_requirements_mixed():
             "hardlink",
             "--python",
             "3.12",
-            "--seed",
             environment_folder,
         ]
         result = subprocess.run(
