@@ -407,8 +407,12 @@ script = [
     debug "🔷 _____ Copying assets..."
     cm_run_task copy_assets
 
-    debug "🔷 _____ Compiling..."
-    cm_run_task build
+    if eq ${compile} "true"
+        debug "🔷 _____ Compiling..."
+        cm_run_task build
+    else
+        debug "🔷 _____ Not Compiling..."
+    end
 
     debug "🔷 _____ Generating python binaries..."
     cm_run_task setup_pytest_tabsdata

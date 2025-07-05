@@ -6,11 +6,13 @@ import datetime
 import json
 import logging
 import os
+from pathlib import Path
 from timeit import default_timer as timer
-from typing import List, Literal
+from typing import List, Literal, Union
 from urllib.parse import quote_plus
 
 import polars as pl
+from polars import BasePartitionContext
 
 from tabsdata.credentials import UserPasswordCredentials
 from tabsdata.io.plugin import DestinationPlugin
@@ -301,7 +303,7 @@ class MongoDBDestination(DestinationPlugin):
         logger.info(f"Results stored in collection '{collection.name}'")
 
     def chunk(
-        self, working_dir: str, *results: List[pl.LazyFrame | None]
+        self, working_dir: str, *results: Union[pl.LazyFrame, None]
     ) -> List[None | List[str]]:
         # This method will split the results and generate files for each one of them
         list_of_files = []
@@ -312,17 +314,23 @@ class MongoDBDestination(DestinationPlugin):
                 logger.warning(f"Result in position '{index}' is None.")
                 list_of_files.append(None)
             else:
-                file_name = f"intermediate_{index}"
-                file_name += "_{part}.jsonl"
+                pattern = f"intermediate_{index}_{{part}}.jsonl"
                 intermediate_destination_file_pattern = os.path.join(
-                    working_dir, file_name
+                    working_dir, pattern
                 )
-                logger.debug(
-                    f"Sinking the data to {intermediate_destination_file_pattern}"
-                )
+                output_dir = Path(working_dir)
+                output_dir.mkdir(parents=True, exist_ok=True)
+                base_path = output_dir / f"intermediate_{index}"
+
+                def file_path_callback(ctx: BasePartitionContext) -> Path:
+                    return Path(f"{base_path}_{ctx.file_idx}.jsonl")
+
+                logger.debug(f"Sinking the data to {base_path}_{{partition}}.jsonl")
+
                 result.sink_ndjson(
                     pl.PartitionMaxSize(
-                        intermediate_destination_file_pattern,
+                        base_path=output_dir,
+                        file_path=file_path_callback,
                         max_size=self.docs_per_trx,
                     ),
                     maintain_order=True,

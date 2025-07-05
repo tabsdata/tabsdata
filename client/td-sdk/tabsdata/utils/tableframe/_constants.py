@@ -53,6 +53,7 @@ UNSUPPORTED_METHODS = [
     "interpolate",
     "join_asof",
     "map_batches",
+    "match_to_schema",
     "melt",
     "reverse",
     "shift",

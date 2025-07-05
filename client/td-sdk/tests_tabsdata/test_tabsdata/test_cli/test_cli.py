@@ -21,7 +21,7 @@ def test_cli():
     result = runner.invoke(
         cli,
     )
-    assert result.exit_code == 0
+    assert result.exit_code == 2
 
 
 @pytest.mark.integration

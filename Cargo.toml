@@ -516,7 +516,7 @@ version = "0.4.2"
 version = "2.0.12"
 
 [workspace.dependencies.tokio]
-version = "1.46.0"
+version = "1.46.1"
 features = ["full"]
 
 [workspace.dependencies.tokio-util]

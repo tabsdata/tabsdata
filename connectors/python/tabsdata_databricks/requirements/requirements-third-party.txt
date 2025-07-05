@@ -3,4 +3,4 @@
 #
 
 databricks-sdk==0.57.0
-databricks-sql-connector==4.0.4
+databricks-sql-connector==4.0.5

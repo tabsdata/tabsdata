@@ -6,6 +6,7 @@
 source =
     tabsdata
 parallel = True
+disable_warnings = no-data-collected
 
 [report]
 show_missing = True
