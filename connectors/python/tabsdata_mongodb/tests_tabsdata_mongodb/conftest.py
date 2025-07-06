@@ -15,7 +15,6 @@ import subprocess
 from time import sleep
 from urllib.parse import quote_plus
 
-import docker
 import pymongo
 import pytest
 from filelock import FileLock
@@ -29,6 +28,8 @@ from tests_tabsdata.conftest import (
     pytest_generate_tests,
     remove_docker_containers,
 )
+
+import docker
 
 logger = logging.getLogger(__name__)
 

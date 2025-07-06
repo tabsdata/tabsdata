@@ -17,9 +17,6 @@ import boto3
 
 # noinspection PyPackageRequirements
 import cx_Oracle
-
-# noinspection PyPackageRequirements
-import docker
 import hvac
 
 # noinspection PyPackageRequirements
@@ -36,6 +33,8 @@ import yaml
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
 
+# noinspection PyPackageRequirements
+import docker
 from tabsdata.api.status_utils.data_version import (
     DataVersionStatus,
     data_version_status_to_mapping,
