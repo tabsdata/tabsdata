@@ -728,6 +728,7 @@ def atomic_environment_creation(
         "hardlink",
         "--python",
         python_version,
+        "--seed",
         os.path.join(DEFAULT_ENVIRONMENT_FOLDER, real_environment_name),
     ]
     logger.info(f"Running command: {' '.join(command)}")
@@ -757,6 +758,7 @@ def atomic_environment_creation(
             "install",
             "--link-mode",
             "hardlink",
+            "--upgrade",
             "pip",
         ],
         real_environment_name,
