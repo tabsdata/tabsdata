@@ -1229,7 +1229,7 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    info "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
@@ -1262,7 +1262,7 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    info "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
@@ -1295,7 +1295,7 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    info "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
@@ -1328,7 +1328,7 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    info "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
@@ -1361,7 +1361,7 @@ script = [
     # This must be false when using a local PyPi reopsitory.
     set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES = "true"
 
-    echo "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+    info "Running command: python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
     exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
     ''']
 
@@ -1597,8 +1597,12 @@ script = [
     exec --fail-on-error pip uninstall tabsdata_databricks --yes
     wheels = glob_array ./target/python/dist/tabsdata_databricks*.whl
     for wheel in ${wheels}
-        echo "Running command: pip install ${wheel}"
-        exec --fail-on-error pip install ${wheel}
+        if not contains ${wheel} "musllinux"
+            info "Running command: pip install ${wheel}"
+            exec --fail-on-error pip install ${wheel}
+        else
+            info "Skipping musl linux wheel: ${wheel}"
+        end
     end
     ''']
 
@@ -1634,8 +1638,12 @@ script = [
     exec --fail-on-error pip uninstall tabsdata_mongodb --yes
     wheels = glob_array ./target/python/dist/tabsdata_mongodb*.whl
     for wheel in ${wheels}
-        echo "Running command: pip install ${wheel}"
-        exec --fail-on-error pip install ${wheel}
+        if not contains ${wheel} "musllinux"
+            info "Running command: pip install ${wheel}"
+            exec --fail-on-error pip install ${wheel}
+        else
+            info "Skipping musl linux wheel: ${wheel}"
+        end
     end
     ''']
 
@@ -1671,8 +1679,12 @@ script = [
     exec --fail-on-error pip uninstall tabsdata_salesforce --yes
     wheels = glob_array ./target/python/dist/tabsdata_salesforce*.whl
     for wheel in ${wheels}
-        echo "Running command: pip install ${wheel}"
-        exec --fail-on-error pip install ${wheel}
+        if not contains ${wheel} "musllinux"
+            info "Running command: pip install ${wheel}"
+            exec --fail-on-error pip install ${wheel}
+        else
+            info "Skipping musl linux wheel: ${wheel}"
+        end
     end
     ''']
 
@@ -1708,8 +1720,12 @@ script = [
     exec --fail-on-error pip uninstall tabsdata_snowflake --yes
     wheels = glob_array ./target/python/dist/tabsdata_snowflake*.whl
     for wheel in ${wheels}
-        echo "Running command: pip install ${wheel}"
-        exec --fail-on-error pip install ${wheel}
+        if not contains ${wheel} "musllinux"
+            info "Running command: pip install ${wheel}"
+            exec --fail-on-error pip install ${wheel}
+        else
+            info "Skipping musl linux wheel: ${wheel}"
+        end
     end
     ''']
 
@@ -1745,8 +1761,12 @@ script = [
     exec --fail-on-error pip uninstall tabsdata --yes
     wheels = glob_array ./target/python/dist/tabsdata*.whl
     for wheel in ${wheels}
-        echo "Running command: pip install ${wheel}"
-        exec --fail-on-error pip install ${wheel}
+        if not contains ${wheel} "musllinux"
+            info "Running command: pip install ${wheel}"
+            exec --fail-on-error pip install ${wheel}
+        else
+            info "Skipping musl linux wheel: ${wheel}"
+        end
     end
     ''']
 

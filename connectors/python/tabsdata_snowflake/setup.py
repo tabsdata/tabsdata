@@ -69,6 +69,7 @@ REQUIRE_SERVER_BINARIES = "REQUIRE_SERVER_BINARIES"
 REQUIRE_THIRD_PARTY = "REQUIRE_THIRD_PARTY"
 TD_IGNORE_CONNECTOR_REQUIREMENTS = "TD_IGNORE_CONNECTOR_REQUIREMENTS"
 TD_SKIP_NON_EXISTING_ASSETS = "TD_SKIP_NON_EXISTING_ASSETS"
+TD_USE_MUSLLINUX = "TD_USE_MUSLLINUX"
 
 TRUE_VALUES = {"1", "true", "yes", "y", "on"}
 
@@ -222,24 +223,55 @@ def read(*paths, **kwargs):
     return content
 
 
+# noinspection DuplicatedCode
+# PEP-513: A Platform Tag for Portable Linux Built Distributions
+#     https://peps.python.org/pep-0513/
+#
+# PEP-599: The manylinux2014 Platform Tag
+#     https://peps.python.org/pep-0599/
+#
+# PEP-656: Platform Tag for Linux Distributions Using Musl
+#     https://peps.python.org/pep-0656/
 def get_platname():
     system = platform.system()
     architecture = platform.machine().lower()
+    use_musllinux = (
+        os.getenv(
+            TD_USE_MUSLLINUX,
+            "False",
+        ).lower()
+        in TRUE_VALUES
+    )
 
+    # Linux
     if system == "Linux":
         if architecture in ["x86_64", "amd64"]:
-            return "manylinux1_x86_64"
+            if use_musllinux:
+                return "musllinux_1_1_x86_64"
+            else:
+                return "manylinux1_x86_64"
         elif architecture in ["aarch64", "arm64"]:
-            return "manylinux1_aarch64"
+            if use_musllinux:
+                return "musllinux_1_1_aarch64"
+            else:
+                return "manylinux2014_aarch64"
         else:
-            return f"manylinux1_{architecture}"
+            if use_musllinux:
+                platname = f"musllinux_1_1_{architecture}"
+                return platname.replace("-", "_").replace(".", "_")
+            else:
+                platname = f"manylinux1_{architecture}"
+                return platname.replace("-", "_").replace(".", "_")
+    # macOS
     elif system == "Darwin":
         if architecture in ["aarch64", "arm64"]:
             return "macosx_11_0_arm64"
         elif architecture == "x86_64":
             return "macosx_10_15_x86_64"
         else:
-            return f"macosx_11_0_{architecture}"
+            platname = f"macosx_11_0_{architecture}"
+            return platname.replace("-", "_").replace(".", "_")
+    # Windows
     else:
         return get_platform().replace("-", "_").replace(".", "_")
 
