@@ -96,11 +96,11 @@ pub enum TabsCliError {
 
 #[derive(Debug, Clone, clap_derive::Parser)]
 #[command(
-    name = "Tabsdata Server CLI",
+    name = "Tabsdata Server",
     version = "0.1.0",
-    about = "Tabsdata Server Command Line Interface",
+    about = "Tabsdata Server",
     long_about = "Any Tabsdata instance can be managed with the available commands of this tool. \
-                  These commands rely on file pid to control the state of any instance."
+                  These commands rely on file 'pid' to control the state of any instance."
 )]
 struct Arguments {
     #[command(subcommand)]

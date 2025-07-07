@@ -35,6 +35,8 @@ known_first_party = [
     "td_sdk",
     "tests",
 ]
+known_third_party = ["docker"]
+skip = ["docker/"]
 
 [tool.licensecheck]
 using = "requirements:requirements.txt"
