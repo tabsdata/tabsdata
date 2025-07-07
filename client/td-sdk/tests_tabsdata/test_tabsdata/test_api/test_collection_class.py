@@ -248,7 +248,7 @@ def test_collection_register_function(tabsserver_connection):
     try:
         collection.create()
         collection.register_function(
-            description="test_function_create_description",
+            description="test_function_register_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
@@ -280,7 +280,7 @@ def test_collection_class_update_function(tabsserver_connection):
     try:
         collection.create()
         collection.register_function(
-            description="test_function_create_description",
+            description="test_function_register_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"

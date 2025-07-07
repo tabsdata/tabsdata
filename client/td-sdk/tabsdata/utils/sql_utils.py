@@ -194,13 +194,13 @@ def verify_output_sql_drivers(output: Output):
             logger.warning(
                 f"  Install a {driver_type} driver in your local "
                 "environment, for example: 'pip install "
-                f"{recommended_driver}'; and then alter the function by running "
-                "'td fn alter'."
+                f"{recommended_driver}'; and then update the function by running "
+                "'td fn update'."
             )
             logger.warning(
                 "  Or create a custom requirements.yaml file for the "
                 f"function and add a {driver_type} driver to it; and then "
-                "alter the function by running 'td fn alter'."
+                "update the function by running 'td fn update'."
             )
             logger.warning("")
             logger.warning(f"Original error: {e}")

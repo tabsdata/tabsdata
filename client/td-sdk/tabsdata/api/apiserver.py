@@ -544,7 +544,7 @@ class APIServer:
         response = self.post(endpoint, json={})
         return self.raise_for_status_or_return(raise_for_status, response)
 
-    def function_create(
+    def function_register(
         self,
         collection_name: str,
         function_name: str,

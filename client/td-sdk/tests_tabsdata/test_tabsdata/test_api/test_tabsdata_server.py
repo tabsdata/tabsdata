@@ -353,15 +353,15 @@ def test_function_trigger_execution_name(tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_function_create(tabsserver_connection):
+def test_function_register(tabsserver_connection):
     try:
         tabsserver_connection.create_collection(
-            name="test_function_create_collection",
+            name="test_function_register_collection",
             description="test_collection_description",
         )
         tabsserver_connection.register_function(
-            collection_name="test_function_create_collection",
-            description="test_function_create_description",
+            collection_name="test_function_register_collection",
+            description="test_function_register_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
@@ -369,17 +369,17 @@ def test_function_create(tabsserver_connection):
             local_packages=LOCAL_PACKAGES_LIST,
         )
         functions = tabsserver_connection.list_functions(
-            "test_function_create_collection"
+            "test_function_register_collection"
         )
         assert any(function.name == "test_input_plugin" for function in functions)
     finally:
         tabsserver_connection.delete_function(
-            "test_function_create_collection",
+            "test_function_register_collection",
             "test_input_plugin",
             raise_for_status=False,
         )
         tabsserver_connection.delete_collection(
-            "test_function_create_collection", raise_for_status=False
+            "test_function_register_collection", raise_for_status=False
         )
 
 

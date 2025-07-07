@@ -110,15 +110,30 @@ LICENSE = "LICENSE"
 # noinspection DuplicatedCode
 def min_python_version():
     version = {}
-    spec_py = os.path.join(
-        ROOT,
-        "client",
-        "td-sdk",
-        "tabsdata",
-        "__spec.py",
-    )
+
+    def check_for_spec_py(base):
+        spec_path = os.path.join(base, "client", "td-sdk", "tabsdata", "__spec.py")
+        return spec_path if os.path.isfile(spec_path) else None
+
+    spec_py = check_for_spec_py(ROOT)
+    if not spec_py:
+        root = os.path.dirname(os.path.dirname(__file__))
+        if os.path.basename(root) == "local_packages":
+            for entry in os.listdir(root):
+                entry_path = os.path.join(root, entry)
+                if os.path.isdir(entry_path):
+                    candidate = check_for_spec_py(entry_path)
+                    if candidate:
+                        spec_py = candidate
+                        break
+    if not spec_py:
+        raise FileNotFoundError(
+            "Could not locate '__spec.py' in any of the expected locations."
+        )
+
     with open(spec_py) as f:
         exec(f.read(), version)
+
     return version["MIN_PYTHON_VERSION"]
 
 

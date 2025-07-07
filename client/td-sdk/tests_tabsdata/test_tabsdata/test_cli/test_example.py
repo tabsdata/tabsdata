@@ -86,7 +86,7 @@ def test_examples(login, tabsserver_connection):
         cli,
         [
             "fn",
-            "create",
+            "register",
             "--coll",
             "examples",
             "--path",
@@ -127,7 +127,7 @@ def test_examples(login, tabsserver_connection):
         cli,
         [
             "fn",
-            "create",
+            "register",
             "--coll",
             "examples",
             "--path",
@@ -168,7 +168,7 @@ def test_examples(login, tabsserver_connection):
         cli,
         [
             "fn",
-            "create",
+            "register",
             "--coll",
             "examples",
             "--path",

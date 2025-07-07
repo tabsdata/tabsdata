@@ -386,7 +386,7 @@ class Collection:
         # TODO: Remove this once the parameter is optional
         runtime_values = "{}"
 
-        self.connection.function_create(
+        self.connection.function_register(
             collection_name=self.name,
             function_name=function_name,
             description=description,

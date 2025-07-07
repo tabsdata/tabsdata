@@ -79,8 +79,8 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
         click.echo("Function deleted successfully")
         show_hint(
             ctx,
-            "You do not need to delete and re-create a function to change it. "
-            "Use 'td fn alter' to modify the function instead.",
+            "You do not need to delete and re-register a function to change it. "
+            "Use 'td fn update' to modify the function instead.",
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -280,7 +280,7 @@ def list(ctx: click.Context, coll: str):
     ),
 )
 @click.pass_context
-def create(
+def register(
     ctx: click.Context,
     coll: str,
     description: str,
@@ -324,7 +324,7 @@ def create(
         click.echo("Function created successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to create function: {e}")
+        raise click.ClickException(f"Failed to register function: {e}")
 
 
 # @fn.command()
@@ -593,7 +593,7 @@ def _monitor_execution_or_transaction(
 @click.option(
     "--name",
     "-n",
-    help="Name of the function to be altered.",
+    help="Name of the function to be updated.",
 )
 @click.option(
     "--coll",
@@ -646,7 +646,7 @@ def _monitor_execution_or_transaction(
     ),
 )
 @click.pass_context
-def alter(
+def update(
     ctx: click.Context,
     name: str,
     coll: str,
@@ -657,14 +657,14 @@ def alter(
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
 ):
-    """Alter a function"""
+    """Update a function"""
     verify_login_or_prompt(ctx)
     description = description or ""
     if local_pkg:
         local_pkg = [element for element in local_pkg]
     else:
         local_pkg = None
-    name = name or logical_prompt(ctx, "Name of the function to be altered")
+    name = name or logical_prompt(ctx, "Name of the function to be updated")
     coll = (
         coll
         or get_currently_pinned_object(ctx, "collection")
@@ -690,7 +690,7 @@ def alter(
             local_packages=local_pkg,
             reuse_tables=reuse_tables,
         )
-        click.echo("Function altered successfully")
+        click.echo("Function updated successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to alter function: {e}")
+        raise click.ClickException(f"Failed to update function: {e}")

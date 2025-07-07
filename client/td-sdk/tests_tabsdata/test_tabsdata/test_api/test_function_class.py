@@ -101,7 +101,7 @@ def test_function_class_register(tabsserver_connection):
     )
     try:
         function.register(
-            description="test_function_create_description",
+            description="test_function_register_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
@@ -138,7 +138,7 @@ def test_function_class_delete(tabsserver_connection):
     )
     try:
         function.register(
-            description="test_function_create_description",
+            description="test_function_register_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
@@ -188,7 +188,7 @@ def test_function_class_update(tabsserver_connection):
     try:
         collection.create()
         collection.register_function(
-            description="test_function_create_description",
+            description="test_function_register_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"
@@ -237,7 +237,7 @@ def test_function_class_history(tabsserver_connection):
     try:
         collection.create()
         collection.register_function(
-            description="test_function_create_description",
+            description="test_function_register_description",
             function_path=(
                 f"{os.path.join(ABSOLUTE_TEST_FOLDER_LOCATION, "testing_resources",
                                 "test_input_plugin", "example.py")}::input_plugin"

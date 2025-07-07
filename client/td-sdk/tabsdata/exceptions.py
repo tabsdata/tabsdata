@@ -730,7 +730,7 @@ class ErrorCode(Enum):
     OCE42 = {
         "code": "OCE-042",
         "message": (
-            "The 'tables' parameter and the 'auto_create_at' paramenter in a Catalog "
+            "The 'tables' parameter and the 'auto_create_at' parameter in a Catalog "
             "must have the same length, got '{}' and '{}' instead."
         ),
     }

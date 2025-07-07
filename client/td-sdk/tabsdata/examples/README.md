@@ -55,7 +55,7 @@ td collection create --name examples --description "Examples"
 
 ### Register the Publisher
 ```
-td fn create --coll examples --path publisher.py::pub
+td fn register --coll examples --path publisher.py::pub
 ```
 
 ### Trigger the Publisher
@@ -72,7 +72,7 @@ td table schema --coll examples --name persons
 
 ### Register the Transformer
 ```
-td fn create --coll examples --path transformer.py::tfr
+td fn register --coll examples --path transformer.py::tfr
 ```
 
 ### Trigger the Transformer
@@ -89,7 +89,7 @@ td table schema --coll examples --name spanish
 
 ### Register the Subscriber
 ```
-td fn create --coll examples --path subscriber.py::sub
+td fn register --coll examples --path subscriber.py::sub
 ```
 
 ### Trigger the Subscriber

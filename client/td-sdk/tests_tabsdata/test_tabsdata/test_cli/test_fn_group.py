@@ -29,13 +29,13 @@ def test_wrong_command_raises_exception(login, testing_collection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_function_create_prompt(
+def test_function_register_prompt(
     testing_collection, function_path, tabsserver_connection
 ):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["fn", "create"],
+        ["fn", "register"],
         input=f"{testing_collection}\n{function_path}\n",
     )
     logger.debug(result.output)
@@ -46,7 +46,7 @@ def test_function_create_prompt(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_function_create_no_prompt(
+def test_function_register_no_prompt(
     testing_collection, function_path, tabsserver_connection
 ):
     runner = CliRunner()
@@ -55,7 +55,7 @@ def test_function_create_no_prompt(
         [
             "--no-prompt",
             "fn",
-            "create",
+            "register",
             "--coll",
             testing_collection,
             "--path",
@@ -70,7 +70,7 @@ def test_function_create_no_prompt(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_function_create_no_prompt_multiple_local_packages(
+def test_function_register_no_prompt_multiple_local_packages(
     testing_collection, function_path, tabsserver_connection
 ):
     runner = CliRunner()
@@ -79,7 +79,7 @@ def test_function_create_no_prompt_multiple_local_packages(
         [
             "--no-prompt",
             "fn",
-            "create",
+            "register",
             "--coll",
             testing_collection,
             "--path",
@@ -105,7 +105,7 @@ def test_function_delete_cli(testing_collection, function_path, tabsserver_conne
         [
             "--no-prompt",
             "fn",
-            "create",
+            "register",
             "--coll",
             testing_collection,
             "--path",
@@ -145,7 +145,7 @@ def test_function_delete_no_prompt(
         [
             "--no-prompt",
             "fn",
-            "create",
+            "register",
             "--coll",
             testing_collection,
             "--path",
@@ -201,7 +201,7 @@ def test_function_delete_wrong_options_raises_error(
         [
             "--no-prompt",
             "fn",
-            "create",
+            "register",
             "--coll",
             testing_collection,
             "--path",
@@ -263,7 +263,7 @@ def test_function_list(testing_collection, function_path, tabsserver_connection)
         [
             "--no-prompt",
             "fn",
-            "create",
+            "register",
             "--coll",
             testing_collection,
             "--path",
@@ -285,7 +285,7 @@ def test_function_update(testing_collection, function_path, tabsserver_connectio
         [
             "--no-prompt",
             "fn",
-            "create",
+            "register",
             "--coll",
             testing_collection,
             "--path",
@@ -299,7 +299,7 @@ def test_function_update(testing_collection, function_path, tabsserver_connectio
         cli,
         [
             "fn",
-            "alter",
+            "update",
             "--name",
             "test_input_plugin",
             "--coll",
@@ -326,7 +326,7 @@ def test_function_info(testing_collection, function_path, tabsserver_connection)
         [
             "--no-prompt",
             "fn",
-            "create",
+            "register",
             "--coll",
             testing_collection,
             "--path",
@@ -362,7 +362,7 @@ def test_function_info_show_versions(
         [
             "--no-prompt",
             "fn",
-            "create",
+            "register",
             "--coll",
             testing_collection,
             "--path",
@@ -396,7 +396,7 @@ def test_function_trigger(testing_collection, function_path, tabsserver_connecti
     arguments = [
         "--no-prompt",
         "fn",
-        "create",
+        "register",
         "--coll",
         testing_collection,
         "--path",
@@ -449,7 +449,7 @@ def test_function_trigger_execution_name(
     arguments = [
         "--no-prompt",
         "fn",
-        "create",
+        "register",
         "--coll",
         testing_collection,
         "--path",

@@ -60,11 +60,6 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.delete_table(coll, name)
         click.echo("Table deleted successfully")
-        show_hint(
-            ctx,
-            "You do not need to delete and re-create a table to change it. "
-            "Use 'td fn alter' to modify the table instead.",
-        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to delete table: {e}")
