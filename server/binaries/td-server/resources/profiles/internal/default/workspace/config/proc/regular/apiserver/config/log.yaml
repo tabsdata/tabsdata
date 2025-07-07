@@ -9,3 +9,8 @@ profiles:
     level: debug
     directives:
       - tower::buffer::worker=info
+      # Uncomment the following lines to set specific log levels for different components.
+      # By default, all components will inherit the level from the profile.
+      # - td_apiserver=error
+      # - td_objects::sql=error
+      # - td_services=error
