@@ -860,9 +860,13 @@ macro_rules! impl_list {
                     })
                     .map_err(|e| e.unwrap_or_else(|e| e))?;
 
-                let result = result
+                let mut result = result
                     .iter()
                     .map(T::try_from_dao).collect::<Result<Vec<T>, TdError>>()?;
+
+                if let Some(_) = request.list_params().previous() {
+                    result.reverse();
+                }
 
                 let (previous, previous_pagination_id) = compute_previous(request.list_params(), &query_params, &result);
                 let (next, next_pagination_id) = compute_next(request.list_params(), &query_params, &result);

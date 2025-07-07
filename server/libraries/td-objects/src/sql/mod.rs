@@ -610,7 +610,7 @@ mod tests {
     use td_error::TdError;
     use td_type::Dao;
 
-    #[td_type::typed(id)]
+    #[td_type::typed(string)]
     struct TestId;
 
     #[td_type::typed(string)]
@@ -652,7 +652,7 @@ mod tests {
         #[td_test::test(sqlx(fixture = "test_queries"))]
         async fn test_dao_insert(db: DbPool) -> Result<(), TdError> {
             let dao = TestDao::builder()
-                .id(TestId::default())
+                .id(TestId::try_from("")?)
                 .try_name("bowser")?
                 .try_modified_on(123)?
                 .build()?;
@@ -1402,7 +1402,9 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
-        async fn test_dao_list_pagination_previous_asc(db: DbPool) -> Result<(), TdError> {
+        async fn test_dao_list_pagination_previous_asc_natural_order(
+            db: DbPool,
+        ) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
@@ -1571,7 +1573,45 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
-        async fn test_dao_list_pagination_order_by_previous_asc(db: DbPool) -> Result<(), TdError> {
+        async fn test_dao_list_pagination_order_by_previous_asc_natural_order(
+            db: DbPool,
+        ) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                #[dto(list(pagination_by = "+"))]
+                id: TestId,
+                #[dto(list(order_by))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .order_by("id+".to_string())
+                .previous(FIXTURE_DAOS[0].id().to_string())
+                .pagination_id(FIXTURE_DAOS[0].id().to_string())
+                .build()
+                .unwrap();
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (id < ? OR (id = ? AND id < ?)) ORDER BY id DESC, id DESC LIMIT ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 0);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_order_by_previous_asc_order(
+            db: DbPool,
+        ) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
             #[td_type(builder(try_from = TestDao))]
@@ -1641,7 +1681,44 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
-        async fn test_dao_list_pagination_order_by_previous_desc(
+        async fn test_dao_list_pagination_order_by_previous_desc_natural_order(
+            db: DbPool,
+        ) -> Result<(), TdError> {
+            #[Dto]
+            #[dto(list(on = TestDao))]
+            #[td_type(builder(try_from = TestDao))]
+            struct TestDto {
+                #[dto(list(pagination_by = "+"))]
+                id: TestId,
+                #[dto(list(order_by))]
+                name: TestName,
+                modified_on: TestModifiedOn,
+            }
+
+            let list_params = ListParamsBuilder::default()
+                .order_by("id-".to_string())
+                .previous(FIXTURE_DAOS[0].id().to_string())
+                .pagination_id(FIXTURE_DAOS[0].id().to_string())
+                .build()
+                .unwrap();
+            let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
+            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let query = query_builder.build_query_as();
+
+            let query_str = query.sql();
+            assert_eq!(
+                query_str,
+                "SELECT id, name, modified_on FROM test_table WHERE (id > ? OR (id = ? AND id > ?)) ORDER BY id ASC, id ASC LIMIT ?"
+            );
+
+            let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();
+            assert_eq!(result.len(), 3);
+            assert_eq!(result[0], FIXTURE_DAOS[1]);
+            Ok(())
+        }
+
+        #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        async fn test_dao_list_pagination_order_by_previous_desc_order(
             db: DbPool,
         ) -> Result<(), TdError> {
             #[Dto]
