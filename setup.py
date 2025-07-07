@@ -109,6 +109,27 @@ LICENSE = "LICENSE"
 
 
 # noinspection DuplicatedCode
+def min_python_version():
+    version = {}
+    spec_py = os.path.join(
+        ROOT,
+        "client",
+        "td-sdk",
+        "tabsdata",
+        "__spec.py",
+    )
+    with open(spec_py) as f:
+        exec(f.read(), version)
+    return version["MIN_PYTHON_VERSION"]
+
+
+python_version = min_python_version()
+python_version_spec = f">={python_version}"
+# noinspection PyCompatibility
+python_version_tag = f"py{python_version.replace(".", "")}"
+
+
+# noinspection DuplicatedCode
 class CustomBuild(_build):
     def initialize_options(self):
         super().initialize_options()
@@ -497,7 +518,7 @@ setup(
         ).replace(os.sep, "/"),
     ),
     author="Tabs Data Inc.",
-    python_requires=">=3.12",
+    python_requires=python_version_spec,
     install_requires=read_requirements("requirements.txt"),
     extras_require={
         "all": read_requirements(
@@ -534,7 +555,7 @@ setup(
     },
     options={
         "bdist_wheel": {
-            "python_tag": "py312",
+            "python_tag": python_version_tag,
             "plat_name": get_platname(),
         }
     },

@@ -28,6 +28,7 @@ from filelock import FileLock, Timeout
 from yaml import MappingNode
 from yaml.constructor import ConstructorError
 
+from tabsdata.__spec import MIN_PYTHON_VERSION
 from tabsdata.tabsserver.function.global_utils import CURRENT_PLATFORM
 from tabsdata.tabsserver.server.instance import (
     DEFAULT_ENVIRONMENT_FOLDER,
@@ -87,7 +88,7 @@ DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER = os.path.join(
 WHEEL_EXTENSION = ".whl"
 TARGET_FOLDER = "target"
 
-PYTHON_BASE_VERSION = "3.12"
+PYTHON_BASE_VERSION = MIN_PYTHON_VERSION
 
 TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
 TD_TABSDATA_DATABRICKS_DEV_PKG = "TD_TABSDATA_DATABRICKS_DEV_PKG"

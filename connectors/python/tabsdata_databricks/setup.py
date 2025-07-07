@@ -17,6 +17,7 @@ from setuptools.command.build import build as _build
 from setuptools.command.sdist import sdist as _sdist
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
+# noinspection DuplicatedCode
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -105,6 +106,27 @@ THIRD_PARTY = "THIRD-PARTY"
 
 BANNER = "BANNER"
 LICENSE = "LICENSE"
+
+
+# noinspection DuplicatedCode
+def min_python_version():
+    version = {}
+    spec_py = os.path.join(
+        ROOT,
+        "client",
+        "td-sdk",
+        "tabsdata",
+        "__spec.py",
+    )
+    with open(spec_py) as f:
+        exec(f.read(), version)
+    return version["MIN_PYTHON_VERSION"]
+
+
+python_version = min_python_version()
+python_version_spec = f">={python_version}"
+# noinspection PyCompatibility
+python_version_tag = f"py{python_version.replace(".", "")}"
 
 
 # noinspection DuplicatedCode
@@ -434,12 +456,12 @@ setup(
         ),
     ),
     author="Tabs Data Inc.",
-    python_requires=">=3.12",
+    python_requires=python_version_spec,
     install_requires=[],
     extras_require={"deps": read_requirements("requirements.txt")},
     options={
         "bdist_wheel": {
-            "python_tag": "py312",
+            "python_tag": python_version_tag,
             "plat_name": get_platname(),
         }
     },

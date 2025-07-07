@@ -14,6 +14,8 @@ from typing import Any, Optional
 import yaml
 from packaging.version import parse as parse_version
 
+from tabsdata.__spec import MIN_PYTHON_VERSION
+
 
 @dataclass
 class PythonVersionParts:
@@ -126,6 +128,8 @@ def resolve_valid_python_versions(
     have been specified as allowed in the server configuration. If no allowed
     versions are specified, all available versions will be considered valid.
     """
+    min_python_version = parse_version(MIN_PYTHON_VERSION)
+
     available_python_versions_path = os.path.join(etc, available_python_versions_file)
     allowed_python_versions_path = os.path.join(etc, allowed_python_versions_file)
     valid_python_versions_path = os.path.join(etc, valid_python_versions_file)
@@ -164,6 +168,16 @@ def resolve_valid_python_versions(
         ),
         key=parse_version,
     )
+
+    valid_python_versions = sorted(
+        [
+            valid_python_version
+            for valid_python_version in valid_python_versions
+            if parse_version(valid_python_version) >= min_python_version
+        ],
+        key=parse_version,
+    )
+
     header = [
         "#",
         f"# Copyright {datetime.now().year} Tabs Data Inc.",

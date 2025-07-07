@@ -12,6 +12,7 @@ import pytest
 import yaml
 from tests_tabsdata.conftest import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 
+from tabsdata.__spec import MIN_PYTHON_VERSION
 from tabsdata.tabsserver.function.global_utils import DEFAULT_DEVELOPMENT_LOCKS_LOCATION
 from tabsdata.tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_FOLDER,
@@ -39,7 +40,7 @@ from . import pytestmark  # noqa: F401
 def test_create_virtual_environment_check_availability_false_fails(tmp_path):
     incorrect_requirements = {
         PYTHON_LOCAL_PACKAGES_KEY: [os.getcwd()],
-        PYTHON_VERSION_KEY: "3.12",
+        PYTHON_VERSION_KEY: MIN_PYTHON_VERSION,
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3", "doesntexist"],
         PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: False,
     }
@@ -64,7 +65,7 @@ def test_create_virtual_environment_check_availability_false_fails(tmp_path):
 def test_create_virtual_environment_check_availability_true_works(tmp_path):
     incorrect_requirements = {
         PYTHON_LOCAL_PACKAGES_KEY: [os.getcwd()],
-        PYTHON_VERSION_KEY: "3.12",
+        PYTHON_VERSION_KEY: MIN_PYTHON_VERSION,
         PYTHON_PUBLIC_PACKAGES_KEY: ["pandas==2.2.3", "doesntexist"],
         PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
@@ -96,7 +97,7 @@ def test_found_requirements_single_package():
             "--link-mode",
             "hardlink",
             "--python",
-            "3.12",
+            MIN_PYTHON_VERSION,
             "--seed",
             environment_folder,
         ]
@@ -128,7 +129,7 @@ def test_found_requirements_single_package_wrong_version():
             "--link-mode",
             "hardlink",
             "--python",
-            "3.12",
+            MIN_PYTHON_VERSION,
             "--seed",
             environment_folder,
         ]
@@ -163,7 +164,7 @@ def test_found_requirements_multiple_packages():
             "--link-mode",
             "hardlink",
             "--python",
-            "3.12",
+            MIN_PYTHON_VERSION,
             "--seed",
             environment_folder,
         ]
@@ -193,7 +194,7 @@ def test_found_requirements_all_not_found():
             "--link-mode",
             "hardlink",
             "--python",
-            "3.12",
+            MIN_PYTHON_VERSION,
             "--seed",
             environment_folder,
         ]
@@ -226,7 +227,7 @@ def test_found_requirements_empty_list():
             "--link-mode",
             "hardlink",
             "--python",
-            "3.12",
+            MIN_PYTHON_VERSION,
             "--seed",
             environment_folder,
         ]
@@ -259,7 +260,7 @@ def test_found_requirements_mixed():
             "--link-mode",
             "hardlink",
             "--python",
-            "3.12",
+            MIN_PYTHON_VERSION,
             "--seed",
             environment_folder,
         ]
