@@ -109,8 +109,8 @@ LICENSE = "LICENSE"
 
 
 # noinspection DuplicatedCode
-def min_python_version():
-    version = {}
+def get_python_tags():
+    tags = {}
 
     def check_for_spec_py(base):
         spec_path = os.path.join(base, "client", "td-sdk", "tabsdata", "__spec.py")
@@ -133,15 +133,21 @@ def min_python_version():
         )
 
     with open(spec_py) as f:
-        exec(f.read(), version)
+        exec(f.read(), tags)
 
-    return version["MIN_PYTHON_VERSION"]
+    return (
+        tags["MIN_PYTHON_VERSION"],
+        tags["PYTHON_IMPLEMENTATION"],
+        tags["MIN_PYTHON_ABI"],
+    )
 
 
-python_version = min_python_version()
+python_version, python_implementation, python_abi = get_python_tags()
+
 python_version_spec = f">={python_version}"
 # noinspection PyCompatibility
-python_version_tag = f"py{python_version.replace(".", "")}"
+python_version_tag = f"{python_implementation}{python_version.replace(".", "")}"
+python_version_abi = python_abi
 
 
 # noinspection DuplicatedCode
@@ -181,6 +187,7 @@ class CustomBDistWheel(_bdist_wheel):
     def __init__(self, dist):
         super().__init__(dist)
         self.dist_dir = None
+        self.root_is_pure: bool | None = None
 
     def initialize_options(self):
         super().initialize_options()
@@ -189,6 +196,14 @@ class CustomBDistWheel(_bdist_wheel):
             "python",
             "dist",
         )
+
+    def finalize_options(self):
+        super().finalize_options()
+        self.root_is_pure = False
+
+    def get_tag(self):
+        _, _, plat = super().get_tag()
+        return python_version_tag, python_version_abi, get_platname()
 
 
 class CustomBDistEgg(_bdist_egg):
@@ -502,15 +517,13 @@ setup(
         ),
     ),
     author="Tabs Data Inc.",
+    url="https://tabsdata.com",
+    project_urls={
+        "Source": "https://github.com/tabsdata/tabsdata",
+    },
     python_requires=python_version_spec,
     install_requires=[],
     extras_require={"deps": read_requirements("requirements.txt")},
-    options={
-        "bdist_wheel": {
-            "python_tag": python_version_tag,
-            "plat_name": get_platname(),
-        }
-    },
     cmdclass={
         "build": CustomBuild,
         "sdist": CustomSDist,
