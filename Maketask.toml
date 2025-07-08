@@ -96,9 +96,10 @@ script = [
     td_ui_mode = get_env TD_UI_MODE
     if ${td_ui_mode}
         info "☂️ TD_UI_MODE set. Using '${td_ui_mode}' for install tasks..."
-    else:
+    else
         info "☂️ TD_UI_MODE not set. Using 'internal' for install tasks..."
         set_env TD_UI_MODE "internal"
+    end
 
     info "✂️️ Unistalling..."
     cm_run_task uninstall
