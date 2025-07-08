@@ -534,8 +534,8 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}isort --check . --extend-skip .tabsdata,test_*,tests_*"
-    exec --fail-on-error ${ENV_PREFIX}isort --check . --extend-skip .tabsdata,test_*,tests_*
+    echo "Running command: ${ENV_PREFIX}isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+    exec --fail-on-error ${ENV_PREFIX}isort --check . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
     ''']
 
 [tasks.format]
@@ -572,8 +572,8 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}isort ."
-    exec --fail-on-error ${ENV_PREFIX}isort .
+    echo "Running command: ${ENV_PREFIX}isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*"
+    exec --fail-on-error ${ENV_PREFIX}isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
     ''']
 
 [tasks.license]
