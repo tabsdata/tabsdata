@@ -6,7 +6,7 @@ from enum import Enum
 
 
 class TransactionStatus(Enum):
-    COMMITED = "C"
+    COMMITTED = "C"
     STALLED = "L"
     RUNNING = "R"
     SCHEDULED = "S"
@@ -16,7 +16,7 @@ class TransactionStatus(Enum):
 
 
 TRANSACTION_STATUS_MAPPING = {
-    TransactionStatus.COMMITED.value: "Commited",
+    TransactionStatus.COMMITTED.value: "Committed",
     TransactionStatus.STALLED.value: "Stalled",
     TransactionStatus.RUNNING.value: "Running",
     TransactionStatus.SCHEDULED.value: "Scheduled",
@@ -45,7 +45,7 @@ TRANSACTION_FAILED_FINAL_STATUSES = {
 # wrongs, and doesn't have to take any action".
 TRANSACTION_SUCCESSFUL_FINAL_STATUSES = {
     transaction_status_to_mapping(TransactionStatus.CANCELED.value),
-    transaction_status_to_mapping(TransactionStatus.COMMITED.value),
+    transaction_status_to_mapping(TransactionStatus.COMMITTED.value),
     transaction_status_to_mapping(TransactionStatus.YANKED.value),
 }
 

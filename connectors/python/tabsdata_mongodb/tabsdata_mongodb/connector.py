@@ -359,7 +359,7 @@ class MongoDBDestination(DestinationPlugin):
                     )
                 session.commit_transaction(**self._suport_commit_transaction)
                 if self.log_intermediate_files:
-                    logger.debug("Transaction commited")
+                    logger.debug("Transaction committed")
             elif self.log_intermediate_files:
                 logger.debug(
                     f"Stored intermediate file '{file}' "

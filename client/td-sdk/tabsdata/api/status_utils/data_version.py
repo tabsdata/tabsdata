@@ -6,7 +6,7 @@ from enum import Enum
 
 
 class DataVersionStatus(Enum):
-    COMMITED = "C"
+    COMMITTED = "C"
     DONE = "D"
     ERROR = "E"
     FAILED = "F"
@@ -21,7 +21,7 @@ class DataVersionStatus(Enum):
 
 
 DATA_VERSION_STATUS_MAPPING = {
-    DataVersionStatus.COMMITED.value: "Commited",
+    DataVersionStatus.COMMITTED.value: "Committed",
     DataVersionStatus.DONE.value: "Done",
     DataVersionStatus.ERROR.value: "Error",
     DataVersionStatus.FAILED.value: "Failed",
@@ -56,7 +56,7 @@ DATA_VERSION_FAILED_FINAL_STATUSES = {
 # wrongs, and doesn't have to take any action".
 DATA_VERSION_SUCCESSFUL_FINAL_STATUSES = {
     data_version_status_to_mapping(DataVersionStatus.CANCELED.value),
-    data_version_status_to_mapping(DataVersionStatus.COMMITED.value),
+    data_version_status_to_mapping(DataVersionStatus.COMMITTED.value),
     data_version_status_to_mapping(DataVersionStatus.YANKED.value),
 }
 

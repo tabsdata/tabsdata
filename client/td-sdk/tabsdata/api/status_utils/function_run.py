@@ -6,7 +6,7 @@ from enum import Enum
 
 
 class FunctionRunStatus(Enum):
-    COMMITED = "C"
+    COMMITTED = "C"
     DONE = "D"
     ERROR = "E"
     FAILED = "F"
@@ -21,7 +21,7 @@ class FunctionRunStatus(Enum):
 
 
 FUNCTION_RUN_STATUS_MAPPING = {
-    FunctionRunStatus.COMMITED.value: "Commited",
+    FunctionRunStatus.COMMITTED.value: "Committed",
     FunctionRunStatus.DONE.value: "Done",
     FunctionRunStatus.ERROR.value: "Error",
     FunctionRunStatus.FAILED.value: "Failed",
@@ -56,7 +56,7 @@ FUNCTION_RUN_FAILED_FINAL_STATUSES = {
 # wrongs, and doesn't have to take any action".
 FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES = {
     function_run_status_to_mapping(FunctionRunStatus.CANCELED.value),
-    function_run_status_to_mapping(FunctionRunStatus.COMMITED.value),
+    function_run_status_to_mapping(FunctionRunStatus.COMMITTED.value),
     function_run_status_to_mapping(FunctionRunStatus.YANKED.value),
 }
 

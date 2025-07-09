@@ -43,7 +43,7 @@ def test_transaction_class(tabsserver_connection):
     assert isinstance(transaction.started_on_str, str)
     assert transaction.ended_on == time_triggered
     assert isinstance(transaction.ended_on_str, str)
-    assert transaction.status == "Commited"
+    assert transaction.status == "Committed"
     assert transaction.kwargs
     assert transaction.__repr__()
     assert transaction.__str__()

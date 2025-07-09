@@ -1048,7 +1048,7 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
     while True:
         dataversion = table.dataversions[0] if table.dataversions else None
         if dataversion and dataversion.status == data_version_status_to_mapping(
-            DataVersionStatus.COMMITED.value
+            DataVersionStatus.COMMITTED.value
         ):
             logger.debug(
                 f"Dataversion '{dataversion}' is in status '"
