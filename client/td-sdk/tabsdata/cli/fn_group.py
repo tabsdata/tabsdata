@@ -4,11 +4,11 @@
 
 import datetime
 import os
-from time import sleep
 from typing import Tuple
 
 import rich_click as click
 from rich.console import Console
+from rich.live import Live
 from rich.table import Table
 
 from tabsdata.api.status_utils.execution import EXECUTION_FINAL_STATUSES
@@ -497,7 +497,7 @@ def trigger(
 def _monitor_execution_or_transaction(
     ctx: click.Context, execution: Execution = None, transaction: Transaction = None
 ):
-    """Monitor the execution of a function or a transaction"""
+    """Monitor the execution of a plan or a transaction"""
     if execution and transaction:
         raise click.ClickException(
             "Internal error: _monitor_execution_or_transaction takes either an "
@@ -514,16 +514,9 @@ def _monitor_execution_or_transaction(
         entity_final_statuses = TRANSACTION_FINAL_STATUSES
     keyword = "plan" if execution else "transaction"
     supervised_entity = execution or transaction
-    click.echo(f"Waiting for the {keyword} to finish...")
-    while True:
-        click.echo("")
-        click.echo("-" * 10)
-        click.echo("")
-        click.echo(f"Current {keyword} status: {supervised_entity.status}")
 
-        list_of_runs = supervised_entity.function_runs
-
-        table = Table(title="Function Runs")
+    def build_table():
+        table = Table(title=f"Function Runs: {len(supervised_entity.function_runs)}")
         table.add_column("Function Run ID", style="cyan", no_wrap=True)
         table.add_column("Collection")
         table.add_column("Function")
@@ -535,8 +528,7 @@ def _monitor_execution_or_transaction(
         table.add_column("Started on", no_wrap=True)
         table.add_column("Ended on", no_wrap=True)
         table.add_column("Status")
-
-        for function_run in list_of_runs:
+        for function_run in supervised_entity.function_runs:
             table.add_row(
                 function_run.id,
                 function_run.collection.name,
@@ -546,26 +538,25 @@ def _monitor_execution_or_transaction(
                 beautify_time(function_run.ended_on_str),
                 function_run.status,
             )
+        return table
 
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo(f"Number of function runs: {len(list_of_runs)}")
-        click.echo()
+    click.echo(f"Waiting for the {keyword} to finish...")
+    with Live(build_table(), refresh_per_second=2, console=Console()) as live:
+        while True:
+            # Note: while it would initially make more sense to write this as
+            # 'if transaction.status in FAILED_FINAL_STATUSES', this approach avoids
+            # the risk of ignoring failed transactions that are not in a recognized
+            # status due to a mismatch between the transaction status and the
+            # FINAL_STATUSES set (which ideally should not happen).
+            if supervised_entity.status in entity_final_statuses:
+                break
+            supervised_entity.refresh()
+            live.update(build_table())
+        live.update(build_table())
 
-        if supervised_entity.status in entity_final_statuses:
-            click.echo("")
-            click.echo("-" * 10)
-            click.echo("")
-            click.echo(f"{keyword.capitalize()} finished.")
-            break
-        sleep(5)
-        supervised_entity.refresh()
-    # Note: while it would initially make more sense to write this as
-    # 'if transaction.status in FAILED_FINAL_STATUSES', this approach avoids
-    # the risk of ignoring failed transactions that are not in a recognized
-    # status due to a mismatch between the transaction status and the
-    # FINAL_STATUSES set (which ideally should not happen).
+    click.echo(f"{keyword.capitalize()} finished.")
+
+    list_of_runs = supervised_entity.function_runs
     failed_runs = [
         fn_run
         for fn_run in list_of_runs
