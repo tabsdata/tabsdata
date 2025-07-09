@@ -1,18 +1,14 @@
 import os
 
-from verify_environment import verify_subscriber_environment
-
 import tabsdata as td
-
-verify_subscriber_environment()
 
 
 @td.subscriber(
     ["spanish", "french"],
     td.LocalFileDestination(
         [
-            os.path.join(os.getenv("TDX"), "output", "spanish.jsonl"),
-            os.path.join(os.getenv("TDX"), "output", "french.jsonl"),
+            os.path.join(os.getcwd(), "output", "spanish.jsonl"),
+            os.path.join(os.getcwd(), "output", "french.jsonl"),
         ]
     ),
 )

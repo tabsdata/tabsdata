@@ -91,7 +91,7 @@ def hints(ctx: click.Context, mode: str):
     ),
 )
 @click.pass_context
-def example(ctx: click.Context, dir: str):
+def examples(ctx: click.Context, dir: str):
     """Create a folder with an example of a publisher, transformer and subscriber"""
     dir = dir or logical_prompt(
         ctx,
@@ -117,13 +117,12 @@ def example(ctx: click.Context, dir: str):
         shutil.copytree(examples_folder, dir, dirs_exist_ok=True)
         output_folder = os.path.join(dir, "output")
         os.makedirs(output_folder, exist_ok=True)
-        click.echo(f"Examples generated in '{dir}'.")
+        click.echo(f"Examples generated in '{dir}'. "
+                   f"Follow the instructions in the './README.md' file to run them.")
         show_hint(
             ctx,
-            "Remember to set environment variable 'TDX' to the path of your "
-            "'examples' directory. For more information, see section 'Set Up the "
-            "Example Directory in an Environment Variable' in the 'Tabsdata Getting "
-            "Started Example' documentation.",
+            "Remember that in order to run the examples, tdserver must be "
+            "running in the same host as the CLI.",
         )
     else:
         raise click.ClickException(

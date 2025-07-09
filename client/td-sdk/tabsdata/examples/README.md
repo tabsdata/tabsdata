@@ -9,7 +9,7 @@
 This example assumes that:
 
 * You are in a command shell within the `examples` directory
- created by the `td example` command.  
+ created by the `td examples` command.  
 * `Tabsdata` server is installed locally in the current 
    Python environment. 
 
@@ -19,21 +19,8 @@ tdserver stop
 tdserver status
 ```
 
-## Set Up the Example Directory in an Environment Variable
-
-**NOTE:** This is required for the Publisher and Subscriber to determine the 
-input and output directories (It has been done this way to make the example
-simpler).
-
-### For Linux/OSX
-```
-export TDX=`pwd`
-```
-
-### For Windows
-```
-set TDX=%cd%
-```
+**NOTE:** It is required that `tdserver` and `td` commands 
+are run in the same host to make this example work out of the box.
 
 ## Start `Tabsdata` Server and Check Its Status
 ```

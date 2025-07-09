@@ -225,17 +225,4 @@ env_scripts = [
         set_env MARKERS ""
     end
     debug "✅ Using markers: '${MARKERS}'"
-    ''',
-
-    # Set up the TDX tests environment variable
-    '''
-    #!@duckscript
-    !include_files ./make/libraries/log.ds
-
-    tmp_dir = temp_dir
-    tmp_folder = random_text 16
-    tdx = join_path ${tmp_dir} ${tmp_folder} tdx
-    set_env TDX ${tdx}
-    TDX = get_env TDX
-    debug "✅ Using TDX temporary folder: '${TDX}'"
     ''']

@@ -608,8 +608,6 @@ script = [
         tdserver = set "tdserver"
     end
     debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-    TDX = get_env TDX
-    debug "🔅 The tdserver process will use TDX location: '${TDX}'"
     debug "🚀 ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468"
 
     # Necessary until we figure out how to cleanly start the supervisor detached from tdserver.
