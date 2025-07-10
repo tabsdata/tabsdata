@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from contextlib import contextmanager
 
 import polars as pl
 import polars.lazyframe.group_by as pl_group_by
+from polars import functions
 
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
@@ -23,8 +25,19 @@ import tabsdata.utils.tableframe._translator as td_translator
 from tabsdata.exceptions import ErrorCode, TableFrameError
 from tabsdata.utils.annotations import pydoc
 
+STATE = "_state"
+
 
 class TableFrameGroupBy:
+    @contextmanager
+    def _transient_state(self, attribute, temp_value):
+        original_value = getattr(self, attribute)
+        setattr(self, attribute, temp_value)
+        try:
+            yield
+        finally:
+            setattr(self, attribute, original_value)
+
     def __init__(self, lgb: pl_group_by.LazyGroupBy | TableFrameGroupBy) -> None:
         if isinstance(lgb, pl_group_by.LazyGroupBy):
             self._lgb = lgb
@@ -32,11 +45,8 @@ class TableFrameGroupBy:
             self._lgb = lgb._lgb
         else:
             raise TableFrameError(ErrorCode.TF6, type(lgb))
+        self._state = None
 
-    # ToDo: allways attach system td columns.
-    # ToDo: dedicated algorithm for proper provenance handling.
-    # ToDo: check for undesired operations of system td columns.
-    # ToDo: proper expressions handling.
     def agg(
         self,
         *aggs: td_expr.IntoExpr | Iterable[td_expr.IntoExpr],
@@ -86,30 +96,40 @@ class TableFrameGroupBy:
             # noinspection PyProtectedMember
             result = td_translator._unwrap_into_tdexpr(agg)
             unwrapped_aggs.append(result)
-        unwrapped_named_aggs = []
 
+        unwrapped_named_aggs = []
         for named_agg in named_aggs:
             # noinspection PyProtectedMember
             result = td_translator._unwrap_into_tdexpr(named_agg)
             unwrapped_named_aggs.append(result)
 
-        unwrapped_required_columns = []
-        for col, metadata in td_helpers.REQUIRED_COLUMNS_METADATA.items():
-            if metadata[td_constants.TD_COL_DTYPE] == pl.List:
-                expr = pl.col(col).explode().alias(col)
+        system_agg = []
+        for column, metadata in td_helpers.REQUIRED_COLUMNS_METADATA.items():
+            if metadata[td_constants.TD_COL_AGGREGATION] is not None:
+                aggregation_function = metadata[td_constants.TD_COL_AGGREGATION]
+                aggregation_function_instance = aggregation_function(self._state)
+                expr = (
+                    pl.col(column)
+                    .map_elements(
+                        aggregation_function_instance,
+                        return_dtype=metadata[td_constants.TD_COL_DTYPE],
+                    )
+                    .alias(column)
+                )
             else:
-                expr = pl.col(col).first()
-            # noinspection PyProtectedMember
-            result = td_translator._unwrap_into_tdexpr(expr)
-            unwrapped_required_columns.append(result)
+                # As TableFrame instantiation mode is 'tab', we do not need to enforce
+                # adding the non-aggregation system columns.
+                # expr = pl.col(column).first()
+                expr = None
+            if expr is not None:
+                # noinspection PyProtectedMember
+                result = td_translator._unwrap_into_tdexpr(expr)
+                system_agg.append(result)
 
-        expressions = unwrapped_aggs + unwrapped_required_columns + unwrapped_named_aggs
+        expressions = unwrapped_aggs + system_agg + unwrapped_named_aggs
 
-        # ToDo...
         return td_frame.TableFrame.__build__(
-            df=self._lgb.agg(
-                expressions,
-            ),
+            df=self._lgb.agg(expressions),
             mode="tab",
             idx=None,
         )
@@ -117,6 +137,8 @@ class TableFrameGroupBy:
     def len(self) -> td_frame.TableFrame:
         """
         Aggregation operation that counts the rows in the group.
+        All the columns of the original `TableFrame` are included in the result,
+        with the count in each of thse columns.
 
         Examples:
 
@@ -144,34 +166,79 @@ class TableFrameGroupBy:
         >>>
         >>> tf.group_by(td.col("ss")).len()
         >>>
-        ┌──────┬─────┐
-        │ ss   ┆ len │
-        │ ---  ┆ --- │
-        │ str  ┆ u32 │
-        ╞══════╪═════╡
-        │ null ┆ 1   │
-        │ B    ┆ 3   │
-        │ F    ┆ 1   │
-        │ C    ┆ 3   │
-        │ A    ┆ 2   │
-        │ D    ┆ 1   │
-        └──────┴─────┘
+        ┌──────┬─────┬─────┐
+        │ ss   ┆ u   │ ff  │
+        │ ---  ┆ --- │ --- │
+        │ str  ┆ u32 │ f64 │
+        ╞══════╪═════╡═════│
+        │ A    ┆ 2   │ 2   │
+        │ B    ┆ 3   │ 3   │
+        │ C    ┆ 3   │ 3   │
+        │ D    ┆ 1   │ 1   │
+        │ F    ┆ 1   │ 1   │
+        │ null ┆ 1   │ 1   │
+        └──────┴─────┴─────┘
         """
-        # ToDo...
-        return td_frame.TableFrame.__build__(
-            df=self._lgb.len(),
-            mode="tab",
-            idx=None,
-        )
+        with self._transient_state(STATE, td_constants.RowOperation.GROUP_LEN):
+            return td_frame.TableFrame.__build__(
+                df=self.agg(functions.all().exclude(system_agg_columns()).len()),
+                mode="tab",
+                idx=None,
+            )
+
 
     @pydoc(categories="aggregation")
     def count(self) -> td_frame.TableFrame:
-        # ToDo...
-        return td_frame.TableFrame.__build__(
-            df=self._lgb.count(),
-            mode="tab",
-            idx=None,
-        )
+        """
+        Aggregation operation that counts the non-null rows in the group.
+        All the columns of the original `TableFrame` are included in the result,
+        with the count in each of thse columns.
+
+        Examples:
+
+        >>> import tabsdata as td
+        >>>
+        >>> tf: td.TableFrame ...
+        >>>
+        ┌──────┬──────┬──────┐
+        │ ss   ┆ u    ┆ ff   │
+        │ ---  ┆ ---  ┆ ---  │
+        │ str  ┆ i64  ┆ f64  │
+        ╞══════╪══════╪══════╡
+        │ A    ┆ 1    ┆ 1.1  │
+        │ B    ┆ 0    ┆ 0.0  │
+        │ A    ┆ 2    ┆ 2.2  │
+        │ B    ┆ 3    ┆ 3.3  │
+        │ B    ┆ 4    ┆ 4.4  │
+        │ C    ┆ 5    ┆ -1.1 │
+        │ C    ┆ 6    ┆ -2.2 │
+        │ C    ┆ 7    ┆ -3.3 │
+        │ D    ┆ 8    ┆ inf  │
+        │ F    ┆ 9    ┆ NaN  │
+        │ null ┆ null ┆ null │
+        └──────┴──────┴──────┘
+        >>>
+        >>> tf.group_by(td.col("ss")).count()
+        >>>
+        ┌──────┬─────┬─────┐
+        │ ss   ┆ u   ┆ ff  │
+        │ ---  ┆ --- ┆ --- │
+        │ str  ┆ u32 ┆ u32 │
+        ╞══════╪═════╪═════╡
+        │ A    ┆ 2   ┆ 2   │
+        │ B    ┆ 3   ┆ 3   │
+        │ C    ┆ 3   ┆ 3   │
+        │ D    ┆ 1   ┆ 1   │
+        │ F    ┆ 1   ┆ 1   │
+        │ null ┆ 0   ┆ 0   │
+        └──────┴─────┴─────┘
+        """
+        with self._transient_state(STATE, td_constants.RowOperation.GROUP_COUNT):
+            return td_frame.TableFrame.__build__(
+                df=self.agg(functions.all().exclude(system_agg_columns()).count()),
+                mode="tab",
+                idx=None,
+            )
 
     @pydoc(categories="aggregation")
     def max(self) -> td_frame.TableFrame:
@@ -218,12 +285,12 @@ class TableFrameGroupBy:
         │ F    ┆ 9    ┆ NaN  │
         └──────┴──────┴──────┘
         """
-        # ToDo...
-        return td_frame.TableFrame.__build__(
-            df=self._lgb.max(),
-            mode="tab",
-            idx=None,
-        )
+        with self._transient_state(STATE, td_constants.RowOperation.GROUP_MAX):
+            return td_frame.TableFrame.__build__(
+                df=self.agg(functions.all().exclude(system_agg_columns()).max()),
+                mode="tab",
+                idx=None,
+            )
 
     @pydoc(categories="aggregation")
     def mean(self) -> td_frame.TableFrame:
@@ -270,12 +337,12 @@ class TableFrameGroupBy:
         │ F    ┆ 9.0      ┆ NaN      │
         └──────┴──────────┴──────────┘
         """
-        # ToDo...
-        return td_frame.TableFrame.__build__(
-            df=self._lgb.mean(),
-            mode="tab",
-            idx=None,
-        )
+        with self._transient_state(STATE, td_constants.RowOperation.GROUP_MEEAN):
+            return td_frame.TableFrame.__build__(
+                df=self.agg(functions.all().exclude(system_agg_columns()).mean()),
+                mode="tab",
+                idx=None,
+            )
 
     @pydoc(categories="aggregation")
     def median(self) -> td_frame.TableFrame:
@@ -322,12 +389,12 @@ class TableFrameGroupBy:
         │ F    ┆ 9.0  ┆ NaN  │
         └──────┴──────┴──────┘
         """
-        # ToDo...
-        return td_frame.TableFrame.__build__(
-            df=self._lgb.median(),
-            mode="tab",
-            idx=None,
-        )
+        with self._transient_state(STATE, td_constants.RowOperation.GROUP_MEDIAN):
+            return td_frame.TableFrame.__build__(
+                df=self.agg(functions.all().exclude(system_agg_columns()).median()),
+                mode="tab",
+                idx=None,
+            )
 
     @pydoc(categories="aggregation")
     def min(self) -> td_frame.TableFrame:
@@ -374,12 +441,12 @@ class TableFrameGroupBy:
         │ F    ┆ 9    ┆ NaN  │
         └──────┴──────┴──────┘
         """
-        # ToDo...
-        return td_frame.TableFrame.__build__(
-            df=self._lgb.min(),
-            mode="tab",
-            idx=None,
-        )
+        with self._transient_state(STATE, td_constants.RowOperation.GROUP_MIN):
+            return td_frame.TableFrame.__build__(
+                df=self.agg(functions.all().exclude(system_agg_columns()).min()),
+                mode="tab",
+                idx=None,
+            )
 
     @pydoc(categories="aggregation")
     def n_unique(self) -> td_frame.TableFrame:
@@ -426,12 +493,12 @@ class TableFrameGroupBy:
         │ F    ┆ 1   ┆ 1   │
         └──────┴─────┴─────┘
         """
-        # ToDo...
-        return td_frame.TableFrame.__build__(
-            df=self._lgb.n_unique(),
-            mode="tab",
-            idx=None,
-        )
+        with self._transient_state(STATE, td_constants.RowOperation.GROUP_UNIQUE):
+            return td_frame.TableFrame.__build__(
+                df=self.agg(functions.all().exclude(system_agg_columns()).n_unique()),
+                mode="tab",
+                idx=None,
+            )
 
     @pydoc(categories="aggregation")
     def sum(self) -> td_frame.TableFrame:
@@ -478,9 +545,17 @@ class TableFrameGroupBy:
         │ F    ┆ 9   ┆ NaN  │
         └──────┴─────┴──────┘
         """
-        # ToDo...
-        return td_frame.TableFrame.__build__(
-            df=self._lgb.sum(),
-            mode="tab",
-            idx=None,
-        )
+        with self._transient_state(STATE, td_constants.RowOperation.GROUP_SUM):
+            return td_frame.TableFrame.__build__(
+                df=self.agg(functions.all().exclude(system_agg_columns()).sum()),
+                mode="tab",
+                idx=None,
+            )
+
+
+def system_agg_columns() -> list[str]:
+    return [
+        column
+        for column, metadata in td_helpers.REQUIRED_COLUMNS_METADATA.items()
+        if metadata[td_constants.TD_COL_AGGREGATION] is not None
+    ]

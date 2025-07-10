@@ -26,7 +26,7 @@ AddSystemColumnsMode: TypeAlias = Literal[
     # TableFrame applies the inception policy defined in column.
     # (Normally used to store a TableFrame after function execution. Columns to keep are
     #  left with current value, and columns to regenerate are dropped and created back.
-    #   In this case, future load will use these lastly generated values.)
+    #  In this case, future load will use these lastly generated values.)
     "sys",
     # TableFrame creates only the unexisting system columns.
     # (Normally used to load a TableFrame from a non-Source function, as the stored

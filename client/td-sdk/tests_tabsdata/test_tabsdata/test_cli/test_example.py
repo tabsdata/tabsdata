@@ -70,19 +70,37 @@ def test_examples(login, tabsserver_connection):
         working_folder = os.path.join(working_folder, "example")
         output_folder = os.path.join(working_folder, "output")
         logger.debug(f"Working folder: {working_folder}")
+
         runner = CliRunner()
+
         result = runner.invoke(
             cli,
-            ["example", "--dir", working_folder],
+            [
+                "examples",
+                "--dir",
+                working_folder,
+            ],
         )
         log_and_assert(result)
+
         assert os.path.exists(working_folder)
         assert os.path.exists(os.path.join(working_folder, "input", "persons.csv"))
+
+        os.chdir(working_folder)
+
         result = runner.invoke(
             cli,
-            ["collection", "create", "--name", "examples", "--description", '"Examples"'],
+            [
+                "collection",
+                "create",
+                "--name",
+                "examples",
+                "--description",
+                '"Examples"',
+            ],
         )
         log_and_assert(result)
+
         # Test the publisher
         result = runner.invoke(
             cli,
@@ -99,7 +117,14 @@ def test_examples(login, tabsserver_connection):
         log_and_assert(result)
         result = runner.invoke(
             cli,
-            ["fn", "trigger", "--coll", "examples", "--name", "pub"],
+            [
+                "fn",
+                "trigger",
+                "--coll",
+                "examples",
+                "--name",
+                "pub",
+            ],
         )
         log_and_assert(result)
         result = runner.invoke(cli, ["exe", "list-trx"])
@@ -112,7 +137,14 @@ def test_examples(login, tabsserver_connection):
             sleep(retry)
             result = runner.invoke(
                 cli,
-                ["table", "schema", "--coll", "examples", "--name", "persons"],
+                [
+                    "table",
+                    "schema",
+                    "--coll",
+                    "examples",
+                    "--name",
+                    "persons",
+                ],
             )
             logger.debug(result.output)
             if result.exit_code == 0:
@@ -120,7 +152,14 @@ def test_examples(login, tabsserver_connection):
             retry += 1
         result = runner.invoke(
             cli,
-            ["table", "schema", "--coll", "examples", "--name", "persons"],
+            [
+                "table",
+                "schema",
+                "--coll",
+                "examples",
+                "--name",
+                "persons",
+            ],
         )
         log_and_assert(result)
 
@@ -140,10 +179,23 @@ def test_examples(login, tabsserver_connection):
         log_and_assert(result)
         result = runner.invoke(
             cli,
-            ["fn", "trigger", "--coll", "examples", "--name", "tfr"],
+            [
+                "fn",
+                "trigger",
+                "--coll",
+                "examples",
+                "--name",
+                "tfr",
+            ],
         )
         log_and_assert(result)
-        result = runner.invoke(cli, ["exe", "list-trx"])
+        result = runner.invoke(
+            cli,
+            [
+                "exe",
+                "list-trx",
+            ],
+        )
         log_and_assert(result)
         transactions = tabsserver_connection.transactions
         logger.debug(transactions)
@@ -153,7 +205,14 @@ def test_examples(login, tabsserver_connection):
             sleep(retry)
             result = runner.invoke(
                 cli,
-                ["table", "schema", "--coll", "examples", "--name", "spanish"],
+                [
+                    "table",
+                    "schema",
+                    "--coll",
+                    "examples",
+                    "--name",
+                    "spanish",
+                ],
             )
             logger.debug(result.output)
             if result.exit_code == 0:
@@ -161,7 +220,14 @@ def test_examples(login, tabsserver_connection):
             retry += 1
         result = runner.invoke(
             cli,
-            ["table", "schema", "--coll", "examples", "--name", "spanish"],
+            [
+                "table",
+                "schema",
+                "--coll",
+                "examples",
+                "--name",
+                "spanish",
+            ],
         )
         log_and_assert(result)
 
@@ -181,10 +247,24 @@ def test_examples(login, tabsserver_connection):
         log_and_assert(result)
         result = runner.invoke(
             cli,
-            ["fn", "trigger", "--coll", "examples", "--name", "sub"],
+            [
+                "fn",
+                "trigger",
+                "--coll",
+                "examples",
+                "--name",
+                "sub",
+            ],
         )
         log_and_assert(result)
-        result = runner.invoke(cli, ["exe", "list-trx"])
+
+        result = runner.invoke(
+            cli,
+            [
+                "exe",
+                "list-trx",
+            ],
+        )
         log_and_assert(result)
         transactions = tabsserver_connection.transactions
         logger.debug(transactions)
@@ -208,10 +288,17 @@ def test_examples(login, tabsserver_connection):
         assert not os.path.exists(os.path.join(output_folder, "spanish.jsonl"))
         assert not os.path.exists(os.path.join(output_folder, "french.jsonl"))
 
-        # Multitrigger
+        # Multi-trigger
         result = runner.invoke(
             cli,
-            ["fn", "trigger", "--coll", "examples", "--name", "pub"],
+            [
+                "fn",
+                "trigger",
+                "--coll",
+                "examples",
+                "--name",
+                "pub",
+            ],
         )
         log_and_assert(result)
         result = runner.invoke(cli, ["exe", "list-trx"])

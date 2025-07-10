@@ -3,7 +3,6 @@
 #
 
 import logging
-from abc import ABC
 from enum import Enum
 from typing import Any, Type
 
@@ -52,7 +51,7 @@ def system_columns() -> list[str]:
     return [member.value for member in SystemColumns]
 
 
-class TableFrameExtension(Extension, ABC):
+class TableFrameExtension(Extension):
     name = "TableFrame Extension (Standard)"
     version = version()
 

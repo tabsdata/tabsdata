@@ -117,8 +117,10 @@ def examples(ctx: click.Context, dir: str):
         shutil.copytree(examples_folder, dir, dirs_exist_ok=True)
         output_folder = os.path.join(dir, "output")
         os.makedirs(output_folder, exist_ok=True)
-        click.echo(f"Examples generated in '{dir}'. "
-                   f"Follow the instructions in the './README.md' file to run them.")
+        click.echo(
+            f"Examples generated in '{dir}'. "
+            "Follow the instructions in the './README.md' file to run them."
+        )
         show_hint(
             ctx,
             "Remember that in order to run the examples, tdserver must be "

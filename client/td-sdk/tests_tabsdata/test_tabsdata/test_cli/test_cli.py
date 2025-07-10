@@ -39,7 +39,7 @@ def test_examples_existing_folder_fails(tmp_path):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["example", "--dir", tmp_path],
+        ["examples", "--dir", tmp_path],
     )
     logger.debug(result.output)
     assert result.exit_code != 0

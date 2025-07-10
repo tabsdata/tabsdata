@@ -92,11 +92,13 @@ class Inception(Enum):
 
 
 TD_COLUMN_PREFIX = "$td."
+TD_COLUMN_PREFIX_REGEXP = "^\\$td\\..*$"
 
 TD_COL_DEFAULT = "default"
 TD_COL_DTYPE = "dtype"
 TD_COL_GENERATOR = "generator"
 TD_COL_INCEPTION = "inception"
+TD_COL_AGGREGATION = "aggregation"
 
 
 class StandardSystemColumns(Enum):
@@ -118,8 +120,26 @@ class StandardSystemColumnsMetadata(Enum):
         TD_COL_DTYPE: pl.String,
         TD_COL_GENERATOR: td_generators.IdGenerator,
         TD_COL_INCEPTION: Inception.REGENERATE,
+        TD_COL_AGGREGATION: None,
     }
 
 
 REGEXP_ANCHOR_START = "^"
 REGEXP_ANCHOR_END = "$"
+
+# ⚠️ ⚠️ ⚠️
+# Do not change the values of the entries in this enum; they are part of the
+# public API and are used in various places the data persisted in the storage.
+# Changing their names is safe, although highly discouraged if there is no
+# strong reason to do so.
+class RowOperation(Enum):
+    ROW = 0
+    UNDEFINED = 1
+    GROUP_MIN = 2
+    GROUP_MAX = 3
+    GROUP_SUM = 4
+    GROUP_LEN = 5
+    GROUP_COUNT = 6
+    GROUP_MEEAN = 7
+    GROUP_MEDIAN = 8
+    GROUP_UNIQUE = 9
