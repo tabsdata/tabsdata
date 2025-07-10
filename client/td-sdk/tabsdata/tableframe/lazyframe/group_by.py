@@ -186,7 +186,6 @@ class TableFrameGroupBy:
                 idx=None,
             )
 
-
     @pydoc(categories="aggregation")
     def count(self) -> td_frame.TableFrame:
         """

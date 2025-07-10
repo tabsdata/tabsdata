@@ -127,6 +127,7 @@ class StandardSystemColumnsMetadata(Enum):
 REGEXP_ANCHOR_START = "^"
 REGEXP_ANCHOR_END = "$"
 
+
 # ⚠️ ⚠️ ⚠️
 # Do not change the values of the entries in this enum; they are part of the
 # public API and are used in various places the data persisted in the storage.

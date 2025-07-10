@@ -281,7 +281,7 @@ class TableFrame:
         # noinspection PyProtectedMember
         instance._id = td_generators._id()
         instance._idx = idx
-        instance._lf = df
+        instance._lf = _arrange_columns(df)
         return instance
 
     def __init__(
@@ -329,7 +329,7 @@ class TableFrame:
         # noinspection PyProtectedMember
         self._id = td_generators._id()
         self._idx = idx
-        self._lf: pl.LazyFrame | None = df
+        self._lf: pl.LazyFrame | None = _arrange_columns(df)
 
     def columns(
         self, kind: Literal["all", "user", "system"] | None = "user"
@@ -2308,6 +2308,29 @@ def _assemble_system_columns(f: TableFrame | pl.LazyFrame) -> TableFrame:
             "Expected frame to be of type TableFrame or LazyFrame, but got"
             f" {type(f).__name__} instead."
         )
+
+
+def _split_columns(columns: list[str]) -> (list[str], list[str]):
+    user_columns = [
+        column
+        for column in columns
+        if not column.startswith(td_constants.TD_COLUMN_PREFIX)
+    ]
+    system_columns = sorted(
+        [
+            column
+            for column in columns
+            if column.startswith(td_constants.TD_COLUMN_PREFIX)
+        ]
+    )
+    return user_columns, system_columns
+
+
+def _arrange_columns(lf: pl.LazyFrame) -> pl.LazyFrame | None:
+    if lf is None:
+        return None
+    user_columns, system_columns = _split_columns(lf.columns)
+    return lf.select(user_columns + system_columns)
 
 
 def get_class_methods(cls) -> List[str]:

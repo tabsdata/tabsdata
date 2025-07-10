@@ -1,8 +1,8 @@
 #
 # Copyright 2024 Tabs Data Inc.
 #
-
-from typing import Any
+import itertools
+from typing import Any, Sequence
 
 import pandas as pd
 import polars as pl
@@ -15,7 +15,13 @@ import tabsdata as td
 from tabsdata.exceptions import ErrorCode, TabsDataException
 from tabsdata.extensions.features.api.features import Feature, FeaturesManager
 from tabsdata.extensions.tableframe.extension import TableFrameExtension
-from tabsdata.tableframe.lazyframe.frame import TableFrame, TableFrameOrigin
+
+# noinspection PyProtectedMember
+from tabsdata.tableframe.lazyframe.frame import (
+    TableFrame,
+    TableFrameOrigin,
+    _split_columns,
+)
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._helpers import REQUIRED_COLUMNS
@@ -300,3 +306,108 @@ def test_from_no_row_tableframe():
 def test_from_non_empty_tableframe():
     tf = TableFrame.__build__(df={"a": [1]}, mode="raw", idx=None)
     assert not tf.is_empty()
+
+
+def assert_columns_sorted(lf: pl.LazyFrame) -> None:
+    columns = lf.columns
+    user_columns, system_columns = _split_columns(columns)
+    assert (
+        columns == user_columns + system_columns
+    ), f"Columns are not sorted: {columns}"
+
+
+NUM_ROWS = 256
+COLUMNS = ["a", "b", "c", "d", "e"]
+
+
+def make_data(columns: Sequence[str]) -> dict[str, list[int]]:
+    return {col: list(range(NUM_ROWS)) for col in columns}
+
+
+@pytest.mark.parametrize("columns", list(itertools.permutations(COLUMNS)))
+def test_sorted_columns_from_init(columns):
+    data = make_data(columns)
+    lf = pl.LazyFrame(data)
+    tf = TableFrame.from_polars(lf)
+
+    assert_columns_sorted(tf._lf)
+
+
+@pytest.mark.parametrize("columns", list(itertools.permutations(COLUMNS)))
+def test_sorted_columns_from_build(columns):
+    data = make_data(columns)
+    lf = pl.LazyFrame(data)
+    tf = TableFrame.from_polars(lf)
+    tf = TableFrame(tf, origin=TableFrameOrigin.IMPORT)
+    tf = TableFrame.__build__(origin=TableFrameOrigin.IMPORT, df=tf, mode="raw", idx=19)
+
+    assert_columns_sorted(tf._lf)
+
+
+@pytest.mark.parametrize("columns", list(itertools.permutations(COLUMNS)))
+def test_sorted_columns_from_group_by(columns):
+    data = make_data(columns)
+    lf = pl.LazyFrame(data)
+    tf = TableFrame.from_polars(lf)
+    tf = TableFrame(tf, origin=TableFrameOrigin.IMPORT)
+    tf = TableFrame.__build__(origin=TableFrameOrigin.IMPORT, df=tf, mode="raw", idx=19)
+
+    tf = tf.group_by("a").max()
+    assert_columns_sorted(tf._lf)
+
+
+@pytest.mark.parametrize("columns", list(itertools.permutations(COLUMNS)))
+def test_sorted_columns_from_chained_group_by(columns):
+    data = make_data(columns)
+    lf = pl.LazyFrame(data)
+    tf = TableFrame.from_polars(lf)
+    tf = TableFrame(tf, origin=TableFrameOrigin.IMPORT)
+    tf = TableFrame.__build__(origin=TableFrameOrigin.IMPORT, df=tf, mode="raw", idx=19)
+
+    tf = tf.group_by("a").max().group_by("b").min()
+    assert_columns_sorted(tf._lf)
+
+
+@pytest.mark.parametrize("columns", list(itertools.permutations(COLUMNS)))
+def test_sorted_columns_from_join(columns):
+    data_left = make_data(columns)
+    lf_left = pl.LazyFrame(data_left)
+    tf_left = TableFrame.from_polars(lf_left)
+    tf_left = TableFrame(tf_left, origin=TableFrameOrigin.IMPORT)
+    tf_left = TableFrame.__build__(
+        origin=TableFrameOrigin.IMPORT, df=tf_left, mode="raw", idx=19
+    )
+
+    data_right = make_data(columns)
+    lf_right = pl.LazyFrame(data_right)
+    tf_right = TableFrame.from_polars(lf_right)
+    tf_right = TableFrame(tf_right, origin=TableFrameOrigin.IMPORT)
+    tf_right = TableFrame.__build__(
+        origin=TableFrameOrigin.IMPORT, df=tf_right, mode="raw", idx=19
+    )
+
+    tf = tf_left.join(other=tf_right, on="a")
+    assert_columns_sorted(tf._lf)
+
+
+@pytest.mark.parametrize("columns", list(itertools.permutations(COLUMNS)))
+def test_sorted_columns_from_join_and_chained_group_by(columns):
+    data_left = make_data(columns)
+    lf_left = pl.LazyFrame(data_left)
+    tf_left = TableFrame.from_polars(lf_left)
+    tf_left = TableFrame(tf_left, origin=TableFrameOrigin.IMPORT)
+    tf_left = TableFrame.__build__(
+        origin=TableFrameOrigin.IMPORT, df=tf_left, mode="raw", idx=19
+    )
+
+    data_right = make_data(columns)
+    lf_right = pl.LazyFrame(data_right)
+    tf_right = TableFrame.from_polars(lf_right)
+    tf_right = TableFrame(tf_right, origin=TableFrameOrigin.IMPORT)
+    tf_right = TableFrame.__build__(
+        origin=TableFrameOrigin.IMPORT, df=tf_right, mode="raw", idx=19
+    )
+
+    tf = tf_left.join(other=tf_right, on="a")
+    tf = tf.group_by("c").max().group_by("d").min()
+    assert_columns_sorted(tf._lf)
