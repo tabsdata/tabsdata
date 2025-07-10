@@ -37,8 +37,8 @@ async fn test_not_allowed_to_delete_collection(db: DbPool) {
     );
 
     assert_service_error(service, request, |err| match err {
-        AuthzError::UnAuthorized(_) => {}
-        other => panic!("Expected 'Unauthorized', got {other:?}"),
+        AuthzError::Forbidden(_) => {}
+        other => panic!("Expected 'Forbidden', got {other:?}"),
     })
     .await;
 }

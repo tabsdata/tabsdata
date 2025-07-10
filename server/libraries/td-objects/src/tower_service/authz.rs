@@ -204,8 +204,8 @@ pub enum AuthzError {
     #[error("Forbidden inter collection access: {0}")]
     ForbiddenInterCollectionAccess(String) = 3000,
 
-    #[error("Unauthorized for '{0}'")]
-    UnAuthorized(String) = 4000,
+    #[error("Forbidden access '{0}'")]
+    Forbidden(String) = 3001,
 
     #[error("Invalid authorization scope, '{0}' cannot be on {1}")]
     InvalidAuthzScope(String, String) = 5000,
@@ -726,7 +726,7 @@ impl<
                 return Ok(());
             }
 
-            Err(AuthzError::UnAuthorized(scope.to_string()))?
+            Err(AuthzError::Forbidden(scope.to_string()))?
         }
     }
 
@@ -1188,7 +1188,7 @@ mod tests {
             &request_context,
             scope,
             Authz::<SysAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_ok(
@@ -1211,7 +1211,7 @@ mod tests {
             &request_context,
             scope,
             Authz::<CollDev>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_error(
@@ -1219,7 +1219,7 @@ mod tests {
             &request_context,
             scope,
             Authz::<CollExec>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_error(
@@ -1227,7 +1227,7 @@ mod tests {
             &request_context,
             scope,
             Authz::<CollRead>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
 
@@ -1239,7 +1239,7 @@ mod tests {
             &request_context,
             scope,
             Authz::<SysAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_error(
@@ -1247,7 +1247,7 @@ mod tests {
             &request_context,
             scope,
             Authz::<SecAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         let scope = &collection_scope;
@@ -1256,7 +1256,7 @@ mod tests {
             &request_context,
             scope,
             Authz::<CollAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_ok(
@@ -1353,7 +1353,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<SysAdmin, SecAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
     }
@@ -1422,7 +1422,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<CollRead>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
     }
@@ -1524,7 +1524,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<CollExec>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_error(
@@ -1532,7 +1532,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<NoPermissions, CollExec>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_error(
@@ -1540,7 +1540,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<NoPermissions, NoPermissions, CollExec>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_error(
@@ -1548,7 +1548,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<NoPermissions, NoPermissions, NoPermissions, CollExec>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_error(
@@ -1556,7 +1556,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<NoPermissions, NoPermissions, NoPermissions, NoPermissions, CollExec>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_error(
@@ -1571,7 +1571,7 @@ mod tests {
                 NoPermissions,
                 CollExec,
             >::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
         assert_error(
@@ -1587,7 +1587,7 @@ mod tests {
                 NoPermissions,
                 CollExec,
             >::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
     }
@@ -1729,7 +1729,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<Requester>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
 
@@ -1752,7 +1752,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<Requester>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
     }
@@ -1806,7 +1806,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<Requester>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
 
@@ -1829,7 +1829,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<Requester>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
     }
@@ -1910,7 +1910,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<Requester, SysAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
 
@@ -1933,7 +1933,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<Requester, SysAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
     }
@@ -2015,7 +2015,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<Requester, SysAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
 
@@ -2037,7 +2037,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<Requester, SysAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
     }
@@ -2118,7 +2118,7 @@ mod tests {
             &request_context,
             &scope,
             Authz::<CollAdmin>::new(),
-            AuthzError::UnAuthorized("".to_string()),
+            AuthzError::Forbidden("".to_string()),
         )
         .await;
     }

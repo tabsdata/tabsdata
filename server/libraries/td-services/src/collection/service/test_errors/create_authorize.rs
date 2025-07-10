@@ -35,8 +35,8 @@ async fn test_not_allowed_to_create_collection(db: DbPool) {
         .await;
 
     assert_service_error(service, request, |err| match err {
-        td_objects::tower_service::authz::AuthzError::UnAuthorized(_) => {}
-        other => panic!("Expected 'Unauthorized', got {other:?}"),
+        td_objects::tower_service::authz::AuthzError::Forbidden(_) => {}
+        other => panic!("Expected 'Forbidden', got {other:?}"),
     })
     .await;
 }

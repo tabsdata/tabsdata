@@ -47,6 +47,7 @@ status!(
     DefaultErrorStatus,
     BAD_REQUEST => ErrorResponse,
     UNAUTHORIZED => ErrorResponse,
+    FORBIDDEN => ErrorResponse,
     INTERNAL_SERVER_ERROR => ErrorResponse,
 );
 
@@ -55,7 +56,7 @@ impl From<ErrorResponse> for DefaultErrorStatus {
         match error.status {
             StatusCode::BAD_REQUEST => DefaultErrorStatus::BAD_REQUEST(error),
             StatusCode::UNAUTHORIZED => DefaultErrorStatus::UNAUTHORIZED(error),
-            StatusCode::FORBIDDEN => DefaultErrorStatus::UNAUTHORIZED(error),
+            StatusCode::FORBIDDEN => DefaultErrorStatus::FORBIDDEN(error),
             _ => DefaultErrorStatus::INTERNAL_SERVER_ERROR(error),
         }
     }
@@ -66,16 +67,17 @@ status!(
     NOT_FOUND => ErrorResponse,
     BAD_REQUEST => ErrorResponse,
     UNAUTHORIZED => ErrorResponse,
+    FORBIDDEN => ErrorResponse,
     INTERNAL_SERVER_ERROR => ErrorResponse,
 );
 
 impl From<ErrorResponse> for DefaultAndNotFoundErrorStatus {
     fn from(error: ErrorResponse) -> Self {
         match error.status {
+            StatusCode::NOT_FOUND => DefaultAndNotFoundErrorStatus::NOT_FOUND(error),
             StatusCode::BAD_REQUEST => DefaultAndNotFoundErrorStatus::BAD_REQUEST(error),
             StatusCode::UNAUTHORIZED => DefaultAndNotFoundErrorStatus::UNAUTHORIZED(error),
-            StatusCode::FORBIDDEN => DefaultAndNotFoundErrorStatus::UNAUTHORIZED(error),
-            StatusCode::NOT_FOUND => DefaultAndNotFoundErrorStatus::NOT_FOUND(error),
+            StatusCode::FORBIDDEN => DefaultAndNotFoundErrorStatus::FORBIDDEN(error),
             _ => DefaultAndNotFoundErrorStatus::INTERNAL_SERVER_ERROR(error),
         }
     }
