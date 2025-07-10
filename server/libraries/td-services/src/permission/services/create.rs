@@ -4,7 +4,7 @@
 
 use crate::permission::layers::{is_permission_on_a_single_collection, PermissionBuildService};
 use std::sync::Arc;
-use td_authz::{Authz, AuthzContext};
+use td_authz::{refresh_authz_context, Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
@@ -81,10 +81,15 @@ impl CreatePermissionService {
                 ),
 
                 from_fn(insert::<DaoQueries, PermissionDB>),
+
                 from_fn(With::<PermissionDB>::extract::<PermissionId>),
                 from_fn(By::<PermissionId>::select::<DaoQueries, PermissionDBWithNames>),
                 from_fn(With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
                 from_fn(With::<PermissionBuilder>::build::<Permission, _>),
+
+                // refresh the permissions authz cache
+                from_fn(refresh_authz_context),
+
             ))
         }
     }
@@ -149,6 +154,7 @@ mod tests {
             type_of_val(&By::<PermissionId>::select::<DaoQueries, PermissionDBWithNames>),
             type_of_val(&With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
             type_of_val(&With::<PermissionBuilder>::build::<Permission, _>),
+            type_of_val(&refresh_authz_context),
         ]);
     }
 

@@ -7,7 +7,7 @@ use crate::permission::layers::{
     is_permission_with_names_on_a_single_collection,
 };
 use std::sync::Arc;
-use td_authz::{Authz, AuthzContext};
+use td_authz::{refresh_authz_context, Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
@@ -82,6 +82,9 @@ impl DeletePermissionService {
 
                 from_fn(With::<PermissionDBWithNames>::extract::<PermissionId>),
                 from_fn(By::<PermissionId>::delete::<DaoQueries, PermissionDB>),
+
+                // refresh the permissions authz cache
+                from_fn(refresh_authz_context),
             ))
         }
     }
@@ -151,6 +154,7 @@ mod tests {
             type_of_val(&assert_permission_is_not_fixed),
             type_of_val(&With::<PermissionDBWithNames>::extract::<PermissionId>),
             type_of_val(&By::<PermissionId>::delete::<DaoQueries, PermissionDB>),
+            type_of_val(&refresh_authz_context),
         ]);
     }
 
