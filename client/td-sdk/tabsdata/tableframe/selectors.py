@@ -76,7 +76,7 @@ def all() -> td_expr.Expr:
         └─────┴──────┘
     """
     return td_expr.Expr(
-        pl.selectors.all() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.all() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -129,7 +129,7 @@ def first() -> td_expr.Expr:
         └─────┘
     """
     return td_expr.Expr(
-        pl.selectors.first() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.first() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -186,7 +186,7 @@ def last() -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.by_index(-(len(SystemColumns) + 1))
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -267,7 +267,7 @@ def by_index(*indices: int | range | Sequence[int | range]) -> td_expr.Expr:
 
     return td_expr.Expr(
         pl.selectors.by_index(*normalized_indices)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -331,7 +331,7 @@ def by_name(*names: str | Collection[str], require_all: bool = True) -> td_expr.
     """
     return td_expr.Expr(
         pl.selectors.by_name(*names, require_all=require_all)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -385,7 +385,7 @@ def contains(*substring: str) -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.contains(*substring)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -443,7 +443,7 @@ def starts_with(*prefix: str) -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.starts_with(*prefix)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -501,7 +501,7 @@ def ends_with(*suffix: str) -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.ends_with(*suffix)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -559,7 +559,7 @@ def matches(pattern: str) -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.matches(pattern=pattern)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -617,7 +617,7 @@ def alpha(ascii_only: bool = False, *, ignore_spaces: bool = False) -> td_expr.E
     """
     return td_expr.Expr(
         pl.selectors.alpha(ascii_only=ascii_only, ignore_spaces=ignore_spaces)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -680,7 +680,7 @@ def alphanumeric(
     """
     return td_expr.Expr(
         pl.selectors.alphanumeric(ascii_only=ascii_only, ignore_spaces=ignore_spaces)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -739,7 +739,7 @@ def digit(ascii_only: bool = False) -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.digit(ascii_only=ascii_only)
-    ) | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+    ) & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
 
 
 """
@@ -805,7 +805,7 @@ def by_dtype(
     """
     return td_expr.Expr(
         pl.selectors.by_dtype(*dtypes)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -864,7 +864,7 @@ def integer() -> td_expr.Expr:
         └────┴───────┘
     """
     return td_expr.Expr(
-        pl.selectors.integer() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.integer() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -919,7 +919,7 @@ def signed_integer() -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.signed_integer()
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -976,7 +976,7 @@ def unsigned_integer() -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.unsigned_integer()
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1030,7 +1030,7 @@ def float() -> td_expr.Expr:
         └───────┘
     """
     return td_expr.Expr(
-        pl.selectors.float() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.float() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1086,7 +1086,7 @@ def numeric() -> td_expr.Expr:
         └────┴────────┘
     """
     return td_expr.Expr(
-        pl.selectors.numeric() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.numeric() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1181,7 +1181,7 @@ def temporal() -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.temporal()
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1238,7 +1238,7 @@ def binary() -> td_expr.Expr:
         └────────┘
     """
     return td_expr.Expr(
-        pl.selectors.binary() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.binary() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1290,7 +1290,7 @@ def boolean() -> td_expr.Expr:
         └─────────┘
     """
     return td_expr.Expr(
-        pl.selectors.boolean() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.boolean() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1346,7 +1346,7 @@ def categorical() -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.categorical()
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1416,7 +1416,7 @@ def date() -> td_expr.Expr:
         └────────────┘
     """
     return td_expr.Expr(
-        pl.selectors.date() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.date() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1507,7 +1507,7 @@ def datetime(
     """
     return td_expr.Expr(
         pl.selectors.datetime(time_unit=time_unit, time_zone=time_zone)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1564,7 +1564,7 @@ def decimal() -> td_expr.Expr:
         └────────┘
     """
     return td_expr.Expr(
-        pl.selectors.decimal() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.decimal() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1634,7 +1634,7 @@ def duration(
     """
     return td_expr.Expr(
         pl.selectors.duration(time_unit=time_unit)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1692,7 +1692,7 @@ def object() -> td_expr.Expr:
         └────────────┘
     """
     return td_expr.Expr(
-        pl.selectors.object() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.object() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1749,7 +1749,7 @@ def string(*, include_categorical: bool = False) -> td_expr.Expr:
     """
     return td_expr.Expr(
         pl.selectors.string(include_categorical=include_categorical)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1805,7 +1805,7 @@ def time() -> td_expr.Expr:
         └───────────┘
     """
     return td_expr.Expr(
-        pl.selectors.time() | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        pl.selectors.time() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1885,5 +1885,5 @@ def exclude(
     """
     return td_expr.Expr(
         pl.selectors.exclude(columns=columns, *more_columns)
-        | pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX)
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )

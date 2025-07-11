@@ -15,6 +15,7 @@ import pytest
 from polars import selectors as pl_selectors
 
 import tabsdata as td
+from tabsdata.extensions.tableframe.extension import SystemColumns
 from tabsdata.tableframe import selectors as td_selectors
 
 # noinspection PyProtectedMember
@@ -934,8 +935,10 @@ def test_select_by_index(exclude, run_id):
 
     # noinspection PyTypeChecker
     random.seed(run_id)
-    q_indices = random.randint(1, len(SCHEMA))
-    indices = sorted(random.sample(range(RUNS), q_indices))
+    all_columns = list(SCHEMA.keys())
+    q_indices = random.randint(1, len(all_columns))
+    indices = sorted(random.sample(range(len(all_columns)), q_indices))
+    api_tester(fn)
 
     api_tester(fn)
 
