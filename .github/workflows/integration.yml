@@ -29,10 +29,10 @@ on:
         options: [ 'true', 'false' ]
         default: 'false'
       runner_action:
-        description: 'Action'
+        description: "Action"
         required: true
         type: choice
-        options: [ 'build', 'lock' ]
+        options: [ 'build', 'lock', 'wheels4whl', 'wheels4repo' ]
         default: 'build'
       run_on_linux_x86_64:
         description: "Run on Ubuntu (x86_64)"

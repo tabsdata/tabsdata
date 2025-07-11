@@ -1390,6 +1390,8 @@ script = [
     set_env REQUIRE_THIRD_PARTY "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+
+    set_env TD_WHEELS_FLAVOUR "4repo"
     ''']
 
 [tasks.wheels_4repo_teardown]
@@ -1474,6 +1476,8 @@ script = [
     set_env REQUIRE_THIRD_PARTY "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+
+    set_env TD_WHEELS_FLAVOUR "4whl"
     ''']
 
 [tasks.wheels_4whl_teardown]
@@ -1541,7 +1545,9 @@ script = [
 
     cd "${ROOT_PROJECT_TABSDATA_FOLDER}"
 
-    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/wheels.py ${td-profile}
+    td_wheels_flavour = get_env TD_WHEELS_FLAVOUR
+
+    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/wheels.py ${td-profile} ${td_wheels_flavour}
     ''']
 
 [tasks.install]

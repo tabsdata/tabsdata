@@ -38,11 +38,13 @@ def wheels(root: Path):
                 yield Path(dirpath) / filename
 
 
-def main(profile: str):
+def main(wheel_profile: str, wheel_flavour: str):
     source_folder = Path(".").resolve()
     target_folder = Path("./target/wheels").resolve()
     target_folder.mkdir(parents=True, exist_ok=True)
-    target_archive = os.path.join(target_folder, f"tabsdata-{profile}.tar.gz")
+    target_archive = os.path.join(
+        target_folder, f"tabsdata-{wheel_profile}-{wheel_flavour}.tar.gz"
+    )
     with tarfile.open(target_archive, "w:gz") as tar:
         for wheel in wheels(source_folder):
             logger.info(f"Adding wheel: {wheel}")
@@ -56,4 +58,11 @@ if __name__ == "__main__":
     else:
         logger.error("⭕️ Error: No profile provided", file=sys.stderr)
         sys.exit(1)
-    main(profile)
+
+    if len(sys.argv) > 2:
+        flavour = sys.argv[2]
+    else:
+        logger.error("⭕️ Error: No flavour provided", file=sys.stderr)
+        sys.exit(1)
+
+    main(profile, flavour)
