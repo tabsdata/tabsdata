@@ -1406,7 +1406,7 @@ script = [
         lower_os = lowercase ${os}
         contains_win = contains ${lower_os} "windows"
         if ${contains_win}
-            _ignore exec --fail-on-error false cls
+            _ignore = exec --fail-on-error false cls
             _ignore = exec --fail-on-error false clear
         else
             _ignore = exec --fail-on-error false clear
@@ -1495,7 +1495,7 @@ script = [
         lower_os = lowercase ${os}
         contains_win = contains ${lower_os} "windows"
         if ${contains_win}
-            _ignore exec --fail-on-error false cls
+            _ignore = exec --fail-on-error false cls
             _ignore = exec --fail-on-error false clear
         else
             _ignore = exec --fail-on-error false clear

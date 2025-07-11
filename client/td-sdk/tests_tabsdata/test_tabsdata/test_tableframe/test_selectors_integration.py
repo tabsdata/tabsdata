@@ -904,7 +904,7 @@ def test_select_boolean(exclude):
 
 
 @pytest.mark.parametrize("exclude", [False, True])
-@pytest.mark.parametrize("run_id", range(RUNS))
+@pytest.mark.parametrize("run_id", list(range(RUNS)))
 def test_select_by_dtype(exclude, run_id):
     def fn(library: pk, frame: ft):
         return apply_selector(
@@ -914,7 +914,6 @@ def test_select_by_dtype(exclude, run_id):
             exclude,
         )
 
-    # noinspection PyTypeChecker
     random.seed(run_id)
     q_dtypes = random.randint(1, len(DTYPES))
     s_dtypes = random.sample(DTYPES, q_dtypes)
@@ -923,7 +922,7 @@ def test_select_by_dtype(exclude, run_id):
 
 
 @pytest.mark.parametrize("exclude", [False, True])
-@pytest.mark.parametrize("run_id", range(RUNS))
+@pytest.mark.parametrize("run_id", list(range(RUNS)))
 def test_select_by_index(exclude, run_id):
     def fn(library: pk, frame: ft):
         return apply_selector(
@@ -933,7 +932,6 @@ def test_select_by_index(exclude, run_id):
             exclude,
         )
 
-    # noinspection PyTypeChecker
     random.seed(run_id)
     all_columns = list(SCHEMA.keys())
     q_indices = random.randint(1, len(all_columns))
@@ -944,7 +942,7 @@ def test_select_by_index(exclude, run_id):
 
 
 @pytest.mark.parametrize("exclude", [False, True])
-@pytest.mark.parametrize("run_id", range(RUNS))
+@pytest.mark.parametrize("run_id", list(range(RUNS)))
 def test_select_by_name(exclude, run_id):
     def fn(library: pk, frame: ft):
         return apply_selector(
@@ -954,7 +952,6 @@ def test_select_by_name(exclude, run_id):
             exclude,
         )
 
-    # noinspection PyTypeChecker
     random.seed(run_id)
     all_columns = list(SCHEMA.keys())
     q_columns = random.randint(1, len(all_columns))
@@ -977,7 +974,7 @@ def test_select_categorical(exclude):
 
 
 @pytest.mark.parametrize("exclude", [False, True])
-@pytest.mark.parametrize("run_id", range(RUNS))
+@pytest.mark.parametrize("run_id", list(range(RUNS)))
 def test_select_by_contains(exclude, run_id):
     def fn(library: pk, frame: ft):
         return apply_selector(
@@ -987,7 +984,6 @@ def test_select_by_contains(exclude, run_id):
             exclude,
         )
 
-    # noinspection PyTypeChecker
     random.seed(run_id)
     all_columns = list(SCHEMA.keys())
     q_columns = random.randint(1, len(all_columns))
@@ -1084,7 +1080,7 @@ def test_select_duration(exclude):
 
 
 @pytest.mark.parametrize("exclude", [False, True])
-@pytest.mark.parametrize("run_id", range(RUNS))
+@pytest.mark.parametrize("run_id", list(range(RUNS)))
 def test_select_by_ends_with(exclude, run_id):
     def fn(library: pk, frame: ft):
         return apply_selector(
@@ -1094,7 +1090,6 @@ def test_select_by_ends_with(exclude, run_id):
             exclude,
         )
 
-    # noinspection PyTypeChecker
     random.seed(run_id)
     all_columns = list(SCHEMA.keys())
     q_columns = random.randint(1, len(all_columns))
@@ -1160,7 +1155,7 @@ def test_select_last(exclude):
 
 
 @pytest.mark.parametrize("exclude", [False, True])
-@pytest.mark.parametrize("run_id", range(RUNS))
+@pytest.mark.parametrize("run_id", list(range(RUNS)))
 def test_select_by_matches(exclude, run_id):
     def fn(library: pk, frame: ft):
         return apply_selector(
@@ -1170,7 +1165,6 @@ def test_select_by_matches(exclude, run_id):
             exclude,
         )
 
-    # noinspection PyTypeChecker
     random.seed(run_id)
     all_columns = list(SCHEMA.keys())
     q_columns = random.randint(1, len(all_columns))
@@ -1231,7 +1225,7 @@ def test_select_signed_integer(exclude):
 
 
 @pytest.mark.parametrize("exclude", [False, True])
-@pytest.mark.parametrize("run_id", range(RUNS))
+@pytest.mark.parametrize("run_id", list(range(RUNS)))
 def test_select_by_starts_with(exclude, run_id):
     def fn(library: pk, frame: ft):
         return apply_selector(
@@ -1241,7 +1235,6 @@ def test_select_by_starts_with(exclude, run_id):
             exclude,
         )
 
-    # noinspection PyTypeChecker
     random.seed(run_id)
     all_columns = list(SCHEMA.keys())
     q_columns = random.randint(1, len(all_columns))
@@ -1305,3 +1298,15 @@ def test_select_unsigned_integer(exclude):
         )
 
     api_tester(fn)
+
+
+@pytest.mark.parametrize("run_id", list(range(2 * len(SCHEMA))))
+def test_scan_select_by_index(run_id):
+    tableframe = _wrap_polars_frame(generate())
+    tableframe = tableframe.select(td_selectors.by_index(run_id))
+    if run_id < len(SCHEMA):
+        assert len(tableframe._lf.columns) == len(SystemColumns) + 1
+    else:
+        assert len(tableframe._lf.columns) == len(SystemColumns)
+    lazyframe = _unwrap_table_frame(tableframe)
+    assert set(lazyframe.columns) == set(tableframe.columns())

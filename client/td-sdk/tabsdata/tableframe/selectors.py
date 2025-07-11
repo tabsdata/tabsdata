@@ -76,7 +76,8 @@ def all() -> td_expr.Expr:
         └─────┴──────┘
     """
     return td_expr.Expr(
-        pl.selectors.all() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.all()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -129,7 +130,8 @@ def first() -> td_expr.Expr:
         └─────┘
     """
     return td_expr.Expr(
-        pl.selectors.first() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.first()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -196,8 +198,9 @@ def by_index(*indices: int | range | Sequence[int | range]) -> td_expr.Expr:
     Select columns by their position in the TableFrame.
 
     Parameters:
-        indices: One or more integer positions or ranges. Negative indexing is
-        supported, selecting columns from the end of the TableFrame.
+        indices: One or more integer positions or ranges. Negative indexing are
+        not supported. Indexes greater than the number of columns will either
+        fail or produce no column.
 
     Example:
         >>> import tabsdata.tableframe as td_tf
@@ -243,30 +246,25 @@ def by_index(*indices: int | range | Sequence[int | range]) -> td_expr.Expr:
         │ "H"  ┆ 89.5  │
         └──────┴───────┘
     """
-    system_columns_length = len(SystemColumns)
 
-    def fix(i: int) -> int:
-        return i + system_columns_length if i < 0 else i
+    def val(i: int):
+        if i < 0:
+            raise ValueError(f"The index selector contains negative indices: {i}")
 
-    normalized_indices = []
-    for index in indices:
-        if isinstance(index, int):
-            normalized_indices.append(fix(index))
-        elif isinstance(index, range):
-            normalized_indices.extend(fix(i) for i in index)
-        elif isinstance(index, Iterable):
-            for sub_index in index:
-                if isinstance(sub_index, int):
-                    normalized_indices.append(fix(sub_index))
-                elif isinstance(sub_index, range):
-                    normalized_indices.extend(fix(i) for i in sub_index)
-                else:
-                    raise TypeError(f"Unsupported nested type: {type(sub_index)}")
+    def validate_item(item):
+        if isinstance(item, int):
+            val(item)
+        elif isinstance(item, range):
+            [val(i) for i in item]
+        elif isinstance(item, Iterable):
+            [validate_item(sub_item) for sub_item in item]
         else:
-            raise TypeError(f"Unsupported index type: {type(index)}")
+            raise TypeError(f"Unsupported type: {type(item)}")
+
+    [validate_item(index) for index in indices]
 
     return td_expr.Expr(
-        pl.selectors.by_index(*normalized_indices)
+        pl.selectors.by_index(*indices)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
@@ -864,7 +862,8 @@ def integer() -> td_expr.Expr:
         └────┴───────┘
     """
     return td_expr.Expr(
-        pl.selectors.integer() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.integer()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1030,7 +1029,8 @@ def float() -> td_expr.Expr:
         └───────┘
     """
     return td_expr.Expr(
-        pl.selectors.float() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.float()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1086,7 +1086,8 @@ def numeric() -> td_expr.Expr:
         └────┴────────┘
     """
     return td_expr.Expr(
-        pl.selectors.numeric() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.numeric()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1238,7 +1239,8 @@ def binary() -> td_expr.Expr:
         └────────┘
     """
     return td_expr.Expr(
-        pl.selectors.binary() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.binary()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1290,7 +1292,8 @@ def boolean() -> td_expr.Expr:
         └─────────┘
     """
     return td_expr.Expr(
-        pl.selectors.boolean() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.boolean()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1416,7 +1419,8 @@ def date() -> td_expr.Expr:
         └────────────┘
     """
     return td_expr.Expr(
-        pl.selectors.date() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.date()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1564,7 +1568,8 @@ def decimal() -> td_expr.Expr:
         └────────┘
     """
     return td_expr.Expr(
-        pl.selectors.decimal() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.decimal()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1692,7 +1697,8 @@ def object() -> td_expr.Expr:
         └────────────┘
     """
     return td_expr.Expr(
-        pl.selectors.object() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.object()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
@@ -1805,7 +1811,8 @@ def time() -> td_expr.Expr:
         └───────────┘
     """
     return td_expr.Expr(
-        pl.selectors.time() & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        pl.selectors.time()
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
