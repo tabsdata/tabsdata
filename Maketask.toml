@@ -1408,10 +1408,12 @@ script = [
         if ${contains_win}
             exec cls
         else
-            exec clear
+            _ignore = exec clear
+            _ignore = exec cls
         end
     else
-        exec clear
+        _ignore = exec clear
+        _ignore = exec cls
     end
 
     lines = array
@@ -1494,10 +1496,12 @@ script = [
         if ${contains_win}
             exec cls
         else
-            exec clear
+            _ignore = exec clear
+            _ignore = exec cls
         end
     else
-        exec clear
+        _ignore = exec clear
+        _ignore = exec cls
     end
 
     lines = array
