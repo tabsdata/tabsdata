@@ -173,7 +173,11 @@ def api_tester(
         assert True
 
 
-# col.py
+"""
+col.py
+"""
+
+
 def test_select_col():
     def fn(library: pk, frame: ft):
         return frame.select(library.col("u"))
@@ -216,7 +220,9 @@ def test_select_name_arr():
     api_tester(fn)
 
 
-# lit.py
+"""
+lit.py
+"""
 
 
 def test_lit():
@@ -226,7 +232,9 @@ def test_lit():
     api_tester(fn)
 
 
-# expr.py
+"""
+expr.py
+"""
 
 
 def test_expr_abs():

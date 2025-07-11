@@ -13,9 +13,12 @@ import logging
 
 from polars import (
     Boolean,
+    Categorical,
     Date,
     Datetime,
+    Decimal,
     Duration,
+    Enum,
     Float32,
     Float64,
     Int8,
@@ -30,6 +33,22 @@ from polars import (
     UInt16,
     UInt32,
     UInt64,
+)
+from polars.datatypes.classes import (
+    FloatType,
+    IntegerType,
+    NumericType,
+    SignedIntegerType,
+    TemporalType,
+    UnsignedIntegerType,
+)
+from polars.datatypes.group import (
+    FLOAT_DTYPES,
+    INTEGER_DTYPES,
+    NUMERIC_DTYPES,
+    SIGNED_INTEGER_DTYPES,
+    TEMPORAL_DTYPES,
+    UNSIGNED_INTEGER_DTYPES,
 )
 
 from tabsdata.credentials import (
@@ -124,7 +143,7 @@ __all__ = [
     "concat",
     "lit",
     "TableFrame",
-    # from polars...
+    # from polars (basic)...
     Boolean,
     Date,
     Datetime,
@@ -143,6 +162,31 @@ __all__ = [
     UInt16,
     UInt32,
     UInt64,
+    # from polars (advanced)...
+    FLOAT_DTYPES,
+    INTEGER_DTYPES,
+    NUMERIC_DTYPES,
+    SIGNED_INTEGER_DTYPES,
+    TEMPORAL_DTYPES,
+    UNSIGNED_INTEGER_DTYPES,
+    NumericType,
+    IntegerType,
+    SignedIntegerType,
+    UnsignedIntegerType,
+    FloatType,
+    TemporalType,
+    # NestedType,
+    # ObjectType,
+    Decimal,
+    # Binary,
+    Categorical,
+    Enum,
+    # Object,
+    # Unknown,
+    # List,
+    # Array,
+    # Field,
+    # Struct,
     # From tabsdata_databricks.connector
     "DatabricksDestination",
     # From tabsdata_mongodb.connector
