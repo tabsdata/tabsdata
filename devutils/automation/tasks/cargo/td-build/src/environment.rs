@@ -25,7 +25,7 @@ const INDEX_HTML_FILE: &str = "index.html";
 pub fn set_environment_variables() -> Result<(), Box<dyn Error>> {
     match env::var(ENV_TD_UI_MODE) {
         Ok(value) => eprintln!("✅ ENV_TD_UI_MODE is set: '{value}'"),
-        Err(env::VarError::NotPresent) => eprintln!("⚠️ ENV_TD_UI_MODE is not set"),
+        Err(env::VarError::NotPresent) => eprintln!("⚠️ TD_UI_MODE is not set"),
         Err(err) => eprintln!("❌ Error accessing ENV_TD_UI_MODE: {err}"),
     }
 
