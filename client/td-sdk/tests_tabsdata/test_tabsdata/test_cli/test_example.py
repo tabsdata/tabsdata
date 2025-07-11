@@ -64,7 +64,7 @@ def test_examples(login, tabsserver_connection):
         f"{tabsdata.extensions.tableframe.extension_test.__file__}"
     )
 
-    with tempfile.TemporaryDirectory() as working_folder:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as working_folder:
         assert working_folder
         logger.debug(f"Temporary working folder: {working_folder}")
         working_folder = os.path.join(working_folder, "example")
