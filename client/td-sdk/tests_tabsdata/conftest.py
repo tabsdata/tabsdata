@@ -842,7 +842,7 @@ def clean_python_virtual_environments():
 
 def remove_docker_containers(name_pattern):
     client = docker.from_env()
-    for container in client.containers.list(filters={"name": name_pattern}):
+    for container in client.containers.list(all=True, filters={"name": name_pattern}):
         try:
             logger.info(f"Removing container {container}")
             container.remove(v=True, force=True)

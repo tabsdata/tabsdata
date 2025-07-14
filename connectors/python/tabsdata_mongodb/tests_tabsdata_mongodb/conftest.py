@@ -46,6 +46,7 @@ MONGODB_URI_WITH_CREDENTIALS = (
     f"{quote_plus(DB_PASSWORD)}@{DB_HOST}:{MONGODB_PORT}"
 )
 
+DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME = "tests_tabsdata_mongodb"
 DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME = (
     "pytest_exclusive_mongodb_container_with_replica_set"
 )
@@ -53,6 +54,7 @@ MONGODB_WITH_REPLICA_SET_URI = "mongodb://127.0.0.1:27017/?replicaSet=rs0"
 
 
 def create_docker_mongodb_database():
+    remove_docker_containers(DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME)
     logger.info("Starting MongoDB container")
     client = docker.from_env()
     if client.containers.list(
@@ -111,6 +113,10 @@ def testing_mongodb(tmp_path_factory, worker_id):
 
 
 def create_docker_mongodb_database_with_replica_set():
+    remove_docker_containers(
+        f"({DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME}"
+        f"|{DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME})"
+    )
     logger.info("Starting MongoDB container with replica set")
     client = docker.from_env()
     if client.containers.list(
@@ -119,7 +125,9 @@ def create_docker_mongodb_database_with_replica_set():
         logger.info("MongoDB container with replica set already exists")
         return
     else:
-        compose_file = os.path.join("tests_tabsdata_mongodb", "compose.yaml")
+        compose_file = os.path.join(
+            DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME, "compose.yaml"
+        )
         subprocess.run(
             [
                 "docker",
@@ -181,8 +189,9 @@ def pytest_sessionfinish(session, exitstatus):
     clean_python_virtual_environments()
     try:
         name_pattern = (
-            f"({DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME}|"
-            f"{DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME})"
+            f"({DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME}"
+            f"|{DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME}"
+            f"|{DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME})"
         )
         remove_docker_containers(name_pattern)
     except Exception as e:
