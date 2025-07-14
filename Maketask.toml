@@ -1214,7 +1214,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
@@ -1247,7 +1247,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
@@ -1280,7 +1280,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
@@ -1313,7 +1313,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
@@ -1346,7 +1346,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
@@ -1367,10 +1367,10 @@ script = [
     ''']
 
 [tasks.wheels_4repo]
-dependencies = ["assembly"]
 run_task = [
     { name = [
         "wheels_4repo_setup",
+        "assembly",
         "wheels_rs",
         "wheels_py",
         "wheels_4repo_teardown"
@@ -1456,10 +1456,10 @@ script = [
     ''']
 
 [tasks.wheels_4whl]
-dependencies = ["assembly"]
 run_task = [
     { name = [
         "wheels_4whl_setup",
+        "assembly",
         "wheels_rs",
         "wheels_py",
         "wheels_4whl_teardown"
@@ -1591,7 +1591,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
@@ -1632,7 +1632,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
@@ -1673,7 +1673,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
@@ -1714,7 +1714,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"
@@ -1755,7 +1755,7 @@ script = [
         info "🔗 Unespecified link to python repository status... defaulting to true"
         td_pypi_linked = set "true"
     else
-        info "🔗 Specified link to python repository status: true"
+        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
     end
     if eq ${td_pypi_linked} "true"
         set_env REQUIRE_SERVER_BINARIES "true"

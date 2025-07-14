@@ -2,15 +2,17 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+# Drivers
+
+-r requirements-drivers-all.txt
+
 # Global
 
-azure-storage-blob==12.25.1
 black==25.1.0
 boto3==1.39.3
 build
 colorlog==6.9.0
 csvkit==2.1.0
-cx_Oracle==8.3.0
 devpi-client==7.2.0
 devpi-server==6.16.0
 devpi-web==5.0.1
@@ -26,14 +28,11 @@ matplotlib==3.10.3
 maturin==1.9.0
 mkdocs==1.6.1
 mimesis==18.0.0
-mysql-connector-python==9.3.0
-oracledb==3.2.0
 parquet-tools==0.2.16
 pdoc==15.0.4
 pipdeptree==2.26.1
 pip-tools==7.4.1
 psutil==7.0.0
-psycopg2-binary==2.9.10
 pydevd
 pydevd_pycharm
 pygame
