@@ -54,6 +54,12 @@ pub struct BundleId;
 #[td_type::typed(id, try_from = EntityId, try_from = FromCollectionId, try_from = ToCollectionId)]
 pub struct CollectionId;
 
+impl CollectionId {
+    pub fn all_collections() -> Self {
+        Self(Id::_new(ID_ALL_ENTITIES))
+    }
+}
+
 #[td_type::typed(id_name(id = CollectionId, name = CollectionName))]
 pub struct CollectionIdName;
 

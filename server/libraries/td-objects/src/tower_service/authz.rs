@@ -173,10 +173,14 @@ pub trait AuthzContextT {
                 .collect::<Vec<_>>();
 
             for perm in perms {
-                for on_all in on_all_collections.iter() {
-                    if !perm.is_same_type(on_all) {
-                        //we only add the collection permission if we don't have the same type of permission for all collections.
-                        simplified_perms.push(perm.clone());
+                if on_all_collections.is_empty() {
+                    simplified_perms.push(perm.clone());
+                } else {
+                    for on_all in on_all_collections.iter() {
+                        if !perm.is_same_type(on_all) {
+                            //we only add the collection permission if we don't have the same type of permission for all collections.
+                            simplified_perms.push(perm.clone());
+                        }
                     }
                 }
             }
@@ -193,6 +197,51 @@ pub trait AuthzContextT {
         conn: &mut SqliteConnection,
         collection_id: &CollectionId,
     ) -> Result<Option<Arc<Vec<ToCollectionId>>>, TdError>;
+
+    /// Return a [`(Vec<CollectionId>`,`Vec<CollectionId>)`] pair where the first vector contains the
+    /// collections the given role has at least one permission for, and the second vector contains
+    /// all the collections that any of the collections from the first vector have inter-collection
+    /// permission to.
+    ///
+    /// The first vector may contain the [`CollectionId::all_collections()`] to indicate that the role
+    /// has permissions on all collections. If that is the case, the first vector does not have any
+    /// other
+    async fn visible_collections(
+        &self,
+        conn: &mut SqliteConnection,
+        role: &RoleId,
+    ) -> Result<(HashSet<CollectionId>, HashSet<CollectionId>), TdError> {
+        let mut collections_with_permissions = self
+            .role_collections_permissions(conn, role)
+            .await?
+            .map(|collections| {
+                collections
+                    .into_iter()
+                    .filter_map(|p| p.on_collection())
+                    .collect::<HashSet<CollectionId>>()
+            })
+            .unwrap_or_default();
+        let mut inter_collection_permissions = HashSet::new();
+        if collections_with_permissions.contains(&CollectionId::all_collections()) {
+            collections_with_permissions = HashSet::from([CollectionId::all_collections()]);
+        } else {
+            //TODO the looping has tbe on CollDev permissions only
+            for coll in collections_with_permissions.iter() {
+                let inter_collection_for_coll = self
+                    .inter_collection_access(conn, coll)
+                    .await?
+                    .map(|perms| {
+                        perms
+                            .iter()
+                            .map(|tc| tc.try_into().unwrap())
+                            .collect::<HashSet<CollectionId>>()
+                    })
+                    .unwrap_or_default();
+                inter_collection_permissions.extend(inter_collection_for_coll);
+            }
+        }
+        Ok((collections_with_permissions, inter_collection_permissions))
+    }
 
     async fn refresh(&self, _conn: &mut SqliteConnection) -> Result<(), TdError> {
         Ok(())
@@ -379,6 +428,20 @@ impl Permission {
                 | Permission::CollectionExec(AuthzEntity::All)
                 | Permission::CollectionRead(AuthzEntity::All)
         )
+    }
+
+    pub fn on_collection(&self) -> Option<CollectionId> {
+        match self {
+            Permission::CollectionAdmin(AuthzEntity::On(collection_id))
+            | Permission::CollectionDev(AuthzEntity::On(collection_id))
+            | Permission::CollectionExec(AuthzEntity::On(collection_id))
+            | Permission::CollectionRead(AuthzEntity::On(collection_id)) => Some(*collection_id),
+            Permission::CollectionAdmin(AuthzEntity::All)
+            | Permission::CollectionDev(AuthzEntity::All)
+            | Permission::CollectionExec(AuthzEntity::All)
+            | Permission::CollectionRead(AuthzEntity::All) => Some(CollectionId::all_collections()),
+            _ => None,
+        }
     }
 
     /// Return if the given permission is the same permission type as [`self`].
@@ -2049,6 +2112,37 @@ mod tests {
 
         let role = RoleId::default();
         let sys_perm = Permission::SecAdmin;
+        let perm_on_collection_1 =
+            Permission::CollectionRead(AuthzEntity::On(CollectionId::default()));
+        let perm_on_collection_2 =
+            Permission::CollectionDev(AuthzEntity::On(CollectionId::default()));
+
+        let authz_context = AuthzContextForTest::default().add_permissions(
+            role,
+            [
+                sys_perm.clone(),
+                perm_on_collection_1.clone(),
+                perm_on_collection_2.clone(),
+            ],
+        );
+
+        let perms = authz_context
+            .role_collections_permissions(&mut conn, &role)
+            .await
+            .unwrap();
+        let perms = perms.unwrap();
+        assert_eq!(perms.len(), 2);
+        assert!(perms.contains(&perm_on_collection_1));
+        assert!(perms.contains(&perm_on_collection_2));
+    }
+
+    #[tokio::test]
+    async fn test_role_collections_permissions_all() {
+        let db = td_database::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
+        let role = RoleId::default();
+        let sys_perm = Permission::SecAdmin;
         let perm_on_collection =
             Permission::CollectionRead(AuthzEntity::On(CollectionId::default()));
         let perm_on_collection_shadowed =
@@ -2254,5 +2348,78 @@ mod tests {
             std::mem::discriminant(&AuthzError::ForbiddenInterCollectionAccess("".to_string())),
             std::mem::discriminant(err.domain_err()),
         );
+    }
+
+    #[tokio::test]
+    async fn test_visible_connections() {
+        let authz_context = AuthzContextForTest::default();
+        let authz_context = Arc::new(authz_context);
+
+        let db = td_database::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
+        // no collections in role
+        let role = RoleId::default();
+
+        let (direct, indirect) = authz_context
+            .visible_collections(&mut conn, &role)
+            .await
+            .unwrap();
+        assert!(direct.is_empty());
+        assert!(indirect.is_empty());
+
+        // all collections in role
+        let role = RoleId::user();
+
+        let (direct, indirect) = authz_context
+            .visible_collections(&mut conn, &role)
+            .await
+            .unwrap();
+        assert!(direct.contains(&CollectionId::all_collections()));
+        assert!(indirect.is_empty());
+
+        // a collection in role, no inter-collection permissions
+        let role = RoleId::default();
+        let collection = CollectionId::default();
+        let mut authz_context = AuthzContextForTest::default();
+        authz_context = authz_context.add_permissions(
+            &role,
+            vec![Permission::CollectionRead(AuthzEntity::On(
+                collection.clone(),
+            ))],
+        );
+        let authz_context = Arc::new(authz_context);
+
+        let (direct, indirect) = authz_context
+            .visible_collections(&mut conn, &role)
+            .await
+            .unwrap();
+        assert_eq!(direct.len(), 1);
+        assert!(direct.contains(&collection));
+        assert!(indirect.is_empty());
+
+        // a collection in role, an inter-collection permission
+        let role = RoleId::default();
+        let collection = CollectionId::default();
+        let inter_collection = CollectionId::default();
+        let mut authz_context = AuthzContextForTest::default();
+        authz_context = authz_context.add_permissions(
+            &role,
+            vec![Permission::CollectionRead(AuthzEntity::On(
+                collection.clone(),
+            ))],
+        );
+        authz_context =
+            authz_context.add_inter_collection_permission(&collection, &(*inter_collection).into());
+        let authz_context = Arc::new(authz_context);
+
+        let (direct, indirect) = authz_context
+            .visible_collections(&mut conn, &role)
+            .await
+            .unwrap();
+        assert_eq!(direct.len(), 1);
+        assert!(direct.contains(&collection));
+        assert_eq!(indirect.len(), 1);
+        assert!(indirect.contains(&inter_collection));
     }
 }
