@@ -211,22 +211,54 @@ pub trait AuthzContextT: Send + Sync {
         conn: &mut SqliteConnection,
         role: &RoleId,
     ) -> Result<VisibleCollections, TdError> {
-        let mut collections_with_permissions = self
+        let collection_permissions = self
             .role_collections_permissions(conn, role)
             .await?
             .map(|collections| {
                 collections
                     .into_iter()
-                    .filter_map(|p| p.on_collection())
-                    .collect::<HashSet<CollectionId>>()
+                    .filter(Permission::is_on_collection)
+                    .collect::<HashSet<_>>()
             })
             .unwrap_or_default();
-        let mut inter_collection_permissions = HashSet::new();
-        if collections_with_permissions.contains(&CollectionId::all_collections()) {
+
+        let mut a_perm_on_all_collections = false;
+        let mut collections_with_permissions = HashSet::new();
+        let mut need_inter_collection_check_for = HashSet::new();
+        for perm in collection_permissions {
+            let collection_id = match perm {
+                Permission::CollectionAdmin(AuthzEntity::On(collection_id)) => {
+                    // admin can do dev stuff, needs to see tables in inter-collections of the collection
+                    need_inter_collection_check_for.insert(collection_id);
+                    collection_id
+                }
+                Permission::CollectionDev(AuthzEntity::On(collection_id)) => {
+                    // dev needs to see tables in inter-collections of the collection
+                    need_inter_collection_check_for.insert(collection_id);
+                    collection_id
+                }
+                Permission::CollectionExec(AuthzEntity::On(collection_id)) => collection_id,
+                Permission::CollectionRead(AuthzEntity::On(collection_id)) => collection_id,
+                Permission::CollectionAdmin(AuthzEntity::All)
+                | Permission::CollectionDev(AuthzEntity::All)
+                | Permission::CollectionRead(AuthzEntity::All)
+                | Permission::CollectionExec(AuthzEntity::All) => {
+                    a_perm_on_all_collections = true;
+                    CollectionId::all_collections()
+                }
+                _ => unreachable!(),
+            };
+            collections_with_permissions.insert(collection_id);
+        }
+        if a_perm_on_all_collections {
             collections_with_permissions = HashSet::from([CollectionId::all_collections()]);
-        } else {
-            //TODO the looping has tbe on CollDev permissions only
-            for coll in collections_with_permissions.iter() {
+            // already has access to all collections, no need to check inter-collection access
+            need_inter_collection_check_for = HashSet::new();
+        }
+
+        let mut inter_collection_permissions = HashSet::new();
+        if !need_inter_collection_check_for.is_empty() {
+            for coll in need_inter_collection_check_for.iter() {
                 let inter_collection_for_coll = self
                     .inter_collection_access(conn, coll)
                     .await?
@@ -2367,14 +2399,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_visible_connections() {
+    async fn test_visible_collections_no_collection_perm_in_role() {
         let authz_context = AuthzContextForTest::default();
         let authz_context = Arc::new(authz_context);
 
         let db = td_database::test_utils::db().await.unwrap();
         let mut conn = db.acquire().await.unwrap();
 
-        // no collections in role
         let role = RoleId::default();
 
         let visible = authz_context
@@ -2383,8 +2414,16 @@ mod tests {
             .unwrap();
         assert!(visible.direct().is_empty());
         assert!(visible.indirect().is_empty());
+    }
 
-        // all collections in role
+    #[tokio::test]
+    async fn test_visible_collections_all_collection_perm_in_role() {
+        let authz_context = AuthzContextForTest::default();
+        let authz_context = Arc::new(authz_context);
+
+        let db = td_database::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
         let role = RoleId::user();
 
         let visible = authz_context
@@ -2393,8 +2432,13 @@ mod tests {
             .unwrap();
         assert!(visible.direct().contains(&CollectionId::all_collections()));
         assert!(visible.indirect().is_empty());
+    }
 
-        // a collection in role, no inter-collection permissions
+    #[tokio::test]
+    async fn test_visible_collections_collection_permission_no_inter_collection() {
+        let db = td_database::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
         let role = RoleId::default();
         let collection = CollectionId::default();
         let mut authz_context = AuthzContextForTest::default();
@@ -2411,8 +2455,13 @@ mod tests {
         assert_eq!(visible.direct().len(), 1);
         assert!(visible.direct().contains(&collection));
         assert!(visible.indirect().is_empty());
+    }
 
-        // a collection in role, an inter-collection permission
+    #[tokio::test]
+    async fn test_visible_collections_no_admin_dev_collection_permission_inter_collection() {
+        let db = td_database::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
         let role = RoleId::default();
         let collection = CollectionId::default();
         let inter_collection = CollectionId::default();
@@ -2420,6 +2469,59 @@ mod tests {
         authz_context = authz_context.add_permissions(
             role,
             vec![Permission::CollectionRead(AuthzEntity::On(collection))],
+        );
+        authz_context =
+            authz_context.add_inter_collection_permission(&collection, &(*inter_collection).into());
+        let authz_context = Arc::new(authz_context);
+
+        let visible = authz_context
+            .visible_collections(&mut conn, &role)
+            .await
+            .unwrap();
+        assert_eq!(visible.direct().len(), 1);
+        assert!(visible.direct().contains(&collection));
+        assert_eq!(visible.indirect().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_visible_collections_admin_collection_permission_inter_collection() {
+        let db = td_database::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
+        let role = RoleId::default();
+        let collection = CollectionId::default();
+        let inter_collection = CollectionId::default();
+        let mut authz_context = AuthzContextForTest::default();
+        authz_context = authz_context.add_permissions(
+            role,
+            vec![Permission::CollectionAdmin(AuthzEntity::On(collection))],
+        );
+        authz_context =
+            authz_context.add_inter_collection_permission(&collection, &(*inter_collection).into());
+        let authz_context = Arc::new(authz_context);
+
+        let visible = authz_context
+            .visible_collections(&mut conn, &role)
+            .await
+            .unwrap();
+        assert_eq!(visible.direct().len(), 1);
+        assert!(visible.direct().contains(&collection));
+        assert_eq!(visible.indirect().len(), 1);
+        assert!(visible.indirect().contains(&inter_collection));
+    }
+
+    #[tokio::test]
+    async fn test_visible_collections_dev_collection_permission_inter_collection() {
+        let db = td_database::test_utils::db().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
+        let role = RoleId::default();
+        let collection = CollectionId::default();
+        let inter_collection = CollectionId::default();
+        let mut authz_context = AuthzContextForTest::default();
+        authz_context = authz_context.add_permissions(
+            role,
+            vec![Permission::CollectionDev(AuthzEntity::On(collection))],
         );
         authz_context =
             authz_context.add_inter_collection_permission(&collection, &(*inter_collection).into());
