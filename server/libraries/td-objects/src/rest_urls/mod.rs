@@ -157,7 +157,8 @@ pub struct FunctionParam {
 pub const FUNCTION_CREATE: &str = url!(FUNCTIONS);
 pub const FUNCTION_GET: &str = url!(FUNCTION);
 pub const FUNCTION_DELETE: &str = url!(FUNCTION);
-pub const FUNCTION_LIST: &str = url!(FUNCTIONS);
+pub const FUNCTION_LIST_BY_COLL: &str = url!(FUNCTIONS);
+pub const FUNCTION_LIST: &str = url!("/functions");
 pub const FUNCTION_UPDATE: &str = url!(FUNCTION);
 pub const FUNCTION_UPLOAD: &str = url!(COLLECTION, "/function-bundle-upload");
 
@@ -217,7 +218,8 @@ pub struct TableParam {
     table: TableIdName,
 }
 
-pub const LIST_TABLES: &str = url!(TABLES);
+pub const LIST_TABLES_BY_COLL: &str = url!(TABLES);
+pub const LIST_TABLES: &str = url!("/tables");
 pub const LIST_TABLE_DATA_VERSIONS: &str = url!(TABLE, "/data-versions");
 pub const SCHEMA_TABLE: &str = url!(TABLE, "/schema");
 pub const SAMPLE_TABLE: &str = url!(TABLE, "/sample");

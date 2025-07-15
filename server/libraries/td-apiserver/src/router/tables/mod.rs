@@ -9,6 +9,7 @@ use td_apiforge::apiserver_tag;
 pub mod delete;
 pub mod download;
 pub mod list;
+pub mod list_by_collection;
 pub mod list_table_data_versions;
 pub mod sample;
 pub mod schema;
@@ -19,6 +20,7 @@ routers! {
     state => { Tables, StorageRef },
     router => {
         download => { state ( Tables, StorageRef ) },
+        list_by_collection => { state ( Tables ) },
         list => { state ( Tables ) },
         list_table_data_versions => { state ( Tables ) },
         sample => { state ( Tables ) },

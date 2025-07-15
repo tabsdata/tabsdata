@@ -6,11 +6,12 @@
 
 pub mod delete;
 pub mod history;
-pub mod list;
+pub mod list_by_collection;
 pub mod read;
 pub mod register;
 pub mod update;
 pub mod upload;
+pub mod list;
 
 use crate::router::state::Functions;
 use crate::routers;
@@ -22,6 +23,7 @@ routers! {
     state => { Functions },
     router => {
         delete => { state ( Functions ) },
+        list_by_collection => { state ( Functions ) },
         list => { state ( Functions ) },
         read => { state ( Functions ) },
         register => { state ( Functions ) },

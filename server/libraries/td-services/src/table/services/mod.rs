@@ -4,7 +4,8 @@
 
 pub mod delete;
 mod download;
-pub mod list;
+mod list;
+pub mod list_by_collection;
 mod list_data_versions;
 mod sample;
 mod schema;
@@ -12,6 +13,7 @@ mod schema;
 use crate::table::services::delete::TableDeleteService;
 use crate::table::services::download::TableDownloadService;
 use crate::table::services::list::TableListService;
+use crate::table::services::list_by_collection::TableListByCollectionService;
 use crate::table::services::list_data_versions::TableListDataVersionsService;
 use crate::table::services::sample::TableSampleService;
 use crate::table::services::schema::TableSchemaService;
@@ -20,7 +22,7 @@ use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, ListRequest, ListResponse, ReadRequest};
-use td_objects::rest_urls::TableParam;
+use td_objects::rest_urls::{AtTimeParam, TableParam};
 use td_objects::sql::DaoQueries;
 use td_objects::types::execution::TableDataVersion;
 use td_objects::types::stream::BoxedSyncStream;
@@ -31,6 +33,7 @@ use td_storage::{SPath, Storage};
 use td_tower::service_provider::TdBoxService;
 
 pub struct TableServices {
+    list_table_by_collection: TableListByCollectionService,
     list_table: TableListService,
     list_table_data_versions: TableListDataVersionsService,
     table_schema: TableSchemaService,
@@ -43,7 +46,12 @@ impl TableServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>, storage: Arc<Storage>) -> Self {
         let queries = Arc::new(DaoQueries::default());
         Self {
-            list_table: TableListService::new(db.clone(), authz_context.clone()),
+            list_table_by_collection: TableListByCollectionService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
+            list_table: TableListService::new(db.clone(), queries.clone()),
             list_table_data_versions: TableListDataVersionsService::new(
                 db.clone(),
                 authz_context.clone(),
@@ -69,9 +77,15 @@ impl TableServices {
         }
     }
 
-    pub async fn list_table_service(
+    pub async fn list_table_by_collection_service(
         &self,
     ) -> TdBoxService<ListRequest<CollectionAtName>, ListResponse<Table>, TdError> {
+        self.list_table_by_collection.service().await
+    }
+
+    pub async fn list_table_service(
+        &self,
+    ) -> TdBoxService<ListRequest<AtTimeParam>, ListResponse<Table>, TdError> {
         self.list_table.service().await
     }
 

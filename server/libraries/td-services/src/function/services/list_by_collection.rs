@@ -2,33 +2,46 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
-use td_objects::crudl::{ListRequest, ListResponse};
-use td_objects::rest_urls::AtTimeParam;
+use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::DaoQueries;
+use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::basic::{AtTime, FunctionStatus};
+use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
+use td_objects::types::basic::{AtTime, CollectionId, CollectionIdName, FunctionStatus};
+use td_objects::types::collection::CollectionDB;
 use td_objects::types::function::Function;
+use td_objects::types::table::CollectionAtName;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
 use td_tower::{layers, provider};
 
 #[provider(
-    name = FunctionListService,
-    request = ListRequest<AtTimeParam>,
+    name = FunctionListByCollectionService,
+    request = ListRequest<CollectionAtName>,
     response = ListResponse<Function>,
     connection = ConnectionProvider,
     context = DaoQueries,
+    context = AuthzContext,
 )]
 fn provider() {
     layers!(
-        from_fn(With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
-        from_fn(With::<AtTimeParam>::extract::<AtTime>),
+        from_fn(With::<ListRequest<CollectionAtName>>::extract::<RequestContext>),
+        from_fn(With::<ListRequest<CollectionAtName>>::extract_name::<CollectionAtName>),
+        from_fn(With::<CollectionAtName>::extract::<CollectionIdName>),
+        // find collection ID
+        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        // check requester has collection permissions
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        // extract attime (natural order)
+        from_fn(With::<CollectionAtName>::extract::<AtTime>),
         // list
         from_fn(FunctionStatus::active),
-        from_fn(By::<()>::list_versions_at::<AtTimeParam, DaoQueries, Function>),
+        from_fn(By::<CollectionId>::list_versions_at::<CollectionAtName, DaoQueries, Function>),
     )
 }
 
@@ -38,9 +51,8 @@ mod tests {
     use crate::function::services::delete::DeleteFunctionService;
     use crate::function::services::update::UpdateFunctionService;
     use std::sync::Arc;
-    use td_authz::AuthzContext;
     use td_database::sql::DbPool;
-    use td_objects::crudl::{ListParams, ListParamsBuilder, RequestContext};
+    use td_objects::crudl::{ListParams, ListParamsBuilder};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
@@ -56,18 +68,30 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider = FunctionListService::provider(db, queries);
+        let authz_context = Arc::new(AuthzContext::default());
+        let provider = FunctionListByCollectionService::provider(db, queries, authz_context);
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
         let metadata = response.get();
 
-        metadata.assert_service::<ListRequest<AtTimeParam>, ListResponse<Function>>(&[
-            type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
-            type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
+        metadata.assert_service::<ListRequest<CollectionAtName>, ListResponse<Function>>(&[
+            type_of_val(&With::<ListRequest<CollectionAtName>>::extract::<RequestContext>),
+            type_of_val(&With::<ListRequest<CollectionAtName>>::extract_name::<CollectionAtName>),
+            type_of_val(&With::<CollectionAtName>::extract::<CollectionIdName>),
+            // find collection ID
+            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+            // check requester has collection permissions
+            type_of_val(&AuthzOn::<CollectionId>::set),
+            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+            // extract attime (natural order)
+            type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
             // list
             type_of_val(&FunctionStatus::active),
-            type_of_val(&By::<()>::list_versions_at::<AtTimeParam, DaoQueries, Function>),
+            type_of_val(
+                &By::<CollectionId>::list_versions_at::<CollectionAtName, DaoQueries, Function>,
+            ),
         ]);
     }
 
@@ -202,11 +226,14 @@ mod tests {
             true,
         )
         .list(
-            AtTimeParam::builder().at(t0).build()?,
+            CollectionAtName::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .at(t0)
+                .build()?,
             ListParams::default(),
         );
 
-        let service = FunctionListService::new(db.clone(), queries.clone())
+        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -223,14 +250,17 @@ mod tests {
             true,
         )
         .list(
-            AtTimeParam::builder().at(t1).build()?,
+            CollectionAtName::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .at(t1)
+                .build()?,
             ListParamsBuilder::default()
                 .order_by("name".to_string())
                 .build()
                 .unwrap(),
         );
 
-        let service = FunctionListService::new(db.clone(), queries.clone())
+        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -248,11 +278,14 @@ mod tests {
             true,
         )
         .list(
-            AtTimeParam::builder().at(t2).build()?,
+            CollectionAtName::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .at(t2)
+                .build()?,
             ListParams::default(),
         );
 
-        let service = FunctionListService::new(db.clone(), queries.clone())
+        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -271,11 +304,14 @@ mod tests {
             true,
         )
         .list(
-            AtTimeParam::builder().at(t3).build()?,
+            CollectionAtName::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .at(t3)
+                .build()?,
             ListParams::default(),
         );
 
-        let service = FunctionListService::new(db.clone(), queries.clone())
+        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -294,11 +330,14 @@ mod tests {
             true,
         )
         .list(
-            AtTimeParam::builder().at(t4).build()?,
+            CollectionAtName::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .at(t4)
+                .build()?,
             ListParams::default(),
         );
 
-        let service = FunctionListService::new(db.clone(), queries.clone())
+        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -316,11 +355,14 @@ mod tests {
             true,
         )
         .list(
-            AtTimeParam::builder().at(t5).build()?,
+            CollectionAtName::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .at(t5)
+                .build()?,
             ListParams::default(),
         );
 
-        let service = FunctionListService::new(db.clone(), queries.clone())
+        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

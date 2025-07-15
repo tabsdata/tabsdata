@@ -5,6 +5,7 @@
 use crate::function::services::delete::DeleteFunctionService;
 use crate::function::services::history::FunctionHistoryService;
 use crate::function::services::list::FunctionListService;
+use crate::function::services::list_by_collection::FunctionListByCollectionService;
 use crate::function::services::read::ReadFunctionService;
 use crate::function::services::register::RegisterFunctionService;
 use crate::function::services::update::UpdateFunctionService;
@@ -16,7 +17,7 @@ use td_error::TdError;
 use td_objects::crudl::{
     CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest,
 };
-use td_objects::rest_urls::{CollectionParam, FunctionParam};
+use td_objects::rest_urls::{AtTimeParam, CollectionParam, FunctionParam};
 use td_objects::sql::DaoQueries;
 use td_objects::types::function::{
     Bundle, Function, FunctionRegister, FunctionUpdate, FunctionUpload, FunctionWithTables,
@@ -28,6 +29,7 @@ use td_tower::service_provider::TdBoxService;
 pub(crate) mod delete;
 pub(crate) mod history;
 pub(crate) mod list;
+pub(crate) mod list_by_collection;
 pub(crate) mod read;
 pub(crate) mod register;
 pub(crate) mod update;
@@ -37,6 +39,7 @@ pub struct FunctionServices {
     register: RegisterFunctionService,
     upload: UploadFunctionService,
     read_version: ReadFunctionService,
+    list_by_collection: FunctionListByCollectionService,
     list: FunctionListService,
     update: UpdateFunctionService,
     delete: DeleteFunctionService,
@@ -54,7 +57,12 @@ impl FunctionServices {
             ),
             upload: UploadFunctionService::new(db.clone(), authz_context.clone(), storage.clone()),
             read_version: ReadFunctionService::new(db.clone(), authz_context.clone()),
-            list: FunctionListService::new(db.clone(), queries.clone(), authz_context.clone()),
+            list_by_collection: FunctionListByCollectionService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
+            list: FunctionListService::new(db.clone(), queries.clone()),
             update: UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone()),
             delete: DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone()),
             history: FunctionHistoryService::new(
@@ -83,9 +91,15 @@ impl FunctionServices {
         self.read_version.service().await
     }
 
-    pub async fn list(
+    pub async fn list_by_collection(
         &self,
     ) -> TdBoxService<ListRequest<CollectionAtName>, ListResponse<Function>, TdError> {
+        self.list_by_collection.service().await
+    }
+
+    pub async fn list(
+        &self,
+    ) -> TdBoxService<ListRequest<AtTimeParam>, ListResponse<Function>, TdError> {
         self.list.service().await
     }
 

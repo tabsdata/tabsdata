@@ -6,7 +6,7 @@ use crate::router;
 use crate::router::functions::FUNCTIONS_TAG;
 use crate::router::state::Functions;
 use crate::status::error_status::GetErrorStatus;
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::Extension;
 use axum_extra::extract::Query;
 use derive_builder::Builder;
@@ -16,9 +16,8 @@ use serde::Serialize;
 use td_apiforge::{apiserver_path, list_status};
 use td_objects::crudl::ListResponseBuilder;
 use td_objects::crudl::{ListParams, ListResponse, RequestContext};
-use td_objects::rest_urls::{AtTimeParam, CollectionParam, FUNCTION_LIST};
+use td_objects::rest_urls::{AtTimeParam, FUNCTION_LIST};
 use td_objects::types::function::Function;
-use td_objects::types::table::CollectionAtName;
 use td_tower::ctx_service::CtxMap;
 use td_tower::ctx_service::CtxResponse;
 use td_tower::ctx_service::CtxResponseBuilder;
@@ -32,16 +31,14 @@ router! {
 list_status!(Function);
 
 #[apiserver_path(method = get, path = FUNCTION_LIST, tag = FUNCTIONS_TAG)]
-#[doc = "List functions for a collection"]
+#[doc = "List functions"]
 pub async fn list_function(
     State(state): State<Functions>,
     Extension(context): Extension<RequestContext>,
-    Path(collection_param): Path<CollectionParam>,
     Query(query_params): Query<ListParams>,
     Query(at_param): Query<AtTimeParam>,
 ) -> Result<ListStatus, GetErrorStatus> {
-    let name = CollectionAtName::new(collection_param, at_param);
-    let request = context.list(name, query_params);
+    let request = context.list(at_param, query_params);
     let response = state.list().await.oneshot(request).await?;
     Ok(ListStatus::OK(response.into()))
 }
