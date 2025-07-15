@@ -27,6 +27,33 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+def _table_fqn_4sdk(table: str) -> str:
+    """
+    Returns the fully qualified name of the table for Databricks SDK.
+    """
+    try:
+        catalog, schema, table_name = table.split(".")
+        return f"{catalog}.{schema}.{table_name}"
+    except ValueError:
+        raise ValueError(
+            "The table name must be fully qualified in the form "
+            "'catalog.schema.table_name'. Tried to fully qualify the table, "
+            f"but got '{table}' instead"
+        )
+
+def _table_fqn_4sql(table: str) -> str:
+    """
+    Returns the fully qualified name of the table for Databricks SQL.
+    """
+    try:
+        catalog, schema, table_name = table.split(".")
+        return f"`{catalog}`.`{schema}`.`{table_name}`"
+    except ValueError:
+        raise ValueError(
+            "The table name must be fully qualified in the form "
+            "'catalog.schema.table_name'. Tried to fully qualify the table, "
+            f"but got '{table}' instead"
+        )
 
 class DatabricksDestination(DestinationPlugin):
 
@@ -297,7 +324,8 @@ class DatabricksDestination(DestinationPlugin):
         table: str,
     ):
         try:
-            table_catalog, table_schema, _ = table.split(".")
+            table_4sdk = _table_fqn_4sdk(table)
+            table_catalog, table_schema, _ = table_4sdk.split(".")
         except ValueError:
             raise ValueError(
                 "The table name must be fully qualified in the form "
@@ -342,17 +370,18 @@ class DatabricksDestination(DestinationPlugin):
         table: str,
     ):
         logger.debug(f"Copying file '{file_path_in_volume}' to table '{table}'")
+        table_4sql = _table_fqn_4sql(table)
         try:
             if self.if_table_exists == "replace":
                 logger.debug(
                     "'if_table_exists' is set to 'replace', so the current "
-                    f"data in table '{table}' will be truncated."
+                    f"data in table '{table_4sql}' will be truncated."
                 )
 
                 # Create the table or replace it, using the parquet file to
                 # infer the schema.
                 instruction = f"""
-                   CREATE OR REPLACE TABLE {table}
+                   CREATE OR REPLACE TABLE {table_4sql}
                    USING DELTA
                      AS SELECT * FROM read_files(
                         '{file_path_in_volume}', format => 'parquet'
@@ -369,7 +398,7 @@ class DatabricksDestination(DestinationPlugin):
                 # IMPORTANT: databricks will not COPY INTO an existing table the same
                 # file name twice (unless COPY_OPTIONS has force=true).
                 instruction = f"""
-                                   COPY INTO {table} FROM '{file_path_in_volume}'
+                                   COPY INTO {table_4sql} FROM '{file_path_in_volume}'
                                      FILEFORMAT = PARQUET
                                     {self._support_replace_copy_options}
                                    """
@@ -381,7 +410,7 @@ class DatabricksDestination(DestinationPlugin):
             elif self.if_table_exists == "append":
                 logger.debug(
                     "'if_table_exists' is set to 'append', so the data will be "
-                    f"appended to table '{table}' if it already exists."
+                    f"appended to table '{table_4sql}' if it already exists."
                 )
                 if self.schema_strategy == "strict":
                     # for schema_strategy 'strict' use
@@ -404,7 +433,7 @@ class DatabricksDestination(DestinationPlugin):
                 # Create the table if it does not exist, using the parquet file to
                 # infer the schema.
                 instruction = f"""
-                   CREATE TABLE IF NOT EXISTS {table}
+                   CREATE TABLE IF NOT EXISTS {table_4sql}
                    USING DELTA
                      AS SELECT * FROM read_files(
                          '{file_path_in_volume}', format => 'parquet'
@@ -421,7 +450,7 @@ class DatabricksDestination(DestinationPlugin):
                 # IMPORTANT: databricks will not COPY INTO an existing table the same
                 # file name twice (unless COPY_OPTIONS has force=true).
                 instruction = f"""
-                   COPY INTO {table} FROM '{file_path_in_volume}'
+                   COPY INTO {table_4sql} FROM '{file_path_in_volume}'
                      FILEFORMAT = PARQUET
                      COPY_OPTIONS ({merge_options}{self._support_append_copy_options});
                    """
@@ -435,10 +464,10 @@ class DatabricksDestination(DestinationPlugin):
                     f"Invalid value for 'if_table_exists': {self.if_table_exists}. "
                     "Expected 'replace' or 'append'."
                 )
-            logger.debug(f"File copied successfully to table '{table}'")
+            logger.debug(f"File copied successfully to table '{table_4sql}'")
         except Exception:
             logger.error(
-                f"Failed to copy file '{file_path_in_volume}' to table '{table}'"
+                f"Failed to copy file '{file_path_in_volume}' to table '{table_4sql}'"
             )
             raise
         finally:

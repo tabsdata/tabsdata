@@ -11,6 +11,8 @@ from unittest import mock
 
 import polars as pl
 import pytest
+
+from tabsdata_databricks.connector import _table_fqn_4sql
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
@@ -279,7 +281,7 @@ def test_stream(tmp_path, size, databricks_client, sql_conn):
     lf = get_lf(size)
     table_name = (
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_stream_table_{uuid.uuid4()}"
-    ).replace("-", "_")
+    )
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
         DATABRICKS_TOKEN,
@@ -293,6 +295,8 @@ def test_stream(tmp_path, size, databricks_client, sql_conn):
     )
     try:
         databricks_destination.stream(str(tmp_path), lf)
+
+        table_name = _table_fqn_4sql(table_name)
 
         query = f"SELECT * FROM {table_name}"
         created_table = pl.read_database(query, sql_conn)
@@ -312,7 +316,7 @@ def test_stream_append(tmp_path, size, databricks_client, sql_conn):
     table_name = (
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_stream_table_appe"
         f"nd_{uuid.uuid4()}"
-    ).replace("-", "_")
+    )
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
         DATABRICKS_TOKEN,
@@ -324,6 +328,9 @@ def test_stream_append(tmp_path, size, databricks_client, sql_conn):
         schema="fake_schema",  # This should not affect execution as table is fully
         # qualified
     )
+
+    table_name = _table_fqn_4sql(table_name)
+
     try:
         for i in range(3):
             databricks_destination.stream(str(tmp_path), lf)
@@ -346,7 +353,7 @@ def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
     table_name = (
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_stream_table_"
         f"replace_{uuid.uuid4()}"
-    ).replace("-", "_")
+    )
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
         DATABRICKS_TOKEN,
@@ -359,6 +366,9 @@ def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
         schema="fake_schema",  # This should not affect execution as table is fully
         # qualified
     )
+
+    table_name = _table_fqn_4sql(table_name)
+
     try:
         for _ in range(3):
             databricks_destination.stream(str(tmp_path), lf)
@@ -378,8 +388,8 @@ def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
 @pytest.mark.requires_internet
 def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
     lf = get_lf(size)
-    table_name_1 = (f"test_stream_multiple_lf_table_1_{uuid.uuid4()}").replace("-", "_")
-    table_name_2 = (f"test_stream_multiple_lf_table_2_{uuid.uuid4()}").replace("-", "_")
+    table_name_1 = (f"test_stream_multiple_lf_table_1_{uuid.uuid4()}")
+    table_name_2 = (f"test_stream_multiple_lf_table_2_{uuid.uuid4()}")
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
         DATABRICKS_TOKEN,
@@ -389,8 +399,8 @@ def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
         catalog=DATABRICKS_CATALOG,
         schema=DATABRICKS_SCHEMA,
     )
-    full_name_1 = f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_1}"
-    full_name_2 = f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_2}"
+    full_name_1 = _table_fqn_4sql(f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_1}")
+    full_name_2 = _table_fqn_4sql(f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_2}")
     try:
         databricks_destination.stream(str(tmp_path), lf, lf)
 
@@ -456,7 +466,7 @@ def test_single_element_table_list(tmp_path, size, databricks_client, sql_conn):
     table_name = (
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_single_element_table_list_table"
         f"_{uuid.uuid4()}"
-    ).replace("-", "_")
+    )
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
         DATABRICKS_TOKEN,
@@ -468,6 +478,9 @@ def test_single_element_table_list(tmp_path, size, databricks_client, sql_conn):
         schema="fake_schema",  # This should not affect execution as table is fully
         # qualified
     )
+
+    table_name = _table_fqn_4sql(table_name)
+
     try:
         databricks_destination.stream(str(tmp_path), lf)
 
@@ -488,7 +501,7 @@ def test_single_element_table_list(tmp_path, size, databricks_client, sql_conn):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_databricks(tmp_path, databricks_client, sql_conn):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    table_name = f"test_output_databricks_table_{uuid.uuid4()}".replace("-", "_")
+    table_name = f"test_output_databricks_table_{uuid.uuid4()}"
     output_databricks.output.tables = table_name
     context_archive = create_bundle_archive(
         output_databricks,
@@ -496,7 +509,7 @@ def test_output_databricks(tmp_path, databricks_client, sql_conn):
         save_location=tmp_path,
     )
 
-    full_table_name = f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name}"
+    full_table_name = _table_fqn_4sql(f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name}")
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -552,11 +565,11 @@ def test_multiple_outputs_databricks(tmp_path, databricks_client, sql_conn):
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
         "test_multiple_outputs_databricks_table_1"
         f"_{uuid.uuid4()}"
-    ).replace("-", "_")
+    )
     table_name_2 = (
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
         f"test_multiple_outputs_databricks_table_2_{uuid.uuid4()}"
-    ).replace("-", "_")
+    )
     multiple_outputs_databricks.output.tables = [table_name_1, table_name_2]
     context_archive = create_bundle_archive(
         multiple_outputs_databricks,
@@ -589,6 +602,10 @@ def test_multiple_outputs_databricks(tmp_path, databricks_client, sql_conn):
         logs_folder=logs_folder,
         temp_cwd=True,
     )
+
+    table_name_1 = _table_fqn_4sql(table_name_1)
+    table_name_2 = _table_fqn_4sql(table_name_2)
+
     try:
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
