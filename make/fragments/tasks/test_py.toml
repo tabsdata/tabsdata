@@ -14,7 +14,7 @@ run_task = [
         "test_py_ta_tableframe",
         "test_py_te_tableframe",
         "test_py_tabsdata",
-        # "test_py_tabsdata_databricks",
+        "test_py_tabsdata_databricks",
         "test_py_tabsdata_mongodb",
         "test_py_tabsdata_salesforce",
         "test_py_tabsdata_snowflake",
