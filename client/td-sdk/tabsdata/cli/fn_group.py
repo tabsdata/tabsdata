@@ -4,6 +4,7 @@
 
 import datetime
 import os
+from time import sleep
 from typing import Tuple
 
 import rich_click as click
@@ -515,8 +516,10 @@ def _monitor_execution_or_transaction(
     keyword = "plan" if execution else "transaction"
     supervised_entity = execution or transaction
 
+    list_of_runs = supervised_entity.function_runs
+
     def build_table():
-        table = Table(title=f"Function Runs: {len(supervised_entity.function_runs)}")
+        table = Table(title=f"Function Runs: {len(list_of_runs)}")
         table.add_column("Function Run ID", style="cyan", no_wrap=True)
         table.add_column("Collection")
         table.add_column("Function")
@@ -528,7 +531,7 @@ def _monitor_execution_or_transaction(
         table.add_column("Started on", no_wrap=True)
         table.add_column("Ended on", no_wrap=True)
         table.add_column("Status")
-        for function_run in supervised_entity.function_runs:
+        for function_run in list_of_runs:
             table.add_row(
                 function_run.id,
                 function_run.collection.name,
@@ -541,7 +544,9 @@ def _monitor_execution_or_transaction(
         return table
 
     click.echo(f"Waiting for the {keyword} to finish...")
-    with Live(build_table(), refresh_per_second=2, console=Console()) as live:
+
+    refresh_rate = 1  # seconds
+    with Live(build_table(), refresh_per_second=refresh_rate, console=Console()) as live:
         while True:
             # Note: while it would initially make more sense to write this as
             # 'if transaction.status in FAILED_FINAL_STATUSES', this approach avoids
@@ -550,13 +555,16 @@ def _monitor_execution_or_transaction(
             # FINAL_STATUSES set (which ideally should not happen).
             if supervised_entity.status in entity_final_statuses:
                 break
-            supervised_entity.refresh()
+            list_of_runs = supervised_entity.function_runs
             live.update(build_table())
+            supervised_entity.refresh()
+            sleep(1 / refresh_rate)
+        list_of_runs = supervised_entity.function_runs
         live.update(build_table())
+        supervised_entity.refresh()
 
     click.echo(f"{keyword.capitalize()} finished.")
 
-    list_of_runs = supervised_entity.function_runs
     failed_runs = [
         fn_run
         for fn_run in list_of_runs
