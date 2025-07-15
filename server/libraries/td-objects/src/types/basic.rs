@@ -17,8 +17,8 @@ use td_common::execution_status::WorkerCallbackStatus;
 use td_common::id::{Id, ID_LENGTH};
 use td_error::TdError;
 use td_security::{
-    ADMIN_USER, ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN, SEC_ADMIN_ROLE,
-    SYS_ADMIN_ROLE, USER_ROLE,
+    ADMIN_USER, ID_ALL_ENTITIES, ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN,
+    SEC_ADMIN_ROLE, SYS_ADMIN_ROLE, USER_ROLE,
 };
 
 #[td_type::typed(string)]
@@ -123,6 +123,16 @@ pub struct Email;
 
 #[td_type::typed(id, try_from = CollectionId)]
 pub struct EntityId;
+
+impl EntityId {
+    pub fn all_entities() -> Self {
+        Self(Id::_new(ID_ALL_ENTITIES))
+    }
+
+    pub fn is_all_entities(&self) -> bool {
+        *self.0 == ID_ALL_ENTITIES
+    }
+}
 
 #[td_type::typed(string(parser = parse_entity))]
 pub struct EntityName;

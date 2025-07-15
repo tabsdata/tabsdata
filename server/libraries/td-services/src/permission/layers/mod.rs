@@ -52,9 +52,9 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
                 .await
                 .map_err(handle_sql_err)?;
             let entity_id = EntityId::try_from(collection.id())?;
-            Some(entity_id)
+            entity_id
         } else {
-            None
+            EntityId::all_entities()
         };
 
         let mut input = input.deref().clone();
@@ -80,7 +80,7 @@ pub async fn is_permission_on_a_single_collection(
 ) -> Result<Condition, TdError> {
     Ok(Condition(
         permission.permission_type().on_entity_type() == PermissionEntityType::Collection
-            && permission.entity_id().is_some(),
+            && !permission.entity_id().is_all_entities(),
     ))
 }
 

@@ -21,21 +21,23 @@ pub struct SqlAuthzDataProvider;
 impl SqlAuthzDataProvider {
     //TODO: This try_to_permission should be converted into a `TryFrom<&PermissionDB> for Permission`
     fn try_to_permission(perm_db: &PermissionDB) -> Result<Permission, TdError> {
-        fn authz_entity(perm_db: &PermissionDB) -> AuthzEntity<CollectionId> {
-            if let Some(entity_id) = perm_db.entity_id() {
-                AuthzEntity::On(CollectionId::try_from(entity_id).unwrap())
+        fn authz_entity(perm_db: &PermissionDB) -> Result<AuthzEntity<CollectionId>, TdError> {
+            if perm_db.entity_id().is_all_entities() {
+                Ok(AuthzEntity::All)
             } else {
-                AuthzEntity::All
+                Ok(AuthzEntity::On(CollectionId::try_from(
+                    perm_db.entity_id(),
+                )?))
             }
         }
 
         let perm = match perm_db.permission_type() {
             PermissionType::SysAdmin => Permission::SysAdmin,
             PermissionType::SecAdmin => Permission::SecAdmin,
-            PermissionType::CollectionAdmin => Permission::CollectionAdmin(authz_entity(perm_db)),
-            PermissionType::CollectionDev => Permission::CollectionDev(authz_entity(perm_db)),
-            PermissionType::CollectionExec => Permission::CollectionExec(authz_entity(perm_db)),
-            PermissionType::CollectionRead => Permission::CollectionRead(authz_entity(perm_db)),
+            PermissionType::CollectionAdmin => Permission::CollectionAdmin(authz_entity(perm_db)?),
+            PermissionType::CollectionDev => Permission::CollectionDev(authz_entity(perm_db)?),
+            PermissionType::CollectionExec => Permission::CollectionExec(authz_entity(perm_db)?),
+            PermissionType::CollectionRead => Permission::CollectionRead(authz_entity(perm_db)?),
         };
         Ok(perm)
     }

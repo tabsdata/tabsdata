@@ -131,7 +131,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'sa' AND
                 entity_type = 's' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_SYS_ADMIN)
@@ -147,7 +147,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'ss' AND
                 entity_type = 's' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_SYS_ADMIN)
@@ -163,7 +163,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'ca' AND
                 entity_type = 'c' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_SYS_ADMIN)
@@ -179,7 +179,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'cd' AND
                 entity_type = 'c' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_SYS_ADMIN)
@@ -195,7 +195,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'cx' AND
                 entity_type = 'c' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_SYS_ADMIN)
@@ -211,7 +211,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'cr' AND
                 entity_type = 'c' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_SYS_ADMIN)
@@ -227,7 +227,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'ss' AND
                 entity_type = 's' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_SEC_ADMIN)
@@ -243,7 +243,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'ca' AND
                 entity_type = 'c' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_SEC_ADMIN)
@@ -259,7 +259,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'cd' AND
                 entity_type = 'c' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_USER)
@@ -275,7 +275,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'cx' AND
                 entity_type = 'c' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_USER)
@@ -291,7 +291,7 @@ mod tests {
                 role_id = ?1 AND
                 permission_type = 'cr' AND
                 entity_type = 'c' AND
-                entity_id IS NULL
+                entity_id = '00000000000000000000000204'
             "#,
         )
         .bind(ENCODED_ID_ROLE_USER)

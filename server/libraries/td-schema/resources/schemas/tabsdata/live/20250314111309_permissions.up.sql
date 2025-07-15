@@ -15,7 +15,7 @@ CREATE TABLE permissions
     -- (cR) collection-read-all
     entity_type     TEXT      NOT NULL, -- (S)ystem
     -- (C)ollection
-    entity_id       TEXT      NULL,     -- NULL means ALL
+    entity_id       TEXT      NOT NULL,     -- 00000000000000000000000204 means ALL
     granted_by_id   TEXT      NOT NULL,
     granted_on      TIMESTAMP NOT NULL,
     fixed           BOOLEAN   NOT NULL,
@@ -32,7 +32,7 @@ SELECT '00000000000000000000000010',
        r.id,
        'sa',
        's',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        true
@@ -45,7 +45,7 @@ SELECT '00000000000000000000000014',
        r.id,
        'ss',
        's',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        false
@@ -58,7 +58,7 @@ SELECT '00000000000000000000000100',
        r.id,
        'ca',
        'c',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        false
@@ -71,7 +71,7 @@ SELECT '00000000000000000000000104',
        r.id,
        'cd',
        'c',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        false
@@ -84,7 +84,7 @@ SELECT '00000000000000000000000108',
        r.id,
        'cx',
        'c',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        false
@@ -97,7 +97,7 @@ SELECT '0000000000000000000000010G',
        r.id,
        'cr',
        'c',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        false
@@ -111,7 +111,7 @@ SELECT '0000000000000000000000010K',
        r.id,
        'ss',
        's',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        true
@@ -124,7 +124,7 @@ SELECT '0000000000000000000000010O',
        r.id,
        'ca',
        'c',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        true
@@ -137,7 +137,7 @@ SELECT '0000000000000000000000010S',
        r.id,
        'cd',
        'c',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        false
@@ -150,7 +150,7 @@ SELECT '00000000000000000000000110',
        r.id,
        'cx',
        'c',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        false
@@ -163,7 +163,7 @@ SELECT '00000000000000000000000200',
        r.id,
        'cr',
        'c',
-       NULL,
+       '00000000000000000000000204',
        '00000000000000000000000000',
        datetime('now'),
        false
@@ -175,6 +175,9 @@ CREATE VIEW permissions__with_names AS
 SELECT p.*,
        -- If the user is deleted, we show the internal id
        IFNULL(u.name, '[' || p.granted_by_id || ']') as granted_by,
+       CASE WHEN (p.entity_id IN ('00000000000000000000000204')) -- means ALL
+          THEN NULL
+          ELSE p.entity_id END as entity_id,
        r.name                                        as role,
        -- When we support different entity types, we will need to change the
        -- resolution of the entity name to be a CASE statement.

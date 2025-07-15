@@ -34,8 +34,9 @@ pub struct PermissionDB {
     #[td_type(builder(include))]
     permission_type: PermissionType,
     entity_type: PermissionEntityType,
+    #[serde(default = "EntityId::all_entities")]
     #[td_type(extractor)]
-    entity_id: Option<EntityId>,
+    entity_id: EntityId,
     #[td_type(updater(try_from = RequestContext, field = "user_id"))]
     granted_by_id: UserId,
     #[td_type(updater(try_from = RequestContext, field = "time"))]

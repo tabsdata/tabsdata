@@ -65,7 +65,9 @@ mod tests {
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_permission::seed_permission;
     use td_objects::test_utils::seed_role::seed_role;
-    use td_objects::types::basic::{AccessTokenId, Description, PermissionType, RoleName, UserId};
+    use td_objects::types::basic::{
+        AccessTokenId, Description, EntityId, PermissionType, RoleName, UserId,
+    };
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -128,7 +130,10 @@ mod tests {
         assert_eq!(permission.role_id(), seeded.role_id());
         assert_eq!(permission.permission_type(), seeded.permission_type());
         assert_eq!(permission.entity_type(), seeded.entity_type());
-        assert_eq!(permission.entity_id(), seeded.entity_id());
+        assert_eq!(
+            permission.entity_id().unwrap_or(EntityId::all_entities()),
+            *seeded.entity_id()
+        );
         assert_eq!(permission.granted_by_id(), seeded.granted_by_id());
         assert_eq!(permission.granted_on(), seeded.granted_on());
         assert_eq!(permission.fixed(), seeded.fixed());

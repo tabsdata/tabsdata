@@ -13,7 +13,7 @@ use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
-    UnwrapService, UpdateService, With,
+    UpdateService, With,
 };
 use td_objects::tower_service::sql::{insert, By, SqlSelectService};
 use td_objects::types::basic::{CollectionId, EntityId, PermissionId, RoleIdName};
@@ -67,8 +67,7 @@ impl CreatePermissionService {
                     ))),
                     Do(service!(layers!(
                         // a permission on a single collection can also be created by a collection admin
-                        from_fn(With::<PermissionDB>::extract::<Option<EntityId>>),
-                        from_fn(With::<EntityId>::unwrap_option),
+                        from_fn(With::<PermissionDB>::extract::<EntityId>),
                         from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
                         from_fn(AuthzOn::<CollectionId>::set),
                         from_fn(Authz::<SecAdmin, CollAdmin>::check),
@@ -142,8 +141,7 @@ mod tests {
             type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
             type_of_val(&With::<PermissionDBBuilder>::build_permission_db::<DaoQueries>),
             type_of_val(&is_permission_on_a_single_collection),
-            type_of_val(&With::<PermissionDB>::extract::<Option<EntityId>>),
-            type_of_val(&With::<EntityId>::unwrap_option),
+            type_of_val(&With::<PermissionDB>::extract::<EntityId>),
             type_of_val(&With::<EntityId>::convert_to::<CollectionId, _>),
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
@@ -161,7 +159,7 @@ mod tests {
     #[td_test::test(sqlx)]
     async fn test_create_permission(db: DbPool) -> Result<(), TdError> {
         let create = PermissionCreate::builder()
-            .permission_type(PermissionType::SysAdmin)
+            .permission_type(PermissionType::SecAdmin)
             .try_entity_name(None)
             .unwrap()
             .build()?;
@@ -174,7 +172,7 @@ mod tests {
         )
         .create(
             RoleParam::builder()
-                .role(RoleIdName::try_from("sys_admin")?)
+                .role(RoleIdName::try_from(RoleName::user().to_string())?)
                 .build()?,
             create,
         );
@@ -190,7 +188,10 @@ mod tests {
         assert_eq!(response.role_id(), found.role_id());
         assert_eq!(response.permission_type(), found.permission_type());
         assert_eq!(response.entity_type(), found.entity_type());
-        assert_eq!(response.entity_id(), found.entity_id());
+        assert_eq!(
+            response.entity_id().unwrap_or(EntityId::all_entities()),
+            *found.entity_id()
+        );
         assert_eq!(response.granted_by_id(), found.granted_by_id());
         assert_eq!(response.granted_on(), found.granted_on());
         assert_eq!(response.fixed(), found.fixed());
@@ -239,7 +240,10 @@ mod tests {
         assert_eq!(response.role_id(), found.role_id());
         assert_eq!(response.permission_type(), found.permission_type());
         assert_eq!(response.entity_type(), found.entity_type());
-        assert_eq!(response.entity_id(), found.entity_id());
+        assert_eq!(
+            response.entity_id().unwrap_or(EntityId::all_entities()),
+            *found.entity_id()
+        );
         assert_eq!(response.granted_by_id(), found.granted_by_id());
         assert_eq!(response.granted_on(), found.granted_on());
         assert_eq!(response.fixed(), found.fixed());

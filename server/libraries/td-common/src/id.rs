@@ -10,7 +10,7 @@ use sqlx::sqlite::{SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef};
 use sqlx::{Decode, Encode, Sqlite, Type};
 use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::Add;
+use std::ops::{Add, Deref};
 use std::time::{Duration, SystemTime};
 use td_error::td_error;
 use td_security::DEFAULT_IDS;
@@ -38,6 +38,14 @@ impl Id {
     /// For td_objects::types::basic::UserId/RoleI duse ONLY.
     pub fn _new(bytes: [u8; 16]) -> Self {
         Id(bytes)
+    }
+}
+
+impl Deref for Id {
+    type Target = [u8; 16];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
