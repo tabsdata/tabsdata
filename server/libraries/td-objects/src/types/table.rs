@@ -98,6 +98,7 @@ pub struct TableDBRead {
     collection_id: CollectionId,
     collection_name: CollectionName,
     function_version_id: FunctionVersionId,
+    private: Private,
     function_name: FunctionName,
     last_data_version: Option<TableDataVersionId>,
     // last_data_changed_version: Option<TableDataVersionId>,

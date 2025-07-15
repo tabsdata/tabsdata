@@ -5,7 +5,7 @@
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
-use td_objects::sql::DaoQueries;
+use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
@@ -41,7 +41,14 @@ fn provider() {
         from_fn(With::<CollectionAtName>::extract::<AtTime>),
         // list
         from_fn(FunctionStatus::active),
-        from_fn(By::<CollectionId>::list_versions_at::<CollectionAtName, DaoQueries, Function>),
+        from_fn(
+            By::<CollectionId>::list_versions_at::<
+                CollectionAtName,
+                NoListFilter,
+                DaoQueries,
+                Function,
+            >
+        ),
     )
 }
 
@@ -90,7 +97,12 @@ mod tests {
             // list
             type_of_val(&FunctionStatus::active),
             type_of_val(
-                &By::<CollectionId>::list_versions_at::<CollectionAtName, DaoQueries, Function>,
+                &By::<CollectionId>::list_versions_at::<
+                    CollectionAtName,
+                    NoListFilter,
+                    DaoQueries,
+                    Function,
+                >,
             ),
         ]);
     }
@@ -233,9 +245,13 @@ mod tests {
             ListParams::default(),
         );
 
-        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
-            .service()
-            .await;
+        let service = FunctionListByCollectionService::new(
+            db.clone(),
+            queries.clone(),
+            authz_context.clone(),
+        )
+        .service()
+        .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -260,9 +276,13 @@ mod tests {
                 .unwrap(),
         );
 
-        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
-            .service()
-            .await;
+        let service = FunctionListByCollectionService::new(
+            db.clone(),
+            queries.clone(),
+            authz_context.clone(),
+        )
+        .service()
+        .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -285,9 +305,13 @@ mod tests {
             ListParams::default(),
         );
 
-        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
-            .service()
-            .await;
+        let service = FunctionListByCollectionService::new(
+            db.clone(),
+            queries.clone(),
+            authz_context.clone(),
+        )
+        .service()
+        .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -311,9 +335,13 @@ mod tests {
             ListParams::default(),
         );
 
-        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
-            .service()
-            .await;
+        let service = FunctionListByCollectionService::new(
+            db.clone(),
+            queries.clone(),
+            authz_context.clone(),
+        )
+        .service()
+        .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -337,9 +365,13 @@ mod tests {
             ListParams::default(),
         );
 
-        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
-            .service()
-            .await;
+        let service = FunctionListByCollectionService::new(
+            db.clone(),
+            queries.clone(),
+            authz_context.clone(),
+        )
+        .service()
+        .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -362,9 +394,13 @@ mod tests {
             ListParams::default(),
         );
 
-        let service = FunctionListByCollectionService::new(db.clone(), queries.clone(), authz_context.clone())
-            .service()
-            .await;
+        let service = FunctionListByCollectionService::new(
+            db.clone(),
+            queries.clone(),
+            authz_context.clone(),
+        )
+        .service()
+        .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();

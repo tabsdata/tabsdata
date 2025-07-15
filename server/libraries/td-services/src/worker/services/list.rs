@@ -4,7 +4,7 @@
 
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
-use td_objects::sql::DaoQueries;
+use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::execution::Worker;
 use td_tower::default_services::ConnectionProvider;
@@ -24,7 +24,7 @@ fn provider() {
         // No need for authz for this service.
 
         // List all Workers.
-        from_fn(By::<()>::list::<(), DaoQueries, Worker>),
+        from_fn(By::<()>::list::<(), NoListFilter, DaoQueries, Worker>),
     )
 }
 
@@ -63,7 +63,7 @@ mod tests {
 
         metadata.assert_service::<ListRequest<()>, ListResponse<Worker>>(&[
             // List all Workers.
-            type_of_val(&By::<()>::list::<(), DaoQueries, Worker>),
+            type_of_val(&By::<()>::list::<(), NoListFilter, DaoQueries, Worker>),
         ]);
     }
 

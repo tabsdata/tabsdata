@@ -5,7 +5,7 @@
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
-use td_objects::sql::DaoQueries;
+use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{combine, ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
@@ -51,7 +51,7 @@ fn provider() {
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // List (all active versions at the time). Here we want the history, so we do not want
         // to query the versioned view.
-        from_fn(By::<FunctionId>::list_at::<FunctionAtIdName, DaoQueries, Function>),
+        from_fn(By::<FunctionId>::list_at::<FunctionAtIdName, NoListFilter, DaoQueries, Function>),
     )
 }
 
@@ -110,7 +110,9 @@ mod tests {
             type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
             // List (all active versions at the time). Here we want the history, so we do not want
             // to query the versioned view.
-            type_of_val(&By::<FunctionId>::list_at::<FunctionAtIdName, DaoQueries, Function>),
+            type_of_val(
+                &By::<FunctionId>::list_at::<FunctionAtIdName, NoListFilter, DaoQueries, Function>,
+            ),
         ]);
     }
 

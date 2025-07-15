@@ -15,6 +15,7 @@ use td_objects::crudl::{
     CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest,
 };
 use td_objects::rest_urls::CollectionParam;
+use td_objects::sql::DaoQueries;
 use td_objects::types::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
 use td_tower::service_provider::TdBoxService;
 
@@ -38,6 +39,7 @@ pub struct CollectionServices {
 
 impl CollectionServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
+        let queries = Arc::new(DaoQueries::default());
         Self {
             create_service_provider: CreateCollectionService::new(
                 db.clone(),
@@ -52,7 +54,11 @@ impl CollectionServices {
                 db.clone(),
                 authz_context.clone(),
             ),
-            list_service_provider: ListCollectionsService::new(db.clone(), authz_context),
+            list_service_provider: ListCollectionsService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
         }
     }
 

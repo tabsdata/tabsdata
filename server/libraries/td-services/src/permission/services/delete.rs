@@ -65,7 +65,7 @@ impl DeletePermissionService {
                     ))),
                     Do(service!(layers!(
                        // a permission on a single collection can also be deleted by a collection admin
-                         from_fn(With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
+                        from_fn(With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
                         from_fn(With::<EntityId>::unwrap_option),
                         from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
                         from_fn(AuthzOn::<CollectionId>::set),

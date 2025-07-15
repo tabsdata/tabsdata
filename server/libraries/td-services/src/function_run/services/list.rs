@@ -4,7 +4,7 @@
 
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
-use td_objects::sql::DaoQueries;
+use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::execution::FunctionRun;
 use td_tower::default_services::ConnectionProvider;
@@ -24,7 +24,7 @@ fn provider() {
         // No need for authz for this service.
 
         // List all function runs in the system.
-        from_fn(By::<()>::list::<(), DaoQueries, FunctionRun>),
+        from_fn(By::<()>::list::<(), NoListFilter, DaoQueries, FunctionRun>),
     )
 }
 
@@ -59,7 +59,7 @@ mod tests {
         let metadata = response.get();
 
         metadata.assert_service::<ListRequest<()>, ListResponse<FunctionRun>>(&[type_of_val(
-            &By::<()>::list::<(), DaoQueries, FunctionRun>,
+            &By::<()>::list::<(), NoListFilter, DaoQueries, FunctionRun>,
         )]);
     }
 

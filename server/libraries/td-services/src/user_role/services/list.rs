@@ -8,7 +8,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::RoleParam;
-use td_objects::sql::DaoQueries;
+use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
@@ -47,7 +47,7 @@ impl ListUserRoleService {
                 from_fn(With::<RoleParam>::extract::<RoleIdName>),
                 from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
                 from_fn(With::<RoleDB>::extract::<RoleId>),
-                from_fn(By::<RoleId>::list::<RoleParam, DaoQueries, UserRole>),
+                from_fn(By::<RoleId>::list::<RoleParam, NoListFilter, DaoQueries, UserRole>),
             ))
         }
     }
@@ -92,7 +92,7 @@ mod tests {
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
             type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
-            type_of_val(&By::<RoleId>::list::<RoleParam, DaoQueries, UserRole>),
+            type_of_val(&By::<RoleId>::list::<RoleParam, NoListFilter, DaoQueries, UserRole>),
         ]);
     }
 

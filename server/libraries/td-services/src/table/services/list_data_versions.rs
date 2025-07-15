@@ -7,7 +7,7 @@ use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
-use td_objects::sql::DaoQueries;
+use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{
     combine, ExtractNameService, ExtractService, TryIntoService, With,
@@ -70,7 +70,7 @@ impl TableListDataVersionsService {
 
                 // list
                 from_fn(FunctionRunStatus::committed),
-                from_fn(By::<TableId>::list_at::<TableAtIdName, DaoQueries, TableDataVersion>),
+                from_fn(By::<TableId>::list_at::<TableAtIdName, NoListFilter, DaoQueries, TableDataVersion>),
             ))
         }
     }
@@ -140,7 +140,7 @@ mod tests {
             type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
             // list
             type_of_val(&FunctionRunStatus::committed),
-            type_of_val(&By::<TableId>::list_at::<TableAtIdName, DaoQueries, TableDataVersion>),
+            type_of_val(&By::<TableId>::list_at::<TableAtIdName, NoListFilter, DaoQueries, TableDataVersion>),
         ]);
     }
 

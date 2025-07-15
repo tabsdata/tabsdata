@@ -185,7 +185,7 @@ pub trait DataTransferObject {
     type Builder;
 }
 
-pub trait ListQuery: DataTransferObject {
+pub trait ListQuery: DataTransferObject + Send + Sync {
     type Dao: DataAccessObject;
 
     fn list_on() -> &'static str {

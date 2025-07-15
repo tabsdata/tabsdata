@@ -62,7 +62,7 @@ impl FunctionServices {
                 queries.clone(),
                 authz_context.clone(),
             ),
-            list: FunctionListService::new(db.clone(), queries.clone()),
+            list: FunctionListService::new(db.clone(), queries.clone(), authz_context.clone()),
             update: UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone()),
             delete: DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone()),
             history: FunctionHistoryService::new(

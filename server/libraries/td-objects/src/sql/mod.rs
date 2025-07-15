@@ -18,6 +18,7 @@ use crate::sql::cte::LATEST_VERSIONS_CTE;
 use crate::sql::cte::{ranked_versions_at, select_ranked_versions_at};
 use crate::sql::list::{ListError, ListQueryParams, Order, Pagination};
 use crate::types::{DataAccessObject, ListQuery, PartitionBy, SqlEntity, VersionedAt};
+use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::td_error;
 use tracing::trace;
@@ -231,35 +232,64 @@ macro_rules! impl_find_by {
 
 all_the_tuples!(impl_find_by);
 
+#[async_trait]
+pub trait ListFilterGenerator: Send + Sync {
+    async fn where_clause<'a, D: DataAccessObject>(
+        &'a self,
+        first: bool,
+        query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    ) -> Result<bool, QueryError>;
+}
+
+pub type NoListFilter = ();
+
+#[async_trait]
+impl ListFilterGenerator for NoListFilter {
+    async fn where_clause<'a, D: DataAccessObject>(
+        &'a self,
+        first: bool,
+        _query_builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    ) -> Result<bool, QueryError> {
+        Ok(first)
+    }
+}
+
+#[async_trait]
 pub trait ListBy<'a, E> {
-    fn list_by<T>(
+    async fn list_by<T, F>(
         &self,
         list_query_params: &'a ListQueryParams<T>,
+        list_filter_generator: &'a F,
         e: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
-        T: ListQuery + 'a;
+        T: ListQuery + 'a,
+        F: ListFilterGenerator + 'a;
 
-    fn list_by_at<T>(
+    async fn list_by_at<T, F>(
         &self,
         list_query_params: &'a ListQueryParams<T>,
         natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
         condition: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+        list_filter_generator: &'a F,
         e: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
         T: ListQuery + 'a,
+        F: ListFilterGenerator + 'a,
         T::Dao: VersionedAt;
 
-    fn list_versions_by_at<T>(
+    async fn list_versions_by_at<T, F>(
         &self,
         list_query_params: &'a ListQueryParams<T>,
         natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
         status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+        list_filter_generator: &'a F,
         e: &'a E,
     ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
     where
         T: ListQuery + 'a,
+        F: ListFilterGenerator + 'a,
         T::Dao: PartitionBy + VersionedAt;
 }
 
@@ -268,19 +298,22 @@ macro_rules! impl_list_by {
     (
         [$($E:ident),*]
     ) => {
+        #[async_trait]
         #[allow(non_snake_case, unused_parens, unused_variables, unused_mut, unused_assignments)]
         impl<'a, Q, $($E),*> ListBy<'a, ($(&'a $E),*)> for Q
         where
-            Q: Deref<Target = dyn Queries>,
+            Q: Deref<Target = dyn Queries> + Send + Sync,
             $($E: SqlEntity),*
         {
-            fn list_by<T>(
+            async fn list_by<T, F>(
                 &self,
                 query_params: &'a ListQueryParams<T>,
+                list_filter_generator: &'a F,
                 ($($E),*): &'a ($(&'a $E),*),
             ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
             where
                 T: ListQuery + 'a,
+                F: ListFilterGenerator + 'a,
             {
                 let table = T::list_on();
                 let fields = T::fields();
@@ -288,22 +321,25 @@ macro_rules! impl_list_by {
                 let mut query_builder = sqlx::QueryBuilder::new(sql);
 
                 let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
+                first = list_filter_generator.where_clause::<T::Dao>(first, &mut query_builder).await?;
                 first = query_params_where(first, query_params, &mut query_builder);
 
                 trace!("list_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }
 
-            fn list_by_at<T>(
+            async fn list_by_at<T, F>(
                 &self,
                 query_params: &'a ListQueryParams<T>,
                 natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
                 status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+                list_filter_generator: &'a F,
                 ($($E),*): &'a ($(&'a $E),*),
             ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
             where
                 T: ListQuery + 'a,
                 T::Dao: VersionedAt,
+                F: ListFilterGenerator + 'a,
             {
                 let table = T::list_on();
                 let fields = T::fields();
@@ -344,22 +380,25 @@ macro_rules! impl_list_by {
                     query_builder.push(")");
                 }
 
+                first = list_filter_generator.where_clause::<T::Dao>(first, &mut query_builder).await?;
                 first = query_params_where(first, &query_params, &mut query_builder);
 
                 trace!("list_at_{}: sql: {}", table, query_builder.sql());
                 Ok(query_builder)
             }
 
-            fn list_versions_by_at<T>(
+            async fn list_versions_by_at<T, F>(
                 &self,
                 query_params: &'a ListQueryParams<T>,
                 natural_order_by: Option<&'a <<T as ListQuery>::Dao as VersionedAt>::Order>,
                 status: Option<&'a [&'a <<T as ListQuery>::Dao as VersionedAt>::Condition]>,
+                list_filter_generator: &'a F,
                 ($($E),*): &'a ($(&'a $E),*),
             ) -> Result<sqlx::QueryBuilder<'a, sqlx::Sqlite>, QueryError>
             where
                 T: ListQuery + 'a,
                 T::Dao: PartitionBy + VersionedAt,
+                F: ListFilterGenerator + 'a,
             {
                 let mut query_builder = sqlx::QueryBuilder::default();
 
@@ -374,6 +413,7 @@ macro_rules! impl_list_by {
                 query_builder.push(select);
 
                 let mut first = gen_where_clause!(query_builder, T::Dao, $($E),*);
+                first = list_filter_generator.where_clause::<T::Dao>(first, &mut query_builder).await?;
                 first = query_params_where(first, &query_params, &mut query_builder);
 
                 trace!("list_versions_at_{}: sql: {}", T::list_on(), query_builder.sql());
@@ -1092,8 +1132,9 @@ mod tests {
                 .unwrap();
             let where_clause = &TestName::try_from("A")?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder =
-                TEST_QUERIES.list_by::<TestDto>(&list_query_params, &where_clause)?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &where_clause)
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1125,7 +1166,9 @@ mod tests {
 
             let list_params = ListParams::default();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1153,7 +1196,9 @@ mod tests {
 
             let list_params = ListParams::default();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1187,7 +1232,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1222,7 +1269,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1256,7 +1305,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1290,7 +1341,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1324,7 +1377,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1356,7 +1411,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1386,7 +1443,9 @@ mod tests {
 
             let list_params = ListParamsBuilder::default().len(1usize).build().unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1421,7 +1480,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1454,7 +1515,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1487,7 +1550,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1520,7 +1585,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1555,7 +1622,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1594,7 +1663,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1630,7 +1701,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1664,7 +1737,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1702,7 +1777,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1739,7 +1816,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1776,7 +1855,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();
@@ -1813,7 +1894,9 @@ mod tests {
                 .build()
                 .unwrap();
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
-            let mut query_builder = TEST_QUERIES.list_by::<TestDto>(&list_query_params, &())?;
+            let mut query_builder = TEST_QUERIES
+                .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
+                .await?;
             let query = query_builder.build_query_as();
 
             let query_str = query.sql();

@@ -119,7 +119,7 @@
 
 use crate::crudl::{handle_sql_err, RequestContext};
 use crate::sql::{DaoQueries, FindBy};
-use crate::types::basic::{CollectionId, RoleId, ToCollectionId, UserId};
+use crate::types::basic::{CollectionId, RoleId, ToCollectionId, UserId, VisibleCollections};
 use crate::types::collection::CollectionDB;
 use crate::types::permission::InterCollectionAccess;
 use async_trait::async_trait;
@@ -136,8 +136,8 @@ use td_error::TdError;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[async_trait]
-pub trait AuthzContextT {
-    /// Return the permissions for a the given role.
+pub trait AuthzContextT: Send + Sync {
+    /// Return the permissions for the given role.
     ///
     /// If the role has no permissions it returns [`None`].
     async fn role_permissions(
@@ -210,7 +210,7 @@ pub trait AuthzContextT {
         &self,
         conn: &mut SqliteConnection,
         role: &RoleId,
-    ) -> Result<(HashSet<CollectionId>, HashSet<CollectionId>), TdError> {
+    ) -> Result<VisibleCollections, TdError> {
         let mut collections_with_permissions = self
             .role_collections_permissions(conn, role)
             .await?
@@ -240,7 +240,10 @@ pub trait AuthzContextT {
                 inter_collection_permissions.extend(inter_collection_for_coll);
             }
         }
-        Ok((collections_with_permissions, inter_collection_permissions))
+        Ok(VisibleCollections::new(
+            collections_with_permissions,
+            inter_collection_permissions,
+        ))
     }
 
     async fn refresh(&self, _conn: &mut SqliteConnection) -> Result<(), TdError> {
@@ -861,6 +864,19 @@ impl<
             })
             .join(", ");
         Err(AuthzError::ForbiddenInterCollectionAccess(no_access))?
+    }
+
+    pub async fn visible_collections(
+        SrvCtx(authz_context): SrvCtx<AC>,
+        Connection(conn): Connection,
+        Input(request_context): Input<RequestContext>,
+    ) -> Result<VisibleCollections, TdError> {
+        // TODO use C1, C2, etc??
+        let mut conn = conn.lock().await;
+        let conn = conn.get_mut_connection()?;
+        authz_context
+            .visible_collections(conn, request_context.role_id())
+            .await
     }
 }
 
@@ -2361,42 +2377,40 @@ mod tests {
         // no collections in role
         let role = RoleId::default();
 
-        let (direct, indirect) = authz_context
+        let visible = authz_context
             .visible_collections(&mut conn, &role)
             .await
             .unwrap();
-        assert!(direct.is_empty());
-        assert!(indirect.is_empty());
+        assert!(visible.direct().is_empty());
+        assert!(visible.indirect().is_empty());
 
         // all collections in role
         let role = RoleId::user();
 
-        let (direct, indirect) = authz_context
+        let visible = authz_context
             .visible_collections(&mut conn, &role)
             .await
             .unwrap();
-        assert!(direct.contains(&CollectionId::all_collections()));
-        assert!(indirect.is_empty());
+        assert!(visible.direct().contains(&CollectionId::all_collections()));
+        assert!(visible.indirect().is_empty());
 
         // a collection in role, no inter-collection permissions
         let role = RoleId::default();
         let collection = CollectionId::default();
         let mut authz_context = AuthzContextForTest::default();
         authz_context = authz_context.add_permissions(
-            &role,
-            vec![Permission::CollectionRead(AuthzEntity::On(
-                collection.clone(),
-            ))],
+            role,
+            vec![Permission::CollectionRead(AuthzEntity::On(collection))],
         );
         let authz_context = Arc::new(authz_context);
 
-        let (direct, indirect) = authz_context
+        let visible = authz_context
             .visible_collections(&mut conn, &role)
             .await
             .unwrap();
-        assert_eq!(direct.len(), 1);
-        assert!(direct.contains(&collection));
-        assert!(indirect.is_empty());
+        assert_eq!(visible.direct().len(), 1);
+        assert!(visible.direct().contains(&collection));
+        assert!(visible.indirect().is_empty());
 
         // a collection in role, an inter-collection permission
         let role = RoleId::default();
@@ -2404,22 +2418,20 @@ mod tests {
         let inter_collection = CollectionId::default();
         let mut authz_context = AuthzContextForTest::default();
         authz_context = authz_context.add_permissions(
-            &role,
-            vec![Permission::CollectionRead(AuthzEntity::On(
-                collection.clone(),
-            ))],
+            role,
+            vec![Permission::CollectionRead(AuthzEntity::On(collection))],
         );
         authz_context =
             authz_context.add_inter_collection_permission(&collection, &(*inter_collection).into());
         let authz_context = Arc::new(authz_context);
 
-        let (direct, indirect) = authz_context
+        let visible = authz_context
             .visible_collections(&mut conn, &role)
             .await
             .unwrap();
-        assert_eq!(direct.len(), 1);
-        assert!(direct.contains(&collection));
-        assert_eq!(indirect.len(), 1);
-        assert!(indirect.contains(&inter_collection));
+        assert_eq!(visible.direct().len(), 1);
+        assert!(visible.direct().contains(&collection));
+        assert_eq!(visible.indirect().len(), 1);
+        assert!(visible.indirect().contains(&inter_collection));
     }
 }

@@ -4,7 +4,7 @@
 
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse};
-use td_objects::sql::DaoQueries;
+use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::execution::SynchrotronResponse;
 use td_tower::default_services::ConnectionProvider;
@@ -28,7 +28,7 @@ fn provider() {
         // No need for authz for this service.
 
         // List all transactions in the system.
-        from_fn(By::<()>::list::<(), DaoQueries, SynchrotronResponse>),
+        from_fn(By::<()>::list::<(), NoListFilter, DaoQueries, SynchrotronResponse>),
     )
 }
 
@@ -63,7 +63,7 @@ mod tests {
 
         metadata.assert_service::<ListRequest<()>, ListResponse<SynchrotronResponse>>(&[
             // List all transactions in the system.
-            type_of_val(&By::<()>::list::<(), DaoQueries, SynchrotronResponse>),
+            type_of_val(&By::<()>::list::<(), NoListFilter, DaoQueries, SynchrotronResponse>),
         ]);
     }
 

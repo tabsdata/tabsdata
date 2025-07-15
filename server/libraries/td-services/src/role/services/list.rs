@@ -7,7 +7,7 @@ use td_authz::{Authz, AuthzContext};
 use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
-use td_objects::sql::DaoQueries;
+use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
@@ -39,7 +39,7 @@ impl ListRoleService {
                 from_fn(AuthzOn::<System>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
 
-                from_fn(By::<()>::list::<(), DaoQueries, Role>),
+                from_fn(By::<()>::list::<(), NoListFilter, DaoQueries, Role>),
             ))
         }
     }
@@ -74,7 +74,7 @@ mod tests {
             type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&By::<()>::list::<(), DaoQueries, Role>),
+            type_of_val(&By::<()>::list::<(), NoListFilter, DaoQueries, Role>),
         ]);
     }
 

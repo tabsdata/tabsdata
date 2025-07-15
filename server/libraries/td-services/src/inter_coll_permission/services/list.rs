@@ -8,7 +8,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::CollectionParam;
-use td_objects::sql::DaoQueries;
+use td_objects::sql::{DaoQueries, NoListFilter};
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
@@ -57,7 +57,7 @@ impl ListInterCollectionPermissionService {
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
 
                 // get list of permissions
-                from_fn(By::<CollectionId>::list::<CollectionParam, DaoQueries, InterCollectionPermission>),
+                from_fn(By::<CollectionId>::list::<CollectionParam, NoListFilter, DaoQueries, InterCollectionPermission>),
             ))
         }
     }
@@ -113,7 +113,7 @@ mod tests {
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
 
             // get list of permissions
-            type_of_val(&By::<CollectionId>::list::<CollectionParam, DaoQueries, InterCollectionPermission>),
+            type_of_val(&By::<CollectionId>::list::<CollectionParam,NoListFilter, DaoQueries, InterCollectionPermission>),
         ]);
     }
 

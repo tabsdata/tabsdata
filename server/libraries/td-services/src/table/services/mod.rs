@@ -51,7 +51,7 @@ impl TableServices {
                 queries.clone(),
                 authz_context.clone(),
             ),
-            list_table: TableListService::new(db.clone(), queries.clone()),
+            list_table: TableListService::new(db.clone(), queries.clone(), authz_context.clone()),
             list_table_data_versions: TableListDataVersionsService::new(
                 db.clone(),
                 authz_context.clone(),

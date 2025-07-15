@@ -5,7 +5,10 @@
 use crate::crudl::{handle_sql_err, ListParams, ListRequest, ListResponse, ListResponseBuilder};
 use crate::sql::cte::CteQueries;
 use crate::sql::list::ListQueryParams;
-use crate::sql::{DeleteBy, DerefQueries, FindBy, Insert, ListBy, QueryError, SelectBy, UpdateBy};
+use crate::sql::{
+    DeleteBy, DerefQueries, FindBy, Insert, ListBy, ListFilterGenerator, QueryError, SelectBy,
+    UpdateBy,
+};
 use crate::types::{DataAccessObject, ListQuery, PartitionBy, SqlEntity, VersionedAt};
 use async_trait::async_trait;
 use std::marker::PhantomData;
@@ -660,43 +663,49 @@ all_the_tuples!(impl_update);
 
 #[async_trait]
 pub trait SqlListService<E> {
-    async fn list<N, Q, T>(
+    async fn list<N, F, Q, T>(
         connection: Connection,
         queries: SrvCtx<Q>,
         request: Input<ListRequest<N>>,
+        list_filter_generator: Input<F>,
         by: Input<E>,
     ) -> Result<ListResponse<T>, TdError>
     where
         N: Send + Sync + Clone,
+        F: ListFilterGenerator,
         Q: DerefQueries,
         T: ListQuery + Send + Sync;
 
-    async fn list_at<N, Q, T>(
+    async fn list_at<N, F, Q, T>(
         connection: Connection,
         queries: SrvCtx<Q>,
         request: Input<ListRequest<N>>,
         natural_order_by: Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
         status: Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+        list_filter_generator: Input<F>,
         by: Input<E>,
     ) -> Result<ListResponse<T>, TdError>
     where
         N: Send + Sync + Clone,
+        F: ListFilterGenerator,
         Q: DerefQueries,
-        T: ListQuery + Send + Sync,
+        T: ListQuery,
         T::Dao: VersionedAt;
 
-    async fn list_versions_at<N, Q, T>(
+    async fn list_versions_at<N, F, Q, T>(
         connection: Connection,
         queries: SrvCtx<Q>,
         request: Input<ListRequest<N>>,
         natural_order_by: Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
         status: Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+        list_filter_generator: Input<F>,
         by: Input<E>,
     ) -> Result<ListResponse<T>, TdError>
     where
         N: Send + Sync + Clone,
+        F: ListFilterGenerator,
         Q: DerefQueries,
-        T: ListQuery + Send + Sync,
+        T: ListQuery,
         T::Dao: PartitionBy + VersionedAt;
 }
 
@@ -710,16 +719,18 @@ macro_rules! impl_list {
         where
             $(for<'a> $E: SqlEntity + 'a),*
         {
-            async fn list<N, Q, T>(
+            async fn list<N, F, Q, T>(
                 Connection(connection): Connection,
                 SrvCtx(queries): SrvCtx<Q>,
                 Input(request): Input<ListRequest<N>>,
+                Input(list_filter_generator): Input<F>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<ListResponse<T>, TdError>
             where
                 N: Send + Sync + Clone,
+                F: ListFilterGenerator,
                 Q: DerefQueries,
-                T: ListQuery + Send + Sync,
+                T: ListQuery,
             {
                 let mut conn = connection.lock().await;
                 let conn = conn.get_mut_connection()?;
@@ -728,7 +739,7 @@ macro_rules! impl_list {
 
                 let ($($E),*) = by.deref();
                 let result: Vec<T::Dao> = queries
-                    .list_by::<T>(&query_params, &($($E),*))?
+                    .list_by::<T, F>(&query_params, &list_filter_generator, &($($E),*)).await?
                     .build_query_as()
                     .persistent(true)
                     .fetch_all(&mut *conn)
@@ -762,18 +773,20 @@ macro_rules! impl_list {
                 Ok(list_response)
             }
 
-            async fn list_at<N, Q, T>(
+            async fn list_at<N, F, Q, T>(
                 Connection(connection): Connection,
                 SrvCtx(queries): SrvCtx<Q>,
                 Input(request): Input<ListRequest<N>>,
                 Input(natural_order_by): Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
                 Input(status): Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+                Input(list_filter_generator): Input<F>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<ListResponse<T>, TdError>
             where
                 N: Send + Sync + Clone,
+                F: ListFilterGenerator,
                 Q: DerefQueries,
-                T: ListQuery + Send + Sync,
+                T: ListQuery,
                 T::Dao: VersionedAt,
             {
                 let mut conn = connection.lock().await;
@@ -783,12 +796,13 @@ macro_rules! impl_list {
 
                 let ($($E),*) = by.deref();
                 let result: Vec<T::Dao> = queries
-                    .list_by_at::<T>(
+                    .list_by_at::<T, F>(
                         &query_params,
                         Some(&*natural_order_by),
                         Some(&status.iter().collect::<Vec<_>>()[..]),
+                        &list_filter_generator,
                         &($($E),*)
-                    )?
+                    ).await?
                     .build_query_as()
                     .persistent(true)
                     .fetch_all(&mut *conn)
@@ -822,18 +836,20 @@ macro_rules! impl_list {
                 Ok(list_response)
             }
 
-            async fn list_versions_at<N, Q, T>(
+            async fn list_versions_at<N, F, Q, T>(
                 Connection(connection): Connection,
                 SrvCtx(queries): SrvCtx<Q>,
                 Input(request): Input<ListRequest<N>>,
                 Input(natural_order_by): Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
                 Input(status): Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
+                Input(list_filter_generator): Input<F>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<ListResponse<T>, TdError>
             where
                 N: Send + Sync + Clone,
+                F: ListFilterGenerator,
                 Q: DerefQueries,
-                T: ListQuery + Send + Sync,
+                T: ListQuery,
                 T::Dao: PartitionBy + VersionedAt,
             {
                 let mut conn = connection.lock().await;
@@ -843,12 +859,13 @@ macro_rules! impl_list {
 
                 let ($($E),*) = by.deref();
                 let result: Vec<T::Dao> = queries
-                    .list_versions_by_at::<T>(
+                    .list_versions_by_at::<T, F>(
                         &query_params,
                         Some(&*natural_order_by),
                         Some(&status.iter().collect::<Vec<_>>()[..]),
+                        &list_filter_generator,
                         &($($E),*)
-                    )?
+                    ).await?
                     .build_query_as()
                     .persistent(true)
                     .fetch_all(&mut *conn)
@@ -1004,7 +1021,7 @@ all_the_tuples!(impl_delete);
 mod tests {
     use super::*;
     use crate::crudl::{ListParams, RequestContext};
-    use crate::sql::DaoQueries;
+    use crate::sql::{DaoQueries, NoListFilter};
     use crate::types::basic::{AccessTokenId, RoleId, UserId};
     use lazy_static::lazy_static;
     use td_database::sql::DbPool;
@@ -1326,10 +1343,11 @@ mod tests {
         )
         .list((), ListParams::default());
 
-        let list = By::<()>::list::<(), DaoQueries, FooDto>(
+        let list = By::<()>::list::<(), NoListFilter, DaoQueries, FooDto>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(list_request),
+            Input::new(()),
             Input::new(()),
         )
         .await?;
@@ -1592,10 +1610,11 @@ mod tests {
         async fn list(db: &DbPool, request: ListRequest<()>) -> ListResponse<FooDto2> {
             let connection =
                 Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
-            By::<()>::list::<(), DaoQueries, FooDto2>(
+            By::<()>::list::<(), NoListFilter, DaoQueries, FooDto2>(
                 connection,
                 TEST_QUERIES.clone(),
                 Input::new(request),
+                Input::new(()),
                 Input::new(()),
             )
             .await
@@ -1720,10 +1739,11 @@ mod tests {
         async fn list(db: &DbPool, request: ListRequest<()>) -> ListResponse<FooDto2> {
             let connection =
                 Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
-            By::<()>::list::<(), DaoQueries, FooDto2>(
+            By::<()>::list::<(), NoListFilter, DaoQueries, FooDto2>(
                 connection,
                 TEST_QUERIES.clone(),
                 Input::new(request),
+                Input::new(()),
                 Input::new(()),
             )
             .await
