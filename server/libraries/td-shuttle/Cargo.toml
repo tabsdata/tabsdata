@@ -87,6 +87,7 @@ tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 wildmatch = { workspace = true }
+uuid = {  workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }

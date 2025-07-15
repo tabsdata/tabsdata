@@ -6119,6 +6119,7 @@ dependencies = [
  "toml",
  "tracing",
  "url",
+ "uuid",
  "wildmatch",
 ]
 

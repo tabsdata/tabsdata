@@ -8,12 +8,11 @@ use crate::transporter::api::{
 };
 use crate::transporter::common::create_store;
 use crate::transporter::error::TransporterError;
+use crate::transporter::files_importer::{FilesImporter, Importer};
 use async_trait::async_trait;
 use object_store::path::Path;
 use object_store::Error::NotFound;
 use object_store::{ObjectMeta, ObjectStore};
-
-use crate::transporter::files_importer::{FilesImporter, Importer};
 use url::Url;
 use wildmatch::WildMatch;
 
@@ -173,11 +172,17 @@ impl FileFinder for PatternFileFinder {
                 TransporterError::CouldListFilesToImport(self.location.url().to_string(), err)
             })?;
 
-        Ok(found
+        // filter files based on the file pattern
+        let mut found: Vec<ObjectMeta> = found
             .objects
             .into_iter()
             .filter(|meta| file_matcher.matches(meta.location.filename().unwrap()))
-            .collect())
+            .collect();
+
+        // sort files by last modified time
+        found.sort_by_key(|meta| meta.last_modified);
+
+        Ok(found)
     }
 
     fn lastmod_info(&self) -> Option<LastModifiedInfoState> {
@@ -316,6 +321,7 @@ mod tests {
     use testdir::testdir;
     use tokio::time::sleep;
     use url::Url;
+    use uuid::Uuid;
 
     fn create_file(path: &std::path::Path) {
         let mut file = File::create(path).unwrap();
@@ -394,15 +400,37 @@ mod tests {
         let file1 = dir.join("file1.csv");
         let file2 = dir.join("file2.csv");
 
-        create_file(&file1);
         create_file(&file2);
+        sleep(Duration::from_millis(1200)).await; // Ensure file1 is newer
+        create_file(&file1);
 
         let file = dir.join("file*.csv");
         let url = Url::from_file_path(&file).unwrap();
 
         let url1 = Url::from_file_path(&file1).unwrap();
         let url2 = Url::from_file_path(&file2).unwrap();
-        test_pattern_file_finder(url, vec![url1, url2]).await;
+        test_pattern_file_finder(url, vec![url2, url1]).await;
+    }
+
+    #[tokio::test]
+    async fn test_pattern_file_finder_found_order_by_timestamp() {
+        let dir = testdir!();
+        let files = (0..5)
+            .map(|_| dir.join(format!("{}.csv", Uuid::now_v7())))
+            .collect::<Vec<_>>();
+        for file in &files {
+            create_file(file);
+            sleep(Duration::from_millis(1200)).await; // Ensure files are created with a delay
+        }
+
+        let file = dir.join("*.csv");
+        let url = Url::from_file_path(&file).unwrap();
+
+        let urls = files
+            .iter()
+            .map(|f| Url::from_file_path(f).unwrap())
+            .collect::<Vec<_>>();
+        test_pattern_file_finder(url, urls).await;
     }
 
     async fn test_single_file_last_mod_finder(
