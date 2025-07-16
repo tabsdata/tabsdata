@@ -27,6 +27,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+
 def _table_fqn_4sdk(table: str) -> str:
     """
     Returns the fully qualified name of the table for Databricks SDK.
@@ -41,6 +42,7 @@ def _table_fqn_4sdk(table: str) -> str:
             f"but got '{table}' instead"
         )
 
+
 def _table_fqn_4sql(table: str) -> str:
     """
     Returns the fully qualified name of the table for Databricks SQL.
@@ -54,6 +56,7 @@ def _table_fqn_4sql(table: str) -> str:
             "'catalog.schema.table_name'. Tried to fully qualify the table, "
             f"but got '{table}' instead"
         )
+
 
 class DatabricksDestination(DestinationPlugin):
 

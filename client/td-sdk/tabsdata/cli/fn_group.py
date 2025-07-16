@@ -546,7 +546,9 @@ def _monitor_execution_or_transaction(
     click.echo(f"Waiting for the {keyword} to finish...")
 
     refresh_rate = 1  # seconds
-    with Live(build_table(), refresh_per_second=refresh_rate, console=Console()) as live:
+    with Live(
+        build_table(), refresh_per_second=refresh_rate, console=Console()
+    ) as live:
         while True:
             # Note: while it would initially make more sense to write this as
             # 'if transaction.status in FAILED_FINAL_STATUSES', this approach avoids

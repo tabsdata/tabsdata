@@ -56,6 +56,7 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 DATABRICKS_BUDGET_SAFETY_TIMEOUT = 120
 
+
 @pytest.mark.databricks
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 def test_class_initialization_default_options():
@@ -406,8 +407,8 @@ def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
 @pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
 def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
     lf = get_lf(size)
-    table_name_1 = (f"test_stream_multiple_lf_table_1_{uuid.uuid4()}")
-    table_name_2 = (f"test_stream_multiple_lf_table_2_{uuid.uuid4()}")
+    table_name_1 = f"test_stream_multiple_lf_table_1_{uuid.uuid4()}"
+    table_name_2 = f"test_stream_multiple_lf_table_2_{uuid.uuid4()}"
     databricks_destination = td.DatabricksDestination(
         DATABRICKS_HOST,
         DATABRICKS_TOKEN,
@@ -417,8 +418,12 @@ def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
         catalog=DATABRICKS_CATALOG,
         schema=DATABRICKS_SCHEMA,
     )
-    full_name_1 = _table_fqn_4sql(f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_1}")
-    full_name_2 = _table_fqn_4sql(f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_2}")
+    full_name_1 = _table_fqn_4sql(
+        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_1}"
+    )
+    full_name_2 = _table_fqn_4sql(
+        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name_2}"
+    )
     try:
         databricks_destination.stream(str(tmp_path), lf, lf)
 
@@ -530,7 +535,9 @@ def test_output_databricks(tmp_path, databricks_client, sql_conn):
         save_location=tmp_path,
     )
 
-    full_table_name = _table_fqn_4sql(f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name}")
+    full_table_name = _table_fqn_4sql(
+        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name}"
+    )
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
