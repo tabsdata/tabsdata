@@ -11,8 +11,6 @@ from unittest import mock
 
 import polars as pl
 import pytest
-
-from tabsdata_databricks.connector import _table_fqn_4sql
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
@@ -45,6 +43,7 @@ from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsdata_databricks.connector import _table_fqn_4sql
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
