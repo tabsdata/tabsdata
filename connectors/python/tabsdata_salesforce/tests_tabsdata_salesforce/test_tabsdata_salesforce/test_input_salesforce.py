@@ -112,14 +112,14 @@ def test_input_salesforce_initial_values(tmp_path):
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
-    output_file = os.path.join(tmp_path, "output.parquet")
-    second_output_file = os.path.join(tmp_path, "second_output.parquet")
+    first_output_file = os.path.join(tmp_path, "first_output_01.parquet")
+    second_output_file = os.path.join(tmp_path, "second_output_01.parquet")
     path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
-        mock_table_location=[output_file, second_output_file],
+        mock_table_location=[first_output_file, second_output_file],
         output_initial_values_path=path_to_output_initial_values,
         function_data_path=function_data_folder,
     )
@@ -137,8 +137,8 @@ def test_input_salesforce_initial_values(tmp_path):
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
     # Check first output file
-    assert os.path.isfile(output_file)
-    output = pl.read_parquet(output_file)
+    assert os.path.isfile(first_output_file)
+    output = pl.read_parquet(first_output_file)
     output = clean_polars_df(output)
     expected_output_file = os.path.join(
         TESTING_RESOURCES_FOLDER,
@@ -180,6 +180,8 @@ def test_input_salesforce_initial_values(tmp_path):
     assert initial_values.equals(expected_initial_values)
 
     # Second iteration
+    first_output_file = os.path.join(tmp_path, "first_output_02.parquet")
+    second_output_file = os.path.join(tmp_path, "second_output_02.parquet")
     path_to_input_initial_values = path_to_output_initial_values
     path_to_output_initial_values = os.path.join(
         tmp_path, "second_initial_values.parquet"
@@ -188,7 +190,7 @@ def test_input_salesforce_initial_values(tmp_path):
     write_v2_yaml_file(
         input_yaml_file,
         context_archive,
-        mock_table_location=[output_file, second_output_file],
+        mock_table_location=[first_output_file, second_output_file],
         input_initial_values_path=path_to_input_initial_values,
         output_initial_values_path=path_to_output_initial_values,
         function_data_path=function_data_folder,
@@ -203,14 +205,18 @@ def test_input_salesforce_initial_values(tmp_path):
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-    assert os.path.isfile(output_file)
-    output = pl.read_parquet(output_file)
-    output = clean_polars_df(output)
-    assert output.is_empty()
-    assert os.path.isfile(second_output_file)
-    output = pl.read_parquet(second_output_file)
-    output = clean_polars_df(output)
-    assert output.is_empty()
+    assert not os.path.isfile(first_output_file)
+    assert not os.path.isfile(second_output_file)
+
+    # assert os.path.isfile(first_output_file)
+    # output = pl.read_parquet(first_output_file)
+    # output = clean_polars_df(output)
+    # assert output.is_empty()
+    # assert os.path.isfile(second_output_file)
+    # output = pl.read_parquet(second_output_file)
+    # output = clean_polars_df(output)
+    # assert output.is_empty()
+
     # In this second iteration, nothing has changed, so the initial values stayed the
     # same. Therefore, we will send a "NoData" for the initial values, and the file
     # will not exist

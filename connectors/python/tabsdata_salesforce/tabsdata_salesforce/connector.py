@@ -218,7 +218,7 @@ class SalesforceSource(SourcePlugin):
                     writer.writeheader()
                 writer.writerow(rec)
         try:
-            pl.scan_csv(origin_file).sink_parquet(destination_path)
+            pl.scan_csv(origin_file, raise_if_empty=True).sink_parquet(destination_path)
             resulting_files.append(destination_file)
         except pl.exceptions.NoDataError:
             logger.warning(f"No data to write in {destination_file}")

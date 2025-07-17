@@ -36,6 +36,7 @@ from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsdata.utils.tableframe._common import drop_system_columns
 from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
 
 # noinspection PyUnresolvedReferences
@@ -188,21 +189,32 @@ def test_output_table_multiple_tables_with_none(tmp_path):
     )
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-    output = pl.read_parquet(output1_path)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_output_table_multiple_with_none",
-        "expected_result.parquet",
-    )
 
-    expected_output = pl.read_parquet(expected_output_file)
-    # ToDo: ⚠️ Aleix: This is just a workaround...
-    #  The persisted expected output does not take into account the additional
-    #  columns in enterprise.
-    assert drop_system_columns(output).equals(drop_system_columns(expected_output))
+    assert not os.path.isfile(output1_path)
+    assert not os.path.isfile(output2_path)
 
-    output = pl.read_parquet(output2_path)
-    assert drop_system_columns(output).equals(drop_system_columns(expected_output))
+    # expected_output_file = os.path.join(
+    #     TESTING_RESOURCES_FOLDER,
+    #     "test_output_table_multiple_with_none",
+    #     "expected_result.parquet",
+    # )
+    # output_1 = pl.read_parquet(output1_path)
+    # output_2 = pl.read_parquet(output2_path)
+    # expected_output = pl.read_parquet(expected_output_file)
+    # # Enure system columns are dropped for comparison as their names values may
+    # # vary over different solution versions.
+    # assert (
+    #     drop_system_columns(output_1.lazy())
+    #     .collect()
+    #     .equals(drop_system_columns(expected_output.lazy()).collect())
+    # )
+    # # Enure system columns are dropped for comparison as their names values may
+    # # vary over different solution versions.
+    # assert (
+    #     drop_system_columns(output_2.lazy())
+    #     .collect()
+    #     .equals(drop_system_columns(expected_output.lazy()).collect())
+    # )
 
 
 @pytest.mark.requires_internet
@@ -244,26 +256,20 @@ def test_output_table_with_none(tmp_path):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-    assert os.path.isfile(output_path)
-    output = pl.read_parquet(output_path)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_output_table_with_none",
-        "expected_result.parquet",
-    )
-    expected_output = pl.read_parquet(expected_output_file)
-    # ToDo: ⚠️ Aleix: This is just a workaround...
-    #  The persisted expected output does not take into account the additional
-    #  columns in enterprise.
-    assert drop_system_columns(output).equals(drop_system_columns(expected_output))
+    assert not os.path.isfile(output_path)
 
-
-# ToDo: ⚠️ Aleix: This is just a workaround...
-def drop_system_columns(df: pl.DataFrame, ignore_missing: bool = True) -> pl.DataFrame:
-    columns_to_remove = list(SYSTEM_COLUMNS)
-    if ignore_missing:
-        existing_columns = set(df.collect_schema().names())
-        columns_to_remove = [
-            col for col in columns_to_remove if col in existing_columns
-        ]
-    return df.drop(columns_to_remove)
+    # assert os.path.isfile(output_path)
+    # output = pl.read_parquet(output_path)
+    # expected_output_file = os.path.join(
+    #     TESTING_RESOURCES_FOLDER,
+    #     "test_output_table_with_none",
+    #     "expected_result.parquet",
+    # )
+    # expected_output = pl.read_parquet(expected_output_file)
+    # # Enure system columns are dropped for comparison as their names values may
+    # # vary over different solution versions.
+    # assert (
+    #     drop_system_columns(output.lazy())
+    #     .collect()
+    #     .equals(drop_system_columns(expected_output.lazy()).collect())
+    # )

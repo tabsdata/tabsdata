@@ -302,21 +302,24 @@ class DatabricksDestination(DestinationPlugin):
         # We need to ensure that the connection parameters are fully evaluated
         ws_client, sql_connection = self._get_connections()
         for file_path, table in zip(files, self.tables):
-            logger.info(f"Starting upload of results to table '{table}'")
-            table = self._fully_qualify_table(table)
-            logger.debug(f"Storing file '{file_path}' in table '{table}'")
-            try:
-                self._upload_single_file_to_table(
-                    ws_client, sql_connection, file_path, table
-                )
-                logger.info(f"Uploaded results to table '{table}' successfully.")
-            except Exception:
-                logger.error(
-                    f"Failed to upload results from file '{file_path}' to table"
-                    f" '{table}'"
-                )
-                sql_connection.close()
-                raise
+            if file_path is None:
+                logger.warning(f"Received None for table '{table}'. No data loaded.")
+            else:
+                logger.info(f"Starting upload of results to table '{table}'")
+                table = self._fully_qualify_table(table)
+                logger.debug(f"Storing file '{file_path}' in table '{table}'")
+                try:
+                    self._upload_single_file_to_table(
+                        ws_client, sql_connection, file_path, table
+                    )
+                    logger.info(f"Uploaded results to table '{table}' successfully.")
+                except Exception:
+                    logger.error(
+                        f"Failed to upload results from file '{file_path}' to table"
+                        f" '{table}'"
+                    )
+                    sql_connection.close()
+                    raise
         sql_connection.close()
 
     def _upload_single_file_to_table(

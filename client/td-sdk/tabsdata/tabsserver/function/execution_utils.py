@@ -343,7 +343,7 @@ def execute_sql_query(
     destination: str,
     query: str,
     initial_values: Offset,
-) -> str:
+) -> str | None:
     logger.info(f"Importing SQL query: {query}")
     if source.initial_values:
         initial_values.returns_values = True
@@ -372,12 +372,16 @@ def execute_sql_query(
     else:
         logger.error(f"Invalid SQL source type: {type(source)}. No data imported.")
         raise TypeError(f"Invalid SQL source type: {type(source)}. No data imported.")
-    destination_file = os.path.join(
-        destination, f"{datetime.now(tz=timezone.utc).timestamp()}.parquet"
-    )
-    loaded_frame.write_parquet(destination_file)
-    logger.info(f"Imported SQL query to: {destination_file}")
-    return destination_file
+    if loaded_frame.is_empty():
+        logger.warning(f"No data obtained from query: '{query}'")
+        return None
+    else:
+        destination_file = os.path.join(
+            destination, f"{datetime.now(tz=timezone.utc).timestamp()}.parquet"
+        )
+        loaded_frame.write_parquet(destination_file)
+        logger.info(f"Imported SQL query to: {destination_file}")
+        return destination_file
 
 
 def execute_file_importer(

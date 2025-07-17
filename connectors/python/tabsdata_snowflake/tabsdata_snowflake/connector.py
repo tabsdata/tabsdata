@@ -124,19 +124,22 @@ class SnowflakeDestination(DestinationPlugin):
         self.schema = connection_parameters.get("schema")
         conn = connect(**connection_parameters)
         for file_path, table in zip(files, self.destination_table):
-            logger.info(f"Starting upload of results to table '{table}'")
-            table = self._fully_qualify_entity(table)
-            logger.debug(f"Storing file '{file_path}' in table '{table}'")
-            try:
-                self._upload_single_file_to_table(conn, file_path, table)
-                logger.info(f"Uploaded results to table '{table}' successfully.")
-            except Exception:
-                logger.error(
-                    f"Failed to upload results from file '{file_path}' to table"
-                    f" '{table}'"
-                )
-                conn.close()
-                raise
+            if file_path is None:
+                logger.warning(f"Received None for table '{table}'. No data loaded.")
+            else:
+                logger.info(f"Starting upload of results to table '{table}'")
+                table = self._fully_qualify_entity(table)
+                logger.debug(f"Storing file '{file_path}' in table '{table}'")
+                try:
+                    self._upload_single_file_to_table(conn, file_path, table)
+                    logger.info(f"Uploaded results to table '{table}' successfully.")
+                except Exception:
+                    logger.error(
+                        f"Failed to upload results from file '{file_path}' to table"
+                        f" '{table}'"
+                    )
+                    conn.close()
+                    raise
         conn.close()
 
     def _upload_single_file_to_table(self, conn, file_path: str, table: str):

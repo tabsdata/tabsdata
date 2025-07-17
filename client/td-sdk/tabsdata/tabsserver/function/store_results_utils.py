@@ -196,7 +196,7 @@ def store_results_in_table(
     destination: TableOutput,
     execution_context: ExecutionContext,
 ) -> List[dict]:
-    results.convert_none_to_empty_frame()
+    results.normalize_frame()
     # Right now, source provides very little information, but we use it to do a small
     # sanity check and to ensure that everything is running properly
     # TODO: Decide if we want to add more checks here
@@ -262,6 +262,15 @@ def store_results_in_table(
             sink_lf_to_location(tf._to_lazy(), execution_context, table.location)
             table_meta_info = get_table_meta_info_from_lf(lf)
             table_info = {"name": table.name, "meta_info": table_meta_info}
+            modified_tables.append(table_info)
+            logger.debug(
+                f"Result stored in table '{table}', added to modified_tables "
+                f"list with information '{table_info}'"
+            )
+        elif result is None:
+            logger.warning(f"Result is None. No data stored: '{table}'.")
+        elif result.value is None:
+            logger.warning(f"Result value is None. No data stored: '{table}'.")
         else:
             logger.error(
                 f"Invalid result type: '{type(result.value)}'. No data stored."
@@ -269,11 +278,6 @@ def store_results_in_table(
             raise TypeError(
                 f"Invalid result type: '{type(result.value)}'. No data stored."
             )
-        modified_tables.append(table_info)
-        logger.debug(
-            f"Result stored in table '{table}', added to modified_tables "
-            f"list with information '{table_info}'"
-        )
     logger.info("Results stored in tables")
     logger.debug(f"Modified tables: {modified_tables}")
     return modified_tables
@@ -335,6 +339,7 @@ def store_results_in_sql(
     output_folder: str,
 ):
     logger.info(f"Storing results in SQL destination '{destination}'")
+    results.normalize_frame()
     if isinstance(
         destination,
         (MariaDBDestination, MySQLDestination, OracleDestination, PostgresDestination),
@@ -417,7 +422,7 @@ def store_results_in_files(
     execution_context: InputYaml,
 ):
     logger.info(f"Storing results in File destination '{destination}'")
-    results.convert_none_to_empty_frame()
+    results.normalize_frame()
 
     destination_path = obtain_destination_path(destination)
     if isinstance(destination_path, str):
@@ -448,47 +453,65 @@ def store_results_in_files(
         f"Pairing destination path '{destination_path}' with results '{results}'"
     )
     for number, (result, destination_file) in enumerate(zip(results, destination_path)):
-        logger.debug(
-            f"Storing result {number} in destination file '{destination_file}'"
-        )
-        destination_files, intermediate_files, result = pair_result_with_destination(
-            destination, destination_file, number, output_folder, result
-        )
+        if result is None:
+            logger.warning(
+                f"Result is None. No data stored: '{number}' - '{destination_file}."
+            )
+        else:
+            logger.debug(
+                f"Storing result {number} in destination file '{destination_file}'"
+            )
+            destination_files, intermediate_files, result = (
+                pair_result_with_destination(
+                    destination, destination_file, number, output_folder, result
+                )
+            )
 
-        # At this point, we should always have a list called result with all the
-        # results (either a single one for a single TableFrame or a list of
-        # TableFrames for a fragmented destination). The same should happen for
-        # intermediate_files and destination_files
+            # At this point, we should always have a list called result with all the
+            # results (either a single one for a single TableFrame or a list of
+            # TableFrames for a fragmented destination). The same should happen for
+            # intermediate_files and destination_files
 
-        # Destination files might be modified, for example if there are placeholders
-        # to be replaced. This list will store the final name of each destination file
-        resolved_destination_files = []
-        resolved_results = []
-        for (
-            individual_result,
-            individual_intermediate_file,
-            individual_destination_file,
-        ) in zip(result, intermediate_files, destination_files):
-            resolved_destination_file, resolved_result = store_result_using_transporter(
+            # Destination files might be modified, for example if there are placeholders
+            # to be replaced. This list will store the final name of each destination
+            # file.
+            resolved_destination_files = []
+            resolved_results = []
+            for (
                 individual_result,
-                individual_destination_file,
                 individual_intermediate_file,
-                destination,
-                output_folder,
-                execution_context,
-            )
-            resolved_destination_files.append(resolved_destination_file)
-            resolved_results.append(resolved_result)
-        if hasattr(destination, "catalog") and destination.catalog is not None:
-            logger.info("Storing file(s) in catalog")
-            catalog = destination.catalog
-            store_file_in_catalog(
-                catalog,
-                resolved_destination_files,
-                catalog.tables[number],
-                resolved_results,
-                number,
-            )
+                individual_destination_file,
+            ) in zip(result, intermediate_files, destination_files):
+                if individual_result is None:
+                    logger.warning(
+                        "Individual result is None. No data stored:"
+                        f" '{individual_intermediate_file}' -"
+                        f" '{individual_destination_file}."
+                    )
+                    resolved_destination_file, resolved_result = None, None
+                else:
+                    resolved_destination_file, resolved_result = (
+                        store_result_using_transporter(
+                            individual_result,
+                            individual_destination_file,
+                            individual_intermediate_file,
+                            destination,
+                            output_folder,
+                            execution_context,
+                        )
+                    )
+                resolved_destination_files.append(resolved_destination_file)
+                resolved_results.append(resolved_result)
+            if hasattr(destination, "catalog") and destination.catalog is not None:
+                logger.info("Storing file(s) in catalog")
+                catalog = destination.catalog
+                store_file_in_catalog(
+                    catalog,
+                    resolved_destination_files,
+                    catalog.tables[number],
+                    resolved_results,
+                    number,
+                )
     logger.info("Results stored in destination")
 
 
@@ -501,14 +524,10 @@ def pair_result_with_destination(
 ):
     result = result.value
     if result is None:
-        logger.error(
-            "Result is None. However, any None result should have been "
-            "converted to an empty TableFrame."
-        )
-        raise ValueError(
-            "Result is None. However, any None result should have been "
-            "converted to an empty TableFrame."
-        )
+        logger.warning("Result is No data will be stored for this TableFrame.")
+        intermediate_files = [os.path.join(output_folder, str(number))]
+        result = [result]
+        destination_files = [destination_file]
     elif isinstance(result, TableFrame):
         intermediate_files = [os.path.join(output_folder, str(number))]
         result = [result]
@@ -600,15 +619,23 @@ def store_file_in_catalog(
     logger.debug(f"Catalog loaded: {iceberg_catalog}")
     schemas = []
     for lf in lf_list:
-        empty_df = lf.limit(0).collect()
-        schema = empty_df.schema
-        pyarrow_individual_empty_df = empty_df.to_arrow()
-        pyarrow_individual_schema = pyarrow_individual_empty_df.schema
-        schemas.append(pyarrow_individual_schema)
-        logger.debug(
-            f"Converted schema '{schema} to pyarrow schema '"
-            f"{pyarrow_individual_schema}'"
-        )
+        if lf is None:
+            logger.warning("LazyFrame is None. No data stored in catalog.")
+        else:
+            empty_df = lf.limit(0).collect()
+            schema = empty_df.schema
+            pyarrow_individual_empty_df = empty_df.to_arrow()
+            pyarrow_individual_schema = pyarrow_individual_empty_df.schema
+            schemas.append(pyarrow_individual_schema)
+            logger.debug(
+                f"Converted schema '{schema} to pyarrow schema '"
+                f"{pyarrow_individual_schema}'"
+            )
+
+    if not schemas:
+        logger.warning("No data stored. Storing no data in catalog.")
+        return
+
     pyarrow_schema = pyarrow.unify_schemas(schemas)
     logger.debug(f"Obtained pyarrow schema '{pyarrow_schema}'")
     logger.debug(f"Obtaining table '{destination_table}'")

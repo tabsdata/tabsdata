@@ -380,36 +380,51 @@ def test_output_file_multiple_files_with_none(tmp_path):
     assert result == 0
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-    temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-    assert os.path.isfile(temporary_output_file)
-    output = pl.read_parquet(temporary_output_file)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_output_file_multiple_files_with_none",
-        "expected_result.json",
-    )
-    expected_output = pl.read_json(expected_output_file)
-    assert output.equals(expected_output)
+    temporary_first_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
+    assert not os.path.isfile(temporary_first_output_file)
+    # assert os.path.isfile(temporary_first_output_file)
+    # output = pl.read_parquet(temporary_first_output_file)
+    # expected_output_file = os.path.join(
+    #     TESTING_RESOURCES_FOLDER,
+    #     "test_output_file_multiple_files_with_none",
+    #     "expected_result.json",
+    # )
+    # expected_output = pl.read_json(expected_output_file)
+    # assert output.equals(expected_output)
 
-    assert os.path.isfile(first_output_file)
-    output = pl.read_parquet(first_output_file)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_output_file_multiple_files_with_none",
-        "expected_result.json",
-    )
-    expected_output = pl.read_json(expected_output_file)
-    assert output.equals(expected_output)
+    temporary_second_output_file = os.path.join(tabsserver_output_folder, "1.parquet")
+    assert not os.path.isfile(temporary_second_output_file)
+    # assert os.path.isfile(temporary_second_output_file)
+    # output = pl.read_parquet(temporary_second_output_file)
+    # expected_output_file = os.path.join(
+    #     TESTING_RESOURCES_FOLDER,
+    #     "test_output_file_multiple_files_with_none",
+    #     "expected_result.json",
+    # )
+    # expected_output = pl.read_json(expected_output_file)
+    # assert output.equals(expected_output)
 
-    assert os.path.isfile(second_output_file)
-    output = pl.read_parquet(second_output_file)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_output_file_multiple_files_with_none",
-        "expected_result.json",
-    )
-    expected_output = pl.read_json(expected_output_file)
-    assert output.equals(expected_output)
+    assert not os.path.isfile(first_output_file)
+    # assert os.path.isfile(first_output_file)
+    # output = pl.read_parquet(first_output_file)
+    # expected_output_file = os.path.join(
+    #     TESTING_RESOURCES_FOLDER,
+    #     "test_output_file_multiple_files_with_none",
+    #     "expected_result.json",
+    # )
+    # expected_output = pl.read_json(expected_output_file)
+    # assert output.equals(expected_output)
+
+    assert not os.path.isfile(second_output_file)
+    # assert os.path.isfile(second_output_file)
+    # output = pl.read_parquet(second_output_file)
+    # expected_output_file = os.path.join(
+    #     TESTING_RESOURCES_FOLDER,
+    #     "test_output_file_multiple_files_with_none",
+    #     "expected_result.json",
+    # )
+    # expected_output = pl.read_json(expected_output_file)
+    # assert output.equals(expected_output)
 
 
 @pytest.mark.requires_internet
@@ -452,25 +467,27 @@ def test_output_file_with_none(tmp_path):
     assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
     temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-    assert os.path.isfile(temporary_output_file)
-    output = pl.read_parquet(temporary_output_file)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_output_file_with_none",
-        "expected_result.json",
-    )
-    expected_output = pl.read_json(expected_output_file)
-    assert output.equals(expected_output)
+    assert not os.path.isfile(temporary_output_file)
+    # assert os.path.isfile(temporary_output_file)
+    # output = pl.read_parquet(temporary_output_file)
+    # expected_output_file = os.path.join(
+    #     TESTING_RESOURCES_FOLDER,
+    #     "test_output_file_with_none",
+    #     "expected_result.json",
+    # )
+    # expected_output = pl.read_json(expected_output_file)
+    # assert output.equals(expected_output)
 
-    assert os.path.isfile(output_file)
-    output = pl.read_parquet(output_file)
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_output_file_with_none",
-        "expected_result.json",
-    )
-    expected_output = pl.read_json(expected_output_file)
-    assert output.equals(expected_output)
+    assert not os.path.isfile(output_file)
+    # assert os.path.isfile(output_file)
+    # output = pl.read_parquet(output_file)
+    # expected_output_file = os.path.join(
+    #     TESTING_RESOURCES_FOLDER,
+    #     "test_output_file_with_none",
+    #     "expected_result.json",
+    # )
+    # expected_output = pl.read_json(expected_output_file)
+    # assert output.equals(expected_output)
 
 
 @pytest.mark.requires_internet
