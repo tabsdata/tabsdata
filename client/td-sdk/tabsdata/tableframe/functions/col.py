@@ -10,9 +10,6 @@ from collections.abc import Iterable
 import polars as pl
 
 # noinspection PyProtectedMember
-from polars._typing import PythonDataType
-
-# noinspection PyProtectedMember
 import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.expr as td_expr
 
@@ -28,11 +25,11 @@ def _new_col(
     name: (
         str
         | td_typing.DataType
-        | PythonDataType
+        | td_typing.PythonDataType
         | Iterable[str]
-        | Iterable[td_typing.DataType | PythonDataType]
+        | Iterable[td_typing.DataType | td_typing.PythonDataType]
     ),
-    *more_names: str | td_typing.DataType | PythonDataType,
+    *more_names: str | td_typing.DataType | td_typing.PythonDataType,
 ) -> td_expr.Expr:
     if check:
         td_common.check_columns(name, *more_names)
@@ -42,12 +39,12 @@ def _new_col(
 def _create_col(
     name: (
         str
-        | td_typing.TdDataType
-        | PythonDataType
+        | td_typing.DataType
+        | td_typing.PythonDataType
         | Iterable[str]
-        | Iterable[td_typing.TdDataType | PythonDataType]
+        | Iterable[td_typing.DataType | td_typing.PythonDataType]
     ),
-    *more_names: str | td_typing.TdDataType | PythonDataType,
+    *more_names: str | td_typing.DataType | td_typing.PythonDataType,
 ) -> td_expr.Expr:
     return td_expr.Expr(pl.col(name, *more_names))
 
@@ -78,12 +75,12 @@ class Col:
         self,
         name: (
             str
-            | td_typing.TdDataType
-            | PythonDataType
+            | td_typing.DataType
+            | td_typing.PythonDataType
             | Iterable[str]
-            | Iterable[td_typing.TdDataType | PythonDataType]
+            | Iterable[td_typing.DataType | td_typing.PythonDataType]
         ),
-        *more_names: str | td_typing.TdDataType | PythonDataType,
+        *more_names: str | td_typing.DataType | td_typing.PythonDataType,
     ) -> td_expr.Expr:
         """
         Create a TableFrame column expression.

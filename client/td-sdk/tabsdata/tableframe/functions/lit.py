@@ -16,7 +16,7 @@ from tabsdata.utils.annotations import pydoc
 
 @pydoc(categories="generation")
 def lit(
-    value: Any, dtype: td_typing.TdDataType | None = None, *, allow_object: bool = False
+    value: Any, dtype: td_typing.DataType | None = None, *, allow_object: bool = False
 ) -> td_expr.Expr:
     """
     Expression for the given literal value.

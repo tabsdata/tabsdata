@@ -10,11 +10,10 @@ import polars.expr.string as pl_string
 from polars import Expr
 
 # noinspection PyProtectedMember
-from polars._typing import Ambiguous, TimeUnit
-
-# noinspection PyProtectedMember
 from polars._utils.various import NoDefault, no_default
 
+# noinspection PyProtectedMember
+import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.expr as td_expr
 
 # noinspection PyProtectedMember
@@ -74,10 +73,10 @@ class ExprStringNameSpace:
         self,
         fmt: str | None = None,
         *,
-        time_unit: TimeUnit | None = None,
+        time_unit: td_typing.TimeUnit | None = None,
         time_zone: str | None = None,
         strict: bool = True,
-        ambiguous: Ambiguous | td_expr.Expr = "raise",
+        ambiguous: td_typing.Ambiguous | td_expr.Expr = "raise",
     ) -> td_expr.Expr:
         """
         Convert the string to a datetime.

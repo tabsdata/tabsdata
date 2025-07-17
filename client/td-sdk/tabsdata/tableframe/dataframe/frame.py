@@ -35,11 +35,7 @@ class DataFrame:
                 .alias(td_constants.StandardVolatileSystemColumns.TD_MAX_COLUMN.value),
             )
             lf = lf.limit(1)
-            df = lf.collect(
-                # ToDo: This feature could be enabled when the polars team deems it as
-                #       stable.
-                # streaming=True
-            )
+            df = lf.collect()
             if df[0, 1] == df[0, 2]:
                 return df[0, 0]
             raise TableFrameError(ErrorCode.TF9)

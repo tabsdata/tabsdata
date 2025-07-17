@@ -6,8 +6,7 @@ from typing import Iterable
 import polars.expr.datetime as pl_datetime
 
 # noinspection PyProtectedMember
-from polars._typing import Ambiguous, EpochTimeUnit, NonExistent, Roll, TimeUnit
-
+import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.expr as td_expr
 
 # noinspection PyProtectedMember
@@ -25,7 +24,7 @@ class ExprDateTimeNameSpace:
         n: int | td_expr.IntoExpr,
         week_mask: Iterable[bool] = (True, True, True, True, True, False, False),
         holidays: Iterable[dt.date] = (),
-        roll: Roll = "raise",
+        roll: td_typing.Roll = "raise",
     ) -> td_expr.Expr:
         # noinspection PyProtectedMember
         return td_expr.Expr(
@@ -54,7 +53,7 @@ class ExprDateTimeNameSpace:
         minute: int | td_expr.IntoExpr | None = None,
         second: int | td_expr.IntoExpr | None = None,
         microsecond: int | td_expr.IntoExpr | None = None,
-        ambiguous: Ambiguous | td_expr.Expr = "raise",
+        ambiguous: td_typing.Ambiguous | td_expr.Expr = "raise",
     ) -> td_expr.Expr:
         # noinspection PyProtectedMember
         return td_expr.Expr(
@@ -72,7 +71,7 @@ class ExprDateTimeNameSpace:
 
     @pydoc(categories="date")
     def combine(
-        self, time: dt.time | td_expr.Expr, time_unit: TimeUnit = "us"
+        self, time: dt.time | td_expr.Expr, time_unit: td_typing.TimeUnit = "us"
     ) -> td_expr.Expr:
         # noinspection PyProtectedMember
         return td_expr.Expr(
@@ -170,19 +169,19 @@ class ExprDateTimeNameSpace:
         return td_expr.Expr(self._expr.nanosecond())
 
     @pydoc(categories="date")
-    def epoch(self, time_unit: EpochTimeUnit = "us") -> td_expr.Expr:
+    def epoch(self, time_unit: td_typing.EpochTimeUnit = "us") -> td_expr.Expr:
         return td_expr.Expr(self._expr.epoch(time_unit=time_unit))
 
     @pydoc(categories="date")
-    def timestamp(self, time_unit: TimeUnit = "us") -> td_expr.Expr:
+    def timestamp(self, time_unit: td_typing.TimeUnit = "us") -> td_expr.Expr:
         return td_expr.Expr(self._expr.timestamp(time_unit=time_unit))
 
     @pydoc(categories="date")
-    def with_time_unit(self, time_unit: TimeUnit) -> td_expr.Expr:
+    def with_time_unit(self, time_unit: td_typing.TimeUnit) -> td_expr.Expr:
         return td_expr.Expr(self._expr.with_time_unit(time_unit))
 
     @pydoc(categories="date")
-    def cast_time_unit(self, time_unit: TimeUnit) -> td_expr.Expr:
+    def cast_time_unit(self, time_unit: td_typing.TimeUnit) -> td_expr.Expr:
         return td_expr.Expr(self._expr.cast_time_unit(time_unit))
 
     @pydoc(categories="date")
@@ -194,8 +193,8 @@ class ExprDateTimeNameSpace:
         self,
         time_zone: str | None,
         *,
-        ambiguous: Ambiguous | td_expr.Expr = "raise",
-        non_existent: NonExistent = "raise",
+        ambiguous: td_typing.Ambiguous | td_expr.Expr = "raise",
+        non_existent: td_typing.NonExistent = "raise",
     ) -> td_expr.Expr:
         # noinspection PyProtectedMember
         return td_expr.Expr(

@@ -14,10 +14,8 @@ from typing import Any, List, Literal, NoReturn, TypeVar, Union, cast
 import pandas as pd
 import polars as pl
 from accessify import accessify, private
-from polars import DataType, Schema, Series
 
 # noinspection PyProtectedMember
-from polars._typing import ColumnNameOrSelector, JoinStrategy, UniqueKeepStrategy
 from polars.dependencies import numpy as np
 
 # noinspection PyProtectedMember
@@ -348,11 +346,11 @@ class TableFrame:
 
     @pydoc(categories="attributes")
     @property
-    def dtypes(self) -> list[DataType]:
+    def dtypes(self) -> list[td_typing.DataType]:
         return self._lf.collect_schema().dtypes()
 
     @property
-    def schema(self) -> Schema:
+    def schema(self) -> td_typing.Schema:
         return self._lf.collect_schema()
 
     @property
@@ -817,8 +815,10 @@ class TableFrame:
     def cast(
         self,
         dtypes: (
-            Mapping[ColumnNameOrSelector | td_typing.TdDataType, td_typing.TdDataType]
-            | td_typing.TdDataType
+            Mapping[
+                td_typing.ColumnNameOrSelector | td_typing.DataType, td_typing.DataType
+            ]
+            | td_typing.DataType
         ),
         *,
         strict: bool = True,
@@ -853,7 +853,7 @@ class TableFrame:
         │ F    ┆ null │
         └──────┴──────┘
         >>>
-        >>> tf.cast({"b":pl.Float32}).collect()
+        >>> tf.cast({"b":td.Float32}).collect()
         >>>
         ┌──────┬───────┐
         │ a    ┆ b     │
@@ -910,7 +910,7 @@ class TableFrame:
         │ F    ┆ null │
         └──────┴──────┘
         >>>
-        >>> tf.cast({"b":pl.Float32}).collect()
+        >>> tf.cast({"b":td.Float32}).collect()
         >>>
         ┌──────┬───────┐
         │ a    ┆ b     │
@@ -935,7 +935,7 @@ class TableFrame:
         self,
         other: TableFrame,
         on: str | td_expr.Expr | Sequence[str | td_expr.Expr] | None = None,
-        how: JoinStrategy = "inner",
+        how: td_typing.JoinStrategy = "inner",
         *,
         left_on: str | td_expr.Expr | Sequence[str | td_expr.Expr] | None = None,
         right_on: str | td_expr.Expr | Sequence[str | td_expr.Expr] | None = None,
@@ -1226,7 +1226,8 @@ class TableFrame:
     @pydoc(categories="projection")
     def drop(
         self,
-        *columns: ColumnNameOrSelector | Iterable[ColumnNameOrSelector],
+        *columns: td_typing.ColumnNameOrSelector
+        | Iterable[td_typing.ColumnNameOrSelector],
         strict: bool = True,
     ) -> TableFrame:
         # noinspection PyShadowingNames
@@ -1397,9 +1398,13 @@ class TableFrame:
     @pydoc(categories="filters")
     def unique(
         self,
-        subset: ColumnNameOrSelector | Collection[ColumnNameOrSelector] | None = None,
+        subset: (
+            td_typing.ColumnNameOrSelector
+            | Collection[td_typing.ColumnNameOrSelector]
+            | None
+        ) = None,
         *,
-        keep: UniqueKeepStrategy = "any",
+        keep: td_typing.UniqueKeepStrategy = "any",
         maintain_order: bool = False,
     ) -> TableFrame:
         # noinspection PyShadowingNames
@@ -1469,7 +1474,11 @@ class TableFrame:
     @pydoc(categories="manipulation")
     def drop_nans(
         self,
-        subset: ColumnNameOrSelector | Collection[ColumnNameOrSelector] | None = None,
+        subset: (
+            td_typing.ColumnNameOrSelector
+            | Collection[td_typing.ColumnNameOrSelector]
+            | None
+        ) = None,
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
@@ -1535,7 +1544,11 @@ class TableFrame:
     @pydoc(categories="manipulation")
     def drop_nulls(
         self,
-        subset: ColumnNameOrSelector | Collection[ColumnNameOrSelector] | None = None,
+        subset: (
+            td_typing.ColumnNameOrSelector
+            | Collection[td_typing.ColumnNameOrSelector]
+            | None
+        ) = None,
     ) -> TableFrame:
         # noinspection PyShadowingNames
         """
@@ -2284,7 +2297,7 @@ class TableFrame:
         )
 
 
-TdType = TypeVar("TdType", "TableFrame", Series, "td_expr.Expr")
+TdType = TypeVar("TdType", "TableFrame", "td_typing.Series", "td_expr.Expr")
 
 """> Internal Private Functions """
 

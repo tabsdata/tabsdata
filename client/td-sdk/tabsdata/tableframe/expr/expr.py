@@ -18,7 +18,6 @@ from typing import (
 
 import polars as pl
 from accessify import accessify
-from polars import Series
 
 # noinspection PyProtectedMember
 from polars._typing import (
@@ -481,7 +480,7 @@ class Expr:
     @pydoc(categories="type_casting")
     def cast(
         self,
-        dtype: td_typing.TdDataType | type[Any],
+        dtype: td_typing.DataType | type[Any],
         *,
         strict: bool = True,
         wrap_numerical: bool = False,
@@ -504,7 +503,7 @@ class Expr:
         >>>
         >>> tf: td.TableFrame ...
         >>>
-        >>> tf = tf.select(td.col("val"), td.col("val").cast(pl.Float64)).alias("cast")
+        >>> tf = tf.select(td.col("val"), td.col("val").cast(td.Float64)).alias("cast")
         >>>
         ┌──────┬──────┐
         │ val  ┆ cast │
@@ -1204,7 +1203,7 @@ class Expr:
         return Expr(self._expr.is_finite())
 
     @pydoc(categories="logic")
-    def is_in(self, other: Expr | Collection[Any] | Series) -> Expr:
+    def is_in(self, other: Expr | Collection[Any]) -> Expr:
         """
         If an element value is in the given collection.
 
@@ -2738,6 +2737,6 @@ class Expr:
         return td_string.ExprStringNameSpace(self._expr.str)
 
 
-IntoExprColumn: TypeAlias = Union[Expr, pl.Series, str]
+IntoExprColumn: TypeAlias = Union[Expr, td_typing.Series, str]
 
 IntoExpr: TypeAlias = Union[PythonLiteral, IntoExprColumn, None]

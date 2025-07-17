@@ -748,9 +748,9 @@ Selectors by data type.
 @pydoc(categories="projection")
 def by_dtype(
     *dtypes: (
-        td_typing.TdDataType
+        td_typing.DataType
         | PythonDataType
-        | Iterable[td_typing.TdDataType]
+        | Iterable[td_typing.DataType]
         | Iterable[PythonDataType]
     ),
 ) -> td_expr.Expr:
@@ -1825,12 +1825,12 @@ Selectors of second order.
 def exclude(
     columns: (
         str
-        | td_typing.TdDataType
-        | td_typing.TdDataType
+        | td_typing.DataType
+        | td_typing.DataType
         | td_expr.Expr
-        | Collection[str | td_typing.TdDataType | td_expr.Expr]
+        | Collection[str | td_typing.DataType | td_expr.Expr]
     ),
-    *more_columns: str | td_typing.TdDataType | td_expr.Expr,
+    *more_columns: str | td_typing.DataType | td_expr.Expr,
 ) -> td_expr.Expr:
     """
     Exclude specific columns from selection by name, data type, expression, or selector.
