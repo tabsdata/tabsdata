@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-name: Release Workflow (Standard)
+name: Release Workflow (Standard) - (${{ inputs.runner_action }})
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.runner_action == 'build' && 'build' || format('run-{0}', github.run_id) }}
@@ -12,6 +12,9 @@ defaults:
   run:
     shell: bash
     working-directory: .
+
+run-name: >
+  ${{ github.event_name == 'workflow_dispatch' && format('Release Workflow (Standard) - ({0})', inputs.runner_action) || '' }}
 
 on:
   workflow_dispatch:

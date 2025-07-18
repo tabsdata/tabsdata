@@ -13,6 +13,9 @@ defaults:
     shell: bash
     working-directory: .
 
+run-name: >
+  ${{ github.event_name == 'workflow_dispatch' && format('Integration Workflow (Standard) - ({0})', inputs.runner_action) || '' }}
+
 on:
   pull_request:
   workflow_dispatch:
