@@ -1401,21 +1401,7 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    os = get_env OS
-    if ${os}
-        lower_os = lowercase ${os}
-        contains_win = contains ${lower_os} "windows"
-        if ${contains_win}
-            _ignore = exec --fail-on-error false cls
-            _ignore = exec --fail-on-error false clear
-        else
-            _ignore = exec --fail-on-error false clear
-            _ignore = exec --fail-on-error false cls
-        end
-    else
-        _ignore = exec --fail-on-error false clear
-        _ignore = exec --fail-on-error false cls
-    end
+    exec python -c "from rich.console import Console; Console().clear()"
 
     lines = array
     array_push ${lines} "🎊 Local tabsdata wheels successfully generated!"
@@ -1442,14 +1428,21 @@ script = [
     array_push ${lines} ""
     array_push ${lines} "export PIP_INDEX_URL=http://localhost:3141/tabsdata/dev/"
     array_push ${lines} "export UV_EXTRA_INDEX_URL=http://localhost:3141/tabsdata/dev/"
-    array_push ${lines} "export TD_CLI_SHOW=true"
-    array_push ${lines} "export PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=false"
-    array_push ${lines} "export TD_IGNORE_CONNECTOR_REQUIREMENTS=false"
-    array_push ${lines} "export TD_INHERIT_TABSDATA_PACKAGES=false"
-    array_push ${lines} "export TD_PYTHON_LINKED_TO_REPOSITORY=true"
-    array_push ${lines} "export TD_SKIP_NON_EXISTING_ASSETS=false"
-    array_push ${lines} "export REQUIRE_SERVER_BINARIES=true"
-    array_push ${lines} "export REQUIRE_THIRD_PARTY=true"
+    array_push ${lines} "unset PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES"
+    array_push ${lines} "unset REQUIRE_SERVER_BINARIES"
+    array_push ${lines} "unset REQUIRE_THIRD_PARTY"
+    array_push ${lines} "unset TD_CLI_SHOW"
+    array_push ${lines} "unset TD_IGNORE_CONNECTOR_REQUIREMENTS"
+    array_push ${lines} "unset TD_INHERIT_TABSDATA_PACKAGES"
+    array_push ${lines} "unset TD_PYTHON_LINKED_TO_REPOSITORY"
+    array_push ${lines} "unset TD_SKIP_NON_EXISTING_ASSETS"
+    array_push ${lines} ""
+    array_push ${lines} "❗ The following commands will install your local wheels on a 'td4repo' conda environment using a local devpi:"
+    array_push ${lines} "❗ (Note: The finer details are left to you. The commands below assume you generated the wheels only with the 'wheels_4repo' task.)"
+    array_push ${lines} ""
+    array_push ${lines} "conda create -y --name td4repo python=3.12; conda activate td4repo"
+    array_push ${lines} "cd ./target/wheels"
+    array_push ${lines} "../../../tabsdata-ee/contents/docker/devpi/install.sh"
     array_push ${lines} ""
     message = array_join ${lines} "\n"
     info ${message}
@@ -1490,21 +1483,7 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    os = get_env OS
-    if ${os}
-        lower_os = lowercase ${os}
-        contains_win = contains ${lower_os} "windows"
-        if ${contains_win}
-            _ignore = exec --fail-on-error false cls
-            _ignore = exec --fail-on-error false clear
-        else
-            _ignore = exec --fail-on-error false clear
-            _ignore = exec --fail-on-error false cls
-        end
-    else
-        _ignore = exec --fail-on-error false clear
-        _ignore = exec --fail-on-error false cls
-    end
+    exec python -c "from rich.console import Console; Console().clear()"
 
     lines = array
     array_push ${lines} "🎊 Local tabsdata wheels successfully generated!"
@@ -1526,15 +1505,27 @@ script = [
     array_push ${lines} ""
     array_push ${lines} "unset PIP_INDEX_URL"
     array_push ${lines} "unset UV_EXTRA_INDEX_URL"
-    array_push ${lines} "export TD_CLI_SHOW=true"
     array_push ${lines} "export PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=true"
+    array_push ${lines} "export REQUIRE_SERVER_BINARIES=false"
+    array_push ${lines} "export REQUIRE_THIRD_PARTY=false"
+    array_push ${lines} "export TD_CLI_SHOW=true"
     array_push ${lines} "export TD_IGNORE_CONNECTOR_REQUIREMENTS=true"
     array_push ${lines} "export TD_INHERIT_TABSDATA_PACKAGES=true"
     array_push ${lines} "export TD_PYTHON_LINKED_TO_REPOSITORY=false"
     array_push ${lines} "export TD_SKIP_NON_EXISTING_ASSETS=true"
-    array_push ${lines} "export REQUIRE_SERVER_BINARIES=false"
-    array_push ${lines} "export REQUIRE_THIRD_PARTY=false"
     array_push ${lines} ""
+    array_push ${lines} "❗ The following commands will install your local wheels on a 'td4whl' conda environment using a direct wheels:"
+    array_push ${lines} "❗ (Note: The finer details are left to you. The commands below assume you generated the wheels only with the 'wheels_4whl' task.)"
+    array_push ${lines} ""
+    array_push ${lines} "conda env remove --name td4whl --yes; conda create -y --name td4whl python=3.12; conda activate td4whl"
+    array_push ${lines} "cd ./target/wheels"
+    array_push ${lines} "tar -xvf *.tar.gz"
+    array_push ${lines} "python -m pip install --upgrade pip"
+    array_push ${lines} "pip install --upgrade packaging pipx platformdirs setuptools wheel"
+    array_push ${lines} "pip list --format=freeze | grep '^tabsdata==' | cut -d= -f1 | xargs -r pip uninstall -y"
+    array_push ${lines} "for wheel in tabsdata*.whl; do pip install \"\${wheel}[deps]\"; done"
+    array_push ${lines} "cd ../.."
+    array_push ${lines} "pip install -r requirements/requirements-drivers-all.txt"
     message = array_join ${lines} "\n"
     info ${message}
     ''']
