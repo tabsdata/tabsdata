@@ -200,7 +200,3 @@ toml = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
-
-# Version 0.17.12 has been flagged as yanked, but we cannot easily downgrade to version 0.17.11.
-[patch.crates-io]
-indicatif = { git = "https://github.com/console-rs/indicatif.git", tag = "0.17.12" }

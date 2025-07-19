@@ -285,11 +285,11 @@ features = ["serde"]
 version = "1.10.1"
 
 [workspace.dependencies.clap]
-version = "4.5.40"
+version = "4.5.41"
 features = ["derive"]
 
 [workspace.dependencies.clap_derive]
-version = "4.5.40"
+version = "4.5.41"
 
 [workspace.dependencies.chrono]
 version = "0.4.41"
@@ -385,7 +385,7 @@ version = "0.7.4"
 version = "2.10.0"
 
 [workspace.dependencies.indicatif]
-version = "0.17.12"
+version = "0.18.0"
 features = ["default", "improved_unicode"]
 
 [workspace.dependencies.itertools]
@@ -460,7 +460,7 @@ version = "0.12.22"
 version = "0.17.14"
 
 [workspace.dependencies.rustls]
-version = "0.23.28"
+version = "0.23.29"
 
 [workspace.dependencies.rust-embed]
 version = "8.7.2"
@@ -613,7 +613,3 @@ ta-tableframe = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
-
-# Version 0.17.12 has been flagged as yanked, but we cannot easily downgrade to version 0.17.11.
-[patch.crates-io]
-indicatif = { git = "https://github.com/console-rs/indicatif.git", tag = "0.17.12" }

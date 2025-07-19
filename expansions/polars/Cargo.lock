@@ -5237,8 +5237,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "indicatif"
-version = "0.17.12"
-source = "git+https://github.com/console-rs/indicatif.git?tag=0.17.12#f46ba0ac88ac0ce5f98f5b2bdef3a2a53618d257"
