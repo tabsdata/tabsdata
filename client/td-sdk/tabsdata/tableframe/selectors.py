@@ -198,9 +198,11 @@ def by_index(*indices: int | range | Sequence[int | range]) -> td_expr.Expr:
     Select columns by their position in the TableFrame.
 
     Parameters:
-        indices: One or more integer positions or ranges. Negative indexing are
-        not supported. Indexes greater than the number of columns will either
-        fail or produce no column.
+        indices: One or more integer positions or ranges. Negative indexes are
+        supported, ranging from -1 (indicating last column) to
+        -{number of columns} (indicating first column). Indices greater (in
+        absolute value) than the number of columns will either fail or produce
+        no column.
 
     Example:
         >>> import tabsdata.tableframe as td_tf
@@ -246,25 +248,30 @@ def by_index(*indices: int | range | Sequence[int | range]) -> td_expr.Expr:
         │ "H"  ┆ 89.5  │
         └──────┴───────┘
     """
+    system_columns_length = len(SystemColumns)
 
-    def val(i: int):
-        if i < 0:
-            raise ValueError(f"The index selector contains negative indices: {i}")
+    def fix(i: int) -> int:
+        return i - system_columns_length if i < 0 else i
 
-    def validate_item(item):
-        if isinstance(item, int):
-            val(item)
-        elif isinstance(item, range):
-            [val(i) for i in item]
-        elif isinstance(item, Iterable):
-            [validate_item(sub_item) for sub_item in item]
+    normalized_indices = []
+    for index in indices:
+        if isinstance(index, int):
+            normalized_indices.append(fix(index))
+        elif isinstance(index, range):
+            normalized_indices.extend(fix(i) for i in index)
+        elif isinstance(index, Iterable):
+            for sub_index in index:
+                if isinstance(sub_index, int):
+                    normalized_indices.append(fix(sub_index))
+                elif isinstance(sub_index, range):
+                    normalized_indices.extend(fix(i) for i in sub_index)
+                else:
+                    raise TypeError(f"Unsupported nested type: {type(sub_index)}")
         else:
-            raise TypeError(f"Unsupported type: {type(item)}")
-
-    [validate_item(index) for index in indices]
+            raise TypeError(f"Unsupported index type: {type(index)}")
 
     return td_expr.Expr(
-        pl.selectors.by_index(*indices)
+        pl.selectors.by_index(*normalized_indices)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 

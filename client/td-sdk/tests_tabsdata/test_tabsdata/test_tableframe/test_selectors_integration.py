@@ -6,6 +6,7 @@ import itertools
 import logging
 import random
 import re
+import sys
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Callable, TypeAlias, Union
@@ -923,7 +924,7 @@ def test_select_by_dtype(exclude, run_id):
 
 @pytest.mark.parametrize("exclude", [False, True])
 @pytest.mark.parametrize("run_id", list(range(RUNS)))
-def test_select_by_index(exclude, run_id):
+def test_select_by_index_positive(exclude, run_id):
     def fn(library: pk, frame: ft):
         return apply_selector(
             library,
@@ -934,9 +935,31 @@ def test_select_by_index(exclude, run_id):
 
     random.seed(run_id)
     all_columns = list(SCHEMA.keys())
-    q_indices = random.randint(1, len(all_columns))
-    indices = sorted(random.sample(range(len(all_columns)), q_indices))
+    q_columns = len(all_columns)
+    q_indices = random.randint(1, q_columns)
+    r_indices = list(range(0, q_columns))
+    indices = sorted(set(random.sample(population=r_indices, k=q_indices)))
+
     api_tester(fn)
+
+
+@pytest.mark.parametrize("exclude", [False, True])
+@pytest.mark.parametrize("run_id", list(range(RUNS)))
+def test_select_by_index_negative(exclude, run_id):
+    def fn(library: pk, frame: ft):
+        return apply_selector(
+            library,
+            frame,
+            lambda lib: lib.by_index(indices),
+            exclude,
+        )
+
+    random.seed(run_id)
+    all_columns = list(SCHEMA.keys())
+    q_columns = len(all_columns)
+    q_indices = random.randint(1, q_columns)
+    r_indices = list(range(-q_columns, 0))
+    indices = sorted(set(random.sample(population=r_indices, k=q_indices)))
 
     api_tester(fn)
 
