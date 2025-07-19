@@ -124,7 +124,7 @@ pub fn config_folder() -> String {
 /// Note: The custom profile can be, therefore, a partial replica of the base profile, holding only
 /// files that require custom contents. This way, avoiding duplicating unnecessarily unmodified
 /// files allows a smarter customization governance.
-/// Omitting profiles is supported, and then it is assumed the instance is already set up.
+/// Omitting a profile is supported, and then it is assumed the instance is already set up.
 pub fn create_instance_tree(
     profile: Option<PathBuf>,
     instance: Option<PathBuf>,

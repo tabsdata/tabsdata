@@ -16,18 +16,17 @@ use td_common::server::{
 use td_common::settings::{DEFAULT_SETTINGS, SETTINGS_FILE};
 use tracing::trace;
 
-pub static DEFAULT_PROFILE: Dir<'_> =
-    include_dir!("server/binaries/td-server/resources/profiles/internal/default");
+pub static PROFILE: Dir<'_> = include_dir!("variant/resources/profile");
 
 pub fn extract_profile<P: AsRef<Path>>(destination: P, rewrite: bool) -> Result<()> {
-    extract_folder(destination, &DEFAULT_PROFILE, rewrite)
+    extract_folder(destination, &PROFILE, rewrite)
 }
 
 pub fn extract_profile_config<P: AsRef<Path>>(destination: P) -> Result<Option<PathBuf>> {
     let config_yaml = Path::new(WORKSPACE_FOLDER)
         .join(CONFIG_FOLDER)
         .join(CONFIG_FILE);
-    let result = extract_file(&destination, &DEFAULT_PROFILE, config_yaml.as_path());
+    let result = extract_file(&destination, &PROFILE, config_yaml.as_path());
     match result {
         Ok(_) => Ok(Some(destination.as_ref().join(config_yaml))),
         Err(err) => Err(err),
