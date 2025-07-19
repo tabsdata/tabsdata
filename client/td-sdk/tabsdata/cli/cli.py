@@ -4,8 +4,10 @@
 
 import os
 import shutil
+import textwrap
 
 import rich_click as click
+from rich.console import Console
 
 from tabsdata.api.apiserver import DEFAULT_TABSDATA_DIRECTORY
 from tabsdata.cli.auth_group import auth
@@ -28,6 +30,17 @@ from tabsdata.cli.exe_group import exe
 from tabsdata.cli.fn_group import fn
 from tabsdata.cli.table_group import table
 from tabsdata.cli.user_group import user
+
+CYAN = "[cyan]"
+NO_CYAN = "[/cyan]"
+
+BOLD = "[bold]"
+NO_BOLD = "[/bold]"
+
+UNDERLINE = "[underline]"
+NO_UNDERLINE = "[underline]"
+
+console = Console()
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
@@ -156,36 +169,33 @@ def info(third_party: bool, license: bool, release_notes: bool):
             "r",
             encoding="utf-8",
         ) as f:
-            click.echo("License:")
-            click.echo()
-            click.echo("-" * 20)
-            click.echo(f.read())
-            click.echo("-" * 20)
-            click.echo()
+            console.print()
+            console.print(f"{UNDERLINE}License{NO_UNDERLINE}")
+            console.print()
+            console.print(f"{CYAN}{textwrap.dedent(f.read()).strip()}{NO_CYAN}")
+            console.print()
     if third_party:
         with open(
             os.path.join(assets_folder, "THIRD-PARTY"),
             "r",
             encoding="utf-8",
         ) as f:
-            click.echo("3rd party dependencies:")
-            click.echo()
-            click.echo("-" * 20)
-            click.echo(f.read())
-            click.echo("-" * 20)
-            click.echo()
+            console.print()
+            console.print(f"{UNDERLINE}Third Party Dependencies{NO_UNDERLINE}")
+            console.print()
+            console.print(f"{CYAN}{f.read()}{NO_CYAN}")
+            console.print()
     if release_notes:
         with open(
             os.path.join(assets_folder, "RELEASE-NOTES"),
             "r",
             encoding="utf-8",
         ) as f:
-            click.echo("Release notes:")
-            click.echo()
-            click.echo("-" * 20)
-            click.echo(f.read())
-            click.echo("-" * 20)
-            click.echo()
+            console.print()
+            console.print(f"{UNDERLINE}Release Notes{NO_UNDERLINE}")
+            console.print()
+            console.print(f"{CYAN}{f.read()}{NO_CYAN}")
+            console.print()
 
 
 @cli.command()
