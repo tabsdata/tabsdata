@@ -457,25 +457,38 @@ CREATE TABLE table_data_versions
 );
 
 CREATE VIEW table_data_versions__with_function AS
+WITH with_data AS (SELECT tdv.id                  AS tdv_id,
+                          tdv_latest.id           AS with_data_table_data_version_id,
+                          tdv_latest.column_count AS with_data_column_count,
+                          tdv_latest.row_count    AS with_data_row_count,
+                          tdv_latest.schema_hash  AS with_data_schema_hash
+                   FROM table_data_versions tdv
+                            LEFT JOIN function_runs fr ON tdv.function_run_id = fr.id
+                            LEFT JOIN table_data_versions tdv_latest
+                                      ON tdv_latest.id = (SELECT tdv2.id
+                                                          FROM table_data_versions tdv2
+                                                                   LEFT JOIN function_runs fr2 ON tdv2.function_run_id = fr2.id
+                                                          WHERE tdv2.table_id = tdv.table_id
+                                                            AND tdv2.has_data = TRUE
+                                                            AND fr2.triggered_on <= fr.triggered_on
+                                                          ORDER BY fr2.triggered_on DESC
+                                                          LIMIT 1))
 SELECT tdv.*,
-       fr.triggered_on    as triggered_on,
-       fr.triggered_by_id as triggered_by_id,
-       fr.started_on      as started_on,
-       fr.ended_on        as ended_on,
-       fr.status          as status,
-       fv.data_location   as data_location,
-       fv.storage_version as storage_version,
-       (SELECT tdv2.id
-        FROM table_data_versions tdv2
-                 LEFT JOIN function_runs fr2 ON tdv2.function_run_id = fr2.id
-        WHERE tdv2.table_id = tdv.table_id
-          AND tdv2.has_data = TRUE
-          AND fr2.triggered_on <= fr.triggered_on
-        ORDER BY fr2.triggered_on DESC
-        LIMIT 1)          as with_data_table_data_version_id
+       fr.triggered_on    AS triggered_on,
+       fr.triggered_by_id AS triggered_by_id,
+       fr.started_on      AS started_on,
+       fr.ended_on        AS ended_on,
+       fr.status          AS status,
+       fv.data_location   AS data_location,
+       fv.storage_version AS storage_version,
+       wd.with_data_table_data_version_id,
+       wd.with_data_column_count,
+       wd.with_data_row_count,
+       wd.with_data_schema_hash
 FROM table_data_versions tdv
          LEFT JOIN functions fv ON tdv.function_version_id = fv.id
-         LEFT JOIN function_runs fr ON tdv.function_run_id = fr.id;
+         LEFT JOIN function_runs fr ON tdv.function_run_id = fr.id
+         LEFT JOIN with_data wd ON tdv.id = wd.tdv_id;
 
 CREATE VIEW table_data_versions__active AS
 SELECT tdv.*

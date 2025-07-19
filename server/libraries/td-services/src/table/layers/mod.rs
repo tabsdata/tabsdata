@@ -12,6 +12,7 @@ use td_objects::types::basic::{
 use td_objects::types::execution::TableDataVersionDBWithNames;
 use td_objects::types::table::TableDBWithNames;
 use td_objects::types::Extractor;
+use td_tower::default_services::Share;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
@@ -25,12 +26,7 @@ pub mod storage;
 #[layer]
 pub fn find_data_version_location_at<E>()
 where
-    E: Extractor<CollectionIdName>
-        + Extractor<TableIdName>
-        + Extractor<AtTime>
-        + Send
-        + Sync
-        + 'static,
+    E: Extractor<CollectionIdName> + Extractor<TableIdName> + Extractor<AtTime> + Share,
 {
     layers!(
         // Extract parameters
