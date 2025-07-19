@@ -309,7 +309,7 @@ def test_from_non_empty_tableframe():
 
 
 def assert_columns_sorted(lf: pl.LazyFrame) -> None:
-    columns = lf.columns
+    columns = lf.collect_schema().names()
     user_columns, system_columns = _split_columns(columns)
     assert (
         columns == user_columns + system_columns

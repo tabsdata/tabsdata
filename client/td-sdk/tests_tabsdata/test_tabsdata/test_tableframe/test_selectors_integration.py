@@ -789,7 +789,7 @@ def eq_pf_tf(
         raise ValueError("Expected a tabsdata.TableFrame as second argument")
     tf = _unwrap_table_frame(tf)
 
-    return set(pf.columns) == (set(tf.columns))
+    return set(pf.collect_schema().names()) == (set(tf.columns))
 
 
 def api_tester(
@@ -1328,8 +1328,8 @@ def test_scan_select_by_index(run_id):
     tableframe = _wrap_polars_frame(generate())
     tableframe = tableframe.select(td_selectors.by_index(run_id))
     if run_id < len(SCHEMA):
-        assert len(tableframe._lf.columns) == len(SystemColumns) + 1
+        assert len(tableframe._lf.collect_schema().names()) == len(SystemColumns) + 1
     else:
-        assert len(tableframe._lf.columns) == len(SystemColumns)
+        assert len(tableframe._lf.collect_schema().names()) == len(SystemColumns)
     lazyframe = _unwrap_table_frame(tableframe)
-    assert set(lazyframe.columns) == set(tableframe.columns())
+    assert set(lazyframe.collect_schema().names()) == set(tableframe.columns())

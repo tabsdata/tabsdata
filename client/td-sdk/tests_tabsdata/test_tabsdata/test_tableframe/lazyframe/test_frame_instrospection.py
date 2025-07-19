@@ -22,6 +22,6 @@ class TestTableFrame(unittest.TestCase):
 
     def test_columns_all(self):
         expected_columns = self.data_frame.collect_schema().names()
-        lf = self.table_frame.select("*")
-        columns = lf.columns("all")
+        tf = self.table_frame.select("*")
+        columns = tf.columns("all")
         check.equal(Counter(columns), Counter(expected_columns + SYSTEM_COLUMNS))

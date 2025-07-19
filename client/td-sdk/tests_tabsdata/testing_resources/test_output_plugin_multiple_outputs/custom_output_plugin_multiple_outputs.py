@@ -2,6 +2,8 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+from typing import List
+
 import polars as pl
 
 from tabsdata import DestinationPlugin
@@ -13,6 +15,12 @@ class CustomDestinationPlugin(DestinationPlugin):
         self.destination_ndjson_file = destination_json_file
         self.second_destination_ndjson_file = second_destination_json_file
 
-    def stream(self, _: str, lf: pl.LazyFrame, lf2: pl.LazyFrame):
-        lf.sink_ndjson(self.destination_ndjson_file)
-        lf2.sink_ndjson(self.second_destination_ndjson_file)
+    def stream(
+        self,
+        working_dir: str,
+        *results: List[pl.LazyFrame | None] | pl.LazyFrame | None
+    ):
+        lf0 = results[0]
+        lf1 = results[1]
+        lf0.sink_ndjson(self.destination_ndjson_file)
+        lf1.sink_ndjson(self.second_destination_ndjson_file)

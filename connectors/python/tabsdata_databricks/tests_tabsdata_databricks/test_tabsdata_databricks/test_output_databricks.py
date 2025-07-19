@@ -10,7 +10,12 @@ from io import StringIO
 from unittest import mock
 
 import polars as pl
+
+# noinspection PyPackageRequirements
 import pytest
+
+# noinspection PyPackageRequirements
+from databricks.sql import ServerOperationError
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
@@ -36,6 +41,12 @@ from tests_tabsdata_databricks.testing_resources.test_multiple_outputs_databrick
 from tests_tabsdata_databricks.testing_resources.test_output_databricks.example import (
     output_databricks,
 )
+from tests_tabsdata_databricks.testing_resources.test_output_databricks_list_none.example import (
+    output_databricks_list_none,
+)
+from tests_tabsdata_databricks.testing_resources.test_output_databricks_none.example import (
+    output_databricks_none,
+)
 
 import tabsdata as td
 from tabsdata.secret import DirectSecret, EnvironmentSecret
@@ -43,6 +54,8 @@ from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
+
+# noinspection PyProtectedMember
 from tabsdata_databricks.connector import _table_fqn_4sql
 
 logger = logging.getLogger(__name__)
@@ -318,6 +331,7 @@ def test_stream(tmp_path, size, databricks_client, sql_conn):
         created_table = pl.read_database(query, sql_conn)
         assert created_table.drop("_rescued_data").equals(lf.collect())
     finally:
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(full_name=table_name)
         except Exception:
@@ -331,7 +345,7 @@ def test_stream(tmp_path, size, databricks_client, sql_conn):
 def test_stream_append(tmp_path, size, databricks_client, sql_conn):
     lf = get_lf(size)
     table_name = (
-        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_stream_table_appe"
+        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.test_stream_table_append"
         f"nd_{uuid.uuid4()}"
     )
     databricks_destination = td.DatabricksDestination(
@@ -356,6 +370,7 @@ def test_stream_append(tmp_path, size, databricks_client, sql_conn):
             created_table = pl.read_database(query, sql_conn)
             assert created_table.height == (i + 1) * size
     finally:
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(full_name=table_name)
         except Exception:
@@ -395,6 +410,7 @@ def test_stream_replace(tmp_path, size, databricks_client, sql_conn):
             created_table = pl.read_database(query, sql_conn)
             assert created_table.height == size
     finally:
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(full_name=table_name)
         except Exception:
@@ -435,10 +451,12 @@ def test_stream_multiple_lf(tmp_path, size, databricks_client, sql_conn):
         created_table_2 = pl.read_database(query, sql_conn)
         assert created_table_2.drop("_rescued_data").equals(lf.collect())
     finally:
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(full_name=full_name_1)
         except Exception:
             pass
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(full_name=full_name_2)
         except Exception:
@@ -468,12 +486,14 @@ def test_stream_different_len_raises_error(tmp_path, databricks_client):
         with pytest.raises(ValueError):
             databricks_destination.stream(str(tmp_path), lf, lf, lf)
     finally:
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(
                 full_name=f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.table1"
             )
         except Exception:
             pass
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(
                 full_name=f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.table2"
@@ -513,6 +533,7 @@ def test_single_element_table_list(tmp_path, size, databricks_client, sql_conn):
         created_table = pl.read_database(query, sql_conn)
         assert created_table.drop("_rescued_data").equals(lf.collect())
     finally:
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(full_name=table_name)
         except Exception:
@@ -576,6 +597,7 @@ def test_output_databricks(tmp_path, databricks_client, sql_conn):
         expected_output = read_json_and_clean(expected_output_file)
         assert expected_output.equals(clean_polars_df(output.drop("_rescued_data")))
     finally:
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(full_name=full_table_name)
         except Exception:
@@ -597,7 +619,8 @@ def test_multiple_outputs_databricks(tmp_path, databricks_client, sql_conn):
     )
     table_name_2 = (
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
-        f"test_multiple_outputs_databricks_table_2_{uuid.uuid4()}"
+        "test_multiple_outputs_databricks_table_2"
+        f"_{uuid.uuid4()}"
     )
     multiple_outputs_databricks.output.tables = [table_name_1, table_name_2]
     context_archive = create_bundle_archive(
@@ -654,10 +677,166 @@ def test_multiple_outputs_databricks(tmp_path, databricks_client, sql_conn):
         output = pl.read_database(query, sql_conn)
         assert expected_output.equals(clean_polars_df(output.drop("_rescued_data")))
     finally:
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(full_name=table_name_1)
         except Exception:
             pass
+        # noinspection PyBroadException
+        try:
+            databricks_client.tables.delete(full_name=table_name_2)
+        except Exception:
+            pass
+
+
+@pytest.mark.slow
+@pytest.mark.tabsserver
+@pytest.mark.requires_internet
+@pytest.mark.databricks
+@pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_output_databricks_with_none(tmp_path, databricks_client, sql_conn):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    table_name = f"test_output_databricks_table_{uuid.uuid4()}"
+    output_databricks.output.tables = table_name
+    context_archive = create_bundle_archive(
+        output_databricks_none,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    full_table_name = _table_fqn_4sql(
+        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}.{table_name}"
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_databricks", "mock_table.parquet"
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    try:
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        query = f"SELECT * FROM {full_table_name}"
+        try:
+            output = pl.read_database(query, sql_conn)
+            assert output.is_empty()
+        except ServerOperationError as e:
+            if "TABLE_OR_VIEW_NOT_FOUND" in str(e) or "SQLSTATE: 42P01" in str(e):
+                pass
+            else:
+                raise
+    finally:
+        # noinspection PyBroadException
+        try:
+            databricks_client.tables.delete(full_name=full_table_name)
+        except Exception:
+            pass
+
+
+@pytest.mark.slow
+@pytest.mark.tabsserver
+@pytest.mark.requires_internet
+@pytest.mark.databricks
+@pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_output_databricks_with_list_none(tmp_path, databricks_client, sql_conn):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    table_name_1 = (
+        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
+        "test_multiple_outputs_databricks_table_1"
+        f"_{uuid.uuid4()}"
+    )
+    table_name_2 = (
+        f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
+        "test_multiple_outputs_databricks_table_2"
+        f"_{uuid.uuid4()}"
+    )
+    multiple_outputs_databricks.output.tables = [table_name_1, table_name_2]
+    context_archive = create_bundle_archive(
+        output_databricks_list_none,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_multiple_outputs_databricks",
+        "mock_table.parquet",
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+
+    table_name_1 = _table_fqn_4sql(table_name_1)
+    table_name_2 = _table_fqn_4sql(table_name_2)
+
+    try:
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        query = f"SELECT * FROM {table_name_1}"
+        try:
+            output = pl.read_database(query, sql_conn)
+            assert output.is_empty()
+        except ServerOperationError as e:
+            if "TABLE_OR_VIEW_NOT_FOUND" in str(e) or "SQLSTATE: 42P01" in str(e):
+                pass
+            else:
+                raise
+
+        query = f"SELECT * FROM {table_name_2}"
+        try:
+            output = pl.read_database(query, sql_conn)
+            assert output.is_empty()
+        except ServerOperationError as e:
+            if "TABLE_OR_VIEW_NOT_FOUND" in str(e) or "SQLSTATE: 42P01" in str(e):
+                pass
+            else:
+                raise
+    finally:
+        # noinspection PyBroadException
+        try:
+            databricks_client.tables.delete(full_name=table_name_1)
+        except Exception:
+            pass
+        # noinspection PyBroadException
         try:
             databricks_client.tables.delete(full_name=table_name_2)
         except Exception:

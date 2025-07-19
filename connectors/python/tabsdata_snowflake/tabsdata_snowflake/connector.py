@@ -247,7 +247,11 @@ class SnowflakeDestination(DestinationPlugin):
             self.stage = self._fully_qualify_entity(self.stage)
             logger.debug(f"Using stage '{self.stage}'")
 
-    def stream(self, working_dir: str, *results: pl.LazyFrame | None):
+    def stream(
+        self,
+        working_dir: str,
+        *results: List[pl.LazyFrame | None] | pl.LazyFrame | None,
+    ):
         if len(results) != len(self.destination_table):
             raise ValueError(
                 f"The number of results ({len(results)}) does not match the number of "

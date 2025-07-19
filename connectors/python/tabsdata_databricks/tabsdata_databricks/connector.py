@@ -255,7 +255,11 @@ class DatabricksDestination(DestinationPlugin):
                 f"strings, got '{tables}' instead."
             )
 
-    def stream(self, working_dir: str, *results: List[pl.LazyFrame | None] | None):
+    def stream(
+        self,
+        working_dir: str,
+        *results: List[pl.LazyFrame | None] | pl.LazyFrame | None,
+    ):
         if len(results) != len(self.tables):
             raise ValueError(
                 f"The number of results ({len(results)}) does not match the number of "

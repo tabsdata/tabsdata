@@ -2342,7 +2342,7 @@ def _split_columns(columns: list[str]) -> (list[str], list[str]):
 def _arrange_columns(lf: pl.LazyFrame) -> pl.LazyFrame | None:
     if lf is None:
         return None
-    user_columns, system_columns = _split_columns(lf.columns)
+    user_columns, system_columns = _split_columns(lf.collect_schema().names())
     return lf.select(user_columns + system_columns)
 
 

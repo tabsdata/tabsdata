@@ -9,7 +9,11 @@ from io import StringIO
 from unittest import mock
 
 import polars as pl
+
+# noinspection PyPackageRequirements
 import pymongo
+
+# noinspection PyPackageRequirements
 import pytest
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
@@ -33,6 +37,12 @@ from tests_tabsdata_mongodb.testing_resources.test_multiple_outputs_mongodb.exam
 )
 from tests_tabsdata_mongodb.testing_resources.test_output_mongodb.example import (
     output_mongodb,
+)
+from tests_tabsdata_mongodb.testing_resources.test_output_mongodb_list_none.example import (
+    output_mongodb_list_none,
+)
+from tests_tabsdata_mongodb.testing_resources.test_output_mongodb_none.example import (
+    output_mongodb_none,
 )
 
 import tabsdata as td
@@ -111,10 +121,13 @@ def test_class_initialization_support_options():
 def test_invalid_class_types():
     uri = "mongodb://localhost:27017"
     with pytest.raises(TypeError):
+        # noinspection PyTypeChecker
         td.MongoDBDestination(uri, "collection.id")
     with pytest.raises(TypeError):
+        # noinspection PyTypeChecker
         td.MongoDBDestination(uri, ("collection.id", "id_column"), "credentials")
     with pytest.raises(ValueError):
+        # noinspection PyTypeChecker
         td.MongoDBDestination(
             uri,
             ("collection.id", "id_column"),
@@ -723,3 +736,97 @@ def test_multiple_outputs_mongodb(tmp_path, testing_mongodb):
     # Verify second collection
     collection = client[database_name + "_2"][collection_name + "_2"]
     assert len(expected_output) == collection.count_documents({})
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.mongodb
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_output_mongodb_with_none(tmp_path, testing_mongodb):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        output_mongodb_none,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mongodb_none",
+        "mock_table.parquet",
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        mock_dependency_location=[mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    database_name = "test_none_database"
+    collection_name = "test_none_collection"
+
+    client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
+    collection = client[database_name][collection_name]
+    assert collection.count_documents({}) == 0
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.mongodb
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_output_mongodb_with_list_none(tmp_path, testing_mongodb):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        output_mongodb_list_none,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_mongodb_list_none", "mock_table.parquet"
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        mock_dependency_location=[mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    database_name = "test_list_none_database"
+    collection_name = "test_list_none_collection"
+
+    client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
+    collection = client[database_name][collection_name]
+    assert collection.count_documents({}) == 0

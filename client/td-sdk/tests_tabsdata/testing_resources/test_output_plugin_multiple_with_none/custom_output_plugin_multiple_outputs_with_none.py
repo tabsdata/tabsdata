@@ -2,6 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+from typing import List
 
 import polars as pl
 
@@ -14,8 +15,14 @@ class CustomDestinationPlugin(DestinationPlugin):
         self.destination_ndjson_file = destination_json_file
         self.second_destination_ndjson_file = second_destination_json_file
 
-    def stream(self, _: str, lf: pl.LazyFrame, lf2: pl.LazyFrame):
-        if lf is not None:
-            raise ValueError("df should be None")
-        if lf2 is not None:
-            raise ValueError("df2 should be None")
+    def stream(
+        self,
+        working_dir: str,
+        *results: List[pl.LazyFrame | None] | pl.LazyFrame | None
+    ):
+        lf0 = results[0]
+        lf1 = results[1]
+        if lf0 is not None:
+            raise ValueError("df0 should be None")
+        if lf1 is not None:
+            raise ValueError("df1 should be None")

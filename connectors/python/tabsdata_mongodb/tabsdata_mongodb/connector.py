@@ -265,7 +265,11 @@ class MongoDBDestination(DestinationPlugin):
                     )
             logger.info("All results stored")
 
-    def stream(self, working_dir: str, *results: List[pl.LazyFrame | None] | None):
+    def stream(
+        self,
+        working_dir: str,
+        *results: List[pl.LazyFrame | None] | pl.LazyFrame | None,
+    ):
         if len(results) != len(self.collections_with_ids):
             raise ValueError(
                 f"The number of results ({len(results)}) does not match the number of "

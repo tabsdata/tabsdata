@@ -10,7 +10,12 @@ from io import StringIO
 from unittest import mock
 
 import polars as pl
+
+# noinspection PyPackageRequirements
 import pytest
+
+# noinspection PyPackageRequirements
+from snowflake.connector.errors import ProgrammingError
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
@@ -29,6 +34,12 @@ from tests_tabsdata_snowflake.testing_resources.test_multiple_outputs_snowflake.
 )
 from tests_tabsdata_snowflake.testing_resources.test_output_snowflake.example import (
     output_snowflake,
+)
+from tests_tabsdata_snowflake.testing_resources.test_output_snowflake_list_none.example import (
+    output_snowflake_list_none,
+)
+from tests_tabsdata_snowflake.testing_resources.test_output_snowflake_none.example import (
+    output_snowflake_none,
 )
 
 import tabsdata as td
@@ -73,18 +84,21 @@ def test_snowflake_class_parameters():
 @pytest.mark.snowflake
 def test_snowflake_wrong_value_if_table_exists():
     with pytest.raises(ValueError):
+        # noinspection PyTypeChecker
         td.SnowflakeDestination(FAKE_CONNECTION_PARAMETERS, "table", "wrong_value")
 
 
 @pytest.mark.snowflake
 def test_snowflake_wrong_table_type():
     with pytest.raises(TypeError):
+        # noinspection PyTypeChecker
         td.SnowflakeDestination(FAKE_CONNECTION_PARAMETERS, 42)
 
 
 @pytest.mark.snowflake
 def test_snowflake_wrong_table_list_type():
     with pytest.raises(TypeError):
+        # noinspection PyTypeChecker
         td.SnowflakeDestination(FAKE_CONNECTION_PARAMETERS, [42])
 
 
@@ -176,12 +190,14 @@ def test_write_snowflake_multiple_files(tmp_path, snowflake_connection):
 
     finally:
         # Clean up the generated tables
+        # noinspection PyBroadException
         try:
             cursor = snowflake_connection.cursor()
             cursor.execute(f"DROP TABLE IF EXISTS {table_name_0}")
             cursor.close()
         except:
             pass
+        # noinspection PyBroadException
         try:
             cursor = snowflake_connection.cursor()
             cursor.execute(f"DROP TABLE IF EXISTS {table_name_1}")
@@ -434,12 +450,162 @@ def test_multiple_outputs_snowflake(tmp_path, snowflake_connection):
         assert output.equals(expected_output)
     finally:
         # Clean up the generated tables
+        # noinspection PyBroadException
         try:
             cursor = snowflake_connection.cursor()
             cursor.execute(f"DROP TABLE IF EXISTS {table_name_0}")
             cursor.close()
         except:
             pass
+        # noinspection PyBroadException
+        try:
+            cursor = snowflake_connection.cursor()
+            cursor.execute(f"DROP TABLE IF EXISTS {table_name_1}")
+            cursor.close()
+        except:
+            pass
+
+
+@pytest.mark.snowflake
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.tabsserver
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_output_snowflake_with_none(tmp_path, snowflake_connection):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    table_name = f"output_snowflake_table_{uuid.uuid4()}".replace("-", "_")
+    destination = td.SnowflakeDestination(REAL_CONNECTION_PARAMETERS, table_name)
+    output_snowflake.output = destination
+    context_archive = create_bundle_archive(
+        output_snowflake_none,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_snowflake", "mock_table.parquet"
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    try:
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+        cursor = snowflake_connection.cursor()
+        try:
+            cursor.execute(f"SELECT * FROM {table_name}")
+            result = cursor.fetchall()
+            assert len(result) == 0
+        except ProgrammingError as e:
+            if "002003" in str(e) and "42S02" in str(e):
+                pass
+            else:
+                raise
+    finally:
+        # Clean up the generated table
+        cursor = snowflake_connection.cursor()
+        cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+        cursor.close()
+
+
+@pytest.mark.snowflake
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.tabsserver
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_output_snowflake_with_list_none(tmp_path, snowflake_connection):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    table_name_0 = f"output_snowflake_table_0_{uuid.uuid4()}".replace("-", "_")
+    table_name_1 = f"output_snowflake_table_0_{uuid.uuid4()}".replace("-", "_")
+    destination = td.SnowflakeDestination(
+        REAL_CONNECTION_PARAMETERS, [table_name_0, table_name_1]
+    )
+    multiple_outputs_snowflake.output = destination
+    context_archive = create_bundle_archive(
+        output_snowflake_list_none,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_multiple_outputs_snowflake",
+        "mock_table.parquet",
+    )
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        [mock_parquet_table],
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    try:
+        assert result == 0
+        assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+        # Check first result
+        cursor = snowflake_connection.cursor()
+        try:
+            cursor.execute(f"SELECT * FROM {table_name_0}")
+            result = cursor.fetchall()
+            assert len(result) == 0
+        except ProgrammingError as e:
+            if "002003" in str(e) and "42S02" in str(e):
+                pass
+            else:
+                raise
+
+        # Check second result
+        cursor = snowflake_connection.cursor()
+        try:
+            cursor.execute(f"SELECT * FROM {table_name_1}")
+            result = cursor.fetchall()
+            assert len(result) == 0
+        except ProgrammingError as e:
+            if "002003" in str(e) and "42S02" in str(e):
+                pass
+            else:
+                raise
+    finally:
+        # Clean up the generated tables
+        # noinspection PyBroadException
+        try:
+            cursor = snowflake_connection.cursor()
+            cursor.execute(f"DROP TABLE IF EXISTS {table_name_0}")
+            cursor.close()
+        except:
+            pass
+        # noinspection PyBroadException
         try:
             cursor = snowflake_connection.cursor()
             cursor.execute(f"DROP TABLE IF EXISTS {table_name_1}")

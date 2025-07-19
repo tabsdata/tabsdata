@@ -9,6 +9,8 @@ from io import StringIO
 from unittest import mock
 
 import polars as pl
+
+# noinspection PyPackageRequirements
 import pytest
 from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
@@ -25,6 +27,12 @@ from tests_tabsdata_salesforce.testing_resources.test_input_salesforce.example i
 )
 from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_initial_values.example import (
     input_salesforce_initial_values,
+)
+from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_list_none.example import (
+    input_salesforce_list_none,
+)
+from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_none.example import (
+    input_salesforce_none,
 )
 
 import tabsdata as td
@@ -248,6 +256,7 @@ def test_username_password_security_token():
 @pytest.mark.salesforce
 def test_wrong_type_username_password_security_token():
     with pytest.raises(TypeError):
+        # noinspection PyTypeChecker
         td.SalesforceSource(
             username=1,
             password="password",
@@ -255,10 +264,12 @@ def test_wrong_type_username_password_security_token():
             query="query",
         )
     with pytest.raises(TypeError):
+        # noinspection PyTypeChecker
         td.SalesforceSource(
             username="user", password=1, security_token="security_token", query="query"
         )
     with pytest.raises(TypeError):
+        # noinspection PyTypeChecker
         td.SalesforceSource(
             username="user", password="password", security_token=1, query="query"
         )
@@ -316,6 +327,7 @@ def test_query():
 @pytest.mark.salesforce
 def test_query_wrong_type():
     with pytest.raises(TypeError):
+        # noinspection PyTypeChecker
         td.SalesforceSource(
             username="username",
             password="password",
@@ -437,7 +449,7 @@ def test_chunk(tmp_path):
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date1}"
         ),
     )
-    [result] = source.chunk(tmp_path)
+    [result] = source.chunk(str(tmp_path))
     assert result is None
 
     source = td.SalesforceSource(
@@ -449,7 +461,7 @@ def test_chunk(tmp_path):
             f" WHERE {td.SalesforceSource.LAST_MODIFIED_COLUMN} > {date5}"
         ),
     )
-    [result] = source.chunk(tmp_path)
+    [result] = source.chunk(str(tmp_path))
     result = os.path.join(tmp_path, result)
     assert os.path.isfile(result)
     output = pl.read_parquet(result)
@@ -488,3 +500,91 @@ def test_login_fails():
     )
     with pytest.raises(Exception):
         source._log_into_salesforce()
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.salesforce
+@pytest.mark.slow
+@pytest.mark.tabsserver
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_input_salesforce_with_none(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_salesforce_none,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file = os.path.join(tmp_path, "output.parquet")
+    path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file],
+        output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    assert not os.path.isfile(output_file)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+@pytest.mark.salesforce
+@pytest.mark.slow
+@pytest.mark.tabsserver
+@mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+def test_input_salesforce_with_list_none(tmp_path):
+    logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
+    context_archive = create_bundle_archive(
+        input_salesforce_list_none,
+        local_packages=LOCAL_PACKAGES_LIST,
+        save_location=tmp_path,
+    )
+
+    input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
+    response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
+    os.makedirs(response_folder, exist_ok=True)
+    output_file_1 = os.path.join(tmp_path, "output_1.parquet")
+    output_file_2 = os.path.join(tmp_path, "output_2.parquet")
+    path_to_output_initial_values = os.path.join(tmp_path, "initial_values.parquet")
+    function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
+    write_v2_yaml_file(
+        input_yaml_file,
+        context_archive,
+        mock_table_location=[output_file_1, output_file_2],
+        output_initial_values_path=path_to_output_initial_values,
+        function_data_path=function_data_folder,
+    )
+    tabsserver_output_folder = os.path.join(tmp_path, "tabsserver_output")
+    os.makedirs(tabsserver_output_folder, exist_ok=True)
+    environment_name, result = tabsserver_main(
+        tmp_path,
+        response_folder,
+        tabsserver_output_folder,
+        environment_prefix=PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+        logs_folder=logs_folder,
+        temp_cwd=True,
+    )
+    assert result == 0
+    assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
+
+    assert not os.path.isfile(output_file_1)
+    assert not os.path.isfile(output_file_2)
