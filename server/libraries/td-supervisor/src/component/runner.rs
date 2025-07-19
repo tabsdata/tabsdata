@@ -69,7 +69,7 @@ impl WorkerRunner for TabsDataWorkerRunner {
     ) -> Result<(Child, Option<PathBuf>, Option<PathBuf>), RunnerError> {
         let current_dir = get_current_dir();
         debug!(
-            "Starting new worker from current directory: '{:?}' (detached: '{}'",
+            "Starting new worker from current directory: '{:?}' (detached: '{}')",
             current_dir, detached
         );
         debug!(

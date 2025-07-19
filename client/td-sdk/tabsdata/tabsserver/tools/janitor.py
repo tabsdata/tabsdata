@@ -7,39 +7,20 @@ import logging
 import os
 import re
 import shutil
-import signal
-import sys
-import threading
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 
 from tabsdata.tabsserver.function.global_utils import setup_logging
 from tabsdata.utils.id import decode_id
 
+# noinspection PyProtectedMember
+from tabsdata.utils.internal._process import TaskRunner
+
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-stop_event = threading.Event()
-
-
-def handle_signal(signum, frame):
-    logger.info(f"\nReceived termination signal ({signum} - {frame}). Shutting down...")
-    stop_event.set()
-
-
-def setup_signal_handlers():
-    signal.signal(signal.SIGINT, handle_signal)
-    signal.signal(signal.SIGTERM, handle_signal)
-    if sys.platform == "win32":
-        signal.signal(signal.SIGBREAK, handle_signal)
-        try:
-            import win32api
-
-            win32api.SetConsoleCtrlHandler(handle_signal, True)
-        except ImportError:
-            pass
 
 
 def delete_file(file: Path):
@@ -78,6 +59,7 @@ def perform(
     retention: int,
     limit: int,
 ):
+    logger.info("Performing instance cleanup")
     now = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
     logger.info(f"Performing {instance} cleanup with current utc timestamp {now}")
     files = get_files(complete_messages_folder)
@@ -108,6 +90,7 @@ def perform(
                 f" greater than threshold {retention}"
             )
     logger.info(f"Deleted {deleted} files (limit is {limit}).")
+    logger.info("Instance cleanup iteration completed")
 
 
 def process(
@@ -119,17 +102,16 @@ def process(
     limit: int,
 ):
     logger.info("Starting instance cleanup process")
-    while not stop_event.is_set():
-        logger.info("Performing instance cleanup")
-        perform(
-            instance,
-            complete_messages_folder,
-            function_cast_folder,
-            retention,
-            limit,
-        )
-        logger.info(f"Waiting {frequency} seconds until next instance cleanup run")
-        stop_event.wait(timeout=frequency)
+    task = partial(
+        perform,
+        instance=instance,
+        complete_messages_folder=complete_messages_folder,
+        function_cast_folder=function_cast_folder,
+        retention=retention,
+        limit=limit,
+    )
+    task_runner = TaskRunner(task, frequency)
+    task_runner.schedule()
     logger.info("Exiting instance cleanup process")
 
 
@@ -210,5 +192,4 @@ def main():
 
 
 if __name__ == "__main__":
-    setup_signal_handlers()
     main()
