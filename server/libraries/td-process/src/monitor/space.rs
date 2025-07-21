@@ -19,9 +19,6 @@ use td_common::server::{
     WORK_FOLDER,
 };
 
-pub const TD_MONITOR_CHECK_FREQUENCY: &str = "TD_MONITOR_CHECK_FREQUENCY";
-pub const MONITOR_CHECK_FREQUENCY: u64 = 60 * 15;
-
 pub type SpaceStats = (PathBuf, u64, String);
 
 pub fn instance_space(instance: &Path) -> IndexMap<String, SpaceStats> {
