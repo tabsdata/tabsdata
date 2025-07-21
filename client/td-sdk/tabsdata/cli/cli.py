@@ -132,7 +132,8 @@ def examples(ctx: click.Context, dir: str):
         os.makedirs(output_folder, exist_ok=True)
         click.echo(
             f"Examples generated in '{dir}'. "
-            "Follow the instructions in the './README.md' file to run them."
+            "Follow the instructions in the 'README.md' file found in the newly "
+            "created directory to run them."
         )
         show_hint(
             ctx,

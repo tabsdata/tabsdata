@@ -291,14 +291,14 @@ def register(
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
 ):
-    """Creating a new function"""
+    """Register a function"""
     verify_login_or_prompt(ctx)
     description = description or ""
     if local_pkg:
         local_pkg = [element for element in local_pkg]
     else:
         local_pkg = None
-    click.echo("Creating a new function")
+    click.echo("Registering a function")
     click.echo("-" * 10)
     coll = (
         coll
@@ -322,7 +322,7 @@ def register(
             local_pkg,
             reuse_tables=reuse_tables,
         )
-        click.echo("Function created successfully")
+        click.echo("Function registered successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to register function: {e}")
