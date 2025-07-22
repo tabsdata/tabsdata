@@ -383,7 +383,7 @@ class TableFrame:
         )
 
     def __bool__(self) -> NoReturn:
-        return self._lf.__bool__()
+        return not self.is_empty()
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, TableFrame):
@@ -577,7 +577,7 @@ class TableFrame:
         return self.schema == tf.schema
 
     @pydoc(categories="tableframe")
-    def is_empty(self) -> (bool, set[str], set[str]):
+    def is_empty(self) -> bool:
         """
         Checks if a TableFrame has no rows.
 

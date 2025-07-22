@@ -132,49 +132,58 @@ def assert_origin(tf: TableFrame, expected: TableFrameOrigin):
 
 def test_empty():
     tf = TableFrame.empty()
+    assert not tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_from_dict():
     tf = TableFrame.from_dict({"a": [1]})
+    assert tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_from_dict_none():
     tf = TableFrame.from_dict(None)
+    assert not tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_from_pandas():
     df = pd.DataFrame({"a": [1]})
     tf = TableFrame.from_pandas(df)
+    assert tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_from_pandas_none():
     tf = TableFrame.from_pandas(None)
+    assert not tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_from_polars_df():
     df = pl.DataFrame({"a": [1]})
     tf = TableFrame.from_polars(df)
+    assert tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_from_polars_lf():
     lf = pl.LazyFrame({"a": [1]})
     tf = TableFrame.from_polars(lf)
+    assert tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_from_polars_none():
     tf = TableFrame.from_polars(None)
+    assert not tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_build():
     tf = TableFrame.__build__(df={"a": [1]}, mode="raw", idx=None)
+    assert tf
     assert_origin(tf, TableFrameOrigin.BUILD)
 
 
@@ -182,130 +191,162 @@ def test_build_explicit():
     tf = TableFrame.__build__(
         origin=TableFrameOrigin.IMPORT, df={"a": [1]}, mode="raw", idx=None
     )
+    assert tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_init_from_tableframe():
     tf1 = TableFrame.from_dict({"a": [1]})
     tf2 = TableFrame(tf1)
+    assert tf1
+    assert tf2
     assert_origin(tf2, TableFrameOrigin.IMPORT)
 
 
 def test_init_from_tableframe_explicit():
     tf1 = TableFrame.from_dict({"a": [1]})
     tf2 = TableFrame(tf1, origin=TableFrameOrigin.IMPORT)
+    assert tf1
+    assert tf2
     assert_origin(tf2, TableFrameOrigin.IMPORT)
 
 
 def test_init_from_dict():
     tf = TableFrame({"a": [1]}, origin=None)
+    assert tf
     assert_origin(tf, TableFrameOrigin.INIT)
 
 
 def test_init_from_none():
     tf = TableFrame(None, origin=None)
+    assert not tf
     assert_origin(tf, TableFrameOrigin.INIT)
 
 
 def test_init_from_void():
     tf = TableFrame(origin=None)
+    assert not tf
     assert_origin(tf, TableFrameOrigin.INIT)
 
 
 def test_init_from_dict_explicit():
     tf = TableFrame({"a": [1]}, origin=TableFrameOrigin.IMPORT)
+    assert tf
     assert_origin(tf, TableFrameOrigin.IMPORT)
 
 
 def test_is_empty_from_empty():
     tf = TableFrame.empty()
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_none_dict():
     tf = TableFrame.from_dict(None)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_empty_dict():
     tf = TableFrame.from_dict({})
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_no_row_dict():
     tf = TableFrame.from_dict({"a": []})
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_non_empty_dict():
     tf = TableFrame.from_dict({"a": [1]})
     assert not tf.is_empty()
+    assert tf
 
 
 def test_from_none_pandas_none():
     tf = TableFrame.from_pandas(None)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_empty_pandas():
     df = pd.DataFrame()
     tf = TableFrame.from_pandas(df)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_no_row_pandas():
     df = pd.DataFrame({"a": []})
     tf = TableFrame.from_pandas(df)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_non_empty_pandas():
     df = pd.DataFrame({"a": [1]})
     tf = TableFrame.from_pandas(df)
     assert not tf.is_empty()
+    assert tf
 
 
 def test_from_none_polars_none():
     tf = TableFrame.from_polars(None)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_empty_polars():
     df = pl.DataFrame()
     tf = TableFrame.from_polars(df)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_no_row_polars():
     df = pl.DataFrame({"a": []})
     tf = TableFrame.from_polars(df)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_non_empty_polars():
     df = pl.DataFrame({"a": [1]})
     tf = TableFrame.from_polars(df)
     assert not tf.is_empty()
+    assert tf
 
 
 def test_from_none_tableframe_none():
     tf = TableFrame.__build__(df=None, mode="raw", idx=None)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_empty_tableframe():
     tf = TableFrame.__build__(df={}, mode="raw", idx=None)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_no_row_tableframe():
     tf = TableFrame.__build__(df={"a": []}, mode="raw", idx=None)
     assert tf.is_empty()
+    assert not tf
 
 
 def test_from_non_empty_tableframe():
     tf = TableFrame.__build__(df={"a": [1]}, mode="raw", idx=None)
     assert not tf.is_empty()
+    assert tf
+
+
+def test_bool_on_none() -> None:
+    tf: TableFrame | None = None
+    assert not tf
+    assert not tf
 
 
 def assert_columns_sorted(lf: pl.LazyFrame) -> None:

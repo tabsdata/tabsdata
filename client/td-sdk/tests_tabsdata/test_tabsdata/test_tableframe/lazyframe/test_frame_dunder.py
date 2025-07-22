@@ -77,8 +77,7 @@ class TestTableFrame(unittest.TestCase):
         self.assertEqual(width, 2 + len(SYSTEM_COLUMNS))
 
     def test_bool(self):
-        with self.assertRaises(TypeError):
-            self.table_frame.__bool__()
+        self.table_frame.__bool__()
 
     def test_eq(self):
         assert self.table_frame.__eq__(self.table_frame)
