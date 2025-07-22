@@ -935,10 +935,10 @@ class Function:
 
     Args:
         id (str): The ID of the function.
-        trigger_with_names (List[str]): If not an empty list, the trigger(s) of
+        triggers (List[str]): If not an empty list, the trigger(s) of
             the function.
         tables (List[str]): The tables generated the function.
-        dependencies_with_names (List[str]): The dependencies of the function.
+        dependencies (List[str]): The dependencies of the function.
         name (str): The name of the function.
         description (str): The description of the function.
         defined_on (int): The timestamp when the function was defined.
@@ -969,10 +969,10 @@ class Function:
 
         Args:
             id (str): The ID of the function.
-            trigger_with_names (List[str]): If not an empty list, the trigger(s) of
+            triggers (List[str]): If not an empty list, the trigger(s) of
                 the function.
             tables (List[str]): The tables generated the function.
-            dependencies_with_names (List[str]): The dependencies of the function.
+            dependencies (List[str]): The dependencies of the function.
             name (str): The name of the function.
             description (str): The description of the function.
             defined_on (int): The timestamp when the function was defined.
@@ -984,9 +984,9 @@ class Function:
         self.name = name
 
         self.id = kwargs.get("id")
-        self.trigger_with_names = kwargs.get("trigger_with_names")
+        self.triggers = kwargs.get("triggers")
         self.tables = kwargs.get("tables")
-        self.dependencies_with_names = kwargs.get("dependencies_with_names")
+        self.dependencies = kwargs.get("dependencies")
         self.description = kwargs.get("description")
         self.defined_on = kwargs.get("defined_on")
         self.defined_on_str = None
@@ -1026,15 +1026,15 @@ class Function:
             )
 
     @property
-    def dependencies_with_names(self) -> List[str]:
+    def dependencies(self) -> List[str]:
         # TODO Aleix: see if we can return something other than a string
-        if self._dependencies_with_names is None:
-            self.dependencies_with_names = self._data.get("dependencies_with_names")
-        return self._dependencies_with_names
+        if self._dependencies is None:
+            self.dependencies = self._data.get("dependencies")
+        return self._dependencies
 
-    @dependencies_with_names.setter
-    def dependencies_with_names(self, dependencies_with_names: List[str] | None):
-        self._dependencies_with_names = dependencies_with_names
+    @dependencies.setter
+    def dependencies(self, dependencies: List[str] | None):
+        self._dependencies = dependencies
 
     @property
     def history(self) -> List[Function]:
@@ -1083,15 +1083,15 @@ class Function:
             )
 
     @property
-    def trigger_with_names(self) -> List[str]:
+    def triggers(self) -> List[str]:
         # TODO Aleix: see if we can return something other than a string
-        if self._trigger_with_names is None:
-            self.trigger_with_names = self._data.get("trigger_with_names")
-        return self._trigger_with_names
+        if self._triggers is None:
+            self.triggers = self._data.get("triggers")
+        return self._triggers
 
-    @trigger_with_names.setter
-    def trigger_with_names(self, trigger_with_names: List[str] | None):
-        self._trigger_with_names = trigger_with_names
+    @triggers.setter
+    def triggers(self, triggers: List[str] | None):
+        self._triggers = triggers
 
     @property
     def workers(self):
@@ -1192,9 +1192,9 @@ class Function:
 
     def refresh(self) -> Function:
         self.id = None
-        self.trigger_with_names = None
+        self.triggers = None
         self.tables = None
-        self.dependencies_with_names = None
+        self.dependencies = None
         self.description = None
         self.defined_on = None
         self.defined_on_str = None

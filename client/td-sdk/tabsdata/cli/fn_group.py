@@ -136,8 +136,8 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
                     function.description,
                     function.defined_on_str,
                     function.defined_by,
-                    beautify_list(function.dependencies_with_names),
-                    beautify_list(function.trigger_with_names),
+                    beautify_list(function.dependencies),
+                    beautify_list(function.triggers),
                     beautify_list([table.name for table in function.tables]),
                 )
 
@@ -165,8 +165,8 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
                 function.description,
                 function.defined_on_str,
                 function.defined_by,
-                beautify_list(function.dependencies_with_names),
-                beautify_list(function.trigger_with_names),
+                beautify_list(function.dependencies),
+                beautify_list(function.triggers),
                 beautify_list([table.name for table in function.tables]),
             )
 

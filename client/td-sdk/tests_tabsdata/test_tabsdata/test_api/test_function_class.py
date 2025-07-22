@@ -28,16 +28,16 @@ def test_function_class(tabsserver_connection, testing_collection_with_table):
         name="test",
         collection=testing_collection_with_table,
         id="test",
-        trigger_with_names=["trigger"],
+        triggers=["trigger"],
         tables=None,
-        dependencies_with_names=["dependency"],
+        dependencies=["dependency"],
     )
     assert function.id == "test"
     assert function.name == "test"
     assert isinstance(function.collection, Collection)
     assert function.collection.name == testing_collection_with_table
-    assert function.trigger_with_names == ["trigger"]
-    assert function.dependencies_with_names == ["dependency"]
+    assert function.triggers == ["trigger"]
+    assert function.dependencies == ["dependency"]
     assert function.__repr__()
     assert function.__str__()
 
@@ -67,8 +67,8 @@ def test_function_class_lazy_properties(
     with pytest.raises(ValueError):
         function.get_table("doesnotexist")
     assert table.collection == function.collection
-    assert function.dependencies_with_names == api_function.dependencies_with_names
-    assert function.trigger_with_names == api_function.trigger_with_names
+    assert function.dependencies == api_function.dependencies
+    assert function.triggers == api_function.triggers
     function.refresh()
     assert function.description == api_function.description
     assert function.defined_on == api_function.defined_on
