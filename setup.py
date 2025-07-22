@@ -535,6 +535,8 @@ os.makedirs(
 console_scripts: list[str] = [
     # Tabsdata CLI
     "td = tabsdata.cli.cli:cli",
+    # Tabsdata client tools
+    "x_oracle_check = tabsdata.tabsserver.tools.x_oracle_check:cli",
     # Supervisor init workers
     "tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
     "tdsrvinf = tabsdata.tabsserver.tools.server_info:main",
