@@ -39,7 +39,7 @@ fn provider() {
         // extract attime (natural order)
         from_fn(With::<CollectionAtName>::extract::<AtTime>),
         // list
-        from_fn(TableStatus::active),
+        from_fn(TableStatus::active_or_frozen),
         from_fn(
             By::<CollectionId>::list_versions_at::<CollectionAtName, NoListFilter, DaoQueries, Table>
         ),
@@ -50,10 +50,11 @@ fn provider() {
 mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
+    use crate::table::services::delete::TableDeleteService;
     use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_objects::crudl::{ListParams, ListParamsBuilder};
-    use td_objects::rest_urls::FunctionParam;
+    use td_objects::rest_urls::{FunctionParam, TableParam};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
@@ -89,7 +90,7 @@ mod tests {
             // extract attime (natural order)
             type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
             // list
-            type_of_val(&TableStatus::active),
+            type_of_val(&TableStatus::active_or_frozen),
             type_of_val(
                 &By::<CollectionId>::list_versions_at::<
                     CollectionAtName,
@@ -169,6 +170,26 @@ mod tests {
                 .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
+
+        // Delete table_2
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .delete(
+            TableParam::builder()
+                .try_collection(format!("{}", collection.name()))?
+                .try_table("table_2")?
+                .build()?,
+        );
+
+        TableDeleteService::new(db.clone(), authz_context.clone())
+            .service()
+            .await
+            .raw_oneshot(request)
+            .await?;
 
         let t2 = AtTime::now().await;
 

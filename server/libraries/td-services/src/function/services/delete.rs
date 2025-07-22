@@ -57,7 +57,7 @@ fn provider() {
         // Get function. Extract function version id.
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(FunctionStatus::active),
+        from_fn(FunctionStatus::active_or_frozen),
         from_fn(
             By::<(CollectionIdName, FunctionIdName)>::select_version::<
                 DaoQueries,
@@ -152,7 +152,7 @@ mod tests {
             // Get function. Extract function version id.
             type_of_val(&combine::<CollectionIdName, FunctionIdName>),
             type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            type_of_val(&FunctionStatus::active),
+            type_of_val(&FunctionStatus::active_or_frozen),
             type_of_val(
                 &By::<(CollectionIdName, FunctionIdName)>::select_version::<
                     DaoQueries,

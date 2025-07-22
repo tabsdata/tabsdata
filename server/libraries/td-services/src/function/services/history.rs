@@ -42,7 +42,7 @@ fn provider() {
         // extract attime (natural order)
         from_fn(With::<FunctionAtIdName>::extract::<AtTime>),
         // find function ID at time (as name could change in time)
-        from_fn(FunctionStatus::active),
+        from_fn(FunctionStatus::active_or_frozen),
         from_fn(With::<FunctionAtIdName>::extract::<FunctionIdName>),
         from_fn(combine::<CollectionId, FunctionIdName>),
         from_fn(
@@ -98,7 +98,7 @@ mod tests {
             // extract attime (natural order)
             type_of_val(&With::<FunctionAtIdName>::extract::<AtTime>),
             // find function ID at time (as name could change in time)
-            type_of_val(&FunctionStatus::active),
+            type_of_val(&FunctionStatus::active_or_frozen),
             type_of_val(&With::<FunctionAtIdName>::extract::<FunctionIdName>),
             type_of_val(&combine::<CollectionId, FunctionIdName>),
             type_of_val(

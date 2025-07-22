@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::function::layers::register::data_location;
+use crate::function::layers::register::{data_location, validate_tables_do_not_exist};
 use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers, DO_AUTHZ,
 };
@@ -72,6 +72,7 @@ fn provider() {
         from_fn(combine::<CollectionId, FunctionName>),
         from_fn(FunctionStatus::active),
         from_fn(With::<RequestContext>::extract::<AtTime>),
+        // Validate function does not exist
         from_fn(
             By::<(CollectionId, FunctionName)>::assert_version_not_exists::<
                 DaoQueries,
@@ -103,6 +104,8 @@ fn provider() {
         from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
         from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
         from_fn(With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
+        // Validate tables do not exist
+        from_fn(validate_tables_do_not_exist::<DaoQueries>),
         // check private tables
         from_fn(check_private_tables::<TableDependencyDto>),
         from_fn(check_private_tables::<TableTriggerDto>),
@@ -221,6 +224,8 @@ mod tests {
                     type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableNameDto>>>),
                     type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableDependencyDto>>>),
                     type_of_val(&With::<FunctionRegister>::extract::<Option<Vec<TableTriggerDto>>>),
+                    // Validate tables do not exist
+                    type_of_val(&validate_tables_do_not_exist::<DaoQueries>),
                     // check private tables
                     type_of_val(&check_private_tables::<TableDependencyDto>),
                     type_of_val(&check_private_tables::<TableTriggerDto>),

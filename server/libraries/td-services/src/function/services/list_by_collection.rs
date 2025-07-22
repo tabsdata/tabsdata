@@ -40,7 +40,7 @@ fn provider() {
         // extract attime (natural order)
         from_fn(With::<CollectionAtName>::extract::<AtTime>),
         // list
-        from_fn(FunctionStatus::active),
+        from_fn(FunctionStatus::active_or_frozen),
         from_fn(
             By::<CollectionId>::list_versions_at::<
                 CollectionAtName,
@@ -95,7 +95,7 @@ mod tests {
             // extract attime (natural order)
             type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
             // list
-            type_of_val(&FunctionStatus::active),
+            type_of_val(&FunctionStatus::active_or_frozen),
             type_of_val(
                 &By::<CollectionId>::list_versions_at::<
                     CollectionAtName,

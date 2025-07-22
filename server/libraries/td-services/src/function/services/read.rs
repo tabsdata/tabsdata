@@ -47,7 +47,7 @@ fn provider() {
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         // Read function version
         from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(FunctionStatus::active),
+        from_fn(FunctionStatus::active_or_frozen),
         from_fn(
             By::<(CollectionIdName, FunctionIdName)>::select_version::<
                 DaoQueries,
@@ -71,14 +71,16 @@ fn provider() {
         from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, TableDBRead>),
         from_fn(With::<TableDBRead>::vec_convert_to::<TableName, _>),
         from_fn(With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
-        // Read triggers
+        // Read triggers and dependencies
+        from_fn(TableStatus::active_or_frozen),
+        // Triggers
         from_fn(TriggerStatus::active),
         from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, TriggerDBRead>),
         from_fn(With::<TriggerDBRead>::extract_vec::<TableId>),
         from_fn(By::<TableId>::find_versions::<DaoQueries, TableDBWithNames>),
         from_fn(With::<TableDBWithNames>::vec_convert_to::<TableTrigger, _>),
         from_fn(With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
-        // Read dependencies
+        // Dependencies
         from_fn(DependencyStatus::active),
         from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, DependencyDBRead>),
         from_fn(With::<DependencyDBRead>::extract_vec::<TableId>),
@@ -126,7 +128,7 @@ mod tests {
             type_of_val(&combine::<CollectionIdName, FunctionIdName>),
             // Read function version
             type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            type_of_val(&FunctionStatus::active),
+            type_of_val(&FunctionStatus::active_or_frozen),
             type_of_val(
                 &By::<(CollectionIdName, FunctionIdName)>::select_version::<
                     DaoQueries,
@@ -150,14 +152,16 @@ mod tests {
             type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, TableDBRead>),
             type_of_val(&With::<TableDBRead>::vec_convert_to::<TableName, _>),
             type_of_val(&With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
-            // Read triggers
+            // Read triggers and dependencies
+            type_of_val(&TableStatus::active_or_frozen),
+            // Triggers
             type_of_val(&TriggerStatus::active),
             type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, TriggerDBRead>),
             type_of_val(&With::<TriggerDBRead>::extract_vec::<TableId>),
             type_of_val(&By::<TableId>::find_versions::<DaoQueries, TableDBWithNames>),
             type_of_val(&With::<TableDBWithNames>::vec_convert_to::<TableTrigger, _>),
             type_of_val(&With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
-            // Read dependencies
+            // Dependencies
             type_of_val(&DependencyStatus::active),
             type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, DependencyDBRead>),
             type_of_val(&With::<DependencyDBRead>::extract_vec::<TableId>),

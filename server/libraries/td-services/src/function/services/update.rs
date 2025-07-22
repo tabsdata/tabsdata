@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::function::layers::register::data_location;
+use crate::function::layers::register::{data_location, validate_tables_do_not_exist};
 use crate::function::layers::update::assert_function_name_not_exists;
 use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers, DO_AUTHZ,
@@ -68,7 +68,7 @@ fn provider() {
         // Get function. Extract function id and name.
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
-        from_fn(FunctionStatus::active),
+        from_fn(FunctionStatus::active_or_frozen),
         from_fn(
             By::<(CollectionIdName, FunctionIdName)>::select_version::<
                 DaoQueries,
@@ -109,6 +109,8 @@ fn provider() {
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
+        // Validate tables do not exist
+        from_fn(validate_tables_do_not_exist::<DaoQueries>),
         // check private tables
         from_fn(check_private_tables::<TableDependencyDto>),
         from_fn(check_private_tables::<TableTriggerDto>),
@@ -199,7 +201,7 @@ mod tests {
                 // Get function. Extract function id and name.
                 type_of_val(&combine::<CollectionIdName, FunctionIdName>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(&FunctionStatus::active),
+                type_of_val(&FunctionStatus::active_or_frozen),
                 type_of_val(&By::<(CollectionIdName, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>),
                 // This is, before update function id and function version id. Function id does
                 // not change, but function version id does.
@@ -235,6 +237,8 @@ mod tests {
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableTriggerDto>>>),
+                // Validate tables do not exist
+                type_of_val(&validate_tables_do_not_exist::<DaoQueries>),
                 // check private tables
                 type_of_val(&check_private_tables::<TableDependencyDto>),
                 type_of_val(&check_private_tables::<TableTriggerDto>),

@@ -35,7 +35,7 @@ fn provider() {
         // convert them to allowed table collections
         from_fn(With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
         // list
-        from_fn(TableStatus::active),
+        from_fn(TableStatus::active_or_frozen),
         from_fn(
             By::<()>::list_versions_at::<AtTimeParam, VisibleTablesCollections, DaoQueries, Table>
         ),
@@ -46,11 +46,12 @@ fn provider() {
 mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
+    use crate::table::services::delete::TableDeleteService;
     use std::sync::Arc;
     use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::crudl::{ListParams, ListParamsBuilder, RequestContext};
-    use td_objects::rest_urls::FunctionParam;
+    use td_objects::rest_urls::{FunctionParam, TableParam};
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_role::seed_role;
@@ -85,7 +86,7 @@ mod tests {
             // convert them to allowed table collections
             type_of_val(&With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
             // list
-            type_of_val(&TableStatus::active),
+            type_of_val(&TableStatus::active_or_frozen),
             type_of_val(
                 &By::<()>::list_versions_at::<
                     AtTimeParam,
@@ -165,6 +166,26 @@ mod tests {
                 .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
+
+        // Delete table_2
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .delete(
+            TableParam::builder()
+                .try_collection(format!("{}", collection.name()))?
+                .try_table("table_2")?
+                .build()?,
+        );
+
+        TableDeleteService::new(db.clone(), authz_context.clone())
+            .service()
+            .await
+            .raw_oneshot(request)
+            .await?;
 
         let t2 = AtTime::now().await;
 

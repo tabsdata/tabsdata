@@ -4,6 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
+use td_error::display_vec::DisplayVec;
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
@@ -22,8 +23,8 @@ use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvC
 
 #[td_error]
 pub enum RegisterFunctionError {
-    #[error("Table '{0}' already exists in collection '{1}'")]
-    TableAlreadyExists(TableName, CollectionName) = 0,
+    #[error("Tables [{0}] already exists in collection '{1}'")]
+    TableAlreadyExists(DisplayVec<TableName>, CollectionName) = 0,
     #[error("Dependency table '{0}' does not exist")]
     DependencyTableDoesNotExist(TableDependency) = 1,
     #[error("Table '{0}' cannot trigger its own function")]
@@ -44,6 +45,79 @@ pub async fn data_location(
 
 pub const SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES: [&str; 1] = ["td.fn_state"];
 pub const SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES: [&str; 1] = ["td.fn_state"];
+
+pub async fn validate_tables_do_not_exist<Q: DerefQueries>(
+    Connection(connection): Connection,
+    SrvCtx(queries): SrvCtx<Q>,
+    Input(collection_id): Input<CollectionId>,
+    Input(collection_name): Input<CollectionName>,
+    Input(existing_versions): Input<Vec<TableDB>>,
+    Input(new_tables): Input<Option<Vec<TableNameDto>>>,
+    Input(at_time): Input<AtTime>,
+) -> Result<(), TdError> {
+    let mut conn = connection.lock().await;
+    let conn = conn.get_mut_connection()?;
+
+    if let Some(new_tables) = new_tables.as_ref() {
+        // We use existing tables to discard lookups in updates (as when registering a function,
+        // there is no existing tables).
+        let existing_tables_map = existing_versions
+            .iter()
+            .map(|t| ((t.collection_id(), t.name()), t))
+            .collect::<HashMap<_, _>>();
+        let new_tables_lookup = new_tables
+            .iter()
+            .map(TableName::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let new_tables_lookup: Vec<_> = new_tables_lookup
+            .iter()
+            .filter_map(|t| {
+                if existing_tables_map.contains_key(&(collection_id.deref(), t)) {
+                    None
+                } else {
+                    Some((collection_id.deref(), t))
+                }
+            })
+            .collect();
+
+        let tables_found: Vec<TableDBWithNames> = queries
+            .find_versions_at::<TableDBWithNames>(
+                Some(&at_time),
+                Some(&[&TableStatus::Active, &TableStatus::Frozen]),
+                &new_tables_lookup,
+            )?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(handle_sql_err)?;
+
+        if !tables_found.is_empty() {
+            let new_tables_set: HashSet<_> = new_tables_lookup.iter().collect();
+            let tables_found: HashSet<_> = tables_found
+                .iter()
+                .map(|t| (collection_id.deref(), t.name()))
+                .collect();
+
+            let duplicate_tables: Vec<_> = tables_found
+                .into_iter()
+                .filter_map(|(c, t)| {
+                    if new_tables_set.contains(&(c, t)) {
+                        Some(t.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            Err(RegisterFunctionError::TableAlreadyExists(
+                duplicate_tables.into(),
+                collection_name.deref().clone(),
+            ))?
+        }
+    }
+
+    Ok(())
+}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_table_versions(
@@ -118,7 +192,7 @@ pub async fn build_table_versions(
                         ))?
                     }
                 }
-                _ => {
+                TableStatus::Deleted => {
                     // Status deleted, table is detached from the created table
                     &TableId::default()
                 }

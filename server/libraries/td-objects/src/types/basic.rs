@@ -325,6 +325,10 @@ impl FunctionStatus {
     pub async fn active() -> Result<Vec<FunctionStatus>, TdError> {
         Ok(vec![FunctionStatus::Active])
     }
+
+    pub async fn active_or_frozen() -> Result<Vec<FunctionStatus>, TdError> {
+        Ok(vec![FunctionStatus::Active, FunctionStatus::Frozen])
+    }
 }
 
 #[td_type::typed(id)]

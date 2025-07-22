@@ -33,7 +33,7 @@ fn provider() {
         // get allowed collections
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
         // list
-        from_fn(FunctionStatus::active),
+        from_fn(FunctionStatus::active_or_frozen),
         from_fn(
             By::<()>::list_versions_at::<AtTimeParam, VisibleCollections, DaoQueries, Function>
         ),
@@ -82,7 +82,7 @@ mod tests {
             // get allowed collections
             type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
             // list
-            type_of_val(&FunctionStatus::active),
+            type_of_val(&FunctionStatus::active_or_frozen),
             type_of_val(&
                 By::<()>::list_versions_at::<AtTimeParam, VisibleCollections, DaoQueries, Function>
             ),

@@ -3,7 +3,8 @@
 //
 
 use crate::table::layers::delete::{
-    build_deleted_table_version, build_frozen_function_versions_dependencies,
+    build_deleted_table_version, build_deleted_trigger_versions,
+    build_frozen_function_versions_dependencies,
 };
 use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
@@ -21,12 +22,13 @@ use td_objects::tower_service::sql::{
 };
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, DependencyStatus, TableId, TableIdName,
-    TableStatus, TableVersionId,
+    TableStatus, TableVersionId, TriggerStatus,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::DependencyDB;
 use td_objects::types::function::FunctionDB;
 use td_objects::types::table::{TableDB, TableDBBuilder, TableDBWithNames};
+use td_objects::types::trigger::TriggerDB;
 use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
@@ -82,6 +84,14 @@ impl TableDeleteService {
                 from_fn(By::<TableId>::select_all_versions::<DaoQueries, DependencyDB>),
                 from_fn(build_frozen_function_versions_dependencies::<DaoQueries>),
                 from_fn(insert_vec::<DaoQueries, FunctionDB>),
+
+                // Insert into trigger_versions(sql) entries with status=Deleted,
+                // for all triggers that have the table as dependency
+                // at the current time.
+                from_fn(TriggerStatus::active_or_frozen),
+                from_fn(By::<TableId>::select_all_versions::<DaoQueries, TriggerDB>),
+                from_fn(build_deleted_trigger_versions),
+                from_fn(insert_vec::<DaoQueries, TriggerDB>),
 
                 // Insert into table_versions(sql) status=Deleted.
                 from_fn(By::<TableVersionId>::select::<DaoQueries, TableDB>),
@@ -160,6 +170,13 @@ mod tests {
             type_of_val(&By::<TableId>::select_all_versions::<DaoQueries, DependencyDB>),
             type_of_val(&build_frozen_function_versions_dependencies::<DaoQueries>),
             type_of_val(&insert_vec::<DaoQueries, FunctionDB>),
+            // Insert into trigger_versions(sql) entries with status=Deleted,
+            // for all triggers that have the table as dependency
+            // at the current time.
+            type_of_val(&TriggerStatus::active_or_frozen),
+            type_of_val(&By::<TableId>::select_all_versions::<DaoQueries, TriggerDB>),
+            type_of_val(&build_deleted_trigger_versions),
+            type_of_val(&insert_vec::<DaoQueries, TriggerDB>),
             // Insert into table_versions(sql) status=Deleted.
             type_of_val(&By::<TableVersionId>::select::<DaoQueries, TableDB>),
             type_of_val(&With::<TableDB>::convert_to::<TableDBBuilder, _>),

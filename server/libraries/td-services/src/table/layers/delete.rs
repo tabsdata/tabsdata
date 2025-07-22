@@ -9,10 +9,12 @@ use td_objects::sql::cte::CteQueries;
 use td_objects::sql::DerefQueries;
 use td_objects::types::basic::{
     CollectionName, FunctionStatus, FunctionVersionId, TableName, TableStatus, TableVersionId,
+    TriggerStatus, TriggerVersionId,
 };
 use td_objects::types::dependency::DependencyDB;
 use td_objects::types::function::{FunctionDB, FunctionDBBuilder};
 use td_objects::types::table::{TableDB, TableDBBuilder};
+use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[td_error]
@@ -62,6 +64,22 @@ pub async fn build_frozen_function_versions_dependencies<Q: DerefQueries>(
         })
         .collect::<Result<_, _>>()?;
     Ok(frozen_versions)
+}
+
+pub async fn build_deleted_trigger_versions(
+    Input(triggers): Input<Vec<TriggerDB>>,
+    Input(request_context): Input<RequestContext>,
+) -> Result<Vec<TriggerDB>, TdError> {
+    let deleted_versions = triggers
+        .iter()
+        .map(|t| {
+            TriggerDBBuilder::try_from((request_context.deref(), t.to_builder()))?
+                .id(TriggerVersionId::default())
+                .status(TriggerStatus::Deleted)
+                .build()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(deleted_versions)
 }
 
 pub async fn build_deleted_table_version(

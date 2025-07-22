@@ -21,14 +21,14 @@ pub async fn vec_create_table_dependency(
 
     let table_deps = dependencies
         .iter()
-        .map(|d| {
-            let table = tables[d.table_id()];
+        .filter_map(|d| {
+            let table = tables.get(d.table_id())?;
             let versions = &**d.table_versions();
-            TableDependency::new(VersionedTableRef::new(
+            Some(TableDependency::new(VersionedTableRef::new(
                 Some(table.collection().clone()),
                 table.name().clone(),
                 versions.clone(),
-            ))
+            )))
         })
         .collect::<Vec<_>>();
     Ok(table_deps)
