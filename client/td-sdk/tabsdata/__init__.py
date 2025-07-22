@@ -2,6 +2,7 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+import importlib.metadata
 import pkgutil
 
 # noinspection PyUnboundLocalVariable
@@ -196,3 +197,12 @@ __all__ = [
     # From tabsdata_snowflake.connector
     "SnowflakeDestination",
 ]
+
+
+# noinspection PyBroadException
+try:
+    __version__ = importlib.metadata.version("tabsdata")
+except Exception:
+    __version__ = "unknown"
+
+version = __version__
