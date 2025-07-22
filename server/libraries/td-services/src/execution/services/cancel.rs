@@ -399,7 +399,7 @@ mod tests {
             .is_ok());
         assert!(cancel_transition_for(FunctionRunStatus::Canceled)
             .await
-            .is_err());
+            .is_ok());
         assert!(cancel_transition_for(FunctionRunStatus::Committed)
             .await
             .is_err());

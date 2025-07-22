@@ -21,9 +21,9 @@ use td_objects::tower_service::sql::{
     insert, By, SqlDeleteService, SqlSelectAllService, SqlSelectService,
 };
 use td_objects::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
-    FunctionIdName, FunctionStatus, FunctionVersionId, ReuseFrozen, StorageVersion,
-    TableDependencyDto, TableNameDto, TableTriggerDto,
+    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation,
+    DependencyStatus, FunctionId, FunctionIdName, FunctionStatus, FunctionVersionId, ReuseFrozen,
+    StorageVersion, TableDependencyDto, TableNameDto, TableStatus, TableTriggerDto, TriggerStatus,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::DependencyDB;
@@ -99,9 +99,12 @@ fn provider() {
         from_fn(By::<BundleId>::delete::<DaoQueries, BundleDB>),
         // Register associations
         // Find previous versions
-        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
-        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
-        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
+        from_fn(TableStatus::active_or_frozen),
+        from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, TableDB>),
+        from_fn(DependencyStatus::active),
+        from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, DependencyDB>),
+        from_fn(TriggerStatus::active_or_frozen),
+        from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, TriggerDBWithNames>),
         // Extract new associations
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
         from_fn(With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
@@ -136,6 +139,8 @@ mod tests {
     use td_database::sql::DbPool;
     use td_objects::crudl::handle_sql_err;
     use td_objects::rest_urls::CollectionParam;
+    use td_objects::sql::cte::CteQueries;
+    use td_objects::sql::recursive::RecursiveQueries;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
@@ -146,13 +151,15 @@ mod tests {
     };
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::table::TableDB;
+    use td_objects::types::trigger::TriggerDB;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_update_function(db: DbPool) {
         use crate::function::layers::register::{
-            build_dependency_versions, build_table_versions, build_trigger_versions,
+            build_dependency_versions, build_table_versions, build_tables_trigger_versions,
+            build_trigger_versions,
         };
         use td_objects::tower_service::authz::InterColl;
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
@@ -218,9 +225,12 @@ mod tests {
                 type_of_val(&By::<BundleId>::delete::<DaoQueries, BundleDB>),
                 // Register associations
                 // Find previous versions
-                type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
-                type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
-                type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
+                type_of_val(&TableStatus::active_or_frozen),
+                type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, TableDB>),
+                type_of_val(&DependencyStatus::active),
+                type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, DependencyDB>),
+                type_of_val(&TriggerStatus::active_or_frozen),
+                type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, TriggerDBWithNames>),
                 // Extract new associations
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableNameDto>>>),
                 type_of_val(&With::<FunctionUpdate>::extract::<Option<Vec<TableDependencyDto>>>),
@@ -237,6 +247,8 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
                 type_of_val(&build_table_versions),
                 type_of_val(&insert_vec::<DaoQueries, TableDB>),
+                type_of_val(&build_tables_trigger_versions::<DaoQueries>),
+                type_of_val(&insert_vec::<DaoQueries, TriggerDB>),
                 // Insert into dependency_versions(sql) current function table dependencies status=Active.
                 type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
@@ -1577,6 +1589,249 @@ mod tests {
             .collect();
         assert!(!map.get("table0").unwrap().private().deref());
         assert!(map.get("_table0").unwrap().private().deref());
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_update_maintain_triggers_dependencies(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        let create = FunctionUpdate::builder()
+            .try_name("function_1")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_1")?])
+            .runtime_values(FunctionRuntimeValues::default())
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let created_function = seed_function(&db, &collection, &create).await;
+
+        let dependant = FunctionUpdate::builder()
+            .try_name("function_2")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
+            .triggers(vec![TableTriggerDto::try_from("table_1")?])
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::default())
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let _ = seed_function(&db, &collection, &dependant).await;
+
+        let update = FunctionUpdate::builder()
+            .try_name("function_1")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(Some(vec![TableNameDto::try_from("table_1")?]))
+            .runtime_values(FunctionRuntimeValues::default())
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        // With an update, a new function version and table version is created
+        // But the trigger and dependency should still be valid (as the use id, not version id)
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .update(
+            FunctionParam::builder()
+                .try_collection(format!("~{}", collection.id()))?
+                .try_function("function_1")?
+                .build()?,
+            update.clone(),
+        );
+
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
+        let response = service.raw_oneshot(request).await;
+        let response = response?;
+
+        assert_update(
+            &db,
+            &UserId::admin(),
+            &collection,
+            &create,
+            &created_function,
+            &update,
+            &response,
+        )
+        .await?;
+
+        let recursive_downstream_trigger: Vec<TriggerDB> = queries
+            .select_recursive_versions_at::<TriggerDB, FunctionDB, _>(
+                None,
+                Some(&[&TriggerStatus::Active]),
+                None,
+                Some(&[&FunctionStatus::Active]),
+                response.function_id(),
+            )?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        // 2 triggered functions, 1 downstream
+        assert_eq!(recursive_downstream_trigger.len(), 1);
+        let triggered_function_id = recursive_downstream_trigger[0].function_id();
+        let triggered_function: FunctionDBWithNames = queries
+            .select_versions_at::<FunctionDBWithNames>(None, None, &(triggered_function_id))?
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(triggered_function.name(), dependant.name());
+
+        let downstream_dependencies: Vec<DependencyDB> = queries
+            .select_versions_at::<DependencyDB>(
+                None,
+                Some(&[&DependencyStatus::Active]),
+                &(triggered_function_id),
+            )?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        // 1 downstream dependency on the triggered function
+        assert_eq!(downstream_dependencies.len(), 1);
+        let dependency_function_id = recursive_downstream_trigger[0].function_id();
+        let dependency_function: FunctionDBWithNames = queries
+            .select_versions_at::<FunctionDBWithNames>(None, None, &(dependency_function_id))?
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(dependency_function.name(), dependant.name());
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    async fn test_update_remove_triggers_dependencies(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+
+        let create = FunctionUpdate::builder()
+            .try_name("function_1")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_1")?])
+            .runtime_values(FunctionRuntimeValues::default())
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let _ = seed_function(&db, &collection, &create).await;
+
+        let dependant = FunctionUpdate::builder()
+            .try_name("function_2")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
+            .triggers(vec![TableTriggerDto::try_from("table_1")?])
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::default())
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let dependant_function = seed_function(&db, &collection, &dependant).await;
+
+        let update = FunctionUpdate::builder()
+            .try_name("function_2")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::default())
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        // With an update, a new function version and table version is created
+        // But the trigger and dependency should still be valid (as the use id, not version id)
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::user(),
+            true,
+        )
+        .update(
+            FunctionParam::builder()
+                .try_collection(collection.name().to_string())?
+                .try_function("function_2")?
+                .build()?,
+            update.clone(),
+        );
+
+        let service =
+            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
+                .service()
+                .await;
+        let response = service.raw_oneshot(request).await;
+        let response = response?;
+
+        assert_update(
+            &db,
+            &UserId::admin(),
+            &collection,
+            &dependant,
+            &dependant_function,
+            &update,
+            &response,
+        )
+        .await?;
+
+        let recursive_downstream_trigger: Vec<TriggerDB> = queries
+            .select_recursive_versions_at::<TriggerDB, FunctionDB, _>(
+                None,
+                Some(&[&TriggerStatus::Active]),
+                None,
+                Some(&[&FunctionStatus::Active]),
+                response.function_id(),
+            )?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        // Downstream trigger removed
+        assert!(recursive_downstream_trigger.is_empty());
+
+        // Downstream dependency removed
+        let dependency_function: Vec<FunctionDBWithNames> = queries
+            .select_versions_at::<FunctionDBWithNames>(None, None, &(response.function_id()))?
+            .build_query_as()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(dependency_function.len(), 1); // only implicit self dependency
+        assert_eq!(dependency_function[0].name(), dependant.name());
         Ok(())
     }
 }

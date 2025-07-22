@@ -3,13 +3,14 @@
 //
 
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyStatus,
-    DependencyVersionId, FunctionId, FunctionName, FunctionVersionId, TableId, TableName,
-    TableStatus, TableVersionId, TableVersions, TriggerId, TriggerStatus, TriggerVersionId, UserId,
-    UserName,
+    AtTime, BundleId, CollectionId, CollectionName, DataLocation, Decorator, DependencyId,
+    DependencyPos, DependencyStatus, DependencyVersionId, Description, FunctionId, FunctionName,
+    FunctionStatus, FunctionVersionId, Snippet, StorageVersion, TableId, TableName, TableStatus,
+    TableVersionId, TableVersions, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
 };
 use crate::types::dependency::DependencyDBWithNames;
 use crate::types::execution::{FunctionVersionNode, TableVersionNode};
+use crate::types::function::FunctionDBWithNames;
 use crate::types::table::TableDBWithNames;
 use crate::types::trigger::TriggerDBWithNames;
 use lazy_static::lazy_static;
@@ -37,6 +38,14 @@ lazy_static! {
         let mut map = HashMap::new();
         map.insert(FUNCTION_NAMES[0].clone(), vec![TABLE_NAMES[0].clone()]);
         map.insert(FUNCTION_NAMES[1].clone(), vec![TABLE_NAMES[1].clone(), TABLE_NAMES[2].clone()]);
+        map
+    };
+
+    static ref FUNCTION_IDS: HashMap<FunctionName, FunctionId> = {
+        let mut map = HashMap::new();
+        for name in FUNCTIONS.keys() {
+            map.insert(name.clone(), FunctionId::default());
+        }
         map
     };
 
@@ -119,66 +128,137 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNam
         .unwrap()
 }
 
-pub async fn dependency(table: &TableName, function: &FunctionName) -> DependencyDBWithNames {
+pub async fn dependency(
+    table: &TableName,
+    function: &FunctionName,
+) -> (DependencyDBWithNames, TableDBWithNames, FunctionDBWithNames) {
     let table_function = FUNCTIONS
         .iter()
         .find(|(_, tables)| tables.contains(table))
         .map(|(function, _)| function)
         .unwrap();
-    DependencyDBWithNames::builder()
-        .id(DependencyVersionId::default())
-        .collection_id(*COLLECTION_ID)
-        .dependency_id(DependencyId::default())
-        .function_id(FunctionId::default())
-        .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
-        .table_collection_id(*COLLECTION_ID)
-        .table_function_version_id(FUNCTION_VERSION_IDS.get(table_function).unwrap())
-        .table_id(TABLE_IDS.get(table).unwrap())
-        .table_version_id(TABLE_VERSION_IDS.get(table).unwrap())
-        .table_name(table)
-        .table_versions(TableVersions::try_from("HEAD").unwrap())
-        .dep_pos(DependencyPos::default())
-        .status(DependencyStatus::Active)
-        .defined_on(AtTime::now().await)
-        .defined_by_id(UserId::default())
-        .collection(&*COLLECTION_NAME)
-        .function(function)
-        .trigger_by_collection(CollectionName::try_from("test").unwrap())
-        .table_collection(&*COLLECTION_NAME)
-        .table_function(table_function)
-        .defined_by(UserName::try_from("joaquin").unwrap())
-        .system(false)
-        .build()
-        .unwrap()
+    (
+        DependencyDBWithNames::builder()
+            .id(DependencyVersionId::default())
+            .collection_id(*COLLECTION_ID)
+            .dependency_id(DependencyId::default())
+            .function_id(FUNCTION_IDS.get(function).unwrap())
+            .table_collection_id(*COLLECTION_ID)
+            .table_function_id(FUNCTION_IDS.get(table_function).unwrap())
+            .table_id(TABLE_IDS.get(table).unwrap())
+            .table_versions(TableVersions::try_from("HEAD").unwrap())
+            .dep_pos(DependencyPos::default())
+            .status(DependencyStatus::Active)
+            .defined_on(AtTime::now().await)
+            .defined_by_id(UserId::default())
+            .collection(&*COLLECTION_NAME)
+            .trigger_by_collection(CollectionName::try_from("test").unwrap())
+            .table_collection(&*COLLECTION_NAME)
+            .system(false)
+            .build()
+            .unwrap(),
+        TableDBWithNames::builder()
+            .id(TABLE_VERSION_IDS.get(table).unwrap())
+            .collection_id(*COLLECTION_ID)
+            .table_id(TABLE_IDS.get(table).unwrap())
+            .name(table)
+            .function_id(FUNCTION_IDS.get(table_function).unwrap())
+            .function_version_id(FUNCTION_VERSION_IDS.get(table_function).unwrap())
+            .function_param_pos(None)
+            .private(false)
+            .partitioned(false)
+            .defined_on(AtTime::now().await)
+            .defined_by_id(UserId::default())
+            .status(TableStatus::Active)
+            .system(false)
+            .collection(COLLECTION_NAME.deref())
+            .function(function)
+            .defined_by(UserName::try_from("joaquin").unwrap())
+            .build()
+            .unwrap(),
+        FunctionDBWithNames::builder()
+            .id(FUNCTION_VERSION_IDS.get(function).unwrap())
+            .collection_id(*COLLECTION_ID)
+            .name(function)
+            .description(Description::default())
+            .decorator(Decorator::Publisher)
+            .function_id(FUNCTION_IDS.get(function).unwrap())
+            .data_location(DataLocation::default())
+            .storage_version(StorageVersion::default())
+            .bundle_id(BundleId::default())
+            .snippet(Snippet::try_from("test").unwrap())
+            .defined_on(AtTime::now().await)
+            .defined_by_id(UserId::default())
+            .status(FunctionStatus::Active)
+            .collection(COLLECTION_NAME.deref())
+            .defined_by(UserName::try_from("joaquin").unwrap())
+            .build()
+            .unwrap(),
+    )
 }
 
-pub async fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWithNames {
+pub async fn trigger(
+    table: &TableName,
+    function: &FunctionName,
+) -> (TriggerDBWithNames, TableDBWithNames, FunctionDBWithNames) {
     let table_function = FUNCTIONS
         .iter()
         .find(|(_, tables)| tables.contains(table))
         .map(|(function, _)| function)
         .unwrap();
-    TriggerDBWithNames::builder()
-        .id(TriggerVersionId::default())
-        .collection_id(*COLLECTION_ID)
-        .trigger_id(TriggerId::default())
-        .function_id(FunctionId::default())
-        .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
-        .trigger_by_collection_id(*COLLECTION_ID)
-        .trigger_by_function_id(FunctionId::default())
-        .trigger_by_function_version_id(FUNCTION_VERSION_IDS.get(table_function).unwrap())
-        .trigger_by_table_id(TABLE_IDS.get(table).unwrap())
-        .trigger_by_table_version_id(TABLE_VERSION_IDS.get(table).unwrap())
-        .status(TriggerStatus::Active)
-        .defined_on(AtTime::now().await)
-        .defined_by_id(UserId::default())
-        .collection(&*COLLECTION_NAME)
-        .function(function)
-        .trigger_by_collection(&*COLLECTION_NAME)
-        .trigger_by_table_name(table)
-        .trigger_by_function(FunctionName::try_from("test").unwrap())
-        .defined_by(UserName::try_from("joaquin").unwrap())
-        .system(false)
-        .build()
-        .unwrap()
+    (
+        TriggerDBWithNames::builder()
+            .id(TriggerVersionId::default())
+            .collection_id(*COLLECTION_ID)
+            .trigger_id(TriggerId::default())
+            .function_id(FUNCTION_IDS.get(function).unwrap())
+            .trigger_by_collection_id(*COLLECTION_ID)
+            .trigger_by_function_id(FUNCTION_IDS.get(table_function).unwrap())
+            .trigger_by_table_id(TABLE_IDS.get(table).unwrap())
+            .status(TriggerStatus::Active)
+            .defined_on(AtTime::now().await)
+            .defined_by_id(UserId::default())
+            .collection(&*COLLECTION_NAME)
+            .trigger_by_collection(&*COLLECTION_NAME)
+            .system(false)
+            .build()
+            .unwrap(),
+        TableDBWithNames::builder()
+            .id(TABLE_VERSION_IDS.get(table).unwrap())
+            .collection_id(*COLLECTION_ID)
+            .table_id(TABLE_IDS.get(table).unwrap())
+            .name(table)
+            .function_id(FUNCTION_IDS.get(table_function).unwrap())
+            .function_version_id(FUNCTION_VERSION_IDS.get(table_function).unwrap())
+            .function_param_pos(None)
+            .private(false)
+            .partitioned(false)
+            .defined_on(AtTime::now().await)
+            .defined_by_id(UserId::default())
+            .status(TableStatus::Active)
+            .system(false)
+            .collection(COLLECTION_NAME.deref())
+            .function(function)
+            .defined_by(UserName::try_from("joaquin").unwrap())
+            .build()
+            .unwrap(),
+        FunctionDBWithNames::builder()
+            .id(FUNCTION_VERSION_IDS.get(function).unwrap())
+            .collection_id(*COLLECTION_ID)
+            .name(function)
+            .description(Description::default())
+            .decorator(Decorator::Publisher)
+            .function_id(FUNCTION_IDS.get(function).unwrap())
+            .data_location(DataLocation::default())
+            .storage_version(StorageVersion::default())
+            .bundle_id(BundleId::default())
+            .snippet(Snippet::try_from("test").unwrap())
+            .defined_on(AtTime::now().await)
+            .defined_by_id(UserId::default())
+            .status(FunctionStatus::Active)
+            .collection(COLLECTION_NAME.deref())
+            .defined_by(UserName::try_from("joaquin").unwrap())
+            .build()
+            .unwrap(),
+    )
 }

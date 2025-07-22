@@ -3,14 +3,12 @@
 //
 
 use crate::sql::{ListFilterGenerator, QueryError};
-use crate::types::dependency::DependencyDBRead;
 use crate::types::parse::{
     parse_collection, parse_email, parse_entity, parse_execution, parse_function, parse_role,
     parse_table, parse_user, DATA_LOCATION_REGEX,
 };
-use crate::types::table::TableDBRead;
+use crate::types::table::{TableDBRead, TableDBWithNames};
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
-use crate::types::trigger::TriggerDBRead;
 use crate::types::{ComposedString, DataAccessObject};
 use async_trait::async_trait;
 use sqlx::{QueryBuilder, Sqlite};
@@ -559,20 +557,6 @@ pub struct TableDataVersionId;
 #[td_type::typed(composed(inner = "VersionedTableRef::<TableName>"), try_from = TableDependencyDto)]
 pub struct TableDependency;
 
-impl TryFrom<&DependencyDBRead> for TableDependency {
-    type Error = TdError;
-
-    fn try_from(v: &DependencyDBRead) -> Result<Self, Self::Error> {
-        let versions = &**v.table_versions();
-        let table_dep = TableDependency::new(VersionedTableRef::new(
-            Some(v.collection().clone()),
-            v.table_name().clone(),
-            versions.clone(),
-        ));
-        Ok(table_dep)
-    }
-}
-
 #[td_type::typed(composed(inner = "VersionedTableRef::<TableNameDto>"))]
 pub struct TableDependencyDto;
 
@@ -648,13 +632,13 @@ impl TryFrom<&TableDependencyDto> for TableTrigger {
     }
 }
 
-impl TryFrom<&TriggerDBRead> for TableTrigger {
+impl TryFrom<&TableDBWithNames> for TableTrigger {
     type Error = TdError;
 
-    fn try_from(v: &TriggerDBRead) -> Result<Self, Self::Error> {
+    fn try_from(v: &TableDBWithNames) -> Result<Self, Self::Error> {
         let table = TableTrigger::new(TableRef::new(
             Some(v.collection().clone()),
-            v.trigger_by_table_name().clone(),
+            v.name().clone(),
         ));
         Ok(table)
     }
@@ -742,8 +726,20 @@ pub enum TriggerStatus {
     #[default]
     #[typed_enum(rename = "A")]
     Active,
+    #[typed_enum(rename = "F")]
+    Frozen,
     #[typed_enum(rename = "D")]
     Deleted,
+}
+
+impl TriggerStatus {
+    pub async fn active() -> Result<Vec<TriggerStatus>, TdError> {
+        Ok(vec![TriggerStatus::Active])
+    }
+
+    pub async fn active_or_frozen() -> Result<Vec<TriggerStatus>, TdError> {
+        Ok(vec![TriggerStatus::Active, TriggerStatus::Frozen])
+    }
 }
 
 #[td_type::typed(id)]

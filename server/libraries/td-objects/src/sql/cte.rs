@@ -100,7 +100,10 @@ macro_rules! impl_select_versions_at {
                 query_builder.push(select);
 
                 // Where clause
-                if !e.is_empty() {
+                if e.is_empty() {
+                    // Safeguard so empty lookups don't find all rows
+                    query_builder.push(" WHERE 1 = 0");
+                } else {
                     gen_where_clause!(query_builder, D, e: [ $($E),* ]);
                 }
 

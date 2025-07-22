@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use ta_execution::graphs::{ExecutionGraph, GraphBuilder};
 use td_error::TdError;
@@ -10,38 +10,32 @@ use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::recursive::RecursiveQueries;
 use td_objects::sql::DerefQueries;
-use td_objects::types::basic::{AtTime, DependencyStatus, FunctionId, FunctionStatus, TableStatus};
+use td_objects::types::basic::{
+    AtTime, DependencyStatus, FunctionId, FunctionStatus, TableStatus, TriggerStatus,
+};
 use td_objects::types::dependency::DependencyDBWithNames;
 use td_objects::types::execution::FunctionVersionNodeBuilder;
 use td_objects::types::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::types::table::TableDBWithNames;
 use td_objects::types::table_ref::Versions;
 use td_objects::types::trigger::TriggerDBWithNames;
-use td_objects::types::{DataAccessObject, PartitionBy, Recursive, VersionedAt};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use te_execution::transaction::TransactionBy;
 
-pub async fn version_graph<Q, V>(
+pub async fn find_trigger_graph<Q: DerefQueries>(
     SrvCtx(queries): SrvCtx<Q>,
     Connection(connection): Connection,
     Input(at_time): Input<AtTime>,
     Input(function): Input<FunctionId>,
-) -> Result<Vec<V>, TdError>
-where
-    Q: DerefQueries,
-    V: DataAccessObject + PartitionBy + Recursive + VersionedAt,
-    V::Condition: Default,
-    V::Order: From<AtTime>,
-{
+) -> Result<Vec<TriggerDBWithNames>, TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
-    let v_at_time = V::Order::from(at_time.deref().clone());
-
-    let result: Vec<V> = queries
-        .select_recursive_versions_at::<V, FunctionDB, _>(
-            Some(&v_at_time),
-            Some(&[&V::Condition::default()]),
+    // Find triggered functions at the given time
+    let trigger_graph: Vec<TriggerDBWithNames> = queries
+        .select_recursive_versions_at::<TriggerDBWithNames, FunctionDB, _>(
+            Some(&at_time),
+            Some(&[&TriggerStatus::Active]),
             Some(&at_time),
             Some(&[&FunctionStatus::Active]),
             function.deref(),
@@ -51,7 +45,7 @@ where
         .await
         .map_err(handle_sql_err)?;
 
-    Ok(result)
+    Ok(trigger_graph)
 }
 
 pub async fn find_all_input_tables<Q: DerefQueries>(
@@ -64,32 +58,29 @@ pub async fn find_all_input_tables<Q: DerefQueries>(
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
-    // We find unique triggered functions
-    let unique_triggered_functions = trigger_graph
+    // Compute unique triggered function ids
+    // Add manual trigger function (which is an implicit trigger)
+    let manual_trigger = trigger_function_version.function_id();
+    let unique_triggered_function_ids = trigger_graph
         .iter()
-        .map(|f| f.function_version_id())
-        .collect::<HashSet<_>>();
-
-    let manual_trigger = trigger_function_version.id();
-    let unique_triggered_functions: Vec<_> = unique_triggered_functions
-        .into_iter()
+        .map(|f| f.function_id())
         .chain(std::iter::once(manual_trigger))
-        .collect();
+        .collect::<HashSet<_>>();
+    let unique_triggered_function_ids: Vec<_> = unique_triggered_function_ids.into_iter().collect();
 
-    // So we can find output and input tables for them
     // TODO this should be chunked
-    let status = [&DependencyStatus::Active];
-    let input_tables: Vec<DependencyDBWithNames> = queries
+    let dep_graph: Vec<DependencyDBWithNames> = queries
         .find_versions_at::<DependencyDBWithNames>(
             Some(&at_time),
-            Some(&status),
-            &unique_triggered_functions,
+            Some(&[&DependencyStatus::Active]),
+            &unique_triggered_function_ids,
         )?
         .build_query_as()
         .fetch_all(&mut *conn)
         .await
         .map_err(handle_sql_err)?;
-    Ok(input_tables)
+
+    Ok(dep_graph)
 }
 
 pub async fn build_execution_template<Q: DerefQueries>(
@@ -99,38 +90,142 @@ pub async fn build_execution_template<Q: DerefQueries>(
     Input(at_time): Input<AtTime>,
     Input(trigger_function_version): Input<FunctionDBWithNames>,
     Input(trigger_graph): Input<Vec<TriggerDBWithNames>>,
-    Input(input_tables): Input<Vec<DependencyDBWithNames>>,
+    Input(dep_graph): Input<Vec<DependencyDBWithNames>>,
 ) -> Result<ExecutionGraph<Versions>, TdError> {
     let mut conn = connection.lock().await;
     let conn = conn.get_mut_connection()?;
 
-    // We find unique triggered functions
-    let unique_triggered_functions = trigger_graph
+    // Compute unique triggered function ids
+    // Add manual trigger function (which is an implicit trigger)
+    let manual_trigger = trigger_function_version.function_id();
+    let unique_triggered_function_ids = trigger_graph
         .iter()
-        .map(|f| f.function_version_id())
-        .collect::<HashSet<_>>();
-
-    let manual_trigger = trigger_function_version.id();
-    let unique_triggered_functions: Vec<_> = unique_triggered_functions
-        .into_iter()
+        .map(|f| f.function_id())
         .chain(std::iter::once(manual_trigger))
+        .collect::<HashSet<_>>();
+    let unique_triggered_function_ids: Vec<_> = unique_triggered_function_ids.into_iter().collect();
+    let unique_triggered_table_ids: HashSet<_> = trigger_graph
+        .iter()
+        .map(|t| t.trigger_by_table_id())
         .collect();
+    let unique_triggered_table_ids: Vec<_> = unique_triggered_table_ids.into_iter().collect();
 
+    // Find output tables for each triggered_function
     // TODO this should be chunked
-    let status = [&TableStatus::Active, &TableStatus::Frozen];
     let output_tables: Vec<TableDBWithNames> = queries
         .find_versions_at::<TableDBWithNames>(
             Some(&at_time),
-            Some(&status),
-            &unique_triggered_functions,
+            Some(&[&TableStatus::Active]),
+            &unique_triggered_function_ids,
         )?
         .build_query_as()
         .fetch_all(&mut *conn)
         .await
         .map_err(handle_sql_err)?;
 
+    // Find table-function pair for each triggered_function
+    // TODO this should be chunked
+    let trigger_tables: Vec<TableDBWithNames> = queries
+        .find_versions_at::<TableDBWithNames>(
+            Some(&at_time),
+            Some(&[&TableStatus::Active]),
+            &unique_triggered_table_ids,
+        )?
+        .build_query_as()
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(handle_sql_err)?;
+    let trigger_tables: HashMap<_, _> = trigger_tables.iter().map(|t| (t.table_id(), t)).collect();
+
+    // TODO this should be chunked
+    let trigger_functions: Vec<FunctionDBWithNames> = queries
+        .find_versions_at::<FunctionDBWithNames>(
+            Some(&at_time),
+            Some(&[&FunctionStatus::Active]),
+            &unique_triggered_function_ids,
+        )?
+        .build_query_as()
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(handle_sql_err)?;
+    let trigger_functions: HashMap<_, _> = trigger_functions
+        .iter()
+        .map(|t| (t.function_id(), t))
+        .collect();
+
+    // Recompute the trigger graph with table-function pairs
+    let trigger_graph = trigger_graph
+        .iter()
+        .filter_map(|trigger| {
+            // Filter out triggers that do not have a corresponding active table or function
+            // This can happen on active functions that have frozen tables (because we query
+            // the trigger graph by active functions only)
+            if let (Some(table), Some(function)) = (
+                trigger_tables.get(trigger.trigger_by_table_id()),
+                trigger_functions.get(trigger.function_id()),
+            ) {
+                Some((trigger, *table, *function))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    // Compute unique dependency functions-tables
+    let unique_dep_function_ids = dep_graph
+        .iter()
+        .map(|f| f.function_id())
+        .collect::<HashSet<_>>();
+    let unique_dep_function_ids: Vec<_> = unique_dep_function_ids.into_iter().collect();
+    let unique_dep_table_ids: HashSet<_> = dep_graph.iter().map(|t| t.table_id()).collect();
+    let unique_dep_table_ids: Vec<_> = unique_dep_table_ids.into_iter().collect();
+
+    // Find table-function pair for each dependency
+    // TODO this should be chunked
+    let dep_tables: Vec<TableDBWithNames> = queries
+        .find_versions_at::<TableDBWithNames>(
+            Some(&at_time),
+            Some(&[&TableStatus::Active, &TableStatus::Frozen]),
+            &unique_dep_table_ids,
+        )?
+        .build_query_as()
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(handle_sql_err)?;
+    let dep_tables: HashMap<_, _> = dep_tables.iter().map(|t| (t.table_id(), t)).collect();
+
+    // TODO this should be chunked
+    let dep_functions: Vec<FunctionDBWithNames> = queries
+        .find_versions_at::<FunctionDBWithNames>(
+            Some(&at_time),
+            Some(&[&FunctionStatus::Active, &FunctionStatus::Frozen]),
+            &unique_dep_function_ids,
+        )?
+        .build_query_as()
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(handle_sql_err)?;
+    let dep_functions: HashMap<_, _> = dep_functions.iter().map(|t| (t.function_id(), t)).collect();
+
+    // Recompute the trigger graph with table-function pairs
+    let dep_graph = dep_graph
+        .iter()
+        .filter_map(|dep| {
+            // It should not happen that a dependency does not have a corresponding
+            // entry in the dep_tables or dep_functions, but we filter it out just in case.
+            if let (Some(table), Some(function)) = (
+                dep_tables.get(dep.table_id()),
+                dep_functions.get(dep.function_id()),
+            ) {
+                Some((dep, *table, *function))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
     let trigger = FunctionVersionNodeBuilder::try_from(&*trigger_function_version)?.build()?;
-    let graph = GraphBuilder::new(&trigger_graph, &output_tables, &input_tables).build(trigger)?;
+    let graph = GraphBuilder::new(&output_tables, &trigger_graph, &dep_graph).build(trigger)?;
 
     graph.validate_dag()?;
     graph.validate_transaction(transaction_by.deref())?;

@@ -2,9 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::sync::Arc;
+use crate::function::layers::read::vec_create_table_dependency;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::FunctionParam;
@@ -12,105 +11,90 @@ use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{
     builder, combine, BuildService, ConvertIntoMapService, ExtractNameService, ExtractService,
-    SetService, TryIntoService, With,
+    ExtractVecService, SetService, TryIntoService, With,
 };
-use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
+use td_objects::tower_service::sql::{By, SqlFindService, SqlSelectAllService, SqlSelectService};
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionIdName, FunctionStatus, FunctionVersionId,
-    TableDependency, TableName, TableTrigger,
+    AtTime, CollectionId, CollectionIdName, DependencyStatus, FunctionId, FunctionIdName,
+    FunctionStatus, TableDependency, TableId, TableName, TableStatus, TableTrigger, TriggerStatus,
 };
 use td_objects::types::dependency::DependencyDBRead;
 use td_objects::types::function::{
     Function, FunctionBuilder, FunctionDBWithNames, FunctionWithTables, FunctionWithTablesBuilder,
 };
-use td_objects::types::table::TableDBRead;
+use td_objects::types::table::{TableDBRead, TableDBWithNames};
 use td_objects::types::trigger::TriggerDBRead;
-use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
+use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct ReadFunctionService {
-    provider: ServiceProvider<ReadRequest<FunctionParam>, FunctionWithTables, TdError>,
-}
-
-impl ReadFunctionService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                ConnectionProvider::new(db),
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(authz_context),
-
-                from_fn(With::<ReadRequest<FunctionParam>>::extract::<RequestContext>),
-                from_fn(With::<ReadRequest<FunctionParam>>::extract_name::<FunctionParam>),
-
-
-                // Extract from request.
-                from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
-                from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
-                from_fn(combine::<CollectionIdName, FunctionIdName>),
-
-                // Read function version
-                from_fn(With::<RequestContext>::extract::<AtTime>),
-                from_fn(FunctionStatus::active),
-                from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>),
-
-                // check requester is coll_admin or coll_dev for the function's collection
-                from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
-
-                from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-
-                // Read function with tables
-                // Builder
-                from_fn(builder::<FunctionWithTablesBuilder>),
-
-                // Read function version
-                from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionDBWithNames>),
-                from_fn(With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
-                from_fn(With::<FunctionBuilder>::build::<Function, _>),
-                from_fn(With::<Function>::set::<FunctionWithTablesBuilder>),
-
-                // Read triggers
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBRead>),
-                from_fn(With::<TriggerDBRead>::vec_convert_to::<TableTrigger, _>),
-                from_fn(With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
-
-                // Read dependencies
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBRead>),
-                from_fn(With::<DependencyDBRead>::vec_convert_to::<TableDependency, _>),
-                from_fn(With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
-
-                // Read tables
-                from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDBRead>),
-                from_fn(With::<TableDBRead>::vec_convert_to::<TableName, _>),
-                from_fn(With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
-
-                // Build
-                from_fn(With::<FunctionWithTablesBuilder>::build::<FunctionWithTables, _>),
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<ReadRequest<FunctionParam>, FunctionWithTables, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = ReadFunctionService,
+    request = ReadRequest<FunctionParam>,
+    response = FunctionWithTables,
+    connection = ConnectionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<ReadRequest<FunctionParam>>::extract::<RequestContext>),
+        from_fn(With::<ReadRequest<FunctionParam>>::extract_name::<FunctionParam>),
+        // Extract from request.
+        from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
+        from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
+        from_fn(combine::<CollectionIdName, FunctionIdName>),
+        // Read function version
+        from_fn(With::<RequestContext>::extract::<AtTime>),
+        from_fn(FunctionStatus::active),
+        from_fn(
+            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                DaoQueries,
+                FunctionDBWithNames,
+            >
+        ),
+        // check requester is coll_admin or coll_dev for the function's collection
+        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        // Read function with tables, triggers and dependencies
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
+        // Builder
+        from_fn(builder::<FunctionWithTablesBuilder>),
+        // Convert to function read
+        from_fn(With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
+        from_fn(With::<FunctionBuilder>::build::<Function, _>),
+        from_fn(With::<Function>::set::<FunctionWithTablesBuilder>),
+        // Read tables
+        from_fn(TableStatus::active),
+        from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, TableDBRead>),
+        from_fn(With::<TableDBRead>::vec_convert_to::<TableName, _>),
+        from_fn(With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
+        // Read triggers
+        from_fn(TriggerStatus::active),
+        from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, TriggerDBRead>),
+        from_fn(With::<TriggerDBRead>::extract_vec::<TableId>),
+        from_fn(By::<TableId>::find_versions::<DaoQueries, TableDBWithNames>),
+        from_fn(With::<TableDBWithNames>::vec_convert_to::<TableTrigger, _>),
+        from_fn(With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
+        // Read dependencies
+        from_fn(DependencyStatus::active),
+        from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, DependencyDBRead>),
+        from_fn(With::<DependencyDBRead>::extract_vec::<TableId>),
+        from_fn(By::<TableId>::find_versions::<DaoQueries, TableDBWithNames>),
+        from_fn(vec_create_table_dependency),
+        from_fn(With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
+        // Build
+        from_fn(With::<FunctionWithTablesBuilder>::build::<FunctionWithTables, _>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use td_database::sql::DbPool;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
@@ -126,8 +110,8 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         let queries = Arc::new(DaoQueries::default());
-        let provider =
-            ReadFunctionService::provider(db, queries, Arc::new(AuthzContext::default()));
+        let authz_context = Arc::new(AuthzContext::default());
+        let provider = ReadFunctionService::provider(db, queries, authz_context);
         let service = provider.make().await;
 
         let response: Metadata = service.raw_oneshot(()).await.unwrap();
@@ -153,27 +137,33 @@ mod tests {
             type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
             type_of_val(&AuthzOn::<CollectionId>::set),
             type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
-            type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-            // Read function with tables
+            // Read function with tables, triggers and dependencies
+            type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
             // Builder
             type_of_val(&builder::<FunctionWithTablesBuilder>),
-            // Read function version
-            type_of_val(&By::<FunctionVersionId>::select::<DaoQueries, FunctionDBWithNames>),
+            // Convert to function read
             type_of_val(&With::<FunctionDBWithNames>::convert_to::<FunctionBuilder, _>),
             type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
             type_of_val(&With::<Function>::set::<FunctionWithTablesBuilder>),
-            // Read trigger
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBRead>),
-            type_of_val(&With::<TriggerDBRead>::vec_convert_to::<TableTrigger, _>),
-            type_of_val(&With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
-            // Read dependencies
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDBRead>),
-            type_of_val(&With::<DependencyDBRead>::vec_convert_to::<TableDependency, _>),
-            type_of_val(&With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
             // Read tables
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TableDBRead>),
+            type_of_val(&TableStatus::active),
+            type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, TableDBRead>),
             type_of_val(&With::<TableDBRead>::vec_convert_to::<TableName, _>),
             type_of_val(&With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
+            // Read triggers
+            type_of_val(&TriggerStatus::active),
+            type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, TriggerDBRead>),
+            type_of_val(&With::<TriggerDBRead>::extract_vec::<TableId>),
+            type_of_val(&By::<TableId>::find_versions::<DaoQueries, TableDBWithNames>),
+            type_of_val(&With::<TableDBWithNames>::vec_convert_to::<TableTrigger, _>),
+            type_of_val(&With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
+            // Read dependencies
+            type_of_val(&DependencyStatus::active),
+            type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, DependencyDBRead>),
+            type_of_val(&With::<DependencyDBRead>::extract_vec::<TableId>),
+            type_of_val(&By::<TableId>::find_versions::<DaoQueries, TableDBWithNames>),
+            type_of_val(&vec_create_table_dependency),
+            type_of_val(&With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
             // Build
             type_of_val(&With::<FunctionWithTablesBuilder>::build::<FunctionWithTables, _>),
         ]);
@@ -181,6 +171,9 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_read(db: DbPool) -> Result<(), TdError> {
+        let queries = Arc::new(DaoQueries::default());
+        let authz_context = Arc::new(AuthzContext::default());
+
         let collection =
             seed_collection(&db, &CollectionName::try_from("cofnig")?, &UserId::admin()).await;
 
@@ -216,7 +209,7 @@ mod tests {
                 .build()?,
         );
 
-        let service = ReadFunctionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = ReadFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

@@ -56,7 +56,11 @@ impl FunctionServices {
                 authz_context.clone(),
             ),
             upload: UploadFunctionService::new(db.clone(), authz_context.clone(), storage.clone()),
-            read_version: ReadFunctionService::new(db.clone(), authz_context.clone()),
+            read_version: ReadFunctionService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
             list_by_collection: FunctionListByCollectionService::new(
                 db.clone(),
                 queries.clone(),
@@ -125,19 +129,20 @@ pub(crate) mod tests {
     use crate::function::layers::register::{
         SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
     };
+    use chrono::DateTime;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::handle_sql_err;
     use td_objects::sql::cte::CteQueries;
     use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::types::basic::{
-        DependencyStatus, FunctionStatus, TableDependency, TableName, TableStatus, TableTrigger,
-        TableTriggerDto, TriggerStatus, UserId,
+        AtTime, DependencyStatus, FunctionStatus, TableDependency, TableName, TableStatus,
+        TableTrigger, TableTriggerDto, TriggerStatus, UserId,
     };
     use td_objects::types::collection::CollectionDB;
     use td_objects::types::dependency::DependencyDBWithNames;
     use td_objects::types::function::{Function, FunctionDB, FunctionRegister, FunctionUpdate};
-    use td_objects::types::table::TableDB;
+    use td_objects::types::table::{TableDB, TableDBWithNames};
     use td_objects::types::table_ref::TableRef;
     use td_objects::types::trigger::TriggerDBWithNames;
 
@@ -181,6 +186,7 @@ pub(crate) mod tests {
 
         let queries = DaoQueries::default();
         let function_version_id = response.id();
+        let function_id = response.function_id();
 
         // Assert function was created
         let functions: Vec<FunctionDB> = queries
@@ -199,9 +205,9 @@ pub(crate) mod tests {
         assert_eq!(function.decorator(), response.decorator());
         assert_eq!(*function.status(), FunctionStatus::Active);
 
-        // Assert table versions were created (query by active to filter deleted tables in updates)
+        // Assert table versions were created
         let table_versions: Vec<TableDB> = queries
-            .select_by::<TableDB>(&(function_version_id, &TableStatus::Active))?
+            .select_versions_at::<TableDB>(None, Some(&[&TableStatus::Active]), &(function_id))?
             .build_query_as()
             .fetch_all(db)
             .await
@@ -221,11 +227,16 @@ pub(crate) mod tests {
             assert!(found.function_param_pos().is_some());
             assert_eq!(found.defined_on(), function.defined_on());
             assert_eq!(found.defined_by_id(), function.defined_by_id());
+            assert_eq!(*found.status(), TableStatus::Active);
         }
 
-        // Assert dependency versions were created (query by active to filter deleted dependencies in updates)
+        // Assert dependency versions were created
         let dependency_versions: Vec<DependencyDBWithNames> = queries
-            .select_by::<DependencyDBWithNames>(&(function_version_id, &DependencyStatus::Active))?
+            .select_versions_at::<DependencyDBWithNames>(
+                None,
+                Some(&[&DependencyStatus::Active]),
+                &(function_id),
+            )?
             .build_query_as()
             .fetch_all(db)
             .await
@@ -235,12 +246,28 @@ pub(crate) mod tests {
             req_dependencies.len() + SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES.len()
         );
         for dependency in req_dependencies {
+            let dependency = &TableDependency::try_from(dependency)?;
+            let dependency_table: TableDBWithNames = queries
+                .select_versions_at::<TableDBWithNames>(
+                    None,
+                    None,
+                    &(
+                        dependency
+                            .collection()
+                            .as_ref()
+                            .unwrap_or(collection.name()),
+                        dependency.table(),
+                    ),
+                )?
+                .build_query_as()
+                .fetch_one(db)
+                .await
+                .map_err(handle_sql_err)?;
             let found = dependency_versions
                 .iter()
-                .find(|d| **d.table_name() == **dependency.table())
+                .find(|d| d.table_id() == dependency_table.table_id())
                 .expect("dependency version not found");
             assert_eq!(found.collection_id(), function.collection_id());
-            assert_eq!(found.function_version_id(), function.id());
             assert_eq!(found.function_id(), function.function_id());
             assert_eq!(
                 found.table_collection(),
@@ -249,34 +276,49 @@ pub(crate) mod tests {
                     .as_ref()
                     .unwrap_or(collection.name())
             );
-            assert_eq!(**found.table_name(), **dependency.table());
             assert_eq!(*found.table_versions(), dependency.versions().into());
             assert_eq!(found.defined_on(), function.defined_on());
             assert_eq!(found.defined_by_id(), function.defined_by_id());
             assert_eq!(*found.status(), DependencyStatus::Active);
         }
 
-        // Assert trigger versions were created (query by active to filter deleted triggers in updates)
+        // Assert trigger versions were created
         let trigger_versions: Vec<TriggerDBWithNames> = queries
-            .select_by::<TriggerDBWithNames>(&(function_version_id, &TriggerStatus::Active))?
+            .select_versions_at::<TriggerDBWithNames>(
+                None,
+                Some(&[&TriggerStatus::Active]),
+                &(function_id),
+            )?
             .build_query_as()
             .fetch_all(db)
             .await
             .map_err(handle_sql_err)?;
         assert_eq!(trigger_versions.len(), req_triggers.len());
         for trigger in req_triggers {
+            let trigger = TableTrigger::try_from(trigger)?;
+            let trigger_table: TableDBWithNames = queries
+                .select_versions_at::<TableDBWithNames>(
+                    None,
+                    None,
+                    &(
+                        trigger.collection().as_ref().unwrap_or(collection.name()),
+                        trigger.table(),
+                    ),
+                )?
+                .build_query_as()
+                .fetch_one(db)
+                .await
+                .map_err(handle_sql_err)?;
             let found = trigger_versions
                 .iter()
-                .find(|d| **d.trigger_by_table_name() == **trigger.table())
+                .find(|d| **d.trigger_by_table_id() == **trigger_table.table_id())
                 .expect("trigger version not found");
             assert_eq!(found.collection_id(), function.collection_id());
-            assert_eq!(found.function_version_id(), function.id());
             assert_eq!(found.function_id(), function.function_id());
             assert_eq!(
                 found.trigger_by_collection(),
                 trigger.collection().as_ref().unwrap_or(collection.name())
             );
-            assert_eq!(**found.trigger_by_table_name(), **trigger.table());
             assert_eq!(*found.status(), TriggerStatus::Active);
         }
 
@@ -352,19 +394,32 @@ pub(crate) mod tests {
             assert_eq!(old_version[0].table_id(), new_version[0].table_id());
         }
 
+        // Use at time of the function version minus 1ms (right before the function version was defined)
+        let before_at_time = AtTime::try_from(
+            DateTime::from_timestamp_millis(response.defined_on().timestamp_millis() - 1).unwrap(),
+        )?;
+
         // Assert dependencies
         for dependency_dto in create.dependencies().as_deref().unwrap_or(&[]) {
             let dependency = &TableDependency::try_from(dependency_dto)?;
+
+            let dependency_table: TableDBWithNames = queries
+                .select_versions_at::<TableDBWithNames>(
+                    Some(&before_at_time),
+                    None,
+                    &(dependency.table()),
+                )?
+                .build_query_as()
+                .fetch_one(db)
+                .await
+                .map_err(handle_sql_err)?;
             // We will always have the old active version
             let old_version: Vec<DependencyDBWithNames> = queries
-                .select_by::<DependencyDBWithNames>(&(
-                    dependency
-                        .collection()
-                        .as_ref()
-                        .unwrap_or(collection.name()),
-                    dependency.table(),
-                    created_function.id(),
-                ))?
+                .select_versions_at::<DependencyDBWithNames>(
+                    Some(&before_at_time),
+                    None,
+                    &(dependency_table.table_id(), created_function.function_id()),
+                )?
                 .build_query_as()
                 .fetch_all(db)
                 .await
@@ -373,15 +428,18 @@ pub(crate) mod tests {
             assert_eq!(*old_version[0].status(), DependencyStatus::Active);
 
             // And a new one, which will be active if still present, or else deleted
+            let dependency_table: TableDBWithNames = queries
+                .select_versions_at::<TableDBWithNames>(None, None, &(dependency.table()))?
+                .build_query_as()
+                .fetch_one(db)
+                .await
+                .map_err(handle_sql_err)?;
             let new_version: Vec<DependencyDBWithNames> = queries
-                .select_by::<DependencyDBWithNames>(&(
-                    dependency
-                        .collection()
-                        .as_ref()
-                        .unwrap_or(collection.name()),
-                    dependency.table(),
-                    response.id(),
-                ))?
+                .select_versions_at::<DependencyDBWithNames>(
+                    None,
+                    None,
+                    &(dependency_table.table_id(), response.function_id()),
+                )?
                 .build_query_as()
                 .fetch_all(db)
                 .await
@@ -410,27 +468,32 @@ pub(crate) mod tests {
         // Assert triggers
         for trigger_dto in create.triggers().as_deref().unwrap_or(&[]) {
             let trigger = TableTrigger::try_from(trigger_dto)?;
+            let trigger_table: TableDBWithNames = queries
+                .select_versions_at::<TableDBWithNames>(None, None, &(trigger.table()))?
+                .build_query_as()
+                .fetch_one(db)
+                .await
+                .map_err(handle_sql_err)?;
             // We will always have the old active version
             let old_version: Vec<TriggerDBWithNames> = queries
-                .select_by::<TriggerDBWithNames>(&(
-                    trigger.collection().as_ref().unwrap_or(collection.name()),
-                    trigger.table(),
-                    created_function.id(),
-                ))?
+                .select_versions_at::<TriggerDBWithNames>(
+                    Some(&before_at_time),
+                    None,
+                    &(trigger_table.table_id(), created_function.function_id()),
+                )?
                 .build_query_as()
                 .fetch_all(db)
                 .await
                 .map_err(handle_sql_err)?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(*old_version[0].status(), TriggerStatus::Active);
 
             // And a new one, which will be active if still present, or else deleted
             let new_version: Vec<TriggerDBWithNames> = queries
-                .select_by::<TriggerDBWithNames>(&(
-                    trigger.collection().as_ref().unwrap_or(collection.name()),
-                    trigger.table(),
-                    response.id(),
-                ))?
+                .select_versions_at::<TriggerDBWithNames>(
+                    None,
+                    None,
+                    &(trigger_table.table_id(), response.function_id()),
+                )?
                 .build_query_as()
                 .fetch_all(db)
                 .await
@@ -514,16 +577,23 @@ pub(crate) mod tests {
         // Assert dependencies
         for dependency in create.dependencies().as_deref().unwrap_or(&[]) {
             let dependency = &TableDependency::try_from(dependency)?;
+            let table_dependency: TableDBWithNames = queries
+                .select_versions_at::<TableDBWithNames>(
+                    Some(created_function.defined_on()),
+                    None,
+                    &(dependency.table()),
+                )?
+                .build_query_as()
+                .fetch_one(db)
+                .await
+                .map_err(handle_sql_err)?;
             // We will always have the old active version
             let old_version: Vec<DependencyDBWithNames> = queries
-                .select_by::<DependencyDBWithNames>(&(
-                    dependency
-                        .collection()
-                        .as_ref()
-                        .unwrap_or(collection.name()),
-                    dependency.table(),
-                    created_function.id(),
-                ))?
+                .select_versions_at::<DependencyDBWithNames>(
+                    Some(created_function.defined_on()),
+                    None,
+                    &(table_dependency.table_id(), created_function.function_id()),
+                )?
                 .build_query_as()
                 .fetch_all(db)
                 .await
@@ -535,13 +605,23 @@ pub(crate) mod tests {
         // Assert triggers
         for trigger_dto in create.triggers().as_deref().unwrap_or(&[]) {
             let trigger = &TableTrigger::try_from(trigger_dto)?;
+            let table_trigger: TableDBWithNames = queries
+                .select_versions_at::<TableDBWithNames>(
+                    Some(created_function.defined_on()),
+                    None,
+                    &(trigger.table()),
+                )?
+                .build_query_as()
+                .fetch_one(db)
+                .await
+                .map_err(handle_sql_err)?;
             // We will always have the old active version
             let old_version: Vec<TriggerDBWithNames> = queries
-                .select_by::<TriggerDBWithNames>(&(
-                    trigger.collection().as_ref().unwrap_or(collection.name()),
-                    trigger.table(),
-                    created_function.id(),
-                ))?
+                .select_versions_at::<TriggerDBWithNames>(
+                    Some(created_function.defined_on()),
+                    None,
+                    &(table_trigger.table_id(), created_function.function_id()),
+                )?
                 .build_query_as()
                 .fetch_all(db)
                 .await

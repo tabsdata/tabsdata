@@ -89,12 +89,14 @@ pub async fn update_function_run_status<Q: DerefQueries>(
 
                     (
                         FunctionRunStatus::Canceled,
+                        // Callback status transition, never returning error to avoid race conditions.
                         FunctionRunStatus::Running
                         | FunctionRunStatus::Done
                         | FunctionRunStatus::Error
-                        | FunctionRunStatus::Failed,
+                        | FunctionRunStatus::Failed
+                        // No-op already canceled status transition.
+                        | FunctionRunStatus::Canceled,
                     ) => {
-                        // Callback status transition, never returning error to avoid race conditions.
                         ctx.warning(UpdateStatusRunError::AlreadyCanceled(*current.id()))
                             .await;
                         None

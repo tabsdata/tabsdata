@@ -97,6 +97,7 @@ pub struct TableDBRead {
     table_id: TableId,
     collection_id: CollectionId,
     collection_name: CollectionName,
+    function_id: FunctionId,
     function_version_id: FunctionVersionId,
     private: Private,
     function_name: FunctionName,

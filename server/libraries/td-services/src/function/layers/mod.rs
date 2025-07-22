@@ -5,7 +5,8 @@
 #![allow(private_bounds, non_camel_case_types)]
 
 use crate::function::layers::register::{
-    build_dependency_versions, build_table_versions, build_trigger_versions,
+    build_dependency_versions, build_table_versions, build_tables_trigger_versions,
+    build_trigger_versions,
 };
 use itertools::Itertools;
 use std::ops::Deref;
@@ -29,6 +30,7 @@ use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
 pub mod delete;
+pub mod read;
 pub mod register;
 pub mod update;
 pub mod upload;
@@ -60,6 +62,9 @@ pub fn register_tables() {
         from_fn(With::<RequestContext>::update::<TableDBBuilder, _>),
         from_fn(build_table_versions),
         from_fn(insert_vec::<DaoQueries, TableDB>),
+        // Insert into trigger_versions(sql) downstream table triggers updates.
+        from_fn(build_tables_trigger_versions::<DaoQueries>),
+        from_fn(insert_vec::<DaoQueries, TriggerDB>),
     )
 }
 

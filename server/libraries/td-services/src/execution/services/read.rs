@@ -5,7 +5,7 @@
 use crate::execution::layers::plan::{build_execution_plan, build_response};
 use crate::execution::layers::read::build_existing_transaction_map;
 use crate::execution::layers::template::{
-    build_execution_template, find_all_input_tables, version_graph,
+    build_execution_template, find_all_input_tables, find_trigger_graph,
 };
 use td_error::TdError;
 use td_objects::crudl::ReadRequest;
@@ -18,7 +18,6 @@ use td_objects::types::basic::{
 };
 use td_objects::types::execution::{ExecutionDB, ExecutionResponse, TransactionDB};
 use td_objects::types::function::FunctionDBWithNames;
-use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
@@ -47,9 +46,8 @@ fn provider() {
         from_fn(With::<ExecutionDB>::extract::<FunctionVersionId>),
         from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-        // Create execution template.
         // Find trigger graph
-        from_fn(version_graph::<DaoQueries, TriggerDBWithNames>),
+        from_fn(find_trigger_graph::<DaoQueries>),
         // Find all input tables
         from_fn(find_all_input_tables::<DaoQueries>),
         // Create execution template
@@ -105,7 +103,7 @@ mod tests {
             type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
             // Create execution template.
             // Find trigger graph
-            type_of_val(&version_graph::<DaoQueries, TriggerDBWithNames>),
+            type_of_val(&find_trigger_graph::<DaoQueries>),
             // Find all input tables
             type_of_val(&find_all_input_tables::<DaoQueries>),
             // Create execution template

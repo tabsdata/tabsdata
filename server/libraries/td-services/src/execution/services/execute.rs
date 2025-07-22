@@ -7,7 +7,7 @@ use crate::execution::layers::plan::{
     build_table_data_versions, build_transaction_map, build_transactions,
 };
 use crate::execution::layers::template::{
-    build_execution_template, find_all_input_tables, version_graph,
+    build_execution_template, find_all_input_tables, find_trigger_graph,
 };
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
@@ -21,7 +21,7 @@ use td_objects::tower_service::from::{
 };
 use td_objects::tower_service::sql::{insert, insert_vec, By, SqlSelectService};
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName,
+    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, FunctionStatus,
 };
 use td_objects::types::dependency::DependencyDBWithNames;
 use td_objects::types::execution::{
@@ -61,17 +61,20 @@ fn provider() {
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         // Select trigger function.
+        from_fn(FunctionStatus::active),
         from_fn(
-            By::<(CollectionIdName, FunctionIdName)>::select::<DaoQueries, FunctionDBWithNames>
+            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                DaoQueries,
+                FunctionDBWithNames,
+            >
         ),
         // check requester is coll_admin or coll_exec for the function's collection
         from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollExec>::check),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
-        // Create execution template.
         // Find trigger graph
-        from_fn(version_graph::<DaoQueries, TriggerDBWithNames>),
+        from_fn(find_trigger_graph::<DaoQueries>),
         // Find all input tables
         from_fn(find_all_input_tables::<DaoQueries>),
         // inter collection authz check
@@ -188,8 +191,9 @@ pub(crate) mod tests {
                     type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
                     type_of_val(&combine::<CollectionIdName, FunctionIdName>),
                     // Select trigger function.
+                    type_of_val(&FunctionStatus::active),
                     type_of_val(
-                        &By::<(CollectionIdName, FunctionIdName)>::select::<
+                        &By::<(CollectionIdName, FunctionIdName)>::select_version::<
                             DaoQueries,
                             FunctionDBWithNames,
                         >,
@@ -199,9 +203,8 @@ pub(crate) mod tests {
                     type_of_val(&AuthzOn::<CollectionId>::set),
                     type_of_val(&Authz::<CollAdmin, CollExec>::check),
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                    // Create execution template.
                     // Find trigger graph
-                    type_of_val(&version_graph::<DaoQueries, TriggerDBWithNames>),
+                    type_of_val(&find_trigger_graph::<DaoQueries>),
                     // Find all input tables
                     type_of_val(&find_all_input_tables::<DaoQueries>),
                     // inter collections check for dependencies

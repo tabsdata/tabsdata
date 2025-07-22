@@ -18,6 +18,7 @@ use td_objects::types::dependency::DependencyDBWithNames;
 use td_objects::types::execution::{
     FunctionVersionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput,
 };
+use td_objects::types::function::FunctionDBWithNames;
 use td_objects::types::table::TableDBWithNames;
 use td_objects::types::table_ref::Versions;
 use td_objects::types::trigger::TriggerDBWithNames;
@@ -33,9 +34,17 @@ enum GraphError {
 
 /// Builder for creating am `ExecutionGraph`.
 pub struct GraphBuilder<'a> {
-    trigger_graph: &'a Vec<TriggerDBWithNames>,
     output_tables: &'a Vec<TableDBWithNames>,
-    input_tables: &'a Vec<DependencyDBWithNames>,
+    trigger_graph: &'a Vec<(
+        &'a TriggerDBWithNames,
+        &'a TableDBWithNames,
+        &'a FunctionDBWithNames,
+    )>,
+    input_tables: &'a Vec<(
+        &'a DependencyDBWithNames,
+        &'a TableDBWithNames,
+        &'a FunctionDBWithNames,
+    )>,
 }
 
 /// Adds a node to the graph if it does not exist.
@@ -55,13 +64,21 @@ where
 impl<'a> GraphBuilder<'a> {
     /// Creates a new `GraphBuilder` from a data and trigger graph.
     pub fn new(
-        trigger_graph: &'a Vec<TriggerDBWithNames>,
         output_tables: &'a Vec<TableDBWithNames>,
-        input_tables: &'a Vec<DependencyDBWithNames>,
+        trigger_graph: &'a Vec<(
+            &'a TriggerDBWithNames,
+            &'a TableDBWithNames,
+            &'a FunctionDBWithNames,
+        )>,
+        input_tables: &'a Vec<(
+            &'a DependencyDBWithNames,
+            &'a TableDBWithNames,
+            &'a FunctionDBWithNames,
+        )>,
     ) -> Self {
         Self {
-            trigger_graph,
             output_tables,
+            trigger_graph,
             input_tables,
         }
     }
@@ -76,8 +93,8 @@ impl<'a> GraphBuilder<'a> {
         let trigger_index = add_if_absent(&mut graph, &mut node_map, GraphNode::Function(trigger));
 
         // Add triggers, both nodes and edges
-        for trigger in self.trigger_graph.deref() {
-            let (source, target) = GraphNode::from_trigger(trigger)?;
+        for (_, table, function) in self.trigger_graph {
+            let (source, target) = GraphNode::input(table, function)?;
             let source_index = add_if_absent(&mut graph, &mut node_map, source);
             let target_index = add_if_absent(&mut graph, &mut node_map, target);
 
@@ -90,7 +107,7 @@ impl<'a> GraphBuilder<'a> {
 
         // Add the output tables for each function
         for table in self.output_tables {
-            let (source, target) = GraphNode::from_table(table)?;
+            let (source, target) = GraphNode::output(table)?;
             let source_index = add_if_absent(&mut graph, &mut node_map, source);
             let target_index = add_if_absent(&mut graph, &mut node_map, target);
 
@@ -105,18 +122,16 @@ impl<'a> GraphBuilder<'a> {
         }
 
         // Add the input tables for each function
-        for dependency in self.input_tables {
-            let (source, target) = GraphNode::from_dependency(dependency)?;
+        for (dep, table, function) in self.input_tables {
+            let (source, target) = GraphNode::input(table, function)?;
             let source_index = add_if_absent(&mut graph, &mut node_map, source);
             let target_index = add_if_absent(&mut graph, &mut node_map, target);
 
             let graph_dependency = GraphDependency::builder()
-                .dep_pos(dependency.dep_pos())
-                .self_dependency(
-                    dependency.function_version_id() == dependency.table_function_version_id(),
-                )
+                .dep_pos(dep.dep_pos())
+                .self_dependency(function.id() == table.function_version_id())
                 .build()?;
-            let versions = dependency.table_versions().deref();
+            let versions = dep.table_versions().deref();
             let edge = GraphEdge::dependency(versions.clone(), graph_dependency);
 
             graph.add_edge(source_index, target_index, edge);
@@ -317,18 +332,6 @@ mod tests {
         dependency, function_node, table, table_node, trigger, FUNCTION_NAMES, TABLE_NAMES,
     };
 
-    #[test]
-    fn test_graph_builder_new() {
-        let output_tables = vec![];
-        let input_tables = vec![];
-        let trigger_graph = vec![];
-
-        let builder = GraphBuilder::new(&trigger_graph, &output_tables, &input_tables);
-        assert_eq!(builder.trigger_graph, &trigger_graph);
-        assert_eq!(builder.output_tables, &output_tables);
-        assert_eq!(builder.input_tables, &input_tables);
-    }
-
     #[tokio::test]
     async fn test_graph_builder_build() {
         let (graph, trigger_function) = test_graph().await;
@@ -487,9 +490,11 @@ mod tests {
             dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]).await,
             dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[1]).await,
         ];
+        let input_tables = input_tables.iter().map(|t| (&t.0, &t.1, &t.2)).collect();
         let trigger_graph = vec![trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await];
+        let trigger_graph = trigger_graph.iter().map(|t| (&t.0, &t.1, &t.2)).collect();
 
-        let builder = GraphBuilder::new(&trigger_graph, &output_tables, &input_tables);
+        let builder = GraphBuilder::new(&output_tables, &trigger_graph, &input_tables);
         let trigger_function = function_node(&FUNCTION_NAMES[0]);
         let graph = builder.build(trigger_function.clone()).unwrap();
         assert!(graph.validate_dag().is_ok());
@@ -507,8 +512,9 @@ mod tests {
             trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
             trigger(&TABLE_NAMES[1], &FUNCTION_NAMES[0]).await,
         ];
+        let trigger_graph = trigger_graph.iter().map(|t| (&t.0, &t.1, &t.2)).collect();
 
-        let builder = GraphBuilder::new(&trigger_graph, &output_tables, &input_tables);
+        let builder = GraphBuilder::new(&output_tables, &trigger_graph, &input_tables);
         let trigger_function = function_node(&FUNCTION_NAMES[0]);
 
         let graph = builder.build(trigger_function.clone()).unwrap();
@@ -578,8 +584,9 @@ mod tests {
             trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1]).await,
             trigger(&TABLE_NAMES[1], &FUNCTION_NAMES[0]).await,
         ];
+        let trigger_graph = trigger_graph.iter().map(|t| (&t.0, &t.1, &t.2)).collect();
 
-        let builder = GraphBuilder::new(&trigger_graph, &output_tables, &input_tables);
+        let builder = GraphBuilder::new(&output_tables, &trigger_graph, &input_tables);
         let trigger_function = function_node(&FUNCTION_NAMES[0]);
         let graph = builder.build(trigger_function.clone()).unwrap();
         assert!(graph

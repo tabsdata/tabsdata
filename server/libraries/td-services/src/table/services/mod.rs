@@ -188,7 +188,7 @@ pub(crate) mod tests {
 
         // And assert that all dependant function versions are also frozen
         let dependency_versions: Vec<DependencyDB> = queries
-            .select_versions_at::<DependencyDB>(None, None, &table_name)?
+            .select_versions_at::<DependencyDB>(None, None, &table_versions[0].table_id())?
             .build_query_as()
             .fetch_all(db)
             .await

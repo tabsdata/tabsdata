@@ -368,6 +368,17 @@ pub trait SqlFindService<E> {
     where
         Q: DerefQueries,
         D: DataAccessObject;
+
+    async fn find_versions<Q, D>(
+        connection: Connection,
+        queries: SrvCtx<Q>,
+        natural_order_by: Input<D::Order>,
+        status: Input<Vec<D::Condition>>,
+        by: Input<Vec<E>>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        Q: DerefQueries,
+        D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
 #[async_trait]
@@ -390,6 +401,35 @@ where
         let by: Vec<_> = by.iter().collect();
         let result = queries
             .find_by::<D>(&(by))?
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| TdError::from(SqlError::FindError(D::sql_table().to_string(), e)))?;
+
+        Ok(result)
+    }
+
+    async fn find_versions<Q, D>(
+        Connection(connection): Connection,
+        SrvCtx(queries): SrvCtx<Q>,
+        Input(natural_order_by): Input<D::Order>,
+        Input(status): Input<Vec<D::Condition>>,
+        Input(by): Input<Vec<E>>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        Q: DerefQueries,
+        D: DataAccessObject + PartitionBy + VersionedAt,
+    {
+        let mut conn = connection.lock().await;
+        let conn = conn.get_mut_connection()?;
+
+        let by: Vec<_> = by.iter().collect();
+        let result = queries
+            .find_versions_at::<D>(
+                Some(&*natural_order_by),
+                Some(&status.iter().collect::<Vec<_>>()[..]),
+                &(by),
+            )?
             .build_query_as()
             .fetch_all(&mut *conn)
             .await

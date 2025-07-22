@@ -189,7 +189,8 @@ where
     query_builder.push(format!(
         r#"
             SELECT
-                d.*
+                d.*,
+                CAST(d.{recurse_down} AS TEXT) AS path
             FROM
                 {LATEST_RECURSION_VERSIONS_CTE} d
             INNER JOIN
@@ -205,7 +206,8 @@ where
     query_builder.push(format!(
         r#"
         SELECT
-                d.*
+                d.*,
+                CAST(d.{recurse_down} AS TEXT) AS path
             FROM
                 {LATEST_RECURSION_VERSIONS_CTE} d
             INNER JOIN
@@ -217,15 +219,17 @@ where
 
     query_builder.push(" UNION ALL ");
 
-    // And then all downstream recursive
+    // And then all downstream recursive (preventing cycles)
     query_builder.push(format!(
         r#"
             SELECT
-                d.*
+                d.*,
+                rd.path || ',' || d.{recurse_down} AS path
             FROM
                 {LATEST_RECURSION_VERSIONS_CTE} d
             INNER JOIN
                 {RECURSIVE_VERSIONS_CTE} rd ON rd.{recurse_down} = d.{recurse_up}
+            WHERE instr(rd.path, d.{recurse_down}) = 0
         "#
     ));
 
@@ -409,25 +413,29 @@ mod tests {
 
         let expected = "recursive_versions AS (\
         \n            SELECT\
-        \n                d.*\
+        \n                d.*,\
+        \n                CAST(d.downstream AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
         \n                latest_reference_versions fv ON fv.reference_id = d.current\
         \n        WHERE fv.id = ? UNION ALL \
         \n        SELECT\
-        \n                d.*\
+        \n                d.*,\
+        \n                CAST(d.downstream AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
         \n                latest_reference_versions fv ON fv.reference_id = d.downstream\
         \n        WHERE fv.id = ? UNION ALL \
         \n            SELECT\
-        \n                d.*\
+        \n                d.*,\
+        \n                rd.path || ',' || d.downstream AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
         \n                recursive_versions rd ON rd.downstream = d.current\
+        \n            WHERE instr(rd.path, d.downstream) = 0\
         \n        )";
         assert_eq!(query.sql(), expected);
     }
@@ -470,25 +478,29 @@ mod tests {
         \n                rv.rn = 1\
         \n        ),recursive_versions AS (\
         \n            SELECT\
-        \n                d.*\
+        \n                d.*,\
+        \n                CAST(d.downstream AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
         \n                latest_reference_versions fv ON fv.reference_id = d.current\
         \n        WHERE fv.id = ? UNION ALL \
         \n        SELECT\
-        \n                d.*\
+        \n                d.*,\
+        \n                CAST(d.downstream AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
         \n                latest_reference_versions fv ON fv.reference_id = d.downstream\
         \n        WHERE fv.id = ? UNION ALL \
         \n            SELECT\
-        \n                d.*\
+        \n                d.*,\
+        \n                rd.path || ',' || d.downstream AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
         \n                recursive_versions rd ON rd.downstream = d.current\
+        \n            WHERE instr(rd.path, d.downstream) = 0\
         \n        ) SELECT DISTINCT id, partition_id, status, current, downstream, defined_on FROM recursive_versions ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
@@ -536,25 +548,29 @@ mod tests {
         \n                rv.rn = 1\
         \n        ),recursive_versions AS (\
         \n            SELECT\
-        \n                d.*\
+        \n                d.*,\
+        \n                CAST(d.downstream AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
         \n                latest_reference_versions fv ON fv.reference_id = d.current\
         \n        WHERE fv.reference_id = ? UNION ALL \
         \n        SELECT\
-        \n                d.*\
+        \n                d.*,\
+        \n                CAST(d.downstream AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
         \n                latest_reference_versions fv ON fv.reference_id = d.downstream\
         \n        WHERE fv.reference_id = ? UNION ALL \
         \n            SELECT\
-        \n                d.*\
+        \n                d.*,\
+        \n                rd.path || ',' || d.downstream AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
         \n                recursive_versions rd ON rd.downstream = d.current\
+        \n            WHERE instr(rd.path, d.downstream) = 0\
         \n        ) SELECT DISTINCT id, partition_id, status, current, downstream, defined_on FROM recursive_versions ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }

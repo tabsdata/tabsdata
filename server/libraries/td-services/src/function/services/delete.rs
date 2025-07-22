@@ -18,9 +18,9 @@ use td_objects::tower_service::from::{
 };
 use td_objects::tower_service::sql::{insert, By, SqlSelectAllService, SqlSelectService};
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
-    FunctionStatus, FunctionVersionId, ReuseFrozen, TableDependencyDto, TableNameDto,
-    TableTriggerDto,
+    AtTime, CollectionId, CollectionIdName, CollectionName, DependencyStatus, FunctionId,
+    FunctionIdName, FunctionStatus, FunctionVersionId, ReuseFrozen, TableDependencyDto,
+    TableNameDto, TableStatus, TableTriggerDto, TriggerStatus,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::DependencyDB;
@@ -74,9 +74,12 @@ fn provider() {
         from_fn(insert::<DaoQueries, FunctionDB>),
         // Register associations
         // Find previous versions.
-        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
-        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
-        from_fn(By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
+        from_fn(TableStatus::active),
+        from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, TableDB>),
+        from_fn(DependencyStatus::active),
+        from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, DependencyDB>),
+        from_fn(TriggerStatus::active_or_frozen),
+        from_fn(By::<FunctionId>::select_all_versions::<DaoQueries, TriggerDBWithNames>),
         // Extract new associations (empty because it is a delete operation).
         from_fn(With::<Option<Vec<TableNameDto>>>::default),
         from_fn(With::<Option<Vec<TableDependencyDto>>>::default),
@@ -115,7 +118,8 @@ mod tests {
         use td_tower::metadata::{type_of_val, Metadata};
 
         use crate::function::layers::register::{
-            build_dependency_versions, build_table_versions, build_trigger_versions,
+            build_dependency_versions, build_table_versions, build_tables_trigger_versions,
+            build_trigger_versions,
         };
         use td_objects::tower_service::from::{TryIntoService, UpdateService};
         use td_objects::tower_service::sql::insert_vec;
@@ -165,9 +169,12 @@ mod tests {
             type_of_val(&insert::<DaoQueries, FunctionDB>),
             // Register associations
             // Find previous versions.
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TableDB>),
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, DependencyDB>),
-            type_of_val(&By::<FunctionVersionId>::select_all::<DaoQueries, TriggerDBWithNames>),
+            type_of_val(&TableStatus::active),
+            type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, TableDB>),
+            type_of_val(&DependencyStatus::active),
+            type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, DependencyDB>),
+            type_of_val(&TriggerStatus::active_or_frozen),
+            type_of_val(&By::<FunctionId>::select_all_versions::<DaoQueries, TriggerDBWithNames>),
             // Extract new associations (empty because it is a delete operation).
             type_of_val(&With::<Option<Vec<TableNameDto>>>::default),
             type_of_val(&With::<Option<Vec<TableDependencyDto>>>::default),
@@ -180,6 +187,8 @@ mod tests {
             type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
             type_of_val(&build_table_versions),
             type_of_val(&insert_vec::<DaoQueries, TableDB>),
+            type_of_val(&build_tables_trigger_versions::<DaoQueries>),
+            type_of_val(&insert_vec::<DaoQueries, TriggerDB>),
             // Insert into dependency_versions(sql) current function table dependencies status=Active.
             type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
             type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),

@@ -4,9 +4,8 @@
 
 use crate::crudl::RequestContext;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, System,
-    TableId, TableName, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId,
-    UserName,
+    AtTime, CollectionId, CollectionName, FunctionId, System, TableId, TriggerId, TriggerStatus,
+    TriggerVersionId, UserId,
 };
 use crate::types::function::FunctionDB;
 
@@ -15,7 +14,7 @@ use crate::types::function::FunctionDB;
     sql_table = "triggers",
     partition_by = "function_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
-    recursive(up = "trigger_by_function_version_id", down = "function_version_id")
+    recursive(up = "trigger_by_function_id", down = "function_id")
 )]
 #[td_type(
     builder(try_from = FunctionDB, skip_all),
@@ -30,18 +29,15 @@ pub struct TriggerDB {
     trigger_id: TriggerId,
     #[td_type(builder(include, field = "function_id"))]
     function_id: FunctionId,
-    #[td_type(builder(include, field = "id"))]
-    function_version_id: FunctionVersionId,
     trigger_by_collection_id: CollectionId,
     trigger_by_function_id: FunctionId,
-    trigger_by_function_version_id: FunctionVersionId,
     trigger_by_table_id: TableId,
-    trigger_by_table_version_id: TableVersionId,
     status: TriggerStatus,
     #[td_type(updater(include, field = "time"))]
     defined_on: AtTime,
     #[td_type(updater(include, field = "user_id"))]
     defined_by_id: UserId,
+    system: System,
 }
 
 #[td_type::Dao]
@@ -49,30 +45,23 @@ pub struct TriggerDB {
     sql_table = "triggers__with_names",
     partition_by = "trigger_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
-    recursive(up = "trigger_by_function_version_id", down = "function_version_id")
+    recursive(up = "trigger_by_function_id", down = "function_id")
 )]
 pub struct TriggerDBWithNames {
     id: TriggerVersionId,
     collection_id: CollectionId,
     trigger_id: TriggerId,
     function_id: FunctionId,
-    function_version_id: FunctionVersionId,
     trigger_by_collection_id: CollectionId,
     trigger_by_function_id: FunctionId,
-    trigger_by_function_version_id: FunctionVersionId,
     trigger_by_table_id: TableId,
-    trigger_by_table_version_id: TableVersionId,
     status: TriggerStatus,
     defined_on: AtTime,
     defined_by_id: UserId,
+    system: System,
 
     collection: CollectionName,
-    function: FunctionName,
     trigger_by_collection: CollectionName,
-    trigger_by_table_name: TableName,
-    trigger_by_function: FunctionName,
-    defined_by: UserName,
-    system: System,
 }
 
 #[td_type::Dao]
@@ -80,27 +69,21 @@ pub struct TriggerDBWithNames {
     sql_table = "triggers__read",
     partition_by = "trigger_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
-    recursive(up = "trigger_by_function_version_id", down = "function_version_id")
+    recursive(up = "trigger_by_function_id", down = "function_id")
 )]
 pub struct TriggerDBRead {
     id: TriggerVersionId,
     collection_id: CollectionId,
     trigger_id: TriggerId,
     function_id: FunctionId,
-    function_version_id: FunctionVersionId,
     trigger_by_collection_id: CollectionId,
     trigger_by_function_id: FunctionId,
-    trigger_by_function_version_id: FunctionVersionId,
+    #[td_type(extractor)]
     trigger_by_table_id: TableId,
-    trigger_by_table_version_id: TableVersionId,
     status: TriggerStatus,
     defined_on: AtTime,
     defined_by_id: UserId,
 
     collection: CollectionName,
-    function: FunctionName,
     trigger_by_collection: CollectionName,
-    trigger_by_table_name: TableName,
-    trigger_by_function: FunctionName,
-    defined_by: UserName,
 }

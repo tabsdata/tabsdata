@@ -143,7 +143,8 @@ mod tests {
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_register_function(db: DbPool) {
         use crate::function::layers::register::{
-            build_dependency_versions, build_table_versions, build_trigger_versions,
+            build_dependency_versions, build_table_versions, build_tables_trigger_versions,
+            build_trigger_versions,
         };
         use td_objects::tower_service::authz::InterColl;
         use td_objects::tower_service::from::{
@@ -231,6 +232,8 @@ mod tests {
                     type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
                     type_of_val(&build_table_versions),
                     type_of_val(&insert_vec::<DaoQueries, TableDB>),
+                    type_of_val(&build_tables_trigger_versions::<DaoQueries>),
+                    type_of_val(&insert_vec::<DaoQueries, TriggerDB>),
                     // Insert into dependency_versions(sql) current function table dependencies status=Active.
                     type_of_val(&With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
                     type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
