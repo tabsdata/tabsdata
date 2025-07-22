@@ -346,7 +346,6 @@ def test_from_non_empty_tableframe():
 def test_bool_on_none() -> None:
     tf: TableFrame | None = None
     assert not tf
-    assert not tf
 
 
 def assert_columns_sorted(lf: pl.LazyFrame) -> None:

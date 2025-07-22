@@ -445,7 +445,7 @@ version = "0.44.2"
 features = ["lazy", "parquet", "csv", "json", "polars-lazy", "streaming", "cloud", "aws", "azure", "gcp", "cloud_write", "sql"]
 
 [workspace.dependencies.rand]
-version = "0.9.1"
+version = "0.9.2"
 
 [workspace.dependencies.ratatui]
 version = "0.28.1"
@@ -476,7 +476,7 @@ version = "1.0.219"
 features = ["derive"]
 
 [workspace.dependencies.serde_json]
-version = "1.0.140"
+version = "1.0.141"
 
 [workspace.dependencies.serde_valid]
 version = "0.25.1"
@@ -489,7 +489,7 @@ version = "0.8.6"
 features = ["sqlite", "runtime-tokio", "macros", "chrono"]
 
 [workspace.dependencies.strum]
-version = "0.27.1"
+version = "0.27.2"
 
 [workspace.dependencies.supports-color]
 version = "3.0.2"
