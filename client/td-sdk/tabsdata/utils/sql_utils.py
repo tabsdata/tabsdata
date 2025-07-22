@@ -30,6 +30,7 @@ handler.setFormatter(formatter)
 logger = logging.getLogger(__name__)
 logger.addHandler(handler)
 logger.setLevel(logging.WARNING)
+logger.propagate = False
 
 
 MAX_USER_LENGTH = 16
