@@ -16,15 +16,15 @@ from typing import Any
 import boto3
 
 # noinspection PyPackageRequirements
-import cx_Oracle
-
-# noinspection PyPackageRequirements
 import docker
 import hvac
 
 # noinspection PyPackageRequirements
 import mysql.connector
 import numpy as np
+
+# noinspection PyPackageRequirements
+import oracledb
 import polars as pl
 import psycopg2
 
@@ -731,12 +731,12 @@ def create_docker_oracle_database():
         retry = 0
         while True:
             try:
-                dsn_tns = cx_Oracle.makedsn(DB_HOST, ORACLE_PORT, service_name="FREE")
-                mydb = cx_Oracle.connect(
+                dsn_tns = oracledb.makedsn(DB_HOST, ORACLE_PORT, service_name="FREE")
+                mydb = oracledb.connect(
                     user="system", password=DB_PASSWORD, dsn=dsn_tns
                 )
                 break
-            except (Exception, cx_Oracle.DatabaseError) as err:
+            except (Exception, oracledb.DatabaseError) as err:
                 retry += 1
                 # Waiting for up to 10' & 30'', as young Gauss already knew.
                 if retry == MAXIMUM_RETRY_COUNT:

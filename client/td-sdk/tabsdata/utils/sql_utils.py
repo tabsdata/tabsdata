@@ -7,6 +7,7 @@ import urllib.parse
 from enum import Enum
 
 import sqlalchemy.dialects.mysql.mysqlconnector as mysqlconnector
+import sqlalchemy.dialects.oracle.oracledb as oracleconnector
 from sqlalchemy import create_engine
 
 from tabsdata.credentials import UserPasswordCredentials
@@ -49,6 +50,9 @@ class SQLDescriptor:
 class SupportedSQL(Enum):
     MYSQL = SQLDescriptor(
         name=mysqlconnector.dialect.name, driver=mysqlconnector.dialect.driver
+    )
+    ORACLE = SQLDescriptor(
+        name=oracleconnector.dialect.name, driver=oracleconnector.dialect.driver
     )
 
 
@@ -142,29 +146,30 @@ def escape_special_characters(string: str) -> str:
 
 def add_driver_to_uri(uri: str, log=False) -> str:
     logger.debug("Adding driver to uri") if log else None
-    if uri.startswith(SupportedSQL.MYSQL.value.name + "://"):
-        descriptor = SupportedSQL.MYSQL.value
+
+    for supported_sql in SupportedSQL:
+        descriptor = supported_sql.value
         name = descriptor.name
         driver = descriptor.driver
-        uri = uri.replace(f"{name}://", f"{name}+{driver}://", 1)
-        logger.debug(f"Added driver '{driver}' to '{name}' uri") if log else None
+        prefix = f"{descriptor.name}://"
+        if uri.startswith(prefix):
+            uri = uri.replace(prefix, f"{name}+{driver}://", 1)
+            if log:
+                logger.debug(f"Added driver '{driver}' to '{name}' uri")
+            break
     else:
-        (
+        if log:
+            known_prefixes = ", ".join(f"{sql.value.name}://" for sql in SupportedSQL)
             logger.debug(
-                "Driver not added to uri. URI did not start with a value"
-                f" in{', '.join([sql_descriptor.value.name
-                                 for sql_descriptor in SupportedSQL])}'"
-                " or already had a driver"
+                "Driver not added. The uri does not match any database prefix that"
+                f" requires adding a driver: {known_prefixes}"
             )
-            if log
-            else None
-        )
     return uri
 
 
 DRIVER_TYPE_AND_RECOMMENDATION_FOR_OUTPUT = {
     MySQLDestination: ("MySQL", "mysql-connector-python"),
-    OracleDestination: ("Oracle", "cx_Oracle"),
+    OracleDestination: ("Oracle", "oracledb"),
     PostgresDestination: ("Postgres", "psycopg2-binary"),
     MariaDBDestination: ("MariaDB", "mysql-connector-python"),
 }

@@ -39,6 +39,42 @@ def print_dpi1047(message: str) -> bool:
     return True
 
 
+# noinspection DuplicatedCode
+def check_package_oracledb() -> bool:
+    console.print("")
+    console.print("2.- Testing oracledb Python package...")
+
+    try:
+        # noinspection PyPackageRequirements
+        import oracledb
+
+        console.print("    - Package oracledb imported successfully")
+        console.print(f"    - Version of oracledb: {oracledb.version}")
+        try:
+            oracledb.init_oracle_client()
+            oracle_instant_client_version = oracledb.clientversion()
+            console.print(
+                "    - Version of Oracle Instant Client: "
+                f" {'.'.join(map(str, oracle_instant_client_version))}"
+            )
+        except Exception as e:
+            console.print(f"    - Oracle Instant Client version check failed")
+            if not print_dpi1047(str(e)):
+                console.print(f"      {e}")
+            return False
+    except ImportError as e:
+        console.print(f"    - Package oracledb is not available: {e}")
+        console.print("    - You can run 'pip install oracledb' to address this issue.")
+        console.print("    - This is only an issue if you have Oracle subscribers.")
+        return False
+    except Exception as e:
+        console.print(f"    - Unexpected error checking package oracledb: {e}")
+        return False
+
+    return True
+
+
+# noinspection DuplicatedCode
 def check_package_cx_oracle() -> bool:
     console.print("")
     console.print("1.- Testing cx_Oracle Python package...")
@@ -50,6 +86,7 @@ def check_package_cx_oracle() -> bool:
         console.print("    - Package cx_Oracle imported successfully")
         console.print(f"    - Version of cx_Oracle: {cx_Oracle.version}")
         try:
+            cx_Oracle.init_oracle_client()
             oracle_instant_client_version = cx_Oracle.clientversion()
             console.print(
                 "    - Version of Oracle Instant Client: "
@@ -65,6 +102,9 @@ def check_package_cx_oracle() -> bool:
         console.print(
             "    - You can run 'pip install cx_Oracle' to address this issue."
         )
+        console.print(
+            "    - This is not an issue, as oracledb is preferred over cx_Oracle."
+        )
         return False
     except Exception as e:
         console.print(f"    - Unexpected checking package cx_Oracle: {e}")
@@ -73,25 +113,15 @@ def check_package_cx_oracle() -> bool:
     return True
 
 
-def check_package_oracledb() -> bool:
-    console.print("")
-    console.print("2.- Testing oracledb Python package...")
-
-    try:
-        # noinspection PyPackageRequirements
-        import oracledb
-
-        console.print("    - Package oracledb imported successfully")
-        console.print(f"    - Version of oracledb: {oracledb.version}")
-    except ImportError as e:
-        console.print(f"    - Package oracledb is not available: {e}")
-        console.print("    - You can run 'pip install oracledb' to address this issue.")
-        return False
-    except Exception as e:
-        console.print(f"    - Unexpected error checking package oracledb: {e}")
-        return False
-
-    return True
+def check_packages() -> bool:
+    cx_oracle_ok = check_package_cx_oracle()
+    oracledb_ok = check_package_oracledb()
+    if not cx_oracle_ok and not oracledb_ok:
+        console.print(
+            "Neither cx_Oracle nor oracledb packages are available. "
+            "You will need at least one of them."
+        )
+    return cx_oracle_ok or oracledb_ok
 
 
 def check_oracle_envs() -> bool:
@@ -187,14 +217,18 @@ def check_oracle_libraries() -> bool:
     return True
 
 
-def check_oracle_functionality() -> bool:
+def check_cx_oracle_functionality() -> bool:
     console.print("")
-    console.print("5.- Testing Oracle connectivity...")
+    console.print("5.- Testing Oracle connectivity with cx_oracle...")
 
     try:
         # noinspection PyPackageRequirements,PyUnresolvedReferences
         import cx_Oracle
+    except ImportError:
+        console.print("    Driver cx_oracle not available. Skipping test")
+        return True
 
+    try:
         dsn = (
             "(DESCRIPTION="
             "(CONNECT_TIMEOUT=5)"
@@ -216,7 +250,7 @@ def check_oracle_functionality() -> bool:
             else:
                 console.print(
                     "    - Unexpected database error, but it appears to be "
-                    f"functional): {e}"
+                    f"functional: {e}"
                 )
         except Exception as e:
             console.print(f"    - Oracle client library is not functional: {e}")
@@ -228,10 +262,65 @@ def check_oracle_functionality() -> bool:
     return True
 
 
+def check_oracledb_functionality() -> bool:
+    console.print("")
+    console.print("6.- Testing Oracle connectivity with oracledb...")
+
+    try:
+        # noinspection PyPackageRequirements,PyUnresolvedReferences
+        import oracledb
+    except ImportError:
+        console.print("    Driver oracledb not available. Skipping test")
+        return True
+
+    try:
+        dsn = (
+            "(DESCRIPTION="
+            "(CONNECT_TIMEOUT=5)"
+            "(CONNECT_DATA=(SERVICE_NAME=dummy))"
+            "(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=1521)))"
+        )
+
+        try:
+            oracledb.connect(
+                user="dummy",
+                password="dummy",
+                dsn=dsn,
+            )
+            console.print("    - Unexpected: dummy pool creation succeeded!")
+        except oracledb.DatabaseError as e:
+            error_code = e.args[0].code if e.args else 0
+            if error_code in [12154, 12514, 12541, 1017]:
+                console.print("    - Oracle client libraries are functional!")
+            else:
+                console.print(
+                    "    - Unexpected database error, but it appears to be "
+                    f"functional: {e}"
+                )
+        except Exception as e:
+            console.print(f"    - Oracle client library is not functional: {e}")
+            return False
+    except Exception as e:
+        console.print(f"    - Oracle client library cannot be loaded: {e}")
+        return False
+
+    return True
+
+
+def check_oracle_functionality() -> bool:
+    cx_oracle_functionality_ok = check_cx_oracle_functionality()
+    oracledb_functionality_ok = check_oracledb_functionality()
+    if not cx_oracle_functionality_ok and not oracledb_functionality_ok:
+        console.print(
+            "Connectivity test failed for cx_Oracle or oracledb packages. "
+            "You will need at least one of them fully functional."
+        )
+    return cx_oracle_functionality_ok or oracledb_functionality_ok
+
+
 def check_oracle_setup() -> bool:
     return (
-        check_package_cx_oracle()
-        and check_package_oracledb()
+        check_packages()
         and check_oracle_envs()
         and check_oracle_libraries()
         and check_oracle_functionality()
