@@ -929,6 +929,57 @@ impl ListFilterGenerator for VisibleTablesCollections {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct VisibleFunctionsCollections(VisibleCollections);
+
+impl Deref for VisibleFunctionsCollections {
+    type Target = VisibleCollections;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<&VisibleCollections> for VisibleFunctionsCollections {
+    type Error = TdError;
+
+    fn try_from(visible: &VisibleCollections) -> Result<Self, TdError> {
+        Ok(Self(visible.clone()))
+    }
+}
+
+// TODO this is only allows functions of direct collections. We should make this
+// more generic and resilient.
+#[async_trait]
+impl ListFilterGenerator for VisibleFunctionsCollections {
+    async fn where_clause<'a, D: DataAccessObject>(
+        &'a self,
+        first: bool,
+        query_builder: &mut QueryBuilder<'a, Sqlite>,
+    ) -> Result<bool, QueryError> {
+        let mut first = first;
+        if first {
+            query_builder.push(" WHERE ");
+        } else {
+            query_builder.push(" AND ");
+        }
+        first = false;
+
+        let field = D::sql_field_for_type(std::any::type_name::<CollectionId>()).ok_or(
+            QueryError::TypeNotFound(
+                std::any::type_name::<CollectionId>().to_string(),
+                D::sql_table().to_string(),
+            ),
+        )?;
+
+        query_builder.push("(");
+        collections_where(query_builder, field, self.direct())?;
+        query_builder.push(")");
+
+        Ok(first)
+    }
+}
+
 #[td_type::typed(id)]
 pub struct WorkerId;
 

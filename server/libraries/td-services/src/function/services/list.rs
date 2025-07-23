@@ -8,9 +8,11 @@ use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::AtTimeParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{CollAdmin, CollDev, CollExec, CollRead};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
+use td_objects::tower_service::from::{ExtractNameService, ExtractService, TryIntoService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
-use td_objects::types::basic::{AtTime, FunctionStatus, VisibleCollections};
+use td_objects::types::basic::{
+    AtTime, FunctionStatus, VisibleCollections, VisibleFunctionsCollections,
+};
 use td_objects::types::function::Function;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -32,10 +34,17 @@ fn provider() {
         from_fn(With::<AtTimeParam>::extract::<AtTime>),
         // get allowed collections
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
+        // convert them to allowed function collections
+        from_fn(With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>),
         // list
         from_fn(FunctionStatus::active_or_frozen),
         from_fn(
-            By::<()>::list_versions_at::<AtTimeParam, VisibleCollections, DaoQueries, Function>
+            By::<()>::list_versions_at::<
+                AtTimeParam,
+                VisibleFunctionsCollections,
+                DaoQueries,
+                Function,
+            >
         ),
     )
 }
@@ -81,10 +90,17 @@ mod tests {
             type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
             // get allowed collections
             type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
+            // convert them to allowed function collections
+            type_of_val(&With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>),
             // list
             type_of_val(&FunctionStatus::active_or_frozen),
-            type_of_val(&
-                By::<()>::list_versions_at::<AtTimeParam, VisibleCollections, DaoQueries, Function>
+            type_of_val(
+                &By::<()>::list_versions_at::<
+                    AtTimeParam,
+                    VisibleFunctionsCollections,
+                    DaoQueries,
+                    Function,
+                >,
             ),
         ]);
     }
