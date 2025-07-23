@@ -758,7 +758,7 @@ impl AuthzRequirements for InterCollRead {
             ))?,
         };
         let collections_that_can_read_collection_in_scope = authz_ctx
-            .inter_collections_permissions_value_can_read_key(conn, &collection)
+            .inter_collections_permissions_value_can_read_key(conn, collection)
             .await?
             .unwrap_or_default();
         let mut permissions_for_indirect_collections =
@@ -2696,22 +2696,22 @@ mod tests {
         // role0 has admin on coll0, it should have only read on col1
         authz_context = authz_context.add_permissions(
             role0,
-            vec![Permission::CollectionAdmin(AuthzEntity::On(coll0.clone()))],
+            vec![Permission::CollectionAdmin(AuthzEntity::On(coll0))],
         );
         // role1 has dev on coll0, it should have read on col1
         authz_context = authz_context.add_permissions(
             role1,
-            vec![Permission::CollectionDev(AuthzEntity::On(coll0.clone()))],
+            vec![Permission::CollectionDev(AuthzEntity::On(coll0))],
         );
         // role2 has exec on coll0
         authz_context = authz_context.add_permissions(
             role2,
-            vec![Permission::CollectionExec(AuthzEntity::On(coll0.clone()))],
+            vec![Permission::CollectionExec(AuthzEntity::On(coll0))],
         );
         // role3 has read on coll0
         authz_context = authz_context.add_permissions(
             role3,
-            vec![Permission::CollectionRead(AuthzEntity::On(coll0.clone()))],
+            vec![Permission::CollectionRead(AuthzEntity::On(coll0))],
         );
         // role4 has admin on all collections, it should have only read on col1
         authz_context = authz_context
@@ -2735,7 +2735,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role0,
+            role0,
             false,
         ));
         assert_ok(
@@ -2750,7 +2750,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role1,
+            role1,
             false,
         ));
 
@@ -2766,7 +2766,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role2,
+            role2,
             false,
         ));
         assert_error(
@@ -2782,7 +2782,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role3,
+            role3,
             false,
         ));
         assert_error(
@@ -2798,7 +2798,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role4,
+            role4,
             false,
         ));
         assert_ok(
@@ -2813,7 +2813,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role5,
+            role5,
             false,
         ));
         assert_ok(
@@ -2828,7 +2828,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role6,
+            role6,
             false,
         ));
         assert_error(
@@ -2844,7 +2844,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role7,
+            role7,
             false,
         ));
         assert_error(
@@ -2863,7 +2863,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role0,
+            role0,
             false,
         ));
         assert_error(
@@ -2879,7 +2879,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role1,
+            role1,
             false,
         ));
         assert_error(
@@ -2895,7 +2895,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role2,
+            role2,
             false,
         ));
         assert_error(
@@ -2911,7 +2911,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role3,
+            role3,
             false,
         ));
         assert_error(
@@ -2927,7 +2927,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role6,
+            role6,
             false,
         ));
         assert_error(
@@ -2943,7 +2943,7 @@ mod tests {
         let request_context = Arc::new(RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            &role7,
+            role7,
             false,
         ));
         assert_error(
