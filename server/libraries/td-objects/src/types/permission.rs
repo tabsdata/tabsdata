@@ -100,9 +100,9 @@ pub struct InterCollectionPermissionDB {
     #[builder(default)]
     id: InterCollectionPermissionId,
     #[td_type(setter)]
-    from_collection_id: CollectionId,
+    from_collection_id: CollectionId, // the collection that grants access
     #[td_type(setter)]
-    to_collection_id: ToCollectionId,
+    to_collection_id: ToCollectionId, // the collection that is granted read access
     #[td_type(updater(try_from = RequestContext, field = "user_id"))]
     granted_by_id: UserId,
     #[td_type(updater(try_from = RequestContext, field = "time"))]
@@ -115,9 +115,9 @@ pub struct InterCollectionPermissionDBWithNames {
     #[td_type(extractor)]
     id: InterCollectionPermissionId,
     #[td_type(extractor)]
-    from_collection_id: CollectionId,
+    from_collection_id: CollectionId, // the collection that grants access
     from_collection: CollectionName,
-    to_collection_id: ToCollectionId,
+    to_collection_id: ToCollectionId, // the collection that is granted read access
     to_collection: CollectionName,
     granted_by_id: UserId,
     granted_by: UserName,

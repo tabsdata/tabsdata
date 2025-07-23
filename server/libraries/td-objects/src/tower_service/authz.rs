@@ -491,9 +491,14 @@ impl Permission {
 }
 
 /// Trait that provides the required permissions to use a service.
+#[async_trait]
 pub trait AuthzRequirements {
     /// Return the required permissions for the given [`AuthzScope`].
-    fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError>;
+    async fn any_of(
+        authz_ctx: &impl AuthzContextT,
+        conn: &mut SqliteConnection,
+        scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError>;
 }
 
 /// No required permissions.
@@ -503,8 +508,13 @@ pub struct NoPermissions {
     instance_blocker: (),
 }
 
+#[async_trait]
 impl AuthzRequirements for NoPermissions {
-    fn any_of(_scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+    async fn any_of(
+        _authz_ctx: &impl AuthzContextT,
+        _conn: &mut SqliteConnection,
+        _scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
         Ok(None)
     }
 }
@@ -516,8 +526,13 @@ pub struct InterColl {
     instance_blocker: (),
 }
 
+#[async_trait]
 impl AuthzRequirements for InterColl {
-    fn any_of(_scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+    async fn any_of(
+        _authz_ctx: &impl AuthzContextT,
+        _conn: &mut SqliteConnection,
+        _scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
         panic!("InterColl should not be used as a permission requirement, it is only used for inter collection access checks");
     }
 }
@@ -529,8 +544,13 @@ pub struct Requester {
     instance_blocker: (),
 }
 
+#[async_trait]
 impl AuthzRequirements for Requester {
-    fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+    async fn any_of(
+        _authz_ctx: &impl AuthzContextT,
+        _conn: &mut SqliteConnection,
+        scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
         match scope {
             AuthzScope::System => Err(AuthzError::InvalidAuthzScope(
                 "Requester".to_string(),
@@ -563,8 +583,13 @@ pub struct SysAdmin {
     instance_blocker: (),
 }
 
+#[async_trait]
 impl AuthzRequirements for SysAdmin {
-    fn any_of(_scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+    async fn any_of(
+        _authz_ctx: &impl AuthzContextT,
+        _conn: &mut SqliteConnection,
+        _scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
         Ok(Some(HashSet::from([Permission::SysAdmin])))
     }
 }
@@ -576,8 +601,13 @@ pub struct SecAdmin {
     instance_blocker: (),
 }
 
+#[async_trait]
 impl AuthzRequirements for SecAdmin {
-    fn any_of(_scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+    async fn any_of(
+        _authz_ctx: &impl AuthzContextT,
+        _conn: &mut SqliteConnection,
+        _scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
         Ok(Some(HashSet::from([Permission::SecAdmin])))
     }
 }
@@ -624,8 +654,13 @@ pub struct CollAdmin {
     instance_blocker: (),
 }
 
+#[async_trait]
 impl AuthzRequirements for CollAdmin {
-    fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+    async fn any_of(
+        _authz_ctx: &impl AuthzContextT,
+        _conn: &mut SqliteConnection,
+        scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
         match scope {
             AuthzScope::System | AuthzScope::SystemOrUser(_) => {
                 Ok(Some(HashSet::from([Permission::CollectionAdmin(
@@ -646,8 +681,13 @@ pub struct CollDev {
     instance_blocker: (),
 }
 
+#[async_trait]
 impl AuthzRequirements for CollDev {
-    fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+    async fn any_of(
+        _authz_ctx: &impl AuthzContextT,
+        _conn: &mut SqliteConnection,
+        scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
         collection_any_of::<Self>(scope, |collection_id| {
             HashSet::from([Permission::CollectionDev(AuthzEntity::On(*collection_id))])
         })
@@ -661,8 +701,13 @@ pub struct CollExec {
     instance_blocker: (),
 }
 
+#[async_trait]
 impl AuthzRequirements for CollExec {
-    fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+    async fn any_of(
+        _authz_ctx: &impl AuthzContextT,
+        _conn: &mut SqliteConnection,
+        scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
         collection_any_of::<Self>(scope, |collection_id| {
             HashSet::from([Permission::CollectionExec(AuthzEntity::On(*collection_id))])
         })
@@ -676,11 +721,66 @@ pub struct CollRead {
     instance_blocker: (),
 }
 
+#[async_trait]
 impl AuthzRequirements for CollRead {
-    fn any_of(scope: &AuthzScope) -> Result<Option<HashSet<Permission>>, TdError> {
+    async fn any_of(
+        _authz_ctx: &impl AuthzContextT,
+        _conn: &mut SqliteConnection,
+        scope: &AuthzScope,
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
         collection_any_of::<Self>(scope, |collection_id| {
             HashSet::from([Permission::CollectionRead(AuthzEntity::On(*collection_id))])
         })
+    }
+}
+
+/// The collection (X) in scope is accessible to the role because the role has [`CollAdmin`] or [`CollDev`]
+/// on a collection (Y) that has [`InterColl`] permission to the collection (X) in scope. In other words,
+/// collection Y can read tables from collection X.
+#[derive(Debug)]
+pub struct InterCollRead {
+    #[allow(dead_code)]
+    instance_blocker: (),
+}
+
+#[async_trait]
+impl AuthzRequirements for InterCollRead {
+    async fn any_of(
+        authz_ctx: &impl AuthzContextT,
+        conn: &mut SqliteConnection,
+        scope: &AuthzScope, //ccc_02
+    ) -> Result<Option<HashSet<Permission>>, TdError> {
+        let collection = match scope {
+            AuthzScope::Collection(AuthzEntity::On(collection_id)) => collection_id,
+            scope => Err(AuthzError::InvalidAuthzScope(
+                type_name::<Self>().to_owned(),
+                scope.to_str().to_string(),
+            ))?,
+        };
+        let collections_that_can_read_collection_in_scope = authz_ctx
+            .inter_collections_permissions_value_can_read_key(conn, &collection)
+            .await?
+            .unwrap_or_default();
+        let mut permissions_for_indirect_collections =
+            collections_that_can_read_collection_in_scope
+                .iter()
+                .map(|coll| coll.try_into().unwrap())
+                .flat_map(|coll| {
+                    vec![
+                        Permission::CollectionAdmin(AuthzEntity::On(coll)),
+                        Permission::CollectionDev(AuthzEntity::On(coll)),
+                    ]
+                })
+                .collect::<HashSet<_>>();
+
+        // if there are no explicit permissions for any collection, require for ALL collections
+        if permissions_for_indirect_collections.is_empty() {
+            permissions_for_indirect_collections
+                .insert(Permission::CollectionAdmin(AuthzEntity::All));
+            permissions_for_indirect_collections
+                .insert(Permission::CollectionDev(AuthzEntity::All));
+        }
+        Ok(Some(permissions_for_indirect_collections))
     }
 }
 
@@ -755,26 +855,29 @@ impl<
         Input(request_context): Input<RequestContext>,
         Input(scope): Input<AuthzScope>,
     ) -> Result<(), TdError> {
+        let mut conn = conn.lock().await;
+        let conn = conn.get_mut_connection()?;
+
         let mut required_permissions = HashSet::new();
-        if let Some(permissions) = C1::any_of(&scope)? {
+        if let Some(permissions) = C1::any_of(&*authz_context, conn, &scope).await? {
             required_permissions.extend(permissions)
         }
-        if let Some(permissions) = C2::any_of(&scope)? {
+        if let Some(permissions) = C2::any_of(&*authz_context, conn, &scope).await? {
             required_permissions.extend(permissions)
         }
-        if let Some(permissions) = C3::any_of(&scope)? {
+        if let Some(permissions) = C3::any_of(&*authz_context, conn, &scope).await? {
             required_permissions.extend(permissions)
         }
-        if let Some(permissions) = C4::any_of(&scope)? {
+        if let Some(permissions) = C4::any_of(&*authz_context, conn, &scope).await? {
             required_permissions.extend(permissions)
         }
-        if let Some(permissions) = C5::any_of(&scope)? {
+        if let Some(permissions) = C5::any_of(&*authz_context, conn, &scope).await? {
             required_permissions.extend(permissions)
         }
-        if let Some(permissions) = C6::any_of(&scope)? {
+        if let Some(permissions) = C6::any_of(&*authz_context, conn, &scope).await? {
             required_permissions.extend(permissions)
         }
-        if let Some(permissions) = C7::any_of(&scope)? {
+        if let Some(permissions) = C7::any_of(&*authz_context, conn, &scope).await? {
             required_permissions.extend(permissions)
         }
 
@@ -786,8 +889,6 @@ impl<
         if required_permissions.is_empty() {
             Ok(())
         } else {
-            let mut conn = conn.lock().await;
-            let conn = conn.get_mut_connection()?;
             if let Some(role_permissions) = authz_context
                 .role_permissions(conn, request_context.role_id())
                 .await?
@@ -925,7 +1026,8 @@ mod tests {
     use crate::crudl::RequestContext;
     use crate::tower_service::authz::{
         AuthzContextT, AuthzEntity, AuthzError, AuthzRequirements, AuthzScope, CollAdmin, CollDev,
-        CollExec, CollRead, InterColl, NoPermissions, Permission, Requester, SecAdmin, SysAdmin,
+        CollExec, CollRead, InterColl, InterCollRead, NoPermissions, Permission, Requester,
+        SecAdmin, SysAdmin,
     };
     use crate::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
     use crate::types::permission::InterCollectionAccess;
@@ -2569,4 +2671,324 @@ mod tests {
         assert_eq!(visible.indirect().len(), 1);
         assert!(visible.indirect().contains(&inter_collection));
     }
+
+    #[tokio::test]
+    async fn test_coll_via_inter_coll_ok() {
+        let coll0 = CollectionId::default();
+        let coll1 = CollectionId::default();
+        let coll2 = CollectionId::default();
+        let role0 = RoleId::default();
+        let role1 = RoleId::default();
+        let role2 = RoleId::default();
+        let role3 = RoleId::default();
+        let role4 = RoleId::default();
+        let role5 = RoleId::default();
+        let role6 = RoleId::default();
+        let role7 = RoleId::default();
+
+        let mut authz_context = AuthzContextForTest::default();
+
+        // coll0 can read coll1
+        authz_context = authz_context.add_inter_collection_permission(&coll1, &(*coll0).into());
+        // coll2 can read coll1
+        authz_context = authz_context.add_inter_collection_permission(&coll1, &(*coll2).into());
+
+        // role0 has admin on coll0, it should have only read on col1
+        authz_context = authz_context.add_permissions(
+            role0,
+            vec![Permission::CollectionAdmin(AuthzEntity::On(coll0.clone()))],
+        );
+        // role1 has dev on coll0, it should have read on col1
+        authz_context = authz_context.add_permissions(
+            role1,
+            vec![Permission::CollectionDev(AuthzEntity::On(coll0.clone()))],
+        );
+        // role2 has exec on coll0
+        authz_context = authz_context.add_permissions(
+            role2,
+            vec![Permission::CollectionExec(AuthzEntity::On(coll0.clone()))],
+        );
+        // role3 has read on coll0
+        authz_context = authz_context.add_permissions(
+            role3,
+            vec![Permission::CollectionRead(AuthzEntity::On(coll0.clone()))],
+        );
+        // role4 has admin on all collections, it should have only read on col1
+        authz_context = authz_context
+            .add_permissions(role4, vec![Permission::CollectionAdmin(AuthzEntity::All)]);
+        // role5 has dev on all collections, it should have only read on col1
+        authz_context =
+            authz_context.add_permissions(role5, vec![Permission::CollectionDev(AuthzEntity::All)]);
+        // role6 has exec on all collections
+        authz_context = authz_context
+            .add_permissions(role6, vec![Permission::CollectionExec(AuthzEntity::All)]);
+        // role7 has read on all collections
+        authz_context = authz_context
+            .add_permissions(role7, vec![Permission::CollectionRead(AuthzEntity::All)]);
+
+        let authz_context = Arc::new(authz_context);
+
+        // scope is collection col1
+        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(coll1)));
+
+        // role0 has admin on coll0, it should have only read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role0,
+            false,
+        ));
+        assert_ok(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+        )
+        .await;
+
+        // role1 has dev on coll0, it should have only read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role1,
+            false,
+        ));
+
+        assert_ok(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+        )
+        .await;
+
+        // role2 has exec on coll0, no read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role2,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+
+        // role3 has exec on coll0, no read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role3,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+
+        // role4 has admin on all collections, it should have only read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role4,
+            false,
+        ));
+        assert_ok(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+        )
+        .await;
+
+        // role5 has dev on all collections, it should have only read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role5,
+            false,
+        ));
+        assert_ok(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+        )
+        .await;
+
+        // role6 has exec on coll0, no read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role6,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+
+        // role7 has exec on coll0, no read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role7,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+
+        // scope is collection col2
+        let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(coll2)));
+
+        // role0 has admin on coll0, it should have only read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role0,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+
+        // role1 has dev on coll0, it should have only read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role1,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+
+        // role2 has exec on coll0, no read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role2,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+
+        // role3 has exec on coll0, no read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role3,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+
+        // role6 has exec on coll0, no read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role6,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+
+        // role7 has exec on coll0, no read on col1
+        let request_context = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            &role7,
+            false,
+        ));
+        assert_error(
+            &authz_context,
+            &request_context,
+            &scope,
+            Authz::<InterCollRead>::new(),
+            AuthzError::Forbidden("".to_string()),
+        )
+        .await;
+    }
+
+    // #[tokio::test]
+    // async fn test_x() {
+    //     let ccc_01 = CollectionId::default();
+    //     let ccc_02 = CollectionId::default();
+    //     let bar = RoleId::default();
+    //
+    //     let mut authz_context = AuthzContextForTest::default();
+    //
+    //     authz_context = authz_context.add_inter_collection_permission(&ccc_02, &(*ccc_01).into());
+    //
+    //     // role0 has admin on coll0, it should have only read on col1
+    //     authz_context = authz_context.add_permissions(
+    //         bar,
+    //         vec![Permission::CollectionDev(AuthzEntity::On(ccc_01.clone()))],
+    //     );
+    //     let authz_context = Arc::new(authz_context);
+    //
+    //     // scope is collection col1
+    //     let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(ccc_02)));
+    //
+    //     // role0 has admin on coll0, it should have only read on col1
+    //     let request_context = Arc::new(RequestContext::with(
+    //         AccessTokenId::default(),
+    //         UserId::admin(),
+    //         &bar,
+    //         false,
+    //     ));
+    //     assert_ok(
+    //         &authz_context,
+    //         &request_context,
+    //         &scope,
+    //         Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::new(),
+    //     )
+    //         .await;
+    // }
 }

@@ -6,7 +6,9 @@ use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::{DaoQueries, NoListFilter};
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
+use td_objects::tower_service::authz::{
+    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
+};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{AtTime, CollectionId, CollectionIdName, TableStatus};
@@ -35,7 +37,7 @@ fn provider() {
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
         // extract attime (natural order)
         from_fn(With::<CollectionAtName>::extract::<AtTime>),
         // list
@@ -86,7 +88,7 @@ mod tests {
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
             // extract attime (natural order)
             type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
             // list

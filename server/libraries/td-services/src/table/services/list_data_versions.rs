@@ -8,7 +8,9 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::{DaoQueries, NoListFilter};
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
+use td_objects::tower_service::authz::{
+    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
+};
 use td_objects::tower_service::from::{
     combine, ExtractNameService, ExtractService, TryIntoService, With,
 };
@@ -55,7 +57,7 @@ impl TableListDataVersionsService {
 
                 // check requester has collection permissions
                 from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
 
                 // extract at time (triggered on)
                 from_fn(With::<TableAtIdName>::extract::<AtTime>),
@@ -123,7 +125,7 @@ mod tests {
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
             // extract attime
             type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
             type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),

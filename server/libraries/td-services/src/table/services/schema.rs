@@ -8,7 +8,9 @@ use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
 use td_objects::crudl::{ReadRequest, RequestContext};
 use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
+use td_objects::tower_service::authz::{
+    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
+};
 use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlSelectService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
@@ -40,7 +42,7 @@ fn provider() {
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // Check permissions
         from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
         // Find data version location.
         find_data_version_location_at::<_, TableAtIdName>(),
         // Get table schema
@@ -125,7 +127,7 @@ mod tests {
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
             // Find table data version location.
             // Extract parameters
             type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
