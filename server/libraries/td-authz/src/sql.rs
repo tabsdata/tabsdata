@@ -87,10 +87,27 @@ impl SqlAuthzDataProvider {
 impl<'a> Provider<'a, AuthzData, &'a mut SqliteConnection> for SqlAuthzDataProvider {
     async fn get(&'a self, context: &'a mut SqliteConnection) -> Result<Arc<AuthzData>, TdError> {
         let permissions = self.get_permissions(context).await?;
-        let inter_collections_permissions = self.get_inter_collection_permissions(context).await?;
+        let inter_collections_permissions_value_can_read_key =
+            self.get_inter_collection_permissions(context).await?;
+        let inter_collections_permissions_key_can_read_value =
+            inter_collections_permissions_value_can_read_key
+                .iter()
+                .flat_map(|(from_collection, to_collections)| {
+                    to_collections
+                        .iter()
+                        .map(move |to_collection| (*to_collection, *from_collection))
+                })
+                .into_group_map()
+                .into_iter()
+                .map(|(to_collection, from_collections)| {
+                    (to_collection, Arc::new(from_collections))
+                })
+                .collect();
+
         let authz_data = AuthzData {
             permissions,
-            inter_collections_permissions,
+            inter_collections_permissions_value_can_read_key,
+            inter_collections_permissions_key_can_read_value,
         };
         Ok(Arc::new(authz_data))
     }
@@ -152,7 +169,12 @@ mod tests {
 
         let authz_data = provider.get(&mut db.acquire().await.unwrap()).await?;
         assert_eq!(authz_data.permissions.len(), 3);
-        assert_eq!(authz_data.inter_collections_permissions.len(), 2);
+        assert_eq!(
+            authz_data
+                .inter_collections_permissions_value_can_read_key
+                .len(),
+            2
+        );
 
         Ok(())
     }

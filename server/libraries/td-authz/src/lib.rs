@@ -33,7 +33,12 @@ pub async fn refresh_authz_context(
 #[derive(Debug)]
 struct AuthzData {
     permissions: HashMap<RoleId, Arc<Vec<Permission>>>,
-    inter_collections_permissions: HashMap<CollectionId, Arc<Vec<ToCollectionId>>>,
+    // Given a CollectionId, which ToCollectionIds can read from it
+    inter_collections_permissions_value_can_read_key:
+        HashMap<CollectionId, Arc<Vec<ToCollectionId>>>,
+    // Given a ToCollectionId, which CollectionIds it has read to
+    inter_collections_permissions_key_can_read_value:
+        HashMap<ToCollectionId, Arc<Vec<CollectionId>>>,
 }
 
 pub struct AuthzContextImplWithCache<'a> {
@@ -64,7 +69,7 @@ impl AuthzContextT for AuthzContextImplWithCache<'_> {
             .cloned())
     }
 
-    async fn inter_collection_access(
+    async fn inter_collections_permissions_value_can_read_key(
         &self,
         conn: &mut SqliteConnection,
         collection_id: &CollectionId,
@@ -73,7 +78,21 @@ impl AuthzContextT for AuthzContextImplWithCache<'_> {
             .provider
             .get(conn)
             .await?
-            .inter_collections_permissions
+            .inter_collections_permissions_value_can_read_key
+            .get(collection_id)
+            .cloned())
+    }
+
+    async fn inter_collections_permissions_key_can_read_value(
+        &self,
+        conn: &mut SqliteConnection,
+        collection_id: &ToCollectionId,
+    ) -> Result<Option<Arc<Vec<CollectionId>>>, TdError> {
+        Ok(self
+            .provider
+            .get(conn)
+            .await?
+            .inter_collections_permissions_key_can_read_value
             .get(collection_id)
             .cloned())
     }

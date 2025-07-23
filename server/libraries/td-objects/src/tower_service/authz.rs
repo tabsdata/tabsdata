@@ -192,11 +192,18 @@ pub trait AuthzContextT: Send + Sync {
     }
 
     /// Return the collections that can access public tables in the the given collection.
-    async fn inter_collection_access(
+    async fn inter_collections_permissions_value_can_read_key(
         &self,
         conn: &mut SqliteConnection,
         collection_id: &CollectionId,
     ) -> Result<Option<Arc<Vec<ToCollectionId>>>, TdError>;
+
+    /// Return the collections that can read from the given collection.
+    async fn inter_collections_permissions_key_can_read_value(
+        &self,
+        conn: &mut SqliteConnection,
+        collection_id: &ToCollectionId,
+    ) -> Result<Option<Arc<Vec<CollectionId>>>, TdError>;
 
     /// Return a [`(Vec<CollectionId>`,`Vec<CollectionId>)`] pair where the first vector contains the
     /// collections the given role has at least one permission for, and the second vector contains
@@ -260,14 +267,12 @@ pub trait AuthzContextT: Send + Sync {
         if !need_inter_collection_check_for.is_empty() {
             for coll in need_inter_collection_check_for.iter() {
                 let inter_collection_for_coll = self
-                    .inter_collection_access(conn, coll)
+                    .inter_collections_permissions_key_can_read_value(
+                        conn,
+                        &coll.try_into().unwrap(),
+                    )
                     .await?
-                    .map(|perms| {
-                        perms
-                            .iter()
-                            .map(|tc| tc.try_into().unwrap())
-                            .collect::<HashSet<CollectionId>>()
-                    })
+                    .map(|perms| perms.iter().copied().collect::<HashSet<_>>())
                     .unwrap_or_default();
                 inter_collection_permissions.extend(inter_collection_for_coll);
             }
@@ -848,7 +853,10 @@ impl<
         let mut no_access = vec![];
         for inter_collection_access in inter_collection_access_list {
             if let Some(collections) = authz_context
-                .inter_collection_access(conn, inter_collection_access.source())
+                .inter_collections_permissions_value_can_read_key(
+                    conn,
+                    inter_collection_access.source(),
+                )
                 .await?
             {
                 if !collections
@@ -1015,7 +1023,10 @@ mod tests {
     #[derive(Debug)]
     struct AuthzContextForTest {
         role_permissions_map: HashMap<RoleId, Arc<Vec<Permission>>>,
-        inter_collection_permission_map: HashMap<CollectionId, Arc<Vec<ToCollectionId>>>,
+        inter_collections_permissions_value_can_read_key:
+            HashMap<CollectionId, Arc<Vec<ToCollectionId>>>,
+        inter_collections_permissions_key_can_read_value:
+            HashMap<ToCollectionId, Arc<Vec<CollectionId>>>,
     }
 
     impl AuthzContextForTest {
@@ -1040,20 +1051,31 @@ mod tests {
             target: &ToCollectionId,
         ) -> Self {
             let entry = self
-                .inter_collection_permission_map
+                .inter_collections_permissions_value_can_read_key
                 .entry(*source)
                 .or_insert_with(|| Arc::new(Vec::new()));
             let entry_vec = Arc::make_mut(entry);
             if !entry_vec.contains(target) {
                 entry_vec.push(*target);
             }
+
+            let entry = self
+                .inter_collections_permissions_key_can_read_value
+                .entry(*target)
+                .or_insert_with(|| Arc::new(Vec::new()));
+            let entry_vec = Arc::make_mut(entry);
+            if !entry_vec.contains(source) {
+                entry_vec.push(*source);
+            }
+
             self
         }
 
         pub fn default() -> Self {
             Self {
                 role_permissions_map: HashMap::new(),
-                inter_collection_permission_map: HashMap::new(),
+                inter_collections_permissions_value_can_read_key: HashMap::new(),
+                inter_collections_permissions_key_can_read_value: HashMap::new(),
             }
             .add_permissions(
                 RoleId::sys_admin(),
@@ -1094,13 +1116,24 @@ mod tests {
             Ok(self.role_permissions_map.get(role).map(Arc::clone))
         }
 
-        async fn inter_collection_access(
+        async fn inter_collections_permissions_value_can_read_key(
             &self,
             _conn: &mut SqliteConnection,
             collection_id: &CollectionId,
         ) -> Result<Option<Arc<Vec<ToCollectionId>>>, TdError> {
             Ok(self
-                .inter_collection_permission_map
+                .inter_collections_permissions_value_can_read_key
+                .get(collection_id)
+                .map(Arc::clone))
+        }
+
+        async fn inter_collections_permissions_key_can_read_value(
+            &self,
+            _conn: &mut SqliteConnection,
+            collection_id: &ToCollectionId,
+        ) -> Result<Option<Arc<Vec<CollectionId>>>, TdError> {
+            Ok(self
+                .inter_collections_permissions_key_can_read_value
                 .get(collection_id)
                 .map(Arc::clone))
         }
@@ -2497,7 +2530,7 @@ mod tests {
             vec![Permission::CollectionAdmin(AuthzEntity::On(collection))],
         );
         authz_context =
-            authz_context.add_inter_collection_permission(&collection, &(*inter_collection).into());
+            authz_context.add_inter_collection_permission(&inter_collection, &(*collection).into());
         let authz_context = Arc::new(authz_context);
 
         let visible = authz_context
@@ -2524,7 +2557,7 @@ mod tests {
             vec![Permission::CollectionDev(AuthzEntity::On(collection))],
         );
         authz_context =
-            authz_context.add_inter_collection_permission(&collection, &(*inter_collection).into());
+            authz_context.add_inter_collection_permission(&inter_collection, &(*collection).into());
         let authz_context = Arc::new(authz_context);
 
         let visible = authz_context
