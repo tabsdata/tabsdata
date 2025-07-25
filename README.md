@@ -100,7 +100,7 @@ def sub(spanish: td.TableFrame):
 To publish data to Tabsdata run the following command:
 
 ```
-$ td fn trigger --collection examples --name pub
+$ td fn trigger --coll examples --name pub
 ```
 
 In Tabsdata binary distribution, every time the `pub` publisher is executed, the `tfr` transformer
