@@ -1,5 +1,3 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-
-tabsdata_snowflake[deps]==1.1.0

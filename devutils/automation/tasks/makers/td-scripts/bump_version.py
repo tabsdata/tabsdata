@@ -6,6 +6,8 @@ import argparse
 import importlib
 import importlib.util
 import os
+import subprocess
+from pathlib import Path
 from types import ModuleType
 
 
@@ -25,10 +27,14 @@ def load(module_name) -> ModuleType:
 
 logger = load("log").get_logger()
 
+TABSDATA_EE = "tabsdata-ee"
+TABSDATA_UI = "tabsdata-ui"
+
 IGNORED_FOLDERS = {
     ".git",
     ".idea",
     ".ipynb_checkpoints",
+    "node_modules",
     ".pytest_cache",
     ".tabsdata",
     "__pycache__",
@@ -68,6 +74,7 @@ def get_bump_files(root_folder) -> set:
         ".custom",
         "bump.cfg",
     )
+    logger.info(f"🔖 Using bump.cgf file {os.path.realpath(bump_files_file)}")
     if not os.path.exists(bump_files_file):
         logger.error(f"❌ Error: bump.cgf file not found at {bump_files_file}")
         exit(1)
@@ -78,20 +85,19 @@ def get_bump_files(root_folder) -> set:
             if line.strip()
         }
     if not bump_files:
-        logger.error("❌ Error: bump.cgf file is empty")
-        exit(1)
+        logger.warning("⚠️ Warning: bump.cgf file is empty")
     return bump_files
 
 
 def bump_version_in_file(path, old_version, new_version, bump_files, warnings):
     if path in bump_files:
         try:
-            with open(path, "r", encoding="utf-8") as file:
-                content = file.read()
+            with open(path, "r", encoding="utf-8") as file_r:
+                content = file_r.read()
                 if old_version in content:
                     content = content.replace(old_version, new_version)
-                    with open(path, "w", encoding="utf-8") as file:
-                        file.write(content)
+                    with open(path, "w", encoding="utf-8") as file_w:
+                        file_w.write(content)
                     logger.debug(f"✅ Bumped version in file {path}")
                 else:
                     logger.debug(f"🌀 Skipping bumping version in file {path}")
@@ -120,9 +126,22 @@ def bump_version(root_folder, old_version, new_version, bump_files):
             path = os.path.join(folder, file)
             bump_version_in_file(path, old_version, new_version, bump_files, warnings)
     for warning in warnings:
-        logger.warn(
+        logger.warning(
             f"‼️ File {warning} contains the old version but is not in the bump list"
         )
+
+
+def bump(root: str, old_version: str, new_version: str):
+    logger.info(f"✏️ Upgrading root {root}")
+
+    bump_files = get_bump_files(root)
+
+    logger.debug(
+        f"🔍 Replacing '{old_version}' with '{new_version}' in defined files:\n"
+        + "\n".join(f"   - {file}" for file in bump_files)
+    )
+
+    bump_version(root, old_version, new_version, bump_files)
 
 
 def main():
@@ -133,14 +152,25 @@ def main():
 
     old_version = get_old_version(args.root)
     new_version = args.version
-    bump_files = get_bump_files(args.root)
 
-    logger.debug(
-        f"🔍 Replacing '{old_version}' with '{new_version}' in defined files:\n"
-        + "\n".join(f"   - {file}" for file in bump_files)
-    )
-
-    bump_version(args.root, old_version, new_version, bump_files)
+    bump(args.root, old_version, new_version)
+    root = os.path.basename(args.root.rstrip(os.sep))
+    parent = Path(args.root).resolve().parent
+    if root == TABSDATA_EE:
+        bump(os.path.join(parent, TABSDATA_UI), args.version, new_version)
+        subprocess.run(
+            [
+                "npm",
+                "version",
+                new_version,
+                "--no-git-tag-version",
+            ],
+            cwd=os.path.join(parent, TABSDATA_UI),
+            capture_output=False,
+            text=True,
+        )
+    else:
+        logger.info(f"✂️ No need to upgrade additional root: {root}")
 
 
 if __name__ == "__main__":

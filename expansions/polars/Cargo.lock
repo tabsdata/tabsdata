@@ -1267,9 +1267,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.15"
+version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f66d5bd4c6f02bf0542fad85d626775bab9258cf795a4256dcaf3161114d1df"
+checksum = "8d9b05277c7e8da2c93a568989bb6207bef0112e8d17df7a6eda4a3cf143bc5e"
 dependencies = [
  "bytes",
  "futures-core",
@@ -1446,9 +1446,9 @@ dependencies = [
 
 [[package]]
 name = "io-uring"
-version = "0.7.8"
+version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b86e202f00093dcba4275d4636b93ef9dd75d025ae560d2521b45ea28ab49013"
+checksum = "d93587f37623a1a17d94ef2bc9ada592f5465fe7732084ab7beefabe5c77c0c4"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -3789,7 +3789,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -3805,7 +3805,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "td-apiforge"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "axum",
  "darling",
@@ -3828,7 +3828,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "darling",
  "openssl",
@@ -3840,7 +3840,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "duct",
  "openssl",
@@ -3852,7 +3852,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3903,7 +3903,7 @@ dependencies = [
 
 [[package]]
 name = "td-concrete"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "darling",
  "derive_builder",
@@ -3918,7 +3918,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "itertools",
@@ -3933,7 +3933,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -3947,7 +3947,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "darling",
  "duct",
@@ -3959,7 +3959,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -4079,7 +4079,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "openssl",
  "quote",
@@ -4088,7 +4088,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "openssl",
  "quote",
@@ -4283,7 +4283,7 @@ dependencies = [
 
 [[package]]
 name = "ty-expansions"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -4294,7 +4294,7 @@ dependencies = [
 
 [[package]]
 name = "ty-tableframe"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "openssl",
  "polars",

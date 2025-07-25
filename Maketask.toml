@@ -1869,6 +1869,7 @@ run_task = [
     { name = [
         "bump_cargo_modules",
         "bump_cargo_macros",
+        "bump_cargo_expansions",
     ] }
 ]
 
@@ -1878,23 +1879,51 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+    info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
     ''']
 
 [tasks.bump_cargo_macros]
 private = true
-cwd = "${PROJECT_RS_TD_MACROS_FOLDER}"
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_RS_TD_MACROS_FOLDER}"
+    info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
+    ''']
+
+[tasks.bump_cargo_expansions]
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}"
+    info "🚀 cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force \"*\""
+    exec --fail-on-error cargo workspaces -v version custom ${CARGO_MAKE_TASK_ARGS} --all --no-git-commit --yes --force "*"
     ''']
 
 [tasks.bump_other]
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "python"
-args = ["${BUMP_VERSION_PY}", "${PROJECT_TABSDATA_ROOT_FOLDER}", "${CARGO_MAKE_TASK_ARGS}"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+    info "🚀 python ${BUMP_VERSION_PY} ${PROJECT_TABSDATA_ROOT_FOLDER} ${CARGO_MAKE_TASK_ARGS}"
+    exec --fail-on-error python ${BUMP_VERSION_PY} ${PROJECT_TABSDATA_ROOT_FOLDER} ${CARGO_MAKE_TASK_ARGS}
+    ''']
 
 [tasks.virtualenv]
 cwd = "${ROOT_PROJECT_TABSDATA_FOLDER}"
