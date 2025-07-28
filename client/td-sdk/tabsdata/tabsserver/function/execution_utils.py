@@ -46,11 +46,18 @@ from tabsdata.tabsserver.function.cloud_connectivity_utils import (
     obtain_and_set_s3_credentials,
     set_s3_region,
 )
+from tabsdata.tabsserver.function.global_utils import (
+    CURRENT_PLATFORM,
+    convert_path_to_uri,
+)
 from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.native_tables_utils import (
     scan_lf_from_location,
     scan_tf_from_table,
     sink_lf_to_location,
+)
+from tabsdata.tabsserver.function.offset_utils import (
+    OFFSET_LAST_MODIFIED_VARIABLE_NAME,
 )
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
 from tabsdata.tabsserver.function.yaml_parsing import (
@@ -73,14 +80,6 @@ from tabsdata.utils.sql_utils import obtain_uri
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._context import TableFrameContext
-
-from .global_utils import (
-    CURRENT_PLATFORM,
-    convert_path_to_uri,
-)
-from .offset_utils import (
-    OFFSET_LAST_MODIFIED_VARIABLE_NAME,
-)
 
 if TYPE_CHECKING:
     from tabsdata.io.input import Input
@@ -167,7 +166,6 @@ def trigger_non_plugin_source(
     initial_values: Offset = None,
     idx: td_generators.IdxGenerator | None = None,
 ) -> list[TableFrame | None | list[TableFrame | None]]:
-    # Call binary to import files
     destination_folder = os.path.join(working_dir, SOURCES_FOLDER)
     os.makedirs(destination_folder, exist_ok=True)
     if isinstance(source, LocalFileSource):
@@ -652,8 +650,9 @@ def convert_characters_to_ascii(dictionary: dict) -> dict:
 
 def load_sources(
     execution_context: ExecutionContext,
-    local_sources: list,
+    local_sources: list | str | None,
     idx: td_generators.IdxGenerator | None = None,
+    working_dir: str | None = None,
 ) -> list[TableFrame | None | list[TableFrame | None]]:
     """
     Given a list of sources, load them into tabsdata TableFrames.
@@ -661,19 +660,34 @@ def load_sources(
     :param local_sources: A list of lists of paths to parquet files. Each element is
     :param idx: Table index generator to use for global indexing.
         either a string to a single file or a list of strings to multiple files.
+    :param working_dir: The working directory where the sources are located. If
+        populated, it will be prepended to the source paths.
     :return: A list were each element is either a DataFrame or a list of DataFrames.
     """
+    if isinstance(local_sources, str) or local_sources is None:
+        logger.debug(f"Obtained single source '{local_sources}', converting to list")
+        local_sources = [local_sources]
     logger.debug(f"Loading list of sources: {local_sources}")
+    if working_dir:
+        logger.debug(f"Using working directory '{working_dir}'")
     if idx is None:
         idx = td_generators.IdxGenerator()
     sources: list[TableFrame | list[TableFrame]] = []
     for source in local_sources:
         logger.debug(f"Loading single source: {source}")
         if isinstance(source, list):
-            sources.append(load_sources_from_list(execution_context, idx, source))
+            sources.append(
+                load_sources_from_list(
+                    execution_context, idx, source, working_dir=working_dir
+                )
+            )
         else:
             sources.append(
-                load_source(execution_context, idx, make_tableframe_context(source))
+                load_source(
+                    execution_context,
+                    idx,
+                    make_tableframe_context(source, working_dir=working_dir),
+                )
             )
     return sources
 
@@ -682,19 +696,27 @@ def load_sources_from_list(
     execution_context: ExecutionContext,
     idx: td_generators.IdxGenerator,
     source_list: list,
+    working_dir: str | None = None,
 ) -> list[TableFrame]:
     sources: list[TableFrame] = []
     for source in source_list:
         sources.append(
-            load_source(execution_context, idx, make_tableframe_context(source))
+            load_source(
+                execution_context,
+                idx,
+                make_tableframe_context(source, working_dir=working_dir),
+            )
         )
     return sources
 
 
 def make_tableframe_context(
     source: TableFrameContext | str | None,
+    working_dir: str | None = None,
 ) -> TableFrameContext | None:
     if isinstance(source, str):
+        logger.debug(f"Using source '{source}' and working directory '{working_dir}'")
+        source = os.path.join(working_dir, source) if working_dir else source
         tableframe_context = TableFrameContext(source)
     elif isinstance(source, TableFrameContext):
         tableframe_context = source

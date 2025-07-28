@@ -201,6 +201,8 @@ class SalesforceSource(SourcePlugin):
         # If using initial values logic, replace the token with the value
         if using_initial_values:
             max_date, query = self._replace_values_in_query(number, query)
+        else:
+            max_date = None
         destination_file = f"{number}.parquet"
         destination_path = os.path.join(working_dir, destination_file)
         res = sf.query_all_iter(query, include_deleted=self.include_deleted)

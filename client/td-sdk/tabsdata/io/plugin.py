@@ -4,15 +4,13 @@
 
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, List, Tuple, Union
 
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._generators as td_generators
-from tabsdata.io.input import LocalFileSource
 from tabsdata.tableframe.lazyframe.frame import TableFrame
-from tabsdata.tabsserver.function.execution_utils import trigger_non_plugin_source
+from tabsdata.tabsserver.function.execution_utils import load_sources
 from tabsdata.tabsserver.function.store_results_utils import (
     remove_system_columns_and_convert,
 )
@@ -159,50 +157,28 @@ class SourcePlugin:
 
         idx = td_generators.IdxGenerator()
         if isinstance(resulting_files, str) or resulting_files is None:
-            parameters = [
-                _import_plugin_file_from_single_element(
-                    resulting_files,
-                    working_dir,
-                    idx=idx,
-                    execution_context=self._ec,
-                )
-            ]
+            # Leaving this logic so that if users implement a plugin that
+            # returns the wrong type, they will get a clear error message.
+            pass
         elif isinstance(resulting_files, (list, tuple)):
-            parameters = []
             for element in resulting_files:
                 if isinstance(element, (list, tuple)):
-                    parameters.append(
-                        [
-                            _import_plugin_file_from_single_element(
-                                single_element,
-                                working_dir,
-                                idx=idx,
-                                execution_context=self._ec,
-                            )
-                            for single_element in element
-                        ]
-                    )
+                    # Leaving this logic so that if users implement a plugin that
+                    # returns the wrong type, they will get a clear error message.
+                    pass
                 elif isinstance(element, str) or element is None:
-                    parameters.append(
-                        _import_plugin_file_from_single_element(
-                            element,
-                            working_dir,
-                            idx=idx,
-                            execution_context=self._ec,
-                        )
-                    )
+                    pass
                 else:
                     logger.error(
-                        f"Invalid type for resulting files: {type(element)}. No data"
-                        " imported."
+                        f"Invalid type for individual file '{type(element)}' found "
+                        f"inside of resulting files '{resulting_files}'. "
+                        "No data imported."
                     )
                     raise TypeError(
-                        f"Invalid type for resulting files: {type(element)}. No data"
-                        " imported."
+                        f"Invalid type for individual file '{type(element)}' found "
+                        f"inside of resulting files '{resulting_files}'. "
+                        "No data imported."
                     )
-            logger.debug(
-                f"List of parameters obtained after plugin import: {parameters}"
-            )
         else:
             logger.error(
                 f"Invalid type for resulting files: {type(resulting_files)}. No data"
@@ -212,6 +188,10 @@ class SourcePlugin:
                 f"Invalid type for resulting files: {type(resulting_files)}. No data"
                 " imported."
             )
+        parameters = load_sources(
+            self._ec, resulting_files, idx, working_dir=working_dir
+        )
+        logger.debug(f"List of parameters obtained after plugin import: {parameters}")
         return parameters
 
     def chunk(self, working_dir: str) -> Union[str, Tuple[str, ...], List[str]]:
@@ -277,24 +257,6 @@ class SourcePlugin:
                 the plugin.
         """
         self._initial_values = values
-
-
-def _import_plugin_file_from_single_element(
-    resulting_files: str | None,
-    working_dir: str,
-    idx: td_generators.IdxGenerator,
-    execution_context: ExecutionContext,
-) -> Union[TableFrame, None, List[TableFrame | None]]:
-    if resulting_files is None:
-        return None
-    resulting_files_paths = os.path.join(working_dir, resulting_files)
-    source_config = LocalFileSource(path=resulting_files_paths)
-    return trigger_non_plugin_source(
-        source_config,
-        working_dir,
-        execution_context=execution_context,
-        idx=idx,
-    )[0]
 
 
 class DestinationPlugin:
