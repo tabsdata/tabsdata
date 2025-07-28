@@ -9,9 +9,8 @@ import logging
 import os
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from enum import auto
-from typing import Any, List, Literal, NoReturn, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, List, Literal, NoReturn, TypeVar, Union, cast
 
-import pandas as pd
 import polars as pl
 from accessify import accessify, private
 
@@ -46,6 +45,9 @@ import tabsdata.utils.tableframe._translator as td_translator
 from tabsdata.exceptions import ErrorCode, TableFrameError
 from tabsdata.extensions.tableframe.extension import TableFrameExtension
 from tabsdata.utils.annotations import pydoc
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # ToDo: SDK-128: Define the logging model for SDK CLI execution
 logger = logging.getLogger(__name__)
@@ -148,6 +150,9 @@ class TableFrame:
         Args:
             data: Input data.
         """
+
+        import pandas as pd
+
         # noinspection PyProtectedMember
         if data is None:
             data_out = pl.LazyFrame(None)

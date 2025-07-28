@@ -7,14 +7,7 @@ import logging
 import os
 from typing import List
 
-try:
-    import polars as pl
-    from dateutil import parser
-    from simple_salesforce import Salesforce, api
-
-    MISSING_LIBRARIES = False
-except ImportError:
-    MISSING_LIBRARIES = True
+import polars as pl
 
 from tabsdata.io.plugin import SourcePlugin
 from tabsdata.secret import DirectSecret, EnvironmentSecret, HashiCorpSecret, Secret
@@ -70,7 +63,10 @@ class SalesforceSource(SourcePlugin):
                 simple_salesforce.
 
         """
-        if MISSING_LIBRARIES:
+        try:
+            from dateutil import parser
+            from simple_salesforce import Salesforce, api  # noqa: F401
+        except ImportError:
             raise ImportError(
                 "The 'tabsdata_salesforce' package is missing some dependencies. You "
                 "can get them by installing 'tabsdata['salesforce']'"
@@ -253,11 +249,17 @@ class SalesforceSource(SourcePlugin):
         return query.replace(self.LAST_MODIFIED_TOKEN, new_value)
 
     def _maximum_date(self, date1: str, date2: str):
+
+        from dateutil import parser
+
         dates = [parser.parse(date) for date in [date1, date2]]
         result = max(dates).strftime(self.DATE_FORMAT)
         return result
 
     def _log_into_salesforce(self):
+
+        from simple_salesforce import Salesforce
+
         return Salesforce(
             username=self.username.secret_value,
             password=self.password.secret_value,

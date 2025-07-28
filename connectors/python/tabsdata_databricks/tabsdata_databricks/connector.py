@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from typing import List, Literal
+from typing import TYPE_CHECKING, List, Literal
 
 import polars as pl
 
@@ -15,14 +15,9 @@ from tabsdata.io.output import IfTableExistsStrategy, SchemaStrategy
 from tabsdata.io.plugin import DestinationPlugin
 from tabsdata.secret import DirectSecret, Secret
 
-try:
+if TYPE_CHECKING:
     import databricks.sdk as dbsdk
     import databricks.sql as dbsql
-    from databricks.sdk.core import Config, pat_auth
-
-    MISSING_LIBRARIES = False
-except ImportError:
-    MISSING_LIBRARIES = True
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -59,7 +54,6 @@ def _table_fqn_4sql(table: str) -> str:
 
 
 class DatabricksDestination(DestinationPlugin):
-
     def __init__(
         self,
         host_url: str,
@@ -81,7 +75,11 @@ class DatabricksDestination(DestinationPlugin):
         Args:
 
         """
-        if MISSING_LIBRARIES:
+        try:
+            import databricks.sdk as dbsdk  # noqa: F401
+            import databricks.sql as dbsql  # noqa: F401
+            from databricks.sdk.core import Config, pat_auth  # noqa: F401
+        except ImportError:
             raise ImportError(
                 "The 'tabsdata_databricks' package is missing some dependencies. You "
                 "can get them by installing 'tabsdata['databricks']'"
@@ -540,6 +538,13 @@ class DatabricksDestination(DestinationPlugin):
                 return table
 
     def _get_connections(self) -> tuple[dbsdk.WorkspaceClient, dbsql.Connection]:
+        # Note: we do the imports here instead of at the top to speed up the import
+        # of the tabsdata package, and therefore the td CLI response time.
+
+        import databricks.sdk as dbsdk
+        import databricks.sql as dbsql
+        from databricks.sdk.core import Config, pat_auth
+
         ws_client = dbsdk.WorkspaceClient(
             host=self.host_url,
             token=self.token.secret_value,

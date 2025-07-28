@@ -17,14 +17,6 @@ from functools import partial
 from typing import TYPE_CHECKING, List, Tuple
 
 import polars as pl
-import pyarrow
-import pyarrow as pa
-import pyarrow.parquet as pq
-import sqlalchemy
-from pyiceberg.catalog import load_catalog
-from pyiceberg.exceptions import NoSuchTableError
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 import tabsdata.utils.tableframe._helpers as td_helpers
 from tabsdata.format import CSVFormat, FileFormat, NDJSONFormat, ParquetFormat
@@ -83,6 +75,9 @@ from tabsdata.utils.tableframe._common import drop_system_columns
 from tabsdata.utils.tableframe._translator import _unwrap_table_frame
 
 if TYPE_CHECKING:
+    import pyarrow as pa
+    import sqlalchemy
+
     from tabsdata.tabsserver.function.execution_context import ExecutionContext
     from tabsdata.tabsserver.function.results_collection import (
         Result,
@@ -309,6 +304,9 @@ def get_arrow_schema(lazy_frame: pl.LazyFrame) -> pa.Schema:
 # (going sorted allows to find equivalent schemas with different field order)
 def arrow_schema_hash(schema: pa.Schema, sort_schema=True) -> str:
     if sort_schema:
+
+        import pyarrow as pa
+
         sorted_fields = sorted(schema, key=lambda field: field.name)
         schema = pa.schema(sorted_fields)
     serialized_schema = schema.serialize()
@@ -338,6 +336,9 @@ def store_results_in_sql(
     ),
     output_folder: str,
 ):
+
+    from sqlalchemy import create_engine
+
     logger.info(f"Storing results in SQL destination '{destination}'")
     results.normalize_frame()
     if isinstance(
@@ -379,6 +380,9 @@ def create_session_and_store(
     destination_if_table_exists: str,
     output_folder: str,
 ):
+
+    from sqlalchemy.orm import sessionmaker
+
     Session = sessionmaker(bind=engine)
     session = Session()
     with session.begin():
@@ -611,6 +615,11 @@ def store_file_in_catalog(
     lf_list: List[pl.LazyFrame],
     index: int,
 ):
+
+    import pyarrow as pa
+    from pyiceberg.catalog import load_catalog
+    from pyiceberg.exceptions import NoSuchTableError
+
     logger.debug(f"Storing file in catalog '{catalog}'")
     definition = catalog.definition
     logger.debug(f"Catalog definition: {definition}")
@@ -636,7 +645,7 @@ def store_file_in_catalog(
         logger.warning("No data stored. Storing no data in catalog.")
         return
 
-    pyarrow_schema = pyarrow.unify_schemas(schemas)
+    pyarrow_schema = pa.unify_schemas(schemas)
     logger.debug(f"Obtained pyarrow schema '{pyarrow_schema}'")
     logger.debug(f"Obtaining table '{destination_table}'")
     try:
@@ -771,6 +780,10 @@ def store_result_in_sql_table(
     if_table_exists: str,
     output_folder: str,
 ):
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
     logger.info(f"Storing result in SQL table: {destination_table}")
     result = result.value
     if result is None:
@@ -796,7 +809,7 @@ def store_result_in_sql_table(
     )
     parquet_file = pq.ParquetFile(intermediate_file_path)
     for batch in parquet_file.iter_batches(batch_size=chunk_size):
-        chunk_table = pyarrow.Table.from_batches(batches=[batch])
+        chunk_table = pa.Table.from_batches(batches=[batch])
         df = pl.from_arrow(chunk_table)
         logger.debug(f"Writing batch of shape {df.shape} to table {destination_table}")
         df.write_database(

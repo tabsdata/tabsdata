@@ -2,14 +2,18 @@
 #  Copyright 2025 Tabs Data Inc.
 #
 
-from typing import Any
+from __future__ import annotations
 
-import pandas as pd
+from typing import TYPE_CHECKING, Any
+
 import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.lazyframe.frame as td_frame
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def empty() -> td_frame.TableFrame:

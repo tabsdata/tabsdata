@@ -7,9 +7,8 @@ from __future__ import annotations
 import inspect
 import logging
 import os
-from typing import Any, Callable, List, Type
+from typing import TYPE_CHECKING, Any, Callable, List, Type
 
-import pandas as pd
 import polars as pl
 
 import tabsdata.tableframe.lazyframe.frame as td_frame
@@ -27,6 +26,9 @@ from tabsdata.tableuri import build_table_uri_object
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._translator import _unwrap_table_frame
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # noinspection PyProtectedMember
 
@@ -295,6 +297,9 @@ class TabsdataFunction:
 
 
 def _convert_recursively_to_tableframe(arguments: Any):
+
+    import pandas as pd
+
     if isinstance(arguments, dict):
         return {k: _convert_recursively_to_tableframe(v) for k, v in arguments.items()}
     elif isinstance(arguments, list):
@@ -334,6 +339,9 @@ def _clean_recursively_and_convert_to_datatype(
         | Type[pd.DataFrame]
     ),
 ) -> Any:
+
+    import pandas as pd
+
     if isinstance(result, dict):
         return {
             k: _clean_recursively_and_convert_to_datatype(v, datatype)
@@ -378,6 +386,9 @@ def _recursively_obtain_datatype(
     | Type[td_frame.TableFrame]
     | None
 ):
+
+    import pandas as pd
+
     if isinstance(
         arguments, (pl.DataFrame, pl.LazyFrame, td_frame.TableFrame, pd.DataFrame)
     ):

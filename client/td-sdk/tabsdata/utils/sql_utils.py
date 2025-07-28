@@ -6,10 +6,6 @@ import logging
 import urllib.parse
 from enum import Enum
 
-import sqlalchemy.dialects.mysql.mysqlconnector as mysqlconnector
-import sqlalchemy.dialects.oracle.oracledb as oracleconnector
-from sqlalchemy import create_engine
-
 from tabsdata.credentials import UserPasswordCredentials
 from tabsdata.io.input import (
     MariaDBSource,
@@ -45,15 +41,6 @@ class SQLDescriptor:
     def __init__(self, name: str, driver: str):
         self.name = name
         self.driver = driver
-
-
-class SupportedSQL(Enum):
-    MYSQL = SQLDescriptor(
-        name=mysqlconnector.dialect.name, driver=mysqlconnector.dialect.driver
-    )
-    ORACLE = SQLDescriptor(
-        name=oracleconnector.dialect.name, driver=oracleconnector.dialect.driver
-    )
 
 
 def obtain_uri(
@@ -145,6 +132,18 @@ def escape_special_characters(string: str) -> str:
 
 
 def add_driver_to_uri(uri: str, log=False) -> str:
+
+    import sqlalchemy.dialects.mysql.mysqlconnector as mysqlconnector
+    import sqlalchemy.dialects.oracle.oracledb as oracleconnector
+
+    class SupportedSQL(Enum):
+        MYSQL = SQLDescriptor(
+            name=mysqlconnector.dialect.name, driver=mysqlconnector.dialect.driver
+        )
+        ORACLE = SQLDescriptor(
+            name=oracleconnector.dialect.name, driver=oracleconnector.dialect.driver
+        )
+
     logger.debug("Adding driver to uri") if log else None
 
     for supported_sql in SupportedSQL:
@@ -180,6 +179,9 @@ def verify_output_sql_drivers(output: Output):
         output,
         (MySQLDestination, OracleDestination, PostgresDestination, MariaDBDestination),
     ):
+
+        from sqlalchemy import create_engine
+
         uri = obtain_uri(output, log=False, add_credentials=False)
         uri = add_driver_to_uri(uri, log=False)
         try:

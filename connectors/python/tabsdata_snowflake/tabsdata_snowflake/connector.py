@@ -43,22 +43,6 @@ def restore_snowflake_logger_levels():
         logging.getLogger(logger_name).setLevel(logger_level)
 
 
-try:
-    modify_snowflake_logger_levels()
-
-    import warnings
-
-    warnings.filterwarnings("ignore", module="snowflake")
-
-    from snowflake.connector import connect
-
-    MISSING_LIBRARIES = False
-except ImportError:
-    MISSING_LIBRARIES = True
-finally:
-    restore_snowflake_logger_levels()
-
-
 class SnowflakeDestination(DestinationPlugin):
 
     def __init__(
@@ -76,11 +60,20 @@ class SnowflakeDestination(DestinationPlugin):
         Args:
 
         """
-        if MISSING_LIBRARIES:
+        try:
+            modify_snowflake_logger_levels()
+
+            import warnings
+
+            warnings.filterwarnings("ignore", module="snowflake")
+            from snowflake.connector import connect  # noqa: F401
+        except ImportError:
             raise ImportError(
                 "The 'tabsdata_snowflake' package is missing some dependencies. You "
                 "can get them by installing 'tabsdata['snowflake']'"
             )
+        finally:
+            restore_snowflake_logger_levels()
         self.connection_parameters = connection_parameters
         if isinstance(destination_table, str):
             self.destination_table = [destination_table]
@@ -117,6 +110,15 @@ class SnowflakeDestination(DestinationPlugin):
         This method is used to write the files to the database. It is called
         from the stream method, and it is not intended to be called directly.
         """
+
+        modify_snowflake_logger_levels()
+
+        import warnings
+
+        warnings.filterwarnings("ignore", module="snowflake")
+
+        from snowflake.connector import connect
+
         connection_parameters = _recursively_evaluate_secret(self.connection_parameters)
         # We need to ensure that the connection parameters are fully evaluated
         self.warehouse = connection_parameters.get("warehouse")

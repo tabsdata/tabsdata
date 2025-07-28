@@ -18,14 +18,6 @@ from tabsdata.credentials import UserPasswordCredentials
 from tabsdata.io.plugin import DestinationPlugin
 from tabsdata.tabsserver.function.store_results_utils import _get_matching_files
 
-try:
-    import pymongo
-    from pymongo.errors import ConnectionFailure
-
-    MISSING_LIBRARIES = False
-except ImportError:
-    MISSING_LIBRARIES = True
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -104,7 +96,10 @@ class MongoDBDestination(DestinationPlugin):
                 the data for a single collection has been stored. Defaults to False.
 
         """
-        if MISSING_LIBRARIES:
+        try:
+            import pymongo  # noqa: F401
+            from pymongo.errors import ConnectionFailure  # noqa: F401
+        except ImportError:
             raise ImportError(
                 "The 'tabsdata_mongodb' package is missing some dependencies. You "
                 "can get them by installing 'tabsdata['mongodb']'"
@@ -216,6 +211,9 @@ class MongoDBDestination(DestinationPlugin):
         This method is used to write the files to the database. It is called
         from the stream method, and it is not intended to be called directly.
         """
+
+        import pymongo
+        from pymongo.errors import ConnectionFailure
 
         uri = self.uri
         if self.credentials:
@@ -351,6 +349,9 @@ class MongoDBDestination(DestinationPlugin):
     def _store_and_control_errors_single_file(
         self, session, file, collection, id_field
     ):
+
+        import pymongo
+
         if self.use_trxs:
             session.start_transaction(**self._suport_start_transaction)
         try:
@@ -396,6 +397,9 @@ class MongoDBDestination(DestinationPlugin):
                 raise e
 
     def _store_single_file_in_collection(self, file, collection, id_field, session):
+
+        import pymongo
+
         operations = []
         with open(file, "r") as f:
             for line in f:
