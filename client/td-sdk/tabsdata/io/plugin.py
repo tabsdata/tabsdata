@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, List, Tuple, Union
 import tabsdata.utils.tableframe._generators as td_generators
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tabsserver.function.execution_utils import load_sources
+from tabsdata.tabsserver.function.offset_utils import OffsetReturn
 from tabsdata.tabsserver.function.store_results_utils import (
     remove_system_columns_and_convert,
 )
@@ -59,6 +60,14 @@ class SourcePlugin:
         class_method = getattr(SourcePlugin, method_name)
         object_method = getattr(self.__class__, method_name)
         return object_method is not class_method
+
+    @property
+    def _offset_return(self) -> str:
+        """
+        Indicates whether the offset is returned by modifying the
+        'initial_values' attribute of the plugin, or if it is part
+        of the function return"""
+        return OffsetReturn.ATTRIBUTE.value
 
     def _run(
         self, execution_context: ExecutionContext

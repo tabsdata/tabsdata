@@ -8,14 +8,14 @@ import logging
 from typing import List, ParamSpec, TypeVar
 
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
-from tabsdata.io.input import (
+from tabsdata.io.input import TableInput
+from tabsdata.io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
+from tabsdata.io.inputs.sql_inputs import (
     MariaDBSource,
     MySQLSource,
     OracleSource,
     PostgresSource,
-    TableInput,
 )
-from tabsdata.io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
 from tabsdata.io.output import (
     AzureDestination,
     LocalFileDestination,

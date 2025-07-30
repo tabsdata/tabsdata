@@ -60,14 +60,14 @@ from tabsdata.credentials import (
 )
 from tabsdata.decorators import ALL_DEPS, publisher, subscriber, transformer
 from tabsdata.format import CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
-from tabsdata.io.input import (
+from tabsdata.io.input import TableInput
+from tabsdata.io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
+from tabsdata.io.inputs.sql_inputs import (
     MariaDBSource,
     MySQLSource,
     OracleSource,
     PostgresSource,
-    TableInput,
 )
-from tabsdata.io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
 from tabsdata.io.output import (
     AWSGlue,
     AzureDestination,

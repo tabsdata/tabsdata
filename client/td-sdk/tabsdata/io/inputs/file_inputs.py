@@ -301,7 +301,7 @@ class AzureSource(SourcePlugin):
         self._credentials = credentials
 
     def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
-        logger.debug("Triggering AzureSource")
+        logger.debug(f"Triggering {self}")
         obtain_and_set_azure_credentials(self.credentials)
         local_sources = execute_file_importer(self, working_dir)
         logger.debug(f"Obtained local sources: '{local_sources}'")
@@ -533,7 +533,7 @@ class LocalFileSource(SourcePlugin):
         logger.info(f"Initial values updated to '{new_values}' successfully.")
 
     def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
-        logger.debug("Triggering LocalFileSource")
+        logger.debug(f"Triggering {self}")
         local_sources = execute_file_importer(self, working_dir)
         logger.debug(f"Obtained local sources: '{local_sources}'")
         self._stream_ignore_working_dir = True
@@ -819,7 +819,7 @@ class S3Source(SourcePlugin):
         self._credentials = credentials
 
     def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
-        logger.debug("Triggering S3Source")
+        logger.debug(f"Triggering {self}")
         obtain_and_set_s3_credentials(self.credentials)
         set_s3_region(self.region)
         local_sources = execute_file_importer(self, working_dir)

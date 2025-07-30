@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from enum import Enum
 from typing import TYPE_CHECKING, Literal
 
 import polars as pl
@@ -34,6 +35,15 @@ VALID_UPDATE_MODES = [
     SAME_MODE,
 ]
 VALID_UPDATE_MODES_HINT = Literal["NEW", "NONE", "SAME"]
+
+
+class OffsetReturn(Enum):
+    """
+    Enum to indicate how the new offset is obtained.
+    """
+
+    ATTRIBUTE = "object_attribute"
+    FUNCTION = "function_return"
 
 
 class Offset:

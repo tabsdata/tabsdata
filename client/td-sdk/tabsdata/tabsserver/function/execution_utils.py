@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Tuple
 
 import polars as pl
@@ -20,13 +19,7 @@ from tabsdata.format import (
     NDJSONFormat,
     ParquetFormat,
 )
-from tabsdata.io.input import (
-    MariaDBSource,
-    MySQLSource,
-    OracleSource,
-    PostgresSource,
-    TableInput,
-)
+from tabsdata.io.input import TableInput
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata.tableuri import build_table_uri_object
 from tabsdata.tabsserver.function import environment_import_utils
@@ -36,13 +29,13 @@ from tabsdata.tabsserver.function.native_tables_utils import (
     scan_tf_from_table,
     sink_lf_to_location,
 )
+from tabsdata.tabsserver.function.offset_utils import OffsetReturn
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
 from tabsdata.tabsserver.function.yaml_parsing import (
     Location,
     Table,
     TableVersions,
 )
-from tabsdata.utils.sql_utils import obtain_uri
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._context import TableFrameContext
@@ -79,10 +72,28 @@ def execute_function_from_config(
 
 
 def update_initial_values(execution_context: ExecutionContext, result):
-    logger.info("New initial values generated")
+    logger.info("New offset generated")
     if source_plugin := execution_context.source_plugin:
-        # If working with a plugin, the new initial values are stored in the plugin
-        new_initial_values = source_plugin.initial_values
+        # TODO: For clarity, remove this if once all builtin inputs have been updated
+        #  as plugins
+        if source_plugin._offset_return == OffsetReturn.ATTRIBUTE.value:
+            logger.debug("Obtaining new offset from the plugin object")
+            # The new initial values are stored in the plugin
+            new_initial_values = source_plugin.initial_values
+        elif source_plugin._offset_return == OffsetReturn.FUNCTION.value:
+            # TODO: Duplicated code, will be removed once the last source is migrated.
+            # The new initial values are part of the result
+            logger.debug("Obtaining new offset from the plugin result")
+            if isinstance(result, tuple):
+                *result, new_initial_values = result
+                result = tuple(result)
+            else:
+                new_initial_values = result
+                result = (None,)
+        else:
+            raise ValueError(
+                f"Invalid offset return type: {source_plugin._offset_return}"
+            )
     else:
         # If working with a source, the new initial values are part of the result
         if isinstance(result, tuple):
@@ -134,19 +145,7 @@ def trigger_non_plugin_source(
 ) -> list[TableFrame | None | list[TableFrame | None]]:
     destination_folder = os.path.join(working_dir, SOURCES_FOLDER)
     os.makedirs(destination_folder, exist_ok=True)
-    if isinstance(source, MySQLSource):
-        logger.debug("Triggering MySQLSource")
-        local_sources = execute_sql_importer(source, destination_folder, initial_values)
-    elif isinstance(source, PostgresSource):
-        logger.debug("Triggering PostgresSource")
-        local_sources = execute_sql_importer(source, destination_folder, initial_values)
-    elif isinstance(source, MariaDBSource):
-        logger.debug("Triggering MariaDBSource")
-        local_sources = execute_sql_importer(source, destination_folder, initial_values)
-    elif isinstance(source, OracleSource):
-        logger.debug("Triggering OracleSource")
-        local_sources = execute_sql_importer(source, destination_folder, initial_values)
-    elif isinstance(source, TableInput):
+    if isinstance(source, TableInput):
         logger.debug("Triggering TableInput")
         # When loading tabsdata tables, we return tuples of (uri, table), so that
         # coming operations can use information on the request for further processing.
@@ -156,11 +155,6 @@ def trigger_non_plugin_source(
     else:
         logger.error(f"Invalid source type: {type(source)}. No data imported.")
         raise TypeError(f"Invalid source type: {type(source)}. No data imported.")
-    # Upload all files in a specific folder, with parquet format always
-    logger.debug(f"Local sources: '{local_sources}'")
-    result = load_sources(execution_context, local_sources, idx)
-    logger.info("Loaded sources successfully")
-    return result
 
 
 def execute_table_importer(
@@ -247,87 +241,6 @@ def verify_source_tables_match(execution_context_table: Table, source_table_str:
             f"match the source table name '{source_table_uri.table}'"
         )
     return
-
-
-def execute_sql_importer(
-    source: MariaDBSource | MySQLSource | OracleSource | PostgresSource,
-    destination: str,
-    initial_values: Offset,
-) -> list | dict:
-    if isinstance(source.query, str):
-        source_list = [
-            execute_sql_query(source, destination, source.query, initial_values)
-        ]
-    elif isinstance(source.query, list):
-        source_list = []
-        for query in source.query:
-            source_list.append(
-                execute_sql_query(source, destination, query, initial_values)
-            )
-    else:
-        logger.error(
-            f"Invalid source data, expected 'str' or 'list' but got: {source.query}"
-        )
-        raise TypeError(
-            f"Invalid source data, expected 'str' or 'list' but got: {source.query}"
-        )
-    return source_list
-
-
-def replace_initial_values(query: str, initial_values: dict) -> str:
-    """
-    Replace the placeholders in the query with the initial values
-    """
-    logger.debug(f"Replacing initial values {initial_values} in query: {query}")
-    for key, value in initial_values.items():
-        query = query.replace(f":{key}", str(value))
-    return query
-
-
-def execute_sql_query(
-    source: MariaDBSource | MySQLSource | OracleSource | PostgresSource,
-    destination: str,
-    query: str,
-    initial_values: Offset,
-) -> str | None:
-    logger.info(f"Importing SQL query: {query}")
-    if source.initial_values:
-        initial_values.returns_values = True
-        initial_values = (
-            source.initial_values
-            if initial_values.use_decorator_values
-            else initial_values.current_offset
-        )
-        query = replace_initial_values(query, initial_values)
-    if isinstance(source, MySQLSource):
-        logger.info("Importing SQL query from MySQL")
-        uri = obtain_uri(source, log=True, add_credentials=True)
-        loaded_frame = pl.read_database_uri(query=query, uri=uri)
-    elif isinstance(source, PostgresSource):
-        logger.info("Importing SQL query from Postgres")
-        uri = obtain_uri(source, log=True, add_credentials=True)
-        loaded_frame = pl.read_database_uri(query=query, uri=uri)
-    elif isinstance(source, MariaDBSource):
-        logger.info("Importing SQL query from MariaDB")
-        uri = obtain_uri(source, log=True, add_credentials=True)
-        loaded_frame = pl.read_database_uri(query=query, uri=uri)
-    elif isinstance(source, OracleSource):
-        logger.info("Importing SQL query from Oracle")
-        uri = obtain_uri(source, log=True, add_credentials=True)
-        loaded_frame = pl.read_database_uri(query=query, uri=uri)
-    else:
-        logger.error(f"Invalid SQL source type: {type(source)}. No data imported.")
-        raise TypeError(f"Invalid SQL source type: {type(source)}. No data imported.")
-    if loaded_frame.is_empty():
-        logger.warning(f"No data obtained from query: '{query}'")
-        return None
-    else:
-        destination_file = os.path.join(
-            destination, f"{datetime.now(tz=timezone.utc).timestamp()}.parquet"
-        )
-        loaded_frame.write_parquet(destination_file)
-        logger.info(f"Imported SQL query to: {destination_file}")
-        return destination_file
 
 
 INPUT_FORMAT_CLASS_TO_IMPORTER_FORMAT = {

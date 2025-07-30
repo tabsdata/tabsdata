@@ -6,10 +6,8 @@ import pytest
 
 from tabsdata.credentials import S3AccessKeyCredentials, UserPasswordCredentials
 from tabsdata.exceptions import ErrorCode, InputConfigurationError
-from tabsdata.io.input import Input, MariaDBSource, build_input
-
-QUERY_KEY = MariaDBSource.QUERY_KEY
-URI_KEY = MariaDBSource.URI_KEY
+from tabsdata.io.inputs.sql_inputs import MariaDBSource
+from tabsdata.io.plugin import SourcePlugin
 
 
 def test_all_correct_query_list():
@@ -25,38 +23,8 @@ def test_all_correct_query_list():
     assert input.credentials == credentials
     assert input.initial_values == {}
     assert isinstance(input, MariaDBSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        MariaDBSource.IDENTIFIER: {
-            URI_KEY: uri,
-            QUERY_KEY: query,
-            MariaDBSource.CREDENTIALS_KEY: credentials.to_dict(),
-            MariaDBSource.INITIAL_VALUES_KEY: {},
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), MariaDBSource)
-
-
-def test_identifier_string_unchanged():
-    uri = "mariadb://DATABASE_IP:DATABASE_PORT/testing"
-    query = [
-        "select * from INVOICE_HEADER where id > 0",
-        "select * from INVOICE_ITEM where id > 0",
-    ]
-    input = MariaDBSource(uri, query)
-    expected_dict = {
-        "mariadb-input": {
-            URI_KEY: uri,
-            QUERY_KEY: query,
-            MariaDBSource.CREDENTIALS_KEY: None,
-            MariaDBSource.INITIAL_VALUES_KEY: {},
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), MariaDBSource)
 
 
 def test_all_correct_query_string():
@@ -69,45 +37,8 @@ def test_all_correct_query_string():
     assert input.credentials == credentials
     assert input.initial_values == {}
     assert isinstance(input, MariaDBSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        MariaDBSource.IDENTIFIER: {
-            URI_KEY: uri,
-            QUERY_KEY: query,
-            MariaDBSource.CREDENTIALS_KEY: credentials.to_dict(),
-            MariaDBSource.INITIAL_VALUES_KEY: {},
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), MariaDBSource)
-
-
-def test_same_input_eq():
-    uri = "mariadb://DATABASE_IP:DATABASE_PORT/testing"
-    query = "select * from INVOICE_HEADER where id > 0"
-    credentials = UserPasswordCredentials("admin", "admin")
-    input = MariaDBSource(uri, query, credentials=credentials)
-    input2 = MariaDBSource(uri, query, credentials=credentials)
-    assert input == input2
-
-
-def test_different_input_not_eq():
-    uri = "mariadb://DATABASE_IP:DATABASE_PORT/testing"
-    query = "select * from INVOICE_HEADER where id > 0"
-    credentials = UserPasswordCredentials("admin", "admin")
-    input = MariaDBSource(uri, query, credentials=credentials)
-    uri2 = "mariadb://DATABASE_IP:3308/testing"
-    input2 = MariaDBSource(uri2, query, credentials=credentials)
-    assert input != input2
-
-
-def test_input_not_eq_dict():
-    uri = "mariadb://DATABASE_IP:DATABASE_PORT/testing"
-    query = "select * from INVOICE_HEADER where id > 0"
-    credentials = UserPasswordCredentials("admin", "admin")
-    input = MariaDBSource(uri, query, credentials=credentials)
-    assert input.to_dict() != input
 
 
 def test_all_correct_query_string_no_credentials():
@@ -118,18 +49,8 @@ def test_all_correct_query_string_no_credentials():
     assert input.query == query
     assert input.credentials is None
     assert isinstance(input, MariaDBSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        MariaDBSource.IDENTIFIER: {
-            URI_KEY: uri,
-            QUERY_KEY: query,
-            MariaDBSource.CREDENTIALS_KEY: None,
-            MariaDBSource.INITIAL_VALUES_KEY: {},
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), MariaDBSource)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -205,18 +126,8 @@ def test_all_correct_initial_values():
     assert input.credentials == credentials
     assert input.initial_values == initial_values
     assert isinstance(input, MariaDBSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        MariaDBSource.IDENTIFIER: {
-            URI_KEY: uri,
-            QUERY_KEY: query,
-            MariaDBSource.CREDENTIALS_KEY: credentials.to_dict(),
-            MariaDBSource.INITIAL_VALUES_KEY: initial_values,
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), MariaDBSource)
 
 
 def test_wrong_type_initial_values_raises_type_error():

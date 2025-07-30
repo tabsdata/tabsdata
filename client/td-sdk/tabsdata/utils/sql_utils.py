@@ -2,17 +2,14 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import logging
 import urllib.parse
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from tabsdata.credentials import UserPasswordCredentials
-from tabsdata.io.input import (
-    MariaDBSource,
-    MySQLSource,
-    OracleSource,
-    PostgresSource,
-)
 from tabsdata.io.output import (
     MariaDBDestination,
     MySQLDestination,
@@ -20,6 +17,14 @@ from tabsdata.io.output import (
     Output,
     PostgresDestination,
 )
+
+if TYPE_CHECKING:
+    from tabsdata.io.inputs.sql_inputs import (
+        MariaDBSource,
+        MySQLSource,
+        OracleSource,
+        PostgresSource,
+    )
 
 formatter = logging.Formatter("%(levelname)s: %(message)s")
 handler = logging.StreamHandler()
