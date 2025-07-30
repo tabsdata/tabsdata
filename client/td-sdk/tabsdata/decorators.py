@@ -9,15 +9,13 @@ from typing import List, ParamSpec, TypeVar
 
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
 from tabsdata.io.input import (
-    AzureSource,
-    LocalFileSource,
     MariaDBSource,
     MySQLSource,
     OracleSource,
     PostgresSource,
-    S3Source,
     TableInput,
 )
+from tabsdata.io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
 from tabsdata.io.output import (
     AzureDestination,
     LocalFileDestination,

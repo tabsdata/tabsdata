@@ -127,7 +127,7 @@ def test_publisher_with_optional_parameters():
         pass
 
     assert func.name == "func_name"
-    assert func.input == LocalFileSource("input.csv")
+    assert isinstance(func.input, LocalFileSource)
     assert func.output == TableOutput("output")
     assert func.trigger_by == ["trigger_table"]
 
@@ -138,7 +138,7 @@ def test_publisher_all_correct():
         pass
 
     assert func.name == "func"
-    assert func.input == LocalFileSource("input.csv")
+    assert isinstance(func.input, LocalFileSource)
     assert func.output == TableOutput("output")
     assert func.trigger_by is None
 
@@ -149,7 +149,7 @@ def test_publisher_all_correct_with_tables_string():
         pass
 
     assert func.name == "func"
-    assert func.input == LocalFileSource("input.csv")
+    assert isinstance(func.input, LocalFileSource)
     assert func.output == TableOutput("output")
     assert func.trigger_by is None
 
@@ -160,7 +160,7 @@ def test_publisher_all_correct_with_tables_string_list():
         pass
 
     assert func.name == "func"
-    assert func.input == LocalFileSource("input.csv")
+    assert isinstance(func.input, LocalFileSource)
     assert func.output == TableOutput(["output", "output2"])
     assert func.trigger_by is None
 

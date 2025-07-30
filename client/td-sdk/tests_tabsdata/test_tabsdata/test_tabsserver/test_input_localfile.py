@@ -67,8 +67,6 @@ from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata.tabsserver.invoker import invoke as tabsserver_main
 from tabsdata.utils.bundle_utils import create_bundle_archive
-from tabsdata.utils.tableframe._common import drop_system_columns
-from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

@@ -16,8 +16,8 @@ from tabsdata.exceptions import (
     FormatConfigurationError,
     InputConfigurationError,
 )
-from tabsdata.io.input import Input, S3Source, build_input
-from tabsdata.secret import DirectSecret
+from tabsdata.io.inputs.file_inputs import S3Source
+from tabsdata.io.plugin import SourcePlugin
 
 TEST_ACCESS_KEY_ID = "test_access_key_id"
 TEST_SECRET_ACCESS_KEY = "test_secret_access_key"
@@ -25,16 +25,6 @@ S3_CREDENTIALS = S3AccessKeyCredentials(
     aws_access_key_id=TEST_ACCESS_KEY_ID,
     aws_secret_access_key=TEST_SECRET_ACCESS_KEY,
 )
-CREDENTIALS_DICT = {
-    S3AccessKeyCredentials.IDENTIFIER: {
-        S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: (
-            DirectSecret(TEST_ACCESS_KEY_ID).to_dict()
-        ),
-        S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: (
-            DirectSecret(TEST_SECRET_ACCESS_KEY).to_dict()
-        ),
-    }
-}
 
 
 def test_all_correct_implicit_format():
@@ -43,19 +33,8 @@ def test_all_correct_implicit_format():
     assert input.uri == uri
     assert isinstance(input.format, CSVFormat)
     assert isinstance(input, S3Source)
-    assert isinstance(input, Input)
+    assert isinstance(input, SourcePlugin)
     assert input.credentials == S3_CREDENTIALS
-    expected_dict = {
-        S3Source.IDENTIFIER: {
-            S3Source.URI_KEY: [uri],
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": None,
-            S3Source.REGION_KEY: None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
     assert input.__repr__()
 
 
@@ -65,27 +44,9 @@ def test_all_correct_uri_list():
     assert input.uri == uri
     assert isinstance(input.format, CSVFormat)
     assert isinstance(input, S3Source)
-    assert isinstance(input, Input)
+    assert isinstance(input, SourcePlugin)
     assert input.credentials == S3_CREDENTIALS
-    expected_dict = {
-        S3Source.IDENTIFIER: {
-            S3Source.URI_KEY: uri,
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": None,
-            S3Source.REGION_KEY: None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
     assert input.__repr__()
-
-
-def test_same_input_eq():
-    uri = ["s3://path/to/data/data.csv", "s3://path/to/data/data2.csv"]
-    input = S3Source(uri, S3_CREDENTIALS)
-    input2 = S3Source(uri, S3_CREDENTIALS)
-    assert input == input2
 
 
 def test_uri_list_update_to_string():
@@ -224,18 +185,7 @@ def test_all_correct_explicit_format():
     assert input.uri == uri
     assert isinstance(input.format, CSVFormat)
     assert isinstance(input, S3Source)
-    assert isinstance(input, Input)
-    expected_dict = {
-        S3Source.IDENTIFIER: {
-            S3Source.URI_KEY: [uri],
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": None,
-            S3Source.REGION_KEY: None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -301,18 +251,7 @@ def test_correct_format_object():
     input = S3Source(uri, S3_CREDENTIALS, format=format)
     assert input.format.to_dict()[CSVFormat.IDENTIFIER] == expected_format
     assert isinstance(input, S3Source)
-    assert isinstance(input, Input)
-    expected_dict = {
-        S3Source.IDENTIFIER: {
-            S3Source.URI_KEY: [uri],
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: expected_format},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": None,
-            S3Source.REGION_KEY: None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_incorrect_data_format_raises_value_error():
@@ -359,18 +298,7 @@ def test_initial_last_modified_none():
     input = S3Source(uri, S3_CREDENTIALS, format=format, initial_last_modified=None)
     assert input.initial_last_modified is None
     assert isinstance(input, S3Source)
-    assert isinstance(input, Input)
-    expected_dict = {
-        S3Source.IDENTIFIER: {
-            S3Source.URI_KEY: [uri],
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": None,
-            S3Source.REGION_KEY: None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_initial_last_modified_valid_string():
@@ -382,20 +310,7 @@ def test_initial_last_modified_valid_string():
         time
     ).isoformat(timespec="microseconds")
     assert isinstance(input, S3Source)
-    assert isinstance(input, Input)
-    expected_dict = {
-        S3Source.IDENTIFIER: {
-            S3Source.URI_KEY: [uri],
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": (
-                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
-            ),
-            S3Source.REGION_KEY: None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_initial_last_modified_valid_string_hour_timezone():
@@ -407,20 +322,7 @@ def test_initial_last_modified_valid_string_hour_timezone():
         time
     ).isoformat(timespec="microseconds")
     assert isinstance(input, S3Source)
-    assert isinstance(input, Input)
-    expected_dict = {
-        S3Source.IDENTIFIER: {
-            S3Source.URI_KEY: [uri],
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": (
-                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
-            ),
-            S3Source.REGION_KEY: None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_initial_last_modified_invalid_string():
@@ -448,18 +350,7 @@ def test_initial_last_modified_valid_datetime():
     input = S3Source(uri, S3_CREDENTIALS, format=format, initial_last_modified=time)
     assert input.initial_last_modified == time.isoformat(timespec="microseconds")
     assert isinstance(input, S3Source)
-    assert isinstance(input, Input)
-    expected_dict = {
-        S3Source.IDENTIFIER: {
-            S3Source.URI_KEY: [uri],
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": time.isoformat(timespec="microseconds"),
-            S3Source.REGION_KEY: None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_initial_last_modified_invalid_datetime():
@@ -480,29 +371,6 @@ def test_initial_last_modified_invalid_type():
     assert e.value.error_code == ErrorCode.ICE6
 
 
-def test_build_input_wrong_type_raises_error():
-    with pytest.raises(InputConfigurationError) as e:
-        build_input(42)
-    assert e.value.error_code == ErrorCode.ICE11
-
-
-def test_identifier_string_unchanged():
-    uri = "s3://path/to/data/data"
-    format = "csv"
-    input = S3Source(uri, S3_CREDENTIALS, format=format)
-    expected_dict = {
-        "s3-input": {
-            S3Source.URI_KEY: [uri],
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": None,
-            S3Source.REGION_KEY: None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
-
-
 def test_region():
     uri = "s3://path/to/data/data"
     format = "csv"
@@ -510,19 +378,7 @@ def test_region():
     input = S3Source(uri, S3_CREDENTIALS, format=format, region=region)
     assert input.region == region
     assert isinstance(input, S3Source)
-    assert isinstance(input, Input)
-    expected_dict = {
-        S3Source.IDENTIFIER: {
-            S3Source.URI_KEY: [uri],
-            S3Source.FORMAT_KEY: {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            S3Source.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            "initial_last_modified": None,
-            S3Source.REGION_KEY: region,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), S3Source)
-    assert build_input(input.to_dict()).region == region
+    assert isinstance(input, SourcePlugin)
 
 
 def test_region_wrong_type_raises_error():

@@ -86,7 +86,6 @@ class SourcePlugin:
             logger.debug(f"Updated plugin initial values to: {current_initial_values}")
         logger.info("Starting plugin stream import")
 
-        parameters = None
         # For a custom stream implementations, method is executed as is.
         if self._is_overridden("stream"):
             parameters = self.stream(destination_dir)
@@ -188,6 +187,13 @@ class SourcePlugin:
                 f"Invalid type for resulting files: {type(resulting_files)}. No data"
                 " imported."
             )
+        if (
+            hasattr(self, "_stream_ignore_working_dir")
+            and self._stream_ignore_working_dir
+        ):
+            # If the plugin is configured to ignore the working directory, we load
+            # the sources from the execution context.
+            working_dir = None
         parameters = load_sources(
             self._ec, resulting_files, idx, working_dir=working_dir
         )

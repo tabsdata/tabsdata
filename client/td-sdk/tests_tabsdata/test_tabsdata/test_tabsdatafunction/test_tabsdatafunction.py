@@ -6,14 +6,14 @@ import os
 
 import pytest
 
-from tabsdata import CSVFormat
 from tabsdata.exceptions import (
     ErrorCode,
     FunctionConfigurationError,
     InputConfigurationError,
     OutputConfigurationError,
 )
-from tabsdata.io.input import LocalFileSource, MySQLSource, build_input
+from tabsdata.io.input import MySQLSource, build_input
+from tabsdata.io.inputs.file_inputs import LocalFileSource
 from tabsdata.io.output import MySQLDestination, build_output
 from tabsdata.tabsdatafunction import TabsdataFunction
 
@@ -23,30 +23,6 @@ URI_KEY = MySQLSource.URI_KEY
 
 def dummy_function(number):
     return number
-
-
-def test_all_correct_input_dict():
-    input = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: "file://path/to/data/data.csv",
-        },
-    }
-
-    function = TabsdataFunction(dummy_function, "dummy_function_name", input=input)
-    assert function(42) == 42
-    assert function.original_function == dummy_function
-    assert isinstance(function.input, LocalFileSource)
-    assert (
-        function.input.path
-        == input[LocalFileSource.IDENTIFIER][LocalFileSource.PATH_KEY]
-    )
-    assert isinstance(function.input.format, CSVFormat)
-    assert isinstance(function, TabsdataFunction)
-    assert function.output is None
-    assert function.original_file == os.path.basename(__file__)
-    assert function.original_folder == os.path.dirname(os.path.abspath(__file__))
-    assert function == function
-    assert function.__repr__()
 
 
 def test_all_correct_mysql_input_dict():
@@ -72,14 +48,6 @@ def test_all_correct_mysql_input_dict():
     assert function.original_folder == os.path.dirname(os.path.abspath(__file__))
 
 
-def test_no_import_files_dict_raises_exception():
-    input = {LocalFileSource.IDENTIFIER: 42}
-
-    with pytest.raises(InputConfigurationError) as e:
-        TabsdataFunction(dummy_function, "dummy_function_name", input=input)
-    assert e.value.error_code == ErrorCode.ICE8
-
-
 def test_all_correct_with_mysql_input_object():
     input = {
         MySQLSource.IDENTIFIER: {
@@ -99,86 +67,6 @@ def test_all_correct_with_mysql_input_object():
     assert isinstance(function.input, MySQLSource)
     assert function.input.uri == input[MySQLSource.IDENTIFIER][URI_KEY]
     assert function.input.query == input[MySQLSource.IDENTIFIER][QUERY_KEY]
-    assert isinstance(function, TabsdataFunction)
-    assert function.output is None
-    assert function.original_file == os.path.basename(__file__)
-    assert function.original_folder == os.path.dirname(os.path.abspath(__file__))
-
-
-def test_all_correct_with_input_object():
-    input = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: "file://path/to/data/data.csv",
-        }
-    }
-    input_object = build_input(input)
-    function = TabsdataFunction(
-        dummy_function, "dummy_function_name", input=input_object
-    )
-    assert function(42) == 42
-    assert function.original_function == dummy_function
-    assert isinstance(function.input, LocalFileSource)
-    assert (
-        function.input.path
-        == input[LocalFileSource.IDENTIFIER][LocalFileSource.PATH_KEY]
-    )
-    assert isinstance(function.input.format, CSVFormat)
-    assert isinstance(function, TabsdataFunction)
-    assert function.output is None
-    assert function.original_file == os.path.basename(__file__)
-    assert function.original_folder == os.path.dirname(os.path.abspath(__file__))
-
-
-def test_all_correct_input_dict_format_object():
-    input = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: "file://path/to/data/data.csv",
-            LocalFileSource.FORMAT_KEY: CSVFormat(
-                separator=".", input_has_header=False
-            ),
-        },
-    }
-
-    function = TabsdataFunction(dummy_function, "dummy_function_name", input=input)
-    assert function(42) == 42
-    assert function.original_function == dummy_function
-    assert isinstance(function.input, LocalFileSource)
-    assert (
-        function.input.path
-        == input[LocalFileSource.IDENTIFIER][LocalFileSource.PATH_KEY]
-    )
-    assert isinstance(function.input.format, CSVFormat)
-    assert function.input.format.input_has_header is False
-    assert function.input.format.separator == "."
-    assert isinstance(function, TabsdataFunction)
-    assert function.output is None
-    assert function.original_file == os.path.basename(__file__)
-    assert function.original_folder == os.path.dirname(os.path.abspath(__file__))
-
-
-def test_all_correct_with_input_object_format_dict():
-    input = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: "file://path/to/data/data.csv",
-            LocalFileSource.FORMAT_KEY: CSVFormat(
-                separator=".", input_has_header=False
-            ),
-        },
-    }
-    input_object = build_input(input)
-    function = TabsdataFunction(
-        dummy_function, "dummy_function_name", input=input_object
-    )
-    assert function(42) == 42
-    assert function.original_function == dummy_function
-    assert isinstance(function.input, LocalFileSource)
-    assert (
-        function.input.path
-        == input[LocalFileSource.IDENTIFIER][LocalFileSource.PATH_KEY]
-    )
-    assert isinstance(function.input.format, CSVFormat)
-    assert function.input.format.input_has_header is False
-    assert function.input.format.separator == "."
     assert isinstance(function, TabsdataFunction)
     assert function.output is None
     assert function.original_file == os.path.basename(__file__)
@@ -233,31 +121,6 @@ def test_wrong_input_dict_wrong_identifier_error():
     assert e.value.error_code == ErrorCode.ICE7
 
 
-def test_wrong_input_dict_multiple_identifiers_error():
-    input = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: "file://path/to/data/data.csv",
-        },
-        MySQLSource.IDENTIFIER: {
-            URI_KEY: "file://path/to/data",
-            QUERY_KEY: "data.csv",
-        },
-    }
-    with pytest.raises(InputConfigurationError) as e:
-        TabsdataFunction(dummy_function, "dummy_function_name", input=input)
-    assert e.value.error_code == ErrorCode.ICE7
-
-
-def test_wrong_input_dict_no_path_error():
-    input = {
-        LocalFileSource.IDENTIFIER: {
-            QUERY_KEY: "data.csv",
-        }
-    }
-    with pytest.raises(TypeError):
-        TabsdataFunction(dummy_function, "dummy_function_name", input=input)
-
-
 def test_wrong_mysql_input_dict_no_uri_error():
     input = {
         MySQLSource.IDENTIFIER: {
@@ -269,17 +132,6 @@ def test_wrong_mysql_input_dict_no_uri_error():
     }
     with pytest.raises(TypeError):
         TabsdataFunction(dummy_function, "dummy_function_name", input=input)
-
-
-def test_wrong_input_dict_unsupported_scheme_error():
-    input = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: "wrongscheme://path/to/data/data.csv",
-        }
-    }
-    with pytest.raises(InputConfigurationError) as e:
-        TabsdataFunction(dummy_function, "dummy_function_name", input=input)
-    assert e.value.error_code == ErrorCode.ICE14
 
 
 def test_wrong_mysql_input_dict_unsupported_scheme_error():

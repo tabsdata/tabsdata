@@ -14,7 +14,8 @@ from tabsdata.exceptions import (
     FormatConfigurationError,
     InputConfigurationError,
 )
-from tabsdata.io.input import Input, LocalFileSource, build_input
+from tabsdata.io.inputs.file_inputs import LocalFileSource
+from tabsdata.io.plugin import SourcePlugin
 
 
 def test_all_correct_single_parameter():
@@ -40,19 +41,8 @@ def test_all_correct_single_parameter_list():
     assert input.path == path
     assert isinstance(input.format, CSVFormat)
     assert isinstance(input, LocalFileSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: path,
-            LocalFileSource.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            "initial_last_modified": None,
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
 
 
 def test_all_correct_single_parameter_uri():
@@ -61,19 +51,8 @@ def test_all_correct_single_parameter_uri():
     assert input.path == path
     assert isinstance(input.format, CSVFormat)
     assert isinstance(input, LocalFileSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: [path],
-            LocalFileSource.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            "initial_last_modified": None,
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
 
 
 def test_list_of_integers_raises_exception():
@@ -89,19 +68,8 @@ def test_all_correct_implicit_format():
     assert input.path == path
     assert isinstance(input.format, CSVFormat)
     assert isinstance(input, LocalFileSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: [path],
-            LocalFileSource.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            "initial_last_modified": None,
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
 
 
 def test_all_correct_explicit_format():
@@ -111,31 +79,7 @@ def test_all_correct_explicit_format():
     assert input.path == path
     assert isinstance(input.format, CSVFormat)
     assert isinstance(input, LocalFileSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            "initial_last_modified": None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
-
-
-def test_identifier_string_unchanged():
-    path = "file://path/to/data/data"
-    format = "csv"
-    input = LocalFileSource(path, format=format)
-    expected_dict = {
-        "localfile-input": {
-            LocalFileSource.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            "initial_last_modified": None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -181,16 +125,7 @@ def test_correct_dict_format():
     assert isinstance(input.format, CSVFormat)
     assert input.format.to_dict() == {CSVFormat.IDENTIFIER: expected_format}
     assert isinstance(input, LocalFileSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: expected_format},
-            "initial_last_modified": None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_incorrect_file_format_raises_error():
@@ -244,16 +179,7 @@ def test_initial_last_modified_none():
     input = LocalFileSource(path, format=format, initial_last_modified=None)
     assert input.initial_last_modified is None
     assert isinstance(input, LocalFileSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            "initial_last_modified": None,
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_initial_last_modified_valid_string():
@@ -265,18 +191,7 @@ def test_initial_last_modified_valid_string():
         time
     ).isoformat(timespec="microseconds")
     assert isinstance(input, LocalFileSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            "initial_last_modified": (
-                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
-            ),
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_initial_last_modified_valid_string_plus_timezone():
@@ -288,27 +203,7 @@ def test_initial_last_modified_valid_string_plus_timezone():
         time
     ).isoformat(timespec="microseconds")
     assert isinstance(input, LocalFileSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            "initial_last_modified": (
-                datetime.datetime.fromisoformat(time).isoformat(timespec="microseconds")
-            ),
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
-
-
-def test_same_input_eq():
-    path = "file://path/to/data/data"
-    format = "csv"
-    time = "2024-09-05T01:01:00.01Z"
-    input = LocalFileSource(path, format=format, initial_last_modified=time)
-    input2 = LocalFileSource(path, format=format, initial_last_modified=time)
-    assert input == input2
+    assert isinstance(input, SourcePlugin)
 
 
 def test_different_input_not_eq():
@@ -355,16 +250,7 @@ def test_initial_last_modified_valid_datetime():
     input = LocalFileSource(path, format=format, initial_last_modified=time)
     assert input.initial_last_modified == time.isoformat(timespec="microseconds")
     assert isinstance(input, LocalFileSource)
-    assert isinstance(input, Input)
-    expected_dict = {
-        LocalFileSource.IDENTIFIER: {
-            LocalFileSource.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            "initial_last_modified": time.isoformat(timespec="microseconds"),
-        }
-    }
-    assert input.to_dict() == expected_dict
-    assert isinstance(build_input(input.to_dict()), LocalFileSource)
+    assert isinstance(input, SourcePlugin)
 
 
 def test_initial_last_modified_invalid_datetime_no_timezone():
@@ -383,12 +269,6 @@ def test_initial_last_modified_invalid_type():
     with pytest.raises(InputConfigurationError) as e:
         LocalFileSource(path, format=format, initial_last_modified=time)
     assert e.value.error_code == ErrorCode.ICE6
-
-
-def test_build_input_wrong_type_raises_error():
-    with pytest.raises(InputConfigurationError) as e:
-        build_input(42)
-    assert e.value.error_code == ErrorCode.ICE11
 
 
 def test_update_path():
