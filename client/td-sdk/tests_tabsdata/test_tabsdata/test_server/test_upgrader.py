@@ -3,8 +3,8 @@ from pathlib import Path
 
 from packaging.version import Version
 
-from tabsdata.tabsserver.server.entity import Upgrade
-from tabsdata.tabsserver.server.upgrader import upgrade
+from tabsdata._tabsserver.server.entity import Upgrade
+from tabsdata._tabsserver.server.upgrader import upgrade
 
 
 # noinspection PyPep8Naming

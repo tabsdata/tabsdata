@@ -10,14 +10,14 @@ import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, ParquetFormat
-from tabsdata.credentials import S3AccessKeyCredentials, UserPasswordCredentials
+from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
+from tabsdata._io.inputs.file_inputs import S3Source
+from tabsdata._io.plugin import SourcePlugin
 from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
     InputConfigurationError,
 )
-from tabsdata.io.inputs.file_inputs import S3Source
-from tabsdata.io.plugin import SourcePlugin
 
 TEST_ACCESS_KEY_ID = "test_access_key_id"
 TEST_SECRET_ACCESS_KEY = "test_secret_access_key"
@@ -175,7 +175,7 @@ def test_different_input_not_eq():
 def test_input_not_eq_dict():
     uri = ["s3://path/to/data/data.csv", "s3://path/to/data/data2.csv"]
     input = S3Source(uri, S3_CREDENTIALS)
-    assert input.to_dict() != input
+    assert input._to_dict() != input
 
 
 def test_all_correct_explicit_format():
@@ -249,7 +249,7 @@ def test_correct_format_object():
     expected_format["input_has_header"] = False
 
     input = S3Source(uri, S3_CREDENTIALS, format=format)
-    assert input.format.to_dict()[CSVFormat.IDENTIFIER] == expected_format
+    assert input.format._to_dict()[CSVFormat.IDENTIFIER] == expected_format
     assert isinstance(input, S3Source)
     assert isinstance(input, SourcePlugin)
 

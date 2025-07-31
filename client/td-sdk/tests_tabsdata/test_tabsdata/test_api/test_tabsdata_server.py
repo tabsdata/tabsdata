@@ -17,9 +17,9 @@ from tests_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
 )
 
-from tabsdata.api.apiserver import BASE_API_URL, APIServerError
-from tabsdata.api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
-from tabsdata.api.tabsdata_server import (
+from tabsdata._api.apiserver import BASE_API_URL, APIServerError
+from tabsdata._api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
+from tabsdata._api.tabsdata_server import (
     Collection,
     DataVersion,
     Execution,

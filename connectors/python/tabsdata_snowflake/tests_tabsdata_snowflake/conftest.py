@@ -5,8 +5,8 @@ from tests_tabsdata.bootest import enrich_sys_path
 from tests_tabsdata_snowflake.bootest import TESTING_RESOURCES_PATH
 
 import tabsdata as td
-from tabsdata.secret import _recursively_evaluate_secret
-from tabsdata.utils.logging import setup_tests_logging
+from tabsdata._secret import _recursively_evaluate_secret
+from tabsdata._utils.logging import setup_tests_logging
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()

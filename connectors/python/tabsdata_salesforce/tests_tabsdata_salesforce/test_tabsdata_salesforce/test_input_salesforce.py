@@ -36,11 +36,11 @@ from tests_tabsdata_salesforce.testing_resources.test_input_salesforce_none.exam
 )
 
 import tabsdata as td
-from tabsdata.secret import DirectSecret
-from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
-from tabsdata.tabsserver.invoker import invoke as tabsserver_main
-from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsdata._secret import DirectSecret
+from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
+from tabsdata._tabsserver.invoker import invoke as tabsserver_main
+from tabsdata._utils.bundle_utils import create_bundle_archive
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

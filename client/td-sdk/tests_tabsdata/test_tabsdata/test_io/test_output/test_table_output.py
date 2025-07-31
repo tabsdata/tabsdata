@@ -4,8 +4,8 @@
 
 import pytest
 
+from tabsdata._io.output import Output, TableOutput, build_output
 from tabsdata.exceptions import ErrorCode, OutputConfigurationError
-from tabsdata.io.output import Output, TableOutput, build_output
 
 
 def test_all_correct_destination_table_list():
@@ -19,9 +19,9 @@ def test_all_correct_destination_table_list():
             TableOutput.TABLE_KEY: destination_table,
         }
     }
-    assert output.to_dict() == expected_dict
+    assert output._to_dict() == expected_dict
     assert output.__repr__()
-    assert isinstance(build_output(output.to_dict()), TableOutput)
+    assert isinstance(build_output(output._to_dict()), TableOutput)
 
 
 def test_identifier_string_unchanged():
@@ -32,9 +32,9 @@ def test_identifier_string_unchanged():
             TableOutput.TABLE_KEY: [destination_table],
         }
     }
-    assert output.to_dict() == expected_dict
+    assert output._to_dict() == expected_dict
     assert output.__repr__()
-    assert isinstance(build_output(output.to_dict()), TableOutput)
+    assert isinstance(build_output(output._to_dict()), TableOutput)
 
 
 def test_all_correct_destination_table_string():
@@ -48,9 +48,9 @@ def test_all_correct_destination_table_string():
             TableOutput.TABLE_KEY: [destination_table],
         }
     }
-    assert output.to_dict() == expected_dict
+    assert output._to_dict() == expected_dict
     assert output.__repr__()
-    assert isinstance(build_output(output.to_dict()), TableOutput)
+    assert isinstance(build_output(output._to_dict()), TableOutput)
 
 
 def test_same_table_eq():
@@ -71,7 +71,7 @@ def test_different_table_not_eq():
 def test_input_not_eq_dict():
     destination_table = "output_table"
     output = TableOutput(destination_table)
-    assert output.to_dict() != output
+    assert output._to_dict() != output
 
 
 def test_table_wrong_type_raises_type_error():

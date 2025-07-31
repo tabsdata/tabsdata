@@ -26,10 +26,10 @@ from tests_tabsdata.testing_resources.test_input_table_multiple_tables.example i
     input_table_multiple_tables,
 )
 
-from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
-from tabsdata.tabsserver.invoker import invoke as tabsserver_main
-from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
+from tabsdata._tabsserver.invoker import invoke as tabsserver_main
+from tabsdata._utils.bundle_utils import create_bundle_archive
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

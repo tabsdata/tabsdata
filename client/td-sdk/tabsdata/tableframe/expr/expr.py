@@ -30,17 +30,17 @@ from polars._typing import (
 )
 
 # noinspection PyProtectedMember
+import tabsdata._utils.tableframe._common as td_common
+
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._translator as td_translator
+
+# noinspection PyProtectedMember
 import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.string as td_string
 import tabsdata.tableframe.functions.datetime as td_datetime
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._common as td_common
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._translator as td_translator
+from tabsdata._utils.annotations import pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
-from tabsdata.utils.annotations import pydoc
 
 T = TypeVar("T")
 P = ParamSpec("P")

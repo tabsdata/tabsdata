@@ -5,13 +5,13 @@
 import pytest
 
 import tabsdata as td
+from tabsdata._io.output import AWSGlue, build_catalog
+from tabsdata._secret import DirectSecret, EnvironmentSecret
 from tabsdata.exceptions import (
     CredentialsConfigurationError,
     ErrorCode,
     OutputConfigurationError,
 )
-from tabsdata.io.output import AWSGlue, build_catalog
-from tabsdata.secret import DirectSecret, EnvironmentSecret
 
 pytestmark = pytest.mark.catalog
 
@@ -26,7 +26,7 @@ def test_catalog_class():
     catalog = AWSGlue(definition=definition, tables=tables)
     assert catalog.definition == definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": False,
             "auto_create_at": [None, None],
@@ -37,7 +37,7 @@ def test_catalog_class():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_catalog_class_if_table_exists():
@@ -50,7 +50,7 @@ def test_catalog_class_if_table_exists():
     catalog = AWSGlue(definition=definition, tables=tables, if_table_exists="replace")
     assert catalog.definition == definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": False,
             "auto_create_at": [None, None],
@@ -61,7 +61,7 @@ def test_catalog_class_if_table_exists():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_catalog_class_allow_incompatible_changes():
@@ -76,7 +76,7 @@ def test_catalog_class_allow_incompatible_changes():
     )
     assert catalog.definition == definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": True,
             "auto_create_at": [None, None],
@@ -87,7 +87,7 @@ def test_catalog_class_allow_incompatible_changes():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_catalog_class_auto_create_at():
@@ -102,7 +102,7 @@ def test_catalog_class_auto_create_at():
     )
     assert catalog.definition == definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": False,
             "auto_create_at": ["destination_1", None],
@@ -113,7 +113,7 @@ def test_catalog_class_auto_create_at():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_catalog_class_partitioned_table():
@@ -130,7 +130,7 @@ def test_catalog_class_partitioned_table():
     )
     assert catalog.definition == definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": False,
             "auto_create_at": [None, None],
@@ -141,7 +141,7 @@ def test_catalog_class_partitioned_table():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_catalog_class_schema_strategy():
@@ -158,7 +158,7 @@ def test_catalog_class_schema_strategy():
     )
     assert catalog.definition == definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": False,
             "auto_create_at": [None, None],
@@ -169,7 +169,7 @@ def test_catalog_class_schema_strategy():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_wrong_if_table_exists():
@@ -196,7 +196,7 @@ def test_catalog_class_with_secrets():
     catalog = AWSGlue(definition=definition, tables=tables)
     assert catalog.definition == definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": False,
             "auto_create_at": [None, None],
@@ -207,7 +207,7 @@ def test_catalog_class_with_secrets():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_catalog_class_with_secrets_definition():
@@ -215,11 +215,11 @@ def test_catalog_class_with_secrets_definition():
         "name": "default",
         "uri": "sqlite:////tmp/path/pyiceberg_catalog.db",
         "warehouse": "file:///tmp/path",
-        "secret1": DirectSecret("hello").to_dict(),
-        "secret2": EnvironmentSecret("hello").to_dict(),
+        "secret1": DirectSecret("hello")._to_dict(),
+        "secret2": EnvironmentSecret("hello")._to_dict(),
         "secret_list": [
-            DirectSecret("hello").to_dict(),
-            EnvironmentSecret("hello").to_dict(),
+            DirectSecret("hello")._to_dict(),
+            EnvironmentSecret("hello")._to_dict(),
         ],
     }
     expected_definition = {
@@ -234,7 +234,7 @@ def test_catalog_class_with_secrets_definition():
     catalog = AWSGlue(definition=definition, tables=tables)
     assert catalog.definition == expected_definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": False,
             "auto_create_at": [None, None],
@@ -245,7 +245,7 @@ def test_catalog_class_with_secrets_definition():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_catalog_wrong_definition_type():
@@ -284,7 +284,7 @@ def test_build_catalog():
     }
     tables = ["output1", "output2"]
     catalog = AWSGlue(definition=definition, tables=tables)
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
     assert build_catalog(catalog) == catalog
 
 
@@ -310,7 +310,7 @@ def test_build_catalog_wrong_dictionary_multiple_keys():
     catalog = AWSGlue(definition=definition, tables=tables)
     with pytest.raises(OutputConfigurationError) as e:
         build_catalog(
-            {AWSGlue.IDENTIFIER: catalog.to_dict()[AWSGlue.IDENTIFIER], "wrong": "key"}
+            {AWSGlue.IDENTIFIER: catalog._to_dict()[AWSGlue.IDENTIFIER], "wrong": "key"}
         )
     assert e.value.error_code == ErrorCode.OCE35
 
@@ -404,7 +404,7 @@ def test_catalog_class_s3_credentials():
     definition["client.secret-access-key"] = DirectSecret("access_token")
     assert catalog.definition == definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": False,
             "auto_create_at": [None, None],
@@ -415,7 +415,7 @@ def test_catalog_class_s3_credentials():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_catalog_class_duplicate_access_key_id():
@@ -609,7 +609,7 @@ def test_catalog_class_s3_region():
     definition["client.region"] = "us-east-1"
     assert catalog.definition == definition
     assert catalog.tables == tables
-    assert catalog.to_dict() == {
+    assert catalog._to_dict() == {
         AWSGlue.IDENTIFIER: {
             "allow_incompatible_changes": False,
             "auto_create_at": [None, None],
@@ -620,7 +620,7 @@ def test_catalog_class_s3_region():
             "tables": tables,
         }
     }
-    assert build_catalog(catalog.to_dict()) == catalog
+    assert build_catalog(catalog._to_dict()) == catalog
 
 
 def test_catalog_class_duplicate_region():

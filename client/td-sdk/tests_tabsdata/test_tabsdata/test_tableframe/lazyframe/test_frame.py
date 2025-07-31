@@ -12,20 +12,20 @@ import polars as pl
 import pytest
 
 import tabsdata as td
+
+# noinspection PyProtectedMember
+from tabsdata._utils.tableframe._helpers import required_columns
+
+# noinspection PyProtectedMember
+from tabsdata._utils.tableframe._translator import (
+    _unwrap_table_frame,
+    _wrap_polars_frame,
+)
 from tabsdata.exceptions import TableFrameError
 from tabsdata.extensions.tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
 from tabsdata.tableframe.lazyframe.frame import _assemble_system_columns
-
-# noinspection PyProtectedMember
-from tabsdata.utils.tableframe._helpers import required_columns
-
-# noinspection PyProtectedMember
-from tabsdata.utils.tableframe._translator import (
-    _unwrap_table_frame,
-    _wrap_polars_frame,
-)
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

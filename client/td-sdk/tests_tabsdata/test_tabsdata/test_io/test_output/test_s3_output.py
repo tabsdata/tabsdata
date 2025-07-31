@@ -9,20 +9,20 @@ import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, ParquetFormat
-from tabsdata.credentials import S3AccessKeyCredentials, UserPasswordCredentials
-from tabsdata.exceptions import (
-    ErrorCode,
-    FormatConfigurationError,
-    OutputConfigurationError,
-)
-from tabsdata.io.output import (
+from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
+from tabsdata._io.output import (
     FRAGMENT_INDEX_PLACEHOLDER,
     AWSGlue,
     Output,
     S3Destination,
     build_output,
 )
-from tabsdata.secret import DirectSecret
+from tabsdata._secret import DirectSecret
+from tabsdata.exceptions import (
+    ErrorCode,
+    FormatConfigurationError,
+    OutputConfigurationError,
+)
 
 TEST_ACCESS_KEY_ID = "test_access_key_id"
 TEST_SECRET_ACCESS_KEY = "test_secret_access_key"
@@ -33,10 +33,10 @@ S3_CREDENTIALS = S3AccessKeyCredentials(
 CREDENTIALS_DICT = {
     S3AccessKeyCredentials.IDENTIFIER: {
         S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: (
-            DirectSecret(TEST_ACCESS_KEY_ID).to_dict()
+            DirectSecret(TEST_ACCESS_KEY_ID)._to_dict()
         ),
         S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: (
-            DirectSecret(TEST_SECRET_ACCESS_KEY).to_dict()
+            DirectSecret(TEST_SECRET_ACCESS_KEY)._to_dict()
         ),
     }
 }
@@ -61,8 +61,8 @@ def test_all_correct_implicit_format():
             S3Destination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), S3Destination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), S3Destination)
     assert output.__repr__()
 
 
@@ -85,8 +85,8 @@ def test_all_correct_uri_list():
             S3Destination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), S3Destination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), S3Destination)
     assert output.__repr__()
 
 
@@ -223,7 +223,7 @@ def test_different_output_not_eq():
 def test_output_not_eq_dict():
     uri = ["s3://path/to/data/data.csv", "s3://path/to/data/data2.csv"]
     output = S3Destination(uri, S3_CREDENTIALS)
-    assert output.to_dict() != output
+    assert output._to_dict() != output
 
 
 def test_all_correct_explicit_format():
@@ -245,8 +245,8 @@ def test_all_correct_explicit_format():
             S3Destination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), S3Destination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), S3Destination)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -310,7 +310,7 @@ def test_correct_format_object():
     expected_format["input_has_header"] = False
 
     output = S3Destination(uri, S3_CREDENTIALS, format=format)
-    assert output.format.to_dict()[CSVFormat.IDENTIFIER] == expected_format
+    assert output.format._to_dict()[CSVFormat.IDENTIFIER] == expected_format
     assert isinstance(output, S3Destination)
     assert isinstance(output, Output)
     expected_dict = {
@@ -322,8 +322,8 @@ def test_correct_format_object():
             S3Destination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), S3Destination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), S3Destination)
 
 
 def test_incorrect_data_format_raises_value_error():
@@ -385,8 +385,8 @@ def test_identifier_string_unchanged():
             S3Destination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), S3Destination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), S3Destination)
 
 
 def test_region():
@@ -408,9 +408,9 @@ def test_region():
             S3Destination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), S3Destination)
-    assert build_output(output.to_dict()).region == region
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), S3Destination)
+    assert build_output(output._to_dict()).region == region
 
 
 def test_region_wrong_type_raises_error():
@@ -440,7 +440,7 @@ def test_correct_catalog_implicit_format():
     uri = "s3://uri/to/data/data.parquet"
     output = S3Destination(uri, S3_CREDENTIALS, catalog=catalog)
     assert output.catalog == catalog
-    assert build_output(output.to_dict()).catalog == catalog
+    assert build_output(output._to_dict()).catalog == catalog
 
 
 def test_correct_catalog_explicit_format():
@@ -455,7 +455,7 @@ def test_correct_catalog_explicit_format():
     uri = "s3://uri/to/data/data"
     output = S3Destination(uri, S3_CREDENTIALS, catalog=catalog, format=ParquetFormat())
     assert output.catalog == catalog
-    assert build_output(output.to_dict()).catalog == catalog
+    assert build_output(output._to_dict()).catalog == catalog
 
 
 def test_wrong_format_fails():

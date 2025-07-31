@@ -4,7 +4,7 @@
 
 import importlib.metadata
 
-from tabsdata_mongodb.connector import MongoDBDestination
+from tabsdata_mongodb._connector import MongoDBDestination
 
 __all__ = ["MongoDBDestination"]
 

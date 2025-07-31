@@ -4,7 +4,7 @@
 
 import importlib.metadata
 
-from tabsdata_snowflake.connector import SnowflakeDestination
+from tabsdata_snowflake._connector import SnowflakeDestination
 
 __all__ = ["SnowflakeDestination"]
 

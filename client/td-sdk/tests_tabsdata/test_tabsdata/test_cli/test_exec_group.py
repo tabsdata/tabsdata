@@ -10,10 +10,10 @@ import pytest
 from click.testing import CliRunner
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
-from tabsdata.api.status_utils.execution import EXECUTION_FINAL_STATUSES
-from tabsdata.api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
-from tabsdata.api.tabsdata_server import Execution
-from tabsdata.cli.cli import cli
+from tabsdata._api.status_utils.execution import EXECUTION_FINAL_STATUSES
+from tabsdata._api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
+from tabsdata._api.tabsdata_server import Execution
+from tabsdata._cli.cli import cli
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

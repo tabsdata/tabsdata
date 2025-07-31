@@ -10,11 +10,11 @@ import polars as pl
 import pytest
 
 import tabsdata as td
-from tabsdata.exceptions import ErrorCode, TabsDataException
-from tabsdata.tableframe.expr.expr import Expr
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._helpers import system_columns
+from tabsdata._utils.tableframe._helpers import system_columns
+from tabsdata.exceptions import ErrorCode, TabsDataException
+from tabsdata.tableframe.expr.expr import Expr
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

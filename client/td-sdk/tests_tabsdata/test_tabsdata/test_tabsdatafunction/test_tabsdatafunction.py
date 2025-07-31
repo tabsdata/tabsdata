@@ -6,14 +6,14 @@ import os
 
 import pytest
 
+from tabsdata._io.inputs.file_inputs import LocalFileSource
+from tabsdata._io.output import MySQLDestination, build_output
+from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata.exceptions import (
     ErrorCode,
     FunctionConfigurationError,
     OutputConfigurationError,
 )
-from tabsdata.io.inputs.file_inputs import LocalFileSource
-from tabsdata.io.output import MySQLDestination, build_output
-from tabsdata.tabsdatafunction import TabsdataFunction
 
 
 def dummy_function(number):

@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
-from tabsdata.api.tabsdata_server import (
+from tabsdata._api.tabsdata_server import (
     Collection,
     Function,
     Table,

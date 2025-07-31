@@ -13,7 +13,7 @@ from tests_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
 )
 
-from tabsdata.api.tabsdata_server import Collection, DataVersion, Table
+from tabsdata._api.tabsdata_server import Collection, DataVersion, Table
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

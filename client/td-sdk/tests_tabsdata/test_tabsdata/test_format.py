@@ -8,21 +8,21 @@ import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
+from tabsdata._format import build_file_format, get_implicit_format_from_list
 from tabsdata.exceptions import ErrorCode, FormatConfigurationError
-from tabsdata.format import build_file_format, get_implicit_format_from_list
 
 
 def test_csv_format_to_dict():
     csv_format = CSVFormat()
-    assert csv_format.to_dict() == {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]}
-    built_csv_format = build_file_format(csv_format.to_dict())
+    assert csv_format._to_dict() == {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]}
+    built_csv_format = build_file_format(csv_format._to_dict())
     assert isinstance(built_csv_format, CSVFormat)
     assert built_csv_format == csv_format
 
 
 def test_csv_format_not_equal_to_dict():
     csv_format = CSVFormat()
-    assert csv_format != csv_format.to_dict()
+    assert csv_format != csv_format._to_dict()
 
 
 def test_csv_format_all_parameters():
@@ -59,7 +59,7 @@ def test_csv_format_all_parameters():
     assert csv_format.input_raise_if_empty is False
     assert csv_format.input_ignore_errors is True
     assert csv_format.__repr__()
-    assert build_file_format(csv_format.to_dict()) == csv_format
+    assert build_file_format(csv_format._to_dict()) == csv_format
 
 
 def test_csv_format_separator():
@@ -67,10 +67,10 @@ def test_csv_format_separator():
     assert csv_format.input_skip_rows_after_header == 3
     expected_dict = copy.deepcopy(FORMAT_TYPE_TO_CONFIG["csv"])
     expected_dict["input_skip_rows_after_header"] = 3
-    assert csv_format.to_dict() == {
+    assert csv_format._to_dict() == {
         CSVFormat.IDENTIFIER: expected_dict,
     }
-    new_csv_format = build_file_format(csv_format.to_dict())
+    new_csv_format = build_file_format(csv_format._to_dict())
     assert isinstance(new_csv_format, CSVFormat)
     assert new_csv_format.input_skip_rows_after_header == 3
 
@@ -117,32 +117,32 @@ def test_csv_format_wrong_identifier_value_raises_error():
 
 def test_parquet_format_to_dict():
     parquet_format = ParquetFormat()
-    assert parquet_format.to_dict() == {
+    assert parquet_format._to_dict() == {
         ParquetFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["parquet"]
     }
-    assert isinstance(build_file_format(parquet_format.to_dict()), ParquetFormat)
+    assert isinstance(build_file_format(parquet_format._to_dict()), ParquetFormat)
     assert parquet_format.__repr__()
 
 
 def test_parquet_format_all_parameters():
     parquet_format = ParquetFormat()
     assert parquet_format.__repr__()
-    assert build_file_format(parquet_format.to_dict()) == parquet_format
+    assert build_file_format(parquet_format._to_dict()) == parquet_format
 
 
 def test_ndjson_format_to_dict():
     json_format = NDJSONFormat()
-    assert json_format.to_dict() == {
+    assert json_format._to_dict() == {
         NDJSONFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["json"]
     }
-    assert isinstance(build_file_format(json_format.to_dict()), NDJSONFormat)
+    assert isinstance(build_file_format(json_format._to_dict()), NDJSONFormat)
     assert json_format.__repr__()
 
 
 def test_ndjson_format_all_parameters():
     json_format = NDJSONFormat()
     assert json_format.__repr__()
-    assert build_file_format(json_format.to_dict()) == json_format
+    assert build_file_format(json_format._to_dict()) == json_format
 
 
 def test_ndjson_file_extensions():
@@ -152,15 +152,15 @@ def test_ndjson_file_extensions():
 
 def test_log_format_to_dict():
     log_format = LogFormat()
-    assert log_format.to_dict() == {LogFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["log"]}
-    assert isinstance(build_file_format(log_format.to_dict()), LogFormat)
+    assert log_format._to_dict() == {LogFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["log"]}
+    assert isinstance(build_file_format(log_format._to_dict()), LogFormat)
     assert log_format.__repr__()
 
 
 def test_log_format_all_parameters():
     log_format = LogFormat()
     assert log_format.__repr__()
-    assert build_file_format(log_format.to_dict()) == log_format
+    assert build_file_format(log_format._to_dict()) == log_format
 
 
 def test_get_implicit_format_from_list_single_csv():

@@ -6,7 +6,7 @@ import logging
 
 from tests_tabsdata.bootest import TESTING_RESOURCES_PATH, enrich_sys_path
 
-from tabsdata.utils.logging import setup_tests_logging
+from tabsdata._utils.logging import setup_tests_logging
 
 logger = logging.getLogger(__name__)
 

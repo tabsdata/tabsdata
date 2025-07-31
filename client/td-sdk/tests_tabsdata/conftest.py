@@ -36,11 +36,11 @@ import yaml
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
 
-from tabsdata.api.status_utils.data_version import (
+from tabsdata._api.status_utils.data_version import (
     DataVersionStatus,
     data_version_status_to_mapping,
 )
-from tabsdata.utils.logging import setup_tests_logging
+from tabsdata._utils.logging import setup_tests_logging
 
 # The following non-import code must execute early to set up the environment correctly.
 # Suppressing E402 to allow imports after this setup.
@@ -70,19 +70,19 @@ check_assets()
 import tabsdata as _td
 
 # noinspection PyProtectedMember
-import tabsdata.utils.tableframe._constants as td_constants
-from tabsdata.api.apiserver import APIServer, obtain_connection
-from tabsdata.api.tabsdata_server import TabsdataServer
-from tabsdata.secret import HashiCorpSecret
-from tabsdata.tabsdatafunction import TableInput, TableOutput
-from tabsdata.tabsserver.function.sql_utils import MARIADB_COLLATION
-from tabsdata.tabsserver.pyenv_creation import (
+import tabsdata._utils.tableframe._constants as td_constants
+from tabsdata._api.apiserver import APIServer, obtain_connection
+from tabsdata._api.tabsdata_server import TabsdataServer
+from tabsdata._secret import HashiCorpSecret
+from tabsdata._tabsdatafunction import TableInput, TableOutput
+from tabsdata._tabsserver.function.sql_utils import MARIADB_COLLATION
+from tabsdata._tabsserver.pyenv_creation import (
     DEFAULT_ENVIRONMENT_TESTIMONY_FOLDER,
     delete_virtual_environment,
 )
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._generators import _id
+from tabsdata._utils.tableframe._generators import _id
 
 module_path = str(_td.__file__)
 

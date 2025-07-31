@@ -13,14 +13,14 @@ import polars as pl
 from polars._typing import PythonDataType, TimeUnit
 
 import tabsdata.tableframe.expr.expr as td_expr
+from tabsdata._utils.annotations import pydoc
+
+# noinspection PyProtectedMember
+from tabsdata._utils.tableframe import _constants as td_constants
 from tabsdata.extensions.tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
 from tabsdata.tableframe import _typing as td_typing
-from tabsdata.utils.annotations import pydoc
-
-# noinspection PyProtectedMember
-from tabsdata.utils.tableframe import _constants as td_constants
 
 """
 Selectors by position.

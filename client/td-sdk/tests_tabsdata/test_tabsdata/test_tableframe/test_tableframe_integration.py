@@ -13,7 +13,7 @@ import pytest
 import tabsdata as td
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._translator import (
+from tabsdata._utils.tableframe._translator import (
     _unwrap_table_frame,
     _wrap_polars_frame,
 )

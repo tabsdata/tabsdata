@@ -4,10 +4,10 @@
 
 import pytest
 
-from tabsdata.credentials import S3AccessKeyCredentials, UserPasswordCredentials
+from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
+from tabsdata._io.inputs.sql_inputs import MariaDBSource
+from tabsdata._io.plugin import SourcePlugin
 from tabsdata.exceptions import ErrorCode, InputConfigurationError
-from tabsdata.io.inputs.sql_inputs import MariaDBSource
-from tabsdata.io.plugin import SourcePlugin
 
 
 def test_all_correct_query_list():

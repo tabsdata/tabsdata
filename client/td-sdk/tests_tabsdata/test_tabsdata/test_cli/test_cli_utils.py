@@ -6,8 +6,8 @@ import os
 
 import pytest
 
-from tabsdata.api.status_utils.execution import user_execution_status_to_api
-from tabsdata.cli.cli_utils import (
+from tabsdata._api.status_utils.execution import user_execution_status_to_api
+from tabsdata._cli.cli_utils import (
     beautify_list,
     cleanup_dot_files,
     generate_dot_image,

@@ -8,11 +8,11 @@ import pathlib
 
 import pytest
 
-from tabsdata.tabsserver.function.store_results_utils import (
+from tabsdata._tabsserver.function.store_results_utils import (
     _extract_index,
     _get_matching_files,
 )
-from tabsdata.tabsserver.utils import convert_uri_to_path
+from tabsdata._tabsserver.utils import convert_uri_to_path
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

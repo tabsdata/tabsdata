@@ -16,14 +16,14 @@ import pytest
 from polars import selectors as pl_selectors
 
 import tabsdata as td
-from tabsdata.extensions.tableframe.extension import SystemColumns
-from tabsdata.tableframe import selectors as td_selectors
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._translator import (
+from tabsdata._utils.tableframe._translator import (
     _unwrap_table_frame,
     _wrap_polars_frame,
 )
+from tabsdata.extensions.tableframe.extension import SystemColumns
+from tabsdata.tableframe import selectors as td_selectors
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

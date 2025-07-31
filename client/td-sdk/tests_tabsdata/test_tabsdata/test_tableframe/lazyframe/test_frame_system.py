@@ -9,12 +9,12 @@ import unittest
 
 import polars as pl
 
-from tabsdata.utils.tableframe._common import drop_inception_regenerate_system_columns
-from tabsdata.utils.tableframe._constants import TD_COL_INCEPTION, Inception
-from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS_METADATA
+from tabsdata._utils.tableframe._common import drop_inception_regenerate_system_columns
+from tabsdata._utils.tableframe._constants import TD_COL_INCEPTION, Inception
+from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS_METADATA
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._translator import (
+from tabsdata._utils.tableframe._translator import (
     _unwrap_table_frame,
     _wrap_polars_frame,
 )

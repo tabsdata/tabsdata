@@ -49,14 +49,14 @@ from tests_tabsdata_databricks.testing_resources.test_output_databricks_none.exa
 )
 
 import tabsdata as td
-from tabsdata.secret import DirectSecret, EnvironmentSecret
-from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
-from tabsdata.tabsserver.invoker import invoke as tabsserver_main
-from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsdata._secret import DirectSecret, EnvironmentSecret
+from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
+from tabsdata._tabsserver.invoker import invoke as tabsserver_main
+from tabsdata._utils.bundle_utils import create_bundle_archive
 
 # noinspection PyProtectedMember
-from tabsdata_databricks.connector import _table_fqn_4sql
+from tabsdata_databricks._connector import _table_fqn_4sql
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

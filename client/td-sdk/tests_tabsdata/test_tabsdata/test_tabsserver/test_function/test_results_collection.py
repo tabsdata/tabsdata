@@ -6,7 +6,7 @@ import pytest
 from tests_tabsdata.conftest import clean_polars_df
 
 import tabsdata as td
-from tabsdata.tabsserver.function.results_collection import Result, ResultsCollection
+from tabsdata._tabsserver.function.results_collection import Result, ResultsCollection
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

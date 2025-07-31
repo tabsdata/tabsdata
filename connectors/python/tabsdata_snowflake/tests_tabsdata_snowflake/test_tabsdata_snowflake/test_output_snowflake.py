@@ -43,10 +43,10 @@ from tests_tabsdata_snowflake.testing_resources.test_output_snowflake_none.examp
 )
 
 import tabsdata as td
-from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
-from tabsdata.tabsserver.invoker import invoke as tabsserver_main
-from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
+from tabsdata._tabsserver.invoker import invoke as tabsserver_main
+from tabsdata._utils.bundle_utils import create_bundle_archive
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

@@ -13,7 +13,7 @@ from tabsdata import (
     PostgresSource,
     UserPasswordCredentials,
 )
-from tabsdata.utils.sql_utils import obtain_uri
+from tabsdata._utils.sql_utils import obtain_uri
 
 
 def test_obtain_uri_postgres_source():

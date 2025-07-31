@@ -6,22 +6,21 @@ import logging
 
 import polars as pl
 
-from tabsdata.tableframe.lazyframe.frame import TableFrame
+# noinspection PyProtectedMember
+from tabsdata._utils.tableframe._common import add_system_columns, drop_system_columns
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._common import add_system_columns, drop_system_columns
+from tabsdata._utils.tableframe._constants import TD_COL_DTYPE
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._constants import TD_COL_DTYPE
+from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS_METADATA
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS_METADATA
-
-# noinspection PyProtectedMember
-from tabsdata.utils.tableframe._translator import (
+from tabsdata._utils.tableframe._translator import (
     _unwrap_table_frame,
     _wrap_polars_frame,
 )
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 from .. import pytestmark  # noqa: F401
 

@@ -9,19 +9,19 @@ import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, ParquetFormat
-from tabsdata.credentials import AzureAccountKeyCredentials, UserPasswordCredentials
-from tabsdata.exceptions import (
-    ErrorCode,
-    FormatConfigurationError,
-    OutputConfigurationError,
-)
-from tabsdata.io.output import (
+from tabsdata._credentials import AzureAccountKeyCredentials, UserPasswordCredentials
+from tabsdata._io.output import (
     FRAGMENT_INDEX_PLACEHOLDER,
     AzureDestination,
     Output,
     build_output,
 )
-from tabsdata.secret import DirectSecret
+from tabsdata._secret import DirectSecret
+from tabsdata.exceptions import (
+    ErrorCode,
+    FormatConfigurationError,
+    OutputConfigurationError,
+)
 
 TEST_ACCOUNT_NAME = "test_account_name"
 TEST_ACCOUNT_KEY = "test_account_key"
@@ -32,10 +32,10 @@ AZURE_CREDENTIALS = AzureAccountKeyCredentials(
 CREDENTIALS_DICT = {
     AzureAccountKeyCredentials.IDENTIFIER: {
         AzureAccountKeyCredentials.ACCOUNT_NAME_KEY: (
-            DirectSecret(TEST_ACCOUNT_NAME).to_dict()
+            DirectSecret(TEST_ACCOUNT_NAME)._to_dict()
         ),
         AzureAccountKeyCredentials.ACCOUNT_KEY_KEY: (
-            DirectSecret(TEST_ACCOUNT_KEY).to_dict()
+            DirectSecret(TEST_ACCOUNT_KEY)._to_dict()
         ),
     }
 }
@@ -59,8 +59,8 @@ def test_all_correct_implicit_format():
             #            AzureDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), AzureDestination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), AzureDestination)
     assert output.__repr__()
 
 
@@ -82,8 +82,8 @@ def test_all_correct_uri_list():
             #            AzureDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), AzureDestination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), AzureDestination)
     assert output.__repr__()
 
 
@@ -222,7 +222,7 @@ def test_different_output_not_eq():
 def test_output_not_eq_dict():
     uri = ["az://path/to/data/data.csv", "az://path/to/data/data2.csv"]
     output = AzureDestination(uri, AZURE_CREDENTIALS)
-    assert output.to_dict() != output
+    assert output._to_dict() != output
 
 
 def test_all_correct_explicit_format():
@@ -243,8 +243,8 @@ def test_all_correct_explicit_format():
             #            AzureDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), AzureDestination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), AzureDestination)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -308,7 +308,7 @@ def test_correct_format_object():
     expected_format["input_has_header"] = False
 
     output = AzureDestination(uri, AZURE_CREDENTIALS, format=format)
-    assert output.format.to_dict()[CSVFormat.IDENTIFIER] == expected_format
+    assert output.format._to_dict()[CSVFormat.IDENTIFIER] == expected_format
     assert isinstance(output, AzureDestination)
     assert isinstance(output, Output)
     expected_dict = {
@@ -319,8 +319,8 @@ def test_correct_format_object():
             #            AzureDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), AzureDestination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), AzureDestination)
 
 
 def test_incorrect_data_format_raises_value_error():
@@ -381,8 +381,8 @@ def test_identifier_string_unchanged():
             #            AzureDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), AzureDestination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), AzureDestination)
 
 
 def test_allow_fragments():

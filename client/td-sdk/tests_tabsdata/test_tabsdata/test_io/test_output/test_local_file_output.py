@@ -8,16 +8,16 @@ import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, NDJSONFormat, ParquetFormat
-from tabsdata.exceptions import (
-    ErrorCode,
-    FormatConfigurationError,
-    OutputConfigurationError,
-)
-from tabsdata.io.output import (
+from tabsdata._io.output import (
     FRAGMENT_INDEX_PLACEHOLDER,
     LocalFileDestination,
     Output,
     build_output,
+)
+from tabsdata.exceptions import (
+    ErrorCode,
+    FormatConfigurationError,
+    OutputConfigurationError,
 )
 
 
@@ -54,9 +54,9 @@ def test_all_correct_single_parameter_list():
             #            LocalFileDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
+    assert output._to_dict() == expected_dict
     assert output.__repr__()
-    assert isinstance(build_output(output.to_dict()), LocalFileDestination)
+    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
 
 
 def test_all_correct_single_parameter_uri():
@@ -75,9 +75,9 @@ def test_all_correct_single_parameter_uri():
             #            LocalFileDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
+    assert output._to_dict() == expected_dict
     assert output.__repr__()
-    assert isinstance(build_output(output.to_dict()), LocalFileDestination)
+    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
 
 
 def test_list_of_integers_raises_exception():
@@ -103,9 +103,9 @@ def test_all_correct_implicit_format():
             #            LocalFileDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
+    assert output._to_dict() == expected_dict
     assert output.__repr__()
-    assert isinstance(build_output(output.to_dict()), LocalFileDestination)
+    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
 
 
 def test_all_correct_explicit_format():
@@ -123,8 +123,8 @@ def test_all_correct_explicit_format():
             #            LocalFileDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), LocalFileDestination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
 
 
 def test_identifier_string_unchanged():
@@ -138,8 +138,8 @@ def test_identifier_string_unchanged():
             #            LocalFileDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), LocalFileDestination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -183,7 +183,7 @@ def test_correct_dict_format():
 
     output = LocalFileDestination(path, format=format)
     assert isinstance(output.format, CSVFormat)
-    assert output.format.to_dict() == {CSVFormat.IDENTIFIER: expected_format}
+    assert output.format._to_dict() == {CSVFormat.IDENTIFIER: expected_format}
     assert isinstance(output, LocalFileDestination)
     assert isinstance(output, Output)
     expected_dict = {
@@ -193,8 +193,8 @@ def test_correct_dict_format():
             #            LocalFileDestination.CATALOG_KEY: None,
         }
     }
-    assert output.to_dict() == expected_dict
-    assert isinstance(build_output(output.to_dict()), LocalFileDestination)
+    assert output._to_dict() == expected_dict
+    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
 
 
 def test_incorrect_file_format_raises_error():
@@ -262,7 +262,7 @@ def test_output_not_eq_dict():
     path = "file://path/to/data/data"
     format = "csv"
     output = LocalFileDestination(path, format=format)
-    assert output.to_dict() != output
+    assert output._to_dict() != output
 
 
 def test_build_output_wrong_type_raises_error():

@@ -7,7 +7,7 @@ import logging
 import pytest
 from click.testing import CliRunner
 
-from tabsdata.cli.cli import cli
+from tabsdata._cli.cli import cli
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

@@ -9,13 +9,13 @@ import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, NDJSONFormat, ParquetFormat
+from tabsdata._io.inputs.file_inputs import LocalFileSource
+from tabsdata._io.plugin import SourcePlugin
 from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
     InputConfigurationError,
 )
-from tabsdata.io.inputs.file_inputs import LocalFileSource
-from tabsdata.io.plugin import SourcePlugin
 
 
 def test_all_correct_single_parameter():
@@ -123,7 +123,7 @@ def test_correct_dict_format():
 
     input = LocalFileSource(path, format=format)
     assert isinstance(input.format, CSVFormat)
-    assert input.format.to_dict() == {CSVFormat.IDENTIFIER: expected_format}
+    assert input.format._to_dict() == {CSVFormat.IDENTIFIER: expected_format}
     assert isinstance(input, LocalFileSource)
     assert isinstance(input, SourcePlugin)
 
@@ -222,7 +222,7 @@ def test_input_not_eq_dict():
     format = "csv"
     time = "2024-09-05T01:01:00.01Z"
     input = LocalFileSource(path, format=format, initial_last_modified=time)
-    assert input.to_dict() != input
+    assert input._to_dict() != input
 
 
 def test_initial_last_modified_invalid_string():

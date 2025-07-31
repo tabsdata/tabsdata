@@ -16,13 +16,13 @@ from tabsdata import (
     EnvironmentSecret,
     HashiCorpSecret,
 )
-from tabsdata.exceptions import ErrorCode, SecretConfigurationError
-from tabsdata.secret import (
+from tabsdata._secret import (
     DirectSecret,
     _recursively_evaluate_secret,
     _recursively_load_secret,
     build_secret,
 )
+from tabsdata.exceptions import ErrorCode, SecretConfigurationError
 
 
 def test_direct_secret_initialization():
@@ -30,13 +30,13 @@ def test_direct_secret_initialization():
         "secret_thing",
     )
     assert secret.secret_value == "secret_thing"
-    assert secret.to_dict() == {
+    assert secret._to_dict() == {
         DirectSecret.IDENTIFIER: {
             DirectSecret.SECRET_DIRECT_VALUE_KEY: "secret_thing",
         }
     }
     assert build_secret(secret) == secret
-    assert build_secret(secret.to_dict()) == secret
+    assert build_secret(secret._to_dict()) == secret
     assert secret.__repr__()
     assert secret.secret_value == "secret_thing"
 
@@ -113,7 +113,7 @@ def test_build_secret_from_wrong_dictionary_content_raises_exception():
 
 def test_secret_object_and_dict_not_equal():
     secret = DirectSecret("secret_thing")
-    secret_dict = secret.to_dict()
+    secret_dict = secret._to_dict()
     assert secret != secret_dict
 
 
@@ -122,7 +122,7 @@ def test_build_hashicorp_secret():
     assert hashicorp_secret.name == "secret_thing_name"
     assert hashicorp_secret.path == "secret_thing_path"
     assert hashicorp_secret.vault == "HASHICORP"
-    assert hashicorp_secret.to_dict() == {
+    assert hashicorp_secret._to_dict() == {
         HashiCorpSecret.IDENTIFIER: {
             HashiCorpSecret.PATH_KEY: "secret_thing_path",
             HashiCorpSecret.NAME_KEY: "secret_thing_name",
@@ -130,7 +130,7 @@ def test_build_hashicorp_secret():
         }
     }
     assert build_secret(hashicorp_secret) == hashicorp_secret
-    assert build_secret(hashicorp_secret.to_dict()) == hashicorp_secret
+    assert build_secret(hashicorp_secret._to_dict()) == hashicorp_secret
     assert hashicorp_secret.__repr__()
 
 
@@ -141,7 +141,7 @@ def test_build_hashicorp_secret_with_vault_name():
     assert hashicorp_secret.name == "secret_thing_name"
     assert hashicorp_secret.path == "secret_thing_path"
     assert hashicorp_secret.vault == "TESTING_VAULT_NAME"
-    assert hashicorp_secret.to_dict() == {
+    assert hashicorp_secret._to_dict() == {
         HashiCorpSecret.IDENTIFIER: {
             HashiCorpSecret.PATH_KEY: "secret_thing_path",
             HashiCorpSecret.NAME_KEY: "secret_thing_name",
@@ -149,7 +149,7 @@ def test_build_hashicorp_secret_with_vault_name():
         }
     }
     assert build_secret(hashicorp_secret) == hashicorp_secret
-    assert build_secret(hashicorp_secret.to_dict()) == hashicorp_secret
+    assert build_secret(hashicorp_secret._to_dict()) == hashicorp_secret
     assert hashicorp_secret.__repr__()
 
 
@@ -255,7 +255,7 @@ def test_secret_repr():
 def test_build_environment_secret():
     environment_secret = EnvironmentSecret("environment_variable_name")
     assert environment_secret.environment_variable_name == "environment_variable_name"
-    assert environment_secret.to_dict() == {
+    assert environment_secret._to_dict() == {
         EnvironmentSecret.IDENTIFIER: {
             EnvironmentSecret.ENVIRONMENT_VARIABLE_NAME_KEY: (
                 "environment_variable_name"
@@ -263,7 +263,7 @@ def test_build_environment_secret():
         }
     }
     assert build_secret(environment_secret) == environment_secret
-    assert build_secret(environment_secret.to_dict()) == environment_secret
+    assert build_secret(environment_secret._to_dict()) == environment_secret
     assert environment_secret.__repr__()
 
 
@@ -280,7 +280,7 @@ def test_environment_secret_value_not_exist():
 
 
 def test_recursively_load_secret():
-    secret_dict = EnvironmentSecret("does_not_exist").to_dict()
+    secret_dict = EnvironmentSecret("does_not_exist")._to_dict()
     assert _recursively_load_secret(secret_dict) == EnvironmentSecret("does_not_exist")
     value = ("hello", secret_dict)
     assert _recursively_load_secret(value) == (
@@ -322,7 +322,7 @@ def test_recursively_load_secret():
 
 def test_recursively_evaluate_secret():
     secret = DirectSecret("evaluated_secret_value")
-    secret_dict = secret.to_dict()
+    secret_dict = secret._to_dict()
     assert _recursively_evaluate_secret(secret_dict) == "evaluated_secret_value"
     value = ("hello", secret_dict)
     assert _recursively_evaluate_secret(value) == (

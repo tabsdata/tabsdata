@@ -385,7 +385,7 @@ target_release_folder = os.path.join(
 logger.debug(f"Using tabsdata target release folder: '{target_release_folder}'")
 
 # Caution!: This list is replicated in project python file
-# 'client/td-sdk/tabsdata/utils/bundle_utils.py' to ensure that when testing
+# 'client/td-sdk/tabsdata/_utils/bundle_utils.py' to ensure that when testing
 # with pytest, the binaries are distributed and available from tabsdata as a
 # local package.
 # Please, make sure you update this list in both places.
@@ -534,19 +534,19 @@ os.makedirs(
 
 console_scripts: list[str] = [
     # Tabsdata CLI
-    "td = tabsdata.cli.cli:cli",
+    "td = tabsdata._cli.cli:cli",
     # Tabsdata client tools
-    "x_oracle_check = tabsdata.tabsserver.tools.x_oracle_check:cli",
+    "x_oracle_check = tabsdata._tabsserver.tools.x_oracle_check:cli",
     # Supervisor init workers
-    "tdcfgrsv = tabsdata.tabsserver.tools.config_resolver:main",
-    "tdsrvinf = tabsdata.tabsserver.tools.server_info:main",
-    "tdmntext = tabsdata.tabsserver.tools.mount_extractor:main",
+    "tdcfgrsv = tabsdata._tabsserver.tools.config_resolver:main",
+    "tdsrvinf = tabsdata._tabsserver.tools.server_info:main",
+    "tdmntext = tabsdata._tabsserver.tools.mount_extractor:main",
     # Supervisor regular workers
-    "janitor = tabsdata.tabsserver.tools.janitor:main",
+    "janitor = tabsdata._tabsserver.tools.janitor:main",
     # Supervisor tools
-    "tdinvoker = tabsdata.tabsserver.invoker:main",
-    "tdupgrader = tabsdata.tabsserver.server.upgrader:main",
-    "tdvenv = tabsdata.tabsserver.pyenv_creation:main",
+    "tdinvoker = tabsdata._tabsserver.invoker:main",
+    "tdupgrader = tabsdata._tabsserver.server.upgrader:main",
+    "tdvenv = tabsdata._tabsserver.pyenv_creation:main",
 ]
 console_scripts.extend(load_console_scripts())
 
@@ -641,6 +641,8 @@ setup(
                 "tabsdata.assets*",
                 "tabsdata.examples",
                 "tabsdata.examples*",
+                "tabsdata._examples",
+                "tabsdata._examples*",
             ],
         ),
         # tabsdata.extensions.features.api
@@ -730,11 +732,11 @@ setup(
     package_data={
         "tabsdata": [
             os.path.join(
-                "examples",
+                "_examples",
                 "*",
             ),
             os.path.join(
-                "examples",
+                "_examples",
                 "input",
                 "*.csv",
             ),

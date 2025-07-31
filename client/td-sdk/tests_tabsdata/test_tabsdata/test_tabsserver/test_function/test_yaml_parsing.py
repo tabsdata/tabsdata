@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from tabsdata.tabsserver.function.yaml_parsing import (
+from tabsdata._tabsserver.function.yaml_parsing import (
     Data,
     NoData,
     store_response_as_yaml,

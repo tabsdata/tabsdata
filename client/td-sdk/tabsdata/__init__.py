@@ -53,22 +53,22 @@ from polars.datatypes.group import (
     UNSIGNED_INTEGER_DTYPES,
 )
 
-from tabsdata.credentials import (
+from tabsdata._credentials import (
     AzureAccountKeyCredentials,
     S3AccessKeyCredentials,
     UserPasswordCredentials,
 )
-from tabsdata.decorators import ALL_DEPS, publisher, subscriber, transformer
-from tabsdata.format import CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
-from tabsdata.io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
-from tabsdata.io.inputs.sql_inputs import (
+from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
+from tabsdata._format import CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
+from tabsdata._io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
+from tabsdata._io.inputs.sql_inputs import (
     MariaDBSource,
     MySQLSource,
     OracleSource,
     PostgresSource,
 )
-from tabsdata.io.inputs.table_inputs import TableInput
-from tabsdata.io.output import (
+from tabsdata._io.inputs.table_inputs import TableInput
+from tabsdata._io.output import (
     AWSGlue,
     AzureDestination,
     LocalFileDestination,
@@ -79,17 +79,17 @@ from tabsdata.io.output import (
     S3Destination,
     TableOutput,
 )
-from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
-from tabsdata.secret import EnvironmentSecret, HashiCorpSecret
+from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
+from tabsdata._secret import EnvironmentSecret, HashiCorpSecret
+from tabsdata._tabsserver.function.execution_exceptions import CustomException
 from tabsdata.tableframe.functions.col import col as col
 from tabsdata.tableframe.functions.eager import concat
 from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
-from tabsdata.tabsserver.function.execution_exceptions import CustomException
-from tabsdata_databricks.connector import DatabricksDestination
-from tabsdata_mongodb.connector import MongoDBDestination
-from tabsdata_salesforce.connector import SalesforceSource
-from tabsdata_snowflake.connector import SnowflakeDestination
+from tabsdata_databricks._connector import DatabricksDestination
+from tabsdata_mongodb._connector import MongoDBDestination
+from tabsdata_salesforce._connector import SalesforceSource
+from tabsdata_snowflake._connector import SnowflakeDestination
 
 logging.basicConfig(
     level=logging.getLevelName(logging.WARNING),

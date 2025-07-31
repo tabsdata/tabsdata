@@ -4,7 +4,7 @@
 
 import importlib.metadata
 
-from tabsdata_databricks.connector import DatabricksDestination
+from tabsdata_databricks._connector import DatabricksDestination
 
 __all__ = ["DatabricksDestination"]
 

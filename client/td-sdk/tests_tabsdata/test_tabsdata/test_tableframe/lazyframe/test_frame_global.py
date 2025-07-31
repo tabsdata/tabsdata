@@ -10,7 +10,7 @@ import polars as pl
 import tabsdata as td
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._translator import _wrap_polars_frame
+from tabsdata._utils.tableframe._translator import _wrap_polars_frame
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

@@ -8,7 +8,7 @@ from collections import Counter
 import pytest_check as check
 
 # noinspection PyProtectedMemberº
-from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
+from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

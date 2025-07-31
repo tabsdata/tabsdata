@@ -13,12 +13,12 @@ from polars import Expr
 from polars._utils.various import NoDefault, no_default
 
 # noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
-import tabsdata.tableframe.expr.expr as td_expr
+import tabsdata._utils.tableframe._translator as td_translator
 
 # noinspection PyProtectedMember
-import tabsdata.utils.tableframe._translator as td_translator
-from tabsdata.utils.annotations import pydoc
+import tabsdata.tableframe._typing as td_typing
+import tabsdata.tableframe.expr.expr as td_expr
+from tabsdata._utils.annotations import pydoc
 
 
 # ToDo: This requires some refactoring to unify transformer methods

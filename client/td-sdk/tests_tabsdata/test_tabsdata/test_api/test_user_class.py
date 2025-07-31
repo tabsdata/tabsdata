@@ -4,7 +4,7 @@
 
 import pytest
 
-from tabsdata.api.tabsdata_server import User
+from tabsdata._api.tabsdata_server import User
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

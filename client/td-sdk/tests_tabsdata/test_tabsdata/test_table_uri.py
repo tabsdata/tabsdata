@@ -4,8 +4,7 @@
 
 import pytest
 
-from tabsdata.exceptions import ErrorCode, TableURIConfigurationError
-from tabsdata.tableuri import (
+from tabsdata._tableuri import (
     TableURI,
     Version,
     VersionList,
@@ -13,6 +12,7 @@ from tabsdata.tableuri import (
     build_table_uri_object,
     build_version_object,
 )
+from tabsdata.exceptions import ErrorCode, TableURIConfigurationError
 
 
 def test_version_all_correct():

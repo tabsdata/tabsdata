@@ -10,11 +10,11 @@ from collections.abc import Iterable
 import polars as pl
 
 # noinspection PyProtectedMember
-import tabsdata.tableframe._typing as td_typing
-import tabsdata.tableframe.expr.expr as td_expr
+import tabsdata._utils.tableframe._common as td_common
 
 # noinspection PyProtectedMember
-import tabsdata.utils.tableframe._common as td_common
+import tabsdata.tableframe._typing as td_typing
+import tabsdata.tableframe.expr.expr as td_expr
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

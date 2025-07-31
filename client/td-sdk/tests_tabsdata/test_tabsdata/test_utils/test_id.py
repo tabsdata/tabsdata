@@ -6,7 +6,7 @@ import datetime
 
 import uuid6
 
-from tabsdata.utils.id import decode_id, encode_id, extract_time_from_uuidv7
+from tabsdata._utils.id import decode_id, encode_id, extract_time_from_uuidv7
 
 
 def test_encode_decode_id():

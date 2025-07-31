@@ -11,19 +11,18 @@ import polars as pl
 import polars.lazyframe.group_by as pl_group_by
 from polars import functions
 
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._constants as td_constants
+
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._helpers as td_helpers
+
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._translator as td_translator
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._constants as td_constants
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._helpers as td_helpers
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._translator as td_translator
+from tabsdata._utils.annotations import pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
-from tabsdata.utils.annotations import pydoc
 
 STATE = "_state"
 

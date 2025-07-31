@@ -10,9 +10,9 @@ from click.testing import CliRunner
 from filelock import FileLock
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, APISERVER_URL
 
-from tabsdata.cli.cli import cli
-from tabsdata.utils.logging import setup_tests_logging
-from tabsdata.utils.tableframe._generators import _id
+from tabsdata._cli.cli import cli
+from tabsdata._utils.logging import setup_tests_logging
+from tabsdata._utils.tableframe._generators import _id
 
 logger = logging.getLogger(__name__)
 

@@ -9,13 +9,13 @@ import polars as pl
 
 import tabsdata as td
 from tabsdata import TableFrame
-from tabsdata.tabsdatafunction import (
+from tabsdata._tabsdatafunction import (
     _clean_recursively_and_convert_to_datatype,
     _convert_recursively_to_tableframe,
     _recursively_obtain_datatype,
 )
-from tabsdata.utils.tableframe._common import add_system_columns
-from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
+from tabsdata._utils.tableframe._common import add_system_columns
+from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS
 
 BASE_DATA = {"a": [1, 2, 3], "b": [4, 5, 6]}
 VALID_PD_DATAFRAME = pd.DataFrame(BASE_DATA)

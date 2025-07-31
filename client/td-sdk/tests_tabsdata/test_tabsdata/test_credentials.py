@@ -10,9 +10,9 @@ from tabsdata import (
     S3AccessKeyCredentials,
     UserPasswordCredentials,
 )
-from tabsdata.credentials import build_credentials
+from tabsdata._credentials import build_credentials
+from tabsdata._secret import DirectSecret
 from tabsdata.exceptions import CredentialsConfigurationError, ErrorCode
-from tabsdata.secret import DirectSecret
 
 
 def test_account_key_credentials_initialization():
@@ -22,18 +22,18 @@ def test_account_key_credentials_initialization():
     )
     assert credentials.account_name == DirectSecret("test_user")
     assert credentials.account_key == DirectSecret("test_password")
-    assert credentials.to_dict() == {
+    assert credentials._to_dict() == {
         AzureAccountKeyCredentials.IDENTIFIER: {
             AzureAccountKeyCredentials.ACCOUNT_NAME_KEY: (
-                DirectSecret("test_user").to_dict()
+                DirectSecret("test_user")._to_dict()
             ),
             AzureAccountKeyCredentials.ACCOUNT_KEY_KEY: (
-                DirectSecret("test_password").to_dict()
+                DirectSecret("test_password")._to_dict()
             ),
         }
     }
     assert build_credentials(credentials) == credentials
-    assert build_credentials(credentials.to_dict()) == credentials
+    assert build_credentials(credentials._to_dict()) == credentials
     assert credentials.__repr__()
 
 
@@ -90,18 +90,18 @@ def test_s3_access_key_credentials_initialization():
     )
     assert credentials.aws_access_key_id == DirectSecret("test_access_key_id")
     assert credentials.aws_secret_access_key == DirectSecret("test_secret_access_key")
-    assert credentials.to_dict() == {
+    assert credentials._to_dict() == {
         S3AccessKeyCredentials.IDENTIFIER: {
             S3AccessKeyCredentials.AWS_ACCESS_KEY_ID_KEY: (
-                DirectSecret("test_access_key_id").to_dict()
+                DirectSecret("test_access_key_id")._to_dict()
             ),
             S3AccessKeyCredentials.AWS_SECRET_ACCESS_KEY_KEY: (
-                DirectSecret("test_secret_access_key").to_dict()
+                DirectSecret("test_secret_access_key")._to_dict()
             ),
         }
     }
     assert build_credentials(credentials) == credentials
-    assert build_credentials(credentials.to_dict()) == credentials
+    assert build_credentials(credentials._to_dict()) == credentials
     assert credentials.__repr__()
 
 
@@ -154,16 +154,16 @@ def test_user_password_credentials_initialization():
     )
     assert credentials.user == DirectSecret("test_user")
     assert credentials.password == DirectSecret("test_password")
-    assert credentials.to_dict() == {
+    assert credentials._to_dict() == {
         UserPasswordCredentials.IDENTIFIER: {
-            UserPasswordCredentials.USER_KEY: DirectSecret("test_user").to_dict(),
+            UserPasswordCredentials.USER_KEY: DirectSecret("test_user")._to_dict(),
             UserPasswordCredentials.PASSWORD_KEY: (
-                DirectSecret("test_password").to_dict()
+                DirectSecret("test_password")._to_dict()
             ),
         }
     }
     assert build_credentials(credentials) == credentials
-    assert build_credentials(credentials.to_dict()) == credentials
+    assert build_credentials(credentials._to_dict()) == credentials
     assert credentials.__repr__()
 
 

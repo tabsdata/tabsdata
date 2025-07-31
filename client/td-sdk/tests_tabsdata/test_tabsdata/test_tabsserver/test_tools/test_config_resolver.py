@@ -13,7 +13,7 @@ from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
 )
 
-from tabsdata.tabsserver.tools.config_resolver import ConfigResolver
+from tabsdata._tabsserver.tools.config_resolver import ConfigResolver
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

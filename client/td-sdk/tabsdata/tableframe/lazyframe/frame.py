@@ -18,33 +18,33 @@ from accessify import accessify, private
 from polars.dependencies import numpy as np
 
 # noinspection PyProtectedMember
+import tabsdata._utils.tableframe._common as td_common
+
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._constants as td_constants
+
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._generators as td_generators
+
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._helpers as td_helpers
+
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._reflection as td_reflection
+
+# noinspection PyProtectedMember
+import tabsdata._utils.tableframe._translator as td_translator
+
+# noinspection PyProtectedMember
 import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.dataframe.frame as td_frame
 
 # noinspection PyProtectedMember
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.group_by as td_group_by
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._common as td_common
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._constants as td_constants
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._generators as td_generators
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._helpers as td_helpers
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._reflection as td_reflection
-
-# noinspection PyProtectedMember
-import tabsdata.utils.tableframe._translator as td_translator
+from tabsdata._utils.annotations import pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
 from tabsdata.extensions.tableframe.extension import TableFrameExtension
-from tabsdata.utils.annotations import pydoc
 
 if TYPE_CHECKING:
     import pandas as pd

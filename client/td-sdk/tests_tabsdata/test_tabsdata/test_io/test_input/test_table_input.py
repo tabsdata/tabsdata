@@ -4,9 +4,9 @@
 
 import pytest
 
+from tabsdata._io.inputs.table_inputs import TableInput
+from tabsdata._io.plugin import SourcePlugin
 from tabsdata.exceptions import TableURIConfigurationError, TabsDataException
-from tabsdata.io.inputs.table_inputs import TableInput
-from tabsdata.io.plugin import SourcePlugin
 
 
 def test_all_correct_string():
@@ -68,7 +68,7 @@ def test_different_input_not_eq():
 def test_input_not_eq_dict():
     table = "collection/table@HEAD^"
     input = TableInput(table)
-    assert input.to_dict() != input
+    assert input._to_dict() != input
 
 
 def test_wrong_scheme_raises_value_error():

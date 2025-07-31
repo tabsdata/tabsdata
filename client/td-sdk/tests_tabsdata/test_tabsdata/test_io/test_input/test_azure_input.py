@@ -10,13 +10,13 @@ import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, ParquetFormat, SourcePlugin
-from tabsdata.credentials import AzureAccountKeyCredentials, UserPasswordCredentials
+from tabsdata._credentials import AzureAccountKeyCredentials, UserPasswordCredentials
+from tabsdata._io.inputs.file_inputs import AzureSource
 from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
     InputConfigurationError,
 )
-from tabsdata.io.inputs.file_inputs import AzureSource
 
 TEST_ACCOUNT_NAME = "test_account_name"
 TEST_ACCOUNT_KEY = "test_account_key"

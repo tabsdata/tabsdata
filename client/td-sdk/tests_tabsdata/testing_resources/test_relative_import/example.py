@@ -8,7 +8,7 @@ from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 import tabsdata as td
-from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsdata._utils.bundle_utils import create_bundle_archive
 
 from .custom_importer_relative_import import Importer
 

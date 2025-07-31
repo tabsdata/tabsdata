@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from tabsdata.api.tabsdata_server import (
+from tabsdata._api.tabsdata_server import (
     Role,
     convert_timestamp_to_string,
 )

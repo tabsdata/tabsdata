@@ -9,10 +9,10 @@ import polars as pl
 import tabsdata as td
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe import _constants, _helpers
+from tabsdata._utils.tableframe import _constants, _helpers
 
 # noinspection PyProtectedMember
-from tabsdata.utils.tableframe._helpers import SYSTEM_COLUMNS
+from tabsdata._utils.tableframe._helpers import SYSTEM_COLUMNS
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

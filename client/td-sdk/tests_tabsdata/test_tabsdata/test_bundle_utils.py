@@ -19,8 +19,7 @@ from tests_tabsdata.testing_resources.test_custom_requirements.example import (
 )
 
 import tabsdata as td
-from tabsdata.exceptions import ErrorCode, RegistrationError
-from tabsdata.utils.bundle_utils import (
+from tabsdata._utils.bundle_utils import (
     CODE_FOLDER,
     CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY,
     CONFIG_ENTRY_POINT_KEY,
@@ -44,6 +43,7 @@ from tabsdata.utils.bundle_utils import (
     store_folder_contents,
     store_function_codebase,
 )
+from tabsdata.exceptions import ErrorCode, RegistrationError
 
 
 class BaseDummyFunction:
@@ -85,18 +85,18 @@ def test_create_configuration_json(tmp_path):
     save_location.mkdir()
     result = create_configuration(dummy_function, str(save_location))
     expected = {
-        CONFIG_INPUTS_KEY: CORRECT_SOURCE.to_dict(),
+        CONFIG_INPUTS_KEY: CORRECT_SOURCE._to_dict(),
         CONFIG_ENTRY_POINT_KEY: {
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
-        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION.to_dict(),
+        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
     }
     expected_load = {
-        CONFIG_INPUTS_KEY: CORRECT_SOURCE.to_dict(),
+        CONFIG_INPUTS_KEY: CORRECT_SOURCE._to_dict(),
         CONFIG_ENTRY_POINT_KEY: {
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
-        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION.to_dict(),
+        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
     }
     print(f"result: {result}")
     assert result == expected
@@ -116,18 +116,18 @@ def test_create_configuration_json_output_dict(tmp_path):
     save_location.mkdir()
     result = create_configuration(dummy_function, str(save_location))
     expected = {
-        CONFIG_INPUTS_KEY: CORRECT_SOURCE.to_dict(),
+        CONFIG_INPUTS_KEY: CORRECT_SOURCE._to_dict(),
         CONFIG_ENTRY_POINT_KEY: {
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
-        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION.to_dict(),
+        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
     }
     expected_load = {
-        CONFIG_INPUTS_KEY: CORRECT_SOURCE.to_dict(),
+        CONFIG_INPUTS_KEY: CORRECT_SOURCE._to_dict(),
         CONFIG_ENTRY_POINT_KEY: {
             CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: "dummy_function.pkl",
         },
-        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION.to_dict(),
+        CONFIG_OUTPUT_KEY: CORRECT_DESTINATION._to_dict(),
     }
     assert result == expected
     with open(save_location / CONFIG_FILE_NAME) as f:
@@ -146,7 +146,7 @@ def test_generate_entry_point_field_json():
 
 
 @patch(
-    "tabsdata.utils.bundle_utils.obtain_ordered_dists",
+    "tabsdata._utils.bundle_utils.obtain_ordered_dists",
     return_value=["package1==1.0.0", "package2==2.0.0"],
 )
 def test_create_requirements_yaml(mock_obtain_ordered_dists, tmp_path):
@@ -186,7 +186,7 @@ def test_store_folder_contents(tmp_path):
     assert (save_location / "src_file.txt").read_text() == "dummy content"
 
 
-@patch("tabsdata.utils.bundle_utils.shutil.copy")
+@patch("tabsdata._utils.bundle_utils.shutil.copy")
 def test_store_non_interpreter_function_codebase(mock_copy, tmp_path):
     src_file = tmp_path / "src_file.txt"
     src_file.write_text("dummy content")
@@ -199,7 +199,7 @@ def test_store_non_interpreter_function_codebase(mock_copy, tmp_path):
 
 
 @patch(
-    "tabsdata.utils.bundle_utils.obtain_ordered_dists",
+    "tabsdata._utils.bundle_utils.obtain_ordered_dists",
     return_value=["package1==1.0.0", "package2==2.0.0"],
 )
 def test_create_requirements_yaml_no_local_packages(
@@ -224,10 +224,10 @@ def test_create_requirements_yaml_no_local_packages(
 
 
 @patch(
-    "tabsdata.utils.bundle_utils.obtain_ordered_dists",
+    "tabsdata._utils.bundle_utils.obtain_ordered_dists",
     return_value=["package1==1.0.0", "package2==2.0.0"],
 )
-@patch("tabsdata.utils.bundle_utils.store_folder_contents")
+@patch("tabsdata._utils.bundle_utils.store_folder_contents")
 def test_create_requirements_yaml_with_local_packages(
     mock_store_folder_contents, mock_obtain_ordered_dists, tmp_path
 ):
@@ -257,10 +257,10 @@ def test_create_requirements_yaml_with_local_packages(
 
 
 @patch(
-    "tabsdata.utils.bundle_utils.obtain_ordered_dists",
+    "tabsdata._utils.bundle_utils.obtain_ordered_dists",
     return_value=["package1==1.0.0", "package2==2.0.0"],
 )
-@patch("tabsdata.utils.bundle_utils.store_folder_contents")
+@patch("tabsdata._utils.bundle_utils.store_folder_contents")
 def test_create_requirements_yaml_with_multiple_local_packages(
     mock_store_folder_contents, mock_obtain_ordered_dists, tmp_path
 ):
@@ -301,10 +301,10 @@ def test_create_requirements_yaml_with_multiple_local_packages(
 
 
 @patch(
-    "tabsdata.utils.bundle_utils.obtain_ordered_dists",
+    "tabsdata._utils.bundle_utils.obtain_ordered_dists",
     return_value=["package1==1.0.0", "package2==2.0.0"],
 )
-@patch("tabsdata.utils.bundle_utils.store_folder_contents")
+@patch("tabsdata._utils.bundle_utils.store_folder_contents")
 def test_create_requirements_yaml_with_tuple_local_packages_raises_exception(
     mock_store_folder_contents, mock_obtain_ordered_dists, tmp_path
 ):
@@ -322,10 +322,10 @@ def test_create_requirements_yaml_with_tuple_local_packages_raises_exception(
 
 
 @patch(
-    "tabsdata.utils.bundle_utils.obtain_ordered_dists",
+    "tabsdata._utils.bundle_utils.obtain_ordered_dists",
     return_value=["package1==1.0.0", "package2==2.0.0"],
 )
-@patch("tabsdata.utils.bundle_utils.store_folder_contents")
+@patch("tabsdata._utils.bundle_utils.store_folder_contents")
 def test_create_requirements_yaml_with_wrong_type_local_packages_raises_exception(
     mock_store_folder_contents, mock_obtain_ordered_dists, tmp_path
 ):

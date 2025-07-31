@@ -4,7 +4,7 @@
 
 import importlib.metadata
 
-from tabsdata_salesforce.connector import SalesforceSource
+from tabsdata_salesforce._connector import SalesforceSource
 
 __all__ = ["SalesforceSource"]
 

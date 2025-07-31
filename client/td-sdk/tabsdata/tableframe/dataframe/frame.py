@@ -9,7 +9,7 @@ from typing import Any
 import polars as pl
 
 # noinspection PyProtectedMember
-import tabsdata.utils.tableframe._constants as td_constants
+import tabsdata._utils.tableframe._constants as td_constants
 from tabsdata.exceptions import ErrorCode, TableFrameError
 
 

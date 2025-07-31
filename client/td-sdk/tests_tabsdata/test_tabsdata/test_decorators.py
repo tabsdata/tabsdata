@@ -5,7 +5,7 @@
 import pytest
 
 from tabsdata import LocalFileDestination, LocalFileSource, TableInput, TableOutput
-from tabsdata.decorators import ALL_DEPS, publisher, subscriber, transformer
+from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
 
 

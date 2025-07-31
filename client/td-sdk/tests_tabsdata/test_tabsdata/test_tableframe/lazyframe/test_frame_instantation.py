@@ -12,6 +12,13 @@ import pytest
 from tabulate import tabulate
 
 import tabsdata as td
+
+# noinspection PyProtectedMember
+from tabsdata._utils.tableframe._helpers import REQUIRED_COLUMNS
+
+# noinspection PyProtectedMember
+from tabsdata._utils.tableframe._translator import _wrap_polars_frame
+from tabsdata._utils.tableframe.builders import from_dict, from_pandas, from_polars
 from tabsdata.exceptions import ErrorCode, TabsDataException
 from tabsdata.extensions.features.api.features import Feature, FeaturesManager
 from tabsdata.extensions.tableframe.extension import TableFrameExtension
@@ -22,13 +29,6 @@ from tabsdata.tableframe.lazyframe.frame import (
     TableFrameOrigin,
     _split_columns,
 )
-
-# noinspection PyProtectedMember
-from tabsdata.utils.tableframe._helpers import REQUIRED_COLUMNS
-
-# noinspection PyProtectedMember
-from tabsdata.utils.tableframe._translator import _wrap_polars_frame
-from tabsdata.utils.tableframe.builders import from_dict, from_pandas, from_polars
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

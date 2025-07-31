@@ -17,7 +17,7 @@ from tests_tabsdata.conftest import (
     write_v2_yaml_file,
 )
 
-from tabsdata.tabsserver.function.yaml_parsing import (
+from tabsdata._tabsserver.function.yaml_parsing import (
     V2,
     Table,
     TableVersions,

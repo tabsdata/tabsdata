@@ -28,7 +28,7 @@ const BANNER: &str = include_str!(concat!(
 
 const COMPATIBILITY_PY: &str = include_str!(concat!(
     workspace_root!(),
-    "/client/td-sdk/tabsdata/utils/compatibility.py"
+    "/client/td-sdk/tabsdata/_utils/compatibility.py"
 ));
 
 fn check_banner() -> std::io::Result<()> {

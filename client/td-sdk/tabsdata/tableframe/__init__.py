@@ -44,12 +44,7 @@ from polars.datatypes.group import (
     UNSIGNED_INTEGER_DTYPES,
 )
 
-from tabsdata.tableframe import selectors
-from tabsdata.tableframe.functions.col import col
-from tabsdata.tableframe.functions.eager import concat
-from tabsdata.tableframe.functions.lit import lit
-from tabsdata.tableframe.lazyframe.frame import TableFrame
-from tabsdata.utils.tableframe.builders import (
+from tabsdata._utils.tableframe.builders import (
     empty,
     from_dict,
     from_pandas,
@@ -59,6 +54,11 @@ from tabsdata.utils.tableframe.builders import (
     to_polars_df,
     to_polars_lf,
 )
+from tabsdata.tableframe import selectors
+from tabsdata.tableframe.functions.col import col
+from tabsdata.tableframe.functions.eager import concat
+from tabsdata.tableframe.functions.lit import lit
+from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 __all__ = [
     # from tabsdata.tableframe...
@@ -66,7 +66,7 @@ __all__ = [
     "concat",
     "lit",
     "TableFrame",
-    # from tabsdata.utils.tableframe
+    # from tabsdata._utils.tableframe
     "empty",
     "from_dict",
     "from_pandas",

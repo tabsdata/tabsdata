@@ -46,10 +46,10 @@ from tests_tabsdata_mongodb.testing_resources.test_output_mongodb_none.example i
 )
 
 import tabsdata as td
-from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.invoker import REQUEST_FILE_NAME
-from tabsdata.tabsserver.invoker import invoke as tabsserver_main
-from tabsdata.utils.bundle_utils import create_bundle_archive
+from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
+from tabsdata._tabsserver.invoker import invoke as tabsserver_main
+from tabsdata._utils.bundle_utils import create_bundle_archive
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -595,7 +595,7 @@ def test_docs_per_trx(tmp_path, testing_mongodb):
 
     mongo_destination.stream(str(tmp_path), lf)
 
-    from tabsdata_mongodb.connector import _get_matching_files
+    from tabsdata_mongodb._connector import _get_matching_files
 
     assert len(_get_matching_files(str(tmp_path / "*.jsonl"))) == 2
 

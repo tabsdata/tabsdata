@@ -13,7 +13,7 @@ import polars._typing as pl_typing
 
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
-from tabsdata.utils.annotations import pydoc
+from tabsdata._utils.annotations import pydoc
 
 
 @pydoc(categories="union")

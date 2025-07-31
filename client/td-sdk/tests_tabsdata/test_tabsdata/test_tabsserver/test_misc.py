@@ -58,20 +58,20 @@ from tests_tabsdata.testing_resources.test_relative_import.example import (
     relative_import,
 )
 
-from tabsdata.tabsserver.function.execution_exceptions import (
+from tabsdata._tabsserver.function.execution_exceptions import (
     GENERAL_ERROR_EXIT_STATUS,
     TABSDATA_ERROR_EXIT_STATUS,
 )
-from tabsdata.tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata.tabsserver.function.yaml_utils.exception_yaml import (
+from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata._tabsserver.function.yaml_utils.exception_yaml import (
     EXCEPTION_YAML_FILE_NAME,
 )
-from tabsdata.tabsserver.invoker import (
+from tabsdata._tabsserver.invoker import (
     REQUEST_FILE_NAME,
 )
-from tabsdata.tabsserver.invoker import invoke as tabsserver_main
-from tabsdata.tabsserver.utils import UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
-from tabsdata.utils.bundle_utils import (
+from tabsdata._tabsserver.invoker import invoke as tabsserver_main
+from tabsdata._tabsserver.utils import UNCOMPRESSED_FUNCTION_BUNDLE_FOLDER
+from tabsdata._utils.bundle_utils import (
     PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY,
     PYTHON_INSTALL_DEPENDENCIES_KEY,
     PYTHON_LOCAL_PACKAGES_KEY,

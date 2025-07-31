@@ -11,7 +11,7 @@ import polars as pl
 # noinspection PyProtectedMember
 import tabsdata.tableframe._typing as td_typing
 import tabsdata.tableframe.expr.expr as td_expr
-from tabsdata.utils.annotations import pydoc
+from tabsdata._utils.annotations import pydoc
 
 
 @pydoc(categories="generation")
