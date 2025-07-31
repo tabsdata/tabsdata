@@ -43,8 +43,8 @@ class ErrorCode(Enum):
     DCE3 = {
         "code": "DCE-003",
         "message": (
-            "The 'data' parameter of a 'publisher' decorator must be an 'Input' object "
-            "(except 'TableInput'), got '{}' instead."
+            "The 'source' parameter of a 'publisher' decorator must be a "
+            "'SourcePlugin' object (except 'TableInput'), got '{}' instead."
         ),
     }
     DCE4 = {
@@ -103,6 +103,13 @@ class ErrorCode(Enum):
         "message": (
             "The 'name' parameter in TabsdataFunction be of type 'str'; got '{}'"
             " instead."
+        ),
+    }
+    FCE7 = {
+        "code": "FCE-007",
+        "message": (
+            "The source in TabsdataFunction must be of type 'SourcePlugin' or None; "
+            "got '{}' instead."
         ),
     }
     FOCE1 = {

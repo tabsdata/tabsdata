@@ -19,7 +19,7 @@ from tabsdata.exceptions import (
     ErrorCode,
     FunctionConfigurationError,
 )
-from tabsdata.io.input import Input, TableInput, build_input
+from tabsdata.io.inputs.table_inputs import TableInput
 from tabsdata.io.output import Output, TableOutput, build_output
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.tableuri import build_table_uri_object
@@ -48,7 +48,7 @@ class TabsdataFunction:
         self,
         func: Callable,
         name: str | None,
-        input: dict | Input | SourcePlugin = None,
+        input: dict | SourcePlugin = None,
         output: dict | Output | DestinationPlugin = None,
         trigger_by: str | List[str] | None = None,
     ):
@@ -141,26 +141,28 @@ class TabsdataFunction:
             raise ValueError("Unable to determine function type.")
 
     @property
-    def input(self) -> Input | SourcePlugin | None:
+    def input(self) -> SourcePlugin | None:
         """
-        Input | SourcePlugin | None: The data to be used when running the function.
+        SourcePlugin | None: The data to be used when running the function.
         """
         return self._input
 
     @input.setter
-    def input(self, input: dict | Input | SourcePlugin | None):
+    def input(self, input: dict | SourcePlugin | None):
         """
         Sets the input data for the function.
 
         Args:
-            input (dict | Input | None): The data to be used when running the
-                function. Can be a dictionary, an instance of Input, an instance of
+            input (dict | SourcePlugin | None): The data to be used when running the
+                function. Can be a dictionary, an instance of
                 SourcePlugin or None.
         """
         if isinstance(input, SourcePlugin):
             self._input = input
+        elif input is None:
+            self._input = None
         else:
-            self._input = build_input(input)
+            raise FunctionConfigurationError(ErrorCode.FCE7, type(input))
         self._verify_valid_input_output()
 
     @property

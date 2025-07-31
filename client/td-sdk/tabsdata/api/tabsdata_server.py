@@ -22,7 +22,7 @@ from tabsdata.api.status_utils.execution import execution_status_to_mapping
 from tabsdata.api.status_utils.function_run import function_run_status_to_mapping
 from tabsdata.api.status_utils.transaction import transaction_status_to_mapping
 from tabsdata.api.status_utils.worker import worker_status_to_mapping
-from tabsdata.io.input import TableInput
+from tabsdata.io.inputs.table_inputs import TableInput
 from tabsdata.io.output import TableOutput
 from tabsdata.tabsdatafunction import TabsdataFunction
 from tabsdata.utils.bundle_utils import create_bundle_archive

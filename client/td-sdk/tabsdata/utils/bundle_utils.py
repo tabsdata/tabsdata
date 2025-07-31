@@ -18,8 +18,9 @@ import cloudpickle
 import yaml
 
 from tabsdata.exceptions import ErrorCode, RegistrationError
+from tabsdata.io.output import Output
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
-from tabsdata.tabsdatafunction import Input, Output, TabsdataFunction
+from tabsdata.tabsdatafunction import TabsdataFunction
 from tabsdata.utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES
 from tabsdata.utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
 
@@ -113,7 +114,7 @@ def create_output_configuration(function: TabsdataFunction, save_location: str) 
 
 
 def convert_to_dict_and_store_if_plugin(
-    to_convert: SourcePlugin | DestinationPlugin | Input | Output, save_location: str
+    to_convert: SourcePlugin | DestinationPlugin | Output, save_location: str
 ) -> dict:
     configuration_dict = to_convert.to_dict() if to_convert else {}
     if isinstance(to_convert, SourcePlugin) or isinstance(

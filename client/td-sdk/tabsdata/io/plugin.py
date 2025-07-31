@@ -62,6 +62,27 @@ class SourcePlugin:
         return object_method is not class_method
 
     @property
+    def _stream_require_ec(self) -> bool:
+        """
+        Indicates whether the stream method requires an execution context.
+
+        Returns:
+            bool: True if the stream method requires an execution context,
+            False otherwise.
+        """
+        return False
+
+    def _stream_requires_execution_context(self) -> bool:
+        """
+        Indicates whether the plugin requires the execution context to be passed to
+        the stream method. If True, the stream method will be called with the
+        execution context as an argument.
+        """
+        return not self._is_overridden("stream") or (
+            hasattr(self, "_stream_require_ec") and self._stream_require_ec
+        )
+
+    @property
     def _offset_return(self) -> str:
         """
         Indicates whether the offset is returned by modifying the
@@ -96,13 +117,13 @@ class SourcePlugin:
         logger.info("Starting plugin stream import")
 
         # For a custom stream implementations, method is executed as is.
-        if self._is_overridden("stream"):
-            parameters = self.stream(destination_dir)
-        else:
+        if self._stream_requires_execution_context():
             # For the core stream implementations, method is executed as with the
             # execution context.
             with td_context(self, execution_context):
                 parameters = self.stream(destination_dir)
+        else:
+            parameters = self.stream(destination_dir)
 
         if self.initial_values:
             execution_context.status.offset.returns_values = True

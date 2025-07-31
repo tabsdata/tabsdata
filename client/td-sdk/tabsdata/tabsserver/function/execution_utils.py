@@ -6,44 +6,30 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata.utils.tableframe._generators as td_generators
-from tabsdata.format import (
-    CSVFormat,
-    FileFormat,
-    LogFormat,
-    NDJSONFormat,
-    ParquetFormat,
-)
-from tabsdata.io.input import TableInput
 from tabsdata.tableframe.lazyframe.frame import TableFrame
-from tabsdata.tableuri import build_table_uri_object
 from tabsdata.tabsserver.function import environment_import_utils
 from tabsdata.tabsserver.function.logging_utils import pad_string
 from tabsdata.tabsserver.function.native_tables_utils import (
     scan_lf_from_location,
-    scan_tf_from_table,
     sink_lf_to_location,
 )
 from tabsdata.tabsserver.function.offset_utils import OffsetReturn
 from tabsdata.tabsserver.function.results_collection import ResultsCollection
 from tabsdata.tabsserver.function.yaml_parsing import (
     Location,
-    Table,
-    TableVersions,
 )
 
 # noinspection PyProtectedMember
 from tabsdata.utils.tableframe._context import TableFrameContext
 
 if TYPE_CHECKING:
-    from tabsdata.io.input import Input
     from tabsdata.tabsserver.function.execution_context import ExecutionContext
-    from tabsdata.tabsserver.function.offset_utils import Offset
 
 logger = logging.getLogger(__name__)
 
@@ -73,35 +59,23 @@ def execute_function_from_config(
 
 def update_initial_values(execution_context: ExecutionContext, result):
     logger.info("New offset generated")
-    if source_plugin := execution_context.source_plugin:
-        # TODO: For clarity, remove this if once all builtin inputs have been updated
-        #  as plugins
-        if source_plugin._offset_return == OffsetReturn.ATTRIBUTE.value:
-            logger.debug("Obtaining new offset from the plugin object")
-            # The new initial values are stored in the plugin
-            new_initial_values = source_plugin.initial_values
-        elif source_plugin._offset_return == OffsetReturn.FUNCTION.value:
-            # TODO: Duplicated code, will be removed once the last source is migrated.
-            # The new initial values are part of the result
-            logger.debug("Obtaining new offset from the plugin result")
-            if isinstance(result, tuple):
-                *result, new_initial_values = result
-                result = tuple(result)
-            else:
-                new_initial_values = result
-                result = (None,)
-        else:
-            raise ValueError(
-                f"Invalid offset return type: {source_plugin._offset_return}"
-            )
-    else:
-        # If working with a source, the new initial values are part of the result
+    source_plugin = execution_context.source
+    # noinspection PyProtectedMember
+    if source_plugin._offset_return == OffsetReturn.ATTRIBUTE.value:
+        logger.debug("Obtaining new offset from the plugin object")
+        # The new initial values are stored in the plugin
+        new_initial_values = source_plugin.initial_values
+    elif source_plugin._offset_return == OffsetReturn.FUNCTION.value:
+        # The new initial values are part of the result
+        logger.debug("Obtaining new offset from the plugin result")
         if isinstance(result, tuple):
             *result, new_initial_values = result
             result = tuple(result)
         else:
             new_initial_values = result
             result = (None,)
+    else:
+        raise ValueError(f"Invalid offset return type: {source_plugin._offset_return}")
     execution_context.status.offset.update_new_values(new_initial_values)
     return result
 
@@ -109,165 +83,10 @@ def update_initial_values(execution_context: ExecutionContext, result):
 def obtain_user_provided_function_parameters(
     execution_context: ExecutionContext,
 ) -> list[TableFrame | None | list[TableFrame | None]]:
-    if source_plugin := execution_context.source_plugin:
-        logger.debug("Running the source plugin")
-        # noinspection PyProtectedMember
-        parameters = source_plugin._run(execution_context)
-    else:
-        # TODO: Remake this to also use execution_context, trying to finish only the
-        #  plugin section for now
-        non_plugin_source = execution_context.non_plugin_source
-        working_dir = execution_context.paths.output_folder
-        parameters = trigger_non_plugin_source(
-            non_plugin_source,
-            working_dir,
-            execution_context,
-            execution_context.status.offset,
-        )
+    logger.debug("Running the source plugin")
+    # noinspection PyProtectedMember
+    parameters = execution_context.source._run(execution_context)
     return parameters
-
-
-def convert_tuple_to_list(
-    result: TableFrame | Tuple[TableFrame],
-) -> list[TableFrame] | TableFrame:
-    if isinstance(result, tuple):
-        return list(result)
-    else:
-        return result
-
-
-def trigger_non_plugin_source(
-    source: Input,
-    working_dir: str,
-    execution_context: ExecutionContext,
-    initial_values: Offset = None,
-    idx: td_generators.IdxGenerator | None = None,
-) -> list[TableFrame | None | list[TableFrame | None]]:
-    destination_folder = os.path.join(working_dir, SOURCES_FOLDER)
-    os.makedirs(destination_folder, exist_ok=True)
-    if isinstance(source, TableInput):
-        logger.debug("Triggering TableInput")
-        # When loading tabsdata tables, we return tuples of (uri, table), so that
-        # coming operations can use information on the request for further processing.
-        result = execute_table_importer(source, execution_context)
-        logger.info("Loaded tables successfully")
-        return result
-    else:
-        logger.error(f"Invalid source type: {type(source)}. No data imported.")
-        raise TypeError(f"Invalid source type: {type(source)}. No data imported.")
-
-
-def execute_table_importer(
-    source: TableInput,
-    execution_context: ExecutionContext,
-) -> list[TableFrame | None | list[TableFrame | None]]:
-    # Right now, source provides very little information, but we use it to do a small
-    # sanity check and to ensure that everything is running properly
-    context_request_input = execution_context.request.input
-    logger.info(
-        f"Importing tables '{context_request_input}' and matching them"
-        f" with source '{source}'"
-    )
-    tableframe_list: list[TableFrame | None | list[TableFrame | None]] = []
-    # Note: source.uri is a list of URIs, it can't be a single URI because when we
-    # serialised it we stored it as such even if it was a single one.
-    if len(context_request_input) != len(source.table):
-        logger.error(
-            "Number of tables in the execution context input"
-            f" ({len(context_request_input)}) does not match the "
-            "number of"
-            f" URIs in the source ({len(source.table)}). No data imported."
-        )
-        raise ValueError(
-            "Number of tables in the execution context input"
-            f" ({len(context_request_input)}) does not match the "
-            "number of"
-            f" URIs in the source ({len(source.table)}). No data imported."
-        )
-    for execution_context_input_entry, source_table_str in zip(
-        context_request_input, source.table
-    ):
-        if isinstance(execution_context_input_entry, Table):
-            verify_source_tables_match(execution_context_input_entry, source_table_str)
-            tf = scan_tf_from_table(
-                execution_context,
-                execution_context_input_entry,
-                fail_on_none_uri=False,
-            )
-            tableframe_list.append(tf)
-        elif isinstance(execution_context_input_entry, TableVersions):
-            logger.debug(
-                f"Matching TableVersions '{execution_context_input_entry}' with source"
-                f" '{source_table_str}'"
-            )
-            list_of_table_objects = execution_context_input_entry.list_of_table_objects
-            versioned_tableframes_list: list[TableFrame | None] = []
-            for table in list_of_table_objects:
-                verify_source_tables_match(table, source_table_str)
-                tf = scan_tf_from_table(
-                    execution_context,
-                    table,
-                    fail_on_none_uri=False,
-                )
-                versioned_tableframes_list.append(tf)
-            tableframe_list.append(versioned_tableframes_list)
-        else:
-            logger.error(
-                f"Invalid table type: {type(execution_context_input_entry)}. No data"
-                " imported."
-            )
-            raise TypeError(
-                f"Invalid table type: {type(execution_context_input_entry)}. No data"
-                " imported."
-            )
-    logger.debug(f"TableFrame list obtained: {tableframe_list}")
-    return tableframe_list
-
-
-def verify_source_tables_match(execution_context_table: Table, source_table_str: str):
-    # For now, we do only this small check for the table name, but we could
-    # add more checks in the future.
-    logger.debug(
-        f"Matching table '{execution_context_table}' with source '{source_table_str}'"
-    )
-    source_table_uri = build_table_uri_object(source_table_str)
-    if execution_context_table.name != source_table_uri.table:
-        logger.debug(
-            f"Source table '{source_table_str}' converted to TableURI:"
-            f" '{source_table_uri}'"
-        )
-        logger.warning(
-            f"Execution context table name '{execution_context_table.name}' does not "
-            f"match the source table name '{source_table_uri.table}'"
-        )
-    return
-
-
-INPUT_FORMAT_CLASS_TO_IMPORTER_FORMAT = {
-    CSVFormat: "csv",
-    LogFormat: "log",
-    NDJSONFormat: "nd-json",
-    ParquetFormat: "parquet",
-}
-
-
-def format_object_to_string(file_format: FileFormat) -> str:
-    logger.debug(f"Converting format object to string: {file_format}")
-    if isinstance(file_format, FileFormat):
-        # noinspection PyTypeChecker
-        return INPUT_FORMAT_CLASS_TO_IMPORTER_FORMAT.get(type(file_format))
-    else:
-        logger.error(f"Invalid format type: {type(file_format)}")
-        raise TypeError(f"Invalid format type: {type(file_format)}")
-
-
-def convert_characters_to_ascii(dictionary: dict) -> dict:
-    for key, value in dictionary.items():
-        if isinstance(value, str) and len(value) == 1:
-            dictionary[key] = ord(value)
-        elif isinstance(value, dict):
-            dictionary[key] = convert_characters_to_ascii(value)
-    return dictionary
 
 
 def load_sources(

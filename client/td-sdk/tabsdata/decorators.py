@@ -8,7 +8,6 @@ import logging
 from typing import List, ParamSpec, TypeVar
 
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
-from tabsdata.io.input import TableInput
 from tabsdata.io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
 from tabsdata.io.inputs.sql_inputs import (
     MariaDBSource,
@@ -16,6 +15,7 @@ from tabsdata.io.inputs.sql_inputs import (
     OracleSource,
     PostgresSource,
 )
+from tabsdata.io.inputs.table_inputs import TableInput
 from tabsdata.io.output import (
     AzureDestination,
     LocalFileDestination,
@@ -131,19 +131,7 @@ def publisher(
     Returns:
         callable: The function converted to a TabsdataFunction.
     """
-    if not isinstance(
-        source,
-        (
-            AzureSource,
-            LocalFileSource,
-            MariaDBSource,
-            MySQLSource,
-            OracleSource,
-            PostgresSource,
-            S3Source,
-            SourcePlugin,
-        ),
-    ):
+    if not isinstance(source, SourcePlugin) or isinstance(source, TableInput):
         raise DecoratorConfigurationError(ErrorCode.DCE3, type(source))
 
     if not isinstance(tables, TableOutput):

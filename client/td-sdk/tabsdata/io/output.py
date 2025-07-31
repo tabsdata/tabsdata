@@ -1799,11 +1799,6 @@ class TableOutput(Output):
         return {self.IDENTIFIER: {self.TABLE_KEY: self._table_list}}
 
 
-# TODO: Explore unifying the build_input and build_output data into a single
-#   function, make them use a common codebase or even create a BuildIO class to
-#   encapsulate both of them. Waiting to see the development of both data to
-#   decide.
-#   https://tabsdata.atlassian.net/browse/TAB-47
 def build_output(
     output: dict | Output | None,
 ) -> (

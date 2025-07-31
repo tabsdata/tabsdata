@@ -9,7 +9,6 @@ import pytest
 from tabsdata.exceptions import (
     ErrorCode,
     FunctionConfigurationError,
-    InputConfigurationError,
     OutputConfigurationError,
 )
 from tabsdata.io.inputs.file_inputs import LocalFileSource
@@ -32,9 +31,9 @@ def test_all_correct_with_no_input_no_output():
 
 
 def test_wrong_input_type_error():
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(FunctionConfigurationError) as e:
         TabsdataFunction(dummy_function, "dummy_function_name", input=42)
-    assert e.value.error_code == ErrorCode.ICE11
+    assert e.value.error_code == ErrorCode.FCE7
 
 
 def test_func_not_callable_type_error():

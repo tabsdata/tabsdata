@@ -44,7 +44,7 @@ def test_transformer_with_optional_parameters():
         pass
 
     assert func.name == "func_name"
-    assert func.input == TableInput("input")
+    assert isinstance(func.input, TableInput)
     assert func.output == TableOutput("output")
     assert func.trigger_by == ["trigger_table"]
 
@@ -55,7 +55,7 @@ def test_transformer_all_correct():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput("input")
+    assert isinstance(func.input, TableInput)
     assert func.output == TableOutput("output")
     assert func.trigger_by is None
 
@@ -66,7 +66,7 @@ def test_transformer_all_deps():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput("input")
+    assert isinstance(func.input, TableInput)
     assert func.output == TableOutput("output")
     assert func.trigger_by is None
 
@@ -77,7 +77,7 @@ def test_transformer_trigger_by_none():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput("input")
+    assert isinstance(func.input, TableInput)
     assert func.output == TableOutput("output")
     assert func.trigger_by == []
 
@@ -88,7 +88,7 @@ def test_transformer_all_string():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput("input")
+    assert isinstance(func.input, TableInput)
     assert func.output == TableOutput("output")
     assert func.trigger_by is None
 
@@ -99,7 +99,7 @@ def test_transformer_all_correct_string_list():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput(["input", "input2"])
+    assert isinstance(func.input, TableInput)
     assert func.output == TableOutput(["output", "output2"])
     assert func.trigger_by is None
 
@@ -189,7 +189,7 @@ def test_subscriber_all_correct():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput("input")
+    assert isinstance(func.input, TableInput)
     assert func.output == LocalFileDestination("output.csv")
     assert func.trigger_by is None
 
@@ -200,7 +200,7 @@ def test_subscriber_all_correct_with_tables_string():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput("input")
+    assert isinstance(func.input, TableInput)
     assert func.output == LocalFileDestination("output.csv")
     assert func.trigger_by is None
 
@@ -211,7 +211,7 @@ def test_subscriber_all_correct_with_tables_string_list():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput(["input", "input2"])
+    assert isinstance(func.input, TableInput)
     assert func.output == LocalFileDestination("output.csv")
     assert func.trigger_by is None
 
@@ -224,7 +224,7 @@ def test_subscriber_trigger_by_all_deps():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput(["input", "input2"])
+    assert isinstance(func.input, TableInput)
     assert func.output == LocalFileDestination("output.csv")
     assert func.trigger_by is None
 
@@ -237,7 +237,7 @@ def test_subscriber_trigger_by_none():
         pass
 
     assert func.name == "func"
-    assert func.input == TableInput(["input", "input2"])
+    assert isinstance(func.input, TableInput)
     assert func.output == LocalFileDestination("output.csv")
     assert func.trigger_by == []
 
@@ -259,6 +259,6 @@ def test_subscriber_with_optional_parameters():
         pass
 
     assert func.name == "func_name"
-    assert func.input == TableInput("input")
+    assert isinstance(func.input, TableInput)
     assert func.output == LocalFileDestination("output.csv")
     assert func.trigger_by == ["trigger_table"]

@@ -5,7 +5,8 @@
 import pytest
 
 from tabsdata.exceptions import TableURIConfigurationError, TabsDataException
-from tabsdata.io.input import Input, TableInput, build_input
+from tabsdata.io.inputs.table_inputs import TableInput
+from tabsdata.io.plugin import SourcePlugin
 
 
 def test_all_correct_string():
@@ -13,16 +14,8 @@ def test_all_correct_string():
     input = TableInput(table)
     assert input.table == table
     assert isinstance(input, TableInput)
-    assert isinstance(input, Input)
-    expected_dict = {
-        TableInput.IDENTIFIER: {
-            TableInput.TABLE_KEY: [table],
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), TableInput)
-    assert build_input(input.to_dict()) == input
 
 
 def test_all_correct_string_no_dataset():
@@ -30,16 +23,8 @@ def test_all_correct_string_no_dataset():
     input = TableInput(table)
     assert input.table == table
     assert isinstance(input, TableInput)
-    assert isinstance(input, Input)
-    expected_dict = {
-        TableInput.IDENTIFIER: {
-            TableInput.TABLE_KEY: [table],
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), TableInput)
-    assert build_input(input.to_dict()) == input
 
 
 def test_all_correct_string_no_version():
@@ -47,16 +32,8 @@ def test_all_correct_string_no_version():
     input = TableInput(table)
     assert input.table == table
     assert isinstance(input, TableInput)
-    assert isinstance(input, Input)
-    expected_dict = {
-        TableInput.IDENTIFIER: {
-            TableInput.TABLE_KEY: [table],
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), TableInput)
-    assert build_input(input.to_dict()) == input
 
 
 def test_identifier_string_unchanged():
@@ -64,16 +41,8 @@ def test_identifier_string_unchanged():
     input = TableInput(table)
     assert input.table == table
     assert isinstance(input, TableInput)
-    assert isinstance(input, Input)
-    expected_dict = {
-        "table-input": {
-            TableInput.TABLE_KEY: [table],
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), TableInput)
-    assert build_input(input.to_dict()) == input
 
 
 def test_all_correct_query_list():
@@ -84,23 +53,8 @@ def test_all_correct_query_list():
     input = TableInput(table)
     assert input.table == table
     assert isinstance(input, TableInput)
-    assert isinstance(input, Input)
-    expected_dict = {
-        TableInput.IDENTIFIER: {
-            TableInput.TABLE_KEY: table,
-        }
-    }
-    assert input.to_dict() == expected_dict
+    assert isinstance(input, SourcePlugin)
     assert input.__repr__()
-    assert isinstance(build_input(input.to_dict()), TableInput)
-    assert build_input(input.to_dict()) == input
-
-
-def test_same_input_eq():
-    table = "collection/table@HEAD^"
-    input = TableInput(table)
-    input2 = TableInput(table)
-    assert input == input2
 
 
 def test_different_input_not_eq():

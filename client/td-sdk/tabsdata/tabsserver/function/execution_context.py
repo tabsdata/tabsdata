@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 import cloudpickle
 
-from tabsdata.io.input import build_input
 from tabsdata.io.output import build_output
 from tabsdata.io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata.tabsdatafunction import TabsdataFunction
@@ -28,7 +27,6 @@ from tabsdata.utils.bundle_utils import (
 )
 
 if TYPE_CHECKING:
-    from tabsdata.io.input import Input
     from tabsdata.io.output import Output
     from tabsdata.tabsserver.function.yaml_parsing import InputYaml
 
@@ -75,31 +73,19 @@ class ExecutionContext:
         return self._user_provided_function
 
     @property
-    def source_plugin(self) -> SourcePlugin | None:
+    def source(self) -> SourcePlugin | None:
         if not hasattr(self, "_source_plugin"):
             importer_plugin_file = self.function_config.input.get(
                 SourcePlugin.IDENTIFIER
             )
             if importer_plugin_file is None:
-                self._source_plugin = None
+                raise ValueError("Source plugin not found in function configuration")
             else:
                 with open(
                     os.path.join(self.paths.plugins_folder, importer_plugin_file), "rb"
                 ) as f:
                     self._source_plugin = cloudpickle.load(f)
         return self._source_plugin
-
-    @property
-    def non_plugin_source(self) -> Input | None:
-        if not hasattr(self, "_non_plugin_source"):
-            if self.source_plugin:
-                # If a source plugin is provided, we don't have a non-plugin source
-                self._non_plugin_source = None
-            else:
-                # If no source plugin is provided, we create a non-plugin source
-                input_config = self.function_config.input
-                self._non_plugin_source = build_input(input_config)
-        return self._non_plugin_source
 
     @property
     def destination_plugin(self) -> DestinationPlugin | None:
