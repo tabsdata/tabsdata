@@ -17,7 +17,6 @@ from typing import Callable, List, Literal, LiteralString
 import cloudpickle
 import yaml
 
-from tabsdata._io.output import Output
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata._utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES
@@ -114,7 +113,7 @@ def create_output_configuration(function: TabsdataFunction, save_location: str) 
 
 
 def convert_to_dict_and_store_if_plugin(
-    to_convert: SourcePlugin | DestinationPlugin | Output, save_location: str
+    to_convert: SourcePlugin | DestinationPlugin, save_location: str
 ) -> dict:
     configuration_dict = to_convert._to_dict() if to_convert else {}
     if isinstance(to_convert, SourcePlugin) or isinstance(

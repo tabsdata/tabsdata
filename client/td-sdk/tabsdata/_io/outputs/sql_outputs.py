@@ -188,7 +188,7 @@ class MariaDBDestination(DestinationPlugin):
             self._credentials = credentials
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(uri={self.uri})"
+        return f"{self.__class__.__name__}({self.uri})"
 
     def chunk(
         self, working_dir: str, *results: pl.LazyFrame | None
@@ -359,7 +359,7 @@ class MySQLDestination(DestinationPlugin):
             self._credentials = credentials
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(uri={self.uri})"
+        return f"{self.__class__.__name__}({self.uri})"
 
     def chunk(
         self, working_dir: str, *results: pl.LazyFrame | None
@@ -531,7 +531,7 @@ class OracleDestination(DestinationPlugin):
             self._credentials = credentials
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(uri={self.uri})"
+        return f"{self.__class__.__name__}({self.uri})"
 
     def chunk(
         self, working_dir: str, *results: pl.LazyFrame | None
@@ -705,7 +705,7 @@ class PostgresDestination(DestinationPlugin):
             self._credentials = credentials
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(uri={self.uri})"
+        return f"{self.__class__.__name__}({self.uri})"
 
     def chunk(
         self, working_dir: str, *results: pl.LazyFrame | None

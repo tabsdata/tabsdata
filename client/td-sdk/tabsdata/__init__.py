@@ -68,7 +68,6 @@ from tabsdata._io.inputs.sql_inputs import (
     PostgresSource,
 )
 from tabsdata._io.inputs.table_inputs import TableInput
-from tabsdata._io.output import TableOutput
 from tabsdata._io.outputs.file_outputs import (
     AWSGlue,
     AzureDestination,
@@ -81,6 +80,7 @@ from tabsdata._io.outputs.sql_outputs import (
     OracleDestination,
     PostgresDestination,
 )
+from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import EnvironmentSecret, HashiCorpSecret
 from tabsdata._tabsserver.function.execution_exceptions import CustomException

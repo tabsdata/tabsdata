@@ -15,7 +15,6 @@ from tabsdata._io.inputs.sql_inputs import (
     PostgresSource,
 )
 from tabsdata._io.inputs.table_inputs import TableInput
-from tabsdata._io.output import TableOutput
 from tabsdata._io.outputs.file_outputs import (
     AzureDestination,
     LocalFileDestination,
@@ -27,6 +26,7 @@ from tabsdata._io.outputs.sql_outputs import (
     OracleDestination,
     PostgresDestination,
 )
+from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata.exceptions import DecoratorConfigurationError, ErrorCode
@@ -198,18 +198,8 @@ def subscriber(
             raise DecoratorConfigurationError(ErrorCode.DCE5, type(tables))
         tables = TableInput(tables)
 
-    if not isinstance(
-        destination,
-        (
-            AzureDestination,
-            LocalFileDestination,
-            MariaDBDestination,
-            MySQLDestination,
-            OracleDestination,
-            PostgresDestination,
-            S3Destination,
-            DestinationPlugin,
-        ),
+    if not isinstance(destination, DestinationPlugin) or isinstance(
+        destination, TableOutput
     ):
         raise DecoratorConfigurationError(ErrorCode.DCE6, type(destination))
 

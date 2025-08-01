@@ -15,7 +15,7 @@ import polars as pl
 import tabsdata._utils.tableframe._helpers as td_helpers
 import tabsdata.tableframe.lazyframe.frame as td_frame
 from tabsdata._io.inputs.table_inputs import TableInput
-from tabsdata._io.output import Output, TableOutput, build_output
+from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._tableuri import build_table_uri_object
 
@@ -48,7 +48,7 @@ class TabsdataFunction:
         func: Callable,
         name: str | None,
         input: dict | SourcePlugin = None,
-        output: dict | Output | DestinationPlugin = None,
+        output: DestinationPlugin = None,
         trigger_by: str | List[str] | None = None,
     ):
         """
@@ -62,7 +62,7 @@ class TabsdataFunction:
             input (dict | Input | SourcePlugin, optional): The data to be used when
                 running the function. Can be a dictionary or an instance of Input or
                 SourcePlugin.
-            output (dict | Output | DestinationPlugin, optional): The location where the
+            output (DestinationPlugin, optional): The location where the
                 function results will be saved when run.
             trigger_by (str | List[str], optional): The trigger(s) that will cause the
                 function to execute. It can be a table in the system, a list of
@@ -201,14 +201,14 @@ class TabsdataFunction:
         self._func = func
 
     @property
-    def output(self) -> Output | DestinationPlugin | None:
+    def output(self) -> DestinationPlugin | None:
         """
         dict: The location where the function results will be saved when run.
         """
         return self._output
 
     @output.setter
-    def output(self, output: dict | Output | DestinationPlugin | None):
+    def output(self, output: DestinationPlugin | None):
         """
         Sets the output location for the function.
 
@@ -218,8 +218,10 @@ class TabsdataFunction:
         """
         if isinstance(output, DestinationPlugin):
             self._output = output
+        elif output is None:
+            self._output = None
         else:
-            self._output = build_output(output)
+            raise FunctionConfigurationError(ErrorCode.FCE8, type(output))
         self._verify_valid_input_output()
 
     @property

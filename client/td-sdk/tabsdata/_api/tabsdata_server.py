@@ -23,8 +23,8 @@ from tabsdata._api.status_utils.function_run import function_run_status_to_mappi
 from tabsdata._api.status_utils.transaction import transaction_status_to_mapping
 from tabsdata._api.status_utils.worker import worker_status_to_mapping
 from tabsdata._io.inputs.table_inputs import TableInput
-from tabsdata._io.output import TableOutput
 from tabsdata._io.outputs.sql_outputs import verify_output_sql_drivers
+from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import create_bundle_archive
 

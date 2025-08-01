@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from .yaml_parsing import Data, NoData, store_response_as_yaml
 
@@ -19,8 +19,8 @@ RESPONSE_FILE_NAME = "response.yaml"
 
 def create_response(
     execution_context: ExecutionContext,
-    modified_tables: List[dict],
 ):
+    modified_tables = execution_context.status.modified_tables
     request = execution_context.request
     execution_context_output_tables = [table.name for table in request.output]
     logger.info(f"Execution context output tables: {execution_context_output_tables}")

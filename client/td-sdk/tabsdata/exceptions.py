@@ -64,8 +64,8 @@ class ErrorCode(Enum):
     DCE6 = {
         "code": "DCE-006",
         "message": (
-            "The 'destination' parameter of a 'subscriber' decorator must be an "
-            "'Output' object (except 'TableOutput'), got '{}' instead."
+            "The 'destination' parameter of a 'subscriber' decorator must be a "
+            "'DestinationPlugin' object (except 'TableOutput'), got '{}' instead."
         ),
     }
     FCE1 = {
@@ -110,6 +110,13 @@ class ErrorCode(Enum):
         "message": (
             "The source in TabsdataFunction must be of type 'SourcePlugin' or None; "
             "got '{}' instead."
+        ),
+    }
+    FCE8 = {
+        "code": "FCE-008",
+        "message": (
+            "The destination in TabsdataFunction must be of type 'DestinationPlugin' "
+            "or None; got '{}' instead."
         ),
     }
     FOCE1 = {

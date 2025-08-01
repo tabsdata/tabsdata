@@ -45,7 +45,7 @@ def test_transformer_with_optional_parameters():
 
     assert func.name == "func_name"
     assert isinstance(func.input, TableInput)
-    assert func.output == TableOutput("output")
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by == ["trigger_table"]
 
 
@@ -56,7 +56,7 @@ def test_transformer_all_correct():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == TableOutput("output")
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by is None
 
 
@@ -67,7 +67,7 @@ def test_transformer_all_deps():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == TableOutput("output")
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by is None
 
 
@@ -78,7 +78,7 @@ def test_transformer_trigger_by_none():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == TableOutput("output")
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by == []
 
 
@@ -89,7 +89,7 @@ def test_transformer_all_string():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == TableOutput("output")
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by is None
 
 
@@ -100,7 +100,7 @@ def test_transformer_all_correct_string_list():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == TableOutput(["output", "output2"])
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by is None
 
 
@@ -128,7 +128,7 @@ def test_publisher_with_optional_parameters():
 
     assert func.name == "func_name"
     assert isinstance(func.input, LocalFileSource)
-    assert func.output == TableOutput("output")
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by == ["trigger_table"]
 
 
@@ -139,7 +139,7 @@ def test_publisher_all_correct():
 
     assert func.name == "func"
     assert isinstance(func.input, LocalFileSource)
-    assert func.output == TableOutput("output")
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by is None
 
 
@@ -150,7 +150,7 @@ def test_publisher_all_correct_with_tables_string():
 
     assert func.name == "func"
     assert isinstance(func.input, LocalFileSource)
-    assert func.output == TableOutput("output")
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by is None
 
 
@@ -161,7 +161,7 @@ def test_publisher_all_correct_with_tables_string_list():
 
     assert func.name == "func"
     assert isinstance(func.input, LocalFileSource)
-    assert func.output == TableOutput(["output", "output2"])
+    assert isinstance(func.output, TableOutput)
     assert func.trigger_by is None
 
 

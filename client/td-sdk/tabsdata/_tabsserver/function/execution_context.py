@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 import cloudpickle
 
-from tabsdata._io.output import build_output
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata._tabsserver.function.configuration_utils import load_function_config
@@ -27,7 +26,6 @@ from tabsdata._utils.bundle_utils import (
 )
 
 if TYPE_CHECKING:
-    from tabsdata._io.output import Output
     from tabsdata._tabsserver.function.yaml_parsing import InputYaml
 
 
@@ -88,7 +86,7 @@ class ExecutionContext:
         return self._source_plugin
 
     @property
-    def destination_plugin(self) -> DestinationPlugin | None:
+    def destination(self) -> DestinationPlugin | None:
         if not hasattr(self, "_destination_plugin"):
             destination_plugin_file = self.function_config.output.get(
                 DestinationPlugin.IDENTIFIER
@@ -102,20 +100,6 @@ class ExecutionContext:
                 ) as f:
                     self._destination_plugin = cloudpickle.load(f)
         return self._destination_plugin
-
-    @property
-    def non_plugin_destination(self) -> Output | None:
-        if not hasattr(self, "_non_plugin_destination"):
-            if self.destination_plugin:
-                # If a destination plugin is provided, we don't have a non-plugin
-                # destination
-                self._non_plugin_destination = None
-            else:
-                # If no destination plugin is provided, we create a non-plugin
-                # destination
-                output_config = self.function_config.output
-                self._non_plugin_destination = build_output(output_config)
-        return self._non_plugin_destination
 
     @property
     def function_config(self) -> FunctionConfig:

@@ -25,6 +25,7 @@ class Status:
     def __init__(self):
         self.offset = Offset()
         self.meta = {}
+        self.modified_tables = []
 
     def __str__(self):
         return f"#Status#< Offset: {str(self.offset)} ; meta: {str(self.meta)} >"
@@ -51,3 +52,12 @@ class Status:
         logger.info(pad_string("[Storing execution information]"))
         logger.debug(f"Storing status: {self}")
         self.offset.store(request, execution_context)
+
+    @property
+    def modified_tables(self) -> list[dict]:
+        return self._modified_tables
+
+    @modified_tables.setter
+    def modified_tables(self, tables):
+        self._modified_tables = tables
+        logger.debug(f"Modified tables set to '{self._modified_tables}'")

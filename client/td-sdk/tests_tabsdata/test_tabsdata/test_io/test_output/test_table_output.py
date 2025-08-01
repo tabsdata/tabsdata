@@ -4,7 +4,8 @@
 
 import pytest
 
-from tabsdata._io.output import Output, TableOutput, build_output
+from tabsdata._io.outputs.table_outputs import TableOutput
+from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import ErrorCode, OutputConfigurationError
 
 
@@ -13,28 +14,8 @@ def test_all_correct_destination_table_list():
     output = TableOutput(destination_table)
     assert output.table == destination_table
     assert isinstance(output, TableOutput)
-    assert isinstance(output, Output)
-    expected_dict = {
-        TableOutput.IDENTIFIER: {
-            TableOutput.TABLE_KEY: destination_table,
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), TableOutput)
-
-
-def test_identifier_string_unchanged():
-    destination_table = "headers_table"
-    output = TableOutput(destination_table)
-    expected_dict = {
-        "table-output": {
-            TableOutput.TABLE_KEY: [destination_table],
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), TableOutput)
 
 
 def test_all_correct_destination_table_string():
@@ -42,36 +23,8 @@ def test_all_correct_destination_table_string():
     output = TableOutput(destination_table)
     assert output.table == destination_table
     assert isinstance(output, TableOutput)
-    assert isinstance(output, Output)
-    expected_dict = {
-        TableOutput.IDENTIFIER: {
-            TableOutput.TABLE_KEY: [destination_table],
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), TableOutput)
-
-
-def test_same_table_eq():
-    destination_table = "output_table"
-    output = TableOutput(destination_table)
-    output2 = TableOutput(destination_table)
-    assert output == output2
-
-
-def test_different_table_not_eq():
-    destination_table = "output_table"
-    output = TableOutput(destination_table)
-    table2 = "second_output_table"
-    output2 = TableOutput(table2)
-    assert output != output2
-
-
-def test_input_not_eq_dict():
-    destination_table = "output_table"
-    output = TableOutput(destination_table)
-    assert output._to_dict() != output
 
 
 def test_table_wrong_type_raises_type_error():

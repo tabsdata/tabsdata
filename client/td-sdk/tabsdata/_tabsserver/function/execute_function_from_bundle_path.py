@@ -37,15 +37,12 @@ def execute_bundled_function(
 ) -> ResultsCollection:
     # Execute the function and obtain a ResultsCollection
     results = execute_function_from_config(execution_context)
-    modified_tables = store_results(
+    store_results(
         execution_context,
         results,
     )
     execution_context.store_status()
-    create_response(
-        execution_context,
-        modified_tables,
-    )
+    create_response(execution_context)
     return results
 
 
