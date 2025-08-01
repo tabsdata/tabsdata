@@ -10,13 +10,6 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from tabsdata._credentials import UserPasswordCredentials
-from tabsdata._io.output import (
-    MariaDBDestination,
-    MySQLDestination,
-    OracleDestination,
-    Output,
-    PostgresDestination,
-)
 
 if TYPE_CHECKING:
     from tabsdata._io.inputs.sql_inputs import (
@@ -24,6 +17,12 @@ if TYPE_CHECKING:
         MySQLSource,
         OracleSource,
         PostgresSource,
+    )
+    from tabsdata._io.outputs.sql_outputs import (
+        MariaDBDestination,
+        MySQLDestination,
+        OracleDestination,
+        PostgresDestination,
     )
 
 formatter = logging.Formatter("%(levelname)s: %(message)s")
@@ -169,54 +168,3 @@ def add_driver_to_uri(uri: str, log=False) -> str:
                 f" requires adding a driver: {known_prefixes}"
             )
     return uri
-
-
-DRIVER_TYPE_AND_RECOMMENDATION_FOR_OUTPUT = {
-    MySQLDestination: ("MySQL", "mysql-connector-python"),
-    OracleDestination: ("Oracle", "oracledb"),
-    PostgresDestination: ("Postgres", "psycopg2-binary"),
-    MariaDBDestination: ("MariaDB", "mysql-connector-python"),
-}
-
-
-def verify_output_sql_drivers(output: Output):
-    if isinstance(
-        output,
-        (MySQLDestination, OracleDestination, PostgresDestination, MariaDBDestination),
-    ):
-
-        from sqlalchemy import create_engine
-
-        uri = obtain_uri(output, log=False, add_credentials=False)
-        uri = add_driver_to_uri(uri, log=False)
-        try:
-            engine = create_engine(uri)
-            engine.dispose()
-        except Exception as e:
-            driver_type, recommended_driver = DRIVER_TYPE_AND_RECOMMENDATION_FOR_OUTPUT[
-                type(output)
-            ]
-            logger.warning("-" * 50)
-            logger.warning(
-                "The local Python environment does not have a suitable "
-                f"{driver_type} driver installed. The function will likely "
-                "fail to execute when running in the Tabsdata server."
-            )
-            logger.warning("")
-            logger.warning("It is recommended to either:")
-            logger.warning(
-                f"  Install a {driver_type} driver in your local "
-                "environment, for example: 'pip install "
-                f"{recommended_driver}'; and then update the function by running "
-                "'td fn update'."
-            )
-            logger.warning(
-                "  Or create a custom requirements.yaml file for the "
-                f"function and add a {driver_type} driver to it; and then "
-                "update the function by running 'td fn update'."
-            )
-            logger.warning("")
-            logger.warning(f"Original error: {e}")
-            logger.warning("-" * 50)
-    else:
-        return

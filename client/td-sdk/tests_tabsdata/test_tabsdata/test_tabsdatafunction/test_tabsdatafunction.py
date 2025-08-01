@@ -7,12 +7,11 @@ import os
 import pytest
 
 from tabsdata._io.inputs.file_inputs import LocalFileSource
-from tabsdata._io.output import MySQLDestination, build_output
+from tabsdata._io.outputs.sql_outputs import MySQLDestination
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata.exceptions import (
     ErrorCode,
     FunctionConfigurationError,
-    OutputConfigurationError,
 )
 
 
@@ -99,45 +98,6 @@ def test_trigger_by_wrong_type_list_raises_error():
             dummy_function, "dummy_function_name", trigger_by=["table_name", 42]
         )
     assert e.value.error_code == ErrorCode.FCE2
-
-
-def test_build_output_wrong_type_raises_exception():
-    output = "wrong_type"
-    with pytest.raises(OutputConfigurationError) as e:
-        build_output(output)
-    assert e.value.error_code == ErrorCode.OCE7
-
-
-def test_build_output_wrong_identifier_dict_raises_exception():
-    output = {
-        "wrong_identifier": {
-            "uri": "mysql://path/to/data",
-        }
-    }
-    with pytest.raises(OutputConfigurationError) as e:
-        build_output(output)
-    assert e.value.error_code == ErrorCode.OCE3
-
-
-def test_build_output_multiple_identifiers_dict_raises_exception():
-    output = {
-        MySQLDestination.IDENTIFIER: {
-            "uri": "mysql://path/to/data",
-        },
-        "wrong_identifier": {
-            "uri": "mysql://path/to/data",
-        },
-    }
-    with pytest.raises(OutputConfigurationError) as e:
-        build_output(output)
-    assert e.value.error_code == ErrorCode.OCE3
-
-
-def test_build_output_wrong_identifier_value_raises_exception():
-    output = {MySQLDestination.IDENTIFIER: 42}
-    with pytest.raises(OutputConfigurationError) as e:
-        build_output(output)
-    assert e.value.error_code == ErrorCode.OCE4
 
 
 def test_importer_exporter_raises_error():

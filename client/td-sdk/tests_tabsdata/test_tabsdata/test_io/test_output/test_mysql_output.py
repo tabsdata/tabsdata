@@ -5,7 +5,8 @@
 import pytest
 
 from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
-from tabsdata._io.output import MySQLDestination, Output, build_output
+from tabsdata._io.outputs.sql_outputs import MySQLDestination
+from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import ErrorCode, OutputConfigurationError
 
 
@@ -18,35 +19,8 @@ def test_all_correct_destination_table_list():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, MySQLDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        MySQLDestination.IDENTIFIER: {
-            MySQLDestination.URI_KEY: uri,
-            MySQLDestination.DESTINATION_TABLE_KEY: destination_table,
-            MySQLDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            MySQLDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), MySQLDestination)
-
-
-def test_identifier_string_unchanged():
-    uri = "mysql://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "headers_table"
-    output = MySQLDestination(uri, destination_table)
-    expected_dict = {
-        "mysql-output": {
-            MySQLDestination.URI_KEY: uri,
-            MySQLDestination.DESTINATION_TABLE_KEY: destination_table,
-            MySQLDestination.CREDENTIALS_KEY: None,
-            MySQLDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), MySQLDestination)
 
 
 def test_all_correct_destination_table_string():
@@ -58,45 +32,8 @@ def test_all_correct_destination_table_string():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, MySQLDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        MySQLDestination.IDENTIFIER: {
-            MySQLDestination.URI_KEY: uri,
-            MySQLDestination.DESTINATION_TABLE_KEY: destination_table,
-            MySQLDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            MySQLDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), MySQLDestination)
-
-
-def test_same_input_eq():
-    uri = "mysql://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "output_table"
-    credentials = UserPasswordCredentials("admin", "admin")
-    output = MySQLDestination(uri, destination_table, credentials=credentials)
-    output2 = MySQLDestination(uri, destination_table, credentials=credentials)
-    assert output == output2
-
-
-def test_different_input_not_eq():
-    uri = "mysql://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "output_table"
-    credentials = UserPasswordCredentials("admin", "admin")
-    output = MySQLDestination(uri, destination_table, credentials=credentials)
-    uri2 = "mysql://DATABASE_IP:3308/testing"
-    output2 = MySQLDestination(uri2, destination_table, credentials=credentials)
-    assert output != output2
-
-
-def test_input_not_eq_dict():
-    uri = "mysql://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "output_table"
-    credentials = UserPasswordCredentials("admin", "admin")
-    output = MySQLDestination(uri, destination_table, credentials=credentials)
-    assert output._to_dict() != output
 
 
 def test_all_correct_destination_table_string_no_credentials():
@@ -107,18 +44,8 @@ def test_all_correct_destination_table_string_no_credentials():
     assert output.destination_table == destination_table
     assert output.credentials is None
     assert isinstance(output, MySQLDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        MySQLDestination.IDENTIFIER: {
-            MySQLDestination.URI_KEY: uri,
-            MySQLDestination.DESTINATION_TABLE_KEY: destination_table,
-            MySQLDestination.CREDENTIALS_KEY: None,
-            MySQLDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), MySQLDestination)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -219,15 +146,5 @@ def test_all_correct_driver():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, MySQLDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        MySQLDestination.IDENTIFIER: {
-            MySQLDestination.URI_KEY: uri,
-            MySQLDestination.DESTINATION_TABLE_KEY: destination_table,
-            MySQLDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            MySQLDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), MySQLDestination)

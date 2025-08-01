@@ -5,7 +5,8 @@
 import pytest
 
 from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
-from tabsdata._io.output import OracleDestination, Output, build_output
+from tabsdata._io.outputs.sql_outputs import OracleDestination
+from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import ErrorCode, OutputConfigurationError
 
 
@@ -18,35 +19,8 @@ def test_all_correct_destination_table_list():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, OracleDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        OracleDestination.IDENTIFIER: {
-            OracleDestination.URI_KEY: uri,
-            OracleDestination.DESTINATION_TABLE_KEY: destination_table,
-            OracleDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            OracleDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), OracleDestination)
-
-
-def test_identifier_string_unchanged():
-    uri = "oracle://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "headers_table"
-    output = OracleDestination(uri, destination_table)
-    expected_dict = {
-        "oracle-output": {
-            OracleDestination.URI_KEY: uri,
-            OracleDestination.DESTINATION_TABLE_KEY: destination_table,
-            OracleDestination.CREDENTIALS_KEY: None,
-            OracleDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), OracleDestination)
 
 
 def test_all_correct_destination_table_string():
@@ -58,45 +32,8 @@ def test_all_correct_destination_table_string():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, OracleDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        OracleDestination.IDENTIFIER: {
-            OracleDestination.URI_KEY: uri,
-            OracleDestination.DESTINATION_TABLE_KEY: destination_table,
-            OracleDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            OracleDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), OracleDestination)
-
-
-def test_same_input_eq():
-    uri = "oracle://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "output_table"
-    credentials = UserPasswordCredentials("admin", "admin")
-    output = OracleDestination(uri, destination_table, credentials=credentials)
-    output2 = OracleDestination(uri, destination_table, credentials=credentials)
-    assert output == output2
-
-
-def test_different_input_not_eq():
-    uri = "oracle://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "output_table"
-    credentials = UserPasswordCredentials("admin", "admin")
-    output = OracleDestination(uri, destination_table, credentials=credentials)
-    uri2 = "oracle://DATABASE_IP:3308/testing"
-    output2 = OracleDestination(uri2, destination_table, credentials=credentials)
-    assert output != output2
-
-
-def test_input_not_eq_dict():
-    uri = "oracle://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "output_table"
-    credentials = UserPasswordCredentials("admin", "admin")
-    output = OracleDestination(uri, destination_table, credentials=credentials)
-    assert output._to_dict() != output
 
 
 def test_all_correct_destination_table_string_no_credentials():
@@ -107,18 +44,8 @@ def test_all_correct_destination_table_string_no_credentials():
     assert output.destination_table == destination_table
     assert output.credentials is None
     assert isinstance(output, OracleDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        OracleDestination.IDENTIFIER: {
-            OracleDestination.URI_KEY: uri,
-            OracleDestination.DESTINATION_TABLE_KEY: destination_table,
-            OracleDestination.CREDENTIALS_KEY: None,
-            OracleDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), OracleDestination)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -219,15 +146,5 @@ def test_all_correct_driver():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, OracleDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        OracleDestination.IDENTIFIER: {
-            OracleDestination.URI_KEY: uri,
-            OracleDestination.DESTINATION_TABLE_KEY: destination_table,
-            OracleDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            OracleDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), OracleDestination)

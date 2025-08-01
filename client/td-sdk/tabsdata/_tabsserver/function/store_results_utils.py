@@ -9,7 +9,6 @@ import hashlib
 import logging
 import os
 import re
-import uuid
 from functools import partial
 from typing import TYPE_CHECKING, List
 
@@ -17,17 +16,11 @@ import polars as pl
 
 import tabsdata._utils.tableframe._helpers as td_helpers
 from tabsdata._io.output import (
-    MariaDBDestination,
-    MySQLDestination,
-    OracleDestination,
-    PostgresDestination,
     TableOutput,
 )
-from tabsdata._tabsserver.function import sql_utils
 from tabsdata._tabsserver.function.logging_utils import pad_string
 from tabsdata._tabsserver.function.native_tables_utils import sink_lf_to_location
 from tabsdata._tabsserver.function.yaml_parsing import Table
-from tabsdata._utils.sql_utils import add_driver_to_uri, obtain_uri
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._common import drop_system_columns
@@ -38,11 +31,9 @@ from tabsdata.tableframe.lazyframe.frame import TableFrame
 
 if TYPE_CHECKING:
     import pyarrow as pa
-    import sqlalchemy
 
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
     from tabsdata._tabsserver.function.results_collection import (
-        Result,
         ResultsCollection,
     )
 
@@ -66,19 +57,7 @@ def store_results(
         destination_plugin._run(execution_context, results)
     else:
         destination = execution_context.non_plugin_destination
-        output_folder = execution_context.paths.output_folder
-
-        if isinstance(
-            destination,
-            (
-                MariaDBDestination,
-                MySQLDestination,
-                OracleDestination,
-                PostgresDestination,
-            ),
-        ):
-            store_results_in_sql(results, destination, output_folder)
-        elif isinstance(destination, TableOutput):
+        if isinstance(destination, TableOutput):
             modified_tables = store_results_in_table(
                 results, destination, execution_context
             )
@@ -236,144 +215,6 @@ def match_tables_and_verify(
             f"Execution context table name '{execution_context_table.name}' does not "
             f"match the destination table name '{destination_table_name}'"
         )
-
-
-def store_results_in_sql(
-    results: ResultsCollection,
-    destination: (
-        MariaDBDestination | MySQLDestination | OracleDestination | PostgresDestination
-    ),
-    output_folder: str,
-):
-
-    from sqlalchemy import create_engine
-
-    logger.info(f"Storing results in SQL destination '{destination}'")
-    results.normalize_frame()
-    if isinstance(
-        destination,
-        (MariaDBDestination, MySQLDestination, OracleDestination, PostgresDestination),
-    ):
-        uri = obtain_uri(destination, log=True, add_credentials=True)
-        uri = add_driver_to_uri(uri, log=True)
-        if isinstance(destination, MariaDBDestination):
-            uri = sql_utils.add_mariadb_collation(uri)
-        destination_table_configuration = destination.destination_table
-        destination_if_table_exists = destination.if_table_exists
-        engine = create_engine(uri)
-        try:
-            create_session_and_store(
-                engine,
-                results,
-                destination_table_configuration,
-                destination_if_table_exists,
-                output_folder,
-            )
-            logger.info("Results stored in SQL destination")
-        except Exception:
-            logger.error("Error storing results in SQL destination")
-            raise
-        finally:
-            engine.dispose()
-    else:
-        logger.error(f"Storing results in destination '{destination}' not supported.")
-        raise TypeError(
-            f"Storing results in destination '{destination}' not supported."
-        )
-
-
-def create_session_and_store(
-    engine: sqlalchemy.engine.base.Engine,
-    results: ResultsCollection,
-    destination_table_configuration: str | List[str],
-    destination_if_table_exists: str,
-    output_folder: str,
-):
-
-    from sqlalchemy.orm import sessionmaker
-
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    with session.begin():
-        if isinstance(destination_table_configuration, str):
-            destination_table_configuration = [destination_table_configuration]
-        elif isinstance(destination_table_configuration, list):
-            pass
-        else:
-            logger.error(
-                "destination_table must be a string or a list of strings, "
-                f"got {type(destination_table_configuration)} instead"
-            )
-            raise TypeError(
-                "destination_table must be a string or a list of strings, "
-                f"got {type(destination_table_configuration)} instead"
-            )
-
-        if len(results) != len(destination_table_configuration):
-            logger.error(
-                "The number of destination tables does not match the number of results."
-            )
-            logger.error(f"Destination tables: '{destination_table_configuration}'")
-            logger.error(f"Number or results: {len(results)}")
-            raise TypeError(
-                "The number of destination tables does not match the number of results."
-            )
-        for result, destination_table in zip(results, destination_table_configuration):
-            store_result_in_sql_table(
-                result,
-                session,
-                destination_table,
-                destination_if_table_exists,
-                output_folder,
-            )
-
-
-def store_result_in_sql_table(
-    result: Result,
-    session: sqlalchemy.orm.Session,
-    destination_table: str,
-    if_table_exists: str,
-    output_folder: str,
-):
-
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-
-    logger.info(f"Storing result in SQL table: {destination_table}")
-    result = result.value
-    if result is None:
-        logger.info("Result is None. No data stored.")
-        return
-    elif isinstance(result, TableFrame):
-        pass
-    else:
-        logger.error(f"Incorrect result type: '{type(result)}'. No data stored.")
-        raise TypeError(f"Incorrect result type: '{type(result)}'. No data stored.")
-    # Note: this warning is due to the fact that if_table_exists must be one of
-    # the following: "fail", "replace", "append". This is enforced by the
-    # Output class, so we can safely ignore this warning.
-    logger.debug(f"Using strategy in case table exists: {if_table_exists}")
-    result: pl.LazyFrame = remove_system_columns_and_convert(result)
-    intermediate_file = f"intermediate_{destination_table}_{uuid.uuid4()}.parquet"
-    intermediate_file_path = os.path.join(output_folder, intermediate_file)
-    chunk_size = 10000
-    logger.debug(f"Writing intermediate file '{intermediate_file_path}'")
-    result.sink_parquet(
-        intermediate_file_path,
-        maintain_order=True,
-    )
-    parquet_file = pq.ParquetFile(intermediate_file_path)
-    for batch in parquet_file.iter_batches(batch_size=chunk_size):
-        chunk_table = pa.Table.from_batches(batches=[batch])
-        df = pl.from_arrow(chunk_table)
-        logger.debug(f"Writing batch of shape {df.shape} to table {destination_table}")
-        df.write_database(
-            table_name=destination_table,
-            connection=session,
-            if_table_exists=if_table_exists,
-        )
-        if_table_exists = "append"
-    logger.info(f"Result stored in SQL table: {destination_table}")
 
 
 def remove_system_columns_and_convert(result: TableFrame) -> pl.LazyFrame:

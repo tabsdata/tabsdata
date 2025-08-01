@@ -68,18 +68,18 @@ from tabsdata._io.inputs.sql_inputs import (
     PostgresSource,
 )
 from tabsdata._io.inputs.table_inputs import TableInput
-from tabsdata._io.output import (
-    MariaDBDestination,
-    MySQLDestination,
-    OracleDestination,
-    PostgresDestination,
-    TableOutput,
-)
+from tabsdata._io.output import TableOutput
 from tabsdata._io.outputs.file_outputs import (
     AWSGlue,
     AzureDestination,
     LocalFileDestination,
     S3Destination,
+)
+from tabsdata._io.outputs.sql_outputs import (
+    MariaDBDestination,
+    MySQLDestination,
+    OracleDestination,
+    PostgresDestination,
 )
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import EnvironmentSecret, HashiCorpSecret

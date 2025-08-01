@@ -24,9 +24,9 @@ from tabsdata._api.status_utils.transaction import transaction_status_to_mapping
 from tabsdata._api.status_utils.worker import worker_status_to_mapping
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.output import TableOutput
+from tabsdata._io.outputs.sql_outputs import verify_output_sql_drivers
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tabsdata._utils.sql_utils import verify_output_sql_drivers
 
 
 class FunctionType(Enum):

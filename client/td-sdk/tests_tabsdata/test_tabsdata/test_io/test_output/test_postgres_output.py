@@ -5,7 +5,8 @@
 import pytest
 
 from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
-from tabsdata._io.output import Output, PostgresDestination, build_output
+from tabsdata._io.outputs.sql_outputs import PostgresDestination
+from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import ErrorCode, OutputConfigurationError
 
 
@@ -18,18 +19,8 @@ def test_all_correct_destination_table_list():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, PostgresDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        PostgresDestination.IDENTIFIER: {
-            PostgresDestination.URI_KEY: uri,
-            PostgresDestination.DESTINATION_TABLE_KEY: destination_table,
-            PostgresDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            PostgresDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), PostgresDestination)
 
 
 def test_all_correct_destination_table_list_postgresql():
@@ -41,35 +32,8 @@ def test_all_correct_destination_table_list_postgresql():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, PostgresDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        PostgresDestination.IDENTIFIER: {
-            PostgresDestination.URI_KEY: uri,
-            PostgresDestination.DESTINATION_TABLE_KEY: destination_table,
-            PostgresDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            PostgresDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), PostgresDestination)
-
-
-def test_identifier_string_unchanged():
-    uri = "postgres://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "headers_table"
-    output = PostgresDestination(uri, destination_table)
-    expected_dict = {
-        "postgres-output": {
-            PostgresDestination.URI_KEY: uri,
-            PostgresDestination.DESTINATION_TABLE_KEY: destination_table,
-            PostgresDestination.CREDENTIALS_KEY: None,
-            PostgresDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), PostgresDestination)
 
 
 def test_all_correct_destination_table_string():
@@ -81,45 +45,8 @@ def test_all_correct_destination_table_string():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, PostgresDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        PostgresDestination.IDENTIFIER: {
-            PostgresDestination.URI_KEY: uri,
-            PostgresDestination.DESTINATION_TABLE_KEY: destination_table,
-            PostgresDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            PostgresDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), PostgresDestination)
-
-
-def test_same_input_eq():
-    uri = "postgres://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "output_table"
-    credentials = UserPasswordCredentials("admin", "admin")
-    output = PostgresDestination(uri, destination_table, credentials=credentials)
-    output2 = PostgresDestination(uri, destination_table, credentials=credentials)
-    assert output == output2
-
-
-def test_different_input_not_eq():
-    uri = "postgres://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "output_table"
-    credentials = UserPasswordCredentials("admin", "admin")
-    output = PostgresDestination(uri, destination_table, credentials=credentials)
-    uri2 = "postgres://DATABASE_IP:3308/testing"
-    output2 = PostgresDestination(uri2, destination_table, credentials=credentials)
-    assert output != output2
-
-
-def test_input_not_eq_dict():
-    uri = "postgres://DATABASE_IP:DATABASE_PORT/testing"
-    destination_table = "output_table"
-    credentials = UserPasswordCredentials("admin", "admin")
-    output = PostgresDestination(uri, destination_table, credentials=credentials)
-    assert output._to_dict() != output
 
 
 def test_all_correct_destination_table_string_no_credentials():
@@ -130,18 +57,8 @@ def test_all_correct_destination_table_string_no_credentials():
     assert output.destination_table == destination_table
     assert output.credentials is None
     assert isinstance(output, PostgresDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        PostgresDestination.IDENTIFIER: {
-            PostgresDestination.URI_KEY: uri,
-            PostgresDestination.DESTINATION_TABLE_KEY: destination_table,
-            PostgresDestination.CREDENTIALS_KEY: None,
-            PostgresDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), PostgresDestination)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -242,18 +159,8 @@ def test_all_correct_driver():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, PostgresDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        PostgresDestination.IDENTIFIER: {
-            PostgresDestination.URI_KEY: uri,
-            PostgresDestination.DESTINATION_TABLE_KEY: destination_table,
-            PostgresDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            PostgresDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), PostgresDestination)
 
 
 def test_all_correct_driver_postgresql():
@@ -265,15 +172,5 @@ def test_all_correct_driver_postgresql():
     assert output.destination_table == destination_table
     assert output.credentials == credentials
     assert isinstance(output, PostgresDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        PostgresDestination.IDENTIFIER: {
-            PostgresDestination.URI_KEY: uri,
-            PostgresDestination.DESTINATION_TABLE_KEY: destination_table,
-            PostgresDestination.CREDENTIALS_KEY: credentials._to_dict(),
-            PostgresDestination.IF_TABLE_EXISTS_KEY: "append",
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), PostgresDestination)
