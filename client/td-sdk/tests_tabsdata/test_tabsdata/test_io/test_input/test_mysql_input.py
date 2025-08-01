@@ -7,7 +7,7 @@ import pytest
 from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
 from tabsdata._io.inputs.sql_inputs import MySQLSource
 from tabsdata._io.plugin import SourcePlugin
-from tabsdata.exceptions import ErrorCode, InputConfigurationError
+from tabsdata.exceptions import ErrorCode, SourceConfigurationError
 
 
 def test_all_correct_query_list():
@@ -56,9 +56,9 @@ def test_all_correct_query_string_no_credentials():
 def test_wrong_scheme_raises_value_error():
     uri = "wrongscheme://path/to/query"
     query = "select * from INVOICE_HEADER where id > 0"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         MySQLSource(uri, query)
-    assert e.value.error_code == ErrorCode.ICE2
+    assert e.value.error_code == ErrorCode.SOCE2
 
 
 def test_query_list():
@@ -74,9 +74,9 @@ def test_query_list():
 def test_query_wrong_type_raises_type_error():
     uri = "mysql://DATABASE_IP:DATABASE_PORT/testing"
     query = 42
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         MySQLSource(uri, query)
-    assert e.value.error_code == ErrorCode.ICE19
+    assert e.value.error_code == ErrorCode.SOCE19
 
 
 def test_query_list_wrong_type_raises_type_error():
@@ -86,26 +86,26 @@ def test_query_list_wrong_type_raises_type_error():
         "select * from INVOICE_ITEM where id > 0",
         42,
     ]
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         MySQLSource(uri, query)
-    assert e.value.error_code == ErrorCode.ICE19
+    assert e.value.error_code == ErrorCode.SOCE19
 
 
 def test_wrong_credentials_type_raises_error():
     uri = "mysql://DATABASE_IP:DATABASE_PORT/testing"
     query = "select * from INVOICE_HEADER where id > 0"
     credentials = S3AccessKeyCredentials("access_key_id", "secret_access_key")
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         MySQLSource(uri, query, credentials=credentials)
-    assert e.value.error_code == ErrorCode.ICE22
+    assert e.value.error_code == ErrorCode.SOCE22
 
 
 def test_empty_uri():
     uri = ""
     query = "select * from INVOICE_HEADER where id > 0"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         MySQLSource(uri, query)
-    assert e.value.error_code == ErrorCode.ICE2
+    assert e.value.error_code == ErrorCode.SOCE2
 
 
 def test_all_correct_initial_values():
@@ -134,9 +134,9 @@ def test_wrong_type_initial_values_raises_type_error():
     uri = "mysql://DATABASE_IP:DATABASE_PORT/testing"
     query = "select * from INVOICE_HEADER where id > :number"
     initial_values = 42
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         MySQLSource(uri, query, initial_values=initial_values)
-    assert e.value.error_code == ErrorCode.ICE12
+    assert e.value.error_code == ErrorCode.SOCE12
 
 
 def test_none_initial_values_converted_empty_dict():
@@ -201,15 +201,15 @@ def test_update_uri():
 def test_driver_uri_fails():
     uri = "mysql+driver://DATABASE_IP:DATABASE_PORT/testing"
     query = "select * from INVOICE_HEADER where id > :number"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         MySQLSource(uri, query)
-    assert e.value.error_code == ErrorCode.ICE2
+    assert e.value.error_code == ErrorCode.SOCE2
 
 
 def test_wrong_type_initial_values_key_raises_error():
     uri = "mysql://DATABASE_IP:DATABASE_PORT/testing"
     query = "select * from INVOICE_HEADER where id > :number"
     initial_values = {42: "42"}
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         MySQLSource(uri, query, initial_values=initial_values)
-    assert e.value.error_code == ErrorCode.ICE40
+    assert e.value.error_code == ErrorCode.SOCE40

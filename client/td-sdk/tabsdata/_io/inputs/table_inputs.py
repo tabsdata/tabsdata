@@ -18,7 +18,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
 )
 from tabsdata.exceptions import (
     ErrorCode,
-    InputConfigurationError,
+    SourceConfigurationError,
 )
 
 if TYPE_CHECKING:
@@ -81,7 +81,7 @@ class TableInput(SourcePlugin):
         for table in self._table_list:
             uri = build_table_uri_object(table)
             if not uri.table:
-                raise InputConfigurationError(ErrorCode.ICE25, table)
+                raise SourceConfigurationError(ErrorCode.SOCE25, table)
 
     @property
     def _stream_require_ec(self) -> bool:

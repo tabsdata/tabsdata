@@ -16,9 +16,9 @@ from tabsdata._io.outputs.file_outputs import (
 )
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import (
+    DestinationConfigurationError,
     ErrorCode,
     FormatConfigurationError,
-    OutputConfigurationError,
 )
 
 TEST_ACCOUNT_NAME = "test_account_name"
@@ -163,9 +163,9 @@ def test_update_credentials():
 def test_wrong_type_credentials_raises_error():
     uri = ["az://path/to/data/data.csv", "az://path/to/data/data2.csv"]
     credentials = UserPasswordCredentials("username", "password")
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         AzureDestination(uri, credentials)
-    assert e.value.error_code == ErrorCode.OCE16
+    assert e.value.error_code == ErrorCode.DECE16
 
 
 def test_different_output_not_eq():
@@ -194,23 +194,23 @@ def test_all_correct_explicit_format():
 
 def test_wrong_scheme_raises_value_error():
     uri = "wrongscheme://path/to/data/data.csv"
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         AzureDestination(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE15
+    assert e.value.error_code == ErrorCode.DECE15
 
 
 def test_empty_scheme_raises_value_error():
     uri = "path/to/data/data.csv"
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         AzureDestination(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE15
+    assert e.value.error_code == ErrorCode.DECE15
 
 
 def test_list_of_integers_raises_exception():
     uri = [1, 2, "hi"]
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         AzureDestination(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE14
+    assert e.value.error_code == ErrorCode.DECE14
 
 
 def test_uri_list():
@@ -224,9 +224,9 @@ def test_uri_list():
 
 def test_uri_wrong_type_raises_type_error():
     uri = 42
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         AzureDestination(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE14
+    assert e.value.error_code == ErrorCode.DECE14
 
 
 def test_format_from_uri_list():
@@ -298,16 +298,16 @@ def test_wrong_type_format_raises_type_error():
 
 def test_allow_fragments():
     uri = f"az://path/to/data/data_{FRAGMENT_INDEX_PLACEHOLDER}.csv"
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         AzureDestination(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE38
+    assert e.value.error_code == ErrorCode.DECE38
     uri = [
         "az://path/to/data/data",
         f"az://path/to/data/data_{FRAGMENT_INDEX_PLACEHOLDER}.csv",
     ]
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         AzureDestination(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE38
+    assert e.value.error_code == ErrorCode.DECE38
     uri = "az://path/to/data/data.csv"
     output = AzureDestination(uri, AZURE_CREDENTIALS)
     assert output.uri == uri

@@ -65,7 +65,7 @@ from tabsdata._tabsserver.function.yaml_parsing import (
 )
 from tabsdata.exceptions import (
     ErrorCode,
-    InputConfigurationError,
+    SourceConfigurationError,
 )
 
 logger = logging.getLogger(__name__)
@@ -156,15 +156,15 @@ class AzureSource(SourcePlugin):
         elif isinstance(uri, list):
             self._uri_list = uri
             if not all(isinstance(single_uri, str) for single_uri in self._uri_list):
-                raise InputConfigurationError(ErrorCode.ICE28, type(uri))
+                raise SourceConfigurationError(ErrorCode.SOCE28, type(uri))
         else:
-            raise InputConfigurationError(ErrorCode.ICE28, type(uri))
+            raise SourceConfigurationError(ErrorCode.SOCE28, type(uri))
 
         self._parsed_uri_list = [urlparse(single_uri) for single_uri in self._uri_list]
         for parsed_uri in self._parsed_uri_list:
             if parsed_uri.scheme != AZURE_SCHEME:
-                raise InputConfigurationError(
-                    ErrorCode.ICE29,
+                raise SourceConfigurationError(
+                    ErrorCode.SOCE29,
                     parsed_uri.scheme,
                     AZURE_SCHEME,
                     urlunparse(parsed_uri),
@@ -213,8 +213,8 @@ class AzureSource(SourcePlugin):
         """
         valid_input_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_input_formats)):
-            raise InputConfigurationError(
-                ErrorCode.ICE4, type(format), valid_input_formats
+            raise SourceConfigurationError(
+                ErrorCode.SOCE4, type(format), valid_input_formats
             )
 
     @property
@@ -249,10 +249,12 @@ class AzureSource(SourcePlugin):
                         initial_last_modified
                     )
                 except ValueError:
-                    raise InputConfigurationError(ErrorCode.ICE5, initial_last_modified)
+                    raise SourceConfigurationError(
+                        ErrorCode.SOCE5, initial_last_modified
+                    )
                 except TypeError:
-                    raise InputConfigurationError(
-                        ErrorCode.ICE6, type(initial_last_modified)
+                    raise SourceConfigurationError(
+                        ErrorCode.SOCE6, type(initial_last_modified)
                     )
             _raise_exception_if_no_tzinfo(processed_initial_last_modified)
             self._initial_last_modified = processed_initial_last_modified
@@ -299,7 +301,7 @@ class AzureSource(SourcePlugin):
         """
         credentials = build_credentials(credentials)
         if not (isinstance(credentials, AzureCredentials)):
-            raise InputConfigurationError(ErrorCode.ICE30, type(credentials))
+            raise SourceConfigurationError(ErrorCode.SOCE30, type(credentials))
         self._credentials = credentials
 
     def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
@@ -405,16 +407,16 @@ class LocalFileSource(SourcePlugin):
         elif isinstance(path, list):
             self._path_list = path
             if not all(isinstance(single_path, str) for single_path in self._path_list):
-                raise InputConfigurationError(ErrorCode.ICE13, type(path))
+                raise SourceConfigurationError(ErrorCode.SOCE13, type(path))
         else:
-            raise InputConfigurationError(ErrorCode.ICE13, type(path))
+            raise SourceConfigurationError(ErrorCode.SOCE13, type(path))
 
         for individual_path in self._path_list:
             if URI_INDICATOR in individual_path:
                 parsed_path = urlparse(individual_path)
                 if parsed_path.scheme != FILE_SCHEME:
-                    raise InputConfigurationError(
-                        ErrorCode.ICE14,
+                    raise SourceConfigurationError(
+                        ErrorCode.SOCE14,
                         parsed_path.scheme,
                         FILE_SCHEME,
                         urlunparse(parsed_path),
@@ -466,8 +468,8 @@ class LocalFileSource(SourcePlugin):
         """
         valid_input_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_input_formats)):
-            raise InputConfigurationError(
-                ErrorCode.ICE4, type(format), valid_input_formats
+            raise SourceConfigurationError(
+                ErrorCode.SOCE4, type(format), valid_input_formats
             )
 
     @property
@@ -502,10 +504,12 @@ class LocalFileSource(SourcePlugin):
                         initial_last_modified
                     )
                 except ValueError:
-                    raise InputConfigurationError(ErrorCode.ICE5, initial_last_modified)
+                    raise SourceConfigurationError(
+                        ErrorCode.SOCE5, initial_last_modified
+                    )
                 except TypeError:
-                    raise InputConfigurationError(
-                        ErrorCode.ICE6, type(initial_last_modified)
+                    raise SourceConfigurationError(
+                        ErrorCode.SOCE6, type(initial_last_modified)
                     )
             _raise_exception_if_no_tzinfo(processed_initial_last_modified)
             self._initial_last_modified = processed_initial_last_modified
@@ -640,15 +644,15 @@ class S3Source(SourcePlugin):
         elif isinstance(uri, list):
             self._uri_list = uri
             if not all(isinstance(single_uri, str) for single_uri in self._uri_list):
-                raise InputConfigurationError(ErrorCode.ICE16, type(uri))
+                raise SourceConfigurationError(ErrorCode.SOCE16, type(uri))
         else:
-            raise InputConfigurationError(ErrorCode.ICE16, type(uri))
+            raise SourceConfigurationError(ErrorCode.SOCE16, type(uri))
 
         self._parsed_uri_list = [urlparse(single_uri) for single_uri in self._uri_list]
         for parsed_uri in self._parsed_uri_list:
             if parsed_uri.scheme != S3_SCHEME:
-                raise InputConfigurationError(
-                    ErrorCode.ICE17,
+                raise SourceConfigurationError(
+                    ErrorCode.SOCE17,
                     parsed_uri.scheme,
                     S3_SCHEME,
                     urlunparse(parsed_uri),
@@ -675,7 +679,7 @@ class S3Source(SourcePlugin):
         """
         if region:
             if not isinstance(region, str):
-                raise InputConfigurationError(ErrorCode.ICE26, type(region))
+                raise SourceConfigurationError(ErrorCode.SOCE26, type(region))
             supported_regions = [element.value for element in SupportedAWSS3Regions]
             if region not in supported_regions:
                 logger.warning(
@@ -731,8 +735,8 @@ class S3Source(SourcePlugin):
         """
         valid_input_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_input_formats)):
-            raise InputConfigurationError(
-                ErrorCode.ICE4, type(format), valid_input_formats
+            raise SourceConfigurationError(
+                ErrorCode.SOCE4, type(format), valid_input_formats
             )
 
     @property
@@ -767,10 +771,12 @@ class S3Source(SourcePlugin):
                         initial_last_modified
                     )
                 except ValueError:
-                    raise InputConfigurationError(ErrorCode.ICE5, initial_last_modified)
+                    raise SourceConfigurationError(
+                        ErrorCode.SOCE5, initial_last_modified
+                    )
                 except TypeError:
-                    raise InputConfigurationError(
-                        ErrorCode.ICE6, type(initial_last_modified)
+                    raise SourceConfigurationError(
+                        ErrorCode.SOCE6, type(initial_last_modified)
                     )
             _raise_exception_if_no_tzinfo(processed_initial_last_modified)
             self._initial_last_modified = processed_initial_last_modified
@@ -817,7 +823,7 @@ class S3Source(SourcePlugin):
         """
         credentials = build_credentials(credentials)
         if not (isinstance(credentials, S3Credentials)):
-            raise InputConfigurationError(ErrorCode.ICE20, type(credentials))
+            raise SourceConfigurationError(ErrorCode.SOCE20, type(credentials))
         self._credentials = credentials
 
     def chunk(self, working_dir: str) -> list[str | None | list[str | None]]:
@@ -1064,4 +1070,4 @@ def _is_wildcard_pattern(pattern: str) -> bool:
 
 def _raise_exception_if_no_tzinfo(user_input_datetime: datetime):
     if user_input_datetime.tzinfo is None:
-        raise InputConfigurationError(ErrorCode.ICE41, user_input_datetime)
+        raise SourceConfigurationError(ErrorCode.SOCE41, user_input_datetime)

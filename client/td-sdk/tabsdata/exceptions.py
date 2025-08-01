@@ -68,6 +68,355 @@ class ErrorCode(Enum):
             "'DestinationPlugin' object (except 'TableOutput'), got '{}' instead."
         ),
     }
+    DECE1 = {
+        "code": "DECE-001",
+        "message": (
+            "Scheme '{}' not currently supported. The supported schemes are "
+            "{}. Try using class {} instead."
+        ),
+    }
+    DECE2 = {
+        "code": "DECE-002",
+        "message": (
+            "Scheme '{}' not currently supported. The supported scheme(s) must start "
+            "with {}. The scheme is inferred from the URI, which should be of the form"
+            " 'scheme<+driver>://path' (the driver is optional). The URI provided was "
+            "'{}'."
+        ),
+    }
+    DECE3 = {
+        "code": "DECE-003",
+        "message": (
+            "The 'output' dictionary to build a destination must contain exactly one"
+            " key, which must be one of the following: {}. Instead, got the following"
+            " key(s) in the dictionary: {}."
+        ),
+    }
+    DECE4 = {
+        "code": "DECE-004",
+        "message": (
+            "The '{}' key in the dictionary to build a "
+            "destination must have an object of type 'dict' as its value. "
+            "Instead, got an object of type '{}'."
+        ),
+    }
+    DECE5 = {
+        "code": "DECE-005",
+        "message": (
+            "The '{}' dictionary to build a destination must contain the key "
+            "'{}', but it is not present."
+        ),
+    }
+    DECE6 = {
+        "code": "DECE-006",
+        "message": (
+            "The '{}' dictionary to build a destination must contain the key "
+            "'{}', but it is not present."
+        ),
+    }
+    DECE7 = {
+        "code": "DECE-007",
+        "message": (
+            "The 'output' parameter to build a destination must be a 'dict', "
+            "a DestinationPlugin object or 'None', got '{}' instead."
+        ),
+    }
+    DECE8 = {
+        "code": "DECE-008",
+        "message": (
+            "The 'destination_table' parameter in a MySQLDestination must be a "
+            "'list' or a 'str', got '{}' instead."
+        ),
+    }
+    DECE9 = {
+        "code": "DECE-009",
+        "message": (
+            "The 'credentials' parameter in a MySQLDestination must be a 'dict', a "
+            "'UserPasswordCredentials' object or None; got '{}' instead."
+        ),
+    }
+    DECE10 = {
+        "code": "DECE-010",
+        "message": (
+            "The 'table' parameter in a TableOutput must be a 'str' or a list of 'str';"
+            " got '{}' of type '{}' instead."
+        ),
+    }
+    DECE11 = {
+        "code": "DECE-011",
+        "message": (
+            "The 'path' parameter in a LocalFileDestination must be a 'str' or "
+            "a 'list[str]', got '{}' instead"
+        ),
+    }
+    DECE12 = {
+        "code": "DECE-012",
+        "message": (
+            "Scheme '{}' not supported. The supported scheme is '{}'."
+            " The scheme is inferred from the path, which should be of the form"
+            " 'scheme://path' or '/path'. The provided path was '{}'."
+        ),
+    }
+    DECE13 = {
+        "code": "DECE-013",
+        "message": (
+            "File format '{}' not supported. The supported formats are"
+            " {}. If the format was not provided, it was"
+            " inferred from the file(s) extension."
+        ),
+    }
+    DECE14 = {
+        "code": "DECE-014",
+        "message": (
+            "The 'uri' parameter in a AzureDestination must be a 'str' or "
+            "a 'list[str]', got '{}' instead"
+        ),
+    }
+    DECE15 = {
+        "code": "DECE-015",
+        "message": (
+            "Scheme '{}' not supported for AzureDestination. The supported scheme is"
+            " '{}'. The scheme is inferred from the URI, which should be of the form"
+            " 'scheme://path'. The URI provided was '{}'."
+        ),
+    }
+    DECE16 = {
+        "code": "DECE-016",
+        "message": (
+            "The 'credentials' parameter in a AzureDestination must be a 'dict' or a "
+            "'AzureCredentials' object, got '{}' instead"
+        ),
+    }
+    DECE17 = {
+        "code": "DECE-017",
+        "message": (
+            "The 'uri' parameter in a S3Destination must be a 'str' or "
+            "a 'list[str]', got '{}' instead"
+        ),
+    }
+    DECE18 = {
+        "code": "DECE-018",
+        "message": (
+            "The 'region' parameter in a S3Destination must be a 'str', got '{}' "
+            "instead"
+        ),
+    }
+    DECE19 = {
+        "code": "DECE-019",
+        "message": (
+            "The 'credentials' parameter in a S3Destination must be a 'dict' or a "
+            "'S3Credentials' object, got '{}' instead"
+        ),
+    }
+    DECE20 = {
+        "code": "DECE-020",
+        "message": (
+            "The 'destination_table' parameter in a PostgresDestination must be a "
+            "'list' or a 'str', got '{}' instead."
+        ),
+    }
+    DECE21 = {
+        "code": "DECE-021",
+        "message": (
+            "The 'credentials' parameter in a PostgresDestination must be a 'dict', a "
+            "'UserPasswordCredentials' object or None; got '{}' instead."
+        ),
+    }
+    DECE22 = {
+        "code": "DECE-022",
+        "message": (
+            "The 'destination_table' parameter in a MariaDBDestination must be a "
+            "'list' or a 'str', got '{}' instead."
+        ),
+    }
+    DECE23 = {
+        "code": "DECE-023",
+        "message": (
+            "The 'credentials' parameter in a MariaDBDestination must be a 'dict', a "
+            "'UserPasswordCredentials' object or None; got '{}' instead."
+        ),
+    }
+    DECE24 = {
+        "code": "DECE-024",
+        "message": (
+            "The 'destination_table' parameter in a OracleDestination must be a "
+            "'list' or a 'str', got '{}' instead."
+        ),
+    }
+    DECE25 = {
+        "code": "DECE-025",
+        "message": (
+            "The 'credentials' parameter in a OracleDestination must be a 'dict', a "
+            "'UserPasswordCredentials' object or None; got '{}' instead."
+        ),
+    }
+    DECE26 = {
+        "code": "DECE-026",
+        "message": (
+            "The 'if_table_exists' parameter in a MariaDBDestination must be one of the"
+            " following values {}, got '{}' instead."
+        ),
+    }
+    DECE27 = {
+        "code": "DECE-027",
+        "message": (
+            "The 'if_table_exists' parameter in a MySQLDestination must be one of the "
+            "following values {}, got '{}' instead."
+        ),
+    }
+    DECE28 = {
+        "code": "DECE-028",
+        "message": (
+            "The 'if_table_exists' parameter in a OracleDestination must be one of the "
+            "following values {}, got '{}' instead."
+        ),
+    }
+    DECE29 = {
+        "code": "DECE-029",
+        "message": (
+            "The 'if_table_exists' parameter in a PostgresDestination must be one of"
+            " the following values {}, got '{}' instead."
+        ),
+    }
+    DECE30 = {
+        "code": "DECE-030",
+        "message": (
+            "The 'definition' parameter in a Catalog must be a dictionary, got "
+            "an object of type '{}' instead."
+        ),
+    }
+    DECE31 = {
+        "code": "DECE-031",
+        "message": (
+            "The 'tables' parameter in a Catalog must be a string or a list of "
+            "strings, got a list with elements that are not strings instead."
+        ),
+    }
+    DECE32 = {
+        "code": "DECE-032",
+        "message": (
+            "The 'tables' parameter in a Catalog must be a string or a list of "
+            "strings, got an object of type '{}' instead."
+        ),
+    }
+    DECE33 = {
+        "code": "DECE-033",
+        "message": (
+            "The 'if_table_exists' parameter in a Catalog must be one of the"
+            " following values {}, got '{}' instead."
+        ),
+    }
+    DECE34 = {
+        "code": "DECE-034",
+        "message": (
+            "The 'catalog' parameter must be either a dictionary or a Catalog object, "
+            "got '{}' instead."
+        ),
+    }
+    DECE35 = {
+        "code": "DECE-035",
+        "message": (
+            "The 'catalog' dictionary to build a Catalog must contain exactly one "
+            "key, which must be one of the following: {}. Instead, got the following "
+            "key(s) in the dictionary: {}."
+        ),
+    }
+    DECE36 = {
+        "code": "DECE-036",
+        "message": (
+            "The '{}' key in the dictionary to build a "
+            "Catalog must have an object of type 'dict' as its value. "
+            "Instead, got an object of type '{}'."
+        ),
+    }
+    DECE37 = {
+        "code": "DECE-037",
+        "message": (
+            "The 'catalog' option is only compatible with file format(s) '{}', "
+            "got '{}' instead."
+        ),
+    }
+    DECE38 = {
+        "code": "DECE-038",
+        "message": (
+            "The fragment index placeholder '{}' has been used in '{}', but this "
+            "class does not support fragments. You can see if a class allows fragments "
+            "by checking the 'allow_fragments' attribute of the class."
+        ),
+    }
+    DECE39 = {
+        "code": "DECE-039",
+        "message": (
+            "Partitioned tables with replace data are not currently supported. Please "
+            "set either 'if_table_exists' to 'append' or 'partitioned_table' "
+            "to 'False'."
+        ),
+    }
+    DECE40 = {
+        "code": "DECE-040",
+        "message": (
+            "The catalog parameter 'partitioned_table' expects a bool, got value of "
+            "type '{}' instead."
+        ),
+    }
+    DECE41 = {
+        "code": "DECE-041",
+        "message": (
+            "The 'schema_strategy' parameter in a Catalog must be one of the"
+            " following values {}, got '{}' instead."
+        ),
+    }
+    DECE42 = {
+        "code": "DECE-042",
+        "message": (
+            "The 'tables' parameter and the 'auto_create_at' parameter in a Catalog "
+            "must have the same length, got '{}' and '{}' instead."
+        ),
+    }
+    DECE43 = {
+        "code": "DECE-043",
+        "message": (
+            "The 'auto_create_at' parameter in a Catalog must be a string, None, "
+            "or a list of strings or Nones, got a list with elements that are neither "
+            "instead."
+        ),
+    }
+    DECE44 = {
+        "code": "DECE-044",
+        "message": (
+            "The 'auto_create_at' parameter in a Catalog must be a string, None, or a "
+            "list of strings or Nones, got an object of type '{}' instead."
+        ),
+    }
+    DECE45 = {
+        "code": "DECE-045",
+        "message": (
+            "The AWSGlue catalog has received two credential declarations, "
+            "one in the definition and one in the s3_credentials parameter. Please "
+            "provide only one."
+        ),
+    }
+    DECE46 = {
+        "code": "DECE-046",
+        "message": (
+            "The AWSGlue catalog has received two region declarations, "
+            "one in the definition and one in the s3_region parameter. Please "
+            "provide only one."
+        ),
+    }
+    DECE47 = {
+        "code": "DECE-047",
+        "message": (
+            "The 's3_credentials' parameter in an AWSGlue must be None, a 'dict' or a "
+            "'S3Credentials' object, got '{}' instead"
+        ),
+    }
+    DECE48 = {
+        "code": "DECE-048",
+        "message": (
+            "The 'region' parameter in an AWSGlue must be a 'str', got '{}' instead"
+        ),
+    }
     FCE1 = {
         "code": "FCE-001",
         "message": (
@@ -161,635 +510,6 @@ class ErrorCode(Enum):
             "The 'format' parameter must be one of {}, got 'None' instead. The most"
             " likely reason is that the format was not provided, and it could not be"
             " inferred from the file extension. Please provide it explicitly."
-        ),
-    }
-    ICE1 = {
-        "code": "ICE-001",
-        "message": (
-            "Scheme '{}' not currently supported. The supported schemes are "
-            "{}. Try using class {} instead."
-        ),
-    }
-    ICE2 = {
-        "code": "ICE-002",
-        "message": (
-            "Scheme '{}' not supported. The supported schemes are {}."
-            " The scheme is inferred from the URI, which should be of the form"
-            " 'scheme://path'. The URI provided was '{}'."
-        ),
-    }
-    ICE3 = {
-        "code": "ICE-003",
-        "message": (
-            "The 'format' parameter in a FileInput must be a 'str' or "
-            "a 'dict', got '{}' instead"
-        ),
-    }
-    ICE4 = {
-        "code": "ICE-004",
-        "message": (
-            "File format '{}' not supported. The supported formats are"
-            " {}. If the format was not provided, it was"
-            " inferred from the file(s) extension."
-        ),
-    }
-    ICE5 = {
-        "code": "ICE-005",
-        "message": (
-            "The 'initial_last_modified' parameter in a FileInput must be a"
-            " string in ISO 8601 format or a datetime object with timezone "
-            "information. Got the string '{}', "
-            "but it was not in ISO 8601 format. Ensure that it can be parsed by using"
-            " datetime.datetime.fromisoformat()."
-        ),
-    }
-    ICE6 = {
-        "code": "ICE-006",
-        "message": (
-            "The 'initial_last_modified' parameter in a FileInput must be a"
-            " string in ISO 8601 format or a datetime object. Instead, got an object of"
-            " type '{}'."
-        ),
-    }
-    ICE7 = {
-        "code": "ICE-007",
-        "message": (
-            "The 'input' dictionary to build a Input must contain exactly one "
-            "key, which must be one of the following: {}. Instead, got the following "
-            "key(s) in the dictionary: {}."
-        ),
-    }
-    ICE8 = {
-        "code": "ICE-008",
-        "message": (
-            "The '{}' key in the dictionary to build a "
-            "Input must have an object of type 'dict' as its value. "
-            "Instead, got an object of type '{}'."
-        ),
-    }
-    ICE9 = {
-        "code": "ICE-009",
-        "message": (
-            "The '{}' dictionary to build a Input must contain the key "
-            "'{}', but it is not present."
-        ),
-    }
-    ICE10 = {
-        "code": "ICE-010",
-        "message": (
-            "The '{}' dictionary to build a Input must contain the key "
-            "'{}', but it is not present."
-        ),
-    }
-    ICE11 = {
-        "code": "ICE-011",
-        "message": (
-            "The 'input' parameter to build a Output must be a 'dict', "
-            "a Input object or 'None', got '{}' instead."
-        ),
-    }
-    ICE12 = {
-        "code": "ICE-012",
-        "message": (
-            "The 'initial_values' parameter in a MySQLSource must be a 'dict' or "
-            "'None', got '{}' instead"
-        ),
-    }
-    ICE13 = {
-        "code": "ICE-013",
-        "message": (
-            "The 'path' parameter in a LocalFileSource must be a 'str' or "
-            "a 'list[str]', got '{}' instead"
-        ),
-    }
-    ICE14 = {
-        "code": "ICE-014",
-        "message": (
-            "Scheme '{}' not supported. The supported scheme is '{}'."
-            " The scheme is inferred from the path, which should be of the form"
-            " 'scheme://path' or '/path'. The provided path was '{}'."
-        ),
-    }
-    ICE15 = {
-        "code": "ICE-015",
-        "message": (
-            "The 'format' parameter for the LocalFileSource was not provided, "
-            "and we were unable to infer it from the extension of the files in the "
-            "path parameter. The supported formats are '{}' and the obtained path was "
-            "'{}'."
-        ),
-    }
-    ICE16 = {
-        "code": "ICE-016",
-        "message": (
-            "The 'uri' parameter in a S3Source must be a 'str' or "
-            "a 'list[str]', got '{}' instead"
-        ),
-    }
-    ICE17 = {
-        "code": "ICE-017",
-        "message": (
-            "Scheme '{}' not supported. The supported scheme is '{}'."
-            " The scheme is inferred from the URI, which should be of the form"
-            " 'scheme://path'. The URI provided was '{}'."
-        ),
-    }
-    ICE18 = {
-        "code": "ICE-018",
-        "message": (
-            "The 'format' parameter for the S3Source was not provided, and we were "
-            "unable to infer it from the extension of the files in the URI parameter. "
-            "The supported formats are '{}' and the obtained URI was '{}'."
-        ),
-    }
-    ICE19 = {
-        "code": "ICE-019",
-        "message": (
-            "The 'query' parameter in a MySQLSource must be a 'str' or a 'list[str]'"
-            ", got '{}' instead"
-        ),
-    }
-    ICE20 = {
-        "code": "ICE-020",
-        "message": (
-            "The 'credentials' parameter in a S3Source must be a 'dict' or a "
-            "'S3Credentials' object, got '{}' instead"
-        ),
-    }
-    ICE21 = {
-        "code": "ICE-021",
-        "message": (
-            "The 'configs' parameter in a MySQLSource must be a 'dict' or None, "
-            "got '{}' instead"
-        ),
-    }
-    ICE22 = {
-        "code": "ICE-022",
-        "message": (
-            "The 'credentials' parameter in a MySQLSource must be a 'dict', a "
-            "'UserPasswordCredentials' object or None, got '{}' instead"
-        ),
-    }
-    ICE25 = {
-        "code": "ICE-025",
-        "message": (
-            "The table parameter for a TableInput must represent a "
-            "table in the system, got '{}' instead."
-        ),
-    }
-    ICE26 = {
-        "code": "ICE-026",
-        "message": (
-            "The 'region' parameter in a S3FileInput must be a 'str', got '{}' instead"
-        ),
-    }
-    ICE28 = {
-        "code": "ICE-028",
-        "message": (
-            "The 'uri' parameter in a AzureSource must be a 'str' or "
-            "a 'list[str]', got '{}' instead"
-        ),
-    }
-    ICE29 = {
-        "code": "ICE-029",
-        "message": (
-            "Scheme '{}' not supported for AzureSource. The supported scheme is '{}'."
-            " The scheme is inferred from the URI, which should be of the form"
-            " 'scheme://path'. The URI provided was '{}'."
-        ),
-    }
-    ICE30 = {
-        "code": "ICE-030",
-        "message": (
-            "The 'credentials' parameter in a AzureSource must be a 'dict' or a "
-            "'AzureCredentials' object, got '{}' instead"
-        ),
-    }
-    ICE31 = {
-        "code": "ICE-031",
-        "message": (
-            "The 'initial_values' parameter in a PostgresSource must be a 'dict' or "
-            "'None', got '{}' instead"
-        ),
-    }
-    ICE32 = {
-        "code": "ICE-032",
-        "message": (
-            "The 'query' parameter in a PostgresSource must be a 'str' or a 'list[str]'"
-            ", got '{}' instead"
-        ),
-    }
-    ICE33 = {
-        "code": "ICE-033",
-        "message": (
-            "The 'credentials' parameter in a PostgresSource must be a 'dict', a "
-            "'UserPasswordCredentials' object or None, got '{}' instead"
-        ),
-    }
-    ICE34 = {
-        "code": "ICE-034",
-        "message": (
-            "The 'initial_values' parameter in a MariaDBSource must be a 'dict' or "
-            "'None', got '{}' instead"
-        ),
-    }
-    ICE35 = {
-        "code": "ICE-035",
-        "message": (
-            "The 'query' parameter in a MariaDBSource must be a 'str' or a 'list[str]'"
-            ", got '{}' instead"
-        ),
-    }
-    ICE36 = {
-        "code": "ICE-036",
-        "message": (
-            "The 'credentials' parameter in a MariaDBSource must be a 'dict', a "
-            "'UserPasswordCredentials' object or None, got '{}' instead"
-        ),
-    }
-    ICE37 = {
-        "code": "ICE-037",
-        "message": (
-            "The 'initial_values' parameter in a OracleSource must be a 'dict' or "
-            "'None', got '{}' instead"
-        ),
-    }
-    ICE38 = {
-        "code": "ICE-038",
-        "message": (
-            "The 'query' parameter in a OracleSource must be a 'str' or a 'list[str]'"
-            ", got '{}' instead"
-        ),
-    }
-    ICE39 = {
-        "code": "ICE-039",
-        "message": (
-            "The 'credentials' parameter in a MariaDBSource must be a 'dict', a "
-            "'UserPasswordCredentials' object or None, got '{}' instead"
-        ),
-    }
-    ICE40 = {
-        "code": "ICE-040",
-        "message": (
-            "The 'initial_values' parameter must be a dictionary where all keys are "
-            "of type 'str', got a key of type '{}' instead."
-        ),
-    }
-    ICE41 = {
-        "code": "ICE-041",
-        "message": (
-            "The 'initial_last_modified' parameter in a FileInput must be a"
-            " string in ISO 8601 format or a datetime object with timezone "
-            "information. Got '{}', which does not have timezone information. "
-            "Ensure that it does by checking that 'last_modified.tzinfo' is not None."
-        ),
-    }
-    OCE1 = {
-        "code": "OCE-001",
-        "message": (
-            "Scheme '{}' not currently supported. The supported schemes are "
-            "{}. Try using class {} instead."
-        ),
-    }
-    OCE2 = {
-        "code": "OCE-002",
-        "message": (
-            "Scheme '{}' not currently supported. The supported scheme(s) must start "
-            "with {}. The scheme is inferred from the URI, which should be of the form"
-            " 'scheme<+driver>://path' (the driver is optional). The URI provided was "
-            "'{}'."
-        ),
-    }
-    OCE3 = {
-        "code": "OCE-003",
-        "message": (
-            "The 'output' dictionary to build a Output must contain exactly one"
-            " key, which must be one of the following: {}. Instead, got the following"
-            " key(s) in the dictionary: {}."
-        ),
-    }
-    OCE4 = {
-        "code": "OCE-004",
-        "message": (
-            "The '{}' key in the dictionary to build a "
-            "Output must have an object of type 'dict' as its value. "
-            "Instead, got an object of type '{}'."
-        ),
-    }
-    OCE5 = {
-        "code": "OCE-005",
-        "message": (
-            "The '{}' dictionary to build a Output must contain the key "
-            "'{}', but it is not present."
-        ),
-    }
-    OCE6 = {
-        "code": "OCE-006",
-        "message": (
-            "The '{}' dictionary to build a Output must contain the key "
-            "'{}', but it is not present."
-        ),
-    }
-    OCE7 = {
-        "code": "OCE-007",
-        "message": (
-            "The 'output' parameter to build a Output must be a 'dict', "
-            "a Output object or 'None', got '{}' instead."
-        ),
-    }
-    OCE8 = {
-        "code": "OCE-008",
-        "message": (
-            "The 'destination_table' parameter in a MySQLDestination must be a "
-            "'list' or a 'str', got '{}' instead."
-        ),
-    }
-    OCE9 = {
-        "code": "OCE-009",
-        "message": (
-            "The 'credentials' parameter in a MySQLDestination must be a 'dict', a "
-            "'UserPasswordCredentials' object or None; got '{}' instead."
-        ),
-    }
-    OCE10 = {
-        "code": "OCE-010",
-        "message": (
-            "The 'table' parameter in a TableOutput must be a 'str' or a list of 'str';"
-            " got '{}' of type '{}' instead."
-        ),
-    }
-    OCE11 = {
-        "code": "OCE-011",
-        "message": (
-            "The 'path' parameter in a LocalFileDestination must be a 'str' or "
-            "a 'list[str]', got '{}' instead"
-        ),
-    }
-    OCE12 = {
-        "code": "OCE-012",
-        "message": (
-            "Scheme '{}' not supported. The supported scheme is '{}'."
-            " The scheme is inferred from the path, which should be of the form"
-            " 'scheme://path' or '/path'. The provided path was '{}'."
-        ),
-    }
-    OCE13 = {
-        "code": "OCE-013",
-        "message": (
-            "File format '{}' not supported. The supported formats are"
-            " {}. If the format was not provided, it was"
-            " inferred from the file(s) extension."
-        ),
-    }
-    OCE14 = {
-        "code": "OCE-014",
-        "message": (
-            "The 'uri' parameter in a AzureDestination must be a 'str' or "
-            "a 'list[str]', got '{}' instead"
-        ),
-    }
-    OCE15 = {
-        "code": "OCE-015",
-        "message": (
-            "Scheme '{}' not supported for AzureDestination. The supported scheme is"
-            " '{}'. The scheme is inferred from the URI, which should be of the form"
-            " 'scheme://path'. The URI provided was '{}'."
-        ),
-    }
-    OCE16 = {
-        "code": "OCE-016",
-        "message": (
-            "The 'credentials' parameter in a AzureDestination must be a 'dict' or a "
-            "'AzureCredentials' object, got '{}' instead"
-        ),
-    }
-    OCE17 = {
-        "code": "OCE-017",
-        "message": (
-            "The 'uri' parameter in a S3Destination must be a 'str' or "
-            "a 'list[str]', got '{}' instead"
-        ),
-    }
-    OCE18 = {
-        "code": "OCE-018",
-        "message": (
-            "The 'region' parameter in a S3FileOutput must be a 'str', got '{}' instead"
-        ),
-    }
-    OCE19 = {
-        "code": "OCE-019",
-        "message": (
-            "The 'credentials' parameter in a S3Destination must be a 'dict' or a "
-            "'S3Credentials' object, got '{}' instead"
-        ),
-    }
-    OCE20 = {
-        "code": "OCE-020",
-        "message": (
-            "The 'destination_table' parameter in a PostgresDestination must be a "
-            "'list' or a 'str', got '{}' instead."
-        ),
-    }
-    OCE21 = {
-        "code": "OCE-021",
-        "message": (
-            "The 'credentials' parameter in a PostgresDestination must be a 'dict', a "
-            "'UserPasswordCredentials' object or None; got '{}' instead."
-        ),
-    }
-    OCE22 = {
-        "code": "OCE-022",
-        "message": (
-            "The 'destination_table' parameter in a MariaDBDestination must be a "
-            "'list' or a 'str', got '{}' instead."
-        ),
-    }
-    OCE23 = {
-        "code": "OCE-023",
-        "message": (
-            "The 'credentials' parameter in a MariaDBDestination must be a 'dict', a "
-            "'UserPasswordCredentials' object or None; got '{}' instead."
-        ),
-    }
-    OCE24 = {
-        "code": "OCE-024",
-        "message": (
-            "The 'destination_table' parameter in a OracleDestination must be a "
-            "'list' or a 'str', got '{}' instead."
-        ),
-    }
-    OCE25 = {
-        "code": "OCE-025",
-        "message": (
-            "The 'credentials' parameter in a OracleDestination must be a 'dict', a "
-            "'UserPasswordCredentials' object or None; got '{}' instead."
-        ),
-    }
-    OCE26 = {
-        "code": "OCE-026",
-        "message": (
-            "The 'if_table_exists' parameter in a MariaDBDestination must be one of the"
-            " following values {}, got '{}' instead."
-        ),
-    }
-    OCE27 = {
-        "code": "OCE-027",
-        "message": (
-            "The 'if_table_exists' parameter in a MySQLDestination must be one of the "
-            "following values {}, got '{}' instead."
-        ),
-    }
-    OCE28 = {
-        "code": "OCE-028",
-        "message": (
-            "The 'if_table_exists' parameter in a OracleDestination must be one of the "
-            "following values {}, got '{}' instead."
-        ),
-    }
-    OCE29 = {
-        "code": "OCE-029",
-        "message": (
-            "The 'if_table_exists' parameter in a PostgresDestination must be one of"
-            " the following values {}, got '{}' instead."
-        ),
-    }
-    OCE30 = {
-        "code": "OCE-030",
-        "message": (
-            "The 'definition' parameter in a Catalog must be a dictionary, got "
-            "an object of type '{}' instead."
-        ),
-    }
-    OCE31 = {
-        "code": "OCE-031",
-        "message": (
-            "The 'tables' parameter in a Catalog must be a string or a list of "
-            "strings, got a list with elements that are not strings instead."
-        ),
-    }
-    OCE32 = {
-        "code": "OCE-032",
-        "message": (
-            "The 'tables' parameter in a Catalog must be a string or a list of "
-            "strings, got an object of type '{}' instead."
-        ),
-    }
-    OCE33 = {
-        "code": "OCE-033",
-        "message": (
-            "The 'if_table_exists' parameter in a Catalog must be one of the"
-            " following values {}, got '{}' instead."
-        ),
-    }
-    OCE34 = {
-        "code": "OCE-034",
-        "message": (
-            "The 'catalog' parameter must be either a dictionary or a Catalog object, "
-            "got '{}' instead."
-        ),
-    }
-    OCE35 = {
-        "code": "OCE-035",
-        "message": (
-            "The 'catalog' dictionary to build a Catalog must contain exactly one "
-            "key, which must be one of the following: {}. Instead, got the following "
-            "key(s) in the dictionary: {}."
-        ),
-    }
-    OCE36 = {
-        "code": "OCE-036",
-        "message": (
-            "The '{}' key in the dictionary to build a "
-            "Catalog must have an object of type 'dict' as its value. "
-            "Instead, got an object of type '{}'."
-        ),
-    }
-    OCE37 = {
-        "code": "OCE-037",
-        "message": (
-            "The 'catalog' option is only compatible with file format(s) '{}', "
-            "got '{}' instead."
-        ),
-    }
-    OCE38 = {
-        "code": "OCE-038",
-        "message": (
-            "The fragment index placeholder '{}' has been used in '{}', but this "
-            "class does not support fragments. You can see if a class allows fragments "
-            "by checking the 'allow_fragments' attribute of the class."
-        ),
-    }
-    OCE39 = {
-        "code": "OCE-039",
-        "message": (
-            "Partitioned tables with replace data are not currently supported. Please "
-            "set either 'if_table_exists' to 'append' or 'partitioned_table' "
-            "to 'False'."
-        ),
-    }
-    OCE40 = {
-        "code": "OCE-040",
-        "message": (
-            "The catalog parameter 'partitioned_table' expects a bool, got value of "
-            "type '{}' instead."
-        ),
-    }
-    OCE41 = {
-        "code": "OCE-041",
-        "message": (
-            "The 'schema_strategy' parameter in a Catalog must be one of the"
-            " following values {}, got '{}' instead."
-        ),
-    }
-    OCE42 = {
-        "code": "OCE-042",
-        "message": (
-            "The 'tables' parameter and the 'auto_create_at' parameter in a Catalog "
-            "must have the same length, got '{}' and '{}' instead."
-        ),
-    }
-    OCE43 = {
-        "code": "OCE-043",
-        "message": (
-            "The 'auto_create_at' parameter in a Catalog must be a string, None, "
-            "or a list of strings or Nones, got a list with elements that are neither "
-            "instead."
-        ),
-    }
-    OCE44 = {
-        "code": "OCE-044",
-        "message": (
-            "The 'auto_create_at' parameter in a Catalog must be a string, None, or a "
-            "list of strings or Nones, got an object of type '{}' instead."
-        ),
-    }
-    OCE45 = {
-        "code": "OCE-045",
-        "message": (
-            "The AWSGlue catalog has received two credential declarations, "
-            "one in the definition and one in the s3_credentials parameter. Please "
-            "provide only one."
-        ),
-    }
-    OCE46 = {
-        "code": "OCE-046",
-        "message": (
-            "The AWSGlue catalog has received two region declarations, "
-            "one in the definition and one in the s3_region parameter. Please "
-            "provide only one."
-        ),
-    }
-    OCE47 = {
-        "code": "OCE-047",
-        "message": (
-            "The 's3_credentials' parameter in an AWSGlue must be None, a 'dict' or a "
-            "'S3Credentials' object, got '{}' instead"
-        ),
-    }
-    OCE48 = {
-        "code": "OCE-048",
-        "message": (
-            "The 'region' parameter in an AWSGlue must be a 'str', got '{}' instead"
         ),
     }
     RE1 = {
@@ -941,6 +661,287 @@ class ErrorCode(Enum):
             "The vault parameter to build a HashiCorpSecret object must be a string "
             "containing only uppercase letters, numbers and underscores and cannot "
             "start with a number; got {} instead."
+        ),
+    }
+    SOCE1 = {
+        "code": "SOCE-001",
+        "message": (
+            "Scheme '{}' not currently supported. The supported schemes are "
+            "{}. Try using class {} instead."
+        ),
+    }
+    SOCE2 = {
+        "code": "SOCE-002",
+        "message": (
+            "Scheme '{}' not supported. The supported schemes are {}."
+            " The scheme is inferred from the URI, which should be of the form"
+            " 'scheme://path'. The URI provided was '{}'."
+        ),
+    }
+    SOCE3 = {
+        "code": "SOCE-003",
+        "message": (
+            "The 'format' parameter in a file source must be a 'str' or "
+            "a 'dict', got '{}' instead"
+        ),
+    }
+    SOCE4 = {
+        "code": "SOCE-004",
+        "message": (
+            "File format '{}' not supported. The supported formats are"
+            " {}. If the format was not provided, it was"
+            " inferred from the file(s) extension."
+        ),
+    }
+    SOCE5 = {
+        "code": "SOCE-005",
+        "message": (
+            "The 'initial_last_modified' parameter in a file source must be a"
+            " string in ISO 8601 format or a datetime object with timezone "
+            "information. Got the string '{}', "
+            "but it was not in ISO 8601 format. Ensure that it can be parsed by using"
+            " datetime.datetime.fromisoformat()."
+        ),
+    }
+    SOCE6 = {
+        "code": "SOCE-006",
+        "message": (
+            "The 'initial_last_modified' parameter in a file source must be a"
+            " string in ISO 8601 format or a datetime object. Instead, got an object of"
+            " type '{}'."
+        ),
+    }
+    SOCE7 = {
+        "code": "SOCE-007",
+        "message": (
+            "The 'input' dictionary to build a source must contain exactly one "
+            "key, which must be one of the following: {}. Instead, got the following "
+            "key(s) in the dictionary: {}."
+        ),
+    }
+    SOCE8 = {
+        "code": "SOCE-008",
+        "message": (
+            "The '{}' key in the dictionary to build a "
+            "source must have an object of type 'dict' as its value. "
+            "Instead, got an object of type '{}'."
+        ),
+    }
+    SOCE9 = {
+        "code": "SOCE-009",
+        "message": (
+            "The '{}' dictionary to build a source must contain the key "
+            "'{}', but it is not present."
+        ),
+    }
+    SOCE10 = {
+        "code": "SOCE-010",
+        "message": (
+            "The '{}' dictionary to build a source must contain the key "
+            "'{}', but it is not present."
+        ),
+    }
+    SOCE11 = {
+        "code": "SOCE-011",
+        "message": (
+            "The 'input' parameter to build a source must be a 'dict', "
+            "a source object or 'None', got '{}' instead."
+        ),
+    }
+    SOCE12 = {
+        "code": "SOCE-012",
+        "message": (
+            "The 'initial_values' parameter in a MySQLSource must be a 'dict' or "
+            "'None', got '{}' instead"
+        ),
+    }
+    SOCE13 = {
+        "code": "SOCE-013",
+        "message": (
+            "The 'path' parameter in a LocalFileSource must be a 'str' or "
+            "a 'list[str]', got '{}' instead"
+        ),
+    }
+    SOCE14 = {
+        "code": "SOCE-014",
+        "message": (
+            "Scheme '{}' not supported. The supported scheme is '{}'."
+            " The scheme is inferred from the path, which should be of the form"
+            " 'scheme://path' or '/path'. The provided path was '{}'."
+        ),
+    }
+    SOCE15 = {
+        "code": "SOCE-015",
+        "message": (
+            "The 'format' parameter for the LocalFileSource was not provided, "
+            "and we were unable to infer it from the extension of the files in the "
+            "path parameter. The supported formats are '{}' and the obtained path was "
+            "'{}'."
+        ),
+    }
+    SOCE16 = {
+        "code": "SOCE-016",
+        "message": (
+            "The 'uri' parameter in a S3Source must be a 'str' or "
+            "a 'list[str]', got '{}' instead"
+        ),
+    }
+    SOCE17 = {
+        "code": "SOCE-017",
+        "message": (
+            "Scheme '{}' not supported. The supported scheme is '{}'."
+            " The scheme is inferred from the URI, which should be of the form"
+            " 'scheme://path'. The URI provided was '{}'."
+        ),
+    }
+    SOCE18 = {
+        "code": "SOCE-018",
+        "message": (
+            "The 'format' parameter for the S3Source was not provided, and we were "
+            "unable to infer it from the extension of the files in the URI parameter. "
+            "The supported formats are '{}' and the obtained URI was '{}'."
+        ),
+    }
+    SOCE19 = {
+        "code": "SOCE-019",
+        "message": (
+            "The 'query' parameter in a MySQLSource must be a 'str' or a 'list[str]'"
+            ", got '{}' instead"
+        ),
+    }
+    SOCE20 = {
+        "code": "SOCE-020",
+        "message": (
+            "The 'credentials' parameter in a S3Source must be a 'dict' or a "
+            "'S3Credentials' object, got '{}' instead"
+        ),
+    }
+    SOCE21 = {
+        "code": "SOCE-021",
+        "message": (
+            "The 'configs' parameter in a MySQLSource must be a 'dict' or None, "
+            "got '{}' instead"
+        ),
+    }
+    SOCE22 = {
+        "code": "SOCE-022",
+        "message": (
+            "The 'credentials' parameter in a MySQLSource must be a 'dict', a "
+            "'UserPasswordCredentials' object or None, got '{}' instead"
+        ),
+    }
+    SOCE25 = {
+        "code": "SOCE-025",
+        "message": (
+            "The table parameter for a TableInput must represent a "
+            "table in the system, got '{}' instead."
+        ),
+    }
+    SOCE26 = {
+        "code": "SOCE-026",
+        "message": (
+            "The 'region' parameter in a S3Source must be a 'str', got '{}' instead"
+        ),
+    }
+    SOCE28 = {
+        "code": "SOCE-028",
+        "message": (
+            "The 'uri' parameter in a AzureSource must be a 'str' or "
+            "a 'list[str]', got '{}' instead"
+        ),
+    }
+    SOCE29 = {
+        "code": "SOCE-029",
+        "message": (
+            "Scheme '{}' not supported for AzureSource. The supported scheme is '{}'."
+            " The scheme is inferred from the URI, which should be of the form"
+            " 'scheme://path'. The URI provided was '{}'."
+        ),
+    }
+    SOCE30 = {
+        "code": "SOCE-030",
+        "message": (
+            "The 'credentials' parameter in a AzureSource must be a 'dict' or a "
+            "'AzureCredentials' object, got '{}' instead"
+        ),
+    }
+    SOCE31 = {
+        "code": "SOCE-031",
+        "message": (
+            "The 'initial_values' parameter in a PostgresSource must be a 'dict' or "
+            "'None', got '{}' instead"
+        ),
+    }
+    SOCE32 = {
+        "code": "SOCE-032",
+        "message": (
+            "The 'query' parameter in a PostgresSource must be a 'str' or a 'list[str]'"
+            ", got '{}' instead"
+        ),
+    }
+    SOCE33 = {
+        "code": "SOCE-033",
+        "message": (
+            "The 'credentials' parameter in a PostgresSource must be a 'dict', a "
+            "'UserPasswordCredentials' object or None, got '{}' instead"
+        ),
+    }
+    SOCE34 = {
+        "code": "SOCE-034",
+        "message": (
+            "The 'initial_values' parameter in a MariaDBSource must be a 'dict' or "
+            "'None', got '{}' instead"
+        ),
+    }
+    SOCE35 = {
+        "code": "SOCE-035",
+        "message": (
+            "The 'query' parameter in a MariaDBSource must be a 'str' or a 'list[str]'"
+            ", got '{}' instead"
+        ),
+    }
+    SOCE36 = {
+        "code": "SOCE-036",
+        "message": (
+            "The 'credentials' parameter in a MariaDBSource must be a 'dict', a "
+            "'UserPasswordCredentials' object or None, got '{}' instead"
+        ),
+    }
+    SOCE37 = {
+        "code": "SOCE-037",
+        "message": (
+            "The 'initial_values' parameter in a OracleSource must be a 'dict' or "
+            "'None', got '{}' instead"
+        ),
+    }
+    SOCE38 = {
+        "code": "SOCE-038",
+        "message": (
+            "The 'query' parameter in a OracleSource must be a 'str' or a 'list[str]'"
+            ", got '{}' instead"
+        ),
+    }
+    SOCE39 = {
+        "code": "SOCE-039",
+        "message": (
+            "The 'credentials' parameter in a MariaDBSource must be a 'dict', a "
+            "'UserPasswordCredentials' object or None, got '{}' instead"
+        ),
+    }
+    SOCE40 = {
+        "code": "SOCE-040",
+        "message": (
+            "The 'initial_values' parameter must be a dictionary where all keys are "
+            "of type 'str', got a key of type '{}' instead."
+        ),
+    }
+    SOCE41 = {
+        "code": "SOCE-041",
+        "message": (
+            "The 'initial_last_modified' parameter in a file source must be a"
+            " string in ISO 8601 format or a datetime object with timezone "
+            "information. Got '{}', which does not have timezone information. "
+            "Ensure that it does by checking that 'last_modified.tzinfo' is not None."
         ),
     }
     TF1 = {
@@ -1162,6 +1163,14 @@ class DecoratorConfigurationError(TabsDataException):
     CODE_PREFIX = "DCE"
 
 
+class DestinationConfigurationError(TabsDataException):
+    """
+    Exception raised when the creation or modification of a destination object fails.
+    """
+
+    CODE_PREFIX = "DECE"
+
+
 class FormatConfigurationError(TabsDataException):
     """
     Exception raised when the creation or modification of a Format object fails.
@@ -1176,22 +1185,6 @@ class FunctionConfigurationError(TabsDataException):
     """
 
     CODE_PREFIX = "FCE"
-
-
-class InputConfigurationError(TabsDataException):
-    """
-    Exception raised when the creation or modification of an Input object fails.
-    """
-
-    CODE_PREFIX = "ICE"
-
-
-class OutputConfigurationError(TabsDataException):
-    """
-    Exception raised when the creation or modification of an Input object fails.
-    """
-
-    CODE_PREFIX = "OCE"
 
 
 class RegistrationError(TabsDataException):
@@ -1215,6 +1208,14 @@ class SecretConfigurationError(TabsDataException):
     """
 
     CODE_PREFIX = "SCE"
+
+
+class SourceConfigurationError(TabsDataException):
+    """
+    Exception raised when the creation or modification of a source object fails.
+    """
+
+    CODE_PREFIX = "SOCE"
 
 
 class TableFrameError(TabsDataException):

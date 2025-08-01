@@ -25,7 +25,7 @@ from tabsdata._tabsserver.function.offset_utils import OffsetReturn
 from tabsdata._utils.sql_utils import obtain_uri
 from tabsdata.exceptions import (
     ErrorCode,
-    InputConfigurationError,
+    SourceConfigurationError,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ def _validate_initial_values_type(initial_values: dict):
     """
     for key, value in initial_values.items():
         if not isinstance(key, str):
-            raise InputConfigurationError(ErrorCode.ICE40, type(key))
+            raise SourceConfigurationError(ErrorCode.SOCE40, type(key))
 
 
 class MariaDBSource(SourcePlugin):
@@ -110,8 +110,8 @@ class MariaDBSource(SourcePlugin):
         self._uri = uri
         self._parsed_uri = urlparse(uri)
         if self._parsed_uri.scheme != MARIADB_SCHEME:
-            raise InputConfigurationError(
-                ErrorCode.ICE2, self._parsed_uri.scheme, MARIADB_SCHEME, self.uri
+            raise SourceConfigurationError(
+                ErrorCode.SOCE2, self._parsed_uri.scheme, MARIADB_SCHEME, self.uri
             )
 
     @property
@@ -133,7 +133,7 @@ class MariaDBSource(SourcePlugin):
         if not initial_values:
             self._initial_values = {}
         elif not isinstance(initial_values, dict):
-            raise InputConfigurationError(ErrorCode.ICE34, type(initial_values))
+            raise SourceConfigurationError(ErrorCode.SOCE34, type(initial_values))
         else:
             _validate_initial_values_type(initial_values)
             self._initial_values = initial_values
@@ -160,9 +160,9 @@ class MariaDBSource(SourcePlugin):
         elif isinstance(query, list):
             self._query = query
             if not all(isinstance(single_query, str) for single_query in self._query):
-                raise InputConfigurationError(ErrorCode.ICE35, type(query))
+                raise SourceConfigurationError(ErrorCode.SOCE35, type(query))
         else:
-            raise InputConfigurationError(ErrorCode.ICE35, type(query))
+            raise SourceConfigurationError(ErrorCode.SOCE35, type(query))
 
     @property
     def credentials(self) -> UserPasswordCredentials | None:
@@ -187,7 +187,7 @@ class MariaDBSource(SourcePlugin):
         else:
             credentials = build_credentials(credentials)
             if not (isinstance(credentials, UserPasswordCredentials)):
-                raise InputConfigurationError(ErrorCode.ICE36, type(credentials))
+                raise SourceConfigurationError(ErrorCode.SOCE36, type(credentials))
             self._credentials = credentials
 
     @property
@@ -278,8 +278,8 @@ class MySQLSource(SourcePlugin):
         self._uri = uri
         self._parsed_uri = urlparse(uri)
         if self._parsed_uri.scheme != MYSQL_SCHEME:
-            raise InputConfigurationError(
-                ErrorCode.ICE2, self._parsed_uri.scheme, MYSQL_SCHEME, self.uri
+            raise SourceConfigurationError(
+                ErrorCode.SOCE2, self._parsed_uri.scheme, MYSQL_SCHEME, self.uri
             )
 
     @property
@@ -301,7 +301,7 @@ class MySQLSource(SourcePlugin):
         if not initial_values:
             self._initial_values = {}
         elif not isinstance(initial_values, dict):
-            raise InputConfigurationError(ErrorCode.ICE12, type(initial_values))
+            raise SourceConfigurationError(ErrorCode.SOCE12, type(initial_values))
         else:
             _validate_initial_values_type(initial_values)
             self._initial_values = initial_values
@@ -328,9 +328,9 @@ class MySQLSource(SourcePlugin):
         elif isinstance(query, list):
             self._query = query
             if not all(isinstance(single_query, str) for single_query in self._query):
-                raise InputConfigurationError(ErrorCode.ICE19, type(query))
+                raise SourceConfigurationError(ErrorCode.SOCE19, type(query))
         else:
-            raise InputConfigurationError(ErrorCode.ICE19, type(query))
+            raise SourceConfigurationError(ErrorCode.SOCE19, type(query))
 
     @property
     def credentials(self) -> UserPasswordCredentials | None:
@@ -355,7 +355,7 @@ class MySQLSource(SourcePlugin):
         else:
             credentials = build_credentials(credentials)
             if not (isinstance(credentials, UserPasswordCredentials)):
-                raise InputConfigurationError(ErrorCode.ICE22, type(credentials))
+                raise SourceConfigurationError(ErrorCode.SOCE22, type(credentials))
             self._credentials = credentials
 
     @property
@@ -446,8 +446,8 @@ class OracleSource(SourcePlugin):
         self._uri = uri
         self._parsed_uri = urlparse(uri)
         if self._parsed_uri.scheme != ORACLE_SCHEME:
-            raise InputConfigurationError(
-                ErrorCode.ICE2, self._parsed_uri.scheme, ORACLE_SCHEME, self.uri
+            raise SourceConfigurationError(
+                ErrorCode.SOCE2, self._parsed_uri.scheme, ORACLE_SCHEME, self.uri
             )
 
     @property
@@ -469,7 +469,7 @@ class OracleSource(SourcePlugin):
         if not initial_values:
             self._initial_values = {}
         elif not isinstance(initial_values, dict):
-            raise InputConfigurationError(ErrorCode.ICE37, type(initial_values))
+            raise SourceConfigurationError(ErrorCode.SOCE37, type(initial_values))
         else:
             _validate_initial_values_type(initial_values)
             self._initial_values = initial_values
@@ -496,9 +496,9 @@ class OracleSource(SourcePlugin):
         elif isinstance(query, list):
             self._query = query
             if not all(isinstance(single_query, str) for single_query in self._query):
-                raise InputConfigurationError(ErrorCode.ICE38, type(query))
+                raise SourceConfigurationError(ErrorCode.SOCE38, type(query))
         else:
-            raise InputConfigurationError(ErrorCode.ICE38, type(query))
+            raise SourceConfigurationError(ErrorCode.SOCE38, type(query))
 
     @property
     def credentials(self) -> UserPasswordCredentials | None:
@@ -523,7 +523,7 @@ class OracleSource(SourcePlugin):
         else:
             credentials = build_credentials(credentials)
             if not (isinstance(credentials, UserPasswordCredentials)):
-                raise InputConfigurationError(ErrorCode.ICE39, type(credentials))
+                raise SourceConfigurationError(ErrorCode.SOCE39, type(credentials))
             self._credentials = credentials
 
     @property
@@ -613,8 +613,8 @@ class PostgresSource(SourcePlugin):
         self._uri = uri
         self._parsed_uri = urlparse(uri)
         if self._parsed_uri.scheme not in POSTGRES_SCHEMES:
-            raise InputConfigurationError(
-                ErrorCode.ICE2, self._parsed_uri.scheme, POSTGRES_SCHEMES, self.uri
+            raise SourceConfigurationError(
+                ErrorCode.SOCE2, self._parsed_uri.scheme, POSTGRES_SCHEMES, self.uri
             )
 
     @property
@@ -636,7 +636,7 @@ class PostgresSource(SourcePlugin):
         if not initial_values:
             self._initial_values = {}
         elif not isinstance(initial_values, dict):
-            raise InputConfigurationError(ErrorCode.ICE31, type(initial_values))
+            raise SourceConfigurationError(ErrorCode.SOCE31, type(initial_values))
         else:
             # Check if the initial values are valid
             _validate_initial_values_type(initial_values)
@@ -664,9 +664,9 @@ class PostgresSource(SourcePlugin):
         elif isinstance(query, list):
             self._query = query
             if not all(isinstance(single_query, str) for single_query in self._query):
-                raise InputConfigurationError(ErrorCode.ICE32, type(query))
+                raise SourceConfigurationError(ErrorCode.SOCE32, type(query))
         else:
-            raise InputConfigurationError(ErrorCode.ICE32, type(query))
+            raise SourceConfigurationError(ErrorCode.SOCE32, type(query))
 
     @property
     def credentials(self) -> UserPasswordCredentials | None:
@@ -691,7 +691,7 @@ class PostgresSource(SourcePlugin):
         else:
             credentials = build_credentials(credentials)
             if not (isinstance(credentials, UserPasswordCredentials)):
-                raise InputConfigurationError(ErrorCode.ICE33, type(credentials))
+                raise SourceConfigurationError(ErrorCode.SOCE33, type(credentials))
             self._credentials = credentials
 
     @property

@@ -14,9 +14,9 @@ from tabsdata._io.outputs.file_outputs import (
 )
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import (
+    DestinationConfigurationError,
     ErrorCode,
     FormatConfigurationError,
-    OutputConfigurationError,
 )
 
 
@@ -59,9 +59,9 @@ def test_all_correct_single_parameter_uri():
 
 def test_list_of_integers_raises_exception():
     uri = [1, 2, "hi"]
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         LocalFileDestination(uri)
-    assert e.value.error_code == ErrorCode.OCE11
+    assert e.value.error_code == ErrorCode.DECE11
 
 
 def test_all_correct_implicit_format():
@@ -86,9 +86,9 @@ def test_all_correct_explicit_format():
 
 def test_wrong_scheme_raises_value_error():
     path = "wrongscheme://path/to/data/data.csv"
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         LocalFileDestination(path)
-    assert e.value.error_code == ErrorCode.OCE12
+    assert e.value.error_code == ErrorCode.DECE12
 
 
 def test_path_list():
@@ -102,9 +102,9 @@ def test_path_list():
 
 def test_path_wrong_type_raises_type_error():
     path = 42
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         LocalFileDestination(path)
-    assert e.value.error_code == ErrorCode.OCE11
+    assert e.value.error_code == ErrorCode.DECE11
 
 
 def test_format_from_path_list():

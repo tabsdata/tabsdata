@@ -15,7 +15,7 @@ from tabsdata._io.inputs.file_inputs import AzureSource
 from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
-    InputConfigurationError,
+    SourceConfigurationError,
 )
 
 TEST_ACCOUNT_NAME = "test_account_name"
@@ -158,9 +158,9 @@ def test_update_credentials():
 def test_wrong_type_credentials_raises_error():
     uri = ["az://path/to/data/data.csv", "az://path/to/data/data2.csv"]
     credentials = UserPasswordCredentials("username", "password")
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         AzureSource(uri, credentials)
-    assert e.value.error_code == ErrorCode.ICE30
+    assert e.value.error_code == ErrorCode.SOCE30
 
 
 def test_different_input_not_eq():
@@ -183,23 +183,23 @@ def test_all_correct_explicit_format():
 
 def test_wrong_scheme_raises_value_error():
     uri = "wrongscheme://path/to/data/data.csv"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         AzureSource(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.ICE29
+    assert e.value.error_code == ErrorCode.SOCE29
 
 
 def test_empty_scheme_raises_value_error():
     uri = "path/to/data/data.csv"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         AzureSource(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.ICE29
+    assert e.value.error_code == ErrorCode.SOCE29
 
 
 def test_list_of_integers_raises_exception():
     uri = [1, 2, "hi"]
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         AzureSource(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.ICE28
+    assert e.value.error_code == ErrorCode.SOCE28
 
 
 def test_uri_list():
@@ -213,9 +213,9 @@ def test_uri_list():
 
 def test_uri_wrong_type_raises_type_error():
     uri = 42
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         AzureSource(uri, AZURE_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.ICE28
+    assert e.value.error_code == ErrorCode.SOCE28
 
 
 def test_format_from_uri_list():
@@ -327,18 +327,18 @@ def test_initial_last_modified_invalid_string():
     uri = "az://path/to/data/data"
     format = "csv"
     time = "wrong_time"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         AzureSource(uri, AZURE_CREDENTIALS, format=format, initial_last_modified=time)
-    assert e.value.error_code == ErrorCode.ICE5
+    assert e.value.error_code == ErrorCode.SOCE5
 
 
 def test_initial_last_modified_invalid_string_no_timezone():
     uri = "az://path/to/data/data"
     format = "csv"
     time = "2024-09-05T01:01:00.01"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         AzureSource(uri, AZURE_CREDENTIALS, format=format, initial_last_modified=time)
-    assert e.value.error_code == ErrorCode.ICE41
+    assert e.value.error_code == ErrorCode.SOCE41
 
 
 def test_initial_last_modified_valid_datetime():
@@ -357,15 +357,15 @@ def test_initial_last_modified_invalid_datetime():
     uri = "az://path/to/data/data"
     format = "csv"
     time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000)
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         AzureSource(uri, AZURE_CREDENTIALS, format=format, initial_last_modified=time)
-    assert e.value.error_code == ErrorCode.ICE41
+    assert e.value.error_code == ErrorCode.SOCE41
 
 
 def test_initial_last_modified_invalid_type():
     uri = "az://path/to/data/data"
     format = "csv"
     time = 123
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         AzureSource(uri, AZURE_CREDENTIALS, format=format, initial_last_modified=time)
-    assert e.value.error_code == ErrorCode.ICE6
+    assert e.value.error_code == ErrorCode.SOCE6

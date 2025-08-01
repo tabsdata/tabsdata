@@ -7,7 +7,7 @@ import pytest
 from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
 from tabsdata._io.outputs.sql_outputs import MariaDBDestination
 from tabsdata._io.plugin import DestinationPlugin
-from tabsdata.exceptions import ErrorCode, OutputConfigurationError
+from tabsdata.exceptions import DestinationConfigurationError, ErrorCode
 
 
 def test_all_correct_destination_table_list():
@@ -51,9 +51,9 @@ def test_all_correct_destination_table_string_no_credentials():
 def test_wrong_scheme_raises_value_error():
     uri = "wrongscheme://path/to/destination_table"
     destination_table = "output_table"
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         MariaDBDestination(uri, destination_table)
-    assert e.value.error_code == ErrorCode.OCE2
+    assert e.value.error_code == ErrorCode.DECE2
 
 
 def test_destination_table_list():
@@ -66,26 +66,26 @@ def test_destination_table_list():
 def test_destination_table_wrong_type_raises_type_error():
     uri = "mariadb://DATABASE_IP:DATABASE_PORT/testing"
     destination_table = 42
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         MariaDBDestination(uri, destination_table)
-    assert e.value.error_code == ErrorCode.OCE22
+    assert e.value.error_code == ErrorCode.DECE22
 
 
 def test_wrong_credentials_type_raises_type_error():
     uri = "mariadb://DATABASE_IP:DATABASE_PORT/testing"
     destination_table = "output_table"
     credentials = S3AccessKeyCredentials("admin", "admin")
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         MariaDBDestination(uri, destination_table, credentials=credentials)
-    assert e.value.error_code == ErrorCode.OCE23
+    assert e.value.error_code == ErrorCode.DECE23
 
 
 def test_empty_uri():
     uri = ""
     destination_table = "output_table"
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         MariaDBDestination(uri, destination_table)
-    assert e.value.error_code == ErrorCode.OCE2
+    assert e.value.error_code == ErrorCode.DECE2
 
 
 def test_update_destination_table():
@@ -129,12 +129,12 @@ def test_update_if_table_exists():
 def test_if_table_exists_wrong_parameter_raises_exception():
     uri = "mariadb://DATABASE_IP:DATABASE_PORT/testing"
     destination_table = "output_table"
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         MariaDBDestination(uri, destination_table, if_table_exists="wrong")
-    assert e.value.error_code == ErrorCode.OCE26
-    with pytest.raises(OutputConfigurationError) as e:
+    assert e.value.error_code == ErrorCode.DECE26
+    with pytest.raises(DestinationConfigurationError) as e:
         MariaDBDestination(uri, destination_table, if_table_exists=42)
-    assert e.value.error_code == ErrorCode.OCE26
+    assert e.value.error_code == ErrorCode.DECE26
 
 
 def test_all_correct_driver():

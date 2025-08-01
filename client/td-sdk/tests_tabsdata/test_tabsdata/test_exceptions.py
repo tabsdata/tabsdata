@@ -6,12 +6,12 @@ import pytest
 
 from tabsdata.exceptions import (
     DecoratorConfigurationError,
+    DestinationConfigurationError,
     ErrorCode,
     FunctionConfigurationError,
-    InputConfigurationError,
-    OutputConfigurationError,
     RegistrationError,
     SDKError,
+    SourceConfigurationError,
 )
 
 
@@ -30,29 +30,29 @@ def test_function_configuration_error_wrong_code_fails():
 
 
 def test_input_configuration_error():
-    with pytest.raises(InputConfigurationError) as e:
-        raise InputConfigurationError(ErrorCode.ICE1, "dummy", "dummy", "dummy")
-    assert e.value.code == ErrorCode.ICE1.value.get("code")
-    assert e.value.error_code == ErrorCode.ICE1
+    with pytest.raises(SourceConfigurationError) as e:
+        raise SourceConfigurationError(ErrorCode.SOCE1, "dummy", "dummy", "dummy")
+    assert e.value.code == ErrorCode.SOCE1.value.get("code")
+    assert e.value.error_code == ErrorCode.SOCE1
 
 
 def test_input_configuration_error_wrong_code_fails():
     with pytest.raises(SDKError) as e:
-        raise InputConfigurationError(ErrorCode.RE1)
+        raise SourceConfigurationError(ErrorCode.RE1)
     assert e.value.code == ErrorCode.SDKE1.value.get("code")
     assert e.value.error_code == ErrorCode.SDKE1
 
 
 def test_output_configuration_error():
-    with pytest.raises(OutputConfigurationError) as e:
-        raise OutputConfigurationError(ErrorCode.OCE1, "dummy", "dummy", "dummy")
-    assert e.value.code == ErrorCode.OCE1.value.get("code")
-    assert e.value.error_code == ErrorCode.OCE1
+    with pytest.raises(DestinationConfigurationError) as e:
+        raise DestinationConfigurationError(ErrorCode.DECE1, "dummy", "dummy", "dummy")
+    assert e.value.code == ErrorCode.DECE1.value.get("code")
+    assert e.value.error_code == ErrorCode.DECE1
 
 
 def test_output_configuration_error_wrong_code_fails():
     with pytest.raises(SDKError) as e:
-        raise OutputConfigurationError(ErrorCode.RE1)
+        raise DestinationConfigurationError(ErrorCode.RE1)
     assert e.value.code == ErrorCode.SDKE1.value.get("code")
     assert e.value.error_code == ErrorCode.SDKE1
 
@@ -66,7 +66,7 @@ def test_registration_configuration_error():
 
 def test_registration_configuration_error_wrong_code_fails():
     with pytest.raises(SDKError) as e:
-        raise RegistrationError(ErrorCode.ICE1, "dummy", "dummy", "dummy")
+        raise RegistrationError(ErrorCode.SOCE1, "dummy", "dummy", "dummy")
     assert e.value.code == ErrorCode.SDKE1.value.get("code")
     assert e.value.error_code == ErrorCode.SDKE1
 
@@ -80,6 +80,6 @@ def test_decorator_configuration_error():
 
 def test_decorator_configuration_error_wrong_code_fails():
     with pytest.raises(SDKError) as e:
-        raise DecoratorConfigurationError(ErrorCode.ICE1, "dummy", "dummy", "dummy")
+        raise DecoratorConfigurationError(ErrorCode.SOCE1, "dummy", "dummy", "dummy")
     assert e.value.code == ErrorCode.SDKE1.value.get("code")
     assert e.value.error_code == ErrorCode.SDKE1

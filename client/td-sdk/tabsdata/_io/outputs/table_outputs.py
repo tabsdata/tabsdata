@@ -14,8 +14,8 @@ from tabsdata._tabsserver.function.store_results_utils import (
 )
 from tabsdata._tabsserver.function.yaml_parsing import Table
 from tabsdata.exceptions import (
+    DestinationConfigurationError,
     ErrorCode,
-    OutputConfigurationError,
 )
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 
@@ -66,8 +66,8 @@ class TableOutput(DestinationPlugin):
         self._table_list = table if isinstance(table, list) else [table]
         for single_table in self._table_list:
             if not isinstance(single_table, str):
-                raise OutputConfigurationError(
-                    ErrorCode.OCE10, single_table, type(single_table)
+                raise DestinationConfigurationError(
+                    ErrorCode.DECE10, single_table, type(single_table)
                 )
 
     def __repr__(self) -> str:

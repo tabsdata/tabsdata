@@ -68,8 +68,8 @@ from tabsdata._tabsserver.function.yaml_parsing import (
     store_copy_as_yaml,
 )
 from tabsdata.exceptions import (
+    DestinationConfigurationError,
     ErrorCode,
-    OutputConfigurationError,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,13 +139,15 @@ class AWSGlue(Catalog):
             partitioned_table (bool): Whether the table is partitioned or not.
         """
         if not isinstance(partitioned_table, bool):
-            raise OutputConfigurationError(ErrorCode.OCE40, type(partitioned_table))
+            raise DestinationConfigurationError(
+                ErrorCode.DECE40, type(partitioned_table)
+            )
         self._partitioned_table = partitioned_table
         if hasattr(self, "_if_table_exists"):
             if (
                 self._if_table_exists == IfTableExistsStrategy.REPLACE.value
             ) and partitioned_table:
-                raise OutputConfigurationError(ErrorCode.OCE39)
+                raise DestinationConfigurationError(ErrorCode.DECE39)
 
     @property
     def if_table_exists(self) -> Literal["append", "replace"]:
@@ -171,8 +173,8 @@ class AWSGlue(Catalog):
             IfTableExistsStrategy.REPLACE.value,
         ]
         if if_table_exists not in valid_values:
-            raise OutputConfigurationError(
-                ErrorCode.OCE33, valid_values, if_table_exists
+            raise DestinationConfigurationError(
+                ErrorCode.DECE33, valid_values, if_table_exists
             )
         self._if_table_exists = if_table_exists
         if hasattr(self, "_partitioned_table"):
@@ -180,7 +182,7 @@ class AWSGlue(Catalog):
                 self._partitioned_table
                 and if_table_exists == IfTableExistsStrategy.REPLACE.value
             ):
-                raise OutputConfigurationError(ErrorCode.OCE39)
+                raise DestinationConfigurationError(ErrorCode.DECE39)
 
     @property
     def schema_strategy(self) -> Literal["update", "strict"]:
@@ -207,8 +209,8 @@ class AWSGlue(Catalog):
             SchemaStrategy.STRICT.value,
         ]
         if schema_strategy not in valid_values:
-            raise OutputConfigurationError(
-                ErrorCode.OCE41, valid_values, schema_strategy
+            raise DestinationConfigurationError(
+                ErrorCode.DECE41, valid_values, schema_strategy
             )
         self._schema_strategy = schema_strategy
 
@@ -230,7 +232,7 @@ class AWSGlue(Catalog):
     @definition.setter
     def definition(self, definition: dict):
         if not isinstance(definition, dict):
-            raise OutputConfigurationError(ErrorCode.OCE30, type(definition))
+            raise DestinationConfigurationError(ErrorCode.DECE30, type(definition))
         self._user_definition = _recursively_load_secret(definition)
         self._verify_duplicate_s3_credentials()
         self._verify_duplicate_s3_region()
@@ -246,7 +248,7 @@ class AWSGlue(Catalog):
         else:
             credentials = build_credentials(s3_credentials)
             if not (isinstance(credentials, S3Credentials)):
-                raise OutputConfigurationError(ErrorCode.OCE47, type(credentials))
+                raise DestinationConfigurationError(ErrorCode.DECE47, type(credentials))
             self._s3_credentials = credentials
         self._verify_duplicate_s3_credentials()
 
@@ -267,7 +269,7 @@ class AWSGlue(Catalog):
         """
         if region:
             if not isinstance(region, str):
-                raise OutputConfigurationError(ErrorCode.OCE48, type(region))
+                raise DestinationConfigurationError(ErrorCode.DECE48, type(region))
             supported_regions = [element.value for element in SupportedAWSS3Regions]
             if region not in supported_regions:
                 logger.warning(
@@ -295,15 +297,15 @@ class AWSGlue(Catalog):
             self._tables = [tables]
         elif isinstance(tables, list):
             if not all(isinstance(single_table, str) for single_table in tables):
-                raise OutputConfigurationError(ErrorCode.OCE31)
+                raise DestinationConfigurationError(ErrorCode.DECE31)
             self._tables = tables
         else:
-            raise OutputConfigurationError(ErrorCode.OCE32, type(tables))
+            raise DestinationConfigurationError(ErrorCode.DECE32, type(tables))
         if hasattr(self, "_auto_create_at") and len(self._auto_create_at) != len(
             self._tables
         ):
-            raise OutputConfigurationError(
-                ErrorCode.OCE42, self._tables, self._auto_create_at
+            raise DestinationConfigurationError(
+                ErrorCode.DECE42, self._tables, self._auto_create_at
             )
 
     @property
@@ -319,13 +321,13 @@ class AWSGlue(Catalog):
         elif isinstance(auto_create_at, list):
             for single_location in auto_create_at:
                 if not (isinstance(single_location, str) or single_location is None):
-                    raise OutputConfigurationError(ErrorCode.OCE43)
+                    raise DestinationConfigurationError(ErrorCode.DECE43)
             self._auto_create_at = auto_create_at
         else:
-            raise OutputConfigurationError(ErrorCode.OCE44, type(auto_create_at))
+            raise DestinationConfigurationError(ErrorCode.DECE44, type(auto_create_at))
         if hasattr(self, "_tables") and len(self._tables) != len(self._auto_create_at):
-            raise OutputConfigurationError(
-                ErrorCode.OCE42, self._tables, self._auto_create_at
+            raise DestinationConfigurationError(
+                ErrorCode.DECE42, self._tables, self._auto_create_at
             )
 
     def _to_dict(self) -> dict:
@@ -361,14 +363,14 @@ class AWSGlue(Catalog):
                 self._user_definition.get(self.AWS_GLUE_ACCESS_KEY_ID)
                 or self._user_definition.get(self.AWS_GLUE_SECRET_ACCESS_KEY)
             ):
-                raise OutputConfigurationError(ErrorCode.OCE45)
+                raise DestinationConfigurationError(ErrorCode.DECE45)
 
     def _verify_duplicate_s3_region(self):
         if hasattr(self, "_user_definition") and hasattr(self, "_s3_region"):
             if self._s3_region is not None and self._user_definition.get(
                 self.AWS_GLUE_REGION
             ):
-                raise OutputConfigurationError(ErrorCode.OCE46)
+                raise DestinationConfigurationError(ErrorCode.DECE46)
 
 
 def build_catalog(catalog) -> AWSGlue:
@@ -385,16 +387,18 @@ def build_catalog(catalog) -> AWSGlue:
     if isinstance(catalog, AWSGlue):
         return catalog
     elif not isinstance(catalog, dict):
-        raise OutputConfigurationError(ErrorCode.OCE34, type(catalog))
+        raise DestinationConfigurationError(ErrorCode.DECE34, type(catalog))
     elif len(catalog) != 1 or next(iter(catalog)) != AWSGlue.IDENTIFIER:
-        raise OutputConfigurationError(
-            ErrorCode.OCE35, AWSGlue.IDENTIFIER, list(catalog.keys())
+        raise DestinationConfigurationError(
+            ErrorCode.DECE35, AWSGlue.IDENTIFIER, list(catalog.keys())
         )
     # Since we have only one key, we select the identifier and the configuration
     identifier, configuration = next(iter(catalog.items()))
     # The configuration must be a dictionary
     if not isinstance(configuration, dict):
-        raise OutputConfigurationError(ErrorCode.OCE36, identifier, type(configuration))
+        raise DestinationConfigurationError(
+            ErrorCode.DECE36, identifier, type(configuration)
+        )
     return AWSGlue(**configuration)
 
 
@@ -471,15 +475,15 @@ class AzureDestination(DestinationPlugin):
         elif isinstance(uri, list):
             self._uri_list = uri
             if not all(isinstance(single_uri, str) for single_uri in self._uri_list):
-                raise OutputConfigurationError(ErrorCode.OCE14, type(uri))
+                raise DestinationConfigurationError(ErrorCode.DECE14, type(uri))
         else:
-            raise OutputConfigurationError(ErrorCode.OCE14, type(uri))
+            raise DestinationConfigurationError(ErrorCode.DECE14, type(uri))
 
         self._parsed_uri_list = [urlparse(single_uri) for single_uri in self._uri_list]
         for parsed_uri in self._parsed_uri_list:
             if parsed_uri.scheme != AZURE_SCHEME:
-                raise OutputConfigurationError(
-                    ErrorCode.OCE15,
+                raise DestinationConfigurationError(
+                    ErrorCode.DECE15,
                     parsed_uri.scheme,
                     AZURE_SCHEME,
                     urlunparse(parsed_uri),
@@ -492,8 +496,8 @@ class AzureDestination(DestinationPlugin):
         if not self.allow_fragments:
             for uri in self._uri_list:
                 if FRAGMENT_INDEX_PLACEHOLDER in uri:
-                    raise OutputConfigurationError(
-                        ErrorCode.OCE38,
+                    raise DestinationConfigurationError(
+                        ErrorCode.DECE38,
                         FRAGMENT_INDEX_PLACEHOLDER,
                         uri,
                     )
@@ -537,8 +541,8 @@ class AzureDestination(DestinationPlugin):
         """
         valid_output_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_output_formats)):
-            raise OutputConfigurationError(
-                ErrorCode.OCE13, type(format), valid_output_formats
+            raise DestinationConfigurationError(
+                ErrorCode.DECE13, type(format), valid_output_formats
             )
 
     @property
@@ -559,7 +563,7 @@ class AzureDestination(DestinationPlugin):
         """
         credentials = build_credentials(credentials)
         if not (isinstance(credentials, AzureCredentials)):
-            raise OutputConfigurationError(ErrorCode.OCE16, type(credentials))
+            raise DestinationConfigurationError(ErrorCode.DECE16, type(credentials))
         self._credentials = credentials
 
     @property
@@ -669,16 +673,16 @@ class LocalFileDestination(DestinationPlugin):
         elif isinstance(path, list):
             self._path_list = path
             if not all(isinstance(single_path, str) for single_path in self._path_list):
-                raise OutputConfigurationError(ErrorCode.OCE11, type(path))
+                raise DestinationConfigurationError(ErrorCode.DECE11, type(path))
         else:
-            raise OutputConfigurationError(ErrorCode.OCE11, type(path))
+            raise DestinationConfigurationError(ErrorCode.DECE11, type(path))
 
         for individual_path in self._path_list:
             if URI_INDICATOR in individual_path:
                 parsed_path = urlparse(individual_path)
                 if parsed_path.scheme != FILE_SCHEME:
-                    raise OutputConfigurationError(
-                        ErrorCode.OCE12,
+                    raise DestinationConfigurationError(
+                        ErrorCode.DECE12,
                         parsed_path.scheme,
                         FILE_SCHEME,
                         urlunparse(parsed_path),
@@ -737,8 +741,8 @@ class LocalFileDestination(DestinationPlugin):
         """
         valid_output_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_output_formats)):
-            raise OutputConfigurationError(
-                ErrorCode.OCE13, type(format), valid_output_formats
+            raise DestinationConfigurationError(
+                ErrorCode.DECE13, type(format), valid_output_formats
             )
 
     @property
@@ -862,15 +866,15 @@ class S3Destination(DestinationPlugin):
         elif isinstance(uri, list):
             self._uri_list = uri
             if not all(isinstance(single_uri, str) for single_uri in self._uri_list):
-                raise OutputConfigurationError(ErrorCode.OCE17, type(uri))
+                raise DestinationConfigurationError(ErrorCode.DECE17, type(uri))
         else:
-            raise OutputConfigurationError(ErrorCode.OCE17, type(uri))
+            raise DestinationConfigurationError(ErrorCode.DECE17, type(uri))
 
         self._parsed_uri_list = [urlparse(single_uri) for single_uri in self._uri_list]
         for parsed_uri in self._parsed_uri_list:
             if parsed_uri.scheme != S3_SCHEME:
-                raise OutputConfigurationError(
-                    ErrorCode.OCE12,
+                raise DestinationConfigurationError(
+                    ErrorCode.DECE12,
                     parsed_uri.scheme,
                     S3_SCHEME,
                     urlunparse(parsed_uri),
@@ -897,7 +901,7 @@ class S3Destination(DestinationPlugin):
         """
         if region:
             if not isinstance(region, str):
-                raise OutputConfigurationError(ErrorCode.OCE18, type(region))
+                raise DestinationConfigurationError(ErrorCode.DECE18, type(region))
             supported_regions = [element.value for element in SupportedAWSS3Regions]
             if region not in supported_regions:
                 logger.warning(
@@ -948,8 +952,8 @@ class S3Destination(DestinationPlugin):
                 and self._catalog is not None
                 and not isinstance(self._format, ParquetFormat)
             ):
-                raise OutputConfigurationError(
-                    ErrorCode.OCE37, ParquetFormat, self._format
+                raise DestinationConfigurationError(
+                    ErrorCode.DECE37, ParquetFormat, self._format
                 )
 
     @property
@@ -972,8 +976,8 @@ class S3Destination(DestinationPlugin):
         else:
             catalog = build_catalog(catalog)
             if hasattr(self, "_format") and not isinstance(self.format, ParquetFormat):
-                raise OutputConfigurationError(
-                    ErrorCode.OCE37, ParquetFormat, self.format
+                raise DestinationConfigurationError(
+                    ErrorCode.DECE37, ParquetFormat, self.format
                 )
             self._catalog = catalog
 
@@ -993,8 +997,8 @@ class S3Destination(DestinationPlugin):
         """
         valid_output_formats = tuple(element.value for element in self.SupportedFormats)
         if not (isinstance(format, valid_output_formats)):
-            raise OutputConfigurationError(
-                ErrorCode.OCE13, type(format), valid_output_formats
+            raise DestinationConfigurationError(
+                ErrorCode.DECE13, type(format), valid_output_formats
             )
 
     @property
@@ -1015,7 +1019,7 @@ class S3Destination(DestinationPlugin):
         """
         credentials = build_credentials(credentials)
         if not (isinstance(credentials, S3Credentials)):
-            raise OutputConfigurationError(ErrorCode.OCE19, type(credentials))
+            raise DestinationConfigurationError(ErrorCode.DECE19, type(credentials))
         self._credentials = credentials
 
     @property

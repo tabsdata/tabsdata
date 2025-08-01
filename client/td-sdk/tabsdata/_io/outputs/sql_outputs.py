@@ -27,8 +27,8 @@ from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._tabsserver.function.sql_utils import add_mariadb_collation
 from tabsdata._utils.sql_utils import add_driver_to_uri, obtain_uri
 from tabsdata.exceptions import (
+    DestinationConfigurationError,
     ErrorCode,
-    OutputConfigurationError,
 )
 
 if TYPE_CHECKING:
@@ -111,8 +111,8 @@ class MariaDBDestination(DestinationPlugin):
             IfTableExistsStrategy.REPLACE.value,
         ]
         if if_table_exists not in valid_values:
-            raise OutputConfigurationError(
-                ErrorCode.OCE26, valid_values, if_table_exists
+            raise DestinationConfigurationError(
+                ErrorCode.DECE26, valid_values, if_table_exists
             )
         self._if_table_exists = if_table_exists
 
@@ -134,8 +134,8 @@ class MariaDBDestination(DestinationPlugin):
         self._uri = uri
         self._parsed_uri = urlparse(uri)
         if not self._parsed_uri.scheme.startswith(MARIADB_SCHEME):
-            raise OutputConfigurationError(
-                ErrorCode.OCE2, self._parsed_uri.scheme, MARIADB_SCHEME, self.uri
+            raise DestinationConfigurationError(
+                ErrorCode.DECE2, self._parsed_uri.scheme, MARIADB_SCHEME, self.uri
             )
 
     @property
@@ -158,7 +158,9 @@ class MariaDBDestination(DestinationPlugin):
         if isinstance(destination_table, (list, str)):
             self._destination_table = destination_table
         else:
-            raise OutputConfigurationError(ErrorCode.OCE22, type(destination_table))
+            raise DestinationConfigurationError(
+                ErrorCode.DECE22, type(destination_table)
+            )
 
     @property
     def credentials(self) -> UserPasswordCredentials:
@@ -184,7 +186,7 @@ class MariaDBDestination(DestinationPlugin):
         else:
             credentials = build_credentials(credentials)
             if not (isinstance(credentials, UserPasswordCredentials)):
-                raise OutputConfigurationError(ErrorCode.OCE23, type(credentials))
+                raise DestinationConfigurationError(ErrorCode.DECE23, type(credentials))
             self._credentials = credentials
 
     def __repr__(self) -> str:
@@ -283,8 +285,8 @@ class MySQLDestination(DestinationPlugin):
             IfTableExistsStrategy.REPLACE.value,
         ]
         if if_table_exists not in valid_values:
-            raise OutputConfigurationError(
-                ErrorCode.OCE27, valid_values, if_table_exists
+            raise DestinationConfigurationError(
+                ErrorCode.DECE27, valid_values, if_table_exists
             )
         self._if_table_exists = if_table_exists
 
@@ -306,8 +308,8 @@ class MySQLDestination(DestinationPlugin):
         self._uri = uri
         self._parsed_uri = urlparse(uri)
         if not self._parsed_uri.scheme.startswith(MYSQL_SCHEME):
-            raise OutputConfigurationError(
-                ErrorCode.OCE2, self._parsed_uri.scheme, MYSQL_SCHEME, self.uri
+            raise DestinationConfigurationError(
+                ErrorCode.DECE2, self._parsed_uri.scheme, MYSQL_SCHEME, self.uri
             )
 
     @property
@@ -330,7 +332,9 @@ class MySQLDestination(DestinationPlugin):
         if isinstance(destination_table, (list, str)):
             self._destination_table = destination_table
         else:
-            raise OutputConfigurationError(ErrorCode.OCE8, type(destination_table))
+            raise DestinationConfigurationError(
+                ErrorCode.DECE8, type(destination_table)
+            )
 
     @property
     def credentials(self) -> UserPasswordCredentials:
@@ -355,7 +359,7 @@ class MySQLDestination(DestinationPlugin):
         else:
             credentials = build_credentials(credentials)
             if not (isinstance(credentials, UserPasswordCredentials)):
-                raise OutputConfigurationError(ErrorCode.OCE9, type(credentials))
+                raise DestinationConfigurationError(ErrorCode.DECE9, type(credentials))
             self._credentials = credentials
 
     def __repr__(self) -> str:
@@ -454,8 +458,8 @@ class OracleDestination(DestinationPlugin):
             IfTableExistsStrategy.REPLACE.value,
         ]
         if if_table_exists not in valid_values:
-            raise OutputConfigurationError(
-                ErrorCode.OCE28, valid_values, if_table_exists
+            raise DestinationConfigurationError(
+                ErrorCode.DECE28, valid_values, if_table_exists
             )
         self._if_table_exists = if_table_exists
 
@@ -477,8 +481,8 @@ class OracleDestination(DestinationPlugin):
         self._uri = uri
         self._parsed_uri = urlparse(uri)
         if not self._parsed_uri.scheme.startswith(ORACLE_SCHEME):
-            raise OutputConfigurationError(
-                ErrorCode.OCE2, self._parsed_uri.scheme, ORACLE_SCHEME, self.uri
+            raise DestinationConfigurationError(
+                ErrorCode.DECE2, self._parsed_uri.scheme, ORACLE_SCHEME, self.uri
             )
 
     @property
@@ -501,7 +505,9 @@ class OracleDestination(DestinationPlugin):
         if isinstance(destination_table, (list, str)):
             self._destination_table = destination_table
         else:
-            raise OutputConfigurationError(ErrorCode.OCE24, type(destination_table))
+            raise DestinationConfigurationError(
+                ErrorCode.DECE24, type(destination_table)
+            )
 
     @property
     def credentials(self) -> UserPasswordCredentials:
@@ -527,7 +533,7 @@ class OracleDestination(DestinationPlugin):
         else:
             credentials = build_credentials(credentials)
             if not (isinstance(credentials, UserPasswordCredentials)):
-                raise OutputConfigurationError(ErrorCode.OCE25, type(credentials))
+                raise DestinationConfigurationError(ErrorCode.DECE25, type(credentials))
             self._credentials = credentials
 
     def __repr__(self) -> str:
@@ -626,8 +632,8 @@ class PostgresDestination(DestinationPlugin):
             IfTableExistsStrategy.REPLACE.value,
         ]
         if if_table_exists not in valid_values:
-            raise OutputConfigurationError(
-                ErrorCode.OCE29, valid_values, if_table_exists
+            raise DestinationConfigurationError(
+                ErrorCode.DECE29, valid_values, if_table_exists
             )
         self._if_table_exists = if_table_exists
 
@@ -651,8 +657,8 @@ class PostgresDestination(DestinationPlugin):
         if not any(
             [self._parsed_uri.scheme.startswith(scheme) for scheme in POSTGRES_SCHEMES]
         ):
-            raise OutputConfigurationError(
-                ErrorCode.OCE2, self._parsed_uri.scheme, POSTGRES_SCHEMES, self.uri
+            raise DestinationConfigurationError(
+                ErrorCode.DECE2, self._parsed_uri.scheme, POSTGRES_SCHEMES, self.uri
             )
 
     @property
@@ -675,7 +681,9 @@ class PostgresDestination(DestinationPlugin):
         if isinstance(destination_table, (list, str)):
             self._destination_table = destination_table
         else:
-            raise OutputConfigurationError(ErrorCode.OCE20, type(destination_table))
+            raise DestinationConfigurationError(
+                ErrorCode.DECE20, type(destination_table)
+            )
 
     @property
     def credentials(self) -> UserPasswordCredentials:
@@ -701,7 +709,7 @@ class PostgresDestination(DestinationPlugin):
         else:
             credentials = build_credentials(credentials)
             if not (isinstance(credentials, UserPasswordCredentials)):
-                raise OutputConfigurationError(ErrorCode.OCE21, type(credentials))
+                raise DestinationConfigurationError(ErrorCode.DECE21, type(credentials))
             self._credentials = credentials
 
     def __repr__(self) -> str:

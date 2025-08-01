@@ -6,7 +6,7 @@ import pytest
 
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin
-from tabsdata.exceptions import ErrorCode, OutputConfigurationError
+from tabsdata.exceptions import DestinationConfigurationError, ErrorCode
 
 
 def test_all_correct_destination_table_list():
@@ -29,9 +29,9 @@ def test_all_correct_destination_table_string():
 
 def test_table_wrong_type_raises_type_error():
     destination_table = 42
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         TableOutput(destination_table)
-    assert e.value.error_code == ErrorCode.OCE10
+    assert e.value.error_code == ErrorCode.DECE10
 
 
 def test_update_destination_table():

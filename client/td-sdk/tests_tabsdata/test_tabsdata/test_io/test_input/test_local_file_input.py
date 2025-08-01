@@ -14,7 +14,7 @@ from tabsdata._io.plugin import SourcePlugin
 from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
-    InputConfigurationError,
+    SourceConfigurationError,
 )
 
 
@@ -57,9 +57,9 @@ def test_all_correct_single_parameter_uri():
 
 def test_list_of_integers_raises_exception():
     uri = [1, 2, "hi"]
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         LocalFileSource(uri)
-    assert e.value.error_code == ErrorCode.ICE13
+    assert e.value.error_code == ErrorCode.SOCE13
 
 
 def test_all_correct_implicit_format():
@@ -84,9 +84,9 @@ def test_all_correct_explicit_format():
 
 def test_wrong_scheme_raises_value_error():
     path = "wrongscheme://path/to/data/data.csv"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         LocalFileSource(path)
-    assert e.value.error_code == ErrorCode.ICE14
+    assert e.value.error_code == ErrorCode.SOCE14
 
 
 def test_path_list():
@@ -100,9 +100,9 @@ def test_path_list():
 
 def test_path_wrong_type_raises_type_error():
     path = 42
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         LocalFileSource(path)
-    assert e.value.error_code == ErrorCode.ICE13
+    assert e.value.error_code == ErrorCode.SOCE13
 
 
 def test_format_from_path_list():
@@ -229,18 +229,18 @@ def test_initial_last_modified_invalid_string():
     path = "file://path/to/data/data"
     format = "csv"
     time = "wrong_time"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         LocalFileSource(path, format=format, initial_last_modified=time)
-    assert e.value.error_code == ErrorCode.ICE5
+    assert e.value.error_code == ErrorCode.SOCE5
 
 
 def test_initial_last_modified_invalid_string_no_timezone():
     path = "file://path/to/data/data"
     format = "csv"
     time = "2024-09-05T01:01:00.01"
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         LocalFileSource(path, format=format, initial_last_modified=time)
-    assert e.value.error_code == ErrorCode.ICE41
+    assert e.value.error_code == ErrorCode.SOCE41
 
 
 def test_initial_last_modified_valid_datetime():
@@ -257,18 +257,18 @@ def test_initial_last_modified_invalid_datetime_no_timezone():
     path = "file://path/to/data/data"
     format = "csv"
     time = datetime.datetime(2024, 9, 5, 1, 1, 0, 10000)
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         LocalFileSource(path, format=format, initial_last_modified=time)
-    assert e.value.error_code == ErrorCode.ICE41
+    assert e.value.error_code == ErrorCode.SOCE41
 
 
 def test_initial_last_modified_invalid_type():
     path = "file://path/to/data/data"
     format = "csv"
     time = 123
-    with pytest.raises(InputConfigurationError) as e:
+    with pytest.raises(SourceConfigurationError) as e:
         LocalFileSource(path, format=format, initial_last_modified=time)
-    assert e.value.error_code == ErrorCode.ICE6
+    assert e.value.error_code == ErrorCode.SOCE6
 
 
 def test_update_path():

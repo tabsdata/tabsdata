@@ -18,9 +18,9 @@ from tabsdata._io.outputs.file_outputs import (
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._secret import DirectSecret
 from tabsdata.exceptions import (
+    DestinationConfigurationError,
     ErrorCode,
     FormatConfigurationError,
-    OutputConfigurationError,
 )
 
 TEST_ACCESS_KEY_ID = "test_access_key_id"
@@ -163,9 +163,9 @@ def test_update_credentials():
 def test_wrong_type_credentials_raises_error():
     uri = ["s3://path/to/data/data.csv", "s3://path/to/data/data2.csv"]
     credentials = UserPasswordCredentials("username", "password")
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         S3Destination(uri, credentials)
-    assert e.value.error_code == ErrorCode.OCE19
+    assert e.value.error_code == ErrorCode.DECE19
 
 
 def test_all_correct_explicit_format():
@@ -180,23 +180,23 @@ def test_all_correct_explicit_format():
 
 def test_wrong_scheme_raises_value_error():
     uri = "wrongscheme://path/to/data/data.csv"
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         S3Destination(uri, S3_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE12
+    assert e.value.error_code == ErrorCode.DECE12
 
 
 def test_empty_scheme_raises_value_error():
     uri = "path/to/data/data.csv"
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         S3Destination(uri, S3_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE12
+    assert e.value.error_code == ErrorCode.DECE12
 
 
 def test_list_of_integers_raises_exception():
     uri = [1, 2, "hi"]
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         S3Destination(uri, S3_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE17
+    assert e.value.error_code == ErrorCode.DECE17
 
 
 def test_uri_list():
@@ -210,9 +210,9 @@ def test_uri_list():
 
 def test_uri_wrong_type_raises_type_error():
     uri = 42
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         S3Destination(uri, S3_CREDENTIALS)
-    assert e.value.error_code == ErrorCode.OCE17
+    assert e.value.error_code == ErrorCode.DECE17
 
 
 def test_format_from_uri_list():
@@ -295,9 +295,9 @@ def test_region():
 def test_region_wrong_type_raises_error():
     uri = "s3://uri/to/data/data.csv"
     region = 42
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         S3Destination(uri, S3_CREDENTIALS, region=region)
-    assert e.value.error_code == ErrorCode.OCE18
+    assert e.value.error_code == ErrorCode.DECE18
 
 
 def test_allow_fragments():
@@ -347,23 +347,23 @@ def test_wrong_format_fails():
     uri = "s3://uri/to/data/data"
     output = S3Destination(uri, S3_CREDENTIALS, catalog=catalog, format=ParquetFormat())
     assert output.catalog == catalog
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         output.format = CSVFormat()
-    assert e.value.error_code == ErrorCode.OCE37
+    assert e.value.error_code == ErrorCode.DECE37
 
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         S3Destination(uri, S3_CREDENTIALS, catalog=catalog, format=CSVFormat())
-    assert e.value.error_code == ErrorCode.OCE37
+    assert e.value.error_code == ErrorCode.DECE37
 
     output = S3Destination("s3://uri/to/data/data.csv", S3_CREDENTIALS)
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         output.catalog = catalog
-    assert e.value.error_code == ErrorCode.OCE37
+    assert e.value.error_code == ErrorCode.DECE37
 
 
 def test_catalog_wrong_type_raises_exception():
     uri = "s3://uri/to/data/data.csv"
     catalog = 42
-    with pytest.raises(OutputConfigurationError) as e:
+    with pytest.raises(DestinationConfigurationError) as e:
         S3Destination(uri, S3_CREDENTIALS, catalog=catalog)
-    assert e.value.error_code == ErrorCode.OCE34
+    assert e.value.error_code == ErrorCode.DECE34
