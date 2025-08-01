@@ -10,9 +10,9 @@ import polars as pl
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
-from tabsdata.extensions.features.api.features import Feature, FeaturesManager
-from tabsdata.extensions.tableframe.api.api import Extension
-from tabsdata.extensions.tableframe.version import version
+from tabsdata.extensions._features.api.features import Feature, FeaturesManager
+from tabsdata.extensions._tableframe.api.api import Extension
+from tabsdata.extensions._tableframe.version import version
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

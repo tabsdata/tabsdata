@@ -44,7 +44,7 @@ import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.group_by as td_group_by
 from tabsdata._utils.annotations import pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
-from tabsdata.extensions.tableframe.extension import TableFrameExtension
+from tabsdata.extensions._tableframe.extension import TableFrameExtension
 
 if TYPE_CHECKING:
     import pandas as pd

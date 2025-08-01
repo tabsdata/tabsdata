@@ -22,7 +22,7 @@ from tabsdata._utils.tableframe._translator import (
     _unwrap_table_frame,
     _wrap_polars_frame,
 )
-from tabsdata.extensions.tableframe.extension import SystemColumns
+from tabsdata.extensions._tableframe.extension import SystemColumns
 from tabsdata.tableframe import selectors as td_selectors
 
 # noinspection PyUnresolvedReferences

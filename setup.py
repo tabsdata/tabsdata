@@ -645,25 +645,25 @@ setup(
                 "tabsdata._examples*",
             ],
         ),
-        # tabsdata.extensions.features.api
+        # tabsdata.extensions._features.api
         *find_packages(
             where=os.path.join(
                 "client",
                 "td-lib",
                 "ta_features",
             ),
-            include=["tabsdata.extensions.features.api*"],
+            include=["tabsdata.extensions._features.api*"],
         ),
-        # tabsdata.extensions.tableframe.api
+        # tabsdata.extensions._tableframe.api
         *find_packages(
             where=os.path.join(
                 "client",
                 "td-lib",
                 "ta_tableframe",
             ),
-            include=["tabsdata.extensions.tableframe.api*"],
+            include=["tabsdata.extensions._tableframe.api*"],
         ),
-        # tabsdata.extensions.tableframe
+        # tabsdata.extensions._tableframe
         *find_packages(
             where=os.path.join(
                 "extensions",
@@ -671,7 +671,7 @@ setup(
                 "td-lib",
                 "te_tableframe",
             ),
-            include=["tabsdata.extensions.tableframe*"],
+            include=["tabsdata.extensions._tableframe*"],
         ),
         # tabsdata.expansions.tableframe
         *find_packages(
@@ -691,32 +691,32 @@ setup(
             "td-sdk",
             "tabsdata",
         ),
-        "tabsdata.extensions.features.api": os.path.join(
+        "tabsdata.extensions._features.api": os.path.join(
             "client",
             "td-lib",
             "ta_features",
             "tabsdata",
             "extensions",
-            "features",
+            "_features",
             "api",
         ),
-        "tabsdata.extensions.tableframe.api": os.path.join(
+        "tabsdata.extensions._tableframe.api": os.path.join(
             "client",
             "td-lib",
             "ta_tableframe",
             "tabsdata",
             "extensions",
-            "tableframe",
+            "_tableframe",
             "api",
         ),
-        "tabsdata.extensions.tableframe": os.path.join(
+        "tabsdata.extensions._tableframe": os.path.join(
             "extensions",
             "python",
             "td-lib",
             "te_tableframe",
             "tabsdata",
             "extensions",
-            "tableframe",
+            "_tableframe",
         ),
         "tabsdata.expansions.tableframe": os.path.join(
             "expansions",

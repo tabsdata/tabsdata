@@ -22,7 +22,7 @@ from tabsdata._utils.tableframe._translator import (
     _wrap_polars_frame,
 )
 from tabsdata.exceptions import TableFrameError
-from tabsdata.extensions.tableframe.extension import SystemColumns
+from tabsdata.extensions._tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
 from tabsdata.tableframe.lazyframe.frame import _assemble_system_columns

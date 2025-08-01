@@ -13,7 +13,7 @@ import polars as pl
 import tabsdata._utils.tableframe._constants as td_constants
 import tabsdata._utils.tableframe._helpers as td_helpers
 from tabsdata.exceptions import ErrorCode, TableFrameError
-from tabsdata.extensions.tableframe.extension import TableFrameExtension
+from tabsdata.extensions._tableframe.extension import TableFrameExtension
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

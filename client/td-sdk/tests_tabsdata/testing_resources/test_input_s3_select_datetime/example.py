@@ -11,7 +11,7 @@ from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 import tabsdata as td
 from tabsdata._utils.bundle_utils import create_bundle_archive
-from tabsdata.extensions.tableframe.extension import SystemColumns
+from tabsdata.extensions._tableframe.extension import SystemColumns
 
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 ROOT_PROJECT_DIR = os.path.dirname(

@@ -17,7 +17,7 @@ from tabsdata._utils.annotations import pydoc
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe import _constants as td_constants
-from tabsdata.extensions.tableframe.extension import SystemColumns
+from tabsdata.extensions._tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
 from tabsdata.tableframe import _typing as td_typing

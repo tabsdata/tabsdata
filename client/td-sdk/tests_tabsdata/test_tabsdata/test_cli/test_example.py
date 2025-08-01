@@ -15,7 +15,7 @@ from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
 
 from tabsdata._cli.cli import cli
 from tabsdata._tabsdatafunction import TabsdataFunction
-from tabsdata.extensions.tableframe.extension_test import instance as checker
+from tabsdata.extensions._tableframe.extension_test import instance as checker
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -45,23 +45,23 @@ def test_examples(login, tabsserver_connection):
     import tabsdata.extensions
 
     print(f"tabsdata.extensions namespace locations: {tabsdata.extensions.__path__}")
-    import tabsdata.extensions.tableframe
+    import tabsdata.extensions._tableframe
 
     print(
-        "tabsdata.extensions.tableframe namespace locations: "
-        f"{tabsdata.extensions.tableframe.__path__}"
+        "tabsdata.extensions._tableframe namespace locations: "
+        f"{tabsdata.extensions._tableframe.__path__}"
     )
-    import tabsdata.extensions.tableframe.extension
+    import tabsdata.extensions._tableframe.extension
 
     print(
-        "tabsdata.extensions.tableframe.extension: "
-        f"{tabsdata.extensions.tableframe.extension.__file__}"
+        "tabsdata.extensions._tableframe.extension: "
+        f"{tabsdata.extensions._tableframe.extension.__file__}"
     )
-    import tabsdata.extensions.tableframe.extension
+    import tabsdata.extensions._tableframe.extension
 
     print(
-        "tabsdata.extensions.tableframe.extension_test: "
-        f"{tabsdata.extensions.tableframe.extension_test.__file__}"
+        "tabsdata.extensions._tableframe.extension_test: "
+        f"{tabsdata.extensions._tableframe.extension_test.__file__}"
     )
 
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as working_folder:
