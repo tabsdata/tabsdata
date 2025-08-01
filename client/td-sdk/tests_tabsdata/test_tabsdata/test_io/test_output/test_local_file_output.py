@@ -8,12 +8,11 @@ import pytest
 from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, NDJSONFormat, ParquetFormat
-from tabsdata._io.output import (
+from tabsdata._io.outputs.file_outputs import (
     FRAGMENT_INDEX_PLACEHOLDER,
     LocalFileDestination,
-    Output,
-    build_output,
 )
+from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
@@ -44,19 +43,8 @@ def test_all_correct_single_parameter_list():
     assert output.path == path
     assert isinstance(output.format, CSVFormat)
     assert isinstance(output, LocalFileDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        LocalFileDestination.IDENTIFIER: {
-            LocalFileDestination.PATH_KEY: path,
-            LocalFileDestination.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            #            LocalFileDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
 
 
 def test_all_correct_single_parameter_uri():
@@ -65,19 +53,8 @@ def test_all_correct_single_parameter_uri():
     assert output.path == path
     assert isinstance(output.format, CSVFormat)
     assert isinstance(output, LocalFileDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        LocalFileDestination.IDENTIFIER: {
-            LocalFileDestination.PATH_KEY: [path],
-            LocalFileDestination.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            #            LocalFileDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
 
 
 def test_list_of_integers_raises_exception():
@@ -93,19 +70,8 @@ def test_all_correct_implicit_format():
     assert output.path == path
     assert isinstance(output.format, CSVFormat)
     assert isinstance(output, LocalFileDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        LocalFileDestination.IDENTIFIER: {
-            LocalFileDestination.PATH_KEY: [path],
-            LocalFileDestination.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            #            LocalFileDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
+    assert isinstance(output, DestinationPlugin)
     assert output.__repr__()
-    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
 
 
 def test_all_correct_explicit_format():
@@ -115,31 +81,7 @@ def test_all_correct_explicit_format():
     assert output.path == path
     assert isinstance(output.format, CSVFormat)
     assert isinstance(output, LocalFileDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        LocalFileDestination.IDENTIFIER: {
-            LocalFileDestination.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            #            LocalFileDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
-
-
-def test_identifier_string_unchanged():
-    path = "file://path/to/data/data"
-    format = "csv"
-    output = LocalFileDestination(path, format=format)
-    expected_dict = {
-        "localfile-output": {
-            LocalFileDestination.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]},
-            #            LocalFileDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
+    assert isinstance(output, DestinationPlugin)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -185,16 +127,7 @@ def test_correct_dict_format():
     assert isinstance(output.format, CSVFormat)
     assert output.format._to_dict() == {CSVFormat.IDENTIFIER: expected_format}
     assert isinstance(output, LocalFileDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        LocalFileDestination.IDENTIFIER: {
-            LocalFileDestination.PATH_KEY: [path],
-            "format": {CSVFormat.IDENTIFIER: expected_format},
-            #            LocalFileDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert isinstance(build_output(output._to_dict()), LocalFileDestination)
+    assert isinstance(output, DestinationPlugin)
 
 
 def test_incorrect_file_format_raises_error():
@@ -240,35 +173,6 @@ def test_wrong_type_format_raises_type_error():
     with pytest.raises(FormatConfigurationError) as e:
         LocalFileDestination(path, format=format)
     assert e.value.error_code == ErrorCode.FOCE5
-
-
-def test_same_output_eq():
-    path = "file://path/to/data/data"
-    format = "csv"
-    output = LocalFileDestination(path, format=format)
-    output2 = LocalFileDestination(path, format=format)
-    assert output == output2
-
-
-def test_different_output_not_eq():
-    path = "file://path/to/data/data"
-    format = "csv"
-    output = LocalFileDestination(path, format=format)
-    output2 = LocalFileDestination(path, format="ndjson")
-    assert output != output2
-
-
-def test_output_not_eq_dict():
-    path = "file://path/to/data/data"
-    format = "csv"
-    output = LocalFileDestination(path, format=format)
-    assert output._to_dict() != output
-
-
-def test_build_output_wrong_type_raises_error():
-    with pytest.raises(OutputConfigurationError) as e:
-        build_output(42)
-    assert e.value.error_code == ErrorCode.OCE7
 
 
 def test_update_path():

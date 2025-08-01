@@ -190,7 +190,7 @@ def test_subscriber_all_correct():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == LocalFileDestination("output.csv")
+    assert isinstance(func.output, LocalFileDestination)
     assert func.trigger_by is None
 
 
@@ -201,7 +201,7 @@ def test_subscriber_all_correct_with_tables_string():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == LocalFileDestination("output.csv")
+    assert isinstance(func.output, LocalFileDestination)
     assert func.trigger_by is None
 
 
@@ -212,7 +212,7 @@ def test_subscriber_all_correct_with_tables_string_list():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == LocalFileDestination("output.csv")
+    assert isinstance(func.output, LocalFileDestination)
     assert func.trigger_by is None
 
 
@@ -225,7 +225,7 @@ def test_subscriber_trigger_by_all_deps():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == LocalFileDestination("output.csv")
+    assert isinstance(func.output, LocalFileDestination)
     assert func.trigger_by is None
 
 
@@ -238,7 +238,7 @@ def test_subscriber_trigger_by_none():
 
     assert func.name == "func"
     assert isinstance(func.input, TableInput)
-    assert func.output == LocalFileDestination("output.csv")
+    assert isinstance(func.output, LocalFileDestination)
     assert func.trigger_by == []
 
 
@@ -260,5 +260,5 @@ def test_subscriber_with_optional_parameters():
 
     assert func.name == "func_name"
     assert isinstance(func.input, TableInput)
-    assert func.output == LocalFileDestination("output.csv")
+    assert isinstance(func.output, LocalFileDestination)
     assert func.trigger_by == ["trigger_table"]

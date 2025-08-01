@@ -10,13 +10,11 @@ from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, ParquetFormat
 from tabsdata._credentials import AzureAccountKeyCredentials, UserPasswordCredentials
-from tabsdata._io.output import (
+from tabsdata._io.outputs.file_outputs import (
     FRAGMENT_INDEX_PLACEHOLDER,
     AzureDestination,
-    Output,
-    build_output,
 )
-from tabsdata._secret import DirectSecret
+from tabsdata._io.plugin import DestinationPlugin
 from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
@@ -29,16 +27,6 @@ AZURE_CREDENTIALS = AzureAccountKeyCredentials(
     account_name=TEST_ACCOUNT_NAME,
     account_key=TEST_ACCOUNT_KEY,
 )
-CREDENTIALS_DICT = {
-    AzureAccountKeyCredentials.IDENTIFIER: {
-        AzureAccountKeyCredentials.ACCOUNT_NAME_KEY: (
-            DirectSecret(TEST_ACCOUNT_NAME)._to_dict()
-        ),
-        AzureAccountKeyCredentials.ACCOUNT_KEY_KEY: (
-            DirectSecret(TEST_ACCOUNT_KEY)._to_dict()
-        ),
-    }
-}
 
 
 def test_all_correct_implicit_format():
@@ -47,20 +35,8 @@ def test_all_correct_implicit_format():
     assert output.uri == uri
     assert isinstance(output.format, CSVFormat)
     assert isinstance(output, AzureDestination)
-    assert isinstance(output, Output)
+    assert isinstance(output, DestinationPlugin)
     assert output.credentials == AZURE_CREDENTIALS
-    expected_dict = {
-        AzureDestination.IDENTIFIER: {
-            AzureDestination.URI_KEY: [uri],
-            AzureDestination.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            #            AzureDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert isinstance(build_output(output._to_dict()), AzureDestination)
     assert output.__repr__()
 
 
@@ -70,28 +46,9 @@ def test_all_correct_uri_list():
     assert output.uri == uri
     assert isinstance(output.format, CSVFormat)
     assert isinstance(output, AzureDestination)
-    assert isinstance(output, Output)
+    assert isinstance(output, DestinationPlugin)
     assert output.credentials == AZURE_CREDENTIALS
-    expected_dict = {
-        AzureDestination.IDENTIFIER: {
-            AzureDestination.URI_KEY: uri,
-            AzureDestination.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            #            AzureDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert isinstance(build_output(output._to_dict()), AzureDestination)
     assert output.__repr__()
-
-
-def test_same_output_eq():
-    uri = ["az://path/to/data/data.csv", "az://path/to/data/data2.csv"]
-    output = AzureDestination(uri, AZURE_CREDENTIALS)
-    output2 = AzureDestination(uri, AZURE_CREDENTIALS)
-    assert output == output2
 
 
 def test_uri_list_update_to_string():
@@ -232,19 +189,7 @@ def test_all_correct_explicit_format():
     assert output.uri == uri
     assert isinstance(output.format, CSVFormat)
     assert isinstance(output, AzureDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        AzureDestination.IDENTIFIER: {
-            AzureDestination.URI_KEY: [uri],
-            AzureDestination.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            #            AzureDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert isinstance(build_output(output._to_dict()), AzureDestination)
+    assert isinstance(output, DestinationPlugin)
 
 
 def test_wrong_scheme_raises_value_error():
@@ -310,17 +255,7 @@ def test_correct_format_object():
     output = AzureDestination(uri, AZURE_CREDENTIALS, format=format)
     assert output.format._to_dict()[CSVFormat.IDENTIFIER] == expected_format
     assert isinstance(output, AzureDestination)
-    assert isinstance(output, Output)
-    expected_dict = {
-        AzureDestination.IDENTIFIER: {
-            AzureDestination.URI_KEY: [uri],
-            AzureDestination.FORMAT_KEY: {CSVFormat.IDENTIFIER: expected_format},
-            AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            #            AzureDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert isinstance(build_output(output._to_dict()), AzureDestination)
+    assert isinstance(output, DestinationPlugin)
 
 
 def test_incorrect_data_format_raises_value_error():
@@ -359,30 +294,6 @@ def test_wrong_type_format_raises_type_error():
     with pytest.raises(FormatConfigurationError) as e:
         AzureDestination(uri, AZURE_CREDENTIALS, format=format)
     assert e.value.error_code == ErrorCode.FOCE5
-
-
-def test_build_output_wrong_type_raises_error():
-    with pytest.raises(OutputConfigurationError) as e:
-        build_output(42)
-    assert e.value.error_code == ErrorCode.OCE7
-
-
-def test_identifier_string_unchanged():
-    uri = "az://path/to/data/data"
-    format = "csv"
-    output = AzureDestination(uri, AZURE_CREDENTIALS, format=format)
-    expected_dict = {
-        "azure-output": {
-            AzureDestination.URI_KEY: [uri],
-            AzureDestination.FORMAT_KEY: {
-                CSVFormat.IDENTIFIER: FORMAT_TYPE_TO_CONFIG["csv"]
-            },
-            AzureDestination.CREDENTIALS_KEY: CREDENTIALS_DICT,
-            #            AzureDestination.CATALOG_KEY: None,
-        }
-    }
-    assert output._to_dict() == expected_dict
-    assert isinstance(build_output(output._to_dict()), AzureDestination)
 
 
 def test_allow_fragments():

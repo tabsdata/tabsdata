@@ -5,7 +5,7 @@
 import pytest
 
 import tabsdata as td
-from tabsdata._io.output import AWSGlue, build_catalog
+from tabsdata._io.outputs.file_outputs import AWSGlue, build_catalog
 from tabsdata._secret import DirectSecret, EnvironmentSecret
 from tabsdata.exceptions import (
     CredentialsConfigurationError,

@@ -16,14 +16,16 @@ from tabsdata._io.inputs.sql_inputs import (
 )
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.output import (
-    AzureDestination,
-    LocalFileDestination,
     MariaDBDestination,
     MySQLDestination,
     OracleDestination,
     PostgresDestination,
-    S3Destination,
     TableOutput,
+)
+from tabsdata._io.outputs.file_outputs import (
+    AzureDestination,
+    LocalFileDestination,
+    S3Destination,
 )
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._tabsdatafunction import TabsdataFunction

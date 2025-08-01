@@ -97,18 +97,6 @@ def test_output_azure_parquet(tmp_path, azure_client):
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_parquet(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_azure",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
-
         blob_client = azure_client.get_blob_client(
             container=container_name, blob=blob_name
         )
@@ -187,19 +175,6 @@ def test_output_azure_csv(tmp_path, azure_client):
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.csv")
-        assert os.path.isfile(temporary_output_file)
-        # ToDo: Undo when https://github.com/pola-rs/polars/issues/21802 fix is available
-        output = pl.read_csv(temporary_output_file, separator=",", eol_char="\n")
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_azure",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
-
         blob_client = azure_client.get_blob_client(
             container=container_name, blob=blob_name
         )
@@ -273,18 +248,6 @@ def test_output_azure_ndjson(tmp_path, azure_client):
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.ndjson")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_ndjson(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_azure",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
 
         blob_client = azure_client.get_blob_client(
             container=container_name, blob=blob_name

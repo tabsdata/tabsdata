@@ -312,6 +312,27 @@ class DestinationPlugin:
         object_method = getattr(self.__class__, method_name)
         return object_method is not class_method
 
+    @property
+    def _stream_require_ec(self) -> bool:
+        """
+        Indicates whether the stream method requires an execution context.
+
+        Returns:
+            bool: True if the stream method requires an execution context,
+            False otherwise.
+        """
+        return False
+
+    def _stream_requires_execution_context(self) -> bool:
+        """
+        Indicates whether the plugin requires the execution context to be passed to
+        the stream method. If True, the stream method will be called with the
+        execution context as an argument.
+        """
+        return not self._is_overridden("stream") or (
+            hasattr(self, "_stream_require_ec") and self._stream_require_ec
+        )
+
     def _run(self, execution_context: ExecutionContext, results: ResultsCollection):
         self._tabsdata_internal_logger = execution_context.logger
         logger = self._tabsdata_internal_logger
@@ -347,13 +368,13 @@ class DestinationPlugin:
             results_to_provide.append(intermediate_result)
         logger.info("Exporting files with plugin stream method")
         # For a custom stream implementations, method is executed as is.
-        if self._is_overridden("stream"):
-            self.stream(execution_context.paths.output_folder, *results_to_provide)
+        if self._stream_requires_execution_context():
+            with td_context(self, execution_context):
+                self.stream(execution_context.paths.output_folder, *results_to_provide)
         else:
             # For the core stream implementations, method is executed as with the
             # execution context.
-            with td_context(self, execution_context):
-                self.stream(execution_context.paths.output_folder, *results_to_provide)
+            self.stream(execution_context.paths.output_folder, *results_to_provide)
         logger.info("Exported files with plugin stream method successfully")
 
     def stream(self, working_dir: str, *results: VALID_PLUGIN_RESULT):

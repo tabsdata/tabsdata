@@ -100,18 +100,6 @@ def test_output_s3_parquet(tmp_path, s3_client):
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_parquet(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_s3",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
-
         copy_destination = os.path.join(tmp_path, "output.parquet")
         s3_client.download_file(bucket_name, file_name, copy_destination)
         output = pl.read_parquet(copy_destination)
@@ -173,18 +161,6 @@ def test_output_s3_parquet_with_transaction_id(tmp_path, s3_client):
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_parquet(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_s3",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
 
         copy_destination = os.path.join(tmp_path, "output.parquet")
         s3_client.download_file(bucket_name, file_name, copy_destination)
@@ -248,18 +224,6 @@ def test_output_s3_parquet_with_function_run_id(tmp_path, s3_client):
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_parquet(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_s3",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
-
         copy_destination = os.path.join(tmp_path, "output.parquet")
         s3_client.download_file(bucket_name, file_name, copy_destination)
         output = pl.read_parquet(copy_destination)
@@ -321,18 +285,6 @@ def test_output_s3_parquet_with_execution_id(tmp_path, s3_client):
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_parquet(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_s3",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
-
         copy_destination = os.path.join(tmp_path, "output.parquet")
         s3_client.download_file(bucket_name, file_name, copy_destination)
         output = pl.read_parquet(copy_destination)
@@ -393,18 +345,6 @@ def test_output_s3_parquet_with_export_timestamp(tmp_path, s3_client):
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_parquet(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_s3",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
 
         response = s3_client.list_objects_v2(Bucket=bucket_name)
         # Check if the bucket contains any files
@@ -478,18 +418,6 @@ def test_output_s3_parquet_with_trigger_timestamp(tmp_path, s3_client):
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_parquet(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_s3",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
-
         response = s3_client.list_objects_v2(Bucket=bucket_name)
         # Check if the bucket contains any files
         if "Contents" in response:
@@ -562,18 +490,6 @@ def test_output_s3_parquet_with_scheduler_timestamp(tmp_path, s3_client):
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.parquet")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_parquet(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_s3",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
 
         response = s3_client.list_objects_v2(Bucket=bucket_name)
         # Check if the bucket contains any files
@@ -653,19 +569,6 @@ def test_output_s3_csv(tmp_path, s3_client):
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
 
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.csv")
-        assert os.path.isfile(temporary_output_file)
-        # ToDo: Undo when https://github.com/pola-rs/polars/issues/21802 fix is available
-        output = pl.read_csv(temporary_output_file, separator=",", eol_char="\n")
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_s3",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
-
         copy_destination = os.path.join(tmp_path, "output.csv")
         s3_client.download_file(bucket_name, file_name, copy_destination)
         # ToDo: Undo when https://github.com/pola-rs/polars/issues/21802 fix is available
@@ -726,18 +629,6 @@ def test_output_s3_ndjson(tmp_path, s3_client):
         )
         assert result == 0
         assert os.path.exists(os.path.join(response_folder, RESPONSE_FILE_NAME))
-
-        temporary_output_file = os.path.join(tabsserver_output_folder, "0.ndjson")
-        assert os.path.isfile(temporary_output_file)
-        output = pl.read_ndjson(temporary_output_file)
-        output = clean_polars_df(output)
-        expected_output_file = os.path.join(
-            TESTING_RESOURCES_FOLDER,
-            "test_output_s3",
-            "expected_result.json",
-        )
-        expected_output = read_json_and_clean(expected_output_file)
-        assert output.equals(expected_output)
 
         copy_destination = os.path.join(tmp_path, "output.ndjson")
         s3_client.download_file(bucket_name, file_name, copy_destination)

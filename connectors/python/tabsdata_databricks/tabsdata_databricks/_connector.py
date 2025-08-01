@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, List, Literal
 
 import polars as pl
 
-from tabsdata._io.output import IfTableExistsStrategy, SchemaStrategy
+from tabsdata._io.outputs.shared_enums import IfTableExistsStrategy, SchemaStrategy
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._secret import DirectSecret, Secret
 
