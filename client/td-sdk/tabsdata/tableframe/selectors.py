@@ -22,6 +22,14 @@ from tabsdata.extensions._tableframe.extension import SystemColumns
 # noinspection PyProtectedMember
 from tabsdata.tableframe import _typing as td_typing
 
+
+# noinspection PyPep8Naming
+class SelectorProxy(td_expr.Expr):
+    # noinspection PyProtectedMember
+    def __init__(self, expr: pl.selectors._selector_proxy_):
+        super().__init__(expr)
+
+
 """
 Selectors by position.
 """
@@ -29,7 +37,7 @@ Selectors by position.
 
 # noinspection PyShadowingBuiltins
 @pydoc(categories="projection")
-def all() -> td_expr.Expr:
+def all() -> SelectorProxy:
     """
     Select all columns in a TableFrame.
 
@@ -75,14 +83,14 @@ def all() -> td_expr.Expr:
         │ 8   ┆ "h"  │
         └─────┴──────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.all()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def first() -> td_expr.Expr:
+def first() -> SelectorProxy:
     """
     Select the first column in the TableFrame.
 
@@ -129,14 +137,14 @@ def first() -> td_expr.Expr:
         │ 108 │
         └─────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.first()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def last() -> td_expr.Expr:
+def last() -> SelectorProxy:
     """
     Select the last column in the TableFrame.
 
@@ -186,14 +194,14 @@ def last() -> td_expr.Expr:
         │ 87.5  │
         └───────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.by_index(-(len(SystemColumns) + 1))
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def by_index(*indices: int | range | Sequence[int | range]) -> td_expr.Expr:
+def by_index(*indices: int | range | Sequence[int | range]) -> SelectorProxy:
     """
     Select columns by their position in the TableFrame.
 
@@ -270,7 +278,7 @@ def by_index(*indices: int | range | Sequence[int | range]) -> td_expr.Expr:
         else:
             raise TypeError(f"Unsupported index type: {type(index)}")
 
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.by_index(*normalized_indices)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
@@ -282,7 +290,7 @@ Selectors by name.
 
 
 @pydoc(categories="projection")
-def by_name(*names: str | Collection[str], require_all: bool = True) -> td_expr.Expr:
+def by_name(*names: str | Collection[str], require_all: bool = True) -> SelectorProxy:
     """
     Select all columns whose names match any given names.
 
@@ -334,14 +342,14 @@ def by_name(*names: str | Collection[str], require_all: bool = True) -> td_expr.
         │ "Hugo" ┆ 89.5  │
         └────────┴───────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.by_name(*names, require_all=require_all)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def contains(*substring: str) -> td_expr.Expr:
+def contains(*substring: str) -> SelectorProxy:
     """
     Select all columns whose names contain one or more of the given substrings.
 
@@ -388,14 +396,14 @@ def contains(*substring: str) -> td_expr.Expr:
         │ 8      ┆ "H"      │
         └────────┴──────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.contains(*substring)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def starts_with(*prefix: str) -> td_expr.Expr:
+def starts_with(*prefix: str) -> SelectorProxy:
     """
     Select all columns whose names start with any of the given prefixes.
 
@@ -446,14 +454,14 @@ def starts_with(*prefix: str) -> td_expr.Expr:
         │ "Hana"   ┆ 89       │
         └──────────┴──────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.starts_with(*prefix)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def ends_with(*suffix: str) -> td_expr.Expr:
+def ends_with(*suffix: str) -> SelectorProxy:
     """
     Select all columns whose names end with any of the given suffixes.
 
@@ -504,14 +512,14 @@ def ends_with(*suffix: str) -> td_expr.Expr:
         │ 8    ┆ 107    ┆ 208       │
         └──────┴────────┴───────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.ends_with(*suffix)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def matches(pattern: str) -> td_expr.Expr:
+def matches(pattern: str) -> SelectorProxy:
     """
     Select all columns whose names match a regular expression pattern.
 
@@ -562,14 +570,14 @@ def matches(pattern: str) -> td_expr.Expr:
         │ 8    ┆ 1    │
         └──────┴──────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.matches(pattern=pattern)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def alpha(ascii_only: bool = False, *, ignore_spaces: bool = False) -> td_expr.Expr:
+def alpha(ascii_only: bool = False, *, ignore_spaces: bool = False) -> SelectorProxy:
     """
     Select all columns with names made up of only alphabetic characters.
 
@@ -620,7 +628,7 @@ def alpha(ascii_only: bool = False, *, ignore_spaces: bool = False) -> td_expr.E
         │ "Hana"  ┆  84   │
         └─────────┴───────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.alpha(ascii_only=ascii_only, ignore_spaces=ignore_spaces)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
@@ -631,7 +639,7 @@ def alphanumeric(
     ascii_only: bool = False,
     *,
     ignore_spaces: bool = False,
-) -> td_expr.Expr:
+) -> SelectorProxy:
     """
     Select all columns whose names contain only letters and digits.
 
@@ -683,14 +691,14 @@ def alphanumeric(
         │  108   ┆  80   ┆ "h"   │
         └────────┴───────┴───────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.alphanumeric(ascii_only=ascii_only, ignore_spaces=ignore_spaces)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def digit(ascii_only: bool = False) -> td_expr.Expr:
+def digit(ascii_only: bool = False) -> SelectorProxy:
     """
     Select all columns whose names consist only of digit characters.
 
@@ -742,9 +750,10 @@ def digit(ascii_only: bool = False) -> td_expr.Expr:
         │ 800  ┆ 8   │
         └──────┴─────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.digit(ascii_only=ascii_only)
-    ) & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+        & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
+    )
 
 
 """
@@ -760,7 +769,7 @@ def by_dtype(
         | Iterable[td_typing.DataType]
         | Iterable[PythonDataType]
     ),
-) -> td_expr.Expr:
+) -> SelectorProxy:
     """
     Select all columns of the specified data type.
 
@@ -808,7 +817,7 @@ def by_dtype(
         │ 89.0  │
         └───────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.by_dtype(*dtypes)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
@@ -820,7 +829,7 @@ Selectors by abstract data types.
 
 
 @pydoc(categories="projection")
-def integer() -> td_expr.Expr:
+def integer() -> SelectorProxy:
     """
     Select all columns with integer data types.
 
@@ -868,14 +877,14 @@ def integer() -> td_expr.Expr:
         │ 8  ┆ 2     │
         └────┴───────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.integer()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def signed_integer() -> td_expr.Expr:
+def signed_integer() -> SelectorProxy:
     """
     Select all columns of signed integer data types.
 
@@ -923,14 +932,14 @@ def signed_integer() -> td_expr.Expr:
         │ 17     ┆ 1      │
         └────────┴────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.signed_integer()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def unsigned_integer() -> td_expr.Expr:
+def unsigned_integer() -> SelectorProxy:
     """
     Select all columns of unsigned integer data types.
 
@@ -980,7 +989,7 @@ def unsigned_integer() -> td_expr.Expr:
         │ 17     ┆ 96    ┆ 0      │
         └────────┴───────┴────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.unsigned_integer()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
@@ -988,7 +997,7 @@ def unsigned_integer() -> td_expr.Expr:
 
 # noinspection PyShadowingBuiltins
 @pydoc(categories="projection")
-def float() -> td_expr.Expr:
+def float() -> SelectorProxy:
     """
     Select all columns of float data types.
 
@@ -1035,14 +1044,14 @@ def float() -> td_expr.Expr:
         │ 86.5  │
         └───────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.float()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def numeric() -> td_expr.Expr:
+def numeric() -> SelectorProxy:
     """
     Select all columns of numeric data types.
 
@@ -1092,14 +1101,14 @@ def numeric() -> td_expr.Expr:
         │ 8  ┆ 89.0   │
         └────┴────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.numeric()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def temporal() -> td_expr.Expr:
+def temporal() -> SelectorProxy:
     """
     Select all columns of temporal data types.
 
@@ -1187,7 +1196,7 @@ def temporal() -> td_expr.Expr:
         │ 2024-01-08 16:00:00+00:00 ┆ 2024-01-08  ┆ 0:35:00  ┆ 16:00:00  │
         └───────────────────────────┴─────────────┴──────────┴───────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.temporal()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
@@ -1199,7 +1208,7 @@ Selectors by concrete data type.
 
 
 @pydoc(categories="projection")
-def binary() -> td_expr.Expr:
+def binary() -> SelectorProxy:
     """
     Select all columns of binary (bytes) data type.
 
@@ -1245,14 +1254,14 @@ def binary() -> td_expr.Expr:
         │ b"H8"  │
         └────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.binary()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def boolean() -> td_expr.Expr:
+def boolean() -> SelectorProxy:
     """
     Select all columns of boolean data type.
 
@@ -1298,14 +1307,14 @@ def boolean() -> td_expr.Expr:
         │ false   │
         └─────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.boolean()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def categorical() -> td_expr.Expr:
+def categorical() -> SelectorProxy:
     """
     Select all columns with categorical data type.
 
@@ -1354,14 +1363,14 @@ def categorical() -> td_expr.Expr:
         │ "B"      │
         └──────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.categorical()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def date() -> td_expr.Expr:
+def date() -> SelectorProxy:
     """
     Select all columns of date data type.
 
@@ -1425,7 +1434,7 @@ def date() -> td_expr.Expr:
         │ 2023-01-08 │
         └────────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.date()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
@@ -1438,7 +1447,7 @@ def datetime(
         "*",
         None,
     ),
-) -> td_expr.Expr:
+) -> SelectorProxy:
     """
     Select all columns of datetime data type.
 
@@ -1516,14 +1525,14 @@ def datetime(
         │ 2024-01-08 16:00:00+00:00 │
         └───────────────────────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.datetime(time_unit=time_unit, time_zone=time_zone)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def decimal() -> td_expr.Expr:
+def decimal() -> SelectorProxy:
     """
     Select all columns of decimal data type.
 
@@ -1574,7 +1583,7 @@ def decimal() -> td_expr.Expr:
         │ 11.45  │
         └────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.decimal()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
@@ -1583,7 +1592,7 @@ def decimal() -> td_expr.Expr:
 @pydoc(categories="projection")
 def duration(
     time_unit: TimeUnit | Collection[TimeUnit] | None = None,
-) -> td_expr.Expr:
+) -> SelectorProxy:
     """
     Select all columns of duration data type.
 
@@ -1644,7 +1653,7 @@ def duration(
         │ 40s      │
         └──────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.duration(time_unit=time_unit)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
@@ -1652,7 +1661,7 @@ def duration(
 
 # noinspection PyShadowingBuiltins
 @pydoc(categories="projection")
-def object() -> td_expr.Expr:
+def object() -> SelectorProxy:
     """
     Select all columns of object data type.
 
@@ -1703,14 +1712,14 @@ def object() -> td_expr.Expr:
         │ {"h": 8}   │
         └────────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.object()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def string(*, include_categorical: bool = False) -> td_expr.Expr:
+def string(*, include_categorical: bool = False) -> SelectorProxy:
     """
     Select all columns of string or categorical data type.
 
@@ -1760,14 +1769,14 @@ def string(*, include_categorical: bool = False) -> td_expr.Expr:
         │ "Hugo" ┆ "SE"    │
         └────────┴─────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.string(include_categorical=include_categorical)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
 
 
 @pydoc(categories="projection")
-def time() -> td_expr.Expr:
+def time() -> SelectorProxy:
     """
     Select columns of Python `time` values.
 
@@ -1817,7 +1826,7 @@ def time() -> td_expr.Expr:
         │ 16:55:00  │
         └───────────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.time()
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )
@@ -1838,7 +1847,7 @@ def exclude(
         | Collection[str | td_typing.DataType | td_expr.Expr]
     ),
     *more_columns: str | td_typing.DataType | td_expr.Expr,
-) -> td_expr.Expr:
+) -> SelectorProxy:
     """
     Exclude specific columns from selection by name, data type, expression, or selector.
 
@@ -1897,7 +1906,7 @@ def exclude(
         │ 8   ┆ "H"  │
         └───═─┴──────┘
     """
-    return td_expr.Expr(
+    return SelectorProxy(
         pl.selectors.exclude(columns=columns, *more_columns)
         & pl.selectors.exclude(pl.selectors.starts_with(td_constants.TD_COLUMN_PREFIX))
     )

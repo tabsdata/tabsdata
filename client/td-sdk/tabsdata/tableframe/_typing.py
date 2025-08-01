@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Mapping, Sequence, TypeAlias, Union
+from typing import TYPE_CHECKING, Literal, Mapping, Sequence, TypeAlias, Union
 
 import polars as pl
 
@@ -12,19 +12,48 @@ import polars as pl
 import polars._typing as pl_typing
 import polars.datatypes as pl_data_types
 
-TableDictionary = Mapping[str, Union[Sequence[object], Mapping[str, Sequence[object]]]]
+if TYPE_CHECKING:
+    from tabsdata.tableframe.selectors import SelectorProxy
 
-DataType: TypeAlias = Union["pl_data_types.DataTypeClass", "pl.DataType"]
+TableDictionary = Mapping[
+    str,
+    Union[
+        Sequence[object],
+        Mapping[
+            str,
+            Sequence[object],
+        ],
+    ],
+]
 
-# noinspection PyProtectedMember
-SelectorType: TypeAlias = pl.selectors._selector_proxy_
+DataType: TypeAlias = Union[
+    pl_data_types.DataTypeClass,
+    pl.DataType,
+]
 
-ColumnNameOrSelector: TypeAlias = Union[str, SelectorType]
+SelectorType: TypeAlias = "SelectorProxy"
 
-UniqueKeepStrategy: TypeAlias = Literal["first", "last", "any", "none"]
+ColumnNameOrSelector: TypeAlias = Union[
+    str,
+    SelectorType,
+]
+
+UniqueKeepStrategy: TypeAlias = Literal[
+    "first",
+    "last",
+    "any",
+    "none",
+]
 
 JoinStrategy: TypeAlias = Literal[
-    "inner", "left", "right", "full", "semi", "anti", "cross", "outer"
+    "inner",
+    "left",
+    "right",
+    "full",
+    "semi",
+    "anti",
+    "cross",
+    "outer",
 ]
 
 Schema: TypeAlias = pl.Schema
