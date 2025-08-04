@@ -6,9 +6,6 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-from tabsdata._api.tabsdata_server import (
-    TabsdataServer,
-)
 from tabsdata._cli.cli_utils import (
     MutuallyExclusiveOption,
     get_currently_pinned_object,
@@ -16,6 +13,9 @@ from tabsdata._cli.cli_utils import (
     logical_prompt,
     show_hint,
     verify_login_or_prompt,
+)
+from tabsdata.api.tabsdata_server import (
+    TabsdataServer,
 )
 
 

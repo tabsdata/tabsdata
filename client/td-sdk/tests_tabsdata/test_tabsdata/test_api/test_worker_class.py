@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from tabsdata._api.tabsdata_server import (
+from tabsdata.api.tabsdata_server import (
     Collection,
     Execution,
     Function,

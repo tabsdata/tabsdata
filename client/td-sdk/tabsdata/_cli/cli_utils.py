@@ -14,14 +14,14 @@ import rich_click as click
 from PIL import Image
 from rich_click import Option, UsageError
 
-from tabsdata._api.apiserver import (
+from tabsdata.api.apiserver import (
     BASE_API_URL,
     DEFAULT_TABSDATA_DIRECTORY,
     APIServer,
     APIServerError,
     obtain_connection,
 )
-from tabsdata._api.tabsdata_server import TabsdataServer
+from tabsdata.api.tabsdata_server import TabsdataServer
 
 CONNECTION_FILE = "connection.json"
 

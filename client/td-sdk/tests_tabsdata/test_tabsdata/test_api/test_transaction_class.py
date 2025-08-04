@@ -8,7 +8,7 @@ import time
 import pytest
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
-from tabsdata._api.tabsdata_server import (
+from tabsdata.api.tabsdata_server import (
     Collection,
     Execution,
     Function,

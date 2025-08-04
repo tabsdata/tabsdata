@@ -12,17 +12,6 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
-from tabsdata._api.status_utils.execution import EXECUTION_FINAL_STATUSES
-from tabsdata._api.status_utils.function_run import (
-    FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES,
-)
-from tabsdata._api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
-from tabsdata._api.tabsdata_server import (
-    Execution,
-    TabsdataServer,
-    Transaction,
-    function_type_to_mapping,
-)
 from tabsdata._cli.cli_utils import (
     DOT_FOLDER,
     beautify_list,
@@ -34,6 +23,17 @@ from tabsdata._cli.cli_utils import (
     logical_prompt,
     show_hint,
     verify_login_or_prompt,
+)
+from tabsdata.api.status_utils.execution import EXECUTION_FINAL_STATUSES
+from tabsdata.api.status_utils.function_run import (
+    FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES,
+)
+from tabsdata.api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
+from tabsdata.api.tabsdata_server import (
+    Execution,
+    TabsdataServer,
+    Transaction,
+    _function_type_to_mapping,
 )
 
 
@@ -149,7 +149,7 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
 
         else:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
-            function = server.function_get(coll, name)
+            function = server.get_function(coll, name)
 
             table = Table(title=f"Function '{name}' in collection '{coll}'")
             table.add_column("ID", style="cyan", no_wrap=True)
@@ -209,7 +209,7 @@ def list(ctx: click.Context, coll: str):
         for function in list_of_functions:
             table.add_row(
                 function.name,
-                function_type_to_mapping(function.type),
+                _function_type_to_mapping(function.type),
                 function.description,
                 function.defined_on_str,
                 function.defined_by,
@@ -373,17 +373,17 @@ def register(
 #
 #         status = status_to_mapping(data.get("status"))
 #         triggered_on = (
-#             convert_timestamp_to_string(data.get("triggered_on"))
+#             _convert_timestamp_to_string(data.get("triggered_on"))
 #             if data.get("triggered_on")
 #             else "-"
 #         )
 #         started_on = (
-#             convert_timestamp_to_string(data.get("started_on"))
+#             _convert_timestamp_to_string(data.get("started_on"))
 #             if data.get("started_on")
 #             else "-"
 #         )
 #         ended_on = (
-#             convert_timestamp_to_string(data.get("ended_on"))
+#             _convert_timestamp_to_string(data.get("ended_on"))
 #             if data.get("ended_on")
 #             else "-"
 #         )
@@ -681,7 +681,7 @@ def update(
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.function_update(
+        server.update_function(
             collection_name=coll,
             function_name=name,
             function_path=path,

@@ -17,9 +17,9 @@ from tests_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
 )
 
-from tabsdata._api.apiserver import BASE_API_URL, APIServerError
-from tabsdata._api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
-from tabsdata._api.tabsdata_server import (
+from tabsdata.api.apiserver import BASE_API_URL, APIServerError
+from tabsdata.api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
+from tabsdata.api.tabsdata_server import (
     Collection,
     DataVersion,
     Execution,
@@ -32,8 +32,8 @@ from tabsdata._api.tabsdata_server import (
     Transaction,
     User,
     Worker,
-    convert_timestamp_to_string,
-    top_and_convert_to_timestamp,
+    _convert_timestamp_to_string,
+    _top_and_convert_to_timestamp,
 )
 
 # noinspection PyUnresolvedReferences
@@ -66,7 +66,7 @@ def test_tabsdata_server_password_change(tabsserver_connection):
         tabsserver_connection.create_user(user_name, password)
         assert tabsserver_connection.get_user(user_name).name == user_name
         new_password = "test_tabsdata_server_password_change_new_password"
-        tabsserver_connection.password_change(user_name, password, new_password)
+        tabsserver_connection.change_password(user_name, password, new_password)
         # Re-authenticate with the new password
         assert TabsdataServer(APISERVER_URL, user_name, new_password)
         with pytest.raises(APIServerError):
@@ -236,7 +236,7 @@ def test_function_get(tabsserver_connection):
             ),
             local_packages=LOCAL_PACKAGES_LIST,
         )
-        function = tabsserver_connection.function_get(
+        function = tabsserver_connection.get_function(
             "test_function_get_collection", "test_input_plugin"
         )
         assert function.name == "test_input_plugin"
@@ -410,7 +410,7 @@ def test_function_update(tabsserver_connection):
                             'test_input_file_csv_modified_format', 'example.py')}"
             "::input_file_csv_modified_format"
         )
-        tabsserver_connection.function_update(
+        tabsserver_connection.update_function(
             "test_function_update_server_collection",
             "test_input_plugin",
             description=new_description,
@@ -792,7 +792,7 @@ def test_server_status_class():
 
 def test_convert_timestamp_to_string():
     timestamp = 1732723413266
-    assert convert_timestamp_to_string(timestamp) == "2024-11-27T16:03:33Z"
+    assert _convert_timestamp_to_string(timestamp) == "2024-11-27T16:03:33Z"
 
 
 @pytest.mark.integration
@@ -1212,38 +1212,38 @@ def test_tabsdata_server_transaction_recover(tabsserver_connection):
 
 
 def test_complete_datetime():
-    result = top_and_convert_to_timestamp("2025-01-16Z")
+    result = _top_and_convert_to_timestamp("2025-01-16Z")
     assert datetime.datetime.fromtimestamp(
         result / 1000, datetime.UTC
     ) == datetime.datetime(2025, 1, 17, 0, 0, tzinfo=datetime.timezone.utc)
 
-    result = top_and_convert_to_timestamp("2025-01-16T15Z")
+    result = _top_and_convert_to_timestamp("2025-01-16T15Z")
     assert datetime.datetime.fromtimestamp(
         result / 1000, datetime.UTC
     ) == datetime.datetime(2025, 1, 16, 16, 0, tzinfo=datetime.timezone.utc)
 
-    result = top_and_convert_to_timestamp("2025-01-16T15:30Z")
+    result = _top_and_convert_to_timestamp("2025-01-16T15:30Z")
     assert datetime.datetime.fromtimestamp(
         result / 1000, datetime.UTC
     ) == datetime.datetime(2025, 1, 16, 15, 31, tzinfo=datetime.timezone.utc)
 
-    result = top_and_convert_to_timestamp("2025-01-16T15:59Z")
+    result = _top_and_convert_to_timestamp("2025-01-16T15:59Z")
     assert datetime.datetime.fromtimestamp(
         result / 1000, datetime.UTC
     ) == datetime.datetime(2025, 1, 16, 16, 0, tzinfo=datetime.timezone.utc)
 
-    result = top_and_convert_to_timestamp("2025-01-16T15:30:45Z")
+    result = _top_and_convert_to_timestamp("2025-01-16T15:30:45Z")
     assert datetime.datetime.fromtimestamp(
         result / 1000, datetime.UTC
     ) == datetime.datetime(2025, 1, 16, 15, 30, 46, tzinfo=datetime.timezone.utc)
 
-    result = top_and_convert_to_timestamp("2025-01-16T15:30:59Z")
+    result = _top_and_convert_to_timestamp("2025-01-16T15:30:59Z")
     assert datetime.datetime.fromtimestamp(
         result / 1000, datetime.UTC
     ) == datetime.datetime(2025, 1, 16, 15, 31, 0, tzinfo=datetime.timezone.utc)
 
-    assert top_and_convert_to_timestamp(None) is None
-    assert top_and_convert_to_timestamp("123456") == 123456
+    assert _top_and_convert_to_timestamp(None) is None
+    assert _top_and_convert_to_timestamp("123456") == 123456
 
 
 @pytest.mark.integration

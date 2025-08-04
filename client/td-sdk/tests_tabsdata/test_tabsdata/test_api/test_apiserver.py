@@ -7,7 +7,7 @@ import hashlib
 import pytest
 from tests_tabsdata.conftest import APISERVER_URL
 
-from tabsdata._api.apiserver import (
+from tabsdata.api.apiserver import (
     BASE_API_URL,
     APIServer,
     APIServerError,

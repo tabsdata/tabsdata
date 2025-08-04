@@ -10,11 +10,11 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
-from tabsdata._api.tabsdata_server import (
+from tabsdata.api.tabsdata_server import (
     Collection,
     Function,
     Table,
-    convert_timestamp_to_string,
+    _convert_timestamp_to_string,
 )
 
 # noinspection PyUnresolvedReferences
@@ -35,7 +35,7 @@ def test_collection_class(tabsserver_connection):
     assert collection.name == "test_collection_class"
     assert collection.description == "test_collection_class_description"
     assert collection.created_on == created_time
-    assert collection.created_on_str == convert_timestamp_to_string(created_time)
+    assert collection.created_on_str == _convert_timestamp_to_string(created_time)
     assert collection.created_by == "test"
     assert collection.kwargs == {
         "example_kwarg": "example",

@@ -7,7 +7,6 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-from tabsdata._api.tabsdata_server import TabsdataServer
 from tabsdata._cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
@@ -15,6 +14,7 @@ from tabsdata._cli.cli_utils import (
     store_pinned_objects,
     verify_login_or_prompt,
 )
+from tabsdata.api.tabsdata_server import TabsdataServer
 
 
 @click.group()

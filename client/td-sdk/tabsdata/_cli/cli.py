@@ -9,7 +9,6 @@ import textwrap
 import rich_click as click
 from rich.console import Console
 
-from tabsdata._api.apiserver import DEFAULT_TABSDATA_DIRECTORY
 from tabsdata._cli.auth_group import auth
 from tabsdata._cli.cli_utils import (
     get_credentials_file_path,
@@ -30,6 +29,7 @@ from tabsdata._cli.exe_group import exe
 from tabsdata._cli.fn_group import fn
 from tabsdata._cli.table_group import table
 from tabsdata._cli.user_group import user
+from tabsdata.api.apiserver import DEFAULT_TABSDATA_DIRECTORY
 
 CYAN = "[cyan]"
 NO_CYAN = "[/cyan]"

@@ -9,18 +9,18 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-from tabsdata._api.apiserver import (
-    DEFAULT_TABSDATA_CERTIFICATE_FOLDER,
-    HTTP_PROTOCOL,
-    HTTPS_PROTOCOL,
-    _obtain_certificate_file_path,
-)
-from tabsdata._api.tabsdata_server import TabsdataServer
 from tabsdata._cli.cli_utils import (
     beautify_list,
     logical_prompt,
     verify_login_or_prompt,
 )
+from tabsdata.api.apiserver import (
+    DEFAULT_TABSDATA_CERTIFICATE_FOLDER,
+    HTTP_PROTOCOL,
+    HTTPS_PROTOCOL,
+    _obtain_certificate_file_path,
+)
+from tabsdata.api.tabsdata_server import TabsdataServer
 
 
 @click.group()
@@ -191,7 +191,7 @@ def password_change(
         # no longer valid, so the user must log in to change the password, but can't
         # log in until the password is changed.
         server = TabsdataServer(server_url)
-        server.password_change(user, password, new_password)
+        server.change_password(user, password, new_password)
         click.echo("Password changed successfully.")
     except Exception as e:
         raise click.ClickException(f"Failed to change password: {e}")

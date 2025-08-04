@@ -36,11 +36,11 @@ import yaml
 from azure.storage.blob import BlobServiceClient
 from filelock import FileLock
 
-from tabsdata._api.status_utils.data_version import (
+from tabsdata._utils.logging import setup_tests_logging
+from tabsdata.api.status_utils.data_version import (
     DataVersionStatus,
     data_version_status_to_mapping,
 )
-from tabsdata._utils.logging import setup_tests_logging
 
 # The following non-import code must execute early to set up the environment correctly.
 # Suppressing E402 to allow imports after this setup.
@@ -71,8 +71,6 @@ import tabsdata as _td
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
-from tabsdata._api.apiserver import APIServer, obtain_connection
-from tabsdata._api.tabsdata_server import TabsdataServer
 from tabsdata._secret import HashiCorpSecret
 from tabsdata._tabsdatafunction import TableInput, TableOutput
 from tabsdata._tabsserver.function.sql_utils import MARIADB_COLLATION
@@ -83,6 +81,8 @@ from tabsdata._tabsserver.pyenv_creation import (
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._generators import _id
+from tabsdata.api.apiserver import APIServer, obtain_connection
+from tabsdata.api.tabsdata_server import TabsdataServer
 
 module_path = str(_td.__file__)
 

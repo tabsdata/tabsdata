@@ -6,9 +6,9 @@ import time
 
 import pytest
 
-from tabsdata._api.tabsdata_server import (
+from tabsdata.api.tabsdata_server import (
     Role,
-    convert_timestamp_to_string,
+    _convert_timestamp_to_string,
 )
 
 # noinspection PyUnresolvedReferences
@@ -29,7 +29,7 @@ def test_role_class(tabsserver_connection):
     assert role.name == "test_role_class"
     assert role.description == "test_role_class_description"
     assert role.created_on == created_time
-    assert role.created_on_str == convert_timestamp_to_string(created_time)
+    assert role.created_on_str == _convert_timestamp_to_string(created_time)
     assert role.created_by == "test"
     assert role.kwargs == {
         "example_kwarg": "example",

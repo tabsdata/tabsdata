@@ -9,26 +9,6 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-from tabsdata._api.status_utils.execution import (
-    EXECUTION_VALID_USER_PROVIDED_STATUSES,
-    user_execution_status_to_api,
-)
-from tabsdata._api.status_utils.function_run import (
-    FUNCTION_RUN_VALID_USER_PROVIDED_STATUSES,
-    user_function_run_status_to_api,
-)
-from tabsdata._api.status_utils.transaction import (
-    TRANSACTION_VALID_USER_PROVIDED_STATUSES,
-    user_transaction_status_to_api,
-)
-from tabsdata._api.status_utils.worker import (
-    WORKER_VALID_USER_PROVIDED_STATUSES,
-    user_worker_status_to_api,
-)
-from tabsdata._api.tabsdata_server import (
-    TabsdataServer,
-    top_and_convert_to_timestamp,
-)
 from tabsdata._cli.cli_utils import (
     MutuallyExclusiveOption,
     beautify_time,
@@ -40,6 +20,26 @@ from tabsdata._cli.cli_utils import (
     verify_login_or_prompt,
 )
 from tabsdata._cli.fn_group import _monitor_execution_or_transaction
+from tabsdata.api.status_utils.execution import (
+    EXECUTION_VALID_USER_PROVIDED_STATUSES,
+    user_execution_status_to_api,
+)
+from tabsdata.api.status_utils.function_run import (
+    FUNCTION_RUN_VALID_USER_PROVIDED_STATUSES,
+    user_function_run_status_to_api,
+)
+from tabsdata.api.status_utils.transaction import (
+    TRANSACTION_VALID_USER_PROVIDED_STATUSES,
+    user_transaction_status_to_api,
+)
+from tabsdata.api.status_utils.worker import (
+    WORKER_VALID_USER_PROVIDED_STATUSES,
+    user_worker_status_to_api,
+)
+from tabsdata.api.tabsdata_server import (
+    TabsdataServer,
+    _top_and_convert_to_timestamp,
+)
 
 
 @click.group()
@@ -376,7 +376,7 @@ def obtain_list_exec_filters(
         request_filter.append(f"collection:eq:{collection}")
     if at:
         try:
-            at_timestamp = top_and_convert_to_timestamp(at)
+            at_timestamp = _top_and_convert_to_timestamp(at)
             request_filter.append(f"triggered_on:le:{at_timestamp}")
         except ValueError as e:
             raise click.ClickException(f"Invalid date-time format for 'at' option: {e}")
@@ -522,7 +522,7 @@ def obtain_list_trx_filters(
         request_filter.append(f"collection:eq:{collection}")
     if at:
         try:
-            at_timestamp = top_and_convert_to_timestamp(at)
+            at_timestamp = _top_and_convert_to_timestamp(at)
             request_filter.append(f"triggered_on:le:{at_timestamp}")
         except ValueError as e:
             raise click.ClickException(f"Invalid date-time format for 'at' option: {e}")

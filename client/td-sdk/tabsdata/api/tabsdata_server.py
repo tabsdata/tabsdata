@@ -16,17 +16,17 @@ from typing import Generator, List
 import polars as pl
 import requests
 
-from tabsdata._api.apiserver import APIServer, obtain_connection
-from tabsdata._api.status_utils.data_version import data_version_status_to_mapping
-from tabsdata._api.status_utils.execution import execution_status_to_mapping
-from tabsdata._api.status_utils.function_run import function_run_status_to_mapping
-from tabsdata._api.status_utils.transaction import transaction_status_to_mapping
-from tabsdata._api.status_utils.worker import worker_status_to_mapping
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.sql_outputs import verify_output_sql_drivers
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from tabsdata.api.apiserver import APIServer, obtain_connection
+from tabsdata.api.status_utils.data_version import data_version_status_to_mapping
+from tabsdata.api.status_utils.execution import execution_status_to_mapping
+from tabsdata.api.status_utils.function_run import function_run_status_to_mapping
+from tabsdata.api.status_utils.transaction import transaction_status_to_mapping
+from tabsdata.api.status_utils.worker import worker_status_to_mapping
 
 
 class FunctionType(Enum):
@@ -42,7 +42,7 @@ FUNCTION_TYPE_MAPPING = {
 }
 
 
-def function_type_to_mapping(function_type: str) -> str:
+def _function_type_to_mapping(function_type: str) -> str:
     """
     Function to convert a function type to a mapping. While currently it
     only accesses the dictionary and returns the corresponding value, it could get
@@ -51,7 +51,7 @@ def function_type_to_mapping(function_type: str) -> str:
     return FUNCTION_TYPE_MAPPING.get(function_type, function_type)
 
 
-class LazyProperty:
+class _LazyProperty:
     def __init__(self, data_key, attr_name=None, subordinate_time_string: bool = False):
         self.data_key = data_key
         self.attr_name = attr_name or "_" + data_key
@@ -65,7 +65,7 @@ class LazyProperty:
             if not self.subordinate_time_string:
                 value = instance._data.get(self.data_key)
             else:
-                value = convert_timestamp_to_string(
+                value = _convert_timestamp_to_string(
                     getattr(instance, self.data_key[: -len("_str")])
                 )
             setattr(instance, self.attr_name, value)
@@ -89,10 +89,10 @@ class Collection:
             string.
     """
 
-    created_by = LazyProperty("created_by")
-    created_on = LazyProperty("created_on")
-    created_on_str = LazyProperty("created_on_str", subordinate_time_string=True)
-    description = LazyProperty("description")
+    created_by = _LazyProperty("created_by")
+    created_on = _LazyProperty("created_on")
+    created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
+    description = _LazyProperty("description")
 
     def __init__(
         self,
@@ -116,7 +116,7 @@ class Collection:
         self.description = description
         self.created_on = created_on
         if created_on:
-            self.created_on_str = convert_timestamp_to_string(created_on)
+            self.created_on_str = _convert_timestamp_to_string(created_on)
         else:
             self.created_on_str = None
         self.created_by = created_by
@@ -247,7 +247,7 @@ class Collection:
         if sum(provided) > 1:
             raise ValueError("Only one of 'at' or 'at_trx' can be provided at a time.")
         if at:
-            at = top_and_convert_to_timestamp(at)
+            at = _top_and_convert_to_timestamp(at)
         elif at_trx:
             if isinstance(at_trx, Transaction):
                 transaction = at_trx
@@ -360,7 +360,7 @@ class Collection:
             context_location,
             decorator_function_name,
             decorator_type,
-        ) = create_archive(
+        ) = _create_archive(
             function_path,
             temporary_directory,
             path_to_bundle,
@@ -469,7 +469,7 @@ class Collection:
             context_location,
             decorator_new_function_name,
             decorator_type,
-        ) = create_archive(
+        ) = _create_archive(
             function_path,
             temporary_directory,
             directory_to_bundle,
@@ -535,11 +535,11 @@ class DataVersion:
         **kwargs: Additional keyword arguments.
     """
 
-    column_count = LazyProperty("column_count")
-    created_at = LazyProperty("created_at")
-    created_at_str = LazyProperty("created_at_str", subordinate_time_string=True)
-    row_count = LazyProperty("row_count")
-    schema_hash = LazyProperty("schema_hash")
+    column_count = _LazyProperty("column_count")
+    created_at = _LazyProperty("created_at")
+    created_at_str = _LazyProperty("created_at_str", subordinate_time_string=True)
+    row_count = _LazyProperty("row_count")
+    schema_hash = _LazyProperty("schema_hash")
 
     # TODO: Make a first class citizen, with links to transaction and execution
     def __init__(
@@ -708,14 +708,14 @@ class Execution:
 
     """
 
-    ended_on = LazyProperty("ended_on")
-    ended_on_str = LazyProperty("ended_on_str", subordinate_time_string=True)
-    name = LazyProperty("name")
-    started_on = LazyProperty("started_on")
-    started_on_str = LazyProperty("started_on_str", subordinate_time_string=True)
-    triggered_by = LazyProperty("triggered_by")
-    triggered_on = LazyProperty("triggered_on")
-    triggered_on_str = LazyProperty("triggered_on_str", subordinate_time_string=True)
+    ended_on = _LazyProperty("ended_on")
+    ended_on_str = _LazyProperty("ended_on_str", subordinate_time_string=True)
+    name = _LazyProperty("name")
+    started_on = _LazyProperty("started_on")
+    started_on_str = _LazyProperty("started_on_str", subordinate_time_string=True)
+    triggered_by = _LazyProperty("triggered_by")
+    triggered_on = _LazyProperty("triggered_on")
+    triggered_on_str = _LazyProperty("triggered_on_str", subordinate_time_string=True)
 
     def __init__(
         self,
@@ -950,12 +950,12 @@ class Function:
             string.
     """
 
-    defined_by = LazyProperty("defined_by")
-    defined_on = LazyProperty("defined_on")
-    defined_on_str = LazyProperty("defined_on_str", subordinate_time_string=True)
-    description = LazyProperty("description")
-    id = LazyProperty("id")
-    type = LazyProperty("decorator")
+    defined_by = _LazyProperty("defined_by")
+    defined_on = _LazyProperty("defined_on")
+    defined_on_str = _LazyProperty("defined_on_str", subordinate_time_string=True)
+    description = _LazyProperty("description")
+    id = _LazyProperty("id")
+    type = _LazyProperty("decorator")
 
     def __init__(
         self,
@@ -1322,10 +1322,10 @@ class FunctionRun:
         **kwargs: Additional keyword arguments.
     """
 
-    ended_on = LazyProperty("ended_on")
-    ended_on_str = LazyProperty("ended_on_str", subordinate_time_string=True)
-    started_on = LazyProperty("started_on")
-    started_on_str = LazyProperty("started_on_str", subordinate_time_string=True)
+    ended_on = _LazyProperty("ended_on")
+    ended_on_str = _LazyProperty("ended_on_str", subordinate_time_string=True)
+    started_on = _LazyProperty("started_on")
+    started_on_str = _LazyProperty("started_on_str", subordinate_time_string=True)
 
     def __init__(
         self,
@@ -1484,16 +1484,16 @@ class FunctionRun:
 
 class Role:
 
-    created_by = LazyProperty("created_by")
-    created_on = LazyProperty("created_on")
-    created_on_str = LazyProperty("created_on_str", subordinate_time_string=True)
-    description = LazyProperty("description")
-    fixed = LazyProperty("fixed")
-    id = LazyProperty("id")
-    modified_by = LazyProperty("modified_by")
-    modified_by_id = LazyProperty("modified_by_id")
-    modified_on = LazyProperty("modified_on")
-    modified_on_str = LazyProperty("modified_on_str", subordinate_time_string=True)
+    created_by = _LazyProperty("created_by")
+    created_on = _LazyProperty("created_on")
+    created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
+    description = _LazyProperty("description")
+    fixed = _LazyProperty("fixed")
+    id = _LazyProperty("id")
+    modified_by = _LazyProperty("modified_by")
+    modified_by_id = _LazyProperty("modified_by_id")
+    modified_on = _LazyProperty("modified_on")
+    modified_on_str = _LazyProperty("modified_on_str", subordinate_time_string=True)
 
     def __init__(
         self,
@@ -1759,7 +1759,7 @@ class Table:
                 "Only one of 'at', 'at_trx' or 'version' can be provided at a time."
             )
         if at:
-            at = top_and_convert_to_timestamp(at)
+            at = _top_and_convert_to_timestamp(at)
         elif at_trx:
             if isinstance(at_trx, Transaction):
                 transaction = at_trx
@@ -1867,7 +1867,7 @@ class Table:
                 "Only one of 'at', 'at_trx' or 'version' can be provided at a time."
             )
         if at:
-            at = top_and_convert_to_timestamp(at)
+            at = _top_and_convert_to_timestamp(at)
         elif at_trx:
             if isinstance(at_trx, Transaction):
                 transaction = at_trx
@@ -1927,7 +1927,7 @@ class Table:
                 "Only one of 'at', 'at_trx' or 'version' can be provided at a time."
             )
         if at:
-            at = top_and_convert_to_timestamp(at)
+            at = _top_and_convert_to_timestamp(at)
         elif at_trx:
             if isinstance(at_trx, Transaction):
                 transaction = at_trx
@@ -1986,13 +1986,13 @@ class Transaction:
         started_on_str (str): The timestamp when the transaction started as a string.
     """
 
-    ended_on = LazyProperty("ended_on")
-    ended_on_str = LazyProperty("ended_on_str", subordinate_time_string=True)
-    started_on = LazyProperty("started_on")
-    started_on_str = LazyProperty("started_on_str", subordinate_time_string=True)
-    triggered_by = LazyProperty("triggered_by")
-    triggered_on = LazyProperty("triggered_on")
-    triggered_on_str = LazyProperty("triggered_on_str", subordinate_time_string=True)
+    ended_on = _LazyProperty("ended_on")
+    ended_on_str = _LazyProperty("ended_on_str", subordinate_time_string=True)
+    started_on = _LazyProperty("started_on")
+    started_on_str = _LazyProperty("started_on_str", subordinate_time_string=True)
+    triggered_by = _LazyProperty("triggered_by")
+    triggered_on = _LazyProperty("triggered_on")
+    triggered_on_str = _LazyProperty("triggered_on_str", subordinate_time_string=True)
 
     def __init__(
         self,
@@ -2185,9 +2185,9 @@ class User:
         **kwargs: Additional keyword arguments.
     """
 
-    email = LazyProperty("email")
-    enabled = LazyProperty("enabled")
-    full_name = LazyProperty("full_name")
+    email = _LazyProperty("email")
+    enabled = _LazyProperty("enabled")
+    full_name = _LazyProperty("full_name")
 
     def __init__(
         self,
@@ -2920,7 +2920,7 @@ class TabsdataServer:
         function = Function(self.connection, collection_name, function_name)
         function.delete(raise_for_status=raise_for_status)
 
-    def function_get(self, collection_name, function_name) -> Function:
+    def get_function(self, collection_name, function_name) -> Function:
         """
         Get a function in the server.
 
@@ -3054,7 +3054,7 @@ class TabsdataServer:
             execution_name=execution_name, raise_for_status=raise_for_status
         )
 
-    def function_update(
+    def update_function(
         self,
         collection_name: str,
         function_name: str,
@@ -3117,7 +3117,7 @@ class TabsdataServer:
     def logout(self, raise_for_status: bool = True):
         return self.connection.authentication_logout(raise_for_status=raise_for_status)
 
-    def password_change(
+    def change_password(
         self,
         username: str,
         old_password: str,
@@ -3688,7 +3688,7 @@ class TabsdataServer:
             first_page = False
 
 
-def convert_timestamp_to_string(timestamp: int | None) -> str:
+def _convert_timestamp_to_string(timestamp: int | None) -> str:
     if not timestamp:
         return str(timestamp)
     return str(
@@ -3696,7 +3696,7 @@ def convert_timestamp_to_string(timestamp: int | None) -> str:
     )
 
 
-def create_archive(
+def _create_archive(
     function_path,
     temporary_directory,
     path_to_bundle=None,
@@ -3704,7 +3704,7 @@ def create_archive(
     local_packages=None,
     valid_python_versions: list[str] = None,
 ):
-    function = dynamic_import_function_from_path(function_path)
+    function = _dynamic_import_function_from_path(function_path)
     function_name: str = function.name
     function_output = function.output
     if not requirements:
@@ -3746,7 +3746,7 @@ def create_archive(
     )
 
 
-UTC_FORMATS = [
+_UTC_FORMATS = [
     "%Y-%m-%dZ",
     "%Y-%m-%dT%HZ",
     "%Y-%m-%dT%H:%MZ",
@@ -3754,7 +3754,7 @@ UTC_FORMATS = [
     "%Y-%m-%dT%H:%M:%S.%fZ",
 ]
 
-LOCALIZED_FORMATS = [
+_LOCALIZED_FORMATS = [
     "%Y-%m-%d",
     "%Y-%m-%dT%H",
     "%Y-%m-%dT%H:%M",
@@ -3763,7 +3763,7 @@ LOCALIZED_FORMATS = [
 ]
 
 
-def top_and_convert_to_timestamp(incomplete_datetime: str | None) -> int | None:
+def _top_and_convert_to_timestamp(incomplete_datetime: str | None) -> int | None:
     if not incomplete_datetime:
         return None
     try:
@@ -3777,11 +3777,11 @@ def top_and_convert_to_timestamp(incomplete_datetime: str | None) -> int | None:
         pass
     # Define possible formats for incomplete datetime strings
 
-    result = complete_utc_datetime(incomplete_datetime)
+    result = _complete_utc_datetime(incomplete_datetime)
     if result is not None:
         return result
 
-    result = complete_localized_datetime(incomplete_datetime)
+    result = _complete_localized_datetime(incomplete_datetime)
     if result is not None:
         return result
 
@@ -3790,13 +3790,13 @@ def top_and_convert_to_timestamp(incomplete_datetime: str | None) -> int | None:
         "a unix timestamp "
         "(milliseconds since epoch) or one of one of the "
         "following:"
-        f" {UTC_FORMATS + LOCALIZED_FORMATS}. "
+        f" {_UTC_FORMATS + _LOCALIZED_FORMATS}. "
         "A 'Z' character at the end of the datetime indicates UTC timezone, if it is "
         "not present the local timezone of the computer will be used."
     )
 
 
-def add_one_to_last_field(dt: datetime) -> datetime:
+def _add_one_to_last_field(dt: datetime) -> datetime:
     if dt.microsecond != 0:
         return dt + timedelta(microseconds=1)
     elif dt.second != 0:
@@ -3809,8 +3809,8 @@ def add_one_to_last_field(dt: datetime) -> datetime:
         return dt + timedelta(days=1)
 
 
-def complete_localized_datetime(incomplete_datetime: str | None) -> int | None:
-    for fmt in LOCALIZED_FORMATS:
+def _complete_localized_datetime(incomplete_datetime: str | None) -> int | None:
+    for fmt in _LOCALIZED_FORMATS:
         try:
             # Try to parse the incomplete datetime string
             dt = (
@@ -3818,7 +3818,7 @@ def complete_localized_datetime(incomplete_datetime: str | None) -> int | None:
                 .replace(tzinfo=None)
                 .astimezone()
             )
-            dt = add_one_to_last_field(dt)  # Add one to the last field
+            dt = _add_one_to_last_field(dt)  # Add one to the last field
             # Format the datetime to the complete format
             return int(dt.timestamp() * 1000.0)  # Convert to milliseconds since epoch
         except ValueError:
@@ -3827,14 +3827,14 @@ def complete_localized_datetime(incomplete_datetime: str | None) -> int | None:
     return None
 
 
-def complete_utc_datetime(incomplete_datetime: str | None) -> int | None:
-    for fmt in UTC_FORMATS:
+def _complete_utc_datetime(incomplete_datetime: str | None) -> int | None:
+    for fmt in _UTC_FORMATS:
         try:
             # Try to parse the incomplete datetime string
             dt = datetime.strptime(incomplete_datetime, fmt).replace(
                 tzinfo=timezone.utc
             )
-            dt = add_one_to_last_field(dt)  # Add one to the last field
+            dt = _add_one_to_last_field(dt)  # Add one to the last field
             # Format the datetime to the complete format
             return int(dt.timestamp() * 1000.0)  # Convert to milliseconds since epoch
         except ValueError:
@@ -3843,7 +3843,7 @@ def complete_utc_datetime(incomplete_datetime: str | None) -> int | None:
     return None
 
 
-def dynamic_import_function_from_path(path: str) -> TabsdataFunction:
+def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:
     """
     Dynamically import a function from a path in the form of 'path::function_name'.
     :param path:
