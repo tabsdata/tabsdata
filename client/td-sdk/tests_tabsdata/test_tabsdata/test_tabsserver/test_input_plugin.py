@@ -259,6 +259,7 @@ def test_input_plugin_initial_values_stored_number_2(tmp_path):
 @pytest.mark.requires_internet
 @pytest.mark.slow
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
+@pytest.mark.skip("Skipping because pypistats.org is currently down.")
 def test_input_plugin_from_pypi(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     context_archive = create_bundle_archive(
