@@ -3,7 +3,7 @@
 #
 
 [tasks.test_py]
-category = "02 - Test"
+category = "05 - Test"
 description = "Task 'test' for Python projects"
 dependencies = ["set_mode_test_py"]
 run_task = [
@@ -24,7 +24,7 @@ run_task = [
 ]
 
 [tasks.setup-test_py]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 script_runner = "@duckscript"
 script = [
@@ -44,7 +44,7 @@ script = [
     ''']
 
 [tasks.test_py_ta_features]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -86,7 +86,7 @@ script = [
     ''']
 
 [tasks.test_py_ta_tableframe]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -127,7 +127,7 @@ script = [
     ''']
 
 [tasks.test_py_te_tableframe]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -168,7 +168,7 @@ script = [
     ''']
 
 [tasks.test_py_tabsdata]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -209,7 +209,7 @@ script = [
     ''']
 
 [tasks.test_py_tabsdata_databricks]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -250,7 +250,7 @@ script = [
     ''']
 
 [tasks.test_py_tabsdata_mongodb]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -291,7 +291,7 @@ script = [
     ''']
 
 [tasks.test_py_tabsdata_salesforce]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -332,7 +332,7 @@ script = [
     ''']
 
 [tasks.test_py_tabsdata_snowflake]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -373,7 +373,7 @@ script = [
     ''']
 
 [tasks.set_mode_test_py]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 script_runner = "@duckscript"
 script = [
@@ -396,7 +396,7 @@ script = [
     ''']
 
 [tasks.pre-test_py]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py", "license"]
 script_runner = "@duckscript"
@@ -439,13 +439,13 @@ script = [
     ''']
 
 [tasks.copy_assets]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 command = "python"
 args = ["${COPY_ASSETS_PY}"]
 
 [tasks.setup_pytest_tabsdata]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 script_runner = "@duckscript"
 script = [
@@ -579,7 +579,7 @@ script = [
     ''']
 
 [tasks.start_pytest_tabsdata]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 script_runner = "@duckscript"
 script = [
@@ -620,7 +620,7 @@ script = [
     ''']
 
 [tasks.status_pytest_tabsdata]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 script_runner = "@duckscript"
 script = [
@@ -680,7 +680,7 @@ script = [
     ''']
 
 [tasks.stop_pytest_tabsdata]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 script_runner = "@duckscript"
 script = [
@@ -714,7 +714,7 @@ script = [
     ''']
 
 [tasks.remove_pytest_tabsdata]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 script_runner = "@duckscript"
 script = [
@@ -736,7 +736,7 @@ script = [
     ''']
 
 [tasks.post-test_py]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
 script_runner = "@duckscript"
@@ -760,7 +760,7 @@ script = [
     ''']
 
 [tasks.cleanup-test_py]
-category = "02 - Test"
+category = "05 - Test"
 private = true
 script_runner = "@duckscript"
 script = [

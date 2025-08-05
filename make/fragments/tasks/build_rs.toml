@@ -3,7 +3,7 @@
 #
 
 [tasks.build_rs]
-category = "02 - Build"
+category = "03 - Build"
 description = "Task 'build' for Rust projects"
 run_task = [
     { name = [
@@ -15,7 +15,7 @@ run_task = [
 ]
 
 [tasks.build_all_rs]
-category = "02 - Build"
+category = "03 - Build"
 private = true
 run_task = [
     { name = [
@@ -26,7 +26,7 @@ run_task = [
 ]
 
 [tasks.build_all_rs_macros]
-category = "02 - Build"
+category = "03 - Build"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
@@ -39,7 +39,7 @@ script = [
     ''']
 
 [tasks.build_all_rs_modules]
-category = "02 - Build"
+category = "03 - Build"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
@@ -52,7 +52,7 @@ script = [
     ''']
 
 [tasks.build_all_rs_expansions]
-category = "02 - Build"
+category = "03 - Build"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
@@ -65,7 +65,7 @@ script = [
     ''']
 
 [tasks.build_none_rs]
-category = "02 - Build"
+category = "03 - Build"
 private = true
 run_task = [
     { name = [
@@ -76,7 +76,7 @@ run_task = [
 ]
 
 [tasks.build_none_rs_macros]
-category = "02 - Build"
+category = "03 - Build"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
@@ -89,7 +89,7 @@ script = [
     ''']
 
 [tasks.build_none_rs_modules]
-category = "02 - Build"
+category = "03 - Build"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
@@ -102,7 +102,7 @@ script = [
     ''']
 
 [tasks.build_none_rs_expansions]
-category = "02 - Build"
+category = "03 - Build"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"

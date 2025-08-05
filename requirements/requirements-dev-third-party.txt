@@ -9,7 +9,7 @@
 # Global
 
 black==25.1.0
-boto3==1.39.3
+boto3==1.39.17
 build
 colorlog==6.9.0
 csvkit==2.1.0
@@ -17,21 +17,22 @@ devpi-client==7.2.0
 devpi-server==6.16.0
 devpi-web==5.0.1
 docker==7.1.0
-fastapi==0.115.14
+fastapi==0.116.1
 flake8==7.3.0
-GitPython==3.1.44
+GitPython==3.1.45
 gTTS
 isort==6.0.1
 liccheck==0.9.2
 licensecheck==2025.1.0
 matplotlib==3.10.3
-maturin==1.9.0
+maturin==1.9.2
 mkdocs==1.6.1
 mimesis==18.0.0
 parquet-tools==0.2.16
 pdoc==15.0.4
-pipdeptree==2.26.1
+pipdeptree==2.28.0
 pip-tools==7.4.1
+pip-upgrader==1.4.15
 psutil==7.0.0
 pydevd
 pydevd_pycharm

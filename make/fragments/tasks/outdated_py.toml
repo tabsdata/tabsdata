@@ -1,0 +1,15 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+[tasks.outdated_py]
+category = "04 - Check"
+description = "Task 'outdated' for Python projects"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    info "🚀 python -c \"import subprocess; subprocess.run(['pip-upgrade', '--dry-run', 'requirements-dev.txt'], input='x\\n', text=True)\""
+    exec --fail-on-error python -c "import subprocess; subprocess.run(['pip-upgrade', '--dry-run', 'requirements-dev.txt'], input='x\\n', text=True)"
+    ''']

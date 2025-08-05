@@ -15,6 +15,9 @@ extend = [
     { path = "./make/fragments/tasks/build_rs.toml" },
     { path = "./make/fragments/tasks/build_py.toml" },
 
+    { path = "./make/fragments/tasks/outdated_rs.toml" },
+    { path = "./make/fragments/tasks/outdated_py.toml" },
+
     { path = "./make/fragments/tasks/test_rs.toml" },
     { path = "./make/fragments/tasks/test_py.toml" },
 
@@ -25,7 +28,7 @@ extend = [
 
 [tasks.permit]
 category = "00 - Verify"
-description = "Ensure all basic required language tools are available"
+description = "Verify that all essential language tools are available"
 run_task = [
     { name = [
         "permit_py",
@@ -44,8 +47,8 @@ run_task = [
 ]
 
 [tasks.lock]
-category = "01 - Clean"
-description = "Generated de dependencies lock file"
+category = "02 - Tidy"
+description = "Generate the dependencies lock files"
 run_task = [
     { name = [
         "lock_rs",
@@ -54,12 +57,32 @@ run_task = [
 ]
 
 [tasks.build]
-category = "02 - Build"
-description = "Compile and build"
+category = "03 - Build"
+description = "Compile and build from source code"
 run_task = [
     { name = [
         "build_rs",
         "build_py",
+    ] }
+]
+
+[tasks.outdated]
+category = "04 - Check"
+description = "Find outdated dependencies"
+run_task = [
+    { name = [
+        "outdated_rs",
+        "outdated_py",
+    ] }
+]
+
+[tasks.test]
+category = "05 - Test"
+description = "Run unit tests"
+run_task = [
+    { name = [
+        "test_rs",
+        "test_py",
     ] }
 ]
 
@@ -145,16 +168,6 @@ script = [
     ''']
 
 ## wip...
-
-[tasks.test]
-category = "03 - Test"
-description = "Unitary automated tests"
-run_task = [
-    { name = [
-        "test_rs",
-        "test_py",
-    ] }
-]
 
 #####
 
@@ -284,7 +297,7 @@ run_task = [
         "check_rs",
         "fmt_rs",
         "license_rs",
-        "upgrade_rs",
+        "outdated_rs",
         "deny_rs",
         "audit_rs",
         "pants_rs",
@@ -302,7 +315,7 @@ run_task = [
         "check_py",
         "fmt_py",
         "license_py",
-        "upgrade_py",
+        "outdated_py",
         "deny_py",
         "audit_py",
         "pants_py",
@@ -727,42 +740,6 @@ script = [
         warn "Generating the source track metadata file does not apply for this project"
     end
     ''']
-
-[tasks.upgrade]
-run_task = [
-    { name = [
-        "upgrade_rs",
-        "upgrade_py"
-    ] }
-]
-
-[tasks.upgrade_rs]
-run_task = [
-    { name = [
-        "upgrade_rs_macros",
-        "upgrade_rs_modules"
-    ] }
-]
-
-[tasks.upgrade_py]
-
-[tasks.upgrade_rs_macros]
-private = true
-command = "cargo"
-args = ["upgrade", "--dry-run", "--compatible", "allow", "--incompatible", "allow", "--pinned", "allow", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}"]
-
-[tasks.upgrade_rs_modules]
-private = true
-command = "cargo"
-args = ["upgrade", "--dry-run", "--compatible", "allow", "--incompatible", "allow", "--pinned", "allow", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}"]
-
-[tasks.deny]
-    run_task = [
-    { name = [
-        "deny_rs",
-        "deny_py"
-    ] }
-]
 
 [tasks.deny_rs]
 run_task = [
