@@ -9,7 +9,7 @@ Copyright 2025 Tabs Data Inc.
 ## Supported Operative Systems
 
 * Windows (x86 - latest)
-* OSX (Apple silicon/x86 - latest)
+* macOS (Apple silicon/x86 - latest)
 * Ubuntu, Debian & RedHat - (x86 - latest)
 
 ## Requirements
