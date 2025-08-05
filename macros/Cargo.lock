@@ -134,12 +134,12 @@ dependencies = [
 
 [[package]]
 name = "darling"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a79c4acb1fd5fa3d9304be4c76e031c54d2e92d172a393e24b19a14fe8532fe9"
+checksum = "d6b136475da5ef7b6ac596c0e956e37bad51b85b987ff3d5e230e964936736b2"
 dependencies = [
- "darling_core 0.21.0",
- "darling_macro 0.21.0",
+ "darling_core 0.21.1",
+ "darling_macro 0.21.1",
 ]
 
 [[package]]
@@ -158,9 +158,9 @@ dependencies = [
 
 [[package]]
 name = "darling_core"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74875de90daf30eb59609910b84d4d368103aaec4c924824c6799b28f77d6a1d"
+checksum = "b44ad32f92b75fb438b04b68547e521a548be8acc339a6dacc4a7121488f53e6"
 dependencies = [
  "fnv",
  "ident_case",
@@ -183,11 +183,11 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e79f8e61677d5df9167cd85265f8e5f64b215cdea3fb55eebc3e622e44c7a146"
+checksum = "2b5be8a7a562d315a5b92a630c30cec6bcf663e6673f00fbb69cca66a6f521b9"
 dependencies = [
- "darling_core 0.21.0",
+ "darling_core 0.21.1",
  "quote",
  "syn",
 ]
@@ -225,9 +225,9 @@ dependencies = [
 
 [[package]]
 name = "duct"
-version = "1.0.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6ce170a0e8454fa0f9b0e5ca38a6ba17ed76a50916839d217eb5357e05cdfde"
+checksum = "d7478638a31d1f1f3d6c9f5e57c76b906a04ac4879d6fd0fb6245bc88f73fd0b"
 dependencies = [
  "libc",
  "os_pipe",
@@ -840,9 +840,9 @@ dependencies = [
 
 [[package]]
 name = "shared_thread"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7a6f98357c6bb0ebace19b22220e5543801d9de90ffe77f8abb27c056bac064"
+checksum = "52b86057fcb5423f5018e331ac04623e32d6b5ce85e33300f92c79a1973928b0"
 
 [[package]]
 name = "shlex"
@@ -873,9 +873,9 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-registry"
-version = "1.4.5"
+version = "1.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9203b8055f63a2a00e2f593bb0510367fe707d7ff1e5c872de2f537b339e5410"
+checksum = "b2a4719bff48cee6b39d12c020eeb490953ad2443b7055bd0b21fca26bd8c28b"
 dependencies = [
  "libc",
 ]
@@ -927,10 +927,10 @@ checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
 
 [[package]]
 name = "td-apiforge"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "axum",
- "darling 0.21.0",
+ "darling 0.21.1",
  "derive_builder",
  "getset",
  "openssl",
@@ -945,9 +945,9 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
- "darling 0.21.0",
+ "darling 0.21.1",
  "openssl",
  "proc-macro-crate",
  "proc-macro2",
@@ -957,7 +957,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "duct",
  "openssl",
@@ -969,7 +969,7 @@ dependencies = [
 
 [[package]]
 name = "td-macros"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -978,9 +978,9 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
- "darling 0.21.0",
+ "darling 0.21.1",
  "duct",
  "openssl",
  "proc-macro2",
@@ -990,9 +990,9 @@ dependencies = [
 
 [[package]]
 name = "td-type"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
- "darling 0.21.0",
+ "darling 0.21.1",
  "openssl",
  "proc-macro2",
  "quote",
@@ -1002,7 +1002,7 @@ dependencies = [
 
 [[package]]
 name = "tm-error"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "openssl",
  "quote",
@@ -1011,9 +1011,9 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
- "darling 0.21.0",
+ "darling 0.21.1",
  "openssl",
  "proc-macro2",
  "quote",
@@ -1023,7 +1023,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "openssl",
  "quote",
@@ -1032,7 +1032,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "openssl",
  "quote",
@@ -1069,9 +1069,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.9.4"
+version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41ae868b5a0f67631c14589f7e250c1ea2c574ee5ba21c6c8dd4b1485705a5a1"
+checksum = "75129e1dc5000bfbaa9fee9d1b21f974f9fbad9daec557a521ee6e080825f6e8"
 dependencies = [
  "indexmap",
  "serde",
@@ -1110,9 +1110,9 @@ dependencies = [
 
 [[package]]
 name = "toml_parser"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97200572db069e74c512a14117b296ba0a80a30123fbbb5aa1f4a348f639ca30"
+checksum = "b551886f449aa90d4fe2bdaa9f4a2577ad2dde302c61ecf262d80b116db95c10"
 dependencies = [
  "winnow",
 ]

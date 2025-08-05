@@ -1,5 +1,3 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-
-tabsdata_salesforce[deps]==1.2.0
