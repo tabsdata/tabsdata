@@ -113,11 +113,11 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of, Metadata};
+                use crate::metadata::{type_of, MetadataMutex};
 
                 // Add metadata to handler
                 let res_type_name = type_of::<ReqCtx>();
-                let metadata = Metadata::with_initial_types(&[res_type_name]);
+                let metadata = MetadataMutex::with_initial_types(&[res_type_name]);
                 handler.insert(Input::new(metadata));
             }
 
@@ -233,10 +233,10 @@ where
         Box::pin(async move {
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of, Metadata};
+                use crate::metadata::{type_of, MetadataMutex};
 
                 // Add types to metadata
-                let Input(metadata) = Metadata::from_handler(&handler).await.unwrap();
+                let Input(metadata) = MetadataMutex::from_handler(&handler).await.unwrap();
                 let res_type_name = type_of::<SrvCtx<T>>();
                 metadata
                     .created_type("ContextProviderService", res_type_name)
@@ -317,10 +317,10 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of_val, Metadata};
+                use crate::metadata::{type_of_val, MetadataMutex};
 
                 // Add types to metadata
-                let Input(metadata) = Metadata::from_handler(&handler).await.unwrap();
+                let Input(metadata) = MetadataMutex::from_handler(&handler).await.unwrap();
                 let res_type_name = type_of_val(&connection);
                 metadata
                     .created_type("ConnectionProviderService", res_type_name)
@@ -401,10 +401,10 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of_val, Metadata};
+                use crate::metadata::{type_of_val, MetadataMutex};
 
                 // Add types to metadata
-                let Input(metadata) = Metadata::from_handler(&handler).await.unwrap();
+                let Input(metadata) = MetadataMutex::from_handler(&handler).await.unwrap();
                 let res_type_name = type_of_val(&connection);
                 metadata
                     .created_type("TransactionProviderService", res_type_name)
@@ -419,11 +419,11 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of_val, Metadata};
+                use crate::metadata::{type_of_val, MetadataMutex};
 
                 // Add types to metadata
                 let handler = result.as_ref().unwrap();
-                let Input(metadata) = Metadata::from_handler(handler).await.unwrap();
+                let Input(metadata) = MetadataMutex::from_handler(handler).await.unwrap();
                 let res_type_name = type_of_val(&connection);
                 metadata
                     .remove_created("TransactionProviderService", res_type_name)
@@ -689,10 +689,10 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of, Metadata};
+                use crate::metadata::{type_of, MetadataMutex};
 
                 // This services uses the Condition
-                let Input(metadata) = Metadata::from_handler(&handler).await?;
+                let Input(metadata) = MetadataMutex::from_handler(&handler).await?;
                 metadata
                     .used_type("ConditionalService", type_of::<Input<Condition>>())
                     .await;
@@ -736,11 +736,11 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_init_service() {
-        use crate::metadata::Metadata;
+        use crate::metadata::MetadataMutex;
 
         let init_service = InitService {
             inner: ServiceReturn,
-            phantom: PhantomData::<Metadata>,
+            phantom: PhantomData::<MetadataMutex>,
         };
 
         let res = init_service.raw_oneshot(()).await;
@@ -825,7 +825,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_service_conditional() {
-        use crate::metadata::{type_of_val, Metadata};
+        use crate::metadata::{type_of_val, MetadataMutex};
 
         async fn if_fn() -> Result<Condition, FromHandlerError> {
             Ok(Condition(true))
@@ -856,7 +856,7 @@ mod tests {
             ))
             .service(ServiceReturn);
 
-        let res: Result<Metadata, FromHandlerError> = service.raw_oneshot(()).await;
+        let res: Result<MetadataMutex, FromHandlerError> = service.raw_oneshot(()).await;
         let res = res.unwrap();
         let metadata = res.get();
         metadata.assert_service::<(), ()>(&[
