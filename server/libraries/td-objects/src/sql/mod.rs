@@ -1298,8 +1298,7 @@ mod tests {
 
             let list_params = ListParamsBuilder::default()
                 .filter(vec!["name:eq:A".to_string()])
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = TEST_QUERIES
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())
@@ -1578,8 +1577,7 @@ mod tests {
             let list_params = ListParamsBuilder::default()
                 .previous(FIXTURE_DAOS[2].id().to_string())
                 .pagination_id(FIXTURE_DAOS[2].id().to_string())
-                .build()
-                .unwrap();
+                .build()?;
             let list_query_params = ListQueryParams::<TestDto>::try_from(&list_params)?;
             let mut query_builder = TEST_QUERIES
                 .list_by::<TestDto, NoListFilter>(&list_query_params, &(), &())

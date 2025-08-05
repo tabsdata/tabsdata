@@ -2,7 +2,7 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use crate::status::error_status::AuthorizeErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -22,7 +22,7 @@ impl LoopbackIpFilterService {
         Host(addr): Host,
         request: Request,
         next: Next,
-    ) -> Result<Response, AuthorizeErrorStatus> {
+    ) -> Result<Response, ErrorStatus> {
         let is_loopback = match addr.to_socket_addrs() {
             Ok(mut addrs) => {
                 // Check if all resolved IP addresses are loopback addresses

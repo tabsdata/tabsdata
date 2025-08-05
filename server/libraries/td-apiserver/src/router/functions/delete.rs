@@ -5,8 +5,8 @@
 use crate::router;
 use crate::router::functions::FUNCTIONS_TAG;
 use crate::router::state::Functions;
-use crate::status::error_status::DeleteErrorStatus;
-use crate::status::DeleteStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::{DeleteStatus, NoContent};
 use axum::extract::{Path, State};
 use axum::Extension;
 use td_apiforge::apiserver_path;
@@ -25,8 +25,8 @@ pub async fn delete(
     State(state): State<Functions>,
     Extension(context): Extension<RequestContext>,
     Path(function_param): Path<FunctionParam>,
-) -> Result<DeleteStatus, DeleteErrorStatus> {
+) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
     let request = context.delete(function_param);
     let response = state.delete().await.oneshot(request).await?;
-    Ok(DeleteStatus::OK(response.into()))
+    Ok(DeleteStatus::OK(response))
 }

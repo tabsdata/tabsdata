@@ -3,16 +3,17 @@
 //
 
 use crate::router;
-use crate::router::functions::list::ListStatus;
 use crate::router::functions::FUNCTIONS_TAG;
 use crate::router::state::Functions;
-use crate::status::error_status::GetErrorStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::ListStatus;
 use axum::extract::{Path, State};
 use axum::Extension;
 use axum_extra::extract::Query;
 use td_apiforge::apiserver_path;
 use td_objects::crudl::{ListParams, RequestContext};
 use td_objects::rest_urls::{AtTimeParam, FunctionParam, FUNCTION_HISTORY};
+use td_objects::types::function::Function;
 use td_objects::types::table::FunctionAtIdName;
 use tower::ServiceExt;
 
@@ -29,9 +30,9 @@ pub async fn function_history(
     Path(function_param): Path<FunctionParam>,
     Query(query_params): Query<ListParams>,
     Query(at_param): Query<AtTimeParam>,
-) -> Result<ListStatus, GetErrorStatus> {
+) -> Result<ListStatus<Function>, ErrorStatus> {
     let name = FunctionAtIdName::new(function_param, at_param);
     let request = context.list(name, query_params);
     let response = state.history().await.oneshot(request).await?;
-    Ok(ListStatus::OK(response.into()))
+    Ok(ListStatus::OK(response))
 }

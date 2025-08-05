@@ -8,15 +8,11 @@
 
 use crate::router;
 use crate::router::state::System;
-use crate::status::error_status::ServerErrorStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::GetStatus;
 use axum::extract::State;
-use derive_builder::Builder;
-use getset::Getters;
-use serde::Serialize;
-use std::fmt::Debug;
-use td_apiforge::{apiserver_path, apiserver_tag, get_status};
+use td_apiforge::{apiserver_path, apiserver_tag};
 use td_objects::types::system::ApiStatus;
-use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
 pub const STATUS: &str = "/status";
@@ -28,13 +24,11 @@ router! {
     routes => { status }
 }
 
-get_status!(ApiStatus);
-
 #[apiserver_path(method = get, path = STATUS, tag = STATUS_TAG)]
 #[doc = "API Server Status"]
-async fn status(State(status_state): State<System>) -> Result<GetStatus, ServerErrorStatus> {
+async fn status(State(status_state): State<System>) -> Result<GetStatus<ApiStatus>, ErrorStatus> {
     let response = status_state.status().await.oneshot(()).await?;
-    Ok(GetStatus::OK(response.into()))
+    Ok(GetStatus::OK(response))
 }
 
 #[cfg(test)]

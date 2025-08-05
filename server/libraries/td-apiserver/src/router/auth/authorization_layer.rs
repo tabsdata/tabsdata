@@ -2,7 +2,7 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::status::error_status::AuthorizeErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use axum::extract::{Request, State};
 use axum::http;
 use axum::middleware::Next;
@@ -21,7 +21,7 @@ pub async fn authorization_layer(
     State(auth_services): State<Arc<AuthServices>>,
     request: Request,
     next: Next,
-) -> Result<Response, AuthorizeErrorStatus> {
+) -> Result<Response, ErrorStatus> {
     // Check if the Authorization header is present
     let auth_header = request
         .headers()

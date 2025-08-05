@@ -10,7 +10,6 @@ use crate::finder::utoipa_docs;
 
 mod attributes;
 mod finder;
-mod status;
 
 // Attribute generation macros
 #[proc_macro_attribute]
@@ -35,39 +34,4 @@ pub fn apiserver_tag(args: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn apiserver_docs(args: TokenStream, item: TokenStream) -> TokenStream {
     utoipa_docs(args, item)
-}
-
-#[proc_macro]
-pub fn status(input: TokenStream) -> TokenStream {
-    status::status(input)
-}
-
-#[proc_macro]
-pub fn get_status(input: TokenStream) -> TokenStream {
-    status::get_status(input)
-}
-
-#[proc_macro]
-pub fn list_status(input: TokenStream) -> TokenStream {
-    status::list_status(input)
-}
-
-#[proc_macro]
-pub fn create_status(input: TokenStream) -> TokenStream {
-    status::create_status(input)
-}
-
-#[proc_macro]
-pub fn update_status(input: TokenStream) -> TokenStream {
-    status::update_status(input)
-}
-
-#[proc_macro]
-pub fn delete_status(input: TokenStream) -> TokenStream {
-    status::delete_status(input)
-}
-
-#[proc_macro]
-pub fn auth_status_raw(input: TokenStream) -> TokenStream {
-    status::auth_status_raw(input)
 }

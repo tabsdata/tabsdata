@@ -4,9 +4,9 @@
 
 use crate::router;
 use crate::router::state::Executions;
-use crate::status::error_status::UpdateErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use crate::status::extractors::Json;
-use crate::status::EmptyUpdateStatus;
+use crate::status::ok_status::{NoContent, UpdateStatus};
 use axum::extract::{Path, State};
 use axum::Extension;
 use td_apiforge::{apiserver_path, apiserver_tag};
@@ -29,8 +29,8 @@ pub async fn callback(
     Extension(context): Extension<RequestContext>,
     Path(param): Path<FunctionRunIdParam>,
     Json(request): Json<CallbackRequest>,
-) -> Result<EmptyUpdateStatus, UpdateErrorStatus> {
+) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
     let request = context.update(param, request);
     let response = execution.callback().await.oneshot(request).await?;
-    Ok(EmptyUpdateStatus::OK(response.into()))
+    Ok(UpdateStatus::OK(response))
 }

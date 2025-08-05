@@ -5,7 +5,7 @@
 use crate::router;
 use crate::router::state::Tables;
 use crate::router::tables::TABLES_TAG;
-use crate::status::error_status::GetErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
@@ -44,7 +44,7 @@ pub async fn sample(
     Query(offset_len_param): Query<SampleOffsetLenParam>,
     Query(file_format_param): Query<FileFormatParam>,
     Query(sql_param): Query<SqlParam>,
-) -> Result<impl IntoResponse, GetErrorStatus> {
+) -> Result<impl IntoResponse, ErrorStatus> {
     let name = TableSampleAtName::new(
         table_param,
         at_param,

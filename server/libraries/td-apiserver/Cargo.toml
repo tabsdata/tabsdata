@@ -49,7 +49,6 @@ td-build = { workspace = true }
 
 ## Macros
 
-td-concrete = { workspace = true }
 td-error = { workspace = true }
 
 ## Libraries
@@ -86,7 +85,6 @@ ring = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sqlx = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }

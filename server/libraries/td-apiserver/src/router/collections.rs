@@ -8,29 +8,21 @@
 
 use crate::router;
 use crate::router::state::Collections;
-use crate::status::error_status::{
-    CreateErrorStatus, DeleteErrorStatus, GetErrorStatus, ListErrorStatus, UpdateErrorStatus,
-};
+use crate::status::error_status::ErrorStatus;
 use crate::status::extractors::Json;
-use crate::status::DeleteStatus;
+use crate::status::ok_status::{
+    CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
+};
 use axum::extract::{Path, State};
 use axum::Extension;
 use axum_extra::extract::Query;
-use derive_builder::Builder;
-use getset::Getters;
-use serde::{Deserialize, Serialize};
-use td_apiforge::{
-    apiserver_path, apiserver_tag, create_status, get_status, list_status, update_status,
-};
-use td_objects::crudl::ListResponse;
-use td_objects::crudl::ListResponseBuilder;
+use td_apiforge::{apiserver_path, apiserver_tag};
 use td_objects::crudl::{ListParams, RequestContext};
 use td_objects::rest_urls::{
     CollectionParam, CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
     UPDATE_COLLECTION,
 };
 use td_objects::types::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
-use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
 apiserver_tag!(name = "Collections", description = "Collections API");
@@ -40,25 +32,21 @@ router! {
     routes => { list_collections, get_collection, create_collection, update_collection, delete_collection }
 }
 
-list_status!(CollectionRead);
-
 #[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTIONS_TAG)]
 #[doc = "Lists collections"]
 pub async fn list_collections(
     State(collection_state): State<Collections>,
     Extension(context): Extension<RequestContext>,
     Query(query_params): Query<ListParams>,
-) -> Result<ListStatus, ListErrorStatus> {
+) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
     let request = context.list((), query_params);
     let response = collection_state
         .list_collections()
         .await
         .oneshot(request)
         .await?;
-    Ok(ListStatus::OK(response.into()))
+    Ok(ListStatus::OK(response))
 }
-
-get_status!(CollectionRead);
 
 #[apiserver_path(method = get, path = GET_COLLECTION, tag = COLLECTIONS_TAG)]
 #[doc = "Get a collection"]
@@ -66,17 +54,15 @@ pub async fn get_collection(
     State(collection_state): State<Collections>,
     Extension(context): Extension<RequestContext>,
     Path(collection_param): Path<CollectionParam>,
-) -> Result<GetStatus, GetErrorStatus> {
+) -> Result<GetStatus<CollectionRead>, ErrorStatus> {
     let request = context.read(collection_param);
     let response = collection_state
         .read_collection()
         .await
         .oneshot(request)
         .await?;
-    Ok(GetStatus::OK(response.into()))
+    Ok(GetStatus::OK(response))
 }
-
-create_status!(CollectionRead);
 
 #[apiserver_path(method = post, path = CREATE_COLLECTION, tag = COLLECTIONS_TAG)]
 #[doc = "Create a collection"]
@@ -84,17 +70,15 @@ pub async fn create_collection(
     State(collection_state): State<Collections>,
     Extension(context): Extension<RequestContext>,
     Json(request): Json<CollectionCreate>,
-) -> Result<CreateStatus, CreateErrorStatus> {
+) -> Result<CreateStatus<CollectionRead>, ErrorStatus> {
     let request = context.create((), request);
     let response = collection_state
         .create_collection()
         .await
         .oneshot(request)
         .await?;
-    Ok(CreateStatus::CREATED(response.into()))
+    Ok(CreateStatus::CREATED(response))
 }
-
-update_status!(CollectionRead);
 
 #[apiserver_path(method = post, path = UPDATE_COLLECTION, tag = COLLECTIONS_TAG)]
 #[doc = "Update a collection"]
@@ -103,14 +87,14 @@ pub async fn update_collection(
     Extension(context): Extension<RequestContext>,
     Path(collection_param): Path<CollectionParam>,
     Json(request): Json<CollectionUpdate>,
-) -> Result<UpdateStatus, UpdateErrorStatus> {
+) -> Result<UpdateStatus<CollectionRead>, ErrorStatus> {
     let request = context.update(collection_param, request);
     let response = collection_state
         .update_collection()
         .await
         .oneshot(request)
         .await?;
-    Ok(UpdateStatus::OK(response.into()))
+    Ok(UpdateStatus::OK(response))
 }
 
 #[apiserver_path(method = delete, path = DELETE_COLLECTION, tag = COLLECTIONS_TAG)]
@@ -119,14 +103,14 @@ pub async fn delete_collection(
     State(collections_state): State<Collections>,
     Extension(context): Extension<RequestContext>,
     Path(collection_param): Path<CollectionParam>,
-) -> Result<DeleteStatus, DeleteErrorStatus> {
+) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
     let request = context.delete(collection_param);
     let response = collections_state
         .delete_collection()
         .await
         .oneshot(request)
         .await?;
-    Ok(DeleteStatus::OK(response.into()))
+    Ok(DeleteStatus::OK(response))
 }
 
 #[cfg(test)]

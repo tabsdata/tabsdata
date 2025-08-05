@@ -1441,7 +1441,10 @@ mod tests {
         ];
 
         // default list params with no data
-        let list_params = ListParams::builder().order_by("name").build().unwrap();
+        let list_params = ListParams::builder()
+            .order_by(Some("name".to_string()))
+            .build()
+            .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
             compute_previous::<MyDto>(&list_params, &list_query_params, &[]),
@@ -1449,7 +1452,10 @@ mod tests {
         );
 
         // default list params with data
-        let list_params = ListParams::builder().order_by("name").build().unwrap();
+        let list_params = ListParams::builder()
+            .order_by(Some("name".to_string()))
+            .build()
+            .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
             compute_previous::<MyDto>(&list_params, &list_query_params, &data),
@@ -1458,9 +1464,9 @@ mod tests {
 
         // previous list params with no data
         let list_params = ListParams::builder()
-            .order_by("name")
+            .order_by(Some("name".to_string()))
             .previous(data[0].id().to_string())
-            .pagination_id(data[0].pagination_value())
+            .pagination_id(Some(data[0].pagination_value()))
             .build()
             .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
@@ -1471,9 +1477,9 @@ mod tests {
 
         // previous list params with data
         let list_params = ListParams::builder()
-            .order_by("name")
+            .order_by(Some("name".to_string()))
             .previous(data[1].id().to_string())
-            .pagination_id(data[1].pagination_value())
+            .pagination_id(Some(data[1].pagination_value()))
             .build()
             .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
@@ -1509,7 +1515,10 @@ mod tests {
         ];
 
         // default list params with no data
-        let list_params = ListParams::builder().order_by("name").build().unwrap();
+        let list_params = ListParams::builder()
+            .order_by(Some("name".to_string()))
+            .build()
+            .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
         assert_eq!(
             compute_next::<MyDto>(&list_params, &list_query_params, &[]),
@@ -1519,7 +1528,7 @@ mod tests {
         // default list params with less data than requested
         let list_params = ListParams::builder()
             .len(10_usize)
-            .order_by("name")
+            .order_by(Some("name".to_string()))
             .build()
             .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
@@ -1531,7 +1540,7 @@ mod tests {
         // default list params with exact data
         let list_params = ListParams::builder()
             .len(4_usize)
-            .order_by("name")
+            .order_by(Some("name".to_string()))
             .build()
             .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
@@ -1545,9 +1554,9 @@ mod tests {
 
         // next list params with no data
         let list_params = ListParams::builder()
-            .order_by("name")
+            .order_by(Some("name".to_string()))
             .next(data[3].id().to_string())
-            .pagination_id(data[3].pagination_value())
+            .pagination_id(Some(data[3].pagination_value()))
             .build()
             .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
@@ -1558,10 +1567,10 @@ mod tests {
 
         // next list params with less data than requested
         let list_params = ListParams::builder()
-            .order_by("name")
+            .order_by(Some("name".to_string()))
             .len(10_usize)
             .next(data[3].id().to_string())
-            .pagination_id(data[3].pagination_value())
+            .pagination_id(Some(data[3].pagination_value()))
             .build()
             .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
@@ -1572,10 +1581,10 @@ mod tests {
 
         // next list params with same amount of data than requested
         let list_params = ListParams::builder()
-            .order_by("name")
+            .order_by(Some("name".to_string()))
             .len(2_usize)
             .next(data[1].id().to_string())
-            .pagination_id(data[1].pagination_value())
+            .pagination_id(Some(data[1].pagination_value()))
             .build()
             .unwrap();
         let list_query_params = ListQueryParams::<MyDto>::try_from(&list_params)?;
@@ -1628,9 +1637,8 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name")
-                .build()
-                .unwrap(),
+                .order_by(Some("name".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &2);
@@ -1643,11 +1651,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name")
-                .next("B")
-                .pagination_id("1")
-                .build()
-                .unwrap(),
+                .order_by(Some("name".to_string()))
+                .next(Some("B".to_string()))
+                .pagination_id(Some("1".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &2);
@@ -1660,11 +1667,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name")
-                .next("D")
-                .pagination_id("3")
-                .build()
-                .unwrap(),
+                .order_by(Some("name".to_string()))
+                .next(Some("D".to_string()))
+                .pagination_id(Some("3".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &1);
@@ -1677,11 +1683,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name")
-                .previous("E")
-                .pagination_id("4")
-                .build()
-                .unwrap(),
+                .order_by(Some("name".to_string()))
+                .previous(Some("E".to_string()))
+                .pagination_id(Some("4".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &2);
@@ -1694,11 +1699,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name")
-                .previous("C")
-                .pagination_id("2")
-                .build()
-                .unwrap(),
+                .order_by(Some("name".to_string()))
+                .previous(Some("C".to_string()))
+                .pagination_id(Some("2".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &2);
@@ -1711,11 +1715,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name")
-                .previous("0")
-                .pagination_id("A")
-                .build()
-                .unwrap(),
+                .order_by(Some("name".to_string()))
+                .previous(Some("0".to_string()))
+                .pagination_id(Some("A".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &0);
@@ -1756,9 +1759,8 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name-")
-                .build()
-                .unwrap(),
+                .order_by(Some("name-".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &2);
@@ -1771,11 +1773,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name-")
-                .next("D")
-                .pagination_id("3")
-                .build()
-                .unwrap(),
+                .order_by(Some("name-".to_string()))
+                .next(Some("D".to_string()))
+                .pagination_id(Some("3".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &2);
@@ -1788,11 +1789,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name-")
-                .next("B")
-                .pagination_id("1")
-                .build()
-                .unwrap(),
+                .order_by(Some("name-".to_string()))
+                .next(Some("B".to_string()))
+                .pagination_id(Some("1".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &1);
@@ -1805,11 +1805,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name-")
-                .previous("A")
-                .pagination_id("0")
-                .build()
-                .unwrap(),
+                .order_by(Some("name-".to_string()))
+                .previous(Some("A".to_string()))
+                .pagination_id(Some("0".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &2);
@@ -1822,11 +1821,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name-")
-                .previous("C")
-                .pagination_id("2")
-                .build()
-                .unwrap(),
+                .order_by(Some("name-".to_string()))
+                .previous(Some("C".to_string()))
+                .pagination_id(Some("2".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &2);
@@ -1839,11 +1837,10 @@ mod tests {
         let req = request(
             ListParams::builder()
                 .len(2usize)
-                .order_by("name-")
-                .previous("E")
-                .pagination_id("4")
-                .build()
-                .unwrap(),
+                .order_by(Some("name-".to_string()))
+                .previous(Some("E".to_string()))
+                .pagination_id(Some("4".to_string()))
+                .build()?,
         );
         let res = list(&db, req).await;
         assert_eq!(res.len(), &0);

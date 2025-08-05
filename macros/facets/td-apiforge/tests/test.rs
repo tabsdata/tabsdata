@@ -85,6 +85,5 @@ mod tests {
         assert!(schemas.contains_key("TestRequest"));
         assert!(schemas.contains_key("TestResponse"));
         assert!(schemas.contains_key("TestErrorResponse"));
-        assert!(schemas.contains_key("CtxGetStatusConcreteResponse"));
     }
 }

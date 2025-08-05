@@ -5,31 +5,22 @@
 use crate::router;
 use crate::router::state::Tables;
 use crate::router::tables::TABLES_TAG;
-use crate::status::error_status::GetErrorStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::ListStatus;
 use axum::extract::{Path, State};
 use axum::Extension;
 use axum_extra::extract::Query;
-use derive_builder::Builder;
-use getset::Getters;
-use serde::Deserialize;
-use serde::Serialize;
-use td_apiforge::{apiserver_path, list_status};
-use td_objects::crudl::ListResponseBuilder;
-use td_objects::crudl::{ListParams, ListResponse, RequestContext};
+use td_apiforge::apiserver_path;
+use td_objects::crudl::{ListParams, RequestContext};
 use td_objects::rest_urls::{AtTimeParam, TableParam, LIST_TABLE_DATA_VERSIONS};
 use td_objects::types::execution::TableDataVersion;
 use td_objects::types::table::TableAtIdName;
-use td_tower::ctx_service::CtxMap;
-use td_tower::ctx_service::CtxResponse;
-use td_tower::ctx_service::CtxResponseBuilder;
 use tower::ServiceExt;
 
 router! {
     state => { Tables },
     routes => { list_table_data_versions }
 }
-
-list_status!(TableDataVersion);
 
 #[apiserver_path(method = get, path = LIST_TABLE_DATA_VERSIONS, tag = TABLES_TAG)]
 #[doc = "List data versions for a table"]
@@ -39,7 +30,7 @@ pub async fn list_table_data_versions(
     Path(table_param): Path<TableParam>,
     Query(query_params): Query<ListParams>,
     Query(at_param): Query<AtTimeParam>,
-) -> Result<ListStatus, GetErrorStatus> {
+) -> Result<ListStatus<TableDataVersion>, ErrorStatus> {
     let name = TableAtIdName::new(table_param, at_param);
     let request = context.list(name, query_params);
     let response = state
@@ -47,5 +38,5 @@ pub async fn list_table_data_versions(
         .await
         .oneshot(request)
         .await?;
-    Ok(ListStatus::OK(response.into()))
+    Ok(ListStatus::OK(response))
 }

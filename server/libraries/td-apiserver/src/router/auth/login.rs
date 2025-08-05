@@ -3,15 +3,15 @@
 //
 
 use crate::router;
-use crate::router::auth::{AuthStatusRaw, AUTH_TAG};
+use crate::router::auth::AUTH_TAG;
 use crate::router::state::Auth;
-use crate::status::error_status::AuthorizeErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use crate::status::extractors::Json;
+use crate::status::ok_status::RawStatus;
 use axum::extract::State;
 use td_apiforge::apiserver_path;
 use td_objects::rest_urls::AUTH_LOGIN;
-use td_objects::types::auth::Login;
-use td_tower::ctx_service::IntoData;
+use td_objects::types::auth::{Login, TokenResponseX};
 use tower::ServiceExt;
 
 router! {
@@ -24,10 +24,10 @@ router! {
 pub async fn login(
     State(state): State<Auth>,
     Json(request): Json<Login>,
-) -> Result<AuthStatusRaw, AuthorizeErrorStatus> {
+) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
     let response = state.login_service().await.oneshot(request).await?;
     // incorrect_role
     // user disabled
     // unauthorized
-    Ok(AuthStatusRaw::OK(response.into_data()))
+    Ok(RawStatus::OK(response))
 }

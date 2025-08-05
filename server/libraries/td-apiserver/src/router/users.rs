@@ -8,25 +8,18 @@
 
 use crate::router;
 use crate::router::state::Users;
-use crate::status::error_status::{
-    CreateErrorStatus, DeleteErrorStatus, GetErrorStatus, ListErrorStatus, UpdateErrorStatus,
-};
+use crate::status::error_status::ErrorStatus;
 use crate::status::extractors::Json;
-use crate::status::DeleteStatus;
+use crate::status::ok_status::{
+    CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
+};
 use axum::extract::{Path, State};
 use axum::Extension;
 use axum_extra::extract::Query;
-use derive_builder::Builder;
-use getset::Getters;
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
-use td_apiforge::{
-    apiserver_path, apiserver_tag, create_status, get_status, list_status, update_status,
-};
-use td_objects::crudl::{ListParams, ListResponse, ListResponseBuilder, RequestContext};
+use td_apiforge::{apiserver_path, apiserver_tag};
+use td_objects::crudl::{ListParams, RequestContext};
 use td_objects::rest_urls::UserParam;
 use td_objects::types::user::{UserCreate, UserRead, UserUpdate};
-use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
 pub const USERS: &str = "/users";
@@ -39,8 +32,6 @@ router! {
     routes => { list_users, get_user, create_user, update_user, delete_user }
 }
 
-list_status!(UserRead);
-
 const LIST_USERS: &str = USERS;
 #[apiserver_path(method = get, path = LIST_USERS, tag = USERS_TAG)]
 #[doc = "Lists users"]
@@ -48,13 +39,11 @@ async fn list_users(
     State(users_state): State<Users>,
     Extension(context): Extension<RequestContext>,
     Query(query_params): Query<ListParams>,
-) -> Result<ListStatus, ListErrorStatus> {
+) -> Result<ListStatus<UserRead>, ErrorStatus> {
     let request = context.list((), query_params);
     let response = users_state.list_users().await.oneshot(request).await?;
-    Ok(ListStatus::OK(response.into()))
+    Ok(ListStatus::OK(response))
 }
-
-get_status!(UserRead);
 
 const GET_USER: &str = USER;
 #[apiserver_path(method = get, path = GET_USER, tag = USERS_TAG)]
@@ -63,13 +52,11 @@ pub async fn get_user(
     State(users_state): State<Users>,
     Extension(context): Extension<RequestContext>,
     Path(path_params): Path<UserParam>,
-) -> Result<GetStatus, GetErrorStatus> {
+) -> Result<GetStatus<UserRead>, ErrorStatus> {
     let request = context.read(path_params);
     let response = users_state.read_user().await.oneshot(request).await?;
-    Ok(GetStatus::OK(response.into()))
+    Ok(GetStatus::OK(response))
 }
-
-create_status!(UserRead);
 
 const CREATE_USER: &str = USERS;
 #[apiserver_path(method = post, path = CREATE_USER, tag = USERS_TAG)]
@@ -78,13 +65,11 @@ pub async fn create_user(
     State(users_state): State<Users>,
     Extension(context): Extension<RequestContext>,
     Json(request): Json<UserCreate>,
-) -> Result<CreateStatus, CreateErrorStatus> {
+) -> Result<CreateStatus<UserRead>, ErrorStatus> {
     let request = context.create((), request);
     let response = users_state.create_user().await.oneshot(request).await?;
-    Ok(CreateStatus::CREATED(response.into()))
+    Ok(CreateStatus::CREATED(response))
 }
-
-update_status!(UserRead);
 
 const UPDATE_USER: &str = USER;
 #[apiserver_path(method = post, path = UPDATE_USER, tag = USERS_TAG)]
@@ -94,10 +79,10 @@ pub async fn update_user(
     Extension(context): Extension<RequestContext>,
     Path(path_params): Path<UserParam>,
     Json(request): Json<UserUpdate>,
-) -> Result<UpdateStatus, UpdateErrorStatus> {
+) -> Result<UpdateStatus<UserRead>, ErrorStatus> {
     let request = context.update(path_params, request);
     let response = users_state.update_user().await.oneshot(request).await?;
-    Ok(UpdateStatus::OK(response.into()))
+    Ok(UpdateStatus::OK(response))
 }
 
 const DELETE_USER: &str = USER;
@@ -107,10 +92,10 @@ pub async fn delete_user(
     State(users_state): State<Users>,
     Extension(context): Extension<RequestContext>,
     Path(path_params): Path<UserParam>,
-) -> Result<DeleteStatus, DeleteErrorStatus> {
+) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
     let request = context.delete(path_params);
     let response = users_state.delete_user().await.oneshot(request).await?;
-    Ok(DeleteStatus::OK(response.into()))
+    Ok(DeleteStatus::OK(response))
 }
 
 #[cfg(test)]

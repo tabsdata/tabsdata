@@ -4,16 +4,16 @@
 
 use crate::router;
 use crate::router::state::Tables;
-use crate::router::tables::list::ListStatus;
 use crate::router::tables::TABLES_TAG;
-use crate::status::error_status::GetErrorStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::ListStatus;
 use axum::extract::{Path, State};
 use axum::Extension;
 use axum_extra::extract::Query;
 use td_apiforge::apiserver_path;
 use td_objects::crudl::{ListParams, RequestContext};
 use td_objects::rest_urls::{AtTimeParam, CollectionParam, LIST_TABLES_BY_COLL};
-use td_objects::types::table::CollectionAtName;
+use td_objects::types::table::{CollectionAtName, Table};
 use tower::ServiceExt;
 
 router! {
@@ -29,7 +29,7 @@ pub async fn list_table_by_collection(
     Path(collection_param): Path<CollectionParam>,
     Query(query_params): Query<ListParams>,
     Query(at_param): Query<AtTimeParam>,
-) -> Result<ListStatus, GetErrorStatus> {
+) -> Result<ListStatus<Table>, ErrorStatus> {
     let name = CollectionAtName::new(collection_param, at_param);
     let request = context.list(name, query_params);
     let response = state
@@ -37,5 +37,5 @@ pub async fn list_table_by_collection(
         .await
         .oneshot(request)
         .await?;
-    Ok(ListStatus::OK(response.into()))
+    Ok(ListStatus::OK(response))
 }

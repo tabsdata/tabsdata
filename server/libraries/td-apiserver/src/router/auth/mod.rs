@@ -2,8 +2,7 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use td_apiforge::{apiserver_tag, auth_status_raw};
-use td_objects::types::auth::TokenResponseX;
+use td_apiforge::apiserver_tag;
 
 pub mod login;
 pub mod logout;
@@ -16,7 +15,5 @@ pub mod auth_unsecure;
 pub mod authorization_layer;
 pub mod cert_download;
 pub mod refresh_token;
-
-auth_status_raw!(TokenResponseX);
 
 apiserver_tag!(name = "Auth", description = "Authentication API");

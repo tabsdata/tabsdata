@@ -58,7 +58,7 @@ use crate::layers::tracing::TraceService;
 use crate::layers::uri_filter::LoopbackIpFilterService;
 use crate::router::auth::authorization_layer::authorization_layer;
 use crate::router::auth::{auth_secure, auth_unsecure};
-use crate::status::error_status::ServerErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use crate::{Server, ServerBuilder, ServerError};
 use axum::middleware::{from_fn, from_fn_with_state};
 use std::error::Error;
@@ -288,7 +288,7 @@ impl ApiServerInstanceBuilder {
     }
 
     pub async fn build(&self) -> Result<ApiServerInstance, ServerError> {
-        async fn api_not_found_handler() -> ServerErrorStatus {
+        async fn api_not_found_handler() -> ErrorStatus {
             TdError::from(ApiServerError::ApiEndpointNotFound).into()
         }
 

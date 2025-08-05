@@ -3,20 +3,17 @@
 //
 
 use crate::types::basic::{AccessTokenId, AtTime, RoleId, UserId};
-use derive_builder::Builder;
-use getset::Getters;
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use sqlx::error::ErrorKind::{ForeignKeyViolation, UniqueViolation};
 use sqlx::sqlite::SqliteQueryResult;
 use sqlx::Error;
 use std::fmt::Debug;
-use td_apiforge::apiserver_schema;
 use td_database::sql::DbError;
 use td_error::td_error;
 use td_error::{TdDomainError, TdError};
 use td_tower::error::{ConnectionError, FromHandlerError};
-use utoipa::IntoParams;
+use td_type::Dto;
 
 #[td_type::typed(bool)]
 pub struct SysAdmin;
@@ -131,38 +128,34 @@ fn default_page_len() -> usize {
 }
 
 /// List parameters for list operations defining filtering, sorting and pagination.
-#[apiserver_schema]
-#[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Validate, Getters, IntoParams, Builder,
-)]
-#[builder(setter(into, strip_option), default)]
-#[getset(get = "pub")]
+#[td_type::QueryParam]
+#[derive(Validate)]
 pub struct ListParams {
     /// The desired length for the result list (for now, default is 10000).
     #[validate(minimum = 0)]
+    #[builder(default = "default_page_len()")]
     #[serde(default = "default_page_len")]
     len: usize,
     /// The filter to apply when creating the result list.
+    #[builder(default)]
     #[serde(alias = "search", default)]
     filter: Vec<String>,
     /// The sort order of the result list.
+    #[builder(default)]
     #[serde(alias = "order-by", default)]
     order_by: Option<String>,
     /// The previous value for pagination.
+    #[builder(default)]
     #[serde(default)]
     previous: Option<String>,
     /// The next value for pagination.
+    #[builder(default)]
     #[serde(default)]
     next: Option<String>,
     /// The natural ID of the entity used in pagination.
+    #[builder(default)]
     #[serde(default)]
     pagination_id: Option<String>,
-}
-
-impl ListParams {
-    pub fn builder() -> ListParamsBuilder {
-        ListParamsBuilder::default()
-    }
 }
 
 impl Default for ListParams {
@@ -273,10 +266,8 @@ pub enum CrudlErrorX {
 ///
 /// Besides the data, it includes the [`ListParams`] used for the list operation,
 /// the offset and length of the result and a flag indicating if there are more results or not.
-#[derive(Debug, Clone, Serialize, Deserialize, Getters, Builder)]
-#[builder(pattern = "owned")]
-#[getset(get = "pub")]
-pub struct ListResponse<LL> {
+#[Dto]
+pub struct ListResponse<LL: Clone> {
     /// The list parameters of the request.
     list_params: ListParams,
     /// The length of the result list.
@@ -303,9 +294,9 @@ pub struct ListResponse<LL> {
     next_pagination_id: Option<String>,
 }
 
-impl<LL> ListResponseBuilder<LL> {
+impl<LL: Clone> ListResponseBuilder<LL> {
     /// Sets the data for the list response, the length is inferred from the data.
-    pub fn data(mut self, data: Vec<LL>) -> Self {
+    pub fn data(&mut self, data: Vec<LL>) -> &mut Self {
         self.len = Some(data.len());
         self.data = Some(data);
         self
@@ -313,17 +304,21 @@ impl<LL> ListResponseBuilder<LL> {
 
     /// Sets info to paginate to previous page
     pub fn previous_page(
-        mut self,
+        &mut self,
         previous: Option<String>,
         previous_pagination_id: Option<String>,
-    ) -> Self {
+    ) -> &mut Self {
         self.previous = Some(previous);
         self.previous_pagination_id = Some(previous_pagination_id);
         self
     }
 
     /// Sets info to paginate to next page
-    pub fn next_page(mut self, next: Option<String>, next_pagination_id: Option<String>) -> Self {
+    pub fn next_page(
+        &mut self,
+        next: Option<String>,
+        next_pagination_id: Option<String>,
+    ) -> &mut Self {
         self.next = Some(next);
         self.next_pagination_id = Some(next_pagination_id);
         self

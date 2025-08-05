@@ -5,8 +5,8 @@
 use crate::router;
 use crate::router::roles::AUTHZ_TAG;
 use crate::router::state::Permissions;
-use crate::status::error_status::GetErrorStatus;
-use crate::status::DeleteStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::{DeleteStatus, NoContent};
 use axum::extract::{Path, State};
 use axum::Extension;
 use td_apiforge::apiserver_path;
@@ -25,8 +25,8 @@ pub async fn delete_permission(
     State(state): State<Permissions>,
     Extension(context): Extension<RequestContext>,
     Path(param): Path<RolePermissionParam>,
-) -> Result<DeleteStatus, GetErrorStatus> {
+) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
     let request = context.delete(param);
     let response = state.delete_permission().await.oneshot(request).await?;
-    Ok(DeleteStatus::OK(response.into()))
+    Ok(DeleteStatus::OK(response))
 }

@@ -9,7 +9,7 @@ use axum::Json;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use td_apiforge::{apiserver_path, apiserver_schema, apiserver_tag, get_status};
+use td_apiforge::{apiserver_path, apiserver_schema, apiserver_tag};
 use utoipa::{IntoParams, IntoResponses};
 
 apiserver_tag!(name = "Test", description = "Test Service");
@@ -71,8 +71,6 @@ pub type CtxMap = String;
 pub struct ConcreteResponse {
     response: String,
 }
-
-get_status!(ConcreteResponse);
 
 pub const TEST_GET: &str = "/get";
 #[apiserver_path(method = get, path = TEST_GET, tag = TEST_TAG)]

@@ -29,7 +29,7 @@ struct UtoipaPathArguments {
 }
 
 /// Utoipa path attribute macro generator. It takes the Axum fn as an argument, as well as
-/// the method, path, and tag attributes. It generated the appropriate utoipa::path attribute.
+/// the method, path, and tag attributes. It generates the appropriate utoipa::path attribute.
 pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_args = parse_meta!(UtoipaPathArguments, args).unwrap();
 
@@ -64,6 +64,21 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
 
     // Extract the response types from the Result type in the function signature
     let (ok_response, err_response) = extract_result_types(&input, &parsed_args.override_response);
+
+    // Generate concrete response struct for the `Ok` response.
+    // This type is never used directly, but it is used to generate the schema for the response.
+    let ok_response_struct = if let Type::ImplTrait(_) = ok_response {
+        quote! {}
+    } else {
+        // Note that we enforce handlers names to be unique, so these structs will also be unique.
+        let fn_name = &input.sig.ident;
+        let struct_name = response_alias_struct_name(fn_name);
+        quote! {
+            #[allow(non_camel_case_types, unused)]
+            #[td_apiforge::apiserver_schema]
+            pub struct #struct_name(#ok_response);
+        }
+    };
 
     // Generate the `#[utoipa::path(...)]` attribute
     let mut utoipa_attr = quote! {
@@ -130,6 +145,8 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
 
     // Combine the generated attribute, type alias, and macro invocation with the original function
     let output = quote! {
+        #ok_response_struct
+
         #[utoipa::path(
             #utoipa_attr
         )]
@@ -137,6 +154,16 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     output.into()
+}
+
+pub fn response_alias_struct_name(fn_name: &Ident) -> Ident {
+    Ident::new(
+        &format!(
+            "__response_{fn_name\
+    }"
+        ),
+        fn_name.span(),
+    )
 }
 
 fn more_than_one(a: bool, b: bool, c: bool) -> bool {
@@ -196,7 +223,7 @@ fn extract_first_generic_argument(path: &syn::Path) -> Option<Ident> {
 }
 
 /// Extracts the Ok and Err response types from the Result type in the function signature.
-fn extract_result_types(input: &ItemFn, override_response: &Option<Ident>) -> (Ident, Ident) {
+fn extract_result_types(input: &ItemFn, override_response: &Option<Ident>) -> (Type, Type) {
     let return_type = match &input.sig.output {
         ReturnType::Type(_, ty) => ty,
         _ => panic!("Expected path type in function return type"),
@@ -222,18 +249,23 @@ fn extract_result_types(input: &ItemFn, override_response: &Option<Ident>) -> (I
         panic!("Expected two generic arguments in Result type");
     }
 
-    let ok_response = if let GenericArgument::Type(Type::Path(type_path)) = &args.args[0] {
-        type_path.path.segments.last().unwrap().ident.clone()
-    } else if let Some(override_response) = override_response {
-        override_response.clone()
-    } else {
-        panic!(
-            "Expected path type in Ok generic argument. Maybe override_response should be used?"
-        );
+    let ok_response = match &args.args[0] {
+        GenericArgument::Type(ty) => match ty {
+            Type::ImplTrait(_) => {
+                // Use override_response if provided, otherwise fallback to a default or panic
+                if let Some(override_response) = override_response {
+                    syn::parse_quote! { #override_response }
+                } else {
+                    panic!("Cannot extract schema from `impl Trait` without override_response");
+                }
+            }
+            _ => ty.clone(),
+        },
+        _ => panic!("Expected type for Ok generic argument"),
     };
 
-    let err_response = if let GenericArgument::Type(Type::Path(type_path)) = &args.args[1] {
-        type_path.path.segments.last().unwrap().ident.clone()
+    let err_response = if let GenericArgument::Type(ty) = &args.args[1] {
+        ty.clone()
     } else {
         panic!("Expected path type in Err generic argument");
     };

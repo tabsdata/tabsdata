@@ -29,7 +29,8 @@ async fn init_server() -> Box<dyn Server> {
 mod endpoint {
     use crate::counter::CounterState;
     use axum::extract::State;
-    use td_apiforge::status;
+    use axum::response::IntoResponse;
+    use http::StatusCode;
     use td_apiserver::router;
 
     router! {
@@ -37,15 +38,10 @@ mod endpoint {
         routes => { counter }
     }
 
-    status! {
-        CounterStatus,
-        OK => usize
-    }
-
     #[utoipa::path(get, path = "/count")]
-    pub async fn counter(State(state): State<CounterState>) -> CounterStatus {
+    pub async fn counter(State(state): State<CounterState>) -> impl IntoResponse {
         let count = state.lock().await.add();
-        CounterStatus::OK(count)
+        (StatusCode::OK, axum::Json(count))
     }
 }
 

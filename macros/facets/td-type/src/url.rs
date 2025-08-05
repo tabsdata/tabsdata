@@ -14,7 +14,7 @@ pub fn url_param(_args: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let expanded = quote! {
-        #[derive(Debug, Clone, td_type::DtoType, utoipa::IntoParams, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
+        #[derive(Debug, Clone, Eq, PartialEq, td_type::DtoType, utoipa::IntoParams, derive_builder::Builder, getset::Getters, serde::Serialize, serde::Deserialize)]
         #[builder(try_setter, setter(into))]
         #[getset(get = "pub")]
         #[td_apiforge::apiserver_schema]

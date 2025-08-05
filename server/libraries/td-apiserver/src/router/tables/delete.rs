@@ -5,8 +5,8 @@
 use crate::router;
 use crate::router::state::Tables;
 use crate::router::tables::TABLES_TAG;
-use crate::status::error_status::GetErrorStatus;
-use crate::status::DeleteStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::{DeleteStatus, NoContent};
 use axum::extract::{Path, State};
 use axum::Extension;
 use td_apiforge::apiserver_path;
@@ -25,8 +25,8 @@ pub async fn delete_table(
     State(state): State<Tables>,
     Extension(context): Extension<RequestContext>,
     Path(table_path): Path<TableParam>,
-) -> Result<DeleteStatus, GetErrorStatus> {
+) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
     let request = context.delete(table_path);
     let response = state.table_delete_service().await.oneshot(request).await?;
-    Ok(DeleteStatus::OK(response.into()))
+    Ok(DeleteStatus::OK(response))
 }

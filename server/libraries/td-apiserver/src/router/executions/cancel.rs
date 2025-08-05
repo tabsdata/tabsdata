@@ -5,8 +5,8 @@
 use crate::router;
 use crate::router::executions::EXECUTION_TAG;
 use crate::router::state::Executions;
-use crate::status::error_status::UpdateErrorStatus;
-use crate::status::EmptyUpdateStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::{NoContent, UpdateStatus};
 use axum::extract::{Path, State};
 use axum::Extension;
 use td_apiforge::apiserver_path;
@@ -25,8 +25,8 @@ pub async fn cancel_execution(
     State(executions): State<Executions>,
     Extension(context): Extension<RequestContext>,
     Path(param): Path<ExecutionParam>,
-) -> Result<EmptyUpdateStatus, UpdateErrorStatus> {
+) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
     let request = context.update(param, ());
     let response = executions.cancel().await.oneshot(request).await?;
-    Ok(EmptyUpdateStatus::OK(response.into()))
+    Ok(UpdateStatus::OK(response))
 }

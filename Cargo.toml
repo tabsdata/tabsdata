@@ -63,7 +63,6 @@ exclude = [
     "macros/helpers/td-shared",
     "macros/facets/td-apiforge",
     "macros/facets/td-attach",
-    "macros/facets/td-concrete",
     "macros/facets/td-type",
     "macros/facets/tm-error",
     "macros/facets/tm-test",
@@ -149,9 +148,6 @@ path = "macros/facets/td-attach"
 
 [workspace.dependencies.td-build]
 path = "devutils/automation/tasks/cargo/td-build"
-
-[workspace.dependencies.td-concrete]
-path = "macros/facets/td-concrete"
 
 [workspace.dependencies.td-type]
 path = "macros/facets/td-type"

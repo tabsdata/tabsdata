@@ -55,10 +55,12 @@ td-error = { workspace = true }
 # External dependencies
 
 async-trait = { workspace = true }
+axum = { workspace = true }
 derive_builder = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 getset = { workspace = true }
+http = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }

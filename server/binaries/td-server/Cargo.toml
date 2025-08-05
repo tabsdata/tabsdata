@@ -85,7 +85,7 @@ test_tower_metadata = ["td-tower/test_tower_metadata"]
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "clap_derive", "getset", "http", "paste", "serde", "serde_json", "strum", "toml", "utoipa-axum", "windows", "windows-sys"]
+ignored = ["openssl", "paste", "toml", "utoipa-axum", "windows"]
 
 # Build dependencies
 
@@ -106,7 +106,6 @@ toml = { workspace = true }
 
 ## Macros
 
-td-apiforge = { workspace = true }
 td-build = { workspace = true }
 tm-workspace = { workspace = true }
 
@@ -137,8 +136,6 @@ paste = { workspace = true }
 path-slash = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-strum = { workspace = true, features = ["derive"] }
 supports-color = { workspace = true }
 textwrap = { workspace = true }
 terminal_size = { workspace = true }

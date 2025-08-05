@@ -5,7 +5,7 @@
 use crate::router;
 use crate::router::executions::EXECUTION_TAG;
 use crate::router::state::Workers;
-use crate::status::error_status::ListErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
@@ -44,7 +44,7 @@ pub async fn worker_logs(
     Extension(context): Extension<RequestContext>,
     Path(path_params): Path<WorkerParam>,
     Query(query_params): Query<WorkerLogsQueryParams>,
-) -> Result<impl IntoResponse, ListErrorStatus> {
+) -> Result<impl IntoResponse, ErrorStatus> {
     let params = WorkerLogsParams::new(path_params, query_params);
     let request = context.read(params);
     let response = messages.logs().await.raw_oneshot(request).await?;

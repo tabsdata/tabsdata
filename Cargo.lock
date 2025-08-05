@@ -5633,16 +5633,11 @@ dependencies = [
  "darling 0.21.0",
  "derive_builder",
  "getset",
- "heck 0.5.0",
- "http",
  "openssl",
- "paste",
  "proc-macro2",
  "quote",
  "serde",
- "serde_json",
  "syn 2.0.104",
- "td-concrete",
  "td-shared",
  "utoipa",
  "walkdir",
@@ -5669,13 +5664,11 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
- "sqlx",
  "strum",
  "td-apiforge",
  "td-authz",
  "td-build",
  "td-common",
- "td-concrete",
  "td-database",
  "td-error",
  "td-objects",
@@ -5791,21 +5784,6 @@ dependencies = [
  "whoami",
  "windows 0.60.0",
  "windows-sys 0.60.2",
-]
-
-[[package]]
-name = "td-concrete"
-version = "1.1.0"
-dependencies = [
- "darling 0.21.0",
- "derive_builder",
- "getset",
- "openssl",
- "proc-macro2",
- "quote",
- "syn 2.0.104",
- "td-shared",
- "walkdir",
 ]
 
 [[package]]
@@ -5996,11 +5974,8 @@ dependencies = [
  "path-slash",
  "reqwest",
  "serde",
- "serde_json",
- "strum",
  "supports-color",
  "ta-tableframe",
- "td-apiforge",
  "td-apiserver",
  "td-build",
  "td-common",
@@ -6243,10 +6218,12 @@ name = "td-tower"
 version = "1.1.0"
 dependencies = [
  "async-trait",
+ "axum 0.8.4",
  "derive_builder",
  "futures",
  "futures-util",
  "getset",
+ "http",
  "openssl",
  "serde",
  "serde_json",

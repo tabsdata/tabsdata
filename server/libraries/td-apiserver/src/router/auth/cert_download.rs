@@ -5,7 +5,7 @@
 use crate::router;
 use crate::router::auth::AUTH_TAG;
 use crate::router::state::Auth;
-use crate::status::error_status::AuthorizeErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use axum::body::Body;
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -36,9 +36,7 @@ pub struct PemFile(Vec<u8>);
 
 #[apiserver_path(method = get, path = CERT_DOWNLOAD, tag = AUTH_TAG, override_response = PemFile)]
 #[doc = "PEM certificate download"]
-pub async fn cert_download(
-    State(state): State<Auth>,
-) -> Result<impl IntoResponse, AuthorizeErrorStatus> {
+pub async fn cert_download(State(state): State<Auth>) -> Result<impl IntoResponse, ErrorStatus> {
     let response = state.cert_download().await.raw_oneshot(()).await?;
     Ok(Body::from_stream(response.into_inner()))
 }

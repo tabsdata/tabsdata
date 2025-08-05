@@ -4,19 +4,11 @@
 
 //! TdError to Error Response conversion
 
-use crate::status::error_status::{
-    DefaultAndNotFoundErrorStatus, DefaultErrorStatus, ErrorResponse, ErrorResponseBuilder,
-};
+use crate::status::error_status::{ErrorResponse, ErrorResponseBuilder, ErrorStatus};
 use http::StatusCode;
 use td_error::{ApiError, TdError};
 
-impl From<TdError> for DefaultAndNotFoundErrorStatus {
-    fn from(error: TdError) -> Self {
-        convert_error(error)
-    }
-}
-
-impl From<TdError> for DefaultErrorStatus {
+impl From<TdError> for ErrorStatus {
     fn from(error: TdError) -> Self {
         convert_error(error)
     }

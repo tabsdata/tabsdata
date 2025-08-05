@@ -5,9 +5,9 @@
 use crate::router;
 use crate::router::auth::AUTH_TAG;
 use crate::router::state::Auth;
-use crate::status::error_status::UpdateErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use crate::status::extractors::Json;
-use crate::status::EmptyUpdateStatus;
+use crate::status::ok_status::{NoContent, UpdateStatus};
 use axum::extract::State;
 use td_apiforge::apiserver_path;
 use td_objects::rest_urls::AUTH_PASSWORD_CHANGE;
@@ -24,7 +24,7 @@ router! {
 pub async fn password_change(
     State(state): State<Auth>,
     Json(request): Json<PasswordChange>,
-) -> Result<EmptyUpdateStatus, UpdateErrorStatus> {
+) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
     let response = state
         .password_change_service()
         .await
@@ -33,5 +33,5 @@ pub async fn password_change(
     // incorrect_role
     // user disabled
     // unauthorized
-    Ok(EmptyUpdateStatus::OK(response.into()))
+    Ok(UpdateStatus::OK(response))
 }

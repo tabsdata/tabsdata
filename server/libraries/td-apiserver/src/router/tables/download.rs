@@ -5,7 +5,7 @@
 use crate::router;
 use crate::router::state::{StorageRef, Tables};
 use crate::router::tables::TABLES_TAG;
-use crate::status::error_status::GetErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
@@ -46,7 +46,7 @@ pub async fn download(
     Extension(context): Extension<RequestContext>,
     Path(table_param): Path<TableParam>,
     Query(at_param): Query<AtTimeParam>,
-) -> Result<impl IntoResponse, GetErrorStatus> {
+) -> Result<impl IntoResponse, ErrorStatus> {
     let name = TableAtIdName::new(table_param, at_param);
     let request = context.read(name);
     let path = tables

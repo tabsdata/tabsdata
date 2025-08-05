@@ -4,7 +4,7 @@
 
 //! Wrapper for axum::extract::Json to control error handling.
 
-use crate::status::error_status::DefaultErrorStatus;
+use crate::status::error_status::ErrorStatus;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::FromRequest;
 use axum::response::{IntoResponse, Response};
@@ -35,7 +35,7 @@ impl IntoResponse for JsonError {
     fn into_response(self) -> Response {
         let error: TdError = self.into();
         error!("{}", error);
-        DefaultErrorStatus::from(error).into_response()
+        ErrorStatus::from(error).into_response()
     }
 }
 

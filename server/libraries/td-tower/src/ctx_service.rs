@@ -5,6 +5,7 @@
 use async_trait::async_trait;
 use derive_builder::Builder;
 use getset::Getters;
+use http::StatusCode;
 use serde::Serialize;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -17,6 +18,7 @@ use tower_service::Service;
 const API_VERSION: &str = "1";
 
 /// Response in given Context.
+#[td_apiforge::apiserver_schema]
 #[derive(Debug, Clone, Serialize, Getters, Builder)]
 #[builder(pattern = "owned")]
 #[getset(get = "pub")]
@@ -37,13 +39,6 @@ impl<U> CtxResponse<U> {
             context,
         }
     }
-
-    pub fn transform<F, V>(self, f: F) -> CtxResponse<V>
-    where
-        F: FnOnce(U) -> V,
-    {
-        CtxResponse::new(f(self.data), self.context)
-    }
 }
 
 impl<U> Deref for CtxResponse<U> {
@@ -54,25 +49,13 @@ impl<U> Deref for CtxResponse<U> {
     }
 }
 
-/// Empty Response in given Context.
-#[apiserver_schema]
-#[derive(Debug, Clone, Serialize, Getters, Builder)]
-#[builder(pattern = "owned")]
-#[getset(get = "pub")]
-pub struct CtxEmptyResponse {
-    /// The context of the response.
-    context: CtxMap,
-}
-
-impl CtxEmptyResponse {
-    pub fn new(context: CtxMap) -> Self {
-        Self { context }
-    }
-}
-
-impl From<CtxResponse<()>> for CtxEmptyResponse {
-    fn from(response: CtxResponse<()>) -> Self {
-        Self::new(response.context)
+impl<U> axum::response::IntoResponse for CtxResponse<(StatusCode, U)>
+where
+    U: Serialize,
+{
+    fn into_response(self) -> axum::response::Response {
+        let (status_code, data) = self.data;
+        (status_code, axum::Json(serde_json::json!(data))).into_response()
     }
 }
 
@@ -261,31 +244,6 @@ mod tests {
         assert_eq!(response.version, API_VERSION.to_string());
         assert_eq!(response.data, data);
         assert_eq!(response.context, context);
-    }
-
-    #[test]
-    fn test_ctx_response_transform() {
-        let context = CtxMap::default();
-        let data = 42;
-        let response = CtxResponse::new(data, context.clone());
-        let transformed_response = response.transform(|x| x.to_string());
-        assert_eq!(transformed_response.data, "42");
-        assert_eq!(transformed_response.context, context);
-    }
-
-    #[test]
-    fn test_ctx_empty_response_new() {
-        let context = CtxMap::default();
-        let response = CtxEmptyResponse::new(context.clone());
-        assert_eq!(response.context, context);
-    }
-
-    #[test]
-    fn test_ctx_empty_response_from_ctx_response() {
-        let context = CtxMap::default();
-        let response = CtxResponse::new((), context.clone());
-        let empty_response: CtxEmptyResponse = response.into();
-        assert_eq!(empty_response.context, context);
     }
 
     #[test]

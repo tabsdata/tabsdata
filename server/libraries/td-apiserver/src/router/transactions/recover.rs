@@ -5,8 +5,8 @@
 use crate::router;
 use crate::router::executions::EXECUTION_TAG;
 use crate::router::state::Transactions;
-use crate::status::error_status::UpdateErrorStatus;
-use crate::status::EmptyUpdateStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::{NoContent, UpdateStatus};
 use axum::extract::{Path, State};
 use axum::Extension;
 use td_apiforge::apiserver_path;
@@ -25,8 +25,8 @@ pub async fn recover_transaction(
     State(transaction): State<Transactions>,
     Extension(context): Extension<RequestContext>,
     Path(param): Path<TransactionParam>,
-) -> Result<EmptyUpdateStatus, UpdateErrorStatus> {
+) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
     let request = context.update(param, ());
     let response = transaction.recover().await.oneshot(request).await?;
-    Ok(EmptyUpdateStatus::OK(response.into()))
+    Ok(UpdateStatus::OK(response))
 }

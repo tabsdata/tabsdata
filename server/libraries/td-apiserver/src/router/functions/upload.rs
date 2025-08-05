@@ -5,17 +5,14 @@
 use crate::router;
 use crate::router::functions::FUNCTIONS_TAG;
 use crate::router::state::Functions;
-use crate::status::error_status::CreateErrorStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::CreateStatus;
 use axum::extract::{Path, Request, State};
 use axum::Extension;
-use derive_builder::Builder;
-use getset::Getters;
-use serde::Serialize;
-use td_apiforge::{apiserver_path, apiserver_schema, create_status};
+use td_apiforge::{apiserver_path, apiserver_schema};
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::{CollectionParam, FUNCTION_UPLOAD};
 use td_objects::types::function::{Bundle, FunctionUpload};
-use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
 router! {
@@ -29,8 +26,6 @@ router! {
 #[apiserver_schema]
 pub struct FileUpload(Vec<u8>);
 
-create_status!(Bundle);
-
 #[apiserver_path(method = post, path = FUNCTION_UPLOAD, tag = FUNCTIONS_TAG)]
 #[doc = "Upload a function bundle"]
 pub async fn upload_function(
@@ -38,9 +33,9 @@ pub async fn upload_function(
     Extension(request_context): Extension<RequestContext>,
     Path(param): Path<CollectionParam>,
     request: Request,
-) -> Result<CreateStatus, CreateErrorStatus> {
+) -> Result<CreateStatus<Bundle>, ErrorStatus> {
     let request = FunctionUpload::new(request);
     let request = request_context.create(param, request);
     let response = functions.upload().await.oneshot(request).await?;
-    Ok(CreateStatus::CREATED(response.into()))
+    Ok(CreateStatus::CREATED(response))
 }

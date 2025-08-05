@@ -5,8 +5,8 @@
 use crate::router;
 use crate::router::roles::AUTHZ_TAG;
 use crate::router::state::UserRoles;
-use crate::status::error_status::GetErrorStatus;
-use crate::status::DeleteStatus;
+use crate::status::error_status::ErrorStatus;
+use crate::status::ok_status::{DeleteStatus, NoContent};
 use axum::extract::{Path, State};
 use axum::Extension;
 use td_apiforge::apiserver_path;
@@ -25,8 +25,8 @@ pub async fn delete_user_role(
     State(state): State<UserRoles>,
     Extension(context): Extension<RequestContext>,
     Path(user_role_param): Path<UserRoleParam>,
-) -> Result<DeleteStatus, GetErrorStatus> {
+) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
     let request = context.delete(user_role_param);
     let response = state.delete_user_role().await.oneshot(request).await?;
-    Ok(DeleteStatus::OK(response.into()))
+    Ok(DeleteStatus::OK(response))
 }

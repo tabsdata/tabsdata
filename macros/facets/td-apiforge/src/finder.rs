@@ -4,14 +4,12 @@
 
 extern crate proc_macro;
 
-use crate::attributes::UtoipaTagArguments;
-use crate::status::{CTX_MACRO_NAME, CTX_PREFIX};
+use crate::attributes::{response_alias_struct_name, UtoipaTagArguments};
 use darling::FromMeta;
-use heck::ToUpperCamelCase;
 use proc_macro::{Span, TokenStream};
-use quote::{format_ident, quote};
+use quote::quote;
 use std::path::Path;
-use syn::{parse_macro_input, Expr, File, Ident, Item, ItemMacro};
+use syn::{parse_macro_input, Expr, File, Ident, Item};
 use td_shared::meta_parser::SynMetaOrLit;
 use td_shared::parse_meta;
 use td_shared::project::get_project_root;
@@ -20,8 +18,6 @@ use walkdir::WalkDir;
 const DEFAULT_TAGS_MACROS: &[&str] = &["apiserver_tag"];
 const DEFAULT_PATHS_ATTRIBUTES: &[&str] = &["apiserver_path"];
 const DEFAULT_SCHEMA_ATTRIBUTES: &[&str] = &["apiserver_schema", "Dto", "typed", "typed_enum"];
-
-const CTX_STATUS_FILE: &str = include_str!("status.rs");
 
 #[derive(FromMeta)]
 struct UtoipaDocsArguments {
@@ -138,8 +134,6 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_args = parse_meta!(UtoipaDocsArguments, args).unwrap();
     let item = parse_macro_input!(item as Item);
 
-    let ctx_macro_gen_idents = extract_ctx_macro_idents();
-
     let (mut tags_found, mut found_paths, mut found_schemas) = (Vec::new(), Vec::new(), Vec::new());
     for crate_dir in parsed_args.crate_dirs() {
         WalkDir::new(&crate_dir.dir)
@@ -158,15 +152,21 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
                     &parsed_args.tags_attributes(),
                     &parsed_args.paths_attributes(),
                     &parsed_args.schemas_attributes(),
-                    &ctx_macro_gen_idents,
                 )
             })
             .for_each(|(tag, path, schema)| {
-                found_paths.extend(path);
+                if let Some(duplicate) = has_duplicates_idents(&found_paths, &schema) {
+                    panic!(
+                        "Duplicate path found: {}. The fn handler name must be different from the existing one.",
+                        duplicate.segments.last().unwrap().ident
+                    );
+                } else {
+                    found_paths.extend(path);
+                }
 
                 if let Some(duplicate) = has_duplicates_idents(&found_schemas, &schema) {
                     panic!(
-                        "Duplicate schema found: {}",
+                        "Duplicate schema found: {}. The schema entity name must be different from the existing one.",
                         duplicate.segments.last().unwrap().ident
                     );
                 } else {
@@ -211,34 +211,6 @@ pub fn utoipa_docs(args: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
-/// Extract all macro idents from the given file.
-fn extract_ctx_macro_idents() -> Vec<Ident> {
-    let parsed_macros: Vec<ItemMacro> = syn::parse::<File>(CTX_STATUS_FILE.parse().unwrap())
-        .expect("Failed to parse file")
-        .items
-        .into_iter()
-        .filter_map(|item| {
-            if let Item::Macro(m) = item {
-                Some(m)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let mut idents = Vec::new();
-    for item_macro in parsed_macros {
-        if item_macro.mac.path.is_ident(CTX_MACRO_NAME) {
-            let tokens = item_macro.mac.tokens.clone();
-            let mut iter = tokens.into_iter();
-            if let Some(proc_macro2::TokenTree::Ident(ident)) = iter.next() {
-                idents.push(ident);
-            }
-        }
-    }
-    idents
-}
-
 /// Find all tags, paths, and schemas in the given file.
 /// The tags are found in macros definitions, while paths and schemas are found in other proc
 /// macros attributes and associated types.
@@ -248,7 +220,6 @@ fn find_in_file(
     tags_attribute: &[Ident],
     paths_attribute: &[Ident],
     schemas_attributes: &[Ident],
-    ctx_macro_gen_idents: &[Ident],
 ) -> (
     Vec<proc_macro2::TokenStream>,
     Vec<syn::Path>,
@@ -269,33 +240,34 @@ fn find_in_file(
                     (name = #name, description = #description)
                 };
                 found_tags.push(syn_tag);
-            } else if let Some(ident) = item.mac.path.get_ident() {
-                // And also look for macro generated schemas.
-                if ctx_macro_gen_idents.contains(ident) {
-                    let macro_name = ident.to_string().to_upper_camel_case();
-                    let input = item.mac.tokens.clone();
-                    let schema_struct = syn::parse::<syn::Ident>(input.into()).unwrap();
-                    let schema_ident =
-                        format_ident!("{}{}{}", CTX_PREFIX, macro_name, schema_struct);
-                    let path = syn::parse_str(&format!("{module}::{schema_ident}")).unwrap();
-                    found_schemas.push(path);
-                }
             }
         }
 
         // And then, look for regular attributes
-        let (ident, attrs) = match item {
-            Item::Struct(item) => (&item.ident, &item.attrs),
-            Item::Enum(item) => (&item.ident, &item.attrs),
-            Item::Type(item) => (&item.ident, &item.attrs),
-            Item::Fn(item) => (&item.sig.ident, &item.attrs),
+        let (ident, attrs, has_generics) = match item {
+            Item::Struct(item) => (&item.ident, &item.attrs, !item.generics.params.is_empty()),
+            Item::Enum(item) => (&item.ident, &item.attrs, !item.generics.params.is_empty()),
+            Item::Type(item) => (&item.ident, &item.attrs, !item.generics.params.is_empty()),
+            Item::Fn(item) => (
+                &item.sig.ident,
+                &item.attrs,
+                !item.sig.generics.params.is_empty(),
+            ),
             _ => continue,
         };
+
+        // Ignore types with generics, they cannot be part of the OpenAPI schema.
+        if has_generics {
+            continue;
+        }
 
         for attr in attrs {
             if is_last_segment_path(attr.path(), paths_attribute) {
                 let path = syn::parse_str(&format!("{module}::{ident}")).unwrap();
                 found_paths.push(path);
+                let ok_response = response_alias_struct_name(ident);
+                let path = syn::parse_str(&format!("{module}::{ok_response}")).unwrap();
+                found_schemas.push(path);
             }
             if is_last_segment_path(attr.path(), schemas_attributes) {
                 let path = syn::parse_str(&format!("{module}::{ident}")).unwrap();
