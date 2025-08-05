@@ -7,7 +7,7 @@ use crate::transporter::error::TransporterError;
 use bytes::Bytes;
 use object_store::path::Path;
 use object_store::{path::Path as ObjectPath, ObjectStore, PutPayload};
-use polars::prelude::*;
+use polars::prelude::{PolarsError, PolarsResult, SinkTarget, SpecialEq};
 use polars_io::prelude::sync_on_close::SyncOnCloseType;
 use polars_io::utils::file::DynWriteable;
 use std::collections::HashMap;
@@ -45,7 +45,6 @@ impl ObjectStoreWriter {
             Handle::current()
                 .block_on(async move { store.put(&path, PutPayload::from_bytes(data)).await })
         })
-        .map_err(Error::other)
         .map_err(Error::other)?;
 
         Ok(())

@@ -240,19 +240,19 @@ mod tests {
             let path_r = folder.join(file_r.clone());
             let url_r = Url::from_file_path(path_r.clone()).unwrap();
 
-            let _ = lf
-                .sink_parquet(
-                    SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
-                    ParquetWriteOptions::default(),
-                    None,
-                    SinkOptions {
-                        sync_on_close: SyncOnCloseType::All,
-                        maintain_order: true,
-                        mkdir: true,
-                    },
-                )
-                .unwrap()
-                .collect();
+            lf.sink_parquet(
+                SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
+                ParquetWriteOptions::default(),
+                None,
+                SinkOptions {
+                    sync_on_close: SyncOnCloseType::All,
+                    maintain_order: true,
+                    mkdir: true,
+                },
+            )
+            .unwrap()
+            .collect()
+            .unwrap();
 
             let url_w = Url::parse(&format!(
                 "{}/unit_test/{}",
@@ -370,19 +370,19 @@ mod tests {
             let path_r = folder.join(file_r.clone());
             let url_r = Url::from_file_path(path_r.clone()).unwrap();
 
-            let _ = lf
-                .sink_parquet(
-                    SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
-                    ParquetWriteOptions::default(),
-                    None,
-                    SinkOptions {
-                        sync_on_close: SyncOnCloseType::All,
-                        maintain_order: true,
-                        mkdir: true,
-                    },
-                )
-                .unwrap()
-                .collect();
+            lf.sink_parquet(
+                SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
+                ParquetWriteOptions::default(),
+                None,
+                SinkOptions {
+                    sync_on_close: SyncOnCloseType::All,
+                    maintain_order: true,
+                    mkdir: true,
+                },
+            )
+            .unwrap()
+            .collect()
+            .unwrap();
 
             let url_w = Url::parse(&format!(
                 "{}/unit_test/{}",
@@ -490,19 +490,19 @@ mod tests {
         let path_r = folder.clone().join(file_r.clone());
         let url_r = Url::from_file_path(path_r.clone()).unwrap();
 
-        let _ = lf
-            .sink_parquet(
-                SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
-                ParquetWriteOptions::default(),
-                None,
-                SinkOptions {
-                    sync_on_close: SyncOnCloseType::All,
-                    maintain_order: true,
-                    mkdir: true,
-                },
-            )
-            .unwrap()
-            .collect();
+        lf.sink_parquet(
+            SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
+            ParquetWriteOptions::default(),
+            None,
+            SinkOptions {
+                sync_on_close: SyncOnCloseType::All,
+                maintain_order: true,
+                mkdir: true,
+            },
+        )
+        .unwrap()
+        .collect()
+        .unwrap();
 
         let id_w = id();
         let file_w = format!("{id_w}.parquet");

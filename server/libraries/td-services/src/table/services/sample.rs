@@ -273,19 +273,19 @@ mod tests {
                     let b = StringChunked::new("s".into(), &["a", "b"]).into_column();
                     let lf = DataFrame::new(vec![a, b]).unwrap().lazy();
                     let sink_target = SinkTarget::Path(PlPath::new(url.to_string().as_str()));
-                    let _ = lf
-                        .sink_parquet(
-                            sink_target,
-                            ParquetWriteOptions::default(),
-                            None,
-                            SinkOptions {
-                                sync_on_close: SyncOnCloseType::All,
-                                maintain_order: true,
-                                mkdir: true,
-                            },
-                        )
-                        .unwrap()
-                        .collect();
+                    lf.sink_parquet(
+                        sink_target,
+                        ParquetWriteOptions::default(),
+                        None,
+                        SinkOptions {
+                            sync_on_close: SyncOnCloseType::All,
+                            maintain_order: true,
+                            mkdir: true,
+                        },
+                    )
+                    .unwrap()
+                    .collect()
+                    .unwrap();
                 } else {
                     seed_table_data_version(
                         &db,
