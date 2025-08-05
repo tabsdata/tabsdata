@@ -41,6 +41,19 @@ impl<'a, O, C: Sync + Send + 'a, P: Provider<'a, O, C>> CachedProvider<'a, O, C,
     }
 }
 
+impl<'a, O, C: Sync + Send + 'a, P: Provider<'a, O, C>> Default for CachedProvider<'a, O, C, P>
+where
+    P: Default,
+{
+    fn default() -> Self {
+        CachedProvider {
+            provider: P::default(),
+            cache: Mutex::new(None),
+            phantom: PhantomData,
+        }
+    }
+}
+
 #[async_trait]
 impl<'a, O: Sync + Send, C: Sync + Send + 'a, P: Provider<'a, O, C>> Provider<'a, O, C>
     for CachedProvider<'a, O, C, P>

@@ -163,7 +163,7 @@ impl ApiServerInstanceBuilder {
         storage: Arc<Storage>,
         runtime_context: Arc<RuntimeContext>,
     ) -> Self {
-        let sessions: Arc<Sessions> = Arc::new(session::new(db.clone()));
+        let sessions = Arc::new(Sessions::default());
 
         // to verify up front configuration is OK.
         let password_hash_config: PasswordHashConfig = (&config).into();
@@ -172,7 +172,7 @@ impl ApiServerInstanceBuilder {
         let authz_context = Arc::new(AuthzContext::default());
 
         let auth_services: Arc<AuthServices> = Arc::new(AuthServices::new(
-            &db,
+            db.clone(),
             sessions.clone(),
             password_hash_config,
             config.jwt().clone(),

@@ -13,7 +13,7 @@ use td_error::TdError;
 use td_objects::crudl::RequestContext;
 use td_objects::types::basic::AccessTokenId;
 use td_services::auth::services::AuthServices;
-use td_services::auth::session::{Session, SessionProvider};
+use td_services::auth::session::{Session, SessionError, SessionProvider};
 use td_services::auth::{decode_token, AuthError};
 use tracing::{span, Instrument, Level, Span};
 
@@ -61,9 +61,14 @@ pub async fn authorization_layer(
     let access_token_id: AccessTokenId = token.jti().into();
 
     // Get user_id/role_id from session
+    let mut conn = auth_services
+        .db()
+        .acquire()
+        .await
+        .map_err(|e| TdError::from(SessionError::CouldNotGetDbConn(e)))?;
     let session = auth_services
         .sessions()
-        .get_session(None, &access_token_id)
+        .get_session(&mut conn, &access_token_id)
         .await
         //        .log_err_warn(ToString::to_string)
         .map_err(|_| TdError::from(AuthError::AuthenticationFailed))?;
