@@ -33,38 +33,22 @@ pub struct RequestContext {
     /// The role of the user making the request.
     #[td_type(extractor)]
     role_id: RoleId,
-    /// if the role has system admin privileges.
-    #[td_type(extractor)]
-    sys_admin: SysAdmin,
     /// The time the request was made.
     #[td_type(extractor)]
     time: AtTime,
 }
 
 impl RequestContext {
-    //TODO: change signature to remove sys_admin when permissions are fully integrated
     pub fn with(
         access_token_id: impl Into<AccessTokenId>,
         user_id: impl Into<UserId>,
         role_id: impl Into<RoleId>,
-        sys_admin: impl Into<SysAdmin>,
     ) -> Self {
         Self {
             access_token_id: access_token_id.into(),
             user_id: user_id.into(),
             role_id: role_id.into(),
-            sys_admin: sys_admin.into(),
             time: AtTime::default(),
-        }
-    }
-
-    pub fn assert_sys_admin(&self) -> Result<(), TdError> {
-        if *self.sys_admin {
-            Ok(())
-        } else {
-            Err(CrudlErrorX::Forbidden(String::from(
-                "Current role does not have sysadmin permission",
-            )))?
         }
     }
 }

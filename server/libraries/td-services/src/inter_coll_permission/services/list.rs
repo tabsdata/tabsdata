@@ -160,18 +160,13 @@ mod tests {
         seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            CollectionParam::builder()
-                .collection(CollectionIdName::try_from("c1")?)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::try_from("c1")?)
+                    .build()?,
+                ListParams::default(),
+            );
 
         assert_service_error(service, request, |err| match err {
             AuthzError::Forbidden(_) => {}

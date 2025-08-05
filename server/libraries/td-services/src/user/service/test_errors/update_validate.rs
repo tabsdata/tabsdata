@@ -37,7 +37,6 @@ async fn test_update_request_has_nothing_to_update(db: DbPool) {
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-        true,
     );
 
     let update = UserUpdate::builder()

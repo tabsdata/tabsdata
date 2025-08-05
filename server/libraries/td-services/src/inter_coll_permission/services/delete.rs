@@ -189,18 +189,13 @@ mod tests {
         let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
         let p = seed_inter_collection_permission(&db, c0.id(), &(**c1.id()).into()).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .delete(
-            InterCollectionPermissionParam::builder()
-                .collection(CollectionIdName::try_from("c0")?)
-                .permission(InterCollectionPermissionIdName::from_id(p.id()))
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                InterCollectionPermissionParam::builder()
+                    .collection(CollectionIdName::try_from("c0")?)
+                    .permission(InterCollectionPermissionIdName::from_id(p.id()))
+                    .build()?,
+            );
 
         assert_service_error(service, request, |err| match err {
             AuthzError::Forbidden(_) => {}

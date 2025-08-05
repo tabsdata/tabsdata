@@ -183,13 +183,9 @@ mod tests {
 
         let service = auth_services.refresh_service().await;
 
-        let request = RequestContext::with(
-            original_access_token_id,
-            UserId::admin(),
-            RoleId::user(),
-            false,
-        )
-        .update((), refresh_token.clone());
+        let request =
+            RequestContext::with(original_access_token_id, UserId::admin(), RoleId::user())
+                .update((), refresh_token.clone());
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res?;

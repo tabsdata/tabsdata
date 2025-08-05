@@ -146,7 +146,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            false,
         );
         let router = router.clone().into();
         router.layer(Extension(context.clone()))

@@ -28,7 +28,6 @@ pub async fn seed_user(db: &DbPool, name: &UserName, enabled: &UserEnabled) -> U
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-        true,
     )
     .read("");
     let request_context = request_context.context();

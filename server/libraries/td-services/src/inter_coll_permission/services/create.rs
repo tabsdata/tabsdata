@@ -288,18 +288,13 @@ mod tests {
             .try_to_collection("c0")?
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .collection(CollectionIdName::try_from("c1")?)
-                .build()?,
-            create,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::try_from("c1")?)
+                    .build()?,
+                create,
+            );
 
         assert_service_error(service, request, |err| match err {
             AuthzError::Forbidden(_) => {}

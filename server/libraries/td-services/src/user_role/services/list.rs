@@ -100,7 +100,7 @@ mod tests {
     async fn test_list_user_role(db: DbPool) -> Result<(), TdError> {
         let user = seed_user(
             &db,
-            &UserName::try_from("joaquin").unwrap(),
+            &UserName::try_from("joaquin")?,
             &UserEnabled::from(false),
         )
         .await;
@@ -116,7 +116,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            false,
         )
         .list(
             RoleParam::builder()

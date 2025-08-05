@@ -29,7 +29,6 @@ async fn test_update_collection_validate(db: DbPool) {
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sys_admin(),
-        false,
     )
     .update(
         CollectionParam::builder()

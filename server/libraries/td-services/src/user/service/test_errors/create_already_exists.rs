@@ -48,7 +48,6 @@ async fn test_create_already_existing(db: DbPool) {
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-        false,
     )
     .create((), create);
 

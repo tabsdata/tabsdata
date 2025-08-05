@@ -106,13 +106,9 @@ mod tests {
         let service = SynchrotronService::new(db.clone(), Arc::new(DaoQueries::default()))
             .service()
             .await;
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list((), ListParams::default());
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list((), ListParams::default());
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(*response.len(), transactions.len());

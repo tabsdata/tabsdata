@@ -120,7 +120,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            false,
         )
         .delete(
             CollectionParam::builder()

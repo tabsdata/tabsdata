@@ -115,18 +115,14 @@ mod tests {
             let transaction = t[&test_transaction].id().to_string();
             async move {
                 // Execute test
-                let request = RequestContext::with(
-                    AccessTokenId::default(),
-                    UserId::admin(),
-                    RoleId::user(),
-                    true,
-                )
-                .update(
-                    TransactionParam::builder()
-                        .try_transaction(transaction)?
-                        .build()?,
-                    (),
-                );
+                let request =
+                    RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                        .update(
+                            TransactionParam::builder()
+                                .try_transaction(transaction)?
+                                .build()?,
+                            (),
+                        );
 
                 TransactionRecoverService::new(
                     db.clone(),

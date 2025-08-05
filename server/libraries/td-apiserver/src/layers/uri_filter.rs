@@ -38,7 +38,6 @@ impl LoopbackIpFilterService {
                 AccessTokenId::default(),
                 UserId::admin(),
                 RoleId::sys_admin(),
-                true,
             );
             let mut request = request;
             request.extensions_mut().insert(request_context);

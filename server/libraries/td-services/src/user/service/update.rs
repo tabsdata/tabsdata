@@ -179,7 +179,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            true,
         )
         .update(
             UserParam::builder()
@@ -252,16 +251,15 @@ mod tests {
             .unwrap();
 
         let before = AtTime::now().await;
-        let request =
-            RequestContext::with(AccessTokenId::default(), user.id(), RoleId::user(), false)
-                .update(
-                    UserParam::builder()
-                        .try_user("u0")
-                        .unwrap()
-                        .build()
-                        .unwrap(),
-                    user_update,
-                );
+        let request = RequestContext::with(AccessTokenId::default(), user.id(), RoleId::user())
+            .update(
+                UserParam::builder()
+                    .try_user("u0")
+                    .unwrap()
+                    .build()
+                    .unwrap(),
+                user_update,
+            );
         let request_time = request.context().time().clone();
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());

@@ -311,27 +311,23 @@ mod tests {
             .service()
             .await;
 
-            let request = RequestContext::with(
-                AccessTokenId::default(),
-                UserId::admin(),
-                RoleId::user(),
-                false,
-            )
-            .read(TableSampleAtName::new(
-                TableParam::builder()
-                    .try_collection(collection)?
-                    .try_table(table)?
-                    .build()?,
-                AtTimeParam::builder().at(at_time).build()?,
-                SampleOffsetLenParam::builder()
-                    .try_offset(offset)?
-                    .try_len(len)?
-                    .build()?,
-                FileFormatParam::builder()
-                    .format(FileFormat::Parquet)
-                    .build()?,
-                SqlParam::builder().sql(None).build()?,
-            ));
+            let request =
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                    .read(TableSampleAtName::new(
+                        TableParam::builder()
+                            .try_collection(collection)?
+                            .try_table(table)?
+                            .build()?,
+                        AtTimeParam::builder().at(at_time).build()?,
+                        SampleOffsetLenParam::builder()
+                            .try_offset(offset)?
+                            .try_len(len)?
+                            .build()?,
+                        FileFormatParam::builder()
+                            .format(FileFormat::Parquet)
+                            .build()?,
+                        SqlParam::builder().sql(None).build()?,
+                    ));
             let response = service.raw_oneshot(request).await;
             match response {
                 Ok(response) => {

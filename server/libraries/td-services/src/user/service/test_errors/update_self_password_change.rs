@@ -43,15 +43,14 @@ async fn test_update_user_self(db: DbPool) {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(AccessTokenId::default(), user.id(), RoleId::user(), false)
-        .update(
-            UserParam::builder()
-                .try_user("u0")
-                .unwrap()
-                .build()
-                .unwrap(),
-            user_update,
-        );
+    let request = RequestContext::with(AccessTokenId::default(), user.id(), RoleId::user()).update(
+        UserParam::builder()
+            .try_user("u0")
+            .unwrap()
+            .build()
+            .unwrap(),
+        user_update,
+    );
 
     assert_service_error(service, request, |err| match err {
         UserError::PasswordChangeNotAllowed => {}

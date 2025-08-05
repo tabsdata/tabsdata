@@ -188,7 +188,6 @@ mod tests {
                         AccessTokenId::default(),
                         UserId::admin(),
                         RoleId::user(),
-                        true,
                     )
                     .read(
                         WorkerLogsParams::builder()

@@ -172,7 +172,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            true,
         )
         .delete(
             RolePermissionParam::builder()
@@ -214,7 +213,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             coll_admin_role.id(),
-            true,
         )
         .create(
             RoleParam::builder()
@@ -257,7 +255,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             coll_admin_role.id(),
-            true,
         )
         .create(
             RoleParam::builder()
@@ -302,7 +299,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             coll_admin_role.id(),
-            true,
         )
         .create(
             RoleParam::builder()
@@ -349,14 +345,13 @@ mod tests {
         )
         .await;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id(), true)
-                .delete(
-                    RolePermissionParam::builder()
-                        .role(RoleIdName::try_from("r0")?)
-                        .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
-                        .build()?,
-                );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+            .delete(
+                RolePermissionParam::builder()
+                    .role(RoleIdName::try_from("r0")?)
+                    .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
+                    .build()?,
+            );
 
         let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
             .service()
@@ -390,14 +385,13 @@ mod tests {
         )
         .await;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id(), true)
-                .delete(
-                    RolePermissionParam::builder()
-                        .role(RoleIdName::try_from("r_incorrect")?)
-                        .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
-                        .build()?,
-                );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+            .delete(
+                RolePermissionParam::builder()
+                    .role(RoleIdName::try_from("r_incorrect")?)
+                    .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
+                    .build()?,
+            );
 
         let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
             .service()
@@ -436,14 +430,13 @@ mod tests {
         )
         .await;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), role0.id(), true)
-                .delete(
-                    RolePermissionParam::builder()
-                        .role(RoleIdName::try_from("r1")?)
-                        .permission(PermissionIdName::try_from(perm1.id().to_string())?)
-                        .build()?,
-                );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role0.id())
+            .delete(
+                RolePermissionParam::builder()
+                    .role(RoleIdName::try_from("r1")?)
+                    .permission(PermissionIdName::try_from(perm1.id().to_string())?)
+                    .build()?,
+            );
 
         let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
             .service()
@@ -472,14 +465,13 @@ mod tests {
         )
         .await;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id(), true)
-                .delete(
-                    RolePermissionParam::builder()
-                        .role(RoleIdName::try_from("r0")?)
-                        .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
-                        .build()?,
-                );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+            .delete(
+                RolePermissionParam::builder()
+                    .role(RoleIdName::try_from("r0")?)
+                    .permission(PermissionIdName::try_from(coll_dev_perm.id().to_string())?)
+                    .build()?,
+            );
 
         let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
             .service()
@@ -516,7 +508,6 @@ mod tests {
                 AccessTokenId::default(),
                 UserId::admin(),
                 RoleId::sec_admin(),
-                false,
             )
             .delete(
                 RolePermissionParam::builder()

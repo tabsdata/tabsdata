@@ -146,19 +146,14 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -168,18 +163,13 @@ mod tests {
         let _response = response?;
 
         // Delete table_2
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .delete(
-            TableParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_table("table_2")?
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                TableParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_table("table_2")?
+                    .build()?,
+            );
 
         TableDeleteService::new(db.clone(), authz_context.clone())
             .service()
@@ -192,16 +182,11 @@ mod tests {
         // Actual test
 
         // t0 -> no tables
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            AtTimeParam::builder().at(t0).build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                AtTimeParam::builder().at(t0).build()?,
+                ListParams::default(),
+            );
 
         let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
@@ -213,19 +198,14 @@ mod tests {
         assert_eq!(data.len(), 0);
 
         // t1 -> table_1 and table_2
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            AtTimeParam::builder().at(t1).build()?,
-            ListParamsBuilder::default()
-                .order_by("name".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                AtTimeParam::builder().at(t1).build()?,
+                ListParamsBuilder::default()
+                    .order_by("name".to_string())
+                    .build()
+                    .unwrap(),
+            );
 
         let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
@@ -239,16 +219,11 @@ mod tests {
         assert_eq!(data[1].name(), &TableName::try_from("table_2")?);
 
         // t2 -> table_1
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            AtTimeParam::builder().at(t2).build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                AtTimeParam::builder().at(t2).build()?,
+                ListParams::default(),
+            );
 
         let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
@@ -310,16 +285,11 @@ mod tests {
         let _ = seed_function(&db, &collection, &create).await;
 
         // All tables are visible to authorized users
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            AtTimeParam::builder().at(AtTime::default()).build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                AtTimeParam::builder().at(AtTime::default()).build()?,
+                ListParams::default(),
+            );
 
         let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()
@@ -333,11 +303,10 @@ mod tests {
         assert_eq!(data[1].name(), &TableName::try_from("table_2")?);
 
         // No tables are visible to authorized users
-        let request = RequestContext::with(AccessTokenId::default(), user.id(), role.id(), true)
-            .list(
-                AtTimeParam::builder().at(AtTime::default()).build()?,
-                ListParams::default(),
-            );
+        let request = RequestContext::with(AccessTokenId::default(), user.id(), role.id()).list(
+            AtTimeParam::builder().at(AtTime::default()).build()?,
+            ListParams::default(),
+        );
 
         let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()

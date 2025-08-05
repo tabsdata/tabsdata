@@ -160,19 +160,14 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("function_1")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -184,18 +179,13 @@ mod tests {
         let t2 = AtTime::now().await;
 
         // Delete function_2
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .delete(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("function_2")?
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("function_2")?
+                    .build()?,
+            );
         let service =
             DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
                 .service()
@@ -223,20 +213,15 @@ mod tests {
 
         // Actual test
         // t0 -> no functions yet
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            FunctionAtIdName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("function_1")?
-                .at(t0)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                FunctionAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("function_1")?
+                    .at(t0)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service =
             FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -247,23 +232,18 @@ mod tests {
         assert!(response.is_err());
 
         // t1 -> function_1 in history
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            FunctionAtIdName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("function_1")?
-                .at(t1)
-                .build()?,
-            ListParamsBuilder::default()
-                .order_by("name".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                FunctionAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("function_1")?
+                    .at(t1)
+                    .build()?,
+                ListParamsBuilder::default()
+                    .order_by("name".to_string())
+                    .build()
+                    .unwrap(),
+            );
 
         let service =
             FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -277,20 +257,15 @@ mod tests {
         assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
 
         // t2 -> function_1 and function_2 in history
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            FunctionAtIdName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("function_2")?
-                .at(t2)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                FunctionAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("function_2")?
+                    .at(t2)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service =
             FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -305,20 +280,15 @@ mod tests {
         assert_eq!(data[1].name(), &FunctionName::try_from("function_2")?);
 
         // t3 -> no function to retrieve the history
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            FunctionAtIdName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("function_2")?
-                .at(t3)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                FunctionAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("function_2")?
+                    .at(t3)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service =
             FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -329,23 +299,18 @@ mod tests {
         assert!(response.is_err());
 
         // t4 -> function_1 in history (different one)
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            FunctionAtIdName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("function_1")?
-                .at(t4)
-                .build()?,
-            ListParamsBuilder::default()
-                .order_by("name".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                FunctionAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("function_1")?
+                    .at(t4)
+                    .build()?,
+                ListParamsBuilder::default()
+                    .order_by("name".to_string())
+                    .build()
+                    .unwrap(),
+            );
 
         let service =
             FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())

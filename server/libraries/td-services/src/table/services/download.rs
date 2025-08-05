@@ -270,19 +270,15 @@ mod tests {
             .service()
             .await;
 
-            let request = RequestContext::with(
-                AccessTokenId::default(),
-                UserId::admin(),
-                RoleId::user(),
-                false,
-            )
-            .read(TableAtIdName::new(
-                TableParam::builder()
-                    .try_collection(collection)?
-                    .try_table(table)?
-                    .build()?,
-                AtTimeParam::builder().at(at_time).build()?,
-            ));
+            let request =
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                    .read(TableAtIdName::new(
+                        TableParam::builder()
+                            .try_collection(collection)?
+                            .try_table(table)?
+                            .build()?,
+                        AtTimeParam::builder().at(at_time).build()?,
+                    ));
             let response = service.raw_oneshot(request).await;
             match response {
                 Ok(path) => match path {

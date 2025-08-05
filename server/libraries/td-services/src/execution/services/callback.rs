@@ -173,18 +173,14 @@ mod tests {
                     .build()
                     .unwrap();
 
-                let request = RequestContext::with(
-                    AccessTokenId::default(),
-                    UserId::admin(),
-                    RoleId::user(),
-                    true,
-                )
-                .update(
-                    FunctionRunIdParam::builder()
-                        .function_run_id(function_run)
-                        .build()?,
-                    response,
-                );
+                let request =
+                    RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                        .update(
+                            FunctionRunIdParam::builder()
+                                .function_run_id(function_run)
+                                .build()?,
+                            response,
+                        );
 
                 let service =
                     ExecutionCallbackService::new(db.clone(), Arc::new(DaoQueries::default()))

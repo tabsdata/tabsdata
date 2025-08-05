@@ -323,19 +323,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("foo")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("foo")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -392,19 +387,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -464,7 +454,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            true,
         )
         .update(
             FunctionParam::builder()
@@ -528,19 +517,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -596,19 +580,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -664,19 +643,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -732,19 +706,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -816,19 +785,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -904,7 +868,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            true,
         )
         .update(
             FunctionParam::builder()
@@ -984,19 +947,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -1080,19 +1038,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -1149,19 +1102,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -1191,19 +1139,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -1233,19 +1176,14 @@ mod tests {
             .reuse_frozen_tables(true)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -1309,19 +1247,14 @@ mod tests {
             .reuse_frozen_tables(true)
             .build()?;
 
-        let update_request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("function_foo")?
-                .build()?,
-            update.clone(),
-        );
+        let update_request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("function_foo")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -1330,18 +1263,13 @@ mod tests {
         let response = service.raw_oneshot(update_request).await;
         let update_response = response?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
         let service =
             RegisterFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
                 .service()
@@ -1489,19 +1417,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection_2.name()))?
-                .try_function("function_2")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection_2.name()))?
+                    .try_function("function_2")?
+                    .build()?,
+                update.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -1559,19 +1482,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection_1.name()))?
-                .try_function("function")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection_1.name()))?
+                    .try_function("function")?
+                    .build()?,
+                update.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -1649,19 +1567,14 @@ mod tests {
 
         // With an update, a new function version and table version is created
         // But the trigger and dependency should still be valid (as the use id, not version id)
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("function_1")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
@@ -1780,19 +1693,14 @@ mod tests {
 
         // With an update, a new function version and table version is created
         // But the trigger and dependency should still be valid (as the use id, not version id)
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(collection.name().to_string())?
-                .try_function("function_2")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(collection.name().to_string())?
+                    .try_function("function_2")?
+                    .build()?,
+                update.clone(),
+            );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())

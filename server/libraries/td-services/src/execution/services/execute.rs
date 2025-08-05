@@ -407,21 +407,16 @@ pub(crate) mod tests {
 
         let _ = seed_function(&db, &collection_2, &create).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection_0.name()))?
-                .try_function("function_0")?
-                .build()?,
-            ExecutionRequest::builder()
-                .name(Some(ExecutionName::try_from("test_execution")?))
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection_0.name()))?
+                    .try_function("function_0")?
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .build()?,
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());

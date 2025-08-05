@@ -222,18 +222,6 @@ mod tests {
 
         let created_function = seed_function(&db, &collection, &create).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .delete(
-            FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-        );
 
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
@@ -241,6 +229,13 @@ mod tests {
             DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
                 .service()
                 .await;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+            );
         service.raw_oneshot(request).await?;
 
         assert_delete(
@@ -276,18 +271,13 @@ mod tests {
 
         let created_function = seed_function(&db, &collection, &create).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .delete(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
@@ -342,18 +332,13 @@ mod tests {
 
         let created_function = seed_function(&db, &collection, &create).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .delete(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
@@ -408,18 +393,13 @@ mod tests {
 
         let created_function = seed_function(&db, &collection, &create).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .delete(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
@@ -472,18 +452,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create_1.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create_1.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());
@@ -509,18 +484,13 @@ mod tests {
 
         let created_function_2 = seed_function(&db, &collection, &create_2).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .delete(
-            FunctionParam::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_function("joaquin_workout_2")?
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_function("joaquin_workout_2")?
+                    .build()?,
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz_context = Arc::new(AuthzContext::default());

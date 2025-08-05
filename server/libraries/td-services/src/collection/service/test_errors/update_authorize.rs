@@ -31,20 +31,15 @@ async fn test_not_allowed_to_update_collection(db: DbPool) {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::user(),
-        false,
-    )
-    .update(
-        CollectionParam::builder()
-            .try_collection(name.to_string())
-            .unwrap()
-            .build()
-            .unwrap(),
-        update,
-    );
+    let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+        .update(
+            CollectionParam::builder()
+                .try_collection(name.to_string())
+                .unwrap()
+                .build()
+                .unwrap(),
+            update,
+        );
 
     assert_service_error(service, request, |err| match err {
         AuthzError::Forbidden(_) => {}

@@ -110,18 +110,14 @@ mod tests {
 
             async move {
                 // Execute test
-                let request = RequestContext::with(
-                    AccessTokenId::default(),
-                    UserId::admin(),
-                    RoleId::user(),
-                    true,
-                )
-                .update(
-                    ExecutionParam::builder()
-                        .try_execution(execution)?
-                        .build()?,
-                    (),
-                );
+                let request =
+                    RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                        .update(
+                            ExecutionParam::builder()
+                                .try_execution(execution)?
+                                .build()?,
+                            (),
+                        );
 
                 ExecutionCancelService::new(
                     db.clone(),

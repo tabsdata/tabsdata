@@ -129,7 +129,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            false,
         )
         .delete(
             UserRoleParam::builder()
@@ -154,7 +153,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            true,
         )
         .delete(
             UserRoleParam::builder()

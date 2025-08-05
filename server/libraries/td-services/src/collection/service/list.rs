@@ -66,17 +66,14 @@ mod tests {
         ]);
     }
 
-    async fn test_list_collection(db: DbPool, admin: bool) {
+    #[td_test::test(sqlx)]
+    async fn test_list_collection(db: DbPool) {
         let name = CollectionName::try_from("ds0").unwrap();
         let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            admin,
-        )
-        .list((), ListParams::default());
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list((), ListParams::default());
 
         let service = ListCollectionsService::new(
             db,
@@ -90,16 +87,6 @@ mod tests {
         let list = response.unwrap();
         assert_eq!(list.len(), &1);
         assert_eq!(*list.data()[0].name(), name);
-    }
-
-    #[td_test::test(sqlx)]
-    async fn test_list_collection_admin(db: DbPool) {
-        test_list_collection(db, true).await;
-    }
-
-    #[td_test::test(sqlx)]
-    async fn test_list_collection_non_admin(db: DbPool) {
-        test_list_collection(db, false).await;
     }
 
     #[td_test::test(sqlx)]
@@ -127,18 +114,9 @@ mod tests {
         let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
         // All collections are visible to authorized users
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list((), ListParams::default());
-
-        let service =
-            ListCollectionsService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list((), ListParams::default());
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response?;
@@ -146,7 +124,7 @@ mod tests {
         assert_eq!(*list.data()[0].name(), name);
 
         // No collections are visible to unauthorized users
-        let request = RequestContext::with(AccessTokenId::default(), user.id(), role.id(), true)
+        let request = RequestContext::with(AccessTokenId::default(), user.id(), role.id())
             .list((), ListParams::default());
 
         let service =

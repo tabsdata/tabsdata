@@ -234,25 +234,20 @@ mod tests {
 
         // Actual test
         // t0 -> no versions
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            TableAtIdName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_table(format!("{}", table_version.name()))?
-                .at(t0)
-                .build()?,
-            ListParams::default(),
-        );
 
         let service =
             TableListDataVersionsService::new(db.clone(), Arc::new(AuthzContext::default()))
                 .service()
                 .await;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                TableAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_table(format!("{}", table_version.name()))?
+                    .at(t0)
+                    .build()?,
+                ListParams::default(),
+            );
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -260,20 +255,15 @@ mod tests {
         assert_eq!(data.len(), 0);
 
         // t1 -> version v1
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            TableAtIdName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_table(format!("{}", table_version.name()))?
-                .at(t1)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                TableAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_table(format!("{}", table_version.name()))?
+                    .at(t1)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service =
             TableListDataVersionsService::new(db.clone(), Arc::new(AuthzContext::default()))
@@ -287,20 +277,15 @@ mod tests {
         assert_eq!(data[0].id(), v1.id());
 
         // t2 -> versions v1 and v2
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            TableAtIdName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .try_table(format!("{}", table_version.name()))?
-                .at(t2)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                TableAtIdName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .try_table(format!("{}", table_version.name()))?
+                    .at(t2)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service =
             TableListDataVersionsService::new(db.clone(), Arc::new(AuthzContext::default()))

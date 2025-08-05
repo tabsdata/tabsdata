@@ -22,13 +22,8 @@ async fn test_not_allowed_to_create_collection(db: DbPool) {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::user(),
-        false,
-    )
-    .create((), create);
+    let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+        .create((), create);
 
     let service = CreateCollectionService::new(db.clone(), Arc::new(AuthzContext::default()))
         .service()

@@ -121,8 +121,8 @@ mod tests {
 
         let service = auth_services.logout_service().await;
 
-        let request = RequestContext::with(access_token_id, UserId::admin(), RoleId::user(), false)
-            .update((), ());
+        let request =
+            RequestContext::with(access_token_id, UserId::admin(), RoleId::user()).update((), ());
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
 

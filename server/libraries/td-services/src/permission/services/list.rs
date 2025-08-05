@@ -109,7 +109,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            true,
         )
         .list(
             RoleParam::builder()

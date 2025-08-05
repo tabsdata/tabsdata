@@ -205,13 +205,9 @@ mod tests {
             .role(RoleName::try_from("sys_admin")?)
             .build()?;
 
-        let request = RequestContext::with(
-            original_access_token_id,
-            UserId::admin(),
-            RoleId::user(),
-            false,
-        )
-        .update((), request);
+        let request =
+            RequestContext::with(original_access_token_id, UserId::admin(), RoleId::user())
+                .update((), request);
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res?;
@@ -256,7 +252,7 @@ mod tests {
             .role(RoleName::try_from("invalid_role")?)
             .build()?;
 
-        let request = RequestContext::with(access_token_id, UserId::admin(), RoleId::user(), false)
+        let request = RequestContext::with(access_token_id, UserId::admin(), RoleId::user())
             .update((), request);
 
         assert_service_error(service, request, |err| match err {

@@ -155,7 +155,7 @@ mod tests {
         let service = auth_services.user_info_service().await;
 
         let request =
-            RequestContext::with(access_token_id, UserId::admin(), RoleId::user(), false).read(());
+            RequestContext::with(access_token_id, UserId::admin(), RoleId::user()).read(());
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let user_info = res?;

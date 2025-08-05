@@ -35,7 +35,6 @@ async fn test_update_already_existing(db: DbPool) {
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sys_admin(),
-        false,
     )
     .update(
         CollectionParam::builder()

@@ -292,18 +292,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -339,18 +334,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -386,18 +376,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -433,22 +418,17 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
         let service = RegisterFunctionService::new(db.clone(), queries.clone(), authz.clone())
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -505,18 +485,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -549,18 +524,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -599,18 +569,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -647,18 +612,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -744,18 +704,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name_1.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name_1.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -785,18 +740,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name_2.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name_2.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -847,18 +797,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name_2.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name_2.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -902,18 +847,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -1031,18 +971,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name_2.as_str())?
-                .build()?,
-            create.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name_2.as_str())?
+                    .build()?,
+                create.clone(),
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());
@@ -1084,18 +1019,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(collection_name_1.as_str())?
-                .build()?,
-            create,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(collection_name_1.as_str())?
+                    .build()?,
+                create,
+            );
 
         let queries = Arc::new(DaoQueries::default());
         let authz = Arc::new(AuthzContext::default());

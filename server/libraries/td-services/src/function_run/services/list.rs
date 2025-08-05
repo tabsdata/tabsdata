@@ -143,13 +143,9 @@ mod tests {
         ];
 
         // Test
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list((), ListParams::default());
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list((), ListParams::default());
 
         let service = FunctionRunListService::new(db.clone(), queries)
             .service()

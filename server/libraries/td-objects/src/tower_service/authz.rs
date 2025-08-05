@@ -1358,20 +1358,14 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            true,
         );
         let sec_admin_context = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            true,
         );
-        let user_context = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            false,
-        );
+        let user_context =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user());
 
         let system_scope = Arc::new(AuthzScope::System);
 
@@ -1536,7 +1530,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::System);
@@ -1561,7 +1554,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::System);
@@ -1586,7 +1578,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::user(),
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::System);
@@ -1628,7 +1619,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             all_collections,
-            false,
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0)));
         assert_ok(
@@ -1652,7 +1642,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             one_collection,
-            false,
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0)));
         assert_ok(
@@ -1688,7 +1677,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            true,
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection)));
         assert_ok(
@@ -1762,7 +1750,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            true,
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection)));
         assert_error(
@@ -1856,7 +1843,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            false,
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection)));
         assert_ok(
@@ -1884,7 +1870,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            false,
         ));
         let scope = Arc::new(AuthzScope::System);
         assert_error(
@@ -1913,7 +1898,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            false,
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::All));
         assert_error(
@@ -1934,12 +1918,7 @@ mod tests {
         let authz_context = AuthzContextForTest::default().add_permissions(role, []);
         let authz_context = Arc::new(authz_context);
 
-        let request_context = Arc::new(RequestContext::with(
-            AccessTokenId::default(),
-            user,
-            role,
-            false,
-        ));
+        let request_context = Arc::new(RequestContext::with(AccessTokenId::default(), user, role));
 
         let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user)));
 
@@ -1965,7 +1944,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user)));
@@ -1988,7 +1966,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user)));
@@ -2011,12 +1988,7 @@ mod tests {
         let authz_context = AuthzContextForTest::default().add_permissions(role, []);
         let authz_context = Arc::new(authz_context);
 
-        let request_context = Arc::new(RequestContext::with(
-            AccessTokenId::default(),
-            user,
-            role,
-            false,
-        ));
+        let request_context = Arc::new(RequestContext::with(AccessTokenId::default(), user, role));
 
         let scope = Arc::new(AuthzScope::Role(AuthzEntity::On(role)));
 
@@ -2042,7 +2014,6 @@ mod tests {
             AccessTokenId::default(),
             user,
             RoleId::default(),
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::Role(AuthzEntity::On(role)));
@@ -2065,7 +2036,6 @@ mod tests {
             AccessTokenId::default(),
             user,
             RoleId::default(),
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::Role(AuthzEntity::On(role)));
@@ -2095,7 +2065,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            true,
         ));
 
         let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
@@ -2117,7 +2086,6 @@ mod tests {
             AccessTokenId::default(),
             user,
             RoleId::sys_admin(),
-            true,
         ));
 
         let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
@@ -2146,7 +2114,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
@@ -2169,7 +2136,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
@@ -2200,7 +2166,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role0,
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
@@ -2221,7 +2186,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role1,
-            true,
         ));
 
         let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
@@ -2251,7 +2215,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role0,
-            false,
         ));
 
         let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
@@ -2273,7 +2236,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::default(),
-            true,
         ));
 
         let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
@@ -2366,7 +2328,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            false,
         ));
         let scope = Arc::new(scope);
         assert_ok(
@@ -2387,7 +2348,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role,
-            false,
         ));
         let scope = Arc::new(scope);
         assert_error(
@@ -2736,7 +2696,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role0,
-            false,
         ));
         assert_ok(
             &authz_context,
@@ -2751,7 +2710,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role1,
-            false,
         ));
 
         assert_ok(
@@ -2767,7 +2725,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role2,
-            false,
         ));
         assert_error(
             &authz_context,
@@ -2783,7 +2740,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role3,
-            false,
         ));
         assert_error(
             &authz_context,
@@ -2799,7 +2755,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role4,
-            false,
         ));
         assert_ok(
             &authz_context,
@@ -2814,7 +2769,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role5,
-            false,
         ));
         assert_ok(
             &authz_context,
@@ -2829,7 +2783,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role6,
-            false,
         ));
         assert_error(
             &authz_context,
@@ -2845,7 +2798,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role7,
-            false,
         ));
         assert_error(
             &authz_context,
@@ -2864,7 +2816,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role0,
-            false,
         ));
         assert_error(
             &authz_context,
@@ -2880,7 +2831,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role1,
-            false,
         ));
         assert_error(
             &authz_context,
@@ -2896,7 +2846,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role2,
-            false,
         ));
         assert_error(
             &authz_context,
@@ -2912,7 +2861,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role3,
-            false,
         ));
         assert_error(
             &authz_context,
@@ -2928,7 +2876,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role6,
-            false,
         ));
         assert_error(
             &authz_context,
@@ -2944,7 +2891,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             role7,
-            false,
         ));
         assert_error(
             &authz_context,

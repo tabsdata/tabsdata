@@ -26,12 +26,7 @@ async fn test_user_cannot_enable_disable_themselves(db: DbPool) {
     .service()
     .await;
 
-    let ctx = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::user(),
-        false,
-    );
+    let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user());
 
     let update = UserUpdate::builder()
         .full_name(None)

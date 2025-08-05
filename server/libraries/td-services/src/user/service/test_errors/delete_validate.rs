@@ -23,7 +23,6 @@ async fn test_not_allowed_to_delete_themselves() {
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-        true,
     );
 
     let request = ctx.delete(

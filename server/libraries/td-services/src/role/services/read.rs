@@ -106,7 +106,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            false,
         )
         .read(
             RoleParam::builder()
@@ -144,7 +143,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            false,
         )
         .read(
             RoleParam::builder()

@@ -168,7 +168,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            true,
         )
         .create(
             RoleParam::builder()
@@ -220,14 +219,13 @@ mod tests {
             .unwrap()
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id(), true)
-                .create(
-                    RoleParam::builder()
-                        .role(RoleIdName::try_from("r0")?)
-                        .build()?,
-                    create,
-                );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+            .create(
+                RoleParam::builder()
+                    .role(RoleIdName::try_from("r0")?)
+                    .build()?,
+                create,
+            );
 
         let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
             .service()
@@ -273,14 +271,13 @@ mod tests {
             .unwrap()
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id(), true)
-                .create(
-                    RoleParam::builder()
-                        .role(RoleIdName::try_from("r0")?)
-                        .build()?,
-                    create,
-                );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id())
+            .create(
+                RoleParam::builder()
+                    .role(RoleIdName::try_from("r0")?)
+                    .build()?,
+                create,
+            );
 
         let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
             .service()

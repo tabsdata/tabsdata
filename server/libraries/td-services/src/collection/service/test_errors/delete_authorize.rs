@@ -22,19 +22,14 @@ async fn test_not_allowed_to_delete_collection(db: DbPool) {
         .service()
         .await;
 
-    let request = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::user(),
-        false,
-    )
-    .delete(
-        CollectionParam::builder()
-            .try_collection(name.to_string())
-            .unwrap()
-            .build()
-            .unwrap(),
-    );
+    let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+        .delete(
+            CollectionParam::builder()
+                .try_collection(name.to_string())
+                .unwrap()
+                .build()
+                .unwrap(),
+        );
 
     assert_service_error(service, request, |err| match err {
         AuthzError::Forbidden(_) => {}

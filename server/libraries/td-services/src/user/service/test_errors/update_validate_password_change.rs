@@ -34,7 +34,6 @@ async fn test_cannot_change_self_password() {
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-        false,
     );
 
     let update = UserUpdate::builder()

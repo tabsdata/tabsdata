@@ -168,46 +168,36 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("function_1")?
-                .build()?,
-            update.clone(),
-        );
 
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
                 .service()
                 .await;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("function_1")?
+                    .build()?,
+                update.clone(),
+            );
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
         let t3 = AtTime::now().await;
 
         // Delete function_2
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .delete(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("function_2")?
-                .build()?,
-        );
         let service =
             DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
                 .service()
                 .await;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("function_2")?
+                    .build()?,
+            );
         service.raw_oneshot(request).await?;
 
         let t4 = AtTime::now().await;
@@ -231,19 +221,14 @@ mod tests {
 
         // Actual test
         // t0 -> no functions
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            CollectionAtName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .at(t0)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                CollectionAtName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .at(t0)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service = FunctionListByCollectionService::new(
             db.clone(),
@@ -259,22 +244,17 @@ mod tests {
         assert_eq!(data.len(), 0);
 
         // t1 -> function_1
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            CollectionAtName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .at(t1)
-                .build()?,
-            ListParamsBuilder::default()
-                .order_by("name".to_string())
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                CollectionAtName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .at(t1)
+                    .build()?,
+                ListParamsBuilder::default()
+                    .order_by("name".to_string())
+                    .build()
+                    .unwrap(),
+            );
 
         let service = FunctionListByCollectionService::new(
             db.clone(),
@@ -291,19 +271,14 @@ mod tests {
         assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
 
         // t2 -> function_1 and function_2
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            CollectionAtName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .at(t2)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                CollectionAtName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .at(t2)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service = FunctionListByCollectionService::new(
             db.clone(),
@@ -321,19 +296,14 @@ mod tests {
         assert_eq!(data[1].name(), &FunctionName::try_from("function_2")?);
 
         // t3 -> function_2 and function_3
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            CollectionAtName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .at(t3)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                CollectionAtName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .at(t3)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service = FunctionListByCollectionService::new(
             db.clone(),
@@ -351,19 +321,14 @@ mod tests {
         assert_eq!(data[1].name(), &FunctionName::try_from("function_3")?);
 
         // t4 -> function_3
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            CollectionAtName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .at(t4)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                CollectionAtName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .at(t4)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service = FunctionListByCollectionService::new(
             db.clone(),
@@ -380,19 +345,14 @@ mod tests {
         assert_eq!(data[0].name(), &FunctionName::try_from("function_3")?);
 
         // t5 -> function_3 and function_5
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .list(
-            CollectionAtName::builder()
-                .try_collection(format!("~{}", collection.id()))?
-                .at(t5)
-                .build()?,
-            ListParams::default(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
+                CollectionAtName::builder()
+                    .try_collection(format!("~{}", collection.id()))?
+                    .at(t5)
+                    .build()?,
+                ListParams::default(),
+            );
 
         let service = FunctionListByCollectionService::new(
             db.clone(),

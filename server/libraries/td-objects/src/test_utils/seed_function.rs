@@ -24,7 +24,6 @@ pub async fn seed_function(
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-        true,
     )
     .read("");
     let request_context = request_context.context();

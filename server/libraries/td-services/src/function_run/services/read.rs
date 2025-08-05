@@ -183,21 +183,14 @@ mod tests {
         .await;
 
         // Test
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .read(
-            FunctionRunParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function(format!("{}", function_version.name()))?
-                .try_execution(format!("~{}", execution.id()))?
-                .build()?,
-        );
-
-        let service = FunctionRunReadService::new(db.clone(), queries, authz_context)
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
+                FunctionRunParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function(format!("{}", function_version.name()))?
+                    .try_execution(format!("~{}", execution.id()))?
+                    .build()?,
+            );
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

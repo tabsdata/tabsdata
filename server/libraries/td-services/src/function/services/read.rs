@@ -200,18 +200,13 @@ mod tests {
 
         let function = seed_function(&db, &collection, &create).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .read(
-            FunctionParam::builder()
-                .try_collection(format!("~{}", function.collection_id()))?
-                .try_function("joaquin_workout")?
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
+                FunctionParam::builder()
+                    .try_collection(format!("~{}", function.collection_id()))?
+                    .try_function("joaquin_workout")?
+                    .build()?,
+            );
 
         let service = ReadFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
             .service()

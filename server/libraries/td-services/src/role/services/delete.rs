@@ -185,7 +185,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            true,
         )
         .delete(RoleParam::builder().role(role_id_name.clone()).build()?);
         let service = DeleteRoleService::new(db.clone(), Arc::new(AuthzContext::default()))
@@ -262,7 +261,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            true,
         )
         .delete(
             RoleParam::builder()

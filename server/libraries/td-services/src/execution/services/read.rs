@@ -130,17 +130,12 @@ mod tests {
         )
         .service()
         .await;
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .read(
-            ExecutionParam::builder()
-                .try_execution(execution.id().to_string())?
-                .build()?,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
+                ExecutionParam::builder()
+                    .try_execution(execution.id().to_string())?
+                    .build()?,
+            );
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(execution, response);

@@ -96,24 +96,20 @@ mod tests {
         ]);
     }
 
-    async fn test_read_collection(db: DbPool, admin: bool) {
+    #[td_test::test(sqlx)]
+    async fn test_read_collection(db: DbPool) {
         let before = AtTime::now().await;
         let name = CollectionName::try_from("ds0").unwrap();
         let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            admin,
-        )
-        .read(
-            CollectionParam::builder()
-                .try_collection(name.to_string())
-                .unwrap()
-                .build()
-                .unwrap(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
+                CollectionParam::builder()
+                    .try_collection(name.to_string())
+                    .unwrap()
+                    .build()
+                    .unwrap(),
+            );
 
         let service = ReadCollectionService::new(db, Arc::new(AuthzContext::default()))
             .service()
@@ -130,15 +126,5 @@ mod tests {
         assert_eq!(created.modified_on(), created.created_on());
         assert_eq!(*created.modified_by_id(), UserId::admin());
         assert_eq!(*created.modified_by(), UserName::admin());
-    }
-
-    #[td_test::test(sqlx)]
-    async fn test_read_collection_admin(db: DbPool) {
-        test_read_collection(db, true).await;
-    }
-
-    #[td_test::test(sqlx)]
-    async fn test_read_collection_non_admin(db: DbPool) {
-        test_read_collection(db, false).await;
     }
 }

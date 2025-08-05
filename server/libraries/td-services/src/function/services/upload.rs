@@ -198,18 +198,13 @@ mod tests {
             .unwrap();
         let function_upload = FunctionUpload::new(request);
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .create(
-            CollectionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .build()?,
-            function_upload,
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .build()?,
+                function_upload,
+            );
 
         let service = UploadFunctionService::new(
             db.clone(),

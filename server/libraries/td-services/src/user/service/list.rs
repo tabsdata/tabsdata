@@ -97,13 +97,9 @@ mod tests {
             .service()
             .await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            user1.id(),
-            RoleId::sec_admin(),
-            true,
-        )
-        .list((), ListParams::default());
+        let request =
+            RequestContext::with(AccessTokenId::default(), user1.id(), RoleId::sec_admin())
+                .list((), ListParams::default());
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();

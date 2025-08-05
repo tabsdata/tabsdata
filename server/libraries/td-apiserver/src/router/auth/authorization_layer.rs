@@ -73,7 +73,6 @@ pub async fn authorization_layer(
         session.access_token_id(),
         session.user_id(),
         session.role_id(),
-        true, // TODO TD-273
     );
     let mut request = request;
     request.extensions_mut().insert(request_context);

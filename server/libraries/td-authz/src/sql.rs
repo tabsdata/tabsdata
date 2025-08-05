@@ -166,7 +166,6 @@ mod tests {
         seed_inter_collection_permission(&db, c1.id(), &ToCollectionId::try_from(c2.id())?).await;
 
         let provider = SqlAuthzDataProvider;
-
         let authz_data = provider.get(&mut db.acquire().await.unwrap()).await?;
         assert_eq!(authz_data.permissions.len(), 3);
         assert_eq!(

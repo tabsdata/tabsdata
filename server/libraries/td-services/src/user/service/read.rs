@@ -103,8 +103,8 @@ mod tests {
             .service()
             .await;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), user.id(), RoleId::user(), false).read(
+        let request = RequestContext::with(AccessTokenId::default(), user.id(), RoleId::user())
+            .read(
                 UserParam::builder()
                     .try_user(user_name.to_string())
                     .unwrap()
