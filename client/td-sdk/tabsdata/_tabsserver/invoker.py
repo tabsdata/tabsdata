@@ -88,7 +88,7 @@ def invoke(
     # In particular, it may cause Python to import the tabsdata module from the test
     # project directory instead of from local packages or the installed version.
     # To avoid this, when this parameter is set to True (typically during tests), a
-    # temporary directory (considered a safe and neutral context)  is used as the
+    # temporary directory (considered a safe and neutral context) is used as the
     # working directory. Otherwise (in production or supervised execution), the current
     # directory is preserved, since the supervisor is responsible for setting it
     # correctly.
@@ -184,7 +184,11 @@ def invoke(
         mount_options = sys.stdin.read()
         with time_block:
             # See explanation on parameter temp_cwd
-            cwd = tempfile.gettempdir() if temp_cwd else None
+            if temp_cwd:
+                cwd = tempfile.mkdtemp()
+                logger.info(f"Using cwd for the running function: {cwd}")
+            else:
+                cwd = None
             result = subprocess.run(
                 command_to_execute,
                 env=env,

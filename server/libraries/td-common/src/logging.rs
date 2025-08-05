@@ -53,6 +53,7 @@ pub const LOG_FILE: &str = "td.log";
 pub const LOG_EXTENSION: &str = "log";
 
 pub const WORK_ENV: &str = "TD_URI_WORK";
+pub const PYTEST_VERSION: &str = "PYTEST_VERSION";
 
 use tracing_subscriber::reload::Handle;
 use tracing_subscriber::reload::Layer as ReloadLayer;
@@ -254,7 +255,8 @@ fn obtain_log_location(path: PathBuf) -> Option<PathBuf> {
     } else {
         obtain_log_location_from_info_file(path.clone())
             .or_else(|| obtain_log_location_from_arguments(path.clone()))
-            .or_else(|| obtain_log_location_from_environment(path))
+            .or_else(|| obtain_log_location_from_environment(path.clone()))
+            .or_else(|| obtain_log_location_from_pytest(path))
     };
     path.and_then(|path| {
         to_absolute(&path)
@@ -288,6 +290,14 @@ fn obtain_log_location_from_arguments(path: PathBuf) -> Option<PathBuf> {
 fn obtain_log_location_from_environment(path: PathBuf) -> Option<PathBuf> {
     if let Ok(work) = env::var(WORK_ENV) {
         Some(PathBuf::from(work).join(path))
+    } else {
+        None
+    }
+}
+
+fn obtain_log_location_from_pytest(_: PathBuf) -> Option<PathBuf> {
+    if let Ok(_) = env::var(PYTEST_VERSION) {
+        Some(get_current_dir())
     } else {
         None
     }
