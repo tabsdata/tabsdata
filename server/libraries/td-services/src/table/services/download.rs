@@ -53,11 +53,13 @@ mod tests {
     use bytes::Bytes;
     use futures::StreamExt;
     use polars::datatypes::{Int64Chunked, StringChunked};
+    use polars::prelude::sync_on_close::SyncOnCloseType;
     use polars::prelude::{
         DataFrame, IntoColumn, IntoLazy, NamedFrom, ParquetReader, ParquetWriteOptions, SerReader,
+        SinkOptions, SinkTarget,
     };
     use std::io::Cursor;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use td_common::absolute_path::AbsolutePath;
     use td_database::sql::DbPool;
@@ -135,6 +137,7 @@ mod tests {
             ]);
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_download() -> Result<(), TdError> {
         let db = td_database::test_utils::db().await?;
@@ -230,8 +233,20 @@ mod tests {
                     let a = Int64Chunked::new("i".into(), &[i, 1]).into_column();
                     let b = StringChunked::new("s".into(), &["a", "b"]).into_column();
                     let lf = DataFrame::new(vec![a, b]).unwrap().lazy();
-                    lf.sink_parquet(path, ParquetWriteOptions::default())
-                        .unwrap();
+                    let sink_target = SinkTarget::Path(Arc::new(PathBuf::from(url.to_string())));
+                    _ = lf
+                        .sink_parquet(
+                            sink_target,
+                            ParquetWriteOptions::default(),
+                            None,
+                            SinkOptions {
+                                sync_on_close: SyncOnCloseType::All,
+                                maintain_order: true,
+                                mkdir: true,
+                            },
+                        )
+                        .unwrap()
+                        .collect();
                 } else {
                     seed_table_data_version(
                         &db,

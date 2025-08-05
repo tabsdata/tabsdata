@@ -3,6 +3,7 @@
 //
 
 use crate::transporter::args::{Format, ImporterOptions, ToFormat};
+use crate::transporter::cloud::create_sink_target;
 use chrono::{DateTime, Duration, Utc};
 use derive_builder::Builder;
 use getset::Getters;
@@ -12,8 +13,9 @@ use object_store::{parse_url_opts, ObjectMeta, ObjectStore};
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
     lit, nth, IntoLazy, LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader,
-    PolarsError,
+    PolarsError, SinkOptions,
 };
+use polars_io::utils::sync_on_close::SyncOnCloseType;
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
 use std::sync::{Arc, Mutex};
@@ -116,7 +118,7 @@ pub fn to_file_to_import_instructions(
             idx,
             from_url: base_url.join(o.location.as_ref()).unwrap(),
             timestamp: o.last_modified,
-            size: o.size,
+            size: o.size as usize,
             to_url: importer_options
                 .to()
                 .join(&(id::id().to_string() + ".parquet"))
@@ -150,7 +152,7 @@ pub struct FileImportInstructions {
     idx: usize,
     from_url: Url,
     timestamp: DateTime<Utc>,
-    size: u64,
+    size: usize,
     to_url: Url,
     importer_options: Arc<ImporterOptions>,
 }
@@ -160,7 +162,7 @@ pub struct FileImportInstructions {
 pub struct FileImportReport {
     idx: usize,
     from: String,
-    size: u64,
+    size: usize,
     rows: usize,
     last_modified: DateTime<Utc>,
     to: String,
@@ -333,7 +335,7 @@ fn importer_lazy_frame(
                 .collect()?
                 .lazy()
         }
-        // As log column is treated as an string, we do not need a full scan to infer data type.
+        // As log column is treated as n string, we do not need a full scan to infer data type.
         Format::Log(options) => {
             let file_name = url
                 .path_segments()
@@ -385,7 +387,7 @@ pub const TD_SYSTEM_COLUMNS: [&str; 0] = [];
 
 /*
 // Not used if system columns are not being generated...
-/// Adds a id column to the LazyFrame.
+/// Adds an id column to the LazyFrame.
 ///
 /// We piggyback on the id column creation to report progress.
 fn add_td_id_column(
@@ -417,14 +419,25 @@ fn write_imported_lazy_frame(
         CloudOptions::from_untyped_config(url.as_ref(), importer_options.to_configs())?;
     match importer_options.to_format() {
         ToFormat::Parquet(parquet_write_options) => {
-            lazy_frame.sink_parquet_cloud(
-                url.to_string(),
+            let sink = lazy_frame.sink_parquet(
+                create_sink_target(url, importer_options.to_configs())?,
+                parquet_write_options.clone(),
                 Some(cloud_options),
-                *parquet_write_options,
-            )?;
+                SinkOptions {
+                    sync_on_close: SyncOnCloseType::None,
+                    maintain_order: true,
+                    mkdir: true,
+                },
+            );
+            match sink {
+                Ok(sink_frame) => {
+                    let _ = sink_frame.collect()?;
+                    Ok(())
+                }
+                Err(err) => Err(err),
+            }
         }
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -507,6 +520,7 @@ mod tests {
         assert_eq!(files[0].location.filename().unwrap(), "test_file");
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test]
     async fn test_filter_matching_files_pattern() {
         let now = chrono::Utc::now();
@@ -589,6 +603,7 @@ mod tests {
         take_files_limit()((MAX_FILE_LIMIT + 1, file.clone())).unwrap_err();
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test]
     async fn test_file_last_modified_comparator() {
         let now = chrono::Utc::now();
@@ -632,7 +647,7 @@ mod tests {
         assert_eq!(instructions.idx, 0);
         assert_eq!(instructions.from_url, Url::parse(&a1b_file()).unwrap());
         assert_eq!(instructions.timestamp, file1.last_modified);
-        assert_eq!(instructions.size, file1.size);
+        assert_eq!(instructions.size, file1.size as usize);
 
         let to_url = instructions.to_url.to_string();
         assert!(to_url.starts_with("file:///"));

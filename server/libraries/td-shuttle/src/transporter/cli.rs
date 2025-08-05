@@ -155,7 +155,7 @@ async fn run_impl(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::transporter::api::{
         AwsConfigs, AzureConfigs, CopyRequest, Location, TransporterReport, TransporterRequest,
         Value,
@@ -167,6 +167,7 @@ mod tests {
     use std::collections::HashSet;
     use std::fs::File;
     use std::io::Write;
+    use td_common::id::id;
     use testdir::testdir;
     use url::Url;
 
@@ -219,7 +220,7 @@ mod tests {
         assert!(matches!(report, Some(TransporterReport::CopyV1(_))));
     }
 
-    fn check_envs(test_name: &str, required_envs: Vec<&str>) -> bool {
+    pub(crate) fn check_envs(test_name: &str, required_envs: Vec<&str>) -> bool {
         let required_envs = required_envs
             .into_iter()
             .map(ToString::to_string)
@@ -294,7 +295,7 @@ mod tests {
         const AWS_SECRET_ACCESS_KEY_ENV: &str = "COPY_AWS_AWS_SECRET_ACCESS_KEY";
 
         if check_envs(
-            "test_copy_to_aws",
+            "test_copy_local_to_aws",
             vec![
                 BASE_URL_ENV,
                 AWS_REGION_ENV,
@@ -303,7 +304,7 @@ mod tests {
             ],
         ) {
             let target = Location::S3 {
-                url: Url::parse(&std::env::var(BASE_URL_ENV).unwrap()).unwrap(),
+                url: build_uuid_v7_url(std::env::var(BASE_URL_ENV).unwrap()),
                 configs: AwsConfigs {
                     region: Some(Value::Env(AWS_REGION_ENV.to_string())),
                     access_key: Value::Env(AWS_ACCESS_KEY_ID_ENV.to_string()),
@@ -322,11 +323,11 @@ mod tests {
         const AZURE_ACCOUNT_KEY_ENV: &str = "COPY_AZURE_ACCOUNT_KEY";
 
         if check_envs(
-            "test_copy_to_azure",
+            "test_copy_local_to_azure",
             vec![BASE_URL_ENV, AZURE_ACCOUNT_NAME_ENV, AZURE_ACCOUNT_KEY_ENV],
         ) {
             let target = Location::Azure {
-                url: Url::parse(&std::env::var(BASE_URL_ENV).unwrap()).unwrap(),
+                url: build_uuid_v7_url(std::env::var(BASE_URL_ENV).unwrap()),
                 configs: AzureConfigs {
                     account_name: Value::Env(AZURE_ACCOUNT_NAME_ENV.to_string()),
                     account_key: Value::Env(AZURE_ACCOUNT_KEY_ENV.to_string()),
@@ -335,5 +336,17 @@ mod tests {
             };
             test_run_impl_copy(target).await;
         }
+    }
+
+    pub(crate) fn build_uuid_v7_url(url: String) -> Url {
+        let mut url = Url::parse(&url).expect("Invalid base URL");
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
+        let file = format!("{}.parquet", id());
+        url.path_segments_mut()
+            .expect("Cannot modify path segments for URL")
+            .push(&file);
+        url
     }
 }

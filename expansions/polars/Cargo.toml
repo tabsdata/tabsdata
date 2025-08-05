@@ -97,11 +97,11 @@ path = "../../extensions/rust/te-tableframe"
 # External dependencies
 
 [workspace.dependencies.polars]
-version = "0.46.0"
+version = "0.49.1"
 default-features = false
 
 [workspace.dependencies.polars-arrow]
-version = "0.46.0"
+version = "0.49.1"
 default-features = false
 
 # Note: Each pyo3-polars is tightly tied to a specific version of pyo3.
@@ -112,11 +112,11 @@ version = "0.10.73"
 features = ["vendored"]
 
 [workspace.dependencies.pyo3]
-version = "0.23.5"
+version = "0.25.1"
 features = ["abi3-py311", "macros", "multiple-pymethods", "anyhow", "chrono", "chrono-tz", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"]
 
 [workspace.dependencies.pyo3-polars]
-version = "0.20.0"
+version = "0.22.0"
 features = ["derive"]
 
 [workspace.dependencies.serde]

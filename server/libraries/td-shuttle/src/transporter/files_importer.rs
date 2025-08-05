@@ -175,3 +175,394 @@ impl Importer for FilesImporter {
         Ok(import_reports)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::transporter::api::{
+        AwsConfigs, AzureConfigs, BaseImportUrl, ImportFormat, ImportRequestBuilder,
+        ImportSourceBuilder, ImportTargetBuilder, Location, Value, WildcardUrl,
+    };
+    use crate::transporter::cli::tests::check_envs;
+    use crate::transporter::files_importer::{FilesImporter, Importer};
+    use chrono::Utc;
+    use object_store::ObjectMeta;
+    use polars::datatypes::{Float64Chunked, Int64Chunked, PlSmallStr, StringChunked};
+    use polars::frame::DataFrame;
+    use polars::prelude::{
+        Column, IntoLazy, IntoSeries, LazyFrame, ScanArgsParquet, SinkOptions, SinkTarget,
+    };
+    use polars_io::cloud::{CloudOptions, ObjectStorePath};
+    use polars_io::prelude::ParquetWriteOptions;
+    use polars_io::utils::sync_on_close::SyncOnCloseType;
+    use std::collections::HashMap;
+    use std::env::var;
+    use std::sync::Arc;
+    use td_common::id::id;
+    use testdir::testdir;
+    use url::Url;
+
+    //noinspection DuplicatedCode
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_from_local_to_aws() {
+        const AWS_ACCESS_KEY_ID_ENV: &str = "IMPORT_AWS_ACCESS_KEY";
+        const AWS_REGION_ENV: &str = "IMPORT_AWS_REGION";
+        const AWS_SECRET_ACCESS_KEY_ENV: &str = "IMPORT_AWS_SECRET_KEY";
+        const BASE_URL_ENV: &str = "IMPORT_AWS_BASE_URL";
+
+        if check_envs(
+            "test_import_from_local_to_aws",
+            vec![
+                AWS_ACCESS_KEY_ID_ENV,
+                AWS_REGION_ENV,
+                AWS_SECRET_ACCESS_KEY_ENV,
+                BASE_URL_ENV,
+            ],
+        ) {
+            let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
+                .into_series()
+                .with_name(PlSmallStr::from("col_int"));
+            let col_float = Float64Chunked::from_iter((0..1000).map(|i| Some(i as f64)))
+                .into_series()
+                .with_name(PlSmallStr::from("col_float"));
+            let col_string = StringChunked::from_iter((0..1000).map(|i| Some(i.to_string())))
+                .into_series()
+                .with_name(PlSmallStr::from("col_string"));
+            let df_out = DataFrame::new(vec![
+                Column::from(col_int),
+                Column::from(col_float),
+                Column::from(col_string),
+            ])
+            .unwrap();
+            let lf = df_out.clone().lazy();
+
+            let folder = testdir!();
+            let id = id();
+            let file_r = format!("{id}.parquet");
+            let path_r = folder.join(file_r.clone());
+            let url_r = Url::from_file_path(path_r.clone()).unwrap();
+
+            let _ = lf
+                .sink_parquet(
+                    SinkTarget::Path(Arc::new(path_r.clone())),
+                    ParquetWriteOptions::default(),
+                    None,
+                    SinkOptions {
+                        sync_on_close: SyncOnCloseType::All,
+                        maintain_order: true,
+                        mkdir: true,
+                    },
+                )
+                .unwrap()
+                .collect();
+
+            let url_w = Url::parse(&format!(
+                "{}/unit_test/{}",
+                var(BASE_URL_ENV).unwrap(),
+                file_r.clone()
+            ))
+            .unwrap();
+
+            let request = ImportRequestBuilder::default()
+                .source(
+                    ImportSourceBuilder::default()
+                        .location(Location::LocalFile {
+                            url: WildcardUrl(url_r.clone()),
+                        })
+                        .initial_lastmod(None)
+                        .lastmod_info(None)
+                        .build()
+                        .unwrap(),
+                )
+                .format(ImportFormat::Parquet)
+                .target(
+                    ImportTargetBuilder::default()
+                        .location(Location::S3 {
+                            url: BaseImportUrl(url_w.clone()),
+                            configs: AwsConfigs {
+                                access_key: Value::Env(AWS_ACCESS_KEY_ID_ENV.into()),
+                                secret_key: Value::Env(AWS_SECRET_ACCESS_KEY_ENV.into()),
+                                region: Some(Value::Env(AWS_REGION_ENV.into())),
+                                extra_configs: None,
+                            },
+                        })
+                        .build()
+                        .unwrap(),
+                )
+                .parallelism(None)
+                .build()
+                .unwrap();
+
+            let meta = ObjectMeta {
+                location: ObjectStorePath::from(path_r.clone().to_string_lossy().as_ref()),
+                last_modified: Utc::now(),
+                size: 1024,
+                e_tag: Some(id.to_string()),
+                version: Some("v1".to_string()),
+            };
+            let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
+
+            let response = FilesImporter::import(&request, files).await.unwrap();
+            assert!(!response.is_empty());
+            assert_eq!(response.len(), 1);
+
+            let url_tf = response.first().unwrap().to.clone();
+
+            let mut config = HashMap::new();
+            config.insert(
+                "AWS_ACCESS_KEY_ID".to_string(),
+                var(AWS_ACCESS_KEY_ID_ENV).unwrap(),
+            );
+            config.insert(
+                "AWS_SECRET_ACCESS_KEY".to_string(),
+                var(AWS_SECRET_ACCESS_KEY_ENV).unwrap(),
+            );
+            config.insert("AWS_REGION".to_string(), var(AWS_REGION_ENV).unwrap());
+            let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config).unwrap();
+
+            let lf = LazyFrame::scan_parquet(
+                url_tf.to_string(),
+                ScanArgsParquet {
+                    cloud_options: Some(cloud_options),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+            let df_in = tokio::task::spawn_blocking(move || lf.collect())
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert!(df_out.equals(&df_in));
+        }
+    }
+
+    //noinspection DuplicatedCode
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_from_local_to_azure() {
+        const AZURE_ACCOUNT_KEY_ENV: &str = "IMPORT_AZURE_ACCOUNT_KEY";
+        const AZURE_ACCOUNT_NAME_ENV: &str = "IMPORT_AZURE_ACCOUNT_NAME";
+        const BASE_URL_ENV: &str = "IMPORT_AZURE_BASE_URL";
+
+        if check_envs(
+            "test_import_from_local_to_azure",
+            vec![AZURE_ACCOUNT_KEY_ENV, AZURE_ACCOUNT_NAME_ENV, BASE_URL_ENV],
+        ) {
+            let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
+                .into_series()
+                .with_name(PlSmallStr::from("col_int"));
+            let col_float = Float64Chunked::from_iter((0..1000).map(|i| Some(i as f64)))
+                .into_series()
+                .with_name(PlSmallStr::from("col_float"));
+            let col_string = StringChunked::from_iter((0..1000).map(|i| Some(i.to_string())))
+                .into_series()
+                .with_name(PlSmallStr::from("col_string"));
+            let df_out = DataFrame::new(vec![
+                Column::from(col_int),
+                Column::from(col_float),
+                Column::from(col_string),
+            ])
+            .unwrap();
+            let lf = df_out.clone().lazy();
+
+            let folder = testdir!();
+            let id = id();
+            let file_r = format!("{id}.parquet");
+            let path_r = folder.join(file_r.clone());
+            let url_r = Url::from_file_path(path_r.clone()).unwrap();
+
+            let _ = lf
+                .sink_parquet(
+                    SinkTarget::Path(Arc::new(path_r.clone())),
+                    ParquetWriteOptions::default(),
+                    None,
+                    SinkOptions {
+                        sync_on_close: SyncOnCloseType::All,
+                        maintain_order: true,
+                        mkdir: true,
+                    },
+                )
+                .unwrap()
+                .collect();
+
+            let url_w = Url::parse(&format!(
+                "{}/unit_test/{}",
+                var(BASE_URL_ENV).unwrap(),
+                file_r.clone()
+            ))
+            .unwrap();
+
+            let request = ImportRequestBuilder::default()
+                .source(
+                    ImportSourceBuilder::default()
+                        .location(Location::LocalFile {
+                            url: WildcardUrl(url_r.clone()),
+                        })
+                        .initial_lastmod(None)
+                        .lastmod_info(None)
+                        .build()
+                        .unwrap(),
+                )
+                .format(ImportFormat::Parquet)
+                .target(
+                    ImportTargetBuilder::default()
+                        .location(Location::Azure {
+                            url: BaseImportUrl(url_w.clone()),
+                            configs: AzureConfigs {
+                                account_name: Value::Env(AZURE_ACCOUNT_NAME_ENV.into()),
+                                account_key: Value::Env(AZURE_ACCOUNT_KEY_ENV.into()),
+                                extra_configs: None,
+                            },
+                        })
+                        .build()
+                        .unwrap(),
+                )
+                .parallelism(None)
+                .build()
+                .unwrap();
+
+            let meta = ObjectMeta {
+                location: ObjectStorePath::from(path_r.clone().to_string_lossy().as_ref()),
+                last_modified: Utc::now(),
+                size: 1024,
+                e_tag: Some(id.to_string()),
+                version: Some("v1".to_string()),
+            };
+            let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
+
+            let response = FilesImporter::import(&request, files).await.unwrap();
+            assert!(!response.is_empty());
+            assert_eq!(response.len(), 1);
+
+            let url_tf = response.first().unwrap().to.clone();
+
+            let mut config = HashMap::new();
+            config.insert(
+                "azure_storage_account_name".to_string(),
+                var(AZURE_ACCOUNT_NAME_ENV).unwrap(),
+            );
+            config.insert(
+                "azure_storage_account_key".to_string(),
+                var(AZURE_ACCOUNT_KEY_ENV).unwrap(),
+            );
+            let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config).unwrap();
+
+            let lf = LazyFrame::scan_parquet(
+                url_tf.to_string(),
+                ScanArgsParquet {
+                    cloud_options: Some(cloud_options),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+            let df_in = tokio::task::spawn_blocking(move || lf.collect())
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert!(df_out.equals(&df_in));
+        }
+    }
+
+    //noinspection DuplicatedCode
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_from_local_to_local() {
+        let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
+            .into_series()
+            .with_name(PlSmallStr::from("col_int"));
+        let col_float = Float64Chunked::from_iter((0..1000).map(|i| Some(i as f64)))
+            .into_series()
+            .with_name(PlSmallStr::from("col_float"));
+        let col_string = StringChunked::from_iter((0..1000).map(|i| Some(i.to_string())))
+            .into_series()
+            .with_name(PlSmallStr::from("col_string"));
+        let df_out = DataFrame::new(vec![
+            Column::from(col_int),
+            Column::from(col_float),
+            Column::from(col_string),
+        ])
+        .unwrap();
+        let lf = df_out.clone().lazy();
+
+        let folder = testdir!();
+        let id_r = id();
+        let file_r = format!("{id_r}.parquet");
+        let path_r = folder.clone().join(file_r.clone());
+        let url_r = Url::from_file_path(path_r.clone()).unwrap();
+
+        let _ = lf
+            .sink_parquet(
+                SinkTarget::Path(Arc::new(path_r.clone())),
+                ParquetWriteOptions::default(),
+                None,
+                SinkOptions {
+                    sync_on_close: SyncOnCloseType::All,
+                    maintain_order: true,
+                    mkdir: true,
+                },
+            )
+            .unwrap()
+            .collect();
+
+        let id_w = id();
+        let file_w = format!("{id_w}.parquet");
+        let path_w = folder.clone().join(file_w.clone());
+        let url_w = Url::from_file_path(path_w.clone()).unwrap();
+
+        let request = ImportRequestBuilder::default()
+            .source(
+                ImportSourceBuilder::default()
+                    .location(Location::LocalFile {
+                        url: WildcardUrl(url_r.clone()),
+                    })
+                    .initial_lastmod(None)
+                    .lastmod_info(None)
+                    .build()
+                    .unwrap(),
+            )
+            .format(ImportFormat::Parquet)
+            .target(
+                ImportTargetBuilder::default()
+                    .location(Location::LocalFile {
+                        url: BaseImportUrl(url_w.clone()),
+                    })
+                    .build()
+                    .unwrap(),
+            )
+            .parallelism(None)
+            .build()
+            .unwrap();
+
+        let meta = ObjectMeta {
+            location: ObjectStorePath::from(path_r.clone().to_string_lossy().as_ref()),
+            last_modified: Utc::now(),
+            size: 1024,
+            e_tag: Some(id_r.to_string()),
+            version: Some("v1".to_string()),
+        };
+        let files: Vec<(Url, ObjectMeta)> = vec![(url_w.clone(), meta)];
+
+        let response = FilesImporter::import(&request, files).await.unwrap();
+
+        assert!(!response.is_empty());
+        assert_eq!(response.len(), 1);
+
+        let url_tf = response.first().unwrap().to.clone();
+
+        let lf = LazyFrame::scan_parquet(
+            url_tf.to_string(),
+            ScanArgsParquet {
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let df_in = tokio::task::spawn_blocking(move || lf.collect())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(df_out.equals(&df_in));
+    }
+}

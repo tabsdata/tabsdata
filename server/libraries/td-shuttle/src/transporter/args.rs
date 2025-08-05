@@ -668,10 +668,16 @@ impl ToFormat {
 #[cfg(test)]
 mod tests {
     use crate::transporter::args::{root_folder, slashed_tmp_file, tmp_file, tmp_path, ToFormat};
+    use polars::prelude::{
+        ChildFieldOverwrites, KeyValueMetadata, MetadataKeyValue, ParquetCompression,
+        ParquetFieldOverwrites, ParquetWriteOptions, PlSmallStr, StatisticsOptions,
+    };
+    use polars_parquet_format::KeyValue;
     use std::collections::HashMap;
     use td_common::env;
     use td_common::time::UniqueUtc;
 
+    //noinspection HttpUrlsUsage
     #[test]
     fn test_parse_uri() {
         assert_eq!(
@@ -758,6 +764,7 @@ mod tests {
         }
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test]
     async fn test_params_no_optionals() {
         let params = super::Params {
@@ -783,16 +790,111 @@ mod tests {
         assert_eq!(params.out(), &None);
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test]
     async fn test_params_with_optionals() {
         let now = UniqueUtc::now_millis();
+        let options = ParquetWriteOptions {
+            compression: ParquetCompression::Uncompressed,
+            statistics: StatisticsOptions {
+                min_value: true,
+                max_value: true,
+                distinct_count: true,
+                null_count: true,
+            },
+            row_group_size: Some(1024),
+            data_page_size: Some(64000),
+            key_value_metadata: Some(KeyValueMetadata::Static(vec![
+                KeyValue {
+                    key: "creator".to_string(),
+                    value: Some("tabsdata".to_string()),
+                },
+                KeyValue {
+                    key: "purpose".to_string(),
+                    value: Some("testing".to_string()),
+                },
+            ])),
+            field_overwrites: vec![
+                ParquetFieldOverwrites {
+                    name: Some(PlSmallStr::from_str("kuro")),
+                    children: ChildFieldOverwrites::None,
+                    required: Some(true),
+                    field_id: Some(25),
+                    metadata: Some(vec![
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("english"),
+                            value: Some(PlSmallStr::from_str("black")),
+                        },
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("kanji"),
+                            value: Some(PlSmallStr::from_str("黒")),
+                        },
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("català"),
+                            value: Some(PlSmallStr::from_str("negre")),
+                        },
+                    ]),
+                },
+                ParquetFieldOverwrites {
+                    name: Some(PlSmallStr::from_str("shiro")),
+                    children: ChildFieldOverwrites::None,
+                    required: Some(false),
+                    field_id: Some(19),
+                    metadata: Some(vec![
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("english"),
+                            value: Some(PlSmallStr::from_str("white")),
+                        },
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("kanji"),
+                            value: Some(PlSmallStr::from_str("白")),
+                        },
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("català"),
+                            value: Some(PlSmallStr::from_str("blanc")),
+                        },
+                    ]),
+                },
+            ],
+        };
+        let _ = serde_yaml::to_string(&options).unwrap();
         let to_format = r#"
-        {
-            "compression": "Uncompressed",
-            "statistics": {"min_value": true, "max_value": true, "distinct_count": true, "null_count": true},
-            "data_page_size": 64000,
-            "maintain_order": true
-        }
+            compression: Uncompressed
+            statistics:
+              min_value: true
+              max_value: true
+              distinct_count: true
+              null_count: true
+            row_group_size: 1024
+            data_page_size: 64000
+            key_value_metadata: !Static
+              - - creator
+                - tabsdata
+              - - purpose
+                - testing
+            field_overwrites:
+              - name: kuro
+                children: None
+                required: true
+                field_id: 25
+                metadata:
+                  - key: english
+                    value: black
+                  - key: kanji
+                    value: 黒
+                  - key: català
+                    value: negre
+              - name: shiro
+                children: None
+                required: false
+                field_id: 19
+                metadata:
+                  - key: english
+                    value: white
+                  - key: kanji
+                    value: 白
+                  - key: català
+                    value: blanc
         "#;
         let params = super::Params {
             location: tmp_file().parse().unwrap(),
@@ -823,6 +925,7 @@ mod tests {
         assert_eq!(params.out().as_ref().unwrap(), "out");
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test]
     async fn augment_object_store_config_envs() {
         let params = super::Params {
@@ -904,15 +1007,110 @@ mod tests {
         }
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test]
     async fn test_importer_options() {
+        let options = ParquetWriteOptions {
+            compression: ParquetCompression::Uncompressed,
+            statistics: StatisticsOptions {
+                min_value: true,
+                max_value: true,
+                distinct_count: true,
+                null_count: true,
+            },
+            row_group_size: Some(1024),
+            data_page_size: Some(64000),
+            key_value_metadata: Some(KeyValueMetadata::Static(vec![
+                KeyValue {
+                    key: "creator".to_string(),
+                    value: Some("tabsdata".to_string()),
+                },
+                KeyValue {
+                    key: "purpose".to_string(),
+                    value: Some("testing".to_string()),
+                },
+            ])),
+            field_overwrites: vec![
+                ParquetFieldOverwrites {
+                    name: Some(PlSmallStr::from_str("kuro")),
+                    children: ChildFieldOverwrites::None,
+                    required: Some(true),
+                    field_id: Some(25),
+                    metadata: Some(vec![
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("english"),
+                            value: Some(PlSmallStr::from_str("black")),
+                        },
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("kanji"),
+                            value: Some(PlSmallStr::from_str("黒")),
+                        },
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("català"),
+                            value: Some(PlSmallStr::from_str("negre")),
+                        },
+                    ]),
+                },
+                ParquetFieldOverwrites {
+                    name: Some(PlSmallStr::from_str("shiro")),
+                    children: ChildFieldOverwrites::None,
+                    required: Some(false),
+                    field_id: Some(19),
+                    metadata: Some(vec![
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("english"),
+                            value: Some(PlSmallStr::from_str("white")),
+                        },
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("kanji"),
+                            value: Some(PlSmallStr::from_str("白")),
+                        },
+                        MetadataKeyValue {
+                            key: PlSmallStr::from_str("català"),
+                            value: Some(PlSmallStr::from_str("blanc")),
+                        },
+                    ]),
+                },
+            ],
+        };
+        let _ = serde_yaml::to_string(&options).unwrap();
         let to_format = r#"
-        {
-            "compression": "Uncompressed",
-            "statistics": {"min_value": true, "max_value": true, "distinct_count": true, "null_count": true},
-            "data_page_size": 64000,
-            "maintain_order": true
-        }
+            compression: Uncompressed
+            statistics:
+              min_value: true
+              max_value: true
+              distinct_count: true
+              null_count: true
+            row_group_size: 1024
+            data_page_size: 64000
+            key_value_metadata: !Static
+              - - creator
+                - tabsdata
+              - - purpose
+                - testing
+            field_overwrites:
+              - name: kuro
+                children: None
+                required: true
+                field_id: 25
+                metadata:
+                  - key: english
+                    value: black
+                  - key: kanji
+                    value: 黒
+                  - key: català
+                    value: negre
+              - name: shiro
+                children: None
+                required: false
+                field_id: 19
+                metadata:
+                  - key: english
+                    value: white
+                  - key: kanji
+                    value: 白
+                  - key: català
+                    value: blanc
         "#;
         let params = super::Params {
             location: "s3://test".parse().unwrap(),

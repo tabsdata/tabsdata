@@ -593,14 +593,14 @@ impl Default for ImportCsvOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 #[builder(setter(into))]
 pub struct FileImportReport {
-    idx: usize,
-    from: Url,
-    size: u64,
-    rows: usize,
-    last_modified: DateTime<Utc>,
-    to: Url,
-    imported_at: DateTime<Utc>,
-    import_millis: usize,
+    pub idx: usize,
+    pub from: Url,
+    pub size: usize,
+    pub rows: usize,
+    pub last_modified: DateTime<Utc>,
+    pub to: Url,
+    pub imported_at: DateTime<Utc>,
+    pub import_millis: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

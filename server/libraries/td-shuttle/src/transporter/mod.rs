@@ -5,6 +5,7 @@
 pub mod api;
 pub mod args;
 pub mod cli;
+pub mod cloud;
 pub mod common;
 pub mod copy;
 pub mod error;
