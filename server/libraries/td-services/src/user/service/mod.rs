@@ -15,6 +15,7 @@ use td_objects::crudl::{
     CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest,
 };
 use td_objects::rest_urls::UserParam;
+use td_objects::sql::DaoQueries;
 use td_objects::types::user::{UserCreate, UserRead, UserUpdate};
 use td_security::config::PasswordHashingConfig;
 use td_tower::service_provider::TdBoxService;
@@ -42,20 +43,35 @@ impl UserServices {
         password_hashing_config: Arc<PasswordHashingConfig>,
         authz_context: Arc<AuthzContext>,
     ) -> Self {
+        let queries = Arc::new(DaoQueries::default());
         Self {
             create_service_provider: CreateUserService::new(
                 db.clone(),
+                queries.clone(),
+                authz_context.clone(),
                 password_hashing_config.clone(),
+            ),
+            read_service_provider: ReadUserService::new(
+                db.clone(),
+                queries.clone(),
                 authz_context.clone(),
             ),
-            read_service_provider: ReadUserService::new(db.clone(), authz_context.clone()),
             update_service_provider: UpdateUserService::new(
                 db.clone(),
+                queries.clone(),
+                authz_context.clone(),
                 password_hashing_config.clone(),
+            ),
+            delete_service_provider: DeleteUserService::new(
+                db.clone(),
+                queries.clone(),
                 authz_context.clone(),
             ),
-            delete_service_provider: DeleteUserService::new(db.clone(), authz_context.clone()),
-            list_service_provider: ListUsersService::new(db.clone(), authz_context.clone()),
+            list_service_provider: ListUsersService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
         }
     }
 

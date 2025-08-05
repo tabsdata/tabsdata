@@ -6,9 +6,7 @@ use crate::table::layers::delete::{
     build_deleted_table_version, build_deleted_trigger_versions,
     build_frozen_function_versions_dependencies,
 };
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::TableParam;
@@ -29,83 +27,61 @@ use td_objects::types::dependency::DependencyDB;
 use td_objects::types::function::FunctionDB;
 use td_objects::types::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_objects::types::trigger::TriggerDB;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct TableDeleteService {
-    provider: ServiceProvider<DeleteRequest<TableParam>, (), TdError>,
-}
-
-impl TableDeleteService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(authz_context),
-
-                from_fn(With::<DeleteRequest<TableParam>>::extract::<RequestContext>),
-                from_fn(With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
-
-                // Extract collection and table from request.
-                from_fn(With::<TableParam>::extract::<CollectionIdName>),
-                from_fn(With::<TableParam>::extract::<TableIdName>),
-
-                // Get collection. Extract collection id and name.
-                from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-                from_fn(With::<CollectionDB>::extract::<CollectionName>),
-                from_fn(With::<CollectionDB>::extract::<CollectionId>),
-
-                // check requester has collection permissions
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<CollAdmin, CollDev>::check),
-
-                // Get table. Extract table id, table version id, function id and function version id.
-                from_fn(combine::<CollectionIdName, TableIdName>),
-                from_fn(With::<RequestContext>::extract::<AtTime>),
-                from_fn(TableStatus::frozen),
-                from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDBWithNames>),
-                from_fn(With::<TableDBWithNames>::extract::<TableId>),
-                from_fn(With::<TableDBWithNames>::extract::<TableVersionId>),
-
-                // Insert into function_versions(sql) entries with status=Frozen,
-                // for all functions with status=Active that have the table as dependency
-                // at the current time.
-                from_fn(DependencyStatus::active),
-                from_fn(By::<TableId>::select_all_versions::<DaoQueries, DependencyDB>),
-                from_fn(build_frozen_function_versions_dependencies::<DaoQueries>),
-                from_fn(insert_vec::<DaoQueries, FunctionDB>),
-
-                // Insert into trigger_versions(sql) entries with status=Deleted,
-                // for all triggers that have the table as dependency
-                // at the current time.
-                from_fn(TriggerStatus::active_or_frozen),
-                from_fn(By::<TableId>::select_all_versions::<DaoQueries, TriggerDB>),
-                from_fn(build_deleted_trigger_versions),
-                from_fn(insert_vec::<DaoQueries, TriggerDB>),
-
-                // Insert into table_versions(sql) status=Deleted.
-                from_fn(By::<TableVersionId>::select::<DaoQueries, TableDB>),
-                from_fn(With::<TableDB>::convert_to::<TableDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<TableDBBuilder, _>),
-                from_fn(build_deleted_table_version),
-                from_fn(insert::<DaoQueries, TableDB>),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<DeleteRequest<TableParam>, (), TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = TableDeleteService,
+    request = DeleteRequest<TableParam>,
+    response = (),
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<DeleteRequest<TableParam>>::extract::<RequestContext>),
+        from_fn(With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
+        // Extract collection and table from request.
+        from_fn(With::<TableParam>::extract::<CollectionIdName>),
+        from_fn(With::<TableParam>::extract::<TableIdName>),
+        // Get collection. Extract collection id and name.
+        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<CollectionName>),
+        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        // check requester has collection permissions
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollDev>::check),
+        // Get table. Extract table id, table version id, function id and function version id.
+        from_fn(combine::<CollectionIdName, TableIdName>),
+        from_fn(With::<RequestContext>::extract::<AtTime>),
+        from_fn(TableStatus::frozen),
+        from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>),
+        from_fn(With::<TableDBWithNames>::extract::<TableId>),
+        from_fn(With::<TableDBWithNames>::extract::<TableVersionId>),
+        // Insert into function_versions(sql) entries with status=Frozen,
+        // for all functions with status=Active that have the table as dependency
+        // at the current time.
+        from_fn(DependencyStatus::active),
+        from_fn(By::<TableId>::select_all_versions::<DependencyDB>),
+        from_fn(build_frozen_function_versions_dependencies),
+        from_fn(insert_vec::<FunctionDB>),
+        // Insert into trigger_versions(sql) entries with status=Deleted,
+        // for all triggers that have the table as dependency
+        // at the current time.
+        from_fn(TriggerStatus::active_or_frozen),
+        from_fn(By::<TableId>::select_all_versions::<TriggerDB>),
+        from_fn(build_deleted_trigger_versions),
+        from_fn(insert_vec::<TriggerDB>),
+        // Insert into table_versions(sql) status=Deleted.
+        from_fn(By::<TableVersionId>::select::<TableDB>),
+        from_fn(With::<TableDB>::convert_to::<TableDBBuilder, _>),
+        from_fn(With::<RequestContext>::update::<TableDBBuilder, _>),
+        from_fn(build_deleted_table_version),
+        from_fn(insert::<TableDB>),
+    )
 }
 
 #[cfg(test)]
@@ -113,6 +89,7 @@ mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
     use crate::table::services::tests::{assert_delete, assert_not_deleted};
+    use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -127,69 +104,59 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_delete_table(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-
-        let provider = TableDeleteService::provider(db, queries, authz_context);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<DeleteRequest<TableParam>, ()>(&[
-            type_of_val(&With::<DeleteRequest<TableParam>>::extract::<RequestContext>),
-            type_of_val(&With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
-            // Extract collection and table from request.
-            type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
-            type_of_val(&With::<TableParam>::extract::<TableIdName>),
-            // Get collection. Extract collection id and name.
-            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev>::check),
-            // Get table. Extract table id, table version id, function id and function version id.
-            type_of_val(&combine::<CollectionIdName, TableIdName>),
-            type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            type_of_val(&TableStatus::frozen),
-            type_of_val(
-                &By::<(CollectionIdName, TableIdName)>::select_version::<
-                    DaoQueries,
-                    TableDBWithNames,
-                >,
-            ),
-            type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-            type_of_val(&With::<TableDBWithNames>::extract::<TableVersionId>),
-            // Insert into function_versions(sql) entries with status=Frozen,
-            // for all functions with status=Active that have the table as dependency
-            // at the current time.
-            type_of_val(&DependencyStatus::active),
-            type_of_val(&By::<TableId>::select_all_versions::<DaoQueries, DependencyDB>),
-            type_of_val(&build_frozen_function_versions_dependencies::<DaoQueries>),
-            type_of_val(&insert_vec::<DaoQueries, FunctionDB>),
-            // Insert into trigger_versions(sql) entries with status=Deleted,
-            // for all triggers that have the table as dependency
-            // at the current time.
-            type_of_val(&TriggerStatus::active_or_frozen),
-            type_of_val(&By::<TableId>::select_all_versions::<DaoQueries, TriggerDB>),
-            type_of_val(&build_deleted_trigger_versions),
-            type_of_val(&insert_vec::<DaoQueries, TriggerDB>),
-            // Insert into table_versions(sql) status=Deleted.
-            type_of_val(&By::<TableVersionId>::select::<DaoQueries, TableDB>),
-            type_of_val(&With::<TableDB>::convert_to::<TableDBBuilder, _>),
-            type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
-            type_of_val(&build_deleted_table_version),
-            type_of_val(&insert::<DaoQueries, TableDB>),
-        ]);
+        TableDeleteService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<DeleteRequest<TableParam>, ()>(&[
+                type_of_val(&With::<DeleteRequest<TableParam>>::extract::<RequestContext>),
+                type_of_val(&With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
+                // Extract collection and table from request.
+                type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
+                type_of_val(&With::<TableParam>::extract::<TableIdName>),
+                // Get collection. Extract collection id and name.
+                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                // check requester has collection permissions
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev>::check),
+                // Get table. Extract table id, table version id, function id and function version id.
+                type_of_val(&combine::<CollectionIdName, TableIdName>),
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
+                type_of_val(&TableStatus::frozen),
+                type_of_val(
+                    &By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>,
+                ),
+                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
+                type_of_val(&With::<TableDBWithNames>::extract::<TableVersionId>),
+                // Insert into function_versions(sql) entries with status=Frozen,
+                // for all functions with status=Active that have the table as dependency
+                // at the current time.
+                type_of_val(&DependencyStatus::active),
+                type_of_val(&By::<TableId>::select_all_versions::<DependencyDB>),
+                type_of_val(&build_frozen_function_versions_dependencies),
+                type_of_val(&insert_vec::<FunctionDB>),
+                // Insert into trigger_versions(sql) entries with status=Deleted,
+                // for all triggers that have the table as dependency
+                // at the current time.
+                type_of_val(&TriggerStatus::active_or_frozen),
+                type_of_val(&By::<TableId>::select_all_versions::<TriggerDB>),
+                type_of_val(&build_deleted_trigger_versions),
+                type_of_val(&insert_vec::<TriggerDB>),
+                // Insert into table_versions(sql) status=Deleted.
+                type_of_val(&By::<TableVersionId>::select::<TableDB>),
+                type_of_val(&With::<TableDB>::convert_to::<TableDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
+                type_of_val(&build_deleted_table_version),
+                type_of_val(&insert::<TableDB>),
+            ]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_delete_table(db: DbPool) -> Result<(), TdError> {
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -230,7 +197,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            true,
         )
         .update(
             FunctionParam::builder()
@@ -240,10 +206,10 @@ mod tests {
             update.clone(),
         );
 
-        let service =
-            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -252,7 +218,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            true,
         )
         .delete(
             TableParam::builder()
@@ -261,9 +226,8 @@ mod tests {
                 .build()?,
         );
 
-        let authz_context = Arc::new(AuthzContext::default());
-
-        let service = TableDeleteService::new(db.clone(), authz_context)
+        let service = TableDeleteService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;
@@ -279,8 +243,6 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_delete_function_with_dependency(db: DbPool) -> Result<(), TdError> {
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
 
@@ -337,7 +299,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            true,
         )
         .update(
             FunctionParam::builder()
@@ -347,10 +308,10 @@ mod tests {
             update.clone(),
         );
 
-        let service =
-            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -359,7 +320,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            true,
         )
         .delete(
             TableParam::builder()
@@ -368,9 +328,8 @@ mod tests {
                 .build()?,
         );
 
-        let authz_context = Arc::new(AuthzContext::default());
-
-        let service = TableDeleteService::new(db.clone(), authz_context)
+        let service = TableDeleteService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;

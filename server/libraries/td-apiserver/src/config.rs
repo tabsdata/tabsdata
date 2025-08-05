@@ -13,7 +13,8 @@ use std::path::PathBuf;
 use strum::{Display, EnumString, ParseError};
 use td_database::sql::SqliteConfig;
 use td_error::td_error;
-use td_services::auth::services::{JwtConfig, PasswordHashConfig};
+use td_security::config::PasswordHashingConfig;
+use td_services::auth::services::JwtConfig;
 use td_storage::MountDef;
 use te_execution::transaction::TransactionBy;
 
@@ -24,7 +25,7 @@ pub struct Config {
     addresses: Vec<SocketAddr>,
     #[serde(default = "internal_addresses_default")]
     internal_addresses: Vec<SocketAddr>,
-    password: PasswordHashConfig,
+    password: PasswordHashingConfig,
     jwt: JwtConfig,
     request_timeout: i64, // in seconds
     ssl_folder: PathBuf,
@@ -86,7 +87,7 @@ impl Default for Config {
         Self {
             addresses: addresses_default(),
             internal_addresses: internal_addresses_default(),
-            password: PasswordHashConfig::default(),
+            password: PasswordHashingConfig::default(),
             jwt: JwtConfig::default(),
             request_timeout: 60,
             ssl_folder: PathBuf::default(),
@@ -123,7 +124,7 @@ impl From<&Config> for JwtConfig {
     }
 }
 
-impl From<&Config> for PasswordHashConfig {
+impl From<&Config> for PasswordHashingConfig {
     fn from(config: &Config) -> Self {
         config.password.clone()
     }

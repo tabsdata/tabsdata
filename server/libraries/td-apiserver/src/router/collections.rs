@@ -144,12 +144,6 @@ mod tests {
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
 
-    async fn collections_state() -> Collections {
-        let db: &'static DbPool = Box::leak(Box::new(td_database::test_utils::db().await.unwrap()));
-        let logic = CollectionServices::new(db.clone(), Arc::new(AuthzContext::default()));
-        Arc::new(logic)
-    }
-
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
         let context = RequestContext::with(
             AccessTokenId::default(),
@@ -160,9 +154,12 @@ mod tests {
         router.layer(Extension(context.clone()))
     }
 
-    #[tokio::test]
-    async fn test_collections_lifecycle() {
-        let collections_state = collections_state().await;
+    #[td_test::test(sqlx)]
+    async fn test_collections_lifecycle(db: DbPool) {
+        let collections_state = Arc::new(CollectionServices::new(
+            db.clone(),
+            Arc::new(AuthzContext::default()),
+        ));
         let router = super::router(collections_state);
 
         // List empty collections

@@ -34,17 +34,17 @@ fn provider() {
         // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
         from_fn(With::<TransactionParam>::extract::<TransactionIdName>),
         // Find function run.
-        from_fn(By::<TransactionIdName>::select::<DaoQueries, TransactionDB>),
+        from_fn(By::<TransactionIdName>::select::<TransactionDB>),
         // check requester is coll_admin or coll_exec for the transaction's collection
         from_fn(With::<TransactionDB>::extract::<CollectionId>),
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollExec>::check),
         from_fn(With::<TransactionDB>::extract::<TransactionId>),
-        from_fn(By::<TransactionId>::select_all::<DaoQueries, FunctionRunDB>),
+        from_fn(By::<TransactionId>::select_all::<FunctionRunDB>),
         // Set cancel status
         from_fn(UpdateFunctionRunDB::cancel),
         // Update function requirements status
-        from_fn(update_function_run_status::<DaoQueries>),
+        from_fn(update_function_run_status),
     )
 }
 
@@ -54,7 +54,6 @@ mod tests {
     use crate::execution::layers::update_status::tests::{
         test_status_update, TestExecution, TestFunction, TestTransaction,
     };
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::RequestContext;
@@ -66,37 +65,35 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_cancel_transaction(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider =
-            TransactionCancelService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<UpdateRequest<TransactionParam, ()>, ()>(&[
-            // Extract from request.
-            type_of_val(&With::<UpdateRequest<TransactionParam, ()>>::extract::<RequestContext>),
-            type_of_val(
-                &With::<UpdateRequest<TransactionParam, ()>>::extract_name::<TransactionParam>,
-            ),
-            // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
-            type_of_val(&With::<TransactionParam>::extract::<TransactionIdName>),
-            // Find function run.
-            type_of_val(&By::<TransactionIdName>::select::<DaoQueries, TransactionDB>),
-            // check requester is coll_admin or coll_exec for the transaction's collection
-            type_of_val(&With::<TransactionDB>::extract::<CollectionId>),
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollExec>::check),
-            type_of_val(&With::<TransactionDB>::extract::<TransactionId>),
-            type_of_val(&By::<TransactionId>::select_all::<DaoQueries, FunctionRunDB>),
-            // Set cancel status
-            type_of_val(&UpdateFunctionRunDB::cancel),
-            // Update function requirements status
-            type_of_val(&update_function_run_status::<DaoQueries>),
-        ]);
+        TransactionCancelService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<UpdateRequest<TransactionParam, ()>, ()>(&[
+                // Extract from request.
+                type_of_val(
+                    &With::<UpdateRequest<TransactionParam, ()>>::extract::<RequestContext>,
+                ),
+                type_of_val(
+                    &With::<UpdateRequest<TransactionParam, ()>>::extract_name::<TransactionParam>,
+                ),
+                // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+                type_of_val(&With::<TransactionParam>::extract::<TransactionIdName>),
+                // Find function run.
+                type_of_val(&By::<TransactionIdName>::select::<TransactionDB>),
+                // check requester is coll_admin or coll_exec for the transaction's collection
+                type_of_val(&With::<TransactionDB>::extract::<CollectionId>),
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollExec>::check),
+                type_of_val(&With::<TransactionDB>::extract::<TransactionId>),
+                type_of_val(&By::<TransactionId>::select_all::<FunctionRunDB>),
+                // Set cancel status
+                type_of_val(&UpdateFunctionRunDB::cancel),
+                // Update function requirements status
+                type_of_val(&update_function_run_status),
+            ]);
     }
 
     async fn test_cancel_transaction(
@@ -124,15 +121,12 @@ mod tests {
                             (),
                         );
 
-                TransactionCancelService::new(
-                    db.clone(),
-                    Arc::new(DaoQueries::default()),
-                    Arc::new(AuthzContext::default()),
-                )
-                .service()
-                .await
-                .raw_oneshot(request)
-                .await
+                TransactionCancelService::with_defaults(db.clone())
+                    .await
+                    .service()
+                    .await
+                    .raw_oneshot(request)
+                    .await
             }
         })
         .await

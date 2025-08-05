@@ -199,7 +199,7 @@ impl<V> ExecutionGraph<V> {
 
 impl<V: Display> ExecutionGraph<V> {
     /// Generates a DOT representation of the graph.
-    pub fn dot(&self) -> Dot<&Graph<GraphNode, GraphEdge<V>>> {
+    pub fn dot(&self) -> Dot<'_, &Graph<GraphNode, GraphEdge<V>>> {
         Dot::with_attr_getters(
             &self.inner,
             &[Config::EdgeNoLabel],
@@ -310,7 +310,7 @@ impl<F> PartialGraph<F> {
 
     /// Generates a DOT representation of the partial graph.
     #[allow(dead_code)]
-    pub fn dot(&self) -> Dot<&Graph<F, ()>> {
+    pub fn dot(&self) -> Dot<'_, &Graph<F, ()>> {
         Dot::with_attr_getters(
             &self.inner,
             &[Config::EdgeNoLabel],

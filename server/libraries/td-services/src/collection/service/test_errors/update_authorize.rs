@@ -3,8 +3,6 @@
 //
 
 use crate::collection::service::update::UpdateCollectionService;
-use std::sync::Arc;
-use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
@@ -19,7 +17,8 @@ async fn test_not_allowed_to_update_collection(db: DbPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
-    let service = UpdateCollectionService::new(db.clone(), Arc::new(AuthzContext::default()))
+    let service = UpdateCollectionService::with_defaults(db)
+        .await
         .service()
         .await;
 

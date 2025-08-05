@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
 use td_objects::crudl::handle_sql_err;
-use td_objects::sql::{DerefQueries, SelectBy};
+use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::tower_service::from::With;
 use td_objects::types::basic::{CollectionName, EntityId, PermissionEntityType, RoleIdName};
 use td_objects::types::collection::CollectionDB;
@@ -20,9 +20,9 @@ use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[async_trait]
 pub trait PermissionBuildService {
-    async fn build_permission_db<Q: DerefQueries>(
+    async fn build_permission_db(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         input: Input<PermissionDBBuilder>,
         permission_create: Input<PermissionCreate>,
     ) -> Result<PermissionDB, TdError>;
@@ -30,9 +30,9 @@ pub trait PermissionBuildService {
 
 #[async_trait]
 impl PermissionBuildService for With<PermissionDBBuilder> {
-    async fn build_permission_db<Q: DerefQueries>(
+    async fn build_permission_db(
         Connection(connection): Connection,
-        SrvCtx(queries): SrvCtx<Q>,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
         Input(input): Input<PermissionDBBuilder>,
         Input(permission_create): Input<PermissionCreate>,
     ) -> Result<PermissionDB, TdError> {

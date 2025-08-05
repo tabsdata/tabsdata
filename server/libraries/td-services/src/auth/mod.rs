@@ -12,7 +12,6 @@ use jsonwebtoken::{decode, encode, Algorithm, Validation};
 use serde::{Deserialize, Serialize};
 use td_common::id::Id;
 use td_error::td_error;
-use td_objects::types::basic::RoleId;
 
 #[td_error]
 pub enum AuthError {
@@ -39,9 +38,6 @@ pub enum AuthError {
 
     #[error("Internal error: {0}")]
     InternalError(String) = 5000,
-
-    #[error("RoleId not found: {0}")]
-    RoleIdNotFound(RoleId) = 5001,
 }
 
 /// JWT Token Claims, serialized on login and deserialized on request

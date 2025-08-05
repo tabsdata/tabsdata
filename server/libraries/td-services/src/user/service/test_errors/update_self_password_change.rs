@@ -4,8 +4,6 @@
 
 use crate::user::service::update::UpdateUserService;
 use crate::user::UserError;
-use std::sync::Arc;
-use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
@@ -15,11 +13,9 @@ use td_objects::types::basic::{
     AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserName,
 };
 use td_objects::types::user::UserUpdate;
-use td_security::config::PasswordHashingConfig;
 
 #[td_test::test(sqlx)]
 async fn test_update_user_self(db: DbPool) {
-    let password_config = Arc::new(PasswordHashingConfig::default());
     let user = seed_user(
         &db,
         &UserName::try_from("u0").unwrap(),
@@ -27,13 +23,10 @@ async fn test_update_user_self(db: DbPool) {
     )
     .await;
 
-    let service = UpdateUserService::new(
-        db.clone(),
-        password_config,
-        Arc::new(AuthzContext::default()),
-    )
-    .service()
-    .await;
+    let service = UpdateUserService::with_defaults(db.clone())
+        .await
+        .service()
+        .await;
 
     let user_update = UserUpdate::builder()
         .full_name(Some(FullName::try_from("U0 Update").unwrap()))

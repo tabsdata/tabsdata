@@ -32,7 +32,7 @@ pub fn commit<T>()
 where
     T: WorkerMessageQueue,
 {
-    layers!(from_fn(unlock_workers::<DaoQueries, T>))
+    layers!(from_fn(unlock_workers::<T>))
 }
 
 #[cfg(test)]
@@ -40,9 +40,8 @@ mod tests {
     use super::*;
     use crate::execution::services::execute::ExecuteFunctionService;
     use crate::scheduler::services::request::ScheduleRequestService;
+    use crate::service_default::ServiceDefault;
     use std::net::SocketAddr;
-    use std::sync::Arc;
-    use td_authz::AuthzContext;
     use td_common::files::{get_files_in_folder_sorted_by_name, YAML_EXTENSION};
     use td_common::server::{FileWorkerMessageQueue, PayloadType, SupervisorMessage};
     use td_database::sql::DbPool;
@@ -58,30 +57,20 @@ mod tests {
     use td_objects::types::execution::{ExecutionRequest, WorkerDB, WorkerMessageStatus};
     use td_objects::types::function::FunctionRegister;
     use td_objects::types::worker::FunctionInput;
-    use td_storage::{MountDef, Storage};
-    use td_test::file::mount_uri;
+    use td_storage::Storage;
     use td_tower::ctx_service::RawOneshot;
-    use te_execution::transaction::TransactionBy;
-    use testdir::testdir;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_schedule_commit(db: DbPool) -> Result<(), TdError> {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let test_dir = testdir!();
-        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir)?);
-        let provider = ScheduleCommitService::provider(db, queries, message_queue);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await?;
-        let metadata = response.get();
-
-        metadata.assert_service::<(), ()>(&[type_of_val(
-            &unlock_workers::<DaoQueries, FileWorkerMessageQueue>,
-        )]);
+        ScheduleCommitService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<(), ()>(&[type_of_val(&unlock_workers::<FileWorkerMessageQueue>)]);
         Ok(())
     }
 
@@ -109,14 +98,6 @@ mod tests {
 
         let _ = seed_function(&db, &collection, &create).await;
 
-
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let transaction_by = Arc::new(TransactionBy::default());
-        let service =
-            ExecuteFunctionService::new(db.clone(), queries.clone(), authz_context, transaction_by)
-                .service()
-                .await;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
@@ -127,23 +108,20 @@ mod tests {
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .build()?,
             );
+
+        let service = ExecuteFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let _ = service.raw_oneshot(request).await?;
 
-        let test_dir = testdir!();
-        let mount_def = MountDef::builder()
-            .id("id")
-            .path("/")
-            .uri(mount_uri(&test_dir))
-            .build()?;
-        let storage = Arc::new(Storage::from(vec![mount_def]).await?);
-        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir)?);
-        let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 8080)));
+        let message_queue = FileWorkerMessageQueue::service_default().await;
         ScheduleRequestService::new(
             db.clone(),
-            queries.clone(),
-            storage.clone(),
+            DaoQueries::service_default().await,
+            Storage::service_default().await,
             message_queue.clone(),
-            server_url,
+            SocketAddr::service_default().await,
         )
         .service()
         .await
@@ -155,11 +133,15 @@ mod tests {
         let created_message = &created_messages[0];
 
         // Actual test
-        ScheduleCommitService::new(db.clone(), queries.clone(), message_queue.clone())
-            .service()
-            .await
-            .oneshot(())
-            .await?;
+        ScheduleCommitService::new(
+            db.clone(),
+            DaoQueries::service_default().await,
+            message_queue.clone(),
+        )
+        .service()
+        .await
+        .oneshot(())
+        .await?;
 
         let locked_messages = message_queue.locked_messages::<FunctionInput>().await;
         assert_eq!(locked_messages.len(), 0);

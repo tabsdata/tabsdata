@@ -55,7 +55,12 @@ impl FunctionServices {
                 queries.clone(),
                 authz_context.clone(),
             ),
-            upload: UploadFunctionService::new(db.clone(), authz_context.clone(), storage.clone()),
+            upload: UploadFunctionService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+                storage.clone(),
+            ),
             read_version: ReadFunctionService::new(
                 db.clone(),
                 queries.clone(),

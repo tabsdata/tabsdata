@@ -34,17 +34,17 @@ fn provider() {
         // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
         from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
         // Find function run.
-        from_fn(By::<ExecutionIdName>::select::<DaoQueries, ExecutionDB>),
+        from_fn(By::<ExecutionIdName>::select::<ExecutionDB>),
         // check requester is coll_admin or coll_exec for the trigger's collection
         from_fn(With::<ExecutionDB>::extract::<CollectionId>),
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollExec>::check),
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
-        from_fn(By::<ExecutionId>::select_all::<DaoQueries, FunctionRunDB>),
+        from_fn(By::<ExecutionId>::select_all::<FunctionRunDB>),
         // Set recover status
         from_fn(UpdateFunctionRunDB::recover),
         // Update function requirements status
-        from_fn(update_function_run_status::<DaoQueries>),
+        from_fn(update_function_run_status),
     )
 }
 
@@ -54,7 +54,6 @@ mod tests {
     use crate::execution::layers::update_status::tests::{
         test_status_update, TestExecution, TestFunction, TestTransaction,
     };
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::RequestContext;
@@ -67,35 +66,33 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_recover_execution(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider =
-            ExecutionRecoverService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<UpdateRequest<ExecutionParam, ()>, ()>(&[
-            // Extract from request.
-            type_of_val(&With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
-            type_of_val(&With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>),
-            // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
-            type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
-            // Find function run.
-            type_of_val(&By::<ExecutionIdName>::select::<DaoQueries, ExecutionDB>),
-            // check requester is coll_admin or coll_exec for the trigger's collection
-            type_of_val(&With::<ExecutionDB>::extract::<CollectionId>),
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollExec>::check),
-            type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
-            type_of_val(&By::<ExecutionId>::select_all::<DaoQueries, FunctionRunDB>),
-            // Set recover status
-            type_of_val(&UpdateFunctionRunDB::recover),
-            // Update function requirements status
-            type_of_val(&update_function_run_status::<DaoQueries>),
-        ]);
+        ExecutionRecoverService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<UpdateRequest<ExecutionParam, ()>, ()>(&[
+                // Extract from request.
+                type_of_val(&With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
+                type_of_val(
+                    &With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>,
+                ),
+                // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+                type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
+                // Find function run.
+                type_of_val(&By::<ExecutionIdName>::select::<ExecutionDB>),
+                // check requester is coll_admin or coll_exec for the trigger's collection
+                type_of_val(&With::<ExecutionDB>::extract::<CollectionId>),
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollExec>::check),
+                type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
+                type_of_val(&By::<ExecutionId>::select_all::<FunctionRunDB>),
+                // Set recover status
+                type_of_val(&UpdateFunctionRunDB::recover),
+                // Update function requirements status
+                type_of_val(&update_function_run_status),
+            ]);
     }
 
     async fn test_recover_execution(
@@ -118,15 +115,12 @@ mod tests {
                             (),
                         );
 
-                ExecutionRecoverService::new(
-                    db.clone(),
-                    Arc::new(DaoQueries::default()),
-                    Arc::new(AuthzContext::default()),
-                )
-                .service()
-                .await
-                .raw_oneshot(request)
-                .await
+                ExecutionRecoverService::with_defaults(db.clone())
+                    .await
+                    .service()
+                    .await
+                    .raw_oneshot(request)
+                    .await
             }
         })
         .await

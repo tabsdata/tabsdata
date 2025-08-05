@@ -6,7 +6,7 @@ use std::ops::Deref;
 use td_error::{td_error, TdError};
 use td_objects::crudl::{handle_sql_err, RequestContext};
 use td_objects::sql::cte::CteQueries;
-use td_objects::sql::DerefQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::types::basic::{
     CollectionName, FunctionStatus, FunctionVersionId, TableName, TableStatus, TableVersionId,
     TriggerStatus, TriggerVersionId,
@@ -23,9 +23,9 @@ enum DeleteTableError {
     TableNotFrozen(TableName, CollectionName, String) = 0,
 }
 
-pub async fn build_frozen_function_versions_dependencies<Q: DerefQueries>(
+pub async fn build_frozen_function_versions_dependencies(
     Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Input(request_context): Input<RequestContext>,
     Input(dependencies): Input<Vec<DependencyDB>>,
 ) -> Result<Vec<FunctionDB>, TdError> {

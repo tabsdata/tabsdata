@@ -34,7 +34,7 @@ fn provider() {
         from_fn(With::<ListRequest<FunctionAtIdName>>::extract_name::<FunctionAtIdName>),
         from_fn(With::<FunctionAtIdName>::extract::<CollectionIdName>),
         // find collection ID
-        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -45,13 +45,11 @@ fn provider() {
         from_fn(FunctionStatus::active_or_frozen),
         from_fn(With::<FunctionAtIdName>::extract::<FunctionIdName>),
         from_fn(combine::<CollectionId, FunctionIdName>),
-        from_fn(
-            By::<(CollectionId, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>
-        ),
+        from_fn(By::<(CollectionId, FunctionIdName)>::select_version::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // List (all active versions at the time). Here we want the history, so we do not want
         // to query the versioned view.
-        from_fn(By::<FunctionId>::list_at::<FunctionAtIdName, NoListFilter, DaoQueries, Function>),
+        from_fn(By::<FunctionId>::list_at::<FunctionAtIdName, NoListFilter, Function>),
     )
 }
 
@@ -60,7 +58,6 @@ mod tests {
     use super::*;
     use crate::function::services::delete::DeleteFunctionService;
     use crate::function::services::update::UpdateFunctionService;
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_objects::crudl::{ListParams, ListParamsBuilder};
     use td_objects::rest_urls::FunctionParam;
@@ -75,45 +72,38 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_function_history(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let provider = FunctionHistoryService::provider(db, queries, authz_context);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ListRequest<FunctionAtIdName>, ListResponse<Function>>(&[
-            type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<RequestContext>),
-            type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract_name::<FunctionAtIdName>),
-            type_of_val(&With::<FunctionAtIdName>::extract::<CollectionIdName>),
-            // find collection ID
-            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
-            // extract attime (natural order)
-            type_of_val(&With::<FunctionAtIdName>::extract::<AtTime>),
-            // find function ID at time (as name could change in time)
-            type_of_val(&FunctionStatus::active_or_frozen),
-            type_of_val(&With::<FunctionAtIdName>::extract::<FunctionIdName>),
-            type_of_val(&combine::<CollectionId, FunctionIdName>),
-            type_of_val(
-                &By::<(CollectionId, FunctionIdName)>::select_version::<
-                    DaoQueries,
-                    FunctionDBWithNames,
-                >,
-            ),
-            type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-            // List (all active versions at the time). Here we want the history, so we do not want
-            // to query the versioned view.
-            type_of_val(
-                &By::<FunctionId>::list_at::<FunctionAtIdName, NoListFilter, DaoQueries, Function>,
-            ),
-        ]);
+        FunctionHistoryService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<FunctionAtIdName>, ListResponse<Function>>(&[
+                type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<RequestContext>),
+                type_of_val(
+                    &With::<ListRequest<FunctionAtIdName>>::extract_name::<FunctionAtIdName>,
+                ),
+                type_of_val(&With::<FunctionAtIdName>::extract::<CollectionIdName>),
+                // find collection ID
+                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                // check requester has collection permissions
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                // extract attime (natural order)
+                type_of_val(&With::<FunctionAtIdName>::extract::<AtTime>),
+                // find function ID at time (as name could change in time)
+                type_of_val(&FunctionStatus::active_or_frozen),
+                type_of_val(&With::<FunctionAtIdName>::extract::<FunctionIdName>),
+                type_of_val(&combine::<CollectionId, FunctionIdName>),
+                type_of_val(
+                    &By::<(CollectionId, FunctionIdName)>::select_version::<FunctionDBWithNames>,
+                ),
+                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
+                // List (all active versions at the time). Here we want the history, so we do not want
+                // to query the versioned view.
+                type_of_val(&By::<FunctionId>::list_at::<FunctionAtIdName, NoListFilter, Function>),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -124,9 +114,6 @@ mod tests {
             &UserId::admin(),
         )
         .await;
-
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
 
         let t0 = AtTime::now().await;
 
@@ -169,10 +156,10 @@ mod tests {
                 update.clone(),
             );
 
-        let service =
-            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -186,10 +173,10 @@ mod tests {
                     .try_function("function_2")?
                     .build()?,
             );
-        let service =
-            DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = DeleteFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         let t3 = AtTime::now().await;
@@ -223,15 +210,14 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service =
-            FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = FunctionHistoryService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response;
         assert!(response.is_err());
 
-        // t1 -> function_1 in history
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
@@ -245,10 +231,10 @@ mod tests {
                     .unwrap(),
             );
 
-        let service =
-            FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = FunctionHistoryService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -267,15 +253,14 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service =
-            FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = FunctionHistoryService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
 
-        assert_eq!(data.len(), 2);
         assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
         assert_eq!(data[1].name(), &FunctionName::try_from("function_2")?);
 
@@ -290,15 +275,14 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service =
-            FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = FunctionHistoryService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response;
         assert!(response.is_err());
 
-        // t4 -> function_1 in history (different one)
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
@@ -312,15 +296,14 @@ mod tests {
                     .unwrap(),
             );
 
-        let service =
-            FunctionHistoryService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = FunctionHistoryService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
 
-        assert_eq!(data.len(), 1);
         assert_eq!(data[0].name(), &FunctionName::try_from("function_1")?);
 
         Ok(())

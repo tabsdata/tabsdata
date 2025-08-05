@@ -24,14 +24,13 @@ fn provider() {
         // No need for authz for this service.
 
         // List all function runs in the system.
-        from_fn(By::<()>::list::<(), NoListFilter, DaoQueries, FunctionRun>),
+        from_fn(By::<()>::list::<(), NoListFilter, FunctionRun>),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -49,24 +48,19 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_list_function_run(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider = FunctionRunListService::provider(db, queries);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ListRequest<()>, ListResponse<FunctionRun>>(&[type_of_val(
-            &By::<()>::list::<(), NoListFilter, DaoQueries, FunctionRun>,
-        )]);
+        FunctionRunListService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<()>, ListResponse<FunctionRun>>(&[type_of_val(
+                &By::<()>::list::<(), NoListFilter, FunctionRun>,
+            )]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_list_function_run(db: DbPool) -> Result<(), TdError> {
-        let queries = Arc::new(DaoQueries::default());
-
         let collection = seed_collection(
             &db,
             &CollectionName::try_from("collection")?,
@@ -147,7 +141,8 @@ mod tests {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                 .list((), ListParams::default());
 
-        let service = FunctionRunListService::new(db.clone(), queries)
+        let service = FunctionRunListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await?;

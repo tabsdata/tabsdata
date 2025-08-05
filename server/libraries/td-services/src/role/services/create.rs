@@ -2,9 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::sql::DaoQueries;
@@ -17,94 +15,73 @@ use td_objects::types::basic::RoleId;
 use td_objects::types::role::{
     Role, RoleBuilder, RoleCreate, RoleDB, RoleDBBuilder, RoleDBWithNames,
 };
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct CreateRoleService {
-    provider: ServiceProvider<CreateRequest<(), RoleCreate>, Role, TdError>,
-}
-
-impl CreateRoleService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-                from_fn(With::<CreateRequest<(), RoleCreate>>::extract::<RequestContext>),
-                from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<SecAdmin>::check),
-                from_fn(With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
-
-                from_fn(With::<RoleCreate>::convert_to::<RoleDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<RoleDBBuilder, _>),
-                from_fn(With::<RoleDBBuilder>::build::<RoleDB, _>),
-
-                from_fn(insert::<DaoQueries, RoleDB>),
-                from_fn(With::<RoleDB>::extract::<RoleId>),
-                from_fn(By::<RoleId>::select::<DaoQueries, RoleDBWithNames>),
-                from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
-                from_fn(With::<RoleBuilder>::build::<Role, _>),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<CreateRequest<(), RoleCreate>, Role, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = CreateRoleService,
+    request = CreateRequest<(), RoleCreate>,
+    response = Role,
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<CreateRequest<(), RoleCreate>>::extract::<RequestContext>),
+        from_fn(AuthzOn::<System>::set),
+        from_fn(Authz::<SecAdmin>::check),
+        from_fn(With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
+        from_fn(With::<RoleCreate>::convert_to::<RoleDBBuilder, _>),
+        from_fn(With::<RequestContext>::update::<RoleDBBuilder, _>),
+        from_fn(With::<RoleDBBuilder>::build::<RoleDB, _>),
+        from_fn(insert::<RoleDB>),
+        from_fn(With::<RoleDB>::extract::<RoleId>),
+        from_fn(By::<RoleId>::select::<RoleDBWithNames>),
+        from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+        from_fn(With::<RoleBuilder>::build::<Role, _>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_role::get_role;
     use td_objects::types::basic::{AccessTokenId, RoleName, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[tokio::test]
-    async fn test_tower_metadata_create_role() {
+    #[td_test::test(sqlx)]
+    async fn test_tower_metadata_create_role(db: DbPool) {
         use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let db = td_database::test_utils::db().await.unwrap();
-        let queries = Arc::new(DaoQueries::default());
-        let provider = CreateRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<CreateRequest<(), RoleCreate>, Role>(&[
-            type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract::<RequestContext>),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin>::check),
-            type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
-            type_of_val(&With::<RoleCreate>::convert_to::<RoleDBBuilder, _>),
-            type_of_val(&With::<RequestContext>::update::<RoleDBBuilder, _>),
-            type_of_val(&With::<RoleDBBuilder>::build::<RoleDB, _>),
-            type_of_val(&insert::<DaoQueries, RoleDB>),
-            type_of_val(&With::<RoleDB>::extract::<RoleId>),
-            type_of_val(&By::<RoleId>::select::<DaoQueries, RoleDBWithNames>),
-            type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
-            type_of_val(&With::<RoleBuilder>::build::<Role, _>),
-        ]);
+        CreateRoleService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<CreateRequest<(), RoleCreate>, Role>(&[
+                type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract::<RequestContext>),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
+                type_of_val(&With::<RoleCreate>::convert_to::<RoleDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<RoleDBBuilder, _>),
+                type_of_val(&With::<RoleDBBuilder>::build::<RoleDB, _>),
+                type_of_val(&insert::<RoleDB>),
+                type_of_val(&With::<RoleDB>::extract::<RoleId>),
+                type_of_val(&By::<RoleId>::select::<RoleDBWithNames>),
+                type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+                type_of_val(&With::<RoleBuilder>::build::<Role, _>),
+            ]);
     }
 
-    #[tokio::test]
-    async fn test_create_role() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
+    #[td_test::test(sqlx)]
+    async fn test_create_role(db: DbPool) -> Result<(), TdError> {
         let create = RoleCreate::builder()
             .try_name("test")?
             .try_description("test desc")?
@@ -117,7 +94,8 @@ mod tests {
         )
         .create((), create);
 
-        let service = CreateRoleService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = CreateRoleService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

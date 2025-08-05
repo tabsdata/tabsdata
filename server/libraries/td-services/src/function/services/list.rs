@@ -38,14 +38,7 @@ fn provider() {
         from_fn(With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>),
         // list
         from_fn(FunctionStatus::active_or_frozen),
-        from_fn(
-            By::<()>::list_versions_at::<
-                AtTimeParam,
-                VisibleFunctionsCollections,
-                DaoQueries,
-                Function,
-            >
-        ),
+        from_fn(By::<()>::list_versions_at::<AtTimeParam, VisibleFunctionsCollections, Function>),
     )
 }
 
@@ -54,8 +47,6 @@ mod tests {
     use super::*;
     use crate::function::services::delete::DeleteFunctionService;
     use crate::function::services::update::UpdateFunctionService;
-    use std::sync::Arc;
-    use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::crudl::{ListParams, ListParamsBuilder, RequestContext};
     use td_objects::rest_urls::FunctionParam;
@@ -74,35 +65,30 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_list_function_versions(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let provider = FunctionListService::provider(db, queries, authz_context);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ListRequest<AtTimeParam>, ListResponse<Function>>(&[
-            type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
-            type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
-            type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
-            // get allowed collections
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-            // convert them to allowed function collections
-            type_of_val(&With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>),
-            // list
-            type_of_val(&FunctionStatus::active_or_frozen),
-            type_of_val(
-                &By::<()>::list_versions_at::<
-                    AtTimeParam,
-                    VisibleFunctionsCollections,
-                    DaoQueries,
-                    Function,
-                >,
-            ),
-        ]);
+        FunctionListService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<AtTimeParam>, ListResponse<Function>>(&[
+                type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
+                type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
+                type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
+                // get allowed collections
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
+                // convert them to allowed function collections
+                type_of_val(&With::<VisibleCollections>::convert_to::<VisibleFunctionsCollections, _>),
+                // list
+                type_of_val(&FunctionStatus::active_or_frozen),
+                type_of_val(
+                    &By::<()>::list_versions_at::<
+                        AtTimeParam,
+                        VisibleFunctionsCollections,
+                        Function,
+                    >,
+                ),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -113,9 +99,6 @@ mod tests {
             &UserId::admin(),
         )
         .await;
-
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
 
         let t0 = AtTime::now().await;
 
@@ -175,20 +158,16 @@ mod tests {
                 update.clone(),
             );
 
-        let service =
-            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
         let t3 = AtTime::now().await;
 
         // Delete function_2
-        let service =
-            DeleteFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 FunctionParam::builder()
@@ -196,6 +175,10 @@ mod tests {
                     .try_function("function_2")?
                     .build()?,
             );
+        let service = DeleteFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         service.raw_oneshot(request).await?;
 
         let t4 = AtTime::now().await;
@@ -225,7 +208,8 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = FunctionListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = FunctionListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -244,7 +228,8 @@ mod tests {
                     .unwrap(),
             );
 
-        let service = FunctionListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = FunctionListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -261,7 +246,8 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = FunctionListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = FunctionListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -279,7 +265,8 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = FunctionListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = FunctionListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -297,7 +284,8 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = FunctionListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = FunctionListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -314,7 +302,8 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = FunctionListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = FunctionListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -351,9 +340,6 @@ mod tests {
             &UserId::admin(),
         )
         .await;
-
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
 
         // Create function_1 and function_2
         let create = FunctionRegister::builder()
@@ -396,7 +382,8 @@ mod tests {
             ListParams::default(),
         );
 
-        let service = FunctionListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = FunctionListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -413,7 +400,8 @@ mod tests {
             ListParams::default(),
         );
 
-        let service = FunctionListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = FunctionListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

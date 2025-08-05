@@ -17,7 +17,7 @@ use td_common::server::{
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
-use td_objects::sql::{DerefQueries, FindBy, SelectBy, UpdateBy};
+use td_objects::sql::{DaoQueries, FindBy, SelectBy, UpdateBy};
 use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId, WorkerStatus};
 use td_objects::types::execution::TableDataVersionDBWithNames;
 use td_objects::types::execution::{
@@ -44,9 +44,9 @@ pub enum ScheduleError {
     MissingRequestContext = 5002,
 }
 
-pub async fn create_locked_workers<Q: DerefQueries, T: WorkerMessageQueue>(
+pub async fn create_locked_workers<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     SrvCtx(storage): SrvCtx<Storage>,
     SrvCtx(server_url): SrvCtx<SocketAddr>,
     Connection(connection): Connection,
@@ -334,9 +334,9 @@ pub async fn create_locked_workers<Q: DerefQueries, T: WorkerMessageQueue>(
 
 // These layer should not fail for single messages errors, only for wider errors (system, connection, etc.).
 // All errors parsing or processing messages should be logged and the message should be removed from the queue.
-pub async fn unlock_workers<Q: DerefQueries, T: WorkerMessageQueue>(
+pub async fn unlock_workers<T: WorkerMessageQueue>(
     SrvCtx(message_queue): SrvCtx<T>,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
 ) -> Result<(), TdError> {
     let messages = message_queue.locked_messages().await;
@@ -510,8 +510,8 @@ pub async fn unlock_workers<Q: DerefQueries, T: WorkerMessageQueue>(
     Ok(())
 }
 
-async fn rollback_query<Q: DerefQueries>(
-    queries: &Q,
+async fn rollback_query(
+    queries: &DaoQueries,
     conn: &mut SqliteConnection,
     message: &SupervisorMessage<FunctionInput>,
     function_run_id: &FunctionRunId,

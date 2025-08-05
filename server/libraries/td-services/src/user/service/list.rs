@@ -2,9 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::{DaoQueries, NoListFilter};
@@ -12,48 +10,32 @@ use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::user::UserRead;
-use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
+use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct ListUsersService {
-    provider: ServiceProvider<ListRequest<()>, ListResponse<UserRead>, TdError>,
-}
-
-impl ListUsersService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        ListUsersService {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                ConnectionProvider::new(db),
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(authz_context),
-                from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-                from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<SecAdmin>::check),
-                from_fn(By::<()>::list::<(), NoListFilter, DaoQueries, UserRead>),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<ListRequest<()>, ListResponse<UserRead>, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = ListUsersService,
+    request = ListRequest<()>,
+    response = ListResponse<UserRead>,
+    connection = ConnectionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
+        from_fn(AuthzOn::<System>::set),
+        from_fn(Authz::<SecAdmin>::check),
+        from_fn(By::<()>::list::<(), NoListFilter, UserRead>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashSet;
-    use std::sync::Arc;
-    use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_user::seed_user;
@@ -63,19 +45,18 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_list_provider(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider = ListUsersService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-        metadata.assert_service::<ListRequest<()>, ListResponse<UserRead>>(&[
-            type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin>::check),
-            type_of_val(&By::<()>::list::<(), NoListFilter, DaoQueries, UserRead>),
-        ]);
+        ListUsersService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<()>, ListResponse<UserRead>>(&[
+                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&By::<()>::list::<(), NoListFilter, UserRead>),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -93,7 +74,8 @@ mod tests {
         )
         .await;
 
-        let service = ListUsersService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = ListUsersService::with_defaults(db.clone())
+            .await
             .service()
             .await;
 

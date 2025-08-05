@@ -39,25 +39,25 @@ fn provider() {
         from_fn(With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
         // Find Plan and its TriggeredOn (and convert to AtTime).
         from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
-        from_fn(By::<ExecutionIdName>::select::<DaoQueries, ExecutionDB>),
+        from_fn(By::<ExecutionIdName>::select::<ExecutionDB>),
         from_fn(With::<ExecutionDB>::extract::<TriggeredOn>),
         from_fn(With::<TriggeredOn>::convert_to::<AtTime, _>),
         // Find function that triggered the plan.
         from_fn(With::<ExecutionDB>::extract::<FunctionVersionId>),
-        from_fn(By::<FunctionVersionId>::select::<DaoQueries, FunctionDBWithNames>),
+        from_fn(By::<FunctionVersionId>::select::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // Find trigger graph
-        from_fn(find_trigger_graph::<DaoQueries>),
+        from_fn(find_trigger_graph),
         // Find all input tables
-        from_fn(find_all_input_tables::<DaoQueries>),
+        from_fn(find_all_input_tables),
         // Create execution template
-        from_fn(build_execution_template::<DaoQueries>),
+        from_fn(build_execution_template),
         // Get transactions
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
-        from_fn(By::<ExecutionId>::select_all::<DaoQueries, TransactionDB>),
+        from_fn(By::<ExecutionId>::select_all::<TransactionDB>),
         from_fn(build_existing_transaction_map),
         // Create execution plan
-        from_fn(build_execution_plan::<DaoQueries>),
+        from_fn(build_execution_plan),
         // Execution plan response
         from_fn(build_response),
     )
@@ -67,7 +67,6 @@ fn provider() {
 mod tests {
     use super::*;
     use crate::execution::services::execute::tests::test_execute;
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::RequestContext;
@@ -77,59 +76,50 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_read_execution(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let provider = ExecutionReadService::provider(
-            db.clone(),
-            Arc::new(DaoQueries::default()),
-            Arc::new(TransactionBy::default()),
-        );
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ReadRequest<ExecutionParam>, ExecutionResponse>(&[
-            // Extract from request.
-            type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
-            // Find Plan and its TriggeredOn (and convert to AtTime).
-            type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
-            type_of_val(&By::<ExecutionIdName>::select::<DaoQueries, ExecutionDB>),
-            type_of_val(&With::<ExecutionDB>::extract::<TriggeredOn>),
-            type_of_val(&With::<TriggeredOn>::convert_to::<AtTime, _>),
-            // Find function that triggered the plan.
-            type_of_val(&With::<ExecutionDB>::extract::<FunctionVersionId>),
-            type_of_val(&By::<FunctionVersionId>::select::<DaoQueries, FunctionDBWithNames>),
-            type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-            // Create execution template.
-            // Find trigger graph
-            type_of_val(&find_trigger_graph::<DaoQueries>),
-            // Find all input tables
-            type_of_val(&find_all_input_tables::<DaoQueries>),
-            // Create execution template
-            type_of_val(&build_execution_template::<DaoQueries>),
-            // Get transactions
-            type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
-            type_of_val(&By::<ExecutionId>::select_all::<DaoQueries, TransactionDB>),
-            type_of_val(&build_existing_transaction_map),
-            // Create execution plan
-            type_of_val(&build_execution_plan::<DaoQueries>),
-            // Execution plan response
-            type_of_val(&build_response),
-        ]);
+        ExecutionReadService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ReadRequest<ExecutionParam>, ExecutionResponse>(&[
+                // Extract from request.
+                type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
+                // Find Plan and its TriggeredOn (and convert to AtTime).
+                type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
+                type_of_val(&By::<ExecutionIdName>::select::<ExecutionDB>),
+                type_of_val(&With::<ExecutionDB>::extract::<TriggeredOn>),
+                type_of_val(&With::<TriggeredOn>::convert_to::<AtTime, _>),
+                // Find function that triggered the plan.
+                type_of_val(&With::<ExecutionDB>::extract::<FunctionVersionId>),
+                type_of_val(&By::<FunctionVersionId>::select::<FunctionDBWithNames>),
+                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
+                // Create execution template.
+                // Find trigger graph
+                type_of_val(&find_trigger_graph),
+                // Find all input tables
+                type_of_val(&find_all_input_tables),
+                // Create execution template
+                type_of_val(&build_execution_template),
+                // Get transactions
+                type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
+                type_of_val(&By::<ExecutionId>::select_all::<TransactionDB>),
+                type_of_val(&build_existing_transaction_map),
+                // Create execution plan
+                type_of_val(&build_execution_plan),
+                // Execution plan response
+                type_of_val(&build_response),
+            ]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_read_execution(db: DbPool) -> Result<(), TdError> {
         let execution = test_execute(db.clone(), false, false, true).await?;
 
-        let service = ExecutionReadService::new(
-            db.clone(),
-            Arc::new(DaoQueries::default()),
-            Arc::new(TransactionBy::default()),
-        )
-        .service()
-        .await;
+        let service = ExecutionReadService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
                 ExecutionParam::builder()

@@ -3,8 +3,6 @@
 //
 
 use crate::collection::service::delete::DeleteCollectionService;
-use std::sync::Arc;
-use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
@@ -18,7 +16,8 @@ async fn test_not_allowed_to_delete_collection(db: DbPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
-    let service = DeleteCollectionService::new(db.clone(), Arc::new(AuthzContext::default()))
+    let service = DeleteCollectionService::with_defaults(db.clone())
+        .await
         .service()
         .await;
 

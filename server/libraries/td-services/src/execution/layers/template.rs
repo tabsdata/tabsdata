@@ -9,7 +9,7 @@ use td_error::TdError;
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::recursive::RecursiveQueries;
-use td_objects::sql::DerefQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::types::basic::{
     AtTime, DependencyStatus, FunctionId, FunctionStatus, TableStatus, TriggerStatus,
 };
@@ -22,8 +22,8 @@ use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use te_execution::transaction::TransactionBy;
 
-pub async fn find_trigger_graph<Q: DerefQueries>(
-    SrvCtx(queries): SrvCtx<Q>,
+pub async fn find_trigger_graph(
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
     Input(at_time): Input<AtTime>,
     Input(function): Input<FunctionId>,
@@ -48,8 +48,8 @@ pub async fn find_trigger_graph<Q: DerefQueries>(
     Ok(trigger_graph)
 }
 
-pub async fn find_all_input_tables<Q: DerefQueries>(
-    SrvCtx(queries): SrvCtx<Q>,
+pub async fn find_all_input_tables(
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
     Input(at_time): Input<AtTime>,
     Input(trigger_function_version): Input<FunctionDBWithNames>,
@@ -83,8 +83,8 @@ pub async fn find_all_input_tables<Q: DerefQueries>(
     Ok(dep_graph)
 }
 
-pub async fn build_execution_template<Q: DerefQueries>(
-    SrvCtx(queries): SrvCtx<Q>,
+pub async fn build_execution_template(
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     SrvCtx(transaction_by): SrvCtx<TransactionBy>,
     Connection(connection): Connection,
     Input(at_time): Input<AtTime>,

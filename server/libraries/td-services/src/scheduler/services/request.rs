@@ -48,15 +48,15 @@ where
     layers!(
         // Get all function runs that are ready to execute.
         // This is, with status scheduled and with all requirements done.
-        from_fn(By::<()>::select_all::<DaoQueries, FunctionRunToExecuteDB>),
+        from_fn(By::<()>::select_all::<FunctionRunToExecuteDB>),
         // Create a locked message for each function run.
-        from_fn(create_locked_workers::<DaoQueries, T>),
+        from_fn(create_locked_workers::<T>),
         // And insert generated messages.
-        from_fn(insert_vec::<DaoQueries, WorkerDB>),
+        from_fn(insert_vec::<WorkerDB>),
         // Update statuses.
         from_fn(With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
         from_fn(UpdateFunctionRunDB::run_requested),
-        from_fn(By::<FunctionRunId>::update_all::<DaoQueries, UpdateFunctionRunDB, FunctionRunDB>)
+        from_fn(By::<FunctionRunId>::update_all::<UpdateFunctionRunDB, FunctionRunDB>)
     )
 }
 
@@ -93,40 +93,25 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_schedule_request(db: DbPool) -> Result<(), TdError> {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let test_dir = testdir!();
-        let mount_def = MountDef::builder()
-            .id("id")
-            .path("/")
-            .uri(mount_uri(&test_dir))
-            .build()?;
-        let storage = Arc::new(Storage::from(vec![mount_def]).await?);
-        let message_queue = Arc::new(FileWorkerMessageQueue::with_location(&test_dir)?);
-        let server_url = Arc::new(SocketAddr::from(([127, 0, 0, 1], 8080)));
-        let provider =
-            ScheduleRequestService::provider(db, queries, storage, message_queue, server_url);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<(), ()>(&[
-            // Get all function runs that are ready to execute.
-            // This is, with status scheduled and with all requirements done.
-            type_of_val(&By::<()>::select_all::<DaoQueries, FunctionRunToExecuteDB>),
-            // Create a locked message for each function run.
-            type_of_val(&create_locked_workers::<DaoQueries, FileWorkerMessageQueue>),
-            // And insert generated messages.
-            type_of_val(&insert_vec::<DaoQueries, WorkerDB>),
-            // Update statuses.
-            type_of_val(&With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
-            type_of_val(&UpdateFunctionRunDB::run_requested),
-            type_of_val(
-                &By::<FunctionRunId>::update_all::<DaoQueries, UpdateFunctionRunDB, FunctionRunDB>,
-            ),
-        ]);
+        ScheduleRequestService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<(), ()>(&[
+                // Get all function runs that are ready to execute.
+                // This is, with status scheduled and with all requirements done.
+                type_of_val(&By::<()>::select_all::<FunctionRunToExecuteDB>),
+                // Create a locked message for each function run.
+                type_of_val(&create_locked_workers::<FileWorkerMessageQueue>),
+                // And insert generated messages.
+                type_of_val(&insert_vec::<WorkerDB>),
+                // Update statuses.
+                type_of_val(&With::<FunctionRunToExecuteDB>::extract_vec::<FunctionRunId>),
+                type_of_val(&UpdateFunctionRunDB::run_requested),
+                type_of_val(&By::<FunctionRunId>::update_all::<UpdateFunctionRunDB, FunctionRunDB>),
+            ]);
         Ok(())
     }
 

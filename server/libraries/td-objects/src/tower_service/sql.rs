@@ -6,7 +6,7 @@ use crate::crudl::{handle_sql_err, ListParams, ListRequest, ListResponse, ListRe
 use crate::sql::cte::CteQueries;
 use crate::sql::list::ListQueryParams;
 use crate::sql::{
-    DeleteBy, DerefQueries, FindBy, Insert, ListBy, ListFilterGenerator, QueryError, SelectBy,
+    DaoQueries, DeleteBy, FindBy, Insert, ListBy, ListFilterGenerator, QueryError, SelectBy,
     UpdateBy,
 };
 use crate::types::{DataAccessObject, ListQuery, PartitionBy, SqlEntity, VersionedAt};
@@ -69,9 +69,9 @@ pub struct By<E> {
     _phantom: PhantomData<E>,
 }
 
-pub async fn insert<Q: DerefQueries, D: DataAccessObject>(
+pub async fn insert<D: DataAccessObject>(
     Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Input(dao): Input<D>,
 ) -> Result<(), TdError> {
     let mut conn = connection.lock().await;
@@ -90,9 +90,9 @@ pub async fn insert<Q: DerefQueries, D: DataAccessObject>(
     Ok(())
 }
 
-pub async fn insert_vec<Q: DerefQueries, D: DataAccessObject>(
+pub async fn insert_vec<D: DataAccessObject>(
     Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Input(daos): Input<Vec<D>>,
 ) -> Result<(), TdError> {
     let mut conn = connection.lock().await;
@@ -115,35 +115,32 @@ pub async fn insert_vec<Q: DerefQueries, D: DataAccessObject>(
 
 #[async_trait]
 pub trait SqlSelectService<E> {
-    async fn select<Q, D>(
+    async fn select<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         by: Input<E>,
     ) -> Result<D, TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject;
 
-    async fn select_version<Q, D>(
+    async fn select_version<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
         status: Input<Vec<D::Condition>>,
         by: Input<E>,
     ) -> Result<D, TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject + PartitionBy + VersionedAt;
 
-    async fn select_version_optional<Q, D>(
+    async fn select_version_optional<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
         status: Input<Vec<D::Condition>>,
         by: Input<E>,
     ) -> Result<Option<D>, TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
@@ -157,13 +154,12 @@ macro_rules! impl_select {
         where
             $(for<'a> $E: SqlEntity + 'a),*
         {
-            async fn select<Q, D>(
+            async fn select<D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<D, TdError>
             where
-                Q: DerefQueries,
                 D: DataAccessObject,
             {
                 let mut conn = connection.lock().await;
@@ -185,15 +181,14 @@ macro_rules! impl_select {
                 Ok(result)
             }
 
-            async fn select_version<Q, D>(
+            async fn select_version<D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(natural_order_by): Input<D::Order>,
                 Input(status): Input<Vec<D::Condition>>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<D, TdError>
             where
-                Q: DerefQueries,
                 D: DataAccessObject + PartitionBy + VersionedAt,
             {
                 let mut conn = connection.lock().await;
@@ -219,15 +214,14 @@ macro_rules! impl_select {
                 Ok(result)
             }
 
-            async fn select_version_optional<Q, D>(
+            async fn select_version_optional<D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(natural_order_by): Input<D::Order>,
                 Input(status): Input<Vec<D::Condition>>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<Option<D>, TdError>
             where
-                Q: DerefQueries,
                 D: DataAccessObject + PartitionBy + VersionedAt,
             {
                 let mut conn = connection.lock().await;
@@ -260,24 +254,22 @@ all_the_tuples!(impl_select);
 
 #[async_trait]
 pub trait SqlSelectAllService<E> {
-    async fn select_all<Q, D>(
+    async fn select_all<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         by: Input<E>,
     ) -> Result<Vec<D>, TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject;
 
-    async fn select_all_versions<Q, D>(
+    async fn select_all_versions<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
         status: Input<Vec<D::Condition>>,
         by: Input<E>,
     ) -> Result<Vec<D>, TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
@@ -291,13 +283,12 @@ macro_rules! impl_select_all {
         where
             $(for<'a> $E: SqlEntity + 'a),*
         {
-            async fn select_all<Q, D>(
+            async fn select_all<D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<Vec<D>, TdError>
             where
-                Q: DerefQueries,
                 D: DataAccessObject,
             {
                 let mut conn = connection.lock().await;
@@ -319,15 +310,14 @@ macro_rules! impl_select_all {
                 Ok(result)
             }
 
-            async fn select_all_versions<Q, D>(
+            async fn select_all_versions<D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(natural_order_by): Input<D::Order>,
                 Input(status): Input<Vec<D::Condition>>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<Vec<D>, TdError>
             where
-                Q: DerefQueries,
                 D: DataAccessObject + PartitionBy + VersionedAt,
             {
                 let mut conn = connection.lock().await;
@@ -360,24 +350,22 @@ all_the_tuples!(impl_select_all);
 
 #[async_trait]
 pub trait SqlFindService<E> {
-    async fn find<Q, D>(
+    async fn find<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         by: Input<Vec<E>>,
     ) -> Result<Vec<D>, TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject;
 
-    async fn find_versions<Q, D>(
+    async fn find_versions<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
         status: Input<Vec<D::Condition>>,
         by: Input<Vec<E>>,
     ) -> Result<Vec<D>, TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
@@ -386,13 +374,12 @@ impl<E> SqlFindService<E> for By<E>
 where
     for<'a> E: SqlEntity + 'a,
 {
-    async fn find<Q, D>(
+    async fn find<D>(
         Connection(connection): Connection,
-        SrvCtx(queries): SrvCtx<Q>,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
         Input(by): Input<Vec<E>>,
     ) -> Result<Vec<D>, TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject,
     {
         let mut conn = connection.lock().await;
@@ -409,15 +396,14 @@ where
         Ok(result)
     }
 
-    async fn find_versions<Q, D>(
+    async fn find_versions<D>(
         Connection(connection): Connection,
-        SrvCtx(queries): SrvCtx<Q>,
+        SrvCtx(queries): SrvCtx<DaoQueries>,
         Input(natural_order_by): Input<D::Order>,
         Input(status): Input<Vec<D::Condition>>,
         Input(by): Input<Vec<E>>,
     ) -> Result<Vec<D>, TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject + PartitionBy + VersionedAt,
     {
         let mut conn = connection.lock().await;
@@ -441,13 +427,12 @@ where
 
 #[async_trait]
 pub trait SqlAssertExistsService<E> {
-    async fn assert_exists<Q, D>(
+    async fn assert_exists<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         by: Input<E>,
     ) -> Result<(), TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject;
 }
 
@@ -461,13 +446,12 @@ macro_rules! impl_assert_exists {
         where
             $(for<'a> $E: SqlEntity + 'a),*
         {
-            async fn assert_exists<Q, D>(
+            async fn assert_exists<D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<(), TdError>
             where
-                Q: DerefQueries,
                 D: DataAccessObject,
             {
                 let mut conn = connection.lock().await;
@@ -499,24 +483,22 @@ all_the_tuples!(impl_assert_exists);
 
 #[async_trait]
 pub trait SqlAssertNotExistsService<E> {
-    async fn assert_not_exists<Q, D>(
+    async fn assert_not_exists<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         by: Input<E>,
     ) -> Result<(), TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject;
 
-    async fn assert_version_not_exists<Q, D>(
+    async fn assert_version_not_exists<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         natural_order_by: Input<D::Order>,
         status: Input<Vec<D::Condition>>,
         by: Input<E>,
     ) -> Result<(), TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject + PartitionBy + VersionedAt;
 }
 
@@ -530,13 +512,12 @@ macro_rules! impl_assert_not_exists {
         where
             $(for<'a> $E: SqlEntity + 'a),*
         {
-            async fn assert_not_exists<Q, D>(
+            async fn assert_not_exists<D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<(), TdError>
             where
-                Q: DerefQueries,
                 D: DataAccessObject,
             {
                 let mut conn = connection.lock().await;
@@ -561,15 +542,14 @@ macro_rules! impl_assert_not_exists {
                 }
             }
 
-            async fn assert_version_not_exists<Q, D>(
+            async fn assert_version_not_exists<D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(natural_order_by): Input<D::Order>,
                 Input(status): Input<Vec<D::Condition>>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<(), TdError>
             where
-                Q: DerefQueries,
                 D: DataAccessObject + PartitionBy + VersionedAt,
             {
                 let mut conn = connection.lock().await;
@@ -605,25 +585,23 @@ all_the_tuples!(impl_assert_not_exists);
 
 #[async_trait]
 pub trait SqlUpdateService<E> {
-    async fn update<Q, U, D>(
+    async fn update<U, D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         update: Input<U>,
         by: Input<E>,
     ) -> Result<(), TdError>
     where
-        Q: DerefQueries,
         U: DataAccessObject,
         D: DataAccessObject;
 
-    async fn update_all<Q, U, D>(
+    async fn update_all<U, D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         update: Input<U>,
         by: Input<Vec<E>>,
     ) -> Result<(), TdError>
     where
-        Q: DerefQueries,
         U: DataAccessObject,
         D: DataAccessObject;
 }
@@ -638,14 +616,13 @@ macro_rules! impl_update {
         where
             $(for<'a> $E: SqlEntity + 'a),*
         {
-            async fn update<Q, U, D>(
+            async fn update<U, D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(update): Input<U>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<(), TdError>
             where
-                Q: DerefQueries,
                 U: DataAccessObject,
                 D: DataAccessObject,
             {
@@ -667,14 +644,13 @@ macro_rules! impl_update {
                 Ok(())
             }
 
-            async fn update_all<Q, U, D>(
+            async fn update_all<U, D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(update): Input<U>,
                 Input(by): Input<Vec<($($E),*)>>,
             ) -> Result<(), TdError>
             where
-                Q: DerefQueries,
                 U: DataAccessObject,
                 D: DataAccessObject,
             {
@@ -703,9 +679,9 @@ all_the_tuples!(impl_update);
 
 #[async_trait]
 pub trait SqlListService<E> {
-    async fn list<N, F, Q, T>(
+    async fn list<N, F, T>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         request: Input<ListRequest<N>>,
         list_filter_generator: Input<F>,
         by: Input<E>,
@@ -713,12 +689,11 @@ pub trait SqlListService<E> {
     where
         N: Send + Sync + Clone,
         F: ListFilterGenerator,
-        Q: DerefQueries,
         T: ListQuery + Send + Sync;
 
-    async fn list_at<N, F, Q, T>(
+    async fn list_at<N, F, T>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         request: Input<ListRequest<N>>,
         natural_order_by: Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
         status: Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
@@ -728,13 +703,12 @@ pub trait SqlListService<E> {
     where
         N: Send + Sync + Clone,
         F: ListFilterGenerator,
-        Q: DerefQueries,
         T: ListQuery,
         T::Dao: VersionedAt;
 
-    async fn list_versions_at<N, F, Q, T>(
+    async fn list_versions_at<N, F, T>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         request: Input<ListRequest<N>>,
         natural_order_by: Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
         status: Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
@@ -744,7 +718,6 @@ pub trait SqlListService<E> {
     where
         N: Send + Sync + Clone,
         F: ListFilterGenerator,
-        Q: DerefQueries,
         T: ListQuery,
         T::Dao: PartitionBy + VersionedAt;
 }
@@ -759,9 +732,9 @@ macro_rules! impl_list {
         where
             $(for<'a> $E: SqlEntity + 'a),*
         {
-            async fn list<N, F, Q, T>(
+            async fn list<N, F, T>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(request): Input<ListRequest<N>>,
                 Input(list_filter_generator): Input<F>,
                 Input(by): Input<($($E),*)>,
@@ -769,7 +742,6 @@ macro_rules! impl_list {
             where
                 N: Send + Sync + Clone,
                 F: ListFilterGenerator,
-                Q: DerefQueries,
                 T: ListQuery,
             {
                 let mut conn = connection.lock().await;
@@ -813,9 +785,9 @@ macro_rules! impl_list {
                 Ok(list_response)
             }
 
-            async fn list_at<N, F, Q, T>(
+            async fn list_at<N, F, T>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(request): Input<ListRequest<N>>,
                 Input(natural_order_by): Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
                 Input(status): Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
@@ -825,7 +797,6 @@ macro_rules! impl_list {
             where
                 N: Send + Sync + Clone,
                 F: ListFilterGenerator,
-                Q: DerefQueries,
                 T: ListQuery,
                 T::Dao: VersionedAt,
             {
@@ -876,9 +847,9 @@ macro_rules! impl_list {
                 Ok(list_response)
             }
 
-            async fn list_versions_at<N, F, Q, T>(
+            async fn list_versions_at<N, F, T>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(request): Input<ListRequest<N>>,
                 Input(natural_order_by): Input<<<T as ListQuery>::Dao as VersionedAt>::Order>,
                 Input(status): Input<Vec<<<T as ListQuery>::Dao as VersionedAt>::Condition>>,
@@ -888,7 +859,6 @@ macro_rules! impl_list {
             where
                 N: Send + Sync + Clone,
                 F: ListFilterGenerator,
-                Q: DerefQueries,
                 T: ListQuery,
                 T::Dao: PartitionBy + VersionedAt,
             {
@@ -1005,13 +975,12 @@ all_the_tuples!(impl_list);
 
 #[async_trait]
 pub trait SqlDeleteService<E> {
-    async fn delete<Q, D>(
+    async fn delete<D>(
         connection: Connection,
-        queries: SrvCtx<Q>,
+        queries: SrvCtx<DaoQueries>,
         by: Input<E>,
     ) -> Result<(), TdError>
     where
-        Q: DerefQueries,
         D: DataAccessObject;
 }
 
@@ -1025,13 +994,12 @@ macro_rules! impl_delete {
         where
             $(for<'a> $E: SqlEntity + 'a),*
         {
-            async fn delete<Q, D>(
+            async fn delete<D>(
                 Connection(connection): Connection,
-                SrvCtx(queries): SrvCtx<Q>,
+                SrvCtx(queries): SrvCtx<DaoQueries>,
                 Input(by): Input<($($E),*)>,
             ) -> Result<(), TdError>
             where
-                Q: DerefQueries,
                 D: DataAccessObject,
             {
                 let mut conn = connection.lock().await;
@@ -1138,7 +1106,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let found = By::<FooName>::select::<DaoQueries, FooDao>(
+        let found = By::<FooName>::select::<FooDao>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -1156,7 +1124,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let found = By::<FooName>::select::<DaoQueries, FooDao>(
+        let found = By::<FooName>::select::<FooDao>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(FooName::try_from("not mario")?),
@@ -1172,7 +1140,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let found = By::<(FooId, FooName)>::select::<DaoQueries, FooDao>(
+        let found = By::<(FooId, FooName)>::select::<FooDao>(
             connection,
             TEST_QUERIES.clone(),
             Input::new((FooId::try_from("its a me")?, FooName::try_from("mario")?)),
@@ -1190,7 +1158,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let found = By::<(FooId, FooName)>::select::<DaoQueries, FooDao>(
+        let found = By::<(FooId, FooName)>::select::<FooDao>(
             connection,
             TEST_QUERIES.clone(),
             Input::new((
@@ -1209,7 +1177,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let found = By::<FooName>::select_all::<DaoQueries, FooDao>(
+        let found = By::<FooName>::select_all::<FooDao>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -1229,12 +1197,9 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let found = By::<()>::select_all::<DaoQueries, FooDao>(
-            connection,
-            TEST_QUERIES.clone(),
-            Input::new(()),
-        )
-        .await?;
+        let found =
+            By::<()>::select_all::<FooDao>(connection, TEST_QUERIES.clone(), Input::new(()))
+                .await?;
 
         assert_eq!(found.len(), 2);
         let (found_1, found_2) = (&found[0], &found[1]);
@@ -1251,7 +1216,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let exists = By::<FooName>::assert_exists::<DaoQueries, FooDao>(
+        let exists = By::<FooName>::assert_exists::<FooDao>(
             connection.clone(),
             TEST_QUERIES.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -1259,7 +1224,7 @@ mod tests {
         .await;
         assert!(exists.is_ok());
 
-        let exists = By::<FooName>::assert_exists::<DaoQueries, FooDao>(
+        let exists = By::<FooName>::assert_exists::<FooDao>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(FooName::try_from("not mario")?),
@@ -1278,7 +1243,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        let not_exists = By::<FooName>::assert_not_exists::<DaoQueries, FooDao>(
+        let not_exists = By::<FooName>::assert_not_exists::<FooDao>(
             connection.clone(),
             TEST_QUERIES.clone(),
             Input::new(FooName::try_from("not mario")?),
@@ -1286,7 +1251,7 @@ mod tests {
         .await;
         assert!(not_exists.is_ok());
 
-        let not_exists = By::<FooName>::assert_not_exists::<DaoQueries, FooDao>(
+        let not_exists = By::<FooName>::assert_not_exists::<FooDao>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -1309,7 +1274,7 @@ mod tests {
         struct FooIdOrName;
 
         // id
-        let found = By::<FooIdOrName>::select::<DaoQueries, FooDao>(
+        let found = By::<FooIdOrName>::select::<FooDao>(
             connection.clone(),
             TEST_QUERIES.clone(),
             Input::new(FooIdOrName::try_from("~its a me")?),
@@ -1320,7 +1285,7 @@ mod tests {
         assert_eq!(found.name, FooName::try_from("mario")?);
 
         // name
-        let found = By::<FooIdOrName>::select::<DaoQueries, FooDao>(
+        let found = By::<FooIdOrName>::select::<FooDao>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(FooIdOrName::try_from("mario")?),
@@ -1338,7 +1303,7 @@ mod tests {
         let transaction = ConnectionType::Transaction(transaction).into();
         let connection = Connection::new(transaction);
 
-        By::<FooName>::update::<_, FooDao, FooDao>(
+        By::<FooName>::update::<FooDao, FooDao>(
             connection.clone(),
             TEST_QUERIES.clone(),
             Input::new(FooDao {
@@ -1349,7 +1314,7 @@ mod tests {
         )
         .await?;
 
-        let not_found = By::<FooName>::select::<DaoQueries, FooDao>(
+        let not_found = By::<FooName>::select::<FooDao>(
             connection.clone(),
             TEST_QUERIES.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -1357,7 +1322,7 @@ mod tests {
         .await;
         assert!(not_found.is_err());
 
-        let found = By::<FooName>::select::<DaoQueries, FooDao>(
+        let found = By::<FooName>::select::<FooDao>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(FooName::try_from("bowser")?),
@@ -1379,11 +1344,10 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
-            true,
         )
         .list((), ListParams::default());
 
-        let list = By::<()>::list::<(), NoListFilter, DaoQueries, FooDto>(
+        let list = By::<()>::list::<(), NoListFilter, FooDto>(
             connection,
             TEST_QUERIES.clone(),
             Input::new(list_request),
@@ -1408,7 +1372,7 @@ mod tests {
 
         let queries = SrvCtx::new(DaoQueries::default());
 
-        By::<FooName>::delete::<DaoQueries, FooDao>(
+        By::<FooName>::delete::<FooDao>(
             connection.clone(),
             queries.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -1416,7 +1380,7 @@ mod tests {
         .await?;
 
         // assert only one of them got deleted
-        let mario_not_found = By::<FooName>::select::<DaoQueries, FooDao>(
+        let mario_not_found = By::<FooName>::select::<FooDao>(
             connection.clone(),
             queries.clone(),
             Input::new(FooName::try_from("mario")?),
@@ -1424,7 +1388,7 @@ mod tests {
         .await;
         assert!(mario_not_found.is_err());
 
-        let luigi_found = By::<FooName>::select::<DaoQueries, FooDao>(
+        let luigi_found = By::<FooName>::select::<FooDao>(
             connection,
             queries,
             Input::new(FooName::try_from("luigi")?),
@@ -1642,7 +1606,6 @@ mod tests {
                 AccessTokenId::default(),
                 UserId::admin(),
                 RoleId::sys_admin(),
-                true,
             )
             .list((), params)
         }
@@ -1650,7 +1613,7 @@ mod tests {
         async fn list(db: &DbPool, request: ListRequest<()>) -> ListResponse<FooDto2> {
             let connection =
                 Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
-            By::<()>::list::<(), NoListFilter, DaoQueries, FooDto2>(
+            By::<()>::list::<(), NoListFilter, FooDto2>(
                 connection,
                 TEST_QUERIES.clone(),
                 Input::new(request),
@@ -1771,7 +1734,6 @@ mod tests {
                 AccessTokenId::default(),
                 UserId::admin(),
                 RoleId::sys_admin(),
-                true,
             )
             .list((), params)
         }
@@ -1779,7 +1741,7 @@ mod tests {
         async fn list(db: &DbPool, request: ListRequest<()>) -> ListResponse<FooDto2> {
             let connection =
                 Connection::new(ConnectionType::PoolConnection(db.acquire().await.unwrap()).into());
-            By::<()>::list::<(), NoListFilter, DaoQueries, FooDto2>(
+            By::<()>::list::<(), NoListFilter, FooDto2>(
                 connection,
                 TEST_QUERIES.clone(),
                 Input::new(request),

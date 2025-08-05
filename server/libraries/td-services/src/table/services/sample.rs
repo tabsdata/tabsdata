@@ -43,7 +43,7 @@ fn provider() {
         from_fn(With::<ReadRequest<TableSampleAtName>>::extract_name::<TableSampleAtName>),
         // find collection ID
         from_fn(With::<TableSampleAtName>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -109,7 +109,7 @@ mod tests {
         use td_objects::types::execution::TableDataVersionDBWithNames;
         use td_objects::types::table::TableDBWithNames;
 
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
         fn dummy_file() -> String {
             if cfg!(target_os = "windows") {
@@ -126,22 +126,21 @@ mod tests {
             .build()
             .unwrap();
         let storage = Storage::from(vec![mound_def]).await.unwrap();
-        let provider = TableSampleService::provider(
+        TableSampleService::new(
             db,
             Arc::new(DaoQueries::default()),
             Arc::new(AuthzContext::default()),
             Arc::new(storage),
-        );
-        let service = provider.make().await;
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-        metadata.assert_service::<ReadRequest<TableSampleAtName>, BoxedSyncStream>(&[
+        )
+        .metadata()
+        .await
+        .assert_service::<ReadRequest<TableSampleAtName>, BoxedSyncStream>(&[
             // Extract parameters
             type_of_val(&With::<ReadRequest<TableSampleAtName>>::extract::<RequestContext>),
             type_of_val(&With::<ReadRequest<TableSampleAtName>>::extract_name::<TableSampleAtName>),
             // find collection ID
             type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
-            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+            type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
             type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
             // check requester has collection permissions
             type_of_val(&AuthzOn::<CollectionId>::set),
@@ -155,20 +154,13 @@ mod tests {
             type_of_val(&TableStatus::active_or_frozen),
             // Find Table ID, looking at the version at the time
             type_of_val(&combine::<CollectionIdName, TableIdName>),
-            type_of_val(
-                &By::<(CollectionIdName, TableIdName)>::select_version::<
-                    DaoQueries,
-                    TableDBWithNames,
-                >,
-            ),
+            type_of_val(&By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>),
             type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
             // Only committed transactions, at the triggered on time
             type_of_val(&FunctionRunStatus::committed),
             type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
             // Find the latest data version of the table ID, at that time
-            type_of_val(
-                &By::<TableId>::select_version_optional::<DaoQueries, TableDataVersionDBWithNames>,
-            ),
+            type_of_val(&By::<TableId>::select_version_optional::<TableDataVersionDBWithNames>),
             // Resolve the location of the data version. This takes into account versions without
             // data changes (in which the previous version is resolved)
             type_of_val(&resolve_table_location),

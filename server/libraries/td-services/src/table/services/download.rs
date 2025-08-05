@@ -37,7 +37,7 @@ fn provider() {
         from_fn(With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
         // find collection ID
         from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -94,54 +94,45 @@ mod tests {
         use td_objects::types::execution::TableDataVersionDBWithNames;
         use td_objects::types::table::TableDBWithNames;
 
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let provider = TableDownloadService::provider(
-            db,
-            Arc::new(DaoQueries::default()),
-            Arc::new(AuthzContext::default()),
-        );
-        let service = provider.make().await;
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-        metadata.assert_service::<ReadRequest<TableAtIdName>, Option<SPath>>(&[
-            // Extract parameters
-            type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
-            type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-            // find collection ID
-            type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
-            // Find table data version location.
-            // Extract parameters
-            type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-            type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
-            type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
-            // Only active or frozen tables
-            type_of_val(&TableStatus::active_or_frozen),
-            // Find Table ID, looking at the version at the time
-            type_of_val(&combine::<CollectionIdName, TableIdName>),
-            type_of_val(
-                &By::<(CollectionIdName, TableIdName)>::select_version::<
-                    DaoQueries,
-                    TableDBWithNames,
-                >,
-            ),
-            type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-            // Only committed transactions, at the triggered on time
-            type_of_val(&FunctionRunStatus::committed),
-            type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
-            // Find the latest data version of the table ID, at that time
-            type_of_val(
-                &By::<TableId>::select_version_optional::<DaoQueries, TableDataVersionDBWithNames>,
-            ),
-            // Resolve the location of the data version. This takes into account versions without
-            // data changes (in which the previous version is resolved)
-            type_of_val(&resolve_table_location),
-        ]);
+        TableDownloadService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ReadRequest<TableAtIdName>, Option<SPath>>(&[
+                // Extract parameters
+                type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
+                type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
+                // find collection ID
+                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
+                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                // check requester has collection permissions
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+                // Find table data version location.
+                // Extract parameters
+                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
+                type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
+                type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
+                // Only active or frozen tables
+                type_of_val(&TableStatus::active_or_frozen),
+                // Find Table ID, looking at the version at the time
+                type_of_val(&combine::<CollectionIdName, TableIdName>),
+                type_of_val(
+                    &By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>,
+                ),
+                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
+                // Only committed transactions, at the triggered on time
+                type_of_val(&FunctionRunStatus::committed),
+                type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
+                // Find the latest data version of the table ID, at that time
+                type_of_val(&By::<TableId>::select_version_optional::<TableDataVersionDBWithNames>),
+                // Resolve the location of the data version. This takes into account versions without
+                // data changes (in which the previous version is resolved)
+                type_of_val(&resolve_table_location),
+            ]);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -262,13 +253,10 @@ mod tests {
             table: &str,
             at_time: &AtTime,
         ) -> Result<Bytes, TdError> {
-            let service = TableDownloadService::new(
-                db,
-                Arc::new(DaoQueries::default()),
-                Arc::new(AuthzContext::default()),
-            )
-            .service()
-            .await;
+            let service = TableDownloadService::with_defaults(db)
+                .await
+                .service()
+                .await;
 
             let request =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())

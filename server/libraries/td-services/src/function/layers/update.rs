@@ -6,7 +6,7 @@ use std::ops::Deref;
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
-use td_objects::sql::DerefQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionName, FunctionStatus,
 };
@@ -19,9 +19,9 @@ enum UpdateFunctionError {
     FunctionAlreadyExists(FunctionName, CollectionName) = 0,
 }
 
-pub async fn assert_function_name_not_exists<Q: DerefQueries>(
+pub async fn assert_function_name_not_exists(
     Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Input(at_time): Input<AtTime>,
     Input(collection_id): Input<CollectionId>,
     Input(collection_name): Input<CollectionName>,

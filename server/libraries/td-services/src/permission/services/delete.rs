@@ -6,9 +6,7 @@ use crate::permission::layers::{
     assert_permission_is_not_fixed, assert_role_in_permission,
     is_permission_with_names_on_a_single_collection,
 };
-use std::sync::Arc;
 use td_authz::{refresh_authz_context, Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::RolePermissionParam;
@@ -22,76 +20,54 @@ use td_objects::types::basic::{
     CollectionId, EntityId, PermissionId, PermissionIdName, RoleIdName,
 };
 use td_objects::types::permission::{PermissionDB, PermissionDBWithNames};
-use td_tower::default_services::{conditional, Do, Else, If, SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::{conditional, Do, Else, If, TransactionProvider};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider, service};
 
-pub struct DeletePermissionService {
-    provider: ServiceProvider<DeleteRequest<RolePermissionParam>, (), TdError>,
-}
-
-impl DeletePermissionService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-                from_fn(With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
-                from_fn(AuthzOn::<System>::set),
+#[provider(
+    name = DeletePermissionService,
+    request = DeleteRequest<RolePermissionParam>,
+    response = (),
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
+        from_fn(AuthzOn::<System>::set),
+        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(With::<DeleteRequest<RolePermissionParam>>::extract_name::<RolePermissionParam>),
+        from_fn(With::<RolePermissionParam>::extract::<PermissionIdName>),
+        from_fn(By::<PermissionIdName>::select::<PermissionDBWithNames>),
+        // Check the role in the request matches the role in permission
+        from_fn(With::<RolePermissionParam>::extract::<RoleIdName>),
+        from_fn(assert_role_in_permission),
+        conditional(
+            If(service!(layers!(from_fn(
+                is_permission_with_names_on_a_single_collection
+            )))),
+            Do(service!(layers!(
+                // a permission on a single collection can also be deleted by a collection admin
+                from_fn(With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
+                from_fn(With::<EntityId>::unwrap_option),
+                from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
+                from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
-
-                from_fn(With::<DeleteRequest<RolePermissionParam>>::extract_name::<RolePermissionParam>),
-
-                from_fn(With::<RolePermissionParam>::extract::<PermissionIdName>),
-
-                from_fn(By::<PermissionIdName>::select::<DaoQueries, PermissionDBWithNames>),
-
-                // Check the role in the request matches the role in permission
-                from_fn(With::<RolePermissionParam>::extract::<RoleIdName>),
-                from_fn(assert_role_in_permission),
-
-                conditional(
-                    If(service!(layers!(
-                        from_fn(is_permission_with_names_on_a_single_collection),
-                    ))),
-                    Do(service!(layers!(
-                       // a permission on a single collection can also be deleted by a collection admin
-                        from_fn(With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
-                        from_fn(With::<EntityId>::unwrap_option),
-                        from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
-                        from_fn(AuthzOn::<CollectionId>::set),
-                        from_fn(Authz::<SecAdmin, CollAdmin>::check),
-                    ))),
-                    Else(service!(layers!(
-                        // a permission on a all collections can be deleted by a sec_admin only
-                        from_fn(AuthzOn::<System>::set),
-                        from_fn(Authz::<SecAdmin>::check),
-                    )))
-                ),
-
-                from_fn(assert_permission_is_not_fixed),
-
-                from_fn(With::<PermissionDBWithNames>::extract::<PermissionId>),
-                from_fn(By::<PermissionId>::delete::<DaoQueries, PermissionDB>),
-
-                // refresh the permissions authz cache
-                from_fn(refresh_authz_context),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<DeleteRequest<RolePermissionParam>, (), TdError> {
-        self.provider.make().await
-    }
+            ))),
+            Else(service!(layers!(
+                // a permission on a all collections can be deleted by a sec_admin only
+                from_fn(AuthzOn::<System>::set),
+                from_fn(Authz::<SecAdmin>::check),
+            )))
+        ),
+        from_fn(assert_permission_is_not_fixed),
+        from_fn(With::<PermissionDBWithNames>::extract::<PermissionId>),
+        from_fn(By::<PermissionId>::delete::<PermissionDB>),
+        // refresh the permissions authz cache
+        from_fn(refresh_authz_context),
+    )
 }
 
 #[cfg(test)]
@@ -100,6 +76,7 @@ mod tests {
     use crate::permission::services::create::CreatePermissionService;
     use crate::permission::PermissionError;
     use std::collections::HashSet;
+    use td_database::sql::DbPool;
     use td_error::assert_service_error;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::RoleParam;
@@ -122,17 +99,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_delete_permission(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider =
-            DeletePermissionService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
+        DeletePermissionService::with_defaults(db).await.
 
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
 
-        metadata.assert_service::<DeleteRequest<RolePermissionParam>, ()>(&[
+
+
+        metadata().await.assert_service::<DeleteRequest<RolePermissionParam>, ()>(&[
             type_of_val(&With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
             type_of_val(&AuthzOn::<System>::set),
             type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
@@ -140,7 +114,7 @@ mod tests {
                 &With::<DeleteRequest<RolePermissionParam>>::extract_name::<RolePermissionParam>,
             ),
             type_of_val(&With::<RolePermissionParam>::extract::<PermissionIdName>),
-            type_of_val(&By::<PermissionIdName>::select::<DaoQueries, PermissionDBWithNames>),
+            type_of_val(&By::<PermissionIdName>::select::<PermissionDBWithNames>),
             type_of_val(&With::<RolePermissionParam>::extract::<RoleIdName>),
             type_of_val(&assert_role_in_permission),
             type_of_val(&is_permission_with_names_on_a_single_collection),
@@ -153,7 +127,7 @@ mod tests {
             type_of_val(&Authz::<SecAdmin>::check),
             type_of_val(&assert_permission_is_not_fixed),
             type_of_val(&With::<PermissionDBWithNames>::extract::<PermissionId>),
-            type_of_val(&By::<PermissionId>::delete::<DaoQueries, PermissionDB>),
+            type_of_val(&By::<PermissionId>::delete::<PermissionDB>),
             type_of_val(&refresh_authz_context),
         ]);
     }
@@ -180,7 +154,8 @@ mod tests {
                 .build()?,
         );
 
-        let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = DeletePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         service.raw_oneshot(request).await?;
@@ -224,7 +199,8 @@ mod tests {
                 .build()?,
         );
 
-        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = CreatePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         assert!(service.raw_oneshot(request).await.is_ok());
@@ -266,7 +242,8 @@ mod tests {
                 .build()?,
         );
 
-        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = CreatePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         assert_service_error(service, request, |err| match err {
@@ -310,7 +287,8 @@ mod tests {
                 .build()?,
         );
 
-        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = CreatePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         assert_service_error(service, request, |err| match err {
@@ -353,7 +331,8 @@ mod tests {
                     .build()?,
             );
 
-        let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = DeletePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         assert!(service.raw_oneshot(request).await.is_ok());
@@ -393,7 +372,8 @@ mod tests {
                     .build()?,
             );
 
-        let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = DeletePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
 
@@ -438,7 +418,8 @@ mod tests {
                     .build()?,
             );
 
-        let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = DeletePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
 
@@ -473,7 +454,8 @@ mod tests {
                     .build()?,
             );
 
-        let service = DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = DeletePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
 
@@ -499,10 +481,10 @@ mod tests {
             .unwrap();
 
         for permission in permissions {
-            let service =
-                DeletePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
-                    .service()
-                    .await;
+            let service = DeletePermissionService::with_defaults(db.clone())
+                .await
+                .service()
+                .await;
 
             let request: DeleteRequest<RolePermissionParam> = RequestContext::with(
                 AccessTokenId::default(),

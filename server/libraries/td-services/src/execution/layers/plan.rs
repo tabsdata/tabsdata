@@ -11,7 +11,7 @@ use ta_execution::transaction::{TransactionMap, TransactionMapper};
 use td_error::TdError;
 use td_execution::planner::ExecutionPlanner;
 use td_execution::version_resolver::VersionResolver;
-use td_objects::sql::DerefQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::types::basic::{Dot, InputIdx, Trigger, VersionPos};
 use td_objects::types::execution::{
     ExecutionDB, ExecutionResponse, FunctionRequirementDB, FunctionRunDB, FunctionRunDBBuilder,
@@ -133,8 +133,8 @@ pub async fn build_table_data_versions(
     Ok(new_table_data_versions)
 }
 
-pub async fn build_execution_plan<Q: DerefQueries>(
-    SrvCtx(queries): SrvCtx<Q>,
+pub async fn build_execution_plan(
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
     Input(execution): Input<ExecutionDB>,
     Input(execution_template): Input<ExecutionGraph<Versions>>,

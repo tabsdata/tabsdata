@@ -11,6 +11,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, DeleteRequest, ListRequest, ListResponse};
 use td_objects::rest_urls::{RoleParam, RolePermissionParam};
+use td_objects::sql::DaoQueries;
 use td_objects::types::permission::{Permission, PermissionCreate};
 use td_tower::service_provider::TdBoxService;
 
@@ -26,10 +27,19 @@ pub struct PermissionServices {
 
 impl PermissionServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
+        let queries = Arc::new(DaoQueries::default());
         Self {
-            create: CreatePermissionService::new(db.clone(), authz_context.clone()),
-            delete: DeletePermissionService::new(db.clone(), authz_context.clone()),
-            list: ListPermissionService::new(db.clone(), authz_context.clone()),
+            create: CreatePermissionService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
+            delete: DeletePermissionService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
+            list: ListPermissionService::new(db.clone(), queries.clone(), authz_context.clone()),
         }
     }
 

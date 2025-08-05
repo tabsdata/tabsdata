@@ -6,9 +6,7 @@ use crate::user::layers::update::{
     update_user_validate, update_user_validate_enabled, update_user_validate_password_change,
     UpdateUserDBBuilderUpdate,
 };
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::UserParam;
@@ -25,76 +23,49 @@ use td_objects::types::user::{
     UserUpdateDBBuilder,
 };
 use td_security::config::PasswordHashingConfig;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct UpdateUserService {
-    provider: ServiceProvider<UpdateRequest<UserParam, UserUpdate>, UserRead, TdError>,
-}
-
-impl UpdateUserService {
-    pub fn new(
-        db: DbPool,
-        password_hashing_config: Arc<PasswordHashingConfig>,
-        authz_context: Arc<AuthzContext>,
-    ) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        UpdateUserService {
-            provider: Self::provider(db, queries, password_hashing_config, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, password_hashing_config: Arc<PasswordHashingConfig>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(authz_context),
-                SrvCtxProvider::new(password_hashing_config),
-                from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract::<RequestContext>),
-                from_fn(With::<RequestContext>::extract::<AtTime>),
-                from_fn(With::<RequestContext>::extract::<UserId>),
-                from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract_name::<UserParam>),
-                from_fn(With::<UserParam>::extract::<UserIdName>),
-
-                from_fn(By::<UserIdName>::select::<DaoQueries, UserDB>),
-                from_fn(AuthzOn::<SystemOrUserId>::set),
-                from_fn(Authz::<SecAdmin, Requester>::check),
-
-                from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract_data::<UserUpdate>),
-                from_fn(update_user_validate),
-                from_fn(update_user_validate_password_change),
-                from_fn(update_user_validate_enabled),
-
-                from_fn(With::<UserDB>::convert_to::<UserUpdateDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<UserUpdateDBBuilder, _>),
-                from_fn(With::<UserUpdate>::update_user_update_db_builder),
-                from_fn(With::<UserUpdateDBBuilder>::build::<UserUpdateDB, _>),
-
-                from_fn(With::<UserDB>::extract::<UserId>),
-                from_fn(By::<UserId>::update::<DaoQueries, UserUpdateDB, UserDB>),
-
-                from_fn(By::<UserId>::select::<DaoQueries, UserDBWithNames>),
-                from_fn(With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
-                from_fn(With::<UserReadBuilder>::build::<UserRead, _>),
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<UpdateRequest<UserParam, UserUpdate>, UserRead, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = UpdateUserService,
+    request = UpdateRequest<UserParam, UserUpdate>,
+    response = UserRead,
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+    context = PasswordHashingConfig,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract::<RequestContext>),
+        from_fn(With::<RequestContext>::extract::<AtTime>),
+        from_fn(With::<RequestContext>::extract::<UserId>),
+        from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract_name::<UserParam>),
+        from_fn(With::<UserParam>::extract::<UserIdName>),
+        from_fn(By::<UserIdName>::select::<UserDB>),
+        from_fn(AuthzOn::<SystemOrUserId>::set),
+        from_fn(Authz::<SecAdmin, Requester>::check),
+        from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract_data::<UserUpdate>),
+        from_fn(update_user_validate),
+        from_fn(update_user_validate_password_change),
+        from_fn(update_user_validate_enabled),
+        from_fn(With::<UserDB>::convert_to::<UserUpdateDBBuilder, _>),
+        from_fn(With::<RequestContext>::update::<UserUpdateDBBuilder, _>),
+        from_fn(With::<UserUpdate>::update_user_update_db_builder),
+        from_fn(With::<UserUpdateDBBuilder>::build::<UserUpdateDB, _>),
+        from_fn(With::<UserDB>::extract::<UserId>),
+        from_fn(By::<UserId>::update::<UserUpdateDB, UserDB>),
+        from_fn(By::<UserId>::select::<UserDBWithNames>),
+        from_fn(With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+        from_fn(With::<UserReadBuilder>::build::<UserRead, _>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::UserParam;
@@ -104,53 +75,50 @@ mod tests {
         AccessTokenId, AtTime, Email, FullName, Password, RoleId, UserEnabled, UserId, UserName,
     };
     use td_objects::types::user::{UserDB, UserUpdate};
-    use td_security::config::PasswordHashingConfig;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_update_provider(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let password_config = Arc::new(PasswordHashingConfig::default());
-        let provider = UpdateUserService::provider(
-            db,
-            queries,
-            password_config,
-            Arc::new(AuthzContext::default()),
-        );
-        let service = provider.make().await;
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-        metadata.assert_service::<UpdateRequest<UserParam, UserUpdate>, UserRead>(&[
-            type_of_val(&With::<UpdateRequest<UserParam, UserUpdate>>::extract::<RequestContext>),
-            type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            type_of_val(&With::<RequestContext>::extract::<UserId>),
-            type_of_val(&With::<UpdateRequest<UserParam, UserUpdate>>::extract_name::<UserParam>),
-            type_of_val(&With::<UserParam>::extract::<UserIdName>),
-            type_of_val(&By::<UserIdName>::select::<DaoQueries, UserDB>),
-            type_of_val(&AuthzOn::<SystemOrUserId>::set),
-            type_of_val(&Authz::<SecAdmin, Requester>::check),
-            type_of_val(&With::<UpdateRequest<UserParam, UserUpdate>>::extract_data::<UserUpdate>),
-            type_of_val(&update_user_validate),
-            type_of_val(&update_user_validate_password_change),
-            type_of_val(&update_user_validate_enabled),
-            type_of_val(&With::<UserDB>::convert_to::<UserUpdateDBBuilder, _>),
-            type_of_val(&With::<RequestContext>::update::<UserUpdateDBBuilder, _>),
-            type_of_val(&With::<UserUpdate>::update_user_update_db_builder),
-            type_of_val(&With::<UserUpdateDBBuilder>::build::<UserUpdateDB, _>),
-            type_of_val(&With::<UserDB>::extract::<UserId>),
-            type_of_val(&By::<UserId>::update::<DaoQueries, UserUpdateDB, UserDB>),
-            type_of_val(&By::<UserId>::select::<DaoQueries, UserDBWithNames>),
-            type_of_val(&With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
-            type_of_val(&With::<UserReadBuilder>::build::<UserRead, _>),
-        ]);
+        UpdateUserService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<UpdateRequest<UserParam, UserUpdate>, UserRead>(&[
+                type_of_val(
+                    &With::<UpdateRequest<UserParam, UserUpdate>>::extract::<RequestContext>,
+                ),
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
+                type_of_val(&With::<RequestContext>::extract::<UserId>),
+                type_of_val(
+                    &With::<UpdateRequest<UserParam, UserUpdate>>::extract_name::<UserParam>,
+                ),
+                type_of_val(&With::<UserParam>::extract::<UserIdName>),
+                type_of_val(&By::<UserIdName>::select::<UserDB>),
+                type_of_val(&AuthzOn::<SystemOrUserId>::set),
+                type_of_val(&Authz::<SecAdmin, Requester>::check),
+                type_of_val(
+                    &With::<UpdateRequest<UserParam, UserUpdate>>::extract_data::<UserUpdate>,
+                ),
+                type_of_val(&update_user_validate),
+                type_of_val(&update_user_validate_password_change),
+                type_of_val(&update_user_validate_enabled),
+                type_of_val(&With::<UserDB>::convert_to::<UserUpdateDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<UserUpdateDBBuilder, _>),
+                type_of_val(&With::<UserUpdate>::update_user_update_db_builder),
+                type_of_val(&With::<UserUpdateDBBuilder>::build::<UserUpdateDB, _>),
+                type_of_val(&With::<UserDB>::extract::<UserId>),
+                type_of_val(&By::<UserId>::update::<UserUpdateDB, UserDB>),
+                type_of_val(&By::<UserId>::select::<UserDBWithNames>),
+                type_of_val(&With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+                type_of_val(&With::<UserReadBuilder>::build::<UserRead, _>),
+            ]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_update_user_admin(db: DbPool) {
-        let password_config = Arc::new(PasswordHashingConfig::default());
         let _ = seed_user(
             &db,
             &UserName::try_from("u0").unwrap(),
@@ -158,13 +126,10 @@ mod tests {
         )
         .await;
 
-        let service = UpdateUserService::new(
-            db.clone(),
-            password_config,
-            Arc::new(AuthzContext::default()),
-        )
-        .service()
-        .await;
+        let service = UpdateUserService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
 
         let user_update = UserUpdate::builder()
             .full_name(Some(FullName::try_from("U0 Update").unwrap()))
@@ -226,7 +191,6 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_update_user_self(db: DbPool) {
-        let password_config = Arc::new(PasswordHashingConfig::default());
         let user = seed_user(
             &db,
             &UserName::try_from("u0").unwrap(),
@@ -234,13 +198,10 @@ mod tests {
         )
         .await;
 
-        let service = UpdateUserService::new(
-            db.clone(),
-            password_config,
-            Arc::new(AuthzContext::default()),
-        )
-        .service()
-        .await;
+        let service = UpdateUserService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
 
         let user_update = UserUpdate::builder()
             .full_name(Some(FullName::try_from("U0 Update").unwrap()))

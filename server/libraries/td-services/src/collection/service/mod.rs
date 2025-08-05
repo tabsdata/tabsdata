@@ -43,15 +43,22 @@ impl CollectionServices {
         Self {
             create_service_provider: CreateCollectionService::new(
                 db.clone(),
+                queries.clone(),
                 authz_context.clone(),
             ),
-            read_service_provider: ReadCollectionService::new(db.clone(), authz_context.clone()),
+            read_service_provider: ReadCollectionService::new(
+                db.clone(),
+                queries.clone(),
+                authz_context.clone(),
+            ),
             update_service_provider: UpdateCollectionService::new(
                 db.clone(),
+                queries.clone(),
                 authz_context.clone(),
             ),
             delete_service_provider: DeleteCollectionService::new(
                 db.clone(),
+                queries.clone(),
                 authz_context.clone(),
             ),
             list_service_provider: ListCollectionsService::new(

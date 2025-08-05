@@ -4,8 +4,6 @@
 
 use crate::user::service::delete::DeleteUserService;
 use crate::user::UserError;
-use std::sync::Arc;
-use td_authz::AuthzContext;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::UserParam;
@@ -15,9 +13,7 @@ use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 async fn test_not_allowed_to_delete_themselves() {
     let db = td_database::test_utils::db().await.unwrap();
 
-    let service = DeleteUserService::new(db.clone(), Arc::new(AuthzContext::default()))
-        .service()
-        .await;
+    let service = DeleteUserService::with_defaults(db).await.service().await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),

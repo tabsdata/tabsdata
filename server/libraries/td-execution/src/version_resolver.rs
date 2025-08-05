@@ -10,7 +10,7 @@ use td_error::display_vec::DisplayVec;
 use td_error::{display_vec, td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::TableQueries;
-use td_objects::sql::DerefQueries;
+use td_objects::sql::DaoQueries;
 use td_objects::types::basic::{TableDataVersionId, TableId, TriggeredOn};
 use td_objects::types::execution::ActiveTableDataVersionDB;
 use td_objects::types::table_ref::{Version, Versions};
@@ -47,9 +47,9 @@ impl<'a> VersionResolver<'a> {
     /// Main resolve function. Note that the return type is a `Vec<Option<TableDataVersionDB>>`,
     /// because versions not existing is not necessarily an error, and a single `Versions` can
     /// resolve to multiple versions (i.e. List).
-    pub async fn resolve<D: DerefQueries>(
+    pub async fn resolve(
         &self,
-        queries: &D,
+        queries: &DaoQueries,
         conn: &mut SqliteConnection,
     ) -> Result<Vec<Option<ActiveTableDataVersionDB>>, TdError> {
         let (table_id, versions, triggered_on) = (self.table_id, self.versions, self.triggered_on);

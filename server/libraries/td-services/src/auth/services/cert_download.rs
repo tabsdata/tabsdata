@@ -34,14 +34,13 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_cert_download() {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let path = PathBuf::default();
-        let service = CertDownloadService::provider(Arc::new(path)).make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-        metadata.assert_service::<(), BoxedSyncStream>(&[type_of_val(&get_certificate_pem_file)]);
+        CertDownloadService::with_defaults()
+            .await
+            .metadata()
+            .await
+            .assert_service::<(), BoxedSyncStream>(&[type_of_val(&get_certificate_pem_file)]);
     }
 
     #[tokio::test]

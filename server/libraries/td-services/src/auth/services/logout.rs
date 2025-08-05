@@ -4,8 +4,6 @@
 
 use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::session::Sessions;
-use std::sync::Arc;
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::sql::DaoQueries;
@@ -15,57 +13,41 @@ use td_objects::tower_service::from::{
 use td_objects::tower_service::sql::{By, SqlUpdateService};
 use td_objects::types::auth::{SessionDB, SessionLogoutDB, SessionLogoutDBBuilder};
 use td_objects::types::basic::{AccessTokenId, AtTime};
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
-use td_tower::service_provider::{ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::{layers, provider};
 
-pub struct LogoutService {
-    provider: ServiceProvider<UpdateRequest<(), ()>, (), TdError>,
-}
-
-impl LogoutService {
-    pub fn new(db: DbPool, queries: Arc<DaoQueries>, sessions: Arc<Sessions<'static>>) -> Self {
-        Self {
-            provider: Self::provider(db, queries, sessions),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, sessions: Arc<Sessions<'static>>) {
-            service_provider!(layers!(
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(sessions),
-
-                // extract access token id and request time from request context
-                from_fn(With::<UpdateRequest<(), ()>>::extract::<RequestContext>),
-                from_fn(With::<RequestContext>::extract::<AccessTokenId>),
-                from_fn(With::<RequestContext>::extract::<AtTime>),
-
-                // logout corresponding session
-                from_fn(With::<SessionLogoutDBBuilder>::default),
-                from_fn(With::<AtTime>::set::<SessionLogoutDBBuilder>),
-                from_fn(With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB, _>),
-                from_fn(By::<AccessTokenId>::update::<DaoQueries, SessionLogoutDB, SessionDB>),
-
-                // invalidate sessions cache
-                from_fn(refresh_sessions),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<UpdateRequest<(), ()>, (), TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = LogoutService,
+    request = UpdateRequest<(), ()>,
+    response = (),
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = Sessions,
+)]
+fn provider() {
+    layers!(
+        // extract access token id and request time from request context
+        from_fn(With::<UpdateRequest<(), ()>>::extract::<RequestContext>),
+        from_fn(With::<RequestContext>::extract::<AccessTokenId>),
+        from_fn(With::<RequestContext>::extract::<AtTime>),
+        // logout corresponding session
+        from_fn(With::<SessionLogoutDBBuilder>::default),
+        from_fn(With::<AtTime>::set::<SessionLogoutDBBuilder>),
+        from_fn(With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB, _>),
+        from_fn(By::<AccessTokenId>::update::<SessionLogoutDB, SessionDB>),
+        // invalidate sessions cache
+        from_fn(refresh_sessions),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::auth::decode_token;
-    use crate::auth::services::tests::{auth_services, get_session};
+    use crate::auth::services::tests::get_session;
+    use crate::auth::services::AuthServices;
     use td_database::sql::DbPool;
     use td_objects::types::auth::Login;
     use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};
@@ -74,38 +56,30 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_logout(db: DbPool) {
-        use crate::auth::session;
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let service = LogoutService::provider(
-            db.clone(),
-            Arc::new(DaoQueries::default()),
-            Arc::new(session::new(db.clone())),
-        )
-        .make()
-        .await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-        metadata.assert_service::<UpdateRequest<(), ()>, ()>(&[
-            // extract access token id and request time from request context
-            type_of_val(&With::<UpdateRequest<(), ()>>::extract::<RequestContext>),
-            type_of_val(&With::<RequestContext>::extract::<AccessTokenId>),
-            type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            // logout corresponding session
-            type_of_val(&With::<SessionLogoutDBBuilder>::default),
-            type_of_val(&With::<AtTime>::set::<SessionLogoutDBBuilder>),
-            type_of_val(&With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB, _>),
-            type_of_val(&By::<AccessTokenId>::update::<DaoQueries, SessionLogoutDB, SessionDB>),
-            // invalidate sessions cache
-            type_of_val(&refresh_sessions),
-        ]);
+        LogoutService::with_defaults(db.clone())
+            .await
+            .metadata()
+            .await
+            .assert_service::<UpdateRequest<(), ()>, ()>(&[
+                // extract access token id and request time from request context
+                type_of_val(&With::<UpdateRequest<(), ()>>::extract::<RequestContext>),
+                type_of_val(&With::<RequestContext>::extract::<AccessTokenId>),
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
+                // logout corresponding session
+                type_of_val(&With::<SessionLogoutDBBuilder>::default),
+                type_of_val(&With::<AtTime>::set::<SessionLogoutDBBuilder>),
+                type_of_val(&With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB, _>),
+                type_of_val(&By::<AccessTokenId>::update::<SessionLogoutDB, SessionDB>),
+                // invalidate sessions cache
+                type_of_val(&refresh_sessions),
+            ]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_logout_ok(db: DbPool) -> Result<(), TdError> {
-        let auth_services = auth_services(&db).await;
-
+        let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;
 
         let request = Login::builder()

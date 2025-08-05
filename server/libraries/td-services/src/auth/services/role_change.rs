@@ -9,8 +9,6 @@ use crate::auth::layers::set_session_expiration::set_session_expiration;
 use crate::auth::services::JwtConfig;
 use crate::auth::session::Sessions;
 use crate::auth::AuthError;
-use std::sync::Arc;
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::sql::DaoQueries;
@@ -27,99 +25,69 @@ use td_objects::types::basic::AtTime;
 use td_objects::types::basic::{AccessTokenId, RoleId, RoleName, UserId};
 use td_objects::types::role::UserRoleDBWithNames;
 use td_objects::types::user::UserDB;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
-use td_tower::service_provider::{ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::{layers, provider};
+use tower::util::MapErrLayer;
 
-pub struct RoleChangeService {
-    provider: ServiceProvider<UpdateRequest<(), RoleChange>, TokenResponseX, TdError>,
-}
-
-impl RoleChangeService {
-    pub fn new(
-        db: DbPool,
-        queries: Arc<DaoQueries>,
-        jwt_config: Arc<JwtConfig>,
-        sessions: Arc<Sessions<'static>>,
-    ) -> Self {
-        Self {
-            provider: Self::provider(db, queries, jwt_config, sessions),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, jwt_config: Arc<JwtConfig>, sessions: Arc<Sessions<'static>>,) {
-            service_provider!(layers!(
-                layers!(
-                    TransactionProvider::new(db),
-                    SrvCtxProvider::new(queries),
-                    SrvCtxProvider::new(jwt_config),
-                    SrvCtxProvider::new(sessions),
-                ),
-                layers!(
-                    from_fn(With::<UpdateRequest<(), RoleChange>>::extract::<RequestContext>),
-
-                    // extract access token id, user id and request time from request context
-                    from_fn(With::<RequestContext>::extract::<AccessTokenId>),
-                    from_fn(With::<RequestContext>::extract::<UserId>),
-                    from_fn(With::<RequestContext>::extract::<AtTime>),
-
-                    // extract role change from request
-                    from_fn(With::<UpdateRequest<(), RoleChange>>::extract_data::<RoleChange>),
-                    from_fn(With::<RoleChange>::extract::<RoleName>),
-
-                    // check user is enabled
-                    from_fn(By::<UserId>::select::<DaoQueries, UserDB>),
-                    from_fn(assert_user_enabled),
-
-                    // check user has the requested role
-                    from_fn(combine::<UserId, RoleName>),
-                    from_fn(By::<(UserId,RoleName)>::select::<DaoQueries, UserRoleDBWithNames>);
-
-
-                    // return this type of error for this layer group
-                    map_err = |_err| TdError::from(AuthError::UserDoesNotBelongToRole)
-                ),
-                layers!(
-                    // invalidate session entry with previous role
-                    from_fn(With::<SessionRoleChangeDBBuilder>::default),
-                    from_fn(With::<AtTime>::set::<SessionRoleChangeDBBuilder>),
-                    from_fn(With::<SessionRoleChangeDBBuilder>::build::<SessionRoleChangeDB, _>),
-                    from_fn(By::<AccessTokenId>::update::<DaoQueries, SessionRoleChangeDB, SessionDB>),
-
-                    // create user session
-                    from_fn(With::<UserRoleDBWithNames>::extract::<RoleId>),
-                    from_fn(builder::<SessionDBBuilder>),
-                    from_fn(With::<UserId>::set::<SessionDBBuilder>),
-                    from_fn(With::<RoleId>::set::<SessionDBBuilder>),
-                    from_fn(With::<AtTime>::set::<SessionDBBuilder>),
-                    from_fn(set_session_expiration),
-                    from_fn(With::<SessionDBBuilder>::build::<SessionDB, _>),
-                    from_fn(insert::<DaoQueries, SessionDB>),
-
-                    // create access token
-                    from_fn(create_access_token),
-
-                    // invalidate sessions cache
-                    from_fn(refresh_sessions),
-                )
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<UpdateRequest<(), RoleChange>, TokenResponseX, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = RoleChangeService,
+    request = UpdateRequest<(), RoleChange>,
+    response = TokenResponseX,
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = JwtConfig,
+    context = Sessions,
+)]
+fn provider() {
+    layers!(
+        layers!(
+            // return this type of error for this layer group
+            MapErrLayer::new(|_err| TdError::from(AuthError::UserDoesNotBelongToRole)),
+            from_fn(With::<UpdateRequest<(), RoleChange>>::extract::<RequestContext>),
+            // extract access token id, user id and request time from request context
+            from_fn(With::<RequestContext>::extract::<AccessTokenId>),
+            from_fn(With::<RequestContext>::extract::<UserId>),
+            from_fn(With::<RequestContext>::extract::<AtTime>),
+            // extract role change from request
+            from_fn(With::<UpdateRequest<(), RoleChange>>::extract_data::<RoleChange>),
+            from_fn(With::<RoleChange>::extract::<RoleName>),
+            // check user is enabled
+            from_fn(By::<UserId>::select::<UserDB>),
+            from_fn(assert_user_enabled),
+            // check user has the requested role
+            from_fn(combine::<UserId, RoleName>),
+            from_fn(By::<(UserId, RoleName)>::select::<UserRoleDBWithNames>)
+        ),
+        layers!(
+            // invalidate session entry with previous role
+            from_fn(With::<SessionRoleChangeDBBuilder>::default),
+            from_fn(With::<AtTime>::set::<SessionRoleChangeDBBuilder>),
+            from_fn(With::<SessionRoleChangeDBBuilder>::build::<SessionRoleChangeDB, _>),
+            from_fn(By::<AccessTokenId>::update::<SessionRoleChangeDB, SessionDB>),
+            // create user session
+            from_fn(With::<UserRoleDBWithNames>::extract::<RoleId>),
+            from_fn(builder::<SessionDBBuilder>),
+            from_fn(With::<UserId>::set::<SessionDBBuilder>),
+            from_fn(With::<RoleId>::set::<SessionDBBuilder>),
+            from_fn(With::<AtTime>::set::<SessionDBBuilder>),
+            from_fn(set_session_expiration),
+            from_fn(With::<SessionDBBuilder>::build::<SessionDB, _>),
+            from_fn(insert::<SessionDB>),
+            // create access token
+            from_fn(create_access_token),
+            // invalidate sessions cache
+            from_fn(refresh_sessions),
+        )
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::services::tests::{assert_session, auth_services, get_session};
+    use crate::auth::services::tests::{assert_session, get_session};
+    use crate::auth::services::AuthServices;
     use crate::auth::{decode_token, AuthError};
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
@@ -131,60 +99,51 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_role_change(db: DbPool) {
-        use crate::auth::session;
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let service = RoleChangeService::provider(
-            db.clone(),
-            Arc::new(DaoQueries::default()),
-            Arc::new(JwtConfig::default()),
-            Arc::new(session::new(db.clone())),
-        )
-        .make()
-        .await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-        metadata.assert_service::<UpdateRequest<(), RoleChange>, TokenResponseX>(&[
-            type_of_val(&With::<UpdateRequest<(), RoleChange>>::extract::<RequestContext>),
-            // extract access token id, user id and request time from request context
-            type_of_val(&With::<RequestContext>::extract::<AccessTokenId>),
-            type_of_val(&With::<RequestContext>::extract::<UserId>),
-            type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            // extract role change from request
-            type_of_val(&With::<UpdateRequest<(), RoleChange>>::extract_data::<RoleChange>),
-            type_of_val(&With::<RoleChange>::extract::<RoleName>),
-            // check user is enabled
-            type_of_val(&By::<UserId>::select::<DaoQueries, UserDB>),
-            type_of_val(&assert_user_enabled),
-            // check user has the requested role
-            type_of_val(&combine::<UserId, RoleName>),
-            type_of_val(&By::<(UserId, RoleName)>::select::<DaoQueries, UserRoleDBWithNames>),
-            // invalidate session entry with previous role
-            type_of_val(&With::<SessionRoleChangeDBBuilder>::default),
-            type_of_val(&With::<AtTime>::set::<SessionRoleChangeDBBuilder>),
-            type_of_val(&With::<SessionRoleChangeDBBuilder>::build::<SessionRoleChangeDB, _>),
-            type_of_val(&By::<AccessTokenId>::update::<DaoQueries, SessionRoleChangeDB, SessionDB>),
-            // create user session
-            type_of_val(&With::<UserRoleDBWithNames>::extract::<RoleId>),
-            type_of_val(&builder::<SessionDBBuilder>),
-            type_of_val(&With::<UserId>::set::<SessionDBBuilder>),
-            type_of_val(&With::<RoleId>::set::<SessionDBBuilder>),
-            type_of_val(&With::<AtTime>::set::<SessionDBBuilder>),
-            type_of_val(&set_session_expiration),
-            type_of_val(&With::<SessionDBBuilder>::build::<SessionDB, _>),
-            type_of_val(&insert::<DaoQueries, SessionDB>),
-            // create access token
-            type_of_val(&create_access_token),
-            // invalidate sessions cache
-            type_of_val(&refresh_sessions),
-        ]);
+        RoleChangeService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<UpdateRequest<(), RoleChange>, TokenResponseX>(&[
+                type_of_val(&With::<UpdateRequest<(), RoleChange>>::extract::<RequestContext>),
+                // extract access token id, user id and request time from request context
+                type_of_val(&With::<RequestContext>::extract::<AccessTokenId>),
+                type_of_val(&With::<RequestContext>::extract::<UserId>),
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
+                // extract role change from request
+                type_of_val(&With::<UpdateRequest<(), RoleChange>>::extract_data::<RoleChange>),
+                type_of_val(&With::<RoleChange>::extract::<RoleName>),
+                // check user is enabled
+                type_of_val(&By::<UserId>::select::<UserDB>),
+                type_of_val(&assert_user_enabled),
+                // check user has the requested role
+                type_of_val(&combine::<UserId, RoleName>),
+                type_of_val(&By::<(UserId, RoleName)>::select::<UserRoleDBWithNames>),
+                // invalidate session entry with previous role
+                type_of_val(&With::<SessionRoleChangeDBBuilder>::default),
+                type_of_val(&With::<AtTime>::set::<SessionRoleChangeDBBuilder>),
+                type_of_val(&With::<SessionRoleChangeDBBuilder>::build::<SessionRoleChangeDB, _>),
+                type_of_val(&By::<AccessTokenId>::update::<SessionRoleChangeDB, SessionDB>),
+                // create user session
+                type_of_val(&With::<UserRoleDBWithNames>::extract::<RoleId>),
+                type_of_val(&builder::<SessionDBBuilder>),
+                type_of_val(&With::<UserId>::set::<SessionDBBuilder>),
+                type_of_val(&With::<RoleId>::set::<SessionDBBuilder>),
+                type_of_val(&With::<AtTime>::set::<SessionDBBuilder>),
+                type_of_val(&set_session_expiration),
+                type_of_val(&With::<SessionDBBuilder>::build::<SessionDB, _>),
+                type_of_val(&insert::<SessionDB>),
+                // create access token
+                type_of_val(&create_access_token),
+                // invalidate sessions cache
+                type_of_val(&refresh_sessions),
+            ]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_role_change_ok(db: DbPool) -> Result<(), TdError> {
-        let auth_services = auth_services(&db).await;
-
+        let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;
 
         let request = Login::builder()
@@ -231,8 +190,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_role_change_user_not_in_given_role(db: DbPool) -> Result<(), TdError> {
-        let auth_services = auth_services(&db).await;
-
+        let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;
 
         let request = Login::builder()

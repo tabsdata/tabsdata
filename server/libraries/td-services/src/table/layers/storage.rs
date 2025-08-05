@@ -339,19 +339,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::user(),
-            true,
-        )
-        .update(
-            FunctionParam::builder()
-                .try_collection(format!("{}", collection.name()))?
-                .try_function("joaquin")?
-                .build()?,
-            update.clone(),
-        );
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .try_collection(format!("{}", collection.name()))?
+                    .try_function("joaquin")?
+                    .build()?,
+                update.clone(),
+            );
         let service =
             UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
                 .service()

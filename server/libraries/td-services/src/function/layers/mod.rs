@@ -13,7 +13,6 @@ use std::ops::Deref;
 use td_authz::Authz;
 use td_error::{td_error, TdError};
 use td_objects::crudl::RequestContext;
-use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::InterColl;
 use td_objects::tower_service::from::{
     ConvertIntoMapService, TryIntoService, UpdateService, VecBuildService, With,
@@ -61,10 +60,10 @@ pub fn register_tables() {
         from_fn(With::<FunctionDB>::convert_to::<TableDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<TableDBBuilder, _>),
         from_fn(build_table_versions),
-        from_fn(insert_vec::<DaoQueries, TableDB>),
+        from_fn(insert_vec::<TableDB>),
         // Insert into trigger_versions(sql) downstream table triggers updates.
-        from_fn(build_tables_trigger_versions::<DaoQueries>),
-        from_fn(insert_vec::<DaoQueries, TriggerDB>),
+        from_fn(build_tables_trigger_versions),
+        from_fn(insert_vec::<TriggerDB>),
     )
 }
 
@@ -74,9 +73,9 @@ pub fn register_dependencies<A: DoAuthz>() {
         // Build dependency_versions(sql) current function table dependencies status=Active.
         from_fn(With::<FunctionDB>::convert_to::<DependencyDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<DependencyDBBuilder, _>),
-        from_fn(build_dependency_versions::<DaoQueries>),
+        from_fn(build_dependency_versions),
         inter_collection_authz::<_, A, DependencyDB, _>(),
-        from_fn(insert_vec::<DaoQueries, DependencyDB>),
+        from_fn(insert_vec::<DependencyDB>),
     )
 }
 
@@ -86,9 +85,9 @@ pub fn register_triggers<A: DoAuthz>() {
         // Insert into trigger_versions(sql) current function trigger status=Active.
         from_fn(With::<FunctionDB>::convert_to::<TriggerDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<TriggerDBBuilder, _>),
-        from_fn(build_trigger_versions::<DaoQueries>),
+        from_fn(build_trigger_versions),
         inter_collection_authz::<_, A, TriggerDB, _>(),
-        from_fn(insert_vec::<DaoQueries, TriggerDB>),
+        from_fn(insert_vec::<TriggerDB>),
     )
 }
 

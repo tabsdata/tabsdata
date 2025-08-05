@@ -33,7 +33,7 @@ fn provider() {
         from_fn(With::<ListRequest<CollectionAtName>>::extract_name::<CollectionAtName>),
         from_fn(With::<CollectionAtName>::extract::<CollectionIdName>),
         // find collection ID
-        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -42,9 +42,7 @@ fn provider() {
         from_fn(With::<CollectionAtName>::extract::<AtTime>),
         // list
         from_fn(TableStatus::active_or_frozen),
-        from_fn(
-            By::<CollectionId>::list_versions_at::<CollectionAtName, NoListFilter, DaoQueries, Table>
-        ),
+        from_fn(By::<CollectionId>::list_versions_at::<CollectionAtName, NoListFilter, Table>),
     )
 }
 
@@ -53,7 +51,6 @@ mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
     use crate::table::services::delete::TableDeleteService;
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_objects::crudl::{ListParams, ListParamsBuilder};
     use td_objects::rest_urls::{FunctionParam, TableParam};
@@ -69,45 +66,36 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_list_table_versions(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider =
-            TableListByCollectionService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ListRequest<CollectionAtName>, ListResponse<Table>>(&[
-            type_of_val(&With::<ListRequest<CollectionAtName>>::extract::<RequestContext>),
-            type_of_val(&With::<ListRequest<CollectionAtName>>::extract_name::<CollectionAtName>),
-            type_of_val(&With::<CollectionAtName>::extract::<CollectionIdName>),
-            // find collection ID
-            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
-            // extract attime (natural order)
-            type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
-            // list
-            type_of_val(&TableStatus::active_or_frozen),
-            type_of_val(
-                &By::<CollectionId>::list_versions_at::<
-                    CollectionAtName,
-                    NoListFilter,
-                    DaoQueries,
-                    Table,
-                >,
-            ),
-        ]);
+        TableListByCollectionService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<CollectionAtName>, ListResponse<Table>>(&[
+                type_of_val(&With::<ListRequest<CollectionAtName>>::extract::<RequestContext>),
+                type_of_val(
+                    &With::<ListRequest<CollectionAtName>>::extract_name::<CollectionAtName>,
+                ),
+                type_of_val(&With::<CollectionAtName>::extract::<CollectionIdName>),
+                // find collection ID
+                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                // check requester has collection permissions
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+                // extract attime (natural order)
+                type_of_val(&With::<CollectionAtName>::extract::<AtTime>),
+                // list
+                type_of_val(&TableStatus::active_or_frozen),
+                type_of_val(
+                    &By::<CollectionId>::list_versions_at::<CollectionAtName, NoListFilter, Table>,
+                ),
+            ]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_list_table_versions(db: DbPool) -> Result<(), TdError> {
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
         let collection = seed_collection(
             &db,
             &CollectionName::try_from("collection")?,
@@ -152,11 +140,6 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-
-        let service =
-            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
@@ -165,6 +148,11 @@ mod tests {
                     .build()?,
                 update.clone(),
             );
+
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -177,7 +165,8 @@ mod tests {
                     .build()?,
             );
 
-        TableDeleteService::new(db.clone(), authz_context.clone())
+        TableDeleteService::with_defaults(db.clone())
+            .await
             .service()
             .await
             .raw_oneshot(request)
@@ -197,13 +186,10 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = TableListByCollectionService::new(
-            db.clone(),
-            queries.clone(),
-            Arc::new(AuthzContext::default()),
-        )
-        .service()
-        .await;
+        let service = TableListByCollectionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -223,13 +209,10 @@ mod tests {
                     .unwrap(),
             );
 
-        let service = TableListByCollectionService::new(
-            db.clone(),
-            queries.clone(),
-            Arc::new(AuthzContext::default()),
-        )
-        .service()
-        .await;
+        let service = TableListByCollectionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -248,13 +231,10 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = TableListByCollectionService::new(
-            db.clone(),
-            queries.clone(),
-            Arc::new(AuthzContext::default()),
-        )
-        .service()
-        .await;
+        let service = TableListByCollectionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();

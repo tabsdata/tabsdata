@@ -48,17 +48,17 @@ fn provider() {
         // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
         from_fn(With::<FunctionRunIdParam>::extract::<FunctionRunId>),
         // Find function run (we will always have 1).
-        from_fn(By::<FunctionRunId>::select_all::<DaoQueries, FunctionRunDB>),
+        from_fn(By::<FunctionRunId>::select_all::<FunctionRunDB>),
         // Update worker status.
         from_fn(With::<UpdateWorkerExecution>::convert_to::<UpdateWorkerDBBuilder, _>),
         from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
-        from_fn(update_worker_status::<DaoQueries>),
+        from_fn(update_worker_status),
         // Update function run status.
         from_fn(With::<UpdateWorkerExecution>::convert_to::<UpdateFunctionRunDBBuilder, _>),
         from_fn(With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
-        from_fn(update_function_run_status::<DaoQueries>),
+        from_fn(update_function_run_status),
         // Update table data versions status.
-        from_fn(update_table_data_version_status::<DaoQueries>),
+        from_fn(update_table_data_version_status),
     )
 }
 
@@ -68,7 +68,6 @@ mod tests {
     use crate::execution::layers::update_status::tests::{
         test_status_update, TestExecution, TestFunction, TestTransaction,
     };
-    use std::sync::Arc;
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::server::ResponseMessagePayloadBuilder;
     use td_common::server::{MessageAction, WorkerClass};
@@ -92,46 +91,43 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_callback(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider = ExecutionCallbackService::provider(db, queries);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<UpdateRequest<FunctionRunIdParam, CallbackRequest>, ()>(&[
-            // Extract from request.
-            type_of_val(
-                &With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_name::<
-                    FunctionRunIdParam,
-                >,
-            ),
-            type_of_val(
-                &With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_data::<
-                    CallbackRequest,
-                >,
-            ),
-            // Convert callback request to status update request.
-            type_of_val(&With::<CallbackRequest>::convert_to::<UpdateWorkerExecution, _>),
-            // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
-            type_of_val(&With::<FunctionRunIdParam>::extract::<FunctionRunId>),
-            // Find function run (we will always have 1).
-            type_of_val(&By::<FunctionRunId>::select_all::<DaoQueries, FunctionRunDB>),
-            // Update worker status.
-            type_of_val(&With::<UpdateWorkerExecution>::convert_to::<UpdateWorkerDBBuilder, _>),
-            type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
-            type_of_val(&update_worker_status::<DaoQueries>),
-            // Update function run status.
-            type_of_val(
-                &With::<UpdateWorkerExecution>::convert_to::<UpdateFunctionRunDBBuilder, _>,
-            ),
-            type_of_val(&With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
-            type_of_val(&update_function_run_status::<DaoQueries>),
-            // Update table data versions status.
-            type_of_val(&update_table_data_version_status::<DaoQueries>),
-        ]);
+        ExecutionCallbackService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<UpdateRequest<FunctionRunIdParam, CallbackRequest>, ()>(&[
+                // Extract from request.
+                type_of_val(
+                    &With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_name::<
+                        FunctionRunIdParam,
+                    >,
+                ),
+                type_of_val(
+                    &With::<UpdateRequest<FunctionRunIdParam, CallbackRequest>>::extract_data::<
+                        CallbackRequest,
+                    >,
+                ),
+                // Convert callback request to status update request.
+                type_of_val(&With::<CallbackRequest>::convert_to::<UpdateWorkerExecution, _>),
+                // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+                type_of_val(&With::<FunctionRunIdParam>::extract::<FunctionRunId>),
+                // Find function run (we will always have 1).
+                type_of_val(&By::<FunctionRunId>::select_all::<FunctionRunDB>),
+                // Update worker status.
+                type_of_val(&With::<UpdateWorkerExecution>::convert_to::<UpdateWorkerDBBuilder, _>),
+                type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
+                type_of_val(&update_worker_status),
+                // Update function run status.
+                type_of_val(
+                    &With::<UpdateWorkerExecution>::convert_to::<UpdateFunctionRunDBBuilder, _>,
+                ),
+                type_of_val(&With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
+                type_of_val(&update_function_run_status),
+                // Update table data versions status.
+                type_of_val(&update_table_data_version_status),
+            ]);
     }
 
     async fn test_callback(
@@ -182,10 +178,10 @@ mod tests {
                             response,
                         );
 
-                let service =
-                    ExecutionCallbackService::new(db.clone(), Arc::new(DaoQueries::default()))
-                        .service()
-                        .await;
+                let service = ExecutionCallbackService::with_defaults(db.clone())
+                    .await
+                    .service()
+                    .await;
                 service.raw_oneshot(request).await
             }
         })

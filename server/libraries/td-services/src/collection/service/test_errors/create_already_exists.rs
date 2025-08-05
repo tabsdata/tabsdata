@@ -3,8 +3,6 @@
 //
 
 use crate::collection::service::create::CreateCollectionService;
-use std::sync::Arc;
-use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
@@ -18,7 +16,8 @@ async fn test_create_already_existing(db: DbPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = seed_collection(&db, &name, &UserId::admin()).await;
 
-    let service = CreateCollectionService::new(db.clone(), Arc::new(AuthzContext::default()))
+    let service = CreateCollectionService::with_defaults(db.clone())
+        .await
         .service()
         .await;
 

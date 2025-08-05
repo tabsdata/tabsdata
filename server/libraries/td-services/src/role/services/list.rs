@@ -2,9 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::{DaoQueries, NoListFilter};
@@ -12,46 +10,32 @@ use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{ExtractService, With};
 use td_objects::tower_service::sql::{By, SqlListService};
 use td_objects::types::role::Role;
-use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
+use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct ListRoleService {
-    provider: ServiceProvider<ListRequest<()>, ListResponse<Role>, TdError>,
-}
-
-impl ListRoleService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                ConnectionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-                from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-                from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<SecAdmin, CollAdmin>::check),
-
-                from_fn(By::<()>::list::<(), NoListFilter, DaoQueries, Role>),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<ListRequest<()>, ListResponse<Role>, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = ListRoleService,
+    request = ListRequest<()>,
+    response = ListResponse<Role>,
+    connection = ConnectionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
+        from_fn(AuthzOn::<System>::set),
+        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(By::<()>::list::<(), NoListFilter, Role>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_database::sql::DbPool;
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::test_utils::seed_role::{get_role, seed_role};
     use td_objects::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
@@ -61,21 +45,18 @@ mod tests {
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_list_role(db: DbPool) {
         use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider = ListRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ListRequest<()>, ListResponse<Role>>(&[
-            type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&By::<()>::list::<(), NoListFilter, DaoQueries, Role>),
-        ]);
+        ListRoleService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<()>, ListResponse<Role>>(&[
+                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+                type_of_val(&By::<()>::list::<(), NoListFilter, Role>),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -94,7 +75,8 @@ mod tests {
         )
         .list((), ListParams::default());
 
-        let service = ListRoleService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = ListRoleService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

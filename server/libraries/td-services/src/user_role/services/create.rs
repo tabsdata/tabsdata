@@ -2,9 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
@@ -21,72 +19,49 @@ use td_objects::types::role::{
     UserRoleDBWithNames,
 };
 use td_objects::types::user::UserDB;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct CreateUserRoleService {
-    provider: ServiceProvider<CreateRequest<RoleParam, UserRoleCreate>, UserRole, TdError>,
-}
-
-impl CreateUserRoleService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-
-                from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract::<RequestContext>),
-                from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<SecAdmin>::check),
-
-                from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_name::<RoleParam>),
-                from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_data::<UserRoleCreate>),
-
-                from_fn(builder::<UserRoleDBBuilder>),
-
-                from_fn(With::<RoleParam>::extract::<RoleIdName>),
-                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
-                from_fn(With::<RoleDB>::extract::<RoleId>),
-                from_fn(With::<RoleId>::set::<UserRoleDBBuilder>),
-
-                from_fn(With::<UserRoleCreate>::extract::<UserName>),
-                from_fn(By::<UserName>::select::<DaoQueries, UserDB>),
-                from_fn(With::<UserDB>::extract::<UserId>),
-                from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
-
-                from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
-                from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
-
-                from_fn(insert::<DaoQueries, UserRoleDB>),
-
-                from_fn(With::<UserRoleDB>::extract::<UserRoleId>),
-                from_fn(By::<UserRoleId>::select::<DaoQueries, UserRoleDBWithNames>),
-                from_fn(With::<UserRoleDBWithNames>::convert_to::<UserRoleBuilder, _>),
-                from_fn(With::<UserRoleBuilder>::build::<UserRole, _>),
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<CreateRequest<RoleParam, UserRoleCreate>, UserRole, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = CreateUserRoleService,
+    request = CreateRequest<RoleParam, UserRoleCreate>,
+    response = UserRole,
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract::<RequestContext>),
+        from_fn(AuthzOn::<System>::set),
+        from_fn(Authz::<SecAdmin>::check),
+        from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_name::<RoleParam>),
+        from_fn(With::<CreateRequest<RoleParam, UserRoleCreate>>::extract_data::<UserRoleCreate>),
+        from_fn(builder::<UserRoleDBBuilder>),
+        from_fn(With::<RoleParam>::extract::<RoleIdName>),
+        from_fn(By::<RoleIdName>::select::<RoleDB>),
+        from_fn(With::<RoleDB>::extract::<RoleId>),
+        from_fn(With::<RoleId>::set::<UserRoleDBBuilder>),
+        from_fn(With::<UserRoleCreate>::extract::<UserName>),
+        from_fn(By::<UserName>::select::<UserDB>),
+        from_fn(With::<UserDB>::extract::<UserId>),
+        from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
+        from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
+        from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
+        from_fn(insert::<UserRoleDB>),
+        from_fn(With::<UserRoleDB>::extract::<UserRoleId>),
+        from_fn(By::<UserRoleId>::select::<UserRoleDBWithNames>),
+        from_fn(With::<UserRoleDBWithNames>::convert_to::<UserRoleBuilder, _>),
+        from_fn(With::<UserRoleBuilder>::build::<UserRole, _>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_database::sql::DbPool;
     use td_objects::test_utils::seed_role::seed_role;
     use td_objects::test_utils::seed_user::seed_user;
     use td_objects::test_utils::seed_user_role::get_user_role;
@@ -97,17 +72,14 @@ mod tests {
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_create_user_role(db: DbPool) {
         use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider =
-            CreateUserRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
+        CreateUserRoleService::with_defaults(db).await.
 
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
 
-        metadata.assert_service::<CreateRequest<RoleParam, UserRoleCreate>, UserRole>(&[
+
+
+        metadata().await.assert_service::<CreateRequest<RoleParam, UserRoleCreate>, UserRole>(&[
             type_of_val(
                 &With::<CreateRequest<RoleParam, UserRoleCreate>>::extract::<RequestContext>,
             ),
@@ -121,18 +93,18 @@ mod tests {
             ),
             type_of_val(&builder::<UserRoleDBBuilder>),
             type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
+            type_of_val(&By::<RoleIdName>::select::<RoleDB>),
             type_of_val(&With::<RoleDB>::extract::<RoleId>),
             type_of_val(&With::<RoleId>::set::<UserRoleDBBuilder>),
             type_of_val(&With::<UserRoleCreate>::extract::<UserName>),
-            type_of_val(&By::<UserName>::select::<DaoQueries, UserDB>),
+            type_of_val(&By::<UserName>::select::<UserDB>),
             type_of_val(&With::<UserDB>::extract::<UserId>),
             type_of_val(&With::<UserId>::set::<UserRoleDBBuilder>),
             type_of_val(&With::<RequestContext>::update::<UserRoleDBBuilder, _>),
             type_of_val(&With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
-            type_of_val(&insert::<DaoQueries, UserRoleDB>),
+            type_of_val(&insert::<UserRoleDB>),
             type_of_val(&With::<UserRoleDB>::extract::<UserRoleId>),
-            type_of_val(&By::<UserRoleId>::select::<DaoQueries, UserRoleDBWithNames>),
+            type_of_val(&By::<UserRoleId>::select::<UserRoleDBWithNames>),
             type_of_val(&With::<UserRoleDBWithNames>::convert_to::<UserRoleBuilder, _>),
             type_of_val(&With::<UserRoleBuilder>::build::<UserRole, _>),
         ]);
@@ -169,7 +141,8 @@ mod tests {
             create,
         );
 
-        let service = CreateUserRoleService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = CreateUserRoleService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

@@ -3,8 +3,6 @@
 //
 
 use crate::collection::service::update::UpdateCollectionService;
-use std::sync::Arc;
-use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
@@ -21,7 +19,8 @@ async fn test_update_already_existing(db: DbPool) {
     let name1 = CollectionName::try_from("ds1").unwrap();
     let _ = seed_collection(&db, &name1, &UserId::admin()).await;
 
-    let service = UpdateCollectionService::new(db.clone(), Arc::new(AuthzContext::default()))
+    let service = UpdateCollectionService::with_defaults(db)
+        .await
         .service()
         .await;
 

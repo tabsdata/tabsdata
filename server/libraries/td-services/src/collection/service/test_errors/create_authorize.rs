@@ -3,8 +3,6 @@
 //
 
 use crate::collection::service::create::CreateCollectionService;
-use std::sync::Arc;
-use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
@@ -25,7 +23,8 @@ async fn test_not_allowed_to_create_collection(db: DbPool) {
     let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
         .create((), create);
 
-    let service = CreateCollectionService::new(db.clone(), Arc::new(AuthzContext::default()))
+    let service = CreateCollectionService::with_defaults(db.clone())
+        .await
         .service()
         .await;
 

@@ -28,7 +28,7 @@ fn provider() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
         from_fn(Authz::<NoPermissions>::visible_collections),
-        from_fn(By::<()>::list::<(), VisibleCollections, DaoQueries, CollectionRead>),
+        from_fn(By::<()>::list::<(), VisibleCollections, CollectionRead>),
     )
 }
 
@@ -51,19 +51,17 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_list_provider(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider =
-            ListCollectionsService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-        metadata.assert_service::<ListRequest<()>, ListResponse<CollectionRead>>(&[
-            type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-            type_of_val(&Authz::<NoPermissions>::visible_collections),
-            type_of_val(&By::<()>::list::<(), VisibleCollections, DaoQueries, CollectionRead>),
-        ]);
+        ListCollectionsService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<()>, ListResponse<CollectionRead>>(&[
+                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
+                type_of_val(&Authz::<NoPermissions>::visible_collections),
+                type_of_val(&By::<()>::list::<(), VisibleCollections, CollectionRead>),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -91,9 +89,6 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_list_collection_unauthorized(db: DbPool) -> Result<(), TdError> {
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-
         // Create new role without permissions
         let user = seed_user(
             &db,
@@ -117,6 +112,11 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                 .list((), ListParams::default());
+
+        let service = ListCollectionsService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response?;
@@ -127,10 +127,10 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), user.id(), role.id())
             .list((), ListParams::default());
 
-        let service =
-            ListCollectionsService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = ListCollectionsService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response?;

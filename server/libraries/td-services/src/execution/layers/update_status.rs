@@ -8,7 +8,7 @@ use td_error::td_error;
 use td_error::TdError;
 use td_objects::crudl::{assert_one, handle_sql_err};
 use td_objects::sql::recursive::RecursiveQueries;
-use td_objects::sql::{DerefQueries, SelectBy, UpdateBy};
+use td_objects::sql::{DaoQueries, SelectBy, UpdateBy};
 use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
 use td_objects::types::execution::{
     CallbackRequest, CommitFunctionRunDB, FunctionRequirementDBWithNames, FunctionRunDB,
@@ -33,8 +33,8 @@ enum UpdateStatusRunError {
     NoOpStatusUpdate = 4,
 }
 
-pub async fn update_worker_status<Q: DerefQueries>(
-    SrvCtx(queries): SrvCtx<Q>,
+pub async fn update_worker_status(
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
     Input(update): Input<UpdateWorkerDB>,
     Input(callback): Input<CallbackRequest>,
@@ -55,9 +55,9 @@ pub async fn update_worker_status<Q: DerefQueries>(
     Ok(())
 }
 
-pub async fn update_function_run_status<Q: DerefQueries>(
+pub async fn update_function_run_status(
     ReqCtx(ctx): ReqCtx,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
     Input(function_runs): Input<Vec<FunctionRunDB>>,
     Input(update): Input<UpdateFunctionRunDB>,
@@ -241,8 +241,8 @@ pub async fn update_function_run_status<Q: DerefQueries>(
     Ok(())
 }
 
-pub async fn update_table_data_version_status<Q: DerefQueries>(
-    SrvCtx(queries): SrvCtx<Q>,
+pub async fn update_table_data_version_status(
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Connection(connection): Connection,
     Input(function_run_id): Input<FunctionRunId>,
     Input(callback): Input<CallbackRequest>,

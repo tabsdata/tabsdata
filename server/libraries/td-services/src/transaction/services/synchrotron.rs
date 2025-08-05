@@ -28,14 +28,13 @@ fn provider() {
         // No need for authz for this service.
 
         // List all transactions in the system.
-        from_fn(By::<()>::list::<(), NoListFilter, DaoQueries, SynchrotronResponse>),
+        from_fn(By::<()>::list::<(), NoListFilter, SynchrotronResponse>),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{ListParams, RequestContext};
@@ -52,19 +51,16 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_synchrotron(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider = SynchrotronService::provider(db, queries);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ListRequest<()>, ListResponse<SynchrotronResponse>>(&[
-            // List all transactions in the system.
-            type_of_val(&By::<()>::list::<(), NoListFilter, DaoQueries, SynchrotronResponse>),
-        ]);
+        SynchrotronService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<()>, ListResponse<SynchrotronResponse>>(&[
+                // List all transactions in the system.
+                type_of_val(&By::<()>::list::<(), NoListFilter, SynchrotronResponse>),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -103,7 +99,8 @@ mod tests {
             seed_transaction(&db, &execution, &transaction_key).await,
         ];
 
-        let service = SynchrotronService::new(db.clone(), Arc::new(DaoQueries::default()))
+        let service = SynchrotronService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let request =

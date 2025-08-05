@@ -2,9 +2,7 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::sql::{DaoQueries, NoListFilter};
@@ -22,71 +20,49 @@ use td_objects::types::basic::{
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::execution::TableDataVersion;
 use td_objects::types::table::{TableAtIdName, TableDBWithNames};
-use td_tower::default_services::{ConnectionProvider, SrvCtxProvider};
+use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
-use td_tower::service_provider::{ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::{layers, provider};
 
-pub struct TableListDataVersionsService {
-    provider: ServiceProvider<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>, TdError>,
-}
-
-impl TableListDataVersionsService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                ConnectionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-
-                from_fn(With::<ListRequest<TableAtIdName >>::extract::<RequestContext>),
-                from_fn(With::<ListRequest<TableAtIdName >>::extract_name::<TableAtIdName>),
-
-                // find collection ID
-                from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
-                from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-                from_fn(With::<CollectionDB>::extract::<CollectionId>),
-
-                // check requester has collection permissions
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
-
-                // extract at time (triggered on)
-                from_fn(With::<TableAtIdName>::extract::<AtTime>),
-                from_fn(With::<AtTime>::convert_to::<TriggeredOn, _>),
-
-                // find table ID
-                from_fn(With::<TableAtIdName>::extract::<TableIdName>),
-                from_fn(combine::<CollectionIdName, TableIdName>),
-                from_fn(TableStatus::active_or_frozen),
-                from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<DaoQueries, TableDBWithNames>),
-                from_fn(With::<TableDBWithNames>::extract::<TableId>),
-
-                // list
-                from_fn(FunctionRunStatus::committed),
-                from_fn(By::<TableId>::list_at::<TableAtIdName, NoListFilter, DaoQueries, TableDataVersion>),
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = TableListDataVersionsService,
+    request = ListRequest<TableAtIdName>,
+    response = ListResponse<TableDataVersion>,
+    connection = ConnectionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<ListRequest<TableAtIdName>>::extract::<RequestContext>),
+        from_fn(With::<ListRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
+        // find collection ID
+        from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
+        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        // check requester has collection permissions
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+        // extract at time (triggered on)
+        from_fn(With::<TableAtIdName>::extract::<AtTime>),
+        from_fn(With::<AtTime>::convert_to::<TriggeredOn, _>),
+        // find table ID
+        from_fn(With::<TableAtIdName>::extract::<TableIdName>),
+        from_fn(combine::<CollectionIdName, TableIdName>),
+        from_fn(TableStatus::active_or_frozen),
+        from_fn(By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>),
+        from_fn(With::<TableDBWithNames>::extract::<TableId>),
+        // list
+        from_fn(FunctionRunStatus::committed),
+        from_fn(By::<TableId>::list_at::<TableAtIdName, NoListFilter, TableDataVersion>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_database::sql::DbPool;
     use td_objects::crudl::ListParams;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -106,44 +82,39 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_list_data_versions(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider =
-            TableListDataVersionsService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>>(&[
-            type_of_val(&With::<ListRequest<TableAtIdName>>::extract::<RequestContext>),
-            type_of_val(&With::<ListRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-            // find collection ID
-            type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
-            // extract attime
-            type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
-            type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
-            // find table ID
-            type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
-            type_of_val(&combine::<CollectionIdName, TableIdName>),
-            type_of_val(&TableStatus::active_or_frozen),
-            type_of_val(
-                &By::<(CollectionIdName, TableIdName)>::select_version::<
-                    DaoQueries,
-                    TableDBWithNames,
-                >,
-            ),
-            type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-            // list
-            type_of_val(&FunctionRunStatus::committed),
-            type_of_val(&By::<TableId>::list_at::<TableAtIdName, NoListFilter, DaoQueries, TableDataVersion>),
-        ]);
+        TableListDataVersionsService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<TableAtIdName>, ListResponse<TableDataVersion>>(&[
+                type_of_val(&With::<ListRequest<TableAtIdName>>::extract::<RequestContext>),
+                type_of_val(&With::<ListRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
+                // find collection ID
+                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
+                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                // check requester has collection permissions
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+                // extract attime
+                type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
+                type_of_val(&With::<AtTime>::convert_to::<TriggeredOn, _>),
+                // find table ID
+                type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
+                type_of_val(&combine::<CollectionIdName, TableIdName>),
+                type_of_val(&TableStatus::active_or_frozen),
+                type_of_val(
+                    &By::<(CollectionIdName, TableIdName)>::select_version::<TableDBWithNames>,
+                ),
+                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
+                // list
+                type_of_val(&FunctionRunStatus::committed),
+                type_of_val(
+                    &By::<TableId>::list_at::<TableAtIdName, NoListFilter, TableDataVersion>,
+                ),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -234,11 +205,6 @@ mod tests {
 
         // Actual test
         // t0 -> no versions
-
-        let service =
-            TableListDataVersionsService::new(db.clone(), Arc::new(AuthzContext::default()))
-                .service()
-                .await;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 TableAtIdName::builder()
@@ -248,6 +214,11 @@ mod tests {
                     .build()?,
                 ListParams::default(),
             );
+
+        let service = TableListDataVersionsService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -265,10 +236,10 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service =
-            TableListDataVersionsService::new(db.clone(), Arc::new(AuthzContext::default()))
-                .service()
-                .await;
+        let service = TableListDataVersionsService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();
@@ -287,10 +258,10 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service =
-            TableListDataVersionsService::new(db.clone(), Arc::new(AuthzContext::default()))
-                .service()
-                .await;
+        let service = TableListDataVersionsService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data();

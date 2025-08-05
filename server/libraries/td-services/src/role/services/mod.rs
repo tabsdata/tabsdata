@@ -15,6 +15,7 @@ use td_objects::crudl::{
     CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest, UpdateRequest,
 };
 use td_objects::rest_urls::RoleParam;
+use td_objects::sql::DaoQueries;
 use td_objects::types::role::{Role, RoleCreate, RoleUpdate};
 use td_tower::service_provider::TdBoxService;
 
@@ -34,12 +35,13 @@ pub struct RoleServices {
 
 impl RoleServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
+        let queries = Arc::new(DaoQueries::default());
         Self {
-            create: CreateRoleService::new(db.clone(), authz_context.clone()),
-            read: ReadRoleService::new(db.clone(), authz_context.clone()),
-            update: UpdateRoleService::new(db.clone(), authz_context.clone()),
-            delete: DeleteRoleService::new(db.clone(), authz_context.clone()),
-            list: ListRoleService::new(db.clone(), authz_context.clone()),
+            create: CreateRoleService::new(db.clone(), queries.clone(), authz_context.clone()),
+            read: ReadRoleService::new(db.clone(), queries.clone(), authz_context.clone()),
+            update: UpdateRoleService::new(db.clone(), queries.clone(), authz_context.clone()),
+            delete: DeleteRoleService::new(db.clone(), queries.clone(), authz_context.clone()),
+            list: ListRoleService::new(db.clone(), queries.clone(), authz_context.clone()),
         }
     }
 

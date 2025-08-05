@@ -12,6 +12,7 @@ use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, DeleteRequest, ListRequest, ListResponse, ReadRequest};
 use td_objects::rest_urls::{RoleParam, UserRoleParam};
+use td_objects::sql::DaoQueries;
 use td_objects::types::role::{UserRole, UserRoleCreate};
 use td_tower::service_provider::TdBoxService;
 
@@ -29,11 +30,12 @@ pub struct UserRoleServices {
 
 impl UserRoleServices {
     pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
+        let queries = Arc::new(DaoQueries::default());
         Self {
-            create: CreateUserRoleService::new(db.clone(), authz_context.clone()),
-            read: ReadUserRoleService::new(db.clone(), authz_context.clone()),
-            delete: DeleteUserRoleService::new(db.clone(), authz_context.clone()),
-            list: ListUserRoleService::new(db.clone(), authz_context.clone()),
+            create: CreateUserRoleService::new(db.clone(), queries.clone(), authz_context.clone()),
+            read: ReadUserRoleService::new(db.clone(), queries.clone(), authz_context.clone()),
+            delete: DeleteUserRoleService::new(db.clone(), queries.clone(), authz_context.clone()),
+            list: ListUserRoleService::new(db.clone(), queries.clone(), authz_context.clone()),
         }
     }
 

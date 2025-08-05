@@ -36,9 +36,7 @@ fn provider() {
         from_fn(With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
         // list
         from_fn(TableStatus::active_or_frozen),
-        from_fn(
-            By::<()>::list_versions_at::<AtTimeParam, VisibleTablesCollections, DaoQueries, Table>
-        ),
+        from_fn(By::<()>::list_versions_at::<AtTimeParam, VisibleTablesCollections, Table>),
     )
 }
 
@@ -47,8 +45,6 @@ mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
     use crate::table::services::delete::TableDeleteService;
-    use std::sync::Arc;
-    use td_authz::AuthzContext;
     use td_database::sql::DbPool;
     use td_objects::crudl::{ListParams, ListParamsBuilder, RequestContext};
     use td_objects::rest_urls::{FunctionParam, TableParam};
@@ -67,41 +63,30 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_list_table_versions(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let provider = TableListService::provider(db, queries, authz_context);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ListRequest<AtTimeParam>, ListResponse<Table>>(&[
-            type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
-            type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
-            type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
-            // get allowed collections
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-            // convert them to allowed table collections
-            type_of_val(&With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
-            // list
-            type_of_val(&TableStatus::active_or_frozen),
-            type_of_val(
-                &By::<()>::list_versions_at::<
-                    AtTimeParam,
-                    VisibleTablesCollections,
-                    DaoQueries,
-                    Table,
-                >,
-            ),
-        ]);
+        TableListService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<AtTimeParam>, ListResponse<Table>>(&[
+                type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
+                type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
+                type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
+                // get allowed collections
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
+                // convert them to allowed table collections
+                type_of_val(&With::<VisibleCollections>::convert_to::<VisibleTablesCollections, _>),
+                // list
+                type_of_val(&TableStatus::active_or_frozen),
+                type_of_val(
+                    &By::<()>::list_versions_at::<AtTimeParam, VisibleTablesCollections, Table>,
+                ),
+            ]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_list_table_versions(db: DbPool) -> Result<(), TdError> {
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
         let collection = seed_collection(
             &db,
             &CollectionName::try_from("collection")?,
@@ -155,10 +140,10 @@ mod tests {
                 update.clone(),
             );
 
-        let service =
-            UpdateFunctionService::new(db.clone(), queries.clone(), authz_context.clone())
-                .service()
-                .await;
+        let service = UpdateFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -171,7 +156,8 @@ mod tests {
                     .build()?,
             );
 
-        TableDeleteService::new(db.clone(), authz_context.clone())
+        TableDeleteService::with_defaults(db.clone())
+            .await
             .service()
             .await
             .raw_oneshot(request)
@@ -188,7 +174,8 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = TableListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -207,7 +194,8 @@ mod tests {
                     .unwrap(),
             );
 
-        let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = TableListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -225,7 +213,8 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = TableListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -239,9 +228,6 @@ mod tests {
 
     #[td_test::test(sqlx)]
     async fn test_list_table_versions_unauthorized(db: DbPool) -> Result<(), TdError> {
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-
         // Create new role without permissions
         let user = seed_user(
             &db,
@@ -291,7 +277,8 @@ mod tests {
                 ListParams::default(),
             );
 
-        let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = TableListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -308,7 +295,8 @@ mod tests {
             ListParams::default(),
         );
 
-        let service = TableListService::new(db.clone(), queries.clone(), authz_context.clone())
+        let service = TableListService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

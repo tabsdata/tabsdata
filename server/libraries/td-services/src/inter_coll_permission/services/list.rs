@@ -2,9 +2,7 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{ListRequest, ListResponse, RequestContext};
 use td_objects::rest_urls::CollectionParam;
@@ -15,66 +13,41 @@ use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{CollectionId, CollectionIdName};
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::permission::InterCollectionPermission;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::service_provider::IntoServiceProvider;
-use td_tower::service_provider::{ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::{layers, provider};
 
-pub struct ListInterCollectionPermissionService {
-    provider: ServiceProvider<
-        ListRequest<CollectionParam>,
-        ListResponse<InterCollectionPermission>,
-        TdError,
-    >,
-}
-
-impl ListInterCollectionPermissionService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-
-                from_fn(With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
-                from_fn(With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
-
-                // find collection ID
-                from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-                from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-
-                // check requester is sec_admin or coll_admin for the collection
-                from_fn(With::<CollectionDB>::extract::<CollectionId>),
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<SecAdmin, CollAdmin>::check),
-
-                // get list of permissions
-                from_fn(By::<CollectionId>::list::<CollectionParam, NoListFilter, DaoQueries, InterCollectionPermission>),
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<ListRequest<CollectionParam>, ListResponse<InterCollectionPermission>, TdError>
-    {
-        self.provider.make().await
-    }
+#[provider(
+    name = ListInterCollectionPermissionService,
+    request = ListRequest<CollectionParam>,
+    response = ListResponse<InterCollectionPermission>,
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
+        from_fn(With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
+        // find collection ID
+        from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
+        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        // check requester is sec_admin or coll_admin for the collection
+        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        // get list of permissions
+        from_fn(
+            By::<CollectionId>::list::<CollectionParam, NoListFilter, InterCollectionPermission>
+        ),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use td_authz::AuthzContext;
+    use td_database::sql::DbPool;
     use td_error::{assert_service_error, TdError};
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::CollectionParam;
@@ -89,39 +62,34 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_list_inter_collection_permission_service(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let provider = ListInterCollectionPermissionService::provider(db, queries, authz_context);
-        let service = provider.make().await;
+        ListInterCollectionPermissionService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ListRequest<CollectionParam>, ListResponse<InterCollectionPermission>>(&[
+                type_of_val(&With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
+                type_of_val(&With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
 
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
+                // find collection ID
+                type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
+                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
 
-        metadata.assert_service::<ListRequest<CollectionParam>, ListResponse<InterCollectionPermission>>(&[
-            type_of_val(&With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
-            type_of_val(&With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
+                // check requester is sec_admin or coll_admin for the collection
+                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
 
-            // find collection ID
-            type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-
-            // check requester is sec_admin or coll_admin for the collection
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-
-            // get list of permissions
-            type_of_val(&By::<CollectionId>::list::<CollectionParam,NoListFilter, DaoQueries, InterCollectionPermission>),
-        ]);
+                // get list of permissions
+                type_of_val(&By::<CollectionId>::list::<CollectionParam, NoListFilter, InterCollectionPermission>),
+            ]);
     }
 
-    #[tokio::test]
-    async fn test_list_permission_ok() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-        let authz_context = Arc::new(AuthzContext::default());
-        let service = ListInterCollectionPermissionService::new(db.clone(), authz_context)
+    #[td_test::test(sqlx)]
+    async fn test_list_permission_ok(db: DbPool) -> Result<(), TdError> {
+        let service = ListInterCollectionPermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
 
@@ -133,7 +101,6 @@ mod tests {
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sec_admin(),
-            true,
         )
         .list(
             CollectionParam::builder()
@@ -149,11 +116,10 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_list_permission_authz_err() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-        let authz_context = Arc::new(AuthzContext::default());
-        let service = ListInterCollectionPermissionService::new(db.clone(), authz_context)
+    #[td_test::test(sqlx)]
+    async fn test_list_permission_authz_err(db: DbPool) -> Result<(), TdError> {
+        let service = ListInterCollectionPermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
 

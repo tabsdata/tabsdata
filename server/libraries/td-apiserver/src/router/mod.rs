@@ -69,8 +69,6 @@ use td_authz::AuthzContext;
 use td_database::sql::DbPool;
 use td_error::{td_error, TdError};
 use td_security::config::PasswordHashingConfig;
-use td_services::auth::services::{AuthServices, PasswordHashConfig};
-use td_services::auth::session;
 use td_services::auth::services::AuthServices;
 use td_services::auth::session::Sessions;
 use td_services::collection::service::CollectionServices;
@@ -166,8 +164,8 @@ impl ApiServerInstanceBuilder {
         let sessions = Arc::new(Sessions::default());
 
         // to verify up front configuration is OK.
-        let password_hash_config: PasswordHashConfig = (&config).into();
-        password_hash_config.hasher();
+        let password_hash_config: PasswordHashingConfig = (&config).into();
+        password_hash_config.password_hasher();
 
         let authz_context = Arc::new(AuthzContext::default());
 
@@ -277,7 +275,7 @@ impl ApiServerInstanceBuilder {
     fn users_state(&self) -> state::Users {
         Arc::new(UserServices::new(
             self.db.clone(),
-            Arc::new(PasswordHashingConfig::default()),
+            Arc::new(self.config.password().clone()),
             self.authz_context.clone(),
         ))
     }

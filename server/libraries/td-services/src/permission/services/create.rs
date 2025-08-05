@@ -3,9 +3,7 @@
 //
 
 use crate::permission::layers::{is_permission_on_a_single_collection, PermissionBuildService};
-use std::sync::Arc;
 use td_authz::{refresh_authz_context, Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::rest_urls::RoleParam;
@@ -22,87 +20,65 @@ use td_objects::types::permission::{
     PermissionDBWithNames,
 };
 use td_objects::types::role::RoleDB;
-use td_tower::default_services::{conditional, Do, Else, If, SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::{conditional, Do, Else, If, TransactionProvider};
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider, service};
 
-pub struct CreatePermissionService {
-    provider: ServiceProvider<CreateRequest<RoleParam, PermissionCreate>, Permission, TdError>,
-}
-
-impl CreatePermissionService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-                from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>),
-                from_fn(AuthzOn::<System>::set),
+#[provider(
+    name = CreatePermissionService,
+    request = CreateRequest<RoleParam, PermissionCreate>,
+    response = Permission,
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>),
+        from_fn(AuthzOn::<System>::set),
+        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>),
+        from_fn(
+            With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<PermissionCreate>
+        ),
+        from_fn(With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
+        from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
+        from_fn(With::<RoleParam>::extract::<RoleIdName>),
+        from_fn(By::<RoleIdName>::select::<RoleDB>),
+        from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
+        from_fn(With::<PermissionDBBuilder>::build_permission_db),
+        conditional(
+            If(service!(layers!(from_fn(
+                is_permission_on_a_single_collection
+            )))),
+            Do(service!(layers!(
+                // a permission on a single collection can also be created by a collection admin
+                from_fn(With::<PermissionDB>::extract::<EntityId>),
+                from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
+                from_fn(AuthzOn::<CollectionId>::set),
                 from_fn(Authz::<SecAdmin, CollAdmin>::check),
-
-                from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>),
-                from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<PermissionCreate>),
-
-                from_fn(With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
-                from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
-
-                from_fn(With::<RoleParam>::extract::<RoleIdName>),
-                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDB>),
-                from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
-
-                from_fn(With::<PermissionDBBuilder>::build_permission_db::<DaoQueries>),
-
-                conditional(
-                    If(service!(layers!(
-                        from_fn(is_permission_on_a_single_collection),
-                    ))),
-                    Do(service!(layers!(
-                        // a permission on a single collection can also be created by a collection admin
-                        from_fn(With::<PermissionDB>::extract::<EntityId>),
-                        from_fn(With::<EntityId>::convert_to::<CollectionId, _>),
-                        from_fn(AuthzOn::<CollectionId>::set),
-                        from_fn(Authz::<SecAdmin, CollAdmin>::check),
-                    ))),
-                    Else(service!(layers!(
-                        // a permission on a all collections can be created by a sec_admin only
-                        from_fn(AuthzOn::<System>::set),
-                        from_fn(Authz::<SecAdmin>::check),
-                    )))
-                ),
-
-                from_fn(insert::<DaoQueries, PermissionDB>),
-
-                from_fn(With::<PermissionDB>::extract::<PermissionId>),
-                from_fn(By::<PermissionId>::select::<DaoQueries, PermissionDBWithNames>),
-                from_fn(With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
-                from_fn(With::<PermissionBuilder>::build::<Permission, _>),
-
-                // refresh the permissions authz cache
-                from_fn(refresh_authz_context),
-
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<CreateRequest<RoleParam, PermissionCreate>, Permission, TdError> {
-        self.provider.make().await
-    }
+            ))),
+            Else(service!(layers!(
+                // a permission on a all collections can be created by a sec_admin only
+                from_fn(AuthzOn::<System>::set),
+                from_fn(Authz::<SecAdmin>::check),
+            )))
+        ),
+        from_fn(insert::<PermissionDB>),
+        from_fn(With::<PermissionDB>::extract::<PermissionId>),
+        from_fn(By::<PermissionId>::select::<PermissionDBWithNames>),
+        from_fn(With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
+        from_fn(With::<PermissionBuilder>::build::<Permission, _>),
+        // refresh the permissions authz cache
+        from_fn(refresh_authz_context),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_database::sql::DbPool;
     use td_error::assert_service_error;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -118,42 +94,46 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_create_permission(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider =
-            CreatePermissionService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<CreateRequest<RoleParam, PermissionCreate>, Permission>(&[
-            type_of_val(&With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>),
-            type_of_val(&With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<PermissionCreate>),
-            type_of_val(&With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
-            type_of_val(&With::<RequestContext>::update::<PermissionDBBuilder, _>),
-            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDB>),
-            type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
-            type_of_val(&With::<PermissionDBBuilder>::build_permission_db::<DaoQueries>),
-            type_of_val(&is_permission_on_a_single_collection),
-            type_of_val(&With::<PermissionDB>::extract::<EntityId>),
-            type_of_val(&With::<EntityId>::convert_to::<CollectionId, _>),
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin>::check),
-            type_of_val(&insert::<DaoQueries, PermissionDB>),
-            type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
-            type_of_val(&By::<PermissionId>::select::<DaoQueries, PermissionDBWithNames>),
-            type_of_val(&With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
-            type_of_val(&With::<PermissionBuilder>::build::<Permission, _>),
-            type_of_val(&refresh_authz_context),
-        ]);
+        CreatePermissionService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<CreateRequest<RoleParam, PermissionCreate>, Permission>(&[
+                type_of_val(
+                    &With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>,
+                ),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+                type_of_val(
+                    &With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>,
+                ),
+                type_of_val(
+                    &With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<
+                        PermissionCreate,
+                    >,
+                ),
+                type_of_val(&With::<PermissionCreate>::convert_to::<PermissionDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<PermissionDBBuilder, _>),
+                type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
+                type_of_val(&By::<RoleIdName>::select::<RoleDB>),
+                type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
+                type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
+                type_of_val(&is_permission_on_a_single_collection),
+                type_of_val(&With::<PermissionDB>::extract::<EntityId>),
+                type_of_val(&With::<EntityId>::convert_to::<CollectionId, _>),
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&insert::<PermissionDB>),
+                type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
+                type_of_val(&By::<PermissionId>::select::<PermissionDBWithNames>),
+                type_of_val(&With::<PermissionDBWithNames>::convert_to::<PermissionBuilder, _>),
+                type_of_val(&With::<PermissionBuilder>::build::<Permission, _>),
+                type_of_val(&refresh_authz_context),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -176,7 +156,8 @@ mod tests {
             create,
         );
 
-        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = CreatePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -227,7 +208,8 @@ mod tests {
                 create,
             );
 
-        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = CreatePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
@@ -279,7 +261,8 @@ mod tests {
                 create,
             );
 
-        let service = CreatePermissionService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = CreatePermissionService::with_defaults(db.clone())
+            .await
             .service()
             .await;
 

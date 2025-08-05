@@ -3,9 +3,7 @@
 //
 
 use crate::user::layers::create::UpdateCreateUserDBBuilder;
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{CreateRequest, RequestContext};
 use td_objects::sql::DaoQueries;
@@ -21,84 +19,53 @@ use td_objects::types::user::{
     UserCreate, UserDB, UserDBBuilder, UserDBWithNames, UserRead, UserReadBuilder,
 };
 use td_security::config::PasswordHashingConfig;
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::TdBoxService;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct CreateUserService {
-    provider: ServiceProvider<CreateRequest<(), UserCreate>, UserRead, TdError>,
-}
-
-impl CreateUserService {
-    pub fn new(
-        db: DbPool,
-        password_hashing_config: Arc<PasswordHashingConfig>,
-        authz_context: Arc<AuthzContext>,
-    ) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        CreateUserService {
-            provider: Self::provider(db, queries, password_hashing_config, authz_context),
-        }
-    }
-
-    p! {
-        provider(
-            db: DbPool,
-            queries: Arc<DaoQueries>,
-            password_hashing_config: Arc<PasswordHashingConfig>,
-            authz_context: Arc<AuthzContext>
-        ) {
-            service_provider!(layers!(
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(queries),
-                SrvCtxProvider::new(authz_context),
-                SrvCtxProvider::new(password_hashing_config),
-
-                from_fn(With::<CreateRequest<(), UserCreate>>::extract::<RequestContext>),
-
-                from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<SecAdmin>::check),
-
-                from_fn(With::<RequestContext>::extract::<AtTime>),
-                from_fn(With::<RequestContext>::extract::<UserId>),
-                from_fn(With::<CreateRequest<(), UserCreate>>::extract_data::<UserCreate>),
-
-                from_fn(builder::<UserDBBuilder>),
-                from_fn(With::<RequestContext>::update::<UserDBBuilder, _>),
-                from_fn(With::<UserCreate>::update_create_user_db_builder),
-                from_fn(With::<UserDBBuilder>::build::<UserDB, _>),
-                from_fn(insert::<DaoQueries, UserDB>),
-
-                // Add user to fixed 'user' role
-                from_fn(builder::<UserRoleDBBuilder>),
-                from_fn(With::<UserDB>::extract::<UserId>),
-                from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
-                from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
-                from_fn(builder::<FixedUserRoleBuilder>),
-                from_fn(With::<FixedUserRoleBuilder>::build::<FixedUserRole, _>),
-                from_fn(With::<FixedUserRole>::update::<UserRoleDBBuilder, _>),
-                from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
-                from_fn(insert::<DaoQueries, UserRoleDB>),
-
-                from_fn(With::<UserDB>::extract::<UserId>),
-                from_fn(By::<UserId>::select::<DaoQueries, UserDBWithNames>),
-                from_fn(With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
-                from_fn(With::<UserReadBuilder>::build::<UserRead, _>),
-            ))
-        }
-    }
-
-    pub async fn service(&self) -> TdBoxService<CreateRequest<(), UserCreate>, UserRead, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = CreateUserService,
+    request = CreateRequest<(), UserCreate>,
+    response = UserRead,
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+    context = PasswordHashingConfig,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<CreateRequest<(), UserCreate>>::extract::<RequestContext>),
+        from_fn(AuthzOn::<System>::set),
+        from_fn(Authz::<SecAdmin>::check),
+        from_fn(With::<RequestContext>::extract::<AtTime>),
+        from_fn(With::<RequestContext>::extract::<UserId>),
+        from_fn(With::<CreateRequest<(), UserCreate>>::extract_data::<UserCreate>),
+        from_fn(builder::<UserDBBuilder>),
+        from_fn(With::<RequestContext>::update::<UserDBBuilder, _>),
+        from_fn(With::<UserCreate>::update_create_user_db_builder),
+        from_fn(With::<UserDBBuilder>::build::<UserDB, _>),
+        from_fn(insert::<UserDB>),
+        // Add user to fixed 'user' role
+        from_fn(builder::<UserRoleDBBuilder>),
+        from_fn(With::<UserDB>::extract::<UserId>),
+        from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
+        from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
+        from_fn(builder::<FixedUserRoleBuilder>),
+        from_fn(With::<FixedUserRoleBuilder>::build::<FixedUserRole, _>),
+        from_fn(With::<FixedUserRole>::update::<UserRoleDBBuilder, _>),
+        from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
+        from_fn(insert::<UserRoleDB>),
+        from_fn(With::<UserDB>::extract::<UserId>),
+        from_fn(By::<UserId>::select::<UserDBWithNames>),
+        from_fn(With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+        from_fn(With::<UserReadBuilder>::build::<UserRead, _>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_objects::sql::SelectBy;
     use td_objects::types::basic::{
@@ -109,45 +76,38 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_create_provider(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let password_hashing_config = Arc::new(PasswordHashingConfig::default());
-        let provider = CreateUserService::provider(
-            db,
-            queries,
-            password_hashing_config,
-            Arc::new(AuthzContext::default()),
-        );
-        let service = provider.make().await;
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-        metadata.assert_service::<CreateRequest<(), UserCreate>, UserRead>(&[
-            type_of_val(&With::<CreateRequest<(), UserCreate>>::extract::<RequestContext>),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin>::check),
-            type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            type_of_val(&With::<RequestContext>::extract::<UserId>),
-            type_of_val(&With::<CreateRequest<(), UserCreate>>::extract_data::<UserCreate>),
-            type_of_val(&builder::<UserDBBuilder>),
-            type_of_val(&With::<RequestContext>::update::<UserDBBuilder, _>),
-            type_of_val(&With::<UserCreate>::update_create_user_db_builder),
-            type_of_val(&With::<UserDBBuilder>::build::<UserDB, _>),
-            type_of_val(&insert::<DaoQueries, UserDB>),
-            type_of_val(&builder::<UserRoleDBBuilder>),
-            type_of_val(&With::<UserDB>::extract::<UserId>),
-            type_of_val(&With::<UserId>::set::<UserRoleDBBuilder>),
-            type_of_val(&With::<RequestContext>::update::<UserRoleDBBuilder, _>),
-            type_of_val(&builder::<FixedUserRoleBuilder>),
-            type_of_val(&With::<FixedUserRoleBuilder>::build::<FixedUserRole, _>),
-            type_of_val(&With::<FixedUserRole>::update::<UserRoleDBBuilder, _>),
-            type_of_val(&With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
-            type_of_val(&insert::<DaoQueries, UserRoleDB>),
-            type_of_val(&With::<UserDB>::extract::<UserId>),
-            type_of_val(&By::<UserId>::select::<DaoQueries, UserDBWithNames>),
-            type_of_val(&With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
-            type_of_val(&With::<UserReadBuilder>::build::<UserRead, _>),
-        ]);
+        CreateUserService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<CreateRequest<(), UserCreate>, UserRead>(&[
+                type_of_val(&With::<CreateRequest<(), UserCreate>>::extract::<RequestContext>),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
+                type_of_val(&With::<RequestContext>::extract::<UserId>),
+                type_of_val(&With::<CreateRequest<(), UserCreate>>::extract_data::<UserCreate>),
+                type_of_val(&builder::<UserDBBuilder>),
+                type_of_val(&With::<RequestContext>::update::<UserDBBuilder, _>),
+                type_of_val(&With::<UserCreate>::update_create_user_db_builder),
+                type_of_val(&With::<UserDBBuilder>::build::<UserDB, _>),
+                type_of_val(&insert::<UserDB>),
+                type_of_val(&builder::<UserRoleDBBuilder>),
+                type_of_val(&With::<UserDB>::extract::<UserId>),
+                type_of_val(&With::<UserId>::set::<UserRoleDBBuilder>),
+                type_of_val(&With::<RequestContext>::update::<UserRoleDBBuilder, _>),
+                type_of_val(&builder::<FixedUserRoleBuilder>),
+                type_of_val(&With::<FixedUserRoleBuilder>::build::<FixedUserRole, _>),
+                type_of_val(&With::<FixedUserRole>::update::<UserRoleDBBuilder, _>),
+                type_of_val(&With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
+                type_of_val(&insert::<UserRoleDB>),
+                type_of_val(&With::<UserDB>::extract::<UserId>),
+                type_of_val(&By::<UserId>::select::<UserDBWithNames>),
+                type_of_val(&With::<UserDBWithNames>::convert_to::<UserReadBuilder, _>),
+                type_of_val(&With::<UserReadBuilder>::build::<UserRead, _>),
+            ]);
     }
 
     async fn test_create_user(
@@ -156,15 +116,10 @@ mod tests {
         expected_enabled: bool,
         with_email: bool,
     ) {
-        let password_hashing_config = Arc::new(PasswordHashingConfig::default());
-
-        let service = CreateUserService::new(
-            db.clone(),
-            password_hashing_config,
-            Arc::new(AuthzContext::default()),
-        )
-        .service()
-        .await;
+        let service = CreateUserService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
 
         let create = UserCreate::builder()
             .try_name("u1".to_string())

@@ -5683,6 +5683,7 @@ dependencies = [
  "td-security",
  "td-services",
  "td-storage",
+ "td-test",
  "td-tower",
  "te-apiserver",
  "te-execution",

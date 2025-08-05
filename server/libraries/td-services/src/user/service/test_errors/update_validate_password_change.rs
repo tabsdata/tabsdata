@@ -2,33 +2,21 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-//
-// Copyright 2024 Tabs Data Inc.
-//
-
 use crate::user::service::update::UpdateUserService;
 use crate::user::UserError;
-use std::sync::Arc;
-use td_authz::AuthzContext;
+use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{AccessTokenId, Password, RoleId, UserId};
 use td_objects::types::user::UserUpdate;
-use td_security::config::PasswordHashingConfig;
 
-#[tokio::test]
-async fn test_cannot_change_self_password() {
-    let db = td_database::test_utils::db().await.unwrap();
-    let password_hashing_config = Arc::new(PasswordHashingConfig::default());
-
-    let service = UpdateUserService::new(
-        db.clone(),
-        password_hashing_config,
-        Arc::new(AuthzContext::default()),
-    )
-    .service()
-    .await;
+#[td_test::test(sqlx)]
+async fn test_cannot_change_self_password(db: DbPool) {
+    let service = UpdateUserService::with_defaults(db.clone())
+        .await
+        .service()
+        .await;
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),

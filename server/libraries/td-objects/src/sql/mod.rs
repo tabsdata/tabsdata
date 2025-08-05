@@ -63,10 +63,6 @@ impl Queries for GenericQueries {}
 // Or we could also just have sqliteQueries, mysqlQueries, etc. And use DaoQueries dyn.
 pub trait Queries {}
 
-/// Utility trait for Send + Sync Deref to Queries
-pub trait DerefQueries: Deref<Target = dyn Queries> + Send + Sync {}
-impl<Q> DerefQueries for Q where Q: Deref<Target = dyn Queries> + Send + Sync {}
-
 pub trait Insert<'a> {
     fn insert<D: DataAccessObject>(
         &self,

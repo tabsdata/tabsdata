@@ -34,7 +34,7 @@ fn provider() {
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>),
         // find collection ID
         from_fn(With::<WorkerLogsParams>::extract::<WorkerIdName>),
-        from_fn(By::<WorkerIdName>::select::<DaoQueries, WorkerDB>),
+        from_fn(By::<WorkerIdName>::select::<WorkerDB>),
         from_fn(With::<WorkerDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -55,7 +55,6 @@ mod tests {
     use crate::worker::layers::tests::create_log_files;
     use bytes::Bytes;
     use futures_util::TryStreamExt;
-    use std::sync::Arc;
     use td_common::server::WORKSPACE_URI_ENV;
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -78,35 +77,33 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_read_workers_logs(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let provider = WorkerLogService::provider(db, queries, authz_context);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ReadRequest<WorkerLogsParams>, BoxedSyncStream>(&[
-            // Extract parameters
-            type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
-            type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>),
-            // find collection ID
-            type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
-            type_of_val(&By::<WorkerIdName>::select::<DaoQueries, WorkerDB>),
-            type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
-            // Resolve worker message path.
-            type_of_val(&With::<WorkerDB>::extract::<WorkerId>),
-            type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
-            type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
-            type_of_val(&resolve_worker_log_path),
-            // Get worker message logs.
-            type_of_val(&get_worker_logs),
-        ]);
+        WorkerLogService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ReadRequest<WorkerLogsParams>, BoxedSyncStream>(&[
+                // Extract parameters
+                type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
+                type_of_val(
+                    &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
+                ),
+                // find collection ID
+                type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
+                type_of_val(&By::<WorkerIdName>::select::<WorkerDB>),
+                type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
+                // check requester has collection permissions
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                // Resolve worker message path.
+                type_of_val(&With::<WorkerDB>::extract::<WorkerId>),
+                type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
+                type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
+                type_of_val(&resolve_worker_log_path),
+                // Get worker message logs.
+                type_of_val(&get_worker_logs),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -176,13 +173,10 @@ mod tests {
                     // as the content.
                     create_log_files(workers[0].id(), 1, 1).await;
 
-                    let service = WorkerLogService::new(
-                        db.clone(),
-                        Arc::new(DaoQueries::default()),
-                        Arc::new(AuthzContext::default()),
-                    )
-                    .service()
-                    .await;
+                    let service = WorkerLogService::with_defaults(db.clone())
+                        .await
+                        .service()
+                        .await;
 
                     let request = RequestContext::with(
                         AccessTokenId::default(),

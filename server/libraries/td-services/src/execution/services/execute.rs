@@ -62,27 +62,22 @@ fn provider() {
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         // Select trigger function.
         from_fn(FunctionStatus::active),
-        from_fn(
-            By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                DaoQueries,
-                FunctionDBWithNames,
-            >
-        ),
+        from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
         // check requester is coll_admin or coll_exec for the function's collection
         from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollExec>::check),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // Find trigger graph
-        from_fn(find_trigger_graph::<DaoQueries>),
+        from_fn(find_trigger_graph),
         // Find all input tables
-        from_fn(find_all_input_tables::<DaoQueries>),
+        from_fn(find_all_input_tables),
         // inter collection authz check
         from_fn(With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
         from_fn(With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
         from_fn(Authz::<InterColl>::check_inter_collection),
         // Create execution template
-        from_fn(build_execution_template::<DaoQueries>),
+        from_fn(build_execution_template),
         // inter collection authz check
         from_fn(With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
         from_fn(With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
@@ -93,24 +88,24 @@ fn provider() {
         from_fn(With::<RequestContext>::update::<ExecutionDBBuilder, _>),
         from_fn(With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
         from_fn(With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
-        from_fn(insert::<DaoQueries, ExecutionDB>),
+        from_fn(insert::<ExecutionDB>),
         // Build transactions
         from_fn(build_transaction_map),
         from_fn(With::<ExecutionDB>::convert_to::<TransactionDBBuilder, _>),
         from_fn(build_transactions),
-        from_fn(insert_vec::<DaoQueries, TransactionDB>),
+        from_fn(insert_vec::<TransactionDB>),
         // Build new function runs
         from_fn(With::<ExecutionDB>::convert_to::<FunctionRunDBBuilder, _>),
         from_fn(build_function_runs),
-        from_fn(insert_vec::<DaoQueries, FunctionRunDB>),
+        from_fn(insert_vec::<FunctionRunDB>),
         // Build new table data versions
         from_fn(build_table_data_versions),
-        from_fn(insert_vec::<DaoQueries, TableDataVersionDB>),
+        from_fn(insert_vec::<TableDataVersionDB>),
         // Create execution plan
-        from_fn(build_execution_plan::<DaoQueries>),
+        from_fn(build_execution_plan),
         // Create steps
         from_fn(build_function_requirements),
-        from_fn(insert_vec::<DaoQueries, FunctionRequirementDB>),
+        from_fn(insert_vec::<FunctionRequirementDB>),
         // Execution plan response
         from_fn(build_response),
     )
@@ -120,7 +115,6 @@ fn provider() {
 pub(crate) mod tests {
     use super::*;
     use std::collections::HashSet;
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_error::TdError;
     use td_objects::crudl::{handle_sql_err, RequestContext};
@@ -152,22 +146,12 @@ pub(crate) mod tests {
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
         use td_objects::types::dependency::DependencyDBWithNames;
         use td_objects::types::permission::{InterCollectionAccess, InterCollectionAccessBuilder};
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let transaction_by = Arc::new(TransactionBy::default());
-        let provider = ExecuteFunctionService::provider(
-            db,
-            queries,
-            Arc::new(AuthzContext::default()),
-            transaction_by,
-        );
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata
+        ExecuteFunctionService::with_defaults(db)
+            .await
+            .metadata()
+            .await
             .assert_service::<CreateRequest<FunctionParam, ExecutionRequest>, ExecutionResponse>(
                 &[
                     // Extract from request.
@@ -194,7 +178,6 @@ pub(crate) mod tests {
                     type_of_val(&FunctionStatus::active),
                     type_of_val(
                         &By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                            DaoQueries,
                             FunctionDBWithNames,
                         >,
                     ),
@@ -204,16 +187,16 @@ pub(crate) mod tests {
                     type_of_val(&Authz::<CollAdmin, CollExec>::check),
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                     // Find trigger graph
-                    type_of_val(&find_trigger_graph::<DaoQueries>),
+                    type_of_val(&find_trigger_graph),
                     // Find all input tables
-                    type_of_val(&find_all_input_tables::<DaoQueries>),
+                    type_of_val(&find_all_input_tables),
                     // inter collections check for dependencies
                     type_of_val(&With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
                     type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
                     type_of_val(&Authz::<InterColl>::check_inter_collection),
 
                     // Create execution template
-                    type_of_val(&build_execution_template::<DaoQueries>),
+                    type_of_val(&build_execution_template),
 
                     // inter collections check for trigger
                     type_of_val(&With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
@@ -226,24 +209,24 @@ pub(crate) mod tests {
                     type_of_val(&With::<RequestContext>::update::<ExecutionDBBuilder, _>),
                     type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
                     type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
-                    type_of_val(&insert::<DaoQueries, ExecutionDB>),
+                    type_of_val(&insert::<ExecutionDB>),
                     // Build transactions
                     type_of_val(&build_transaction_map),
                     type_of_val(&With::<ExecutionDB>::convert_to::<TransactionDBBuilder, _>),
                     type_of_val(&build_transactions),
-                    type_of_val(&insert_vec::<DaoQueries, TransactionDB>),
+                    type_of_val(&insert_vec::<TransactionDB>),
                     // Build new function runs
                     type_of_val(&With::<ExecutionDB>::convert_to::<FunctionRunDBBuilder, _>),
                     type_of_val(&build_function_runs),
-                    type_of_val(&insert_vec::<DaoQueries, FunctionRunDB>),
+                    type_of_val(&insert_vec::<FunctionRunDB>),
                     // Build new table data versions
                     type_of_val(&build_table_data_versions),
-                    type_of_val(&insert_vec::<DaoQueries, TableDataVersionDB>),
+                    type_of_val(&insert_vec::<TableDataVersionDB>),
                     // Create execution plan
-                    type_of_val(&build_execution_plan::<DaoQueries>),
+                    type_of_val(&build_execution_plan),
                     // Create steps
                     type_of_val(&build_function_requirements),
-                    type_of_val(&insert_vec::<DaoQueries, FunctionRequirementDB>),
+                    type_of_val(&insert_vec::<FunctionRequirementDB>),
                     // Execution plan response
                     type_of_val(&build_response),
                 ],
@@ -418,13 +401,10 @@ pub(crate) mod tests {
                     .build()?,
             );
 
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let transaction_by = Arc::new(TransactionBy::default());
-        let service =
-            ExecuteFunctionService::new(db.clone(), queries, authz_context, transaction_by)
-                .service()
-                .await;
+        let service = ExecuteFunctionService::with_defaults(db.clone())
+            .await
+            .service()
+            .await;
         let response = service.raw_oneshot(request).await;
         let response = if with_permission {
             let response = response?;

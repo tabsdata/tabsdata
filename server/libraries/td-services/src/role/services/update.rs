@@ -2,9 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::sync::Arc;
 use td_authz::{Authz, AuthzContext};
-use td_database::sql::DbPool;
 use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::RoleParam;
@@ -19,63 +17,43 @@ use td_objects::types::basic::{RoleId, RoleIdName};
 use td_objects::types::role::{
     Role, RoleBuilder, RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleDBWithNames, RoleUpdate,
 };
-use td_tower::default_services::{SrvCtxProvider, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::service_provider::{IntoServiceProvider, ServiceProvider, TdBoxService};
-use td_tower::{layers, p, service_provider};
+use td_tower::service_provider::IntoServiceProvider;
+use td_tower::{layers, provider};
 
-pub struct UpdateRoleService {
-    provider: ServiceProvider<UpdateRequest<RoleParam, RoleUpdate>, Role, TdError>,
-}
-
-impl UpdateRoleService {
-    pub fn new(db: DbPool, authz_context: Arc<AuthzContext>) -> Self {
-        let queries = Arc::new(DaoQueries::default());
-        Self {
-            provider: Self::provider(db, queries, authz_context),
-        }
-    }
-
-    p! {
-        provider(db: DbPool, queries: Arc<DaoQueries>, authz_context: Arc<AuthzContext>) {
-            service_provider!(layers!(
-                SrvCtxProvider::new(queries),
-                TransactionProvider::new(db),
-                SrvCtxProvider::new(authz_context),
-
-                from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>),
-                from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<SecAdmin>::check),
-                from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>),
-                from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>),
-
-                from_fn(With::<RoleUpdate>::convert_to::<RoleDBUpdateBuilder, _>),
-                from_fn(With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
-                from_fn(With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate, _>),
-
-                from_fn(With::<RoleParam>::extract::<RoleIdName>),
-
-                from_fn(By::<RoleIdName>::select::<DaoQueries, RoleDBWithNames>),
-                from_fn(With::<RoleDBWithNames>::extract::<RoleId>),
-                from_fn(By::<RoleId>::update::<DaoQueries, RoleDBUpdate, RoleDB>),
-
-                from_fn(By::<RoleId>::select::<DaoQueries, RoleDBWithNames>),
-                from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
-                from_fn(With::<RoleBuilder>::build::<Role, _>),
-            ))
-        }
-    }
-
-    pub async fn service(
-        &self,
-    ) -> TdBoxService<UpdateRequest<RoleParam, RoleUpdate>, Role, TdError> {
-        self.provider.make().await
-    }
+#[provider(
+    name = UpdateRoleService,
+    request = UpdateRequest<RoleParam, RoleUpdate>,
+    response = Role,
+    connection = TransactionProvider,
+    context = DaoQueries,
+    context = AuthzContext,
+)]
+fn provider() {
+    layers!(
+        from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>),
+        from_fn(AuthzOn::<System>::set),
+        from_fn(Authz::<SecAdmin>::check),
+        from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>),
+        from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>),
+        from_fn(With::<RoleUpdate>::convert_to::<RoleDBUpdateBuilder, _>),
+        from_fn(With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
+        from_fn(With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate, _>),
+        from_fn(With::<RoleParam>::extract::<RoleIdName>),
+        from_fn(By::<RoleIdName>::select::<RoleDBWithNames>),
+        from_fn(With::<RoleDBWithNames>::extract::<RoleId>),
+        from_fn(By::<RoleId>::update::<RoleDBUpdate, RoleDB>),
+        from_fn(By::<RoleId>::select::<RoleDBWithNames>),
+        from_fn(With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+        from_fn(With::<RoleBuilder>::build::<Role, _>),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_role::{get_role, seed_role};
     use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserId};
@@ -84,32 +62,35 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_update_role(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let provider = UpdateRoleService::provider(db, queries, Arc::new(AuthzContext::default()));
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<UpdateRequest<RoleParam, RoleUpdate>, Role>(&[
-            type_of_val(&With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin>::check),
-            type_of_val(&With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>),
-            type_of_val(&With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>),
-            type_of_val(&With::<RoleUpdate>::convert_to::<RoleDBUpdateBuilder, _>),
-            type_of_val(&With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
-            type_of_val(&With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate, _>),
-            type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
-            type_of_val(&By::<RoleIdName>::select::<DaoQueries, RoleDBWithNames>),
-            type_of_val(&With::<RoleDBWithNames>::extract::<RoleId>),
-            type_of_val(&By::<RoleId>::update::<DaoQueries, RoleDBUpdate, RoleDB>),
-            type_of_val(&By::<RoleId>::select::<DaoQueries, RoleDBWithNames>),
-            type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
-            type_of_val(&With::<RoleBuilder>::build::<Role, _>),
-        ]);
+        UpdateRoleService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<UpdateRequest<RoleParam, RoleUpdate>, Role>(&[
+                type_of_val(
+                    &With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>,
+                ),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(
+                    &With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>,
+                ),
+                type_of_val(
+                    &With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>,
+                ),
+                type_of_val(&With::<RoleUpdate>::convert_to::<RoleDBUpdateBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<RoleDBUpdateBuilder, _>),
+                type_of_val(&With::<RoleDBUpdateBuilder>::build::<RoleDBUpdate, _>),
+                type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
+                type_of_val(&By::<RoleIdName>::select::<RoleDBWithNames>),
+                type_of_val(&With::<RoleDBWithNames>::extract::<RoleId>),
+                type_of_val(&By::<RoleId>::update::<RoleDBUpdate, RoleDB>),
+                type_of_val(&By::<RoleId>::select::<RoleDBWithNames>),
+                type_of_val(&With::<RoleDBWithNames>::convert_to::<RoleBuilder, _>),
+                type_of_val(&With::<RoleBuilder>::build::<Role, _>),
+            ]);
     }
 
     #[td_test::test(sqlx)]
@@ -138,7 +119,8 @@ mod tests {
             update,
         );
 
-        let service = UpdateRoleService::new(db.clone(), Arc::new(AuthzContext::default()))
+        let service = UpdateRoleService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

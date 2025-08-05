@@ -8,7 +8,7 @@ use td_error::display_vec::DisplayVec;
 use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
-use td_objects::sql::{DerefQueries, FindBy};
+use td_objects::sql::{DaoQueries, FindBy};
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
     DependencyStatus, FunctionId, ReuseFrozen, TableDependency, TableDependencyDto,
@@ -46,9 +46,9 @@ pub async fn data_location(
 pub const SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES: [&str; 1] = ["td.fn_state"];
 pub const SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES: [&str; 1] = ["td.fn_state"];
 
-pub async fn validate_tables_do_not_exist<Q: DerefQueries>(
+pub async fn validate_tables_do_not_exist(
     Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Input(collection_id): Input<CollectionId>,
     Input(collection_name): Input<CollectionName>,
     Input(existing_versions): Input<Vec<TableDB>>,
@@ -235,9 +235,9 @@ pub async fn build_table_versions(
     Ok(new_table_versions)
 }
 
-pub async fn build_tables_trigger_versions<Q: DerefQueries>(
+pub async fn build_tables_trigger_versions(
     Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Input(at_time): Input<AtTime>,
     Input(new_table_versions): Input<Vec<TableDB>>,
 ) -> Result<Vec<TriggerDB>, TdError> {
@@ -302,9 +302,9 @@ pub async fn build_tables_trigger_versions<Q: DerefQueries>(
     Ok(trigger_versions)
 }
 
-pub async fn build_dependency_versions<Q: DerefQueries>(
+pub async fn build_dependency_versions(
     Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Input(existing_versions): Input<Vec<DependencyDB>>,
     Input(new_dependencies): Input<Option<Vec<TableDependencyDto>>>,
     Input(collection_in_context): Input<CollectionName>,
@@ -469,9 +469,9 @@ pub async fn build_dependency_versions<Q: DerefQueries>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn build_trigger_versions<Q: DerefQueries>(
+pub async fn build_trigger_versions(
     Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<Q>,
+    SrvCtx(queries): SrvCtx<DaoQueries>,
     Input(existing_versions): Input<Vec<TriggerDBWithNames>>,
     Input(new_tables): Input<Option<Vec<TableNameDto>>>,
     Input(new_triggers): Input<Option<Vec<TableTriggerDto>>>,

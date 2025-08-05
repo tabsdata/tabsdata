@@ -13,9 +13,9 @@ use td_tower::{layers, provider};
 
 #[provider(
     name = RuntimeInfoService,
-    context = RuntimeContext,
     request = ReadRequest<()>,
     response = RuntimeInfo,
+    context = RuntimeContext,
 )]
 fn provider() {
     layers!(from_fn(runtime_info))
@@ -23,30 +23,21 @@ fn provider() {
 
 #[cfg(test)]
 mod tests {
-
-    //TODO check with Joaquin why this fails
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_runtime_info() {
         use super::*;
-        use std::sync::Arc;
         use td_objects::crudl::ReadRequest;
         use td_objects::types::runtime_info::RuntimeInfo;
-        use td_tower::ctx_service::RawOneshot;
+        use td_tower::metadata::type_of_val;
 
-        use td_tower::metadata::{type_of_val, Metadata};
-
-        let runtime_context = Arc::new(RuntimeContext::new().await.unwrap());
-
-        let provider = RuntimeInfoService::provider(runtime_context);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ReadRequest<()>, RuntimeInfo>(&[
-            // Extract from request.
-            type_of_val(&runtime_info),
-        ]);
+        RuntimeInfoService::with_defaults()
+            .await
+            .metadata()
+            .await
+            .assert_service::<ReadRequest<()>, RuntimeInfo>(&[
+                // Extract from request.
+                type_of_val(&runtime_info),
+            ]);
     }
 }

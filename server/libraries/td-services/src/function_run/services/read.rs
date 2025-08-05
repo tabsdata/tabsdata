@@ -40,7 +40,7 @@ fn provider() {
         from_fn(With::<ReadRequest<FunctionRunParam>>::extract_name::<FunctionRunParam>),
         from_fn(With::<FunctionRunParam>::extract::<CollectionIdName>),
         // find collection ID
-        from_fn(By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
+        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -50,22 +50,15 @@ fn provider() {
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(FunctionStatus::active),
-        from_fn(
-            By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                DaoQueries,
-                FunctionDBWithNames,
-            >
-        ),
+        from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
         // find execution ID
         from_fn(With::<FunctionRunParam>::extract::<ExecutionIdName>),
-        from_fn(By::<ExecutionIdName>::select::<DaoQueries, ExecutionDB>),
+        from_fn(By::<ExecutionIdName>::select::<ExecutionDB>),
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
         // find function run
         from_fn(combine::<ExecutionId, FunctionVersionId>),
-        from_fn(
-            By::<(ExecutionId, FunctionVersionId)>::select::<DaoQueries, FunctionRunDBWithNames>
-        ),
+        from_fn(By::<(ExecutionId, FunctionVersionId)>::select::<FunctionRunDBWithNames>),
         // Build FunctionRun
         from_fn(With::<FunctionRunDBWithNames>::convert_to::<FunctionRunBuilder, _>),
         from_fn(With::<FunctionRunBuilder>::build::<FunctionRun, _>),
@@ -75,7 +68,6 @@ fn provider() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -93,58 +85,46 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_read_function_run(db: DbPool) {
-        use td_tower::metadata::{type_of_val, Metadata};
+        use td_tower::metadata::type_of_val;
 
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-        let provider = FunctionRunReadService::provider(db, queries, authz_context);
-        let service = provider.make().await;
-
-        let response: Metadata = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<ReadRequest<FunctionRunParam>, FunctionRun>(&[
-            type_of_val(&With::<ReadRequest<FunctionRunParam>>::extract::<RequestContext>),
-            type_of_val(&With::<ReadRequest<FunctionRunParam>>::extract_name::<FunctionRunParam>),
-
-            type_of_val(&With::<FunctionRunParam>::extract::<CollectionIdName>),
-
-            // find collection ID
-            type_of_val(&By::<CollectionIdName>::select::<DaoQueries, CollectionDB>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
-
-            // find function version ID
-            type_of_val(&With::<FunctionRunParam>::extract::<FunctionIdName>),
-            type_of_val(&combine::<CollectionIdName, FunctionIdName>),
-            type_of_val(&With::<RequestContext>::extract::<AtTime>),
-            type_of_val(&FunctionStatus::active),
-            type_of_val(&By::<(CollectionIdName, FunctionIdName)>::select_version::<DaoQueries, FunctionDBWithNames>),
-            type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-
-            // find execution ID
-            type_of_val(&With::<FunctionRunParam>::extract::<ExecutionIdName>),
-            type_of_val(&By::<ExecutionIdName>::select::<DaoQueries, ExecutionDB>),
-            type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
-
-            // find function run
-            type_of_val(&combine::<ExecutionId, FunctionVersionId>),
-            type_of_val(&By::<(ExecutionId, FunctionVersionId)>::select::<DaoQueries, FunctionRunDBWithNames>),
-
-            // Build FunctionRun
-            type_of_val(&With::<FunctionRunDBWithNames>::convert_to::<FunctionRunBuilder, _>),
-            type_of_val(&With::<FunctionRunBuilder>::build::<FunctionRun, _>),
-        ]);
+        FunctionRunReadService::with_defaults(db)
+            .await
+            .metadata()
+            .await
+            .assert_service::<ReadRequest<FunctionRunParam>, FunctionRun>(&[
+                type_of_val(&With::<ReadRequest<FunctionRunParam>>::extract::<RequestContext>),
+                type_of_val(&With::<ReadRequest<FunctionRunParam>>::extract_name::<FunctionRunParam>),
+                type_of_val(&With::<FunctionRunParam>::extract::<CollectionIdName>),
+                // find collection ID
+                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                // check requester has collection permissions
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                // find function version ID
+                type_of_val(&With::<FunctionRunParam>::extract::<FunctionIdName>),
+                type_of_val(&combine::<CollectionIdName, FunctionIdName>),
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
+                type_of_val(&FunctionStatus::active),
+                type_of_val(
+                    &By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>,
+                ),
+                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
+                // find execution ID
+                type_of_val(&With::<FunctionRunParam>::extract::<ExecutionIdName>),
+                type_of_val(&By::<ExecutionIdName>::select::<ExecutionDB>),
+                type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
+                // find function run
+                type_of_val(&combine::<ExecutionId, FunctionVersionId>),
+                type_of_val(&By::<(ExecutionId, FunctionVersionId)>::select::<FunctionRunDBWithNames>),
+                // Build FunctionRun
+                type_of_val(&With::<FunctionRunDBWithNames>::convert_to::<FunctionRunBuilder, _>),
+                type_of_val(&With::<FunctionRunBuilder>::build::<FunctionRun, _>),
+            ]);
     }
 
     #[td_test::test(sqlx)]
     async fn test_read_function_run(db: DbPool) -> Result<(), TdError> {
-        let queries = Arc::new(DaoQueries::default());
-        let authz_context = Arc::new(AuthzContext::default());
-
         let collection = seed_collection(
             &db,
             &CollectionName::try_from("collection")?,
@@ -191,6 +171,9 @@ mod tests {
                     .try_execution(format!("~{}", execution.id()))?
                     .build()?,
             );
+
+        let service = FunctionRunReadService::with_defaults(db.clone())
+            .await
             .service()
             .await;
         let response = service.raw_oneshot(request).await;

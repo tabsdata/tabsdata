@@ -10,12 +10,10 @@ use crate::auth::services::refresh::RefreshService;
 use crate::auth::services::role_change::RoleChangeService;
 use crate::auth::services::user_info::UserInfoService;
 use crate::auth::session::Sessions;
-use argon2::{Argon2, Params, PasswordHasher, Version};
 use getset::Getters;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 use td_common::id;
 use td_database::sql::DbPool;
@@ -26,6 +24,7 @@ use td_objects::types::auth::UserInfo;
 use td_objects::types::auth::{Login, PasswordChange, RoleChange, TokenResponseX};
 use td_objects::types::basic::RefreshToken;
 use td_objects::types::stream::BoxedSyncStream;
+use td_security::config::PasswordHashingConfig;
 use td_tower::service_provider::TdBoxService;
 
 mod cert_download;
@@ -35,56 +34,6 @@ mod password_change;
 mod refresh;
 mod role_change;
 mod user_info;
-
-#[derive(Clone, Serialize, Deserialize, Getters)]
-#[getset(get = "pub")]
-pub struct PasswordHashConfig {
-    algorithm: String,
-    version: usize,
-    memory_cost_mib: usize,
-    time_cost: usize,
-    parallelism_cost: usize,
-}
-
-impl PasswordHashConfig {
-    pub fn new(
-        algorithm: &str,
-        version: usize,
-        memory_cost_mib: usize,
-        time_cost: usize,
-        parallelism_cost: usize,
-    ) -> Self {
-        Self {
-            algorithm: algorithm.into(),
-            version,
-            memory_cost_mib,
-            time_cost,
-            parallelism_cost,
-        }
-    }
-
-    pub fn hasher(&self) -> impl PasswordHasher {
-        Argon2::new(
-            argon2::Algorithm::from_str(&self.algorithm)
-                .unwrap_or_else(|_| panic!("Invalid configuration: unknown password hashing algorithm {}. Valid values: argon2d, argon2i, argon2id (default)", self.algorithm)),
-            Version::try_from(self.version as u32)
-                .unwrap_or_else(|_| panic!("Invalid configuration: unknown password hashing version {}. Valid values: 16, 19 (default)", self.version)),
-            Params::new(
-                self.memory_cost_mib as u32,
-                self.time_cost as u32,
-                self.parallelism_cost as u32,
-                None,
-            )
-                .unwrap(),
-        )
-    }
-}
-
-impl Default for PasswordHashConfig {
-    fn default() -> Self {
-        PasswordHashConfig::new("argon2d", 19, 65536, 4, 1)
-    }
-}
 
 #[derive(Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
@@ -135,8 +84,9 @@ impl Default for JwtConfig {
 }
 
 pub struct AuthServices {
+    db: DbPool,
     jwt_settings: Arc<JwtConfig>,
-    sessions: Arc<Sessions<'static>>,
+    sessions: Arc<Sessions>,
     login: LoginService,
     refresh: RefreshService,
     logout: LogoutService,
@@ -148,9 +98,9 @@ pub struct AuthServices {
 
 impl AuthServices {
     pub fn new(
-        db: &DbPool,
-        sessions: impl Into<Arc<Sessions<'static>>>,
-        password_settings: impl Into<PasswordHashConfig>,
+        db: DbPool,
+        sessions: impl Into<Arc<Sessions>>,
+        password_settings: impl Into<PasswordHashingConfig>,
         jwt_settings: impl Into<JwtConfig>,
         ssl_folder: impl Into<PathBuf>,
     ) -> Self {
@@ -160,6 +110,7 @@ impl AuthServices {
         let jwt_settings = Arc::new(jwt_settings.into());
         let ssl_folder = Arc::new(ssl_folder.into());
         Self {
+            db: db.clone(),
             jwt_settings: jwt_settings.clone(),
             sessions: sessions.clone(),
             login: LoginService::new(
@@ -190,6 +141,20 @@ impl AuthServices {
             ),
             cert_download: CertDownloadService::new(ssl_folder),
         }
+    }
+
+    pub async fn with_defaults(db: DbPool) -> Self {
+        Self::new(
+            db,
+            Sessions::default(),
+            PasswordHashingConfig::default(),
+            JwtConfig::default(),
+            PathBuf::default(),
+        )
+    }
+
+    pub fn db(&self) -> &DbPool {
+        &self.db
     }
 
     pub async fn login_service(&self) -> TdBoxService<Login, TokenResponseX, TdError> {
@@ -234,24 +199,11 @@ impl AuthServices {
 }
 
 #[cfg(test)]
-pub mod tests {
-    use crate::auth::services::{AuthServices, JwtConfig, PasswordHashConfig};
-    use crate::auth::session;
-    use crate::auth::session::Sessions;
+mod tests {
     use sqlx::FromRow;
-    use std::path::PathBuf;
-    use std::sync::Arc;
     use td_database::sql::DbPool;
     use td_objects::types::auth::SessionDB;
     use td_objects::types::basic::AccessTokenId;
-
-    pub async fn auth_services(db: &DbPool) -> AuthServices {
-        let sessions: Arc<Sessions> = Arc::new(session::new(db.clone()));
-        let password_hash_config: PasswordHashConfig = PasswordHashConfig::default();
-        let jwt_config: JwtConfig = JwtConfig::default();
-        let ssl_folder = PathBuf::default();
-        AuthServices::new(db, sessions, password_hash_config, jwt_config, ssl_folder)
-    }
 
     pub async fn assert_session(db: &DbPool, access_token_id: &Option<AccessTokenId>) {
         #[derive(Debug, FromRow)]
