@@ -68,7 +68,6 @@ def test_examples(login, tabsserver_connection):
         assert working_folder
         logger.debug(f"Temporary working folder: {working_folder}")
         working_folder = os.path.join(working_folder, "example")
-        output_folder = os.path.join(working_folder, "output")
         logger.debug(f"Working folder: {working_folder}")
 
         runner = CliRunner()
@@ -82,6 +81,9 @@ def test_examples(login, tabsserver_connection):
             ],
         )
         log_and_assert(result)
+
+        working_folder = os.path.join(working_folder, "example-000")
+        output_folder = os.path.join(working_folder, "output")
 
         assert os.path.exists(working_folder)
         assert os.path.exists(os.path.join(working_folder, "input", "persons.csv"))

@@ -296,7 +296,7 @@ fn obtain_log_location_from_environment(path: PathBuf) -> Option<PathBuf> {
 }
 
 fn obtain_log_location_from_pytest(_: PathBuf) -> Option<PathBuf> {
-    if let Ok(_) = env::var(PYTEST_VERSION) {
+    if env::var(PYTEST_VERSION).is_ok() {
         Some(get_current_dir())
     } else {
         None

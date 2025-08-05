@@ -336,7 +336,7 @@ version = "6.0.0"
 version = "0.1.1"
 
 [workspace.dependencies.duct]
-version = "1.0.0"
+version = "1.1.0"
 
 [workspace.dependencies.dunce]
 version = "1.0.5"
@@ -524,10 +524,10 @@ version = "1.47.1"
 features = ["full"]
 
 [workspace.dependencies.tokio-util]
-version = "0.7.15"
+version = "0.7.16"
 
 [workspace.dependencies.toml]
-version = "0.9.4"
+version = "0.9.5"
 
 [workspace.dependencies.tower]
 version = "0.5.2"

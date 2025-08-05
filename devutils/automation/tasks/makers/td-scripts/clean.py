@@ -44,7 +44,7 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
             logger.debug(f"✏️ Found path: '{path}'")
             relative_path = os.path.relpath(full_path, project_folder)
             first_component = relative_path.split(os.sep, 1)[0]
-            if first_component.startswith("."):
+            if first_component.startswith(".") and first_component != ".pytest_cache":
                 logger.debug(f"✏️    - Skipping root dot file/folder: {full_path}")
                 continue
             elif "target" in full_path and "deps" in full_path and pattern == "*.log.*":
@@ -83,6 +83,7 @@ def clean_py(project_folder):
         "tdlocal",
         "local_development_artifacts",
         "client/td-sdk/tabsdata/assets",
+        "SOURCETRACK.yaml",
         EXAMPLES_GUIDES_BOOK_PATH,
         os.path.join(
             "connectors",

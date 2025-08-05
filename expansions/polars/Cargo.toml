@@ -124,7 +124,7 @@ version = "1.0.219"
 features = ["derive"]
 
 [workspace.dependencies.toml]
-version = "0.9.4"
+version = "0.9.5"
 
 [build-dependencies]
 

@@ -4,7 +4,7 @@
 
 accessify==0.3.1
 base32hex==1.0.2
-click==8.2.1
+click==8.2.2
 cloudpickle==3.1.1
 colorama==0.4.6
 connectorx==0.4.3

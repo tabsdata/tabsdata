@@ -7,7 +7,7 @@ use crate::transporter::error::TransporterError;
 use bytes::Bytes;
 use object_store::path::Path;
 use object_store::{path::Path as ObjectPath, ObjectStore, PutPayload};
-use polars::prelude::{PolarsError, PolarsResult, SinkTarget, SpecialEq};
+use polars::prelude::{PlPath, PolarsError, PolarsResult, SinkTarget, SpecialEq};
 use polars_io::prelude::sync_on_close::SyncOnCloseType;
 use polars_io::utils::file::DynWriteable;
 use std::collections::HashMap;
