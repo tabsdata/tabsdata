@@ -209,8 +209,7 @@ def by_index(*indices: int | range | Sequence[int | range]) -> SelectorProxy:
         indices: One or more integer positions or ranges. Negative indexes are
         supported, ranging from -1 (indicating last column) to
         -{number of columns} (indicating first column). Indices greater (in
-        absolute value) than the number of columns will either fail or produce
-        no column.
+        absolute value) than the number of columns will fail.
 
     Example:
         >>> import tabsdata.tableframe as td_tf

@@ -189,14 +189,13 @@ mod tests {
     use polars::datatypes::{Float64Chunked, Int64Chunked, PlSmallStr, StringChunked};
     use polars::frame::DataFrame;
     use polars::prelude::{
-        Column, IntoLazy, IntoSeries, LazyFrame, ScanArgsParquet, SinkOptions, SinkTarget,
+        Column, IntoLazy, IntoSeries, LazyFrame, PlPath, ScanArgsParquet, SinkOptions, SinkTarget,
     };
     use polars_io::cloud::{CloudOptions, ObjectStorePath};
     use polars_io::prelude::ParquetWriteOptions;
     use polars_io::utils::sync_on_close::SyncOnCloseType;
     use std::collections::HashMap;
     use std::env::var;
-    use std::sync::Arc;
     use td_common::id::id;
     use testdir::testdir;
     use url::Url;
@@ -243,7 +242,7 @@ mod tests {
 
             let _ = lf
                 .sink_parquet(
-                    SinkTarget::Path(Arc::new(path_r.clone())),
+                    SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
                     ParquetWriteOptions::default(),
                     None,
                     SinkOptions {
@@ -320,7 +319,7 @@ mod tests {
             let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config).unwrap();
 
             let lf = LazyFrame::scan_parquet(
-                url_tf.to_string(),
+                PlPath::new(url_tf.to_string().as_str()),
                 ScanArgsParquet {
                     cloud_options: Some(cloud_options),
                     ..Default::default()
@@ -373,7 +372,7 @@ mod tests {
 
             let _ = lf
                 .sink_parquet(
-                    SinkTarget::Path(Arc::new(path_r.clone())),
+                    SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
                     ParquetWriteOptions::default(),
                     None,
                     SinkOptions {
@@ -448,7 +447,7 @@ mod tests {
             let cloud_options = CloudOptions::from_untyped_config(url_tf.as_str(), config).unwrap();
 
             let lf = LazyFrame::scan_parquet(
-                url_tf.to_string(),
+                PlPath::new(url_tf.to_string().as_str()),
                 ScanArgsParquet {
                     cloud_options: Some(cloud_options),
                     ..Default::default()
@@ -493,7 +492,7 @@ mod tests {
 
         let _ = lf
             .sink_parquet(
-                SinkTarget::Path(Arc::new(path_r.clone())),
+                SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
                 ParquetWriteOptions::default(),
                 None,
                 SinkOptions {
@@ -551,7 +550,7 @@ mod tests {
         let url_tf = response.first().unwrap().to.clone();
 
         let lf = LazyFrame::scan_parquet(
-            url_tf.to_string(),
+            PlPath::new(url_tf.to_string().as_str()),
             ScanArgsParquet {
                 ..Default::default()
             },

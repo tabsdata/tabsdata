@@ -13,7 +13,6 @@ use polars_io::utils::file::DynWriteable;
 use std::collections::HashMap;
 use std::io;
 use std::io::{Error, Result as IoResult, Write};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Handle;
 use url::Url;
@@ -102,7 +101,7 @@ pub fn create_sink_target(
 }
 
 fn create_local_sink_target(url: &Url) -> PolarsResult<SinkTarget> {
-    let target = SinkTarget::Path(Arc::new(PathBuf::from(url.to_string())));
+    let target = SinkTarget::Path(PlPath::new(url.to_string().as_str()));
     Ok(target)
 }
 

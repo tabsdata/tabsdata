@@ -1323,7 +1323,7 @@ def test_select_unsigned_integer(exclude):
     api_tester(fn)
 
 
-@pytest.mark.parametrize("run_id", list(range(2 * len(SCHEMA))))
+@pytest.mark.parametrize("run_id", list(range(len(SCHEMA))))
 def test_scan_select_by_index(run_id):
     tableframe = _wrap_polars_frame(generate())
     tableframe = tableframe.select(td_selectors.by_index(run_id))

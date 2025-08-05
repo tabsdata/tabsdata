@@ -107,8 +107,21 @@ class TableFrameGroupBy:
             if metadata[td_constants.TD_COL_AGGREGATION] is not None:
                 aggregation_function = metadata[td_constants.TD_COL_AGGREGATION]
                 aggregation_function_instance = aggregation_function(self._state)
+                # In polars 1.31.0, map_elements internally set agg_list=True
+                #    which aggregated values into a list before calling the
+                #     map function.
+                #
+                # In polars 1.32.0, this was removed, so the map function
+                #     receives individual values (as integers) instead of
+                #     list[bytes].
+                #
+                # Using implode() restores back the expected behaviour.
+                #
+                # Eventually whe should move to map_batches, that gives direct
+                #     access to the agg_list flag.
                 expr = (
                     pl.col(column)
+                    .implode()
                     .map_elements(
                         aggregation_function_instance,
                         return_dtype=metadata[td_constants.TD_COL_DTYPE],

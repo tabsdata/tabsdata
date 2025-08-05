@@ -56,9 +56,10 @@ mod tests {
     use polars::datatypes::{Int64Chunked, StringChunked};
     use polars::prelude::sync_on_close::SyncOnCloseType;
     use polars::prelude::{
-        DataFrame, IntoColumn, IntoLazy, NamedFrom, ParquetWriteOptions, SinkOptions, SinkTarget,
+        DataFrame, IntoColumn, IntoLazy, NamedFrom, ParquetWriteOptions, PlPath, SinkOptions,
+        SinkTarget,
     };
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
     use std::sync::Arc;
     use td_common::absolute_path::AbsolutePath;
     use td_database::sql::DbPool;
@@ -250,7 +251,7 @@ mod tests {
                     let a = Int64Chunked::new(format!("i{i}").into(), &[1, 2]).into_column();
                     let b = StringChunked::new("s".into(), &["a", "b"]).into_column();
                     let lf = DataFrame::new(vec![a, b]).unwrap().lazy();
-                    let sink_target = SinkTarget::Path(Arc::new(PathBuf::from(url.to_string())));
+                    let sink_target = SinkTarget::Path(PlPath::new(url.to_string().as_str()));
                     _ = lf
                         .sink_parquet(
                             sink_target,

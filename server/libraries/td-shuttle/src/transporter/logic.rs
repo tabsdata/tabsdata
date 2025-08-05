@@ -12,7 +12,7 @@ use object_store::path::Path;
 use object_store::{parse_url_opts, ObjectMeta, ObjectStore};
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
-    lit, nth, IntoLazy, LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader,
+    lit, nth, IntoLazy, LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader, PlPath,
     PolarsError, SinkOptions,
 };
 use polars_io::utils::sync_on_close::SyncOnCloseType;
@@ -313,17 +313,19 @@ fn importer_lazy_frame(
         Format::Parquet(config) => {
             let mut parquet_config = config.scan_config();
             parquet_config.cloud_options = Some(cloud_config);
-            LazyFrame::scan_parquet(&url_str, parquet_config)?
+            LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)?
         }
         // We force reading the whole file the avoid corner cases of columns data type inference.
         Format::Csv(options) => {
-            let reader = LazyCsvReader::new(&url_str).with_infer_schema_length(None);
+            let reader =
+                LazyCsvReader::new(PlPath::new(url_str.as_str())).with_infer_schema_length(None);
             let reader = options.apply_to(reader);
             reader.with_cloud_options(Some(cloud_config)).finish()?
         }
         // We force reading the whole file the avoid corner cases of columns data type inference.
         Format::NdJson(options) => {
-            let reader = LazyJsonLineReader::new(&url_str).with_infer_schema_length(None);
+            let reader = LazyJsonLineReader::new(PlPath::new(url_str.as_str()))
+                .with_infer_schema_length(None);
             let reader = options.apply_to(reader);
             // HACK!! NDJSON does not do streaming writes yet https://github.com/pola-rs/polars/issues/10964
             // TODO: we should read from the object store in chunks (get_ranges), write each chunk to a local temp parquet file
@@ -342,12 +344,15 @@ fn importer_lazy_frame(
                 .unwrap_or_else(|| panic!("URL {url} does not refer to a file"))
                 .next_back()
                 .unwrap_or_else(|| panic!("URL {url} does not refer to a file"));
-            let reader = LazyCsvReader::new(&url_str);
+            let reader = LazyCsvReader::new(PlPath::new(url_str.as_str()));
             let reader = options.apply_to(reader);
             reader
                 .with_cloud_options(Some(cloud_config))
                 .finish()?
-                .select([lit(file_name).alias("file"), nth(0).alias("message")])
+                .select([
+                    lit(file_name).alias("file"),
+                    nth(0).as_expr().alias("message"),
+                ])
         }
     };
     Ok(lazy_frame)

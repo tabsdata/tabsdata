@@ -7,7 +7,7 @@ use bytes::Bytes;
 use futures_util::FutureExt;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
-    CsvWriter, DataFrame, IdxSize, JsonWriter, LazyFrame, ParquetWriter, PolarsError,
+    CsvWriter, DataFrame, IdxSize, JsonWriter, LazyFrame, ParquetWriter, PlPath, PolarsError,
     ScanArgsParquet, SerWriter,
 };
 use polars::sql::SQLContext;
@@ -78,7 +78,7 @@ pub async fn get_table_sample(
         };
 
         tokio::task::block_in_place(move || {
-            let lazy_frame = LazyFrame::scan_parquet(&url_str, parquet_config)
+            let lazy_frame = LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)
                 .map_err(SampleError::LazyFrameError)?;
 
             // drop system columns and set the offset set in the request
@@ -144,6 +144,7 @@ mod tests {
         });
     }
 
+    //noinspection DuplicatedCode
     async fn test_get_table_sample(
         offset: usize,
         len: usize,
@@ -235,6 +236,7 @@ mod tests {
         Ok(())
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_table_sample_offset() -> Result<(), TdError> {
         let file = test_get_table_sample(1, SampleLen::MAX as usize, FileFormat::Csv, None).await?;
@@ -260,6 +262,7 @@ mod tests {
         Ok(())
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_table_sample_len() -> Result<(), TdError> {
         let file = test_get_table_sample(0, 9, FileFormat::Csv, None).await?;
@@ -285,6 +288,7 @@ mod tests {
         Ok(())
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_table_sample_sql() -> Result<(), TdError> {
         let file = test_get_table_sample(
@@ -318,6 +322,7 @@ mod tests {
         Ok(())
     }
 
+    //noinspection DuplicatedCode
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_table_sample_sql_from_offset() -> Result<(), TdError> {
         let file = test_get_table_sample(
@@ -371,6 +376,7 @@ mod tests {
         Ok(())
     }
 
+    //noinspection DuplicatedCode
     async fn test_get_table_sample_not_found(
         format: FileFormat,
         sql: Option<Sql>,

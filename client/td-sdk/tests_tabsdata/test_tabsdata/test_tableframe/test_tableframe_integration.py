@@ -1592,18 +1592,3 @@ def test_datetime_dst_offset():
         return frame.select(library.col("dt").dt.dst_offset())
 
     api_tester(fn, polars_frame=POLARS_TABLE_FRAME_DATETIME)
-
-
-# ----------------------------------------
-
-# def test___():
-#     p = POLARS_TABLE_FRAME_DATETIME
-#     t = _wrap_polars_frame(p)
-#
-#     def fn(library: ma, frame: ft):
-#         return frame.select(library.col("i"), library.col("i").diff().alias("diff"))
-#
-#     (alias_pl, frame_pl) = (pl, p)
-#     log_frame(frame_pl)
-#     out_pl = fn(alias_pl, frame_pl)
-#     log_frame(out_pl)

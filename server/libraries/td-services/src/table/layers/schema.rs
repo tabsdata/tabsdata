@@ -4,7 +4,7 @@
 
 use crate::table::layers::storage::StorageServiceError;
 use polars::prelude::cloud::CloudOptions;
-use polars::prelude::{Field, LazyFrame, PolarsError, ScanArgsParquet, SchemaExt};
+use polars::prelude::{Field, LazyFrame, PlPath, PolarsError, ScanArgsParquet, SchemaExt};
 use td_error::{td_error, TdError};
 use td_objects::types::table::{SchemaField, TableSchema};
 use td_storage::{SPath, Storage};
@@ -43,7 +43,7 @@ pub async fn get_table_schema(
         };
 
         tokio::task::block_in_place(move || {
-            let lazy_frame = LazyFrame::scan_parquet(&url_str, parquet_config)
+            let lazy_frame = LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)
                 .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
 
             let lazy_frame = drop_system_columns(lazy_frame)

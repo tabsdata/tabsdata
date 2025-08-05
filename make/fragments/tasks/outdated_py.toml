@@ -10,6 +10,26 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
+    unset PIP_INDEX_URL
+    unset PIP_EXTRA_INDEX_URL
+
+    unset UV_DEFAULT_INDEX
+    unset UV_INDEX
+
+    unset UV_INDEX_URL
+    unset UV_EXTRA_INDEX_URL
+
+
+    set_env PIP_INDEX_URL ""
+    set_env PIP_EXTRA_INDEX_URL ""
+
+    set_env UV_DEFAULT_INDEX ""
+    unset UV_INDEX
+
+    set_env UV_INDEX_URL ""
+    set_env UV_EXTRA_INDEX_URL ""
+
+
     info "🚀 python -c \"import subprocess; subprocess.run(['pip-upgrade', '--dry-run', 'requirements-dev.txt'], input='x\\n', text=True)\""
     exec --fail-on-error python -c "import subprocess; subprocess.run(['pip-upgrade', '--dry-run', 'requirements-dev.txt'], input='x\\n', text=True)"
     ''']
