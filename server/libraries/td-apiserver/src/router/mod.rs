@@ -46,7 +46,6 @@ mod roles;
 mod runtime_info;
 pub mod scheduler_server;
 mod server_status;
-mod status;
 mod tables;
 mod transactions;
 mod user_roles;
@@ -59,7 +58,6 @@ use crate::layers::tracing::TraceService;
 use crate::layers::uri_filter::LoopbackIpFilterService;
 use crate::router::auth::authorization_layer::authorization_layer;
 use crate::router::auth::{auth_secure, auth_unsecure};
-use crate::router::status::StatusLogic;
 use crate::status::error_status::ServerErrorStatus;
 use crate::{Server, ServerBuilder, ServerError};
 use axum::middleware::{from_fn, from_fn_with_state};
@@ -73,6 +71,7 @@ use td_error::{td_error, TdError};
 use td_security::config::PasswordHashingConfig;
 use td_services::auth::services::{AuthServices, PasswordHashConfig};
 use td_services::auth::session;
+use td_services::auth::services::AuthServices;
 use td_services::auth::session::Sessions;
 use td_services::collection::service::CollectionServices;
 use td_services::execution::services::ExecutionServices;
@@ -82,6 +81,7 @@ use td_services::function_run::services::FunctionRunServices;
 use td_services::inter_coll_permission::services::InterCollectionPermissionServices;
 use td_services::permission::services::PermissionServices;
 use td_services::role::services::RoleServices;
+use td_services::system::services::SystemServices;
 use td_services::table::services::TableServices;
 use td_services::transaction::services::TransactionServices;
 use td_services::user::service::UserServices;
@@ -102,7 +102,7 @@ pub mod state {
     pub type Permissions = Arc<PermissionServices>;
     pub type InterCollectionPermissions = Arc<InterCollectionPermissionServices>;
     pub type Roles = Arc<RoleServices>;
-    pub type Status = Arc<StatusLogic>;
+    pub type System = Arc<SystemServices>;
     pub type Tables = Arc<TableServices>;
     pub type Transactions = Arc<TransactionServices>;
     pub type Users = Arc<UserServices>;
@@ -244,8 +244,8 @@ impl ApiServerInstanceBuilder {
         ))
     }
 
-    fn status_state(&self) -> state::Status {
-        Arc::new(StatusLogic::new(self.db.clone()))
+    fn system_state(&self) -> state::System {
+        Arc::new(SystemServices::new(self.db.clone()))
     }
 
     fn storage_state(&self) -> state::StorageRef {
@@ -312,7 +312,7 @@ impl ApiServerInstanceBuilder {
                         ))
                         .merge(permissions::router(self.permissions_state()))
                         .merge(roles::router(self.roles_state()))
-                        .merge(server_status::router(self.status_state()))
+                        .merge(server_status::router(self.system_state()))
                         .merge(user_roles::router(self.user_roles_state()))
                         .merge(users::router(self.users_state()))
                         .merge(tables::router(self.table_state(), self.storage_state()))

@@ -16,6 +16,7 @@ pub mod permission;
 pub mod role;
 pub mod runtime_info;
 pub mod stream;
+pub mod system;
 pub mod table;
 pub mod table_ref;
 pub mod trigger;

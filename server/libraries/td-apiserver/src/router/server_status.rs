@@ -7,8 +7,7 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use crate::router;
-use crate::router::state::Status;
-use crate::router::status::ApiStatus;
+use crate::router::state::System;
 use crate::status::error_status::ServerErrorStatus;
 use axum::extract::State;
 use derive_builder::Builder;
@@ -16,6 +15,7 @@ use getset::Getters;
 use serde::Serialize;
 use std::fmt::Debug;
 use td_apiforge::{apiserver_path, apiserver_tag, get_status};
+use td_objects::types::system::ApiStatus;
 use td_tower::ctx_service::{CtxMap, CtxResponse, CtxResponseBuilder};
 use tower::ServiceExt;
 
@@ -24,7 +24,7 @@ pub const STATUS: &str = "/status";
 apiserver_tag!(name = "Status", description = "Server Status API");
 
 router! {
-    state => { Status },
+    state => { System },
     routes => { status }
 }
 
@@ -32,8 +32,8 @@ get_status!(ApiStatus);
 
 #[apiserver_path(method = get, path = STATUS, tag = STATUS_TAG)]
 #[doc = "API Server Status"]
-async fn status(State(status_state): State<Status>) -> Result<GetStatus, ServerErrorStatus> {
-    let response = status_state.status_service().await.oneshot(()).await?;
+async fn status(State(status_state): State<System>) -> Result<GetStatus, ServerErrorStatus> {
+    let response = status_state.status().await.oneshot(()).await?;
     Ok(GetStatus::OK(response.into()))
 }
 
@@ -41,21 +41,17 @@ async fn status(State(status_state): State<Status>) -> Result<GetStatus, ServerE
 mod tests {
     use super::*;
     use crate::router::server_status::ApiStatus;
-    use crate::router::status::{HealthStatus, StatusLogic};
     use axum::body::{to_bytes, Body};
     use axum::extract::Request;
     use axum::{Extension, Router};
     use http::{Method, StatusCode};
     use std::sync::Arc;
+    use td_database::sql::DbPool;
     use td_objects::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::system::HealthStatus;
+    use td_services::system::services::SystemServices;
     use tower::ServiceExt;
-
-    async fn users_state() -> Status {
-        let db = td_database::test_utils::db().await.unwrap();
-        let logic = StatusLogic::new(db);
-        Arc::new(logic)
-    }
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
         let context =
@@ -64,10 +60,9 @@ mod tests {
         router.layer(Extension(context.clone()))
     }
 
-    #[tokio::test]
-    async fn test_status() {
-        let users_state = users_state().await;
-        let router = super::router(users_state);
+    #[td_test::test(sqlx)]
+    async fn test_status(db: DbPool) {
+        let router = super::router(Arc::new(SystemServices::new(db)));
 
         // Retrieve the status
         let response = to_route(&router)
