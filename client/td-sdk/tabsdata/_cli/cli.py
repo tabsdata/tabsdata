@@ -5,10 +5,12 @@
 import os
 import shutil
 import textwrap
+from pathlib import Path
 
 import rich_click as click
 from rich.console import Console
 
+from tabsdata._cli import examples_guide
 from tabsdata._cli.auth_group import auth
 from tabsdata._cli.cli_utils import (
     get_credentials_file_path,
@@ -95,17 +97,45 @@ def hints(ctx: click.Context, mode: str):
         click.echo("Hints disabled. You will no longer see hints in the CLI.")
 
 
-@cli.command()
-@click.option(
-    "--dir",
-    help=(
-        "Directory to generate the example in. The directory must not exist "
-        "beforehand, as it will be created by the CLI."
-    ),
-)
+def shared_examples_options(f):
+    f = click.option(
+        "--dir",
+        help=(
+            "Directory to generate the examples in. The directory must not exist "
+            "beforehand, as it will be created by the CLI."
+        ),
+    )(f)
+    f = click.option(
+        "--guide",
+        is_flag=True,
+        help="Open the examples guide in the browser after generating the examples.",
+    )(f)
+    return f
+
+
+@cli.group(invoke_without_command=True)
+@shared_examples_options
 @click.pass_context
-def examples(ctx: click.Context, dir: str):
-    """Create a folder with an example of a publisher, transformer and subscriber"""
+def examples(ctx: click.Context, dir: str, guide: bool):
+    """Generate a folder with example use cases; or open these example's
+    guide."""
+    if ctx.invoked_subcommand is None:
+        if dir:
+            ctx.invoke(generate, dir=dir, guide=guide)
+        else:
+            click.echo(ctx.get_help())
+
+
+@examples.command()
+@shared_examples_options
+@click.pass_context
+def generate(ctx: click.Context, dir: str, guide: bool):
+    """Generate a folder with example use cases, each demonstrating different
+    combinations of publishers, transformers, and subscribers."""
+
+    def ignored_files(_folder, files):
+        return [f for f in files if f == ".gitkeep"]
+
     dir = dir or logical_prompt(
         ctx,
         "Directory to generate the example in. The directory must not exist "
@@ -119,17 +149,18 @@ def examples(ctx: click.Context, dir: str):
         raise click.ClickException(
             f"Failed to generate examples: {dir} already exists."
         )
-    examples_folder = os.path.abspath(
-        os.path.join(
-            os.path.dirname(__file__),
-            "..",
-            "_examples",
+
+    # noinspection PyProtectedMember
+    import tabsdata.extensions._examples.cases as cases_module
+
+    cases_folder = Path(cases_module.__path__[0])
+    if os.path.exists(cases_folder):
+        shutil.copytree(
+            cases_folder,
+            dir,
+            dirs_exist_ok=True,
+            ignore=ignored_files,
         )
-    )
-    if os.path.exists(examples_folder):
-        shutil.copytree(examples_folder, dir, dirs_exist_ok=True)
-        output_folder = os.path.join(dir, "output")
-        os.makedirs(output_folder, exist_ok=True)
         click.echo(
             f"Examples generated in '{dir}'. "
             "Follow the instructions in the 'README.md' file found in the newly "
@@ -145,8 +176,19 @@ def examples(ctx: click.Context, dir: str):
             "Failed to generate examples: internal error, could not find examples "
             "content folder in your local tabsdata package installation. As some "
             "files are missing, reinstalling the package is strongly recommended. "
-            f"The missing folder is {examples_folder}."
+            f"The missing folder is {cases_folder}."
         )
+
+    if guide:
+        examples_guide.run()
+
+
+@examples.command()
+@click.pass_context
+def guide(_ctx: click.Context):
+    """Open the guide that explains how to explore and run the generated
+    examples"""
+    examples_guide.run()
 
 
 @cli.command()

@@ -10,6 +10,10 @@ import shutil
 import sys
 from types import ModuleType
 
+EXAMPLES_GUIDES_BOOK_PATH = (
+    "extensions/python/td-lib/te_examples/tabsdata/extensions/_examples/guides/book"
+)
+
 
 # noinspection DuplicatedCode
 def load(module_name) -> ModuleType:
@@ -79,6 +83,7 @@ def clean_py(project_folder):
         "tdlocal",
         "local_development_artifacts",
         "client/td-sdk/tabsdata/assets",
+        EXAMPLES_GUIDES_BOOK_PATH,
         os.path.join(
             "connectors",
             "python",

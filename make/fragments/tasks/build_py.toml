@@ -30,6 +30,16 @@ private = true
 [tasks.build_py_te_examples]
 category = "03 - Build"
 private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_PY_TE_EXAMPLES_FOLDER}/tabsdata/extensions/_examples/guides"
+
+    debug "🚀 mdbook build"
+    exec --fail-on-error mdbook build
+    ''']
 
 [tasks.build_py_te_tableframe]
 category = "03 - Build"

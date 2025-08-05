@@ -1,0 +1,6 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+recursive-include extensions/python/td-lib/te_examples/tabsdata/extensions/_examples/guides/book *
+recursive-include extensions/python/td-lib/te_examples/tabsdata/extensions/_examples/cases *

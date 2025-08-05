@@ -8,6 +8,7 @@ import logging
 import os
 import platform
 import shutil
+import warnings
 from pathlib import Path
 from sysconfig import get_platform
 from uuid import uuid4
@@ -26,9 +27,17 @@ logger.setLevel(logging.INFO)
 try:
     from setuptools.command.build_py import _IncludePackageDataAbuse
 
+    # noinspection PyProtectedMember
     _IncludePackageDataAbuse._Warning._DETAILS = ""
+
+    # noinspection PyProtectedMember
+    warnings.filterwarnings("ignore", category=_IncludePackageDataAbuse._Warning)
 except Exception:
     pass
+
+warnings.filterwarnings(
+    "ignore", message=".*is absent from the `packages` configuration.*"
+)
 
 
 # noinspection DuplicatedCode
@@ -639,10 +648,6 @@ setup(
                 "tests*",
                 "tabsdata.assets",
                 "tabsdata.assets*",
-                "tabsdata.examples",
-                "tabsdata.examples*",
-                "tabsdata._examples",
-                "tabsdata._examples*",
             ],
         ),
         # tabsdata.extensions._features.api
@@ -751,20 +756,24 @@ setup(
     package_data={
         "tabsdata": [
             os.path.join(
-                "_examples",
-                "*",
-            ),
-            os.path.join(
-                "_examples",
-                "input",
-                "*.csv",
-            ),
-            os.path.join(
                 "assets",
                 "manifest",
                 "*",
             ),
             *yaml_files,
+        ],
+        "tabsdata.extensions._examples": [
+            os.path.join(
+                "guides",
+                "book",
+                "**",
+                "*",
+            ),
+            os.path.join(
+                "cases",
+                "**",
+                "*",
+            ),
         ],
         "tabsdata.expansions.tableframe": [
             os.path.join(

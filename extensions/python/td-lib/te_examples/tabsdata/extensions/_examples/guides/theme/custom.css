@@ -1,0 +1,46 @@
+/*
+ * Copyright 2025 Tabs Data Inc.
+ */
+
+:root {
+    --content-max-width: 90%;
+}
+
+:root {
+  --tabs-orange: #FD9A00;
+  --tabs-gray:   #A6A09B;
+  --tabs-white:  #F5F5F4;
+  --tabs-black:  #201D1B;
+  --sidebar-width: 350px;
+  --content-max-width: 90%;
+}
+
+.menu-bar .left-buttons {
+    width: 220px;
+}
+
+.menu-bar .right-buttons {
+    text-align: right;
+    width: 200px;
+}
+
+.content h1,
+.content h1 a.header {
+    color: var(--tabs-orange) !important;
+}
+
+.content h2,
+.content h2 a.header {
+    color: var(--tabs-white) !important;
+}
+
+.content h3,
+.content h3 a.header {
+    color: var(--tabs-gray) !important;
+}
+
+.book .content p {
+    text-align: justify;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
