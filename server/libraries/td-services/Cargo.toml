@@ -66,7 +66,7 @@ te-execution = { workspace = true }
 
 # External dependencies
 
-argon2 = { workspace = true }
+argon2 = { workspace = true, features = [ "std" ] }
 async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }

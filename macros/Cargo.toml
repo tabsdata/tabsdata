@@ -107,13 +107,13 @@ version = "0.8.4"
 version = "0.4.41"
 
 [workspace.dependencies.darling]
-version = "0.20.11"
+version = "0.21.0"
 
 [workspace.dependencies.derive_builder]
 version = "0.20.2"
 
 [workspace.dependencies.duct]
-version = "0.13.7"
+version = "1.0.0"
 
 [workspace.dependencies.getset]
 version = "0.1.6"
@@ -169,10 +169,10 @@ version = "2.0.104"
 features = ["full"]
 
 [workspace.dependencies.tokio]
-version = "1.46.1"
+version = "1.47.0"
 
 [workspace.dependencies.toml]
-version = "0.8.23"
+version = "0.9.4"
 
 [workspace.dependencies.thiserror]
 version = "2.0.12"

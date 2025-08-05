@@ -50,7 +50,7 @@ td-error = { workspace = true }
 
 # External dependencies
 
-argon2 = { workspace = true }
+argon2 = { workspace = true, features = [ "std" ] }
 derive_builder = { workspace = true }
 getset = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

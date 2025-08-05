@@ -116,7 +116,7 @@ pub fn to_file_to_import_instructions(
             idx,
             from_url: base_url.join(o.location.as_ref()).unwrap(),
             timestamp: o.last_modified,
-            size: o.size as u64,
+            size: o.size,
             to_url: importer_options
                 .to()
                 .join(&(id::id().to_string() + ".parquet"))
@@ -632,7 +632,7 @@ mod tests {
         assert_eq!(instructions.idx, 0);
         assert_eq!(instructions.from_url, Url::parse(&a1b_file()).unwrap());
         assert_eq!(instructions.timestamp, file1.last_modified);
-        assert_eq!(instructions.size, file1.size as u64);
+        assert_eq!(instructions.size, file1.size);
 
         let to_url = instructions.to_url.to_string();
         assert!(to_url.starts_with("file:///"));

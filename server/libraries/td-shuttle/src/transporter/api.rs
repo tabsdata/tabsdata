@@ -629,7 +629,7 @@ impl ImportReport {
 pub struct FileCopyReport {
     pub idx: usize,
     pub from: Url,
-    pub size: usize,
+    pub size: u64,
     pub to: Url,
     pub started_at: DateTime<Utc>,
     pub ended_at: DateTime<Utc>,

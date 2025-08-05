@@ -36,9 +36,8 @@ fn set_rust_environment() {
         if cargo_toml_file.exists() {
             let cargo_toml_content =
                 fs::read_to_string(&cargo_toml_file).expect("Unable to read Cargo.toml file");
-            let cargo_toml: Value = cargo_toml_content
-                .parse::<Value>()
-                .expect("Unable to parse Cargo.toml file");
+            let cargo_toml: Value =
+                toml::from_str(&cargo_toml_content).expect("Unable to parse Cargo.toml file");
             let object_store_version = cargo_toml
                 .get(TAG_WORKSPACE)
                 .and_then(|workspace| workspace.get(TAG_DEPENDENCIES))

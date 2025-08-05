@@ -7,7 +7,7 @@ use std::ops::Range;
 use td_error::td_error;
 use tokio::sync::mpsc::error::SendError;
 
-pub fn range_to_string(range: &Range<usize>) -> String {
+pub fn range_to_string(range: &Range<u64>) -> String {
     format!("{}..{}", range.start, range.end)
 }
 

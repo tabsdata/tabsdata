@@ -92,7 +92,7 @@ impl TabsDataWorkerDescriberBuilder {
             return Err(MissingWorkerName);
         }
         if let Some(program) = &self.program {
-            if let Some(WorkerLocation::RELATIVE) = &self.location {
+            if let Some(WorkerLocation::Relative) = &self.location {
                 if program
                     .as_os_str()
                     .to_string_lossy()
@@ -183,7 +183,7 @@ impl TabsDataWorkerDescriberBuilder {
     }
 
     pub fn build(&mut self) -> Result<TabsDataWorkerDescriber, DescriberError> {
-        if let Some(WorkerLocation::RELATIVE) = &self.location {
+        if let Some(WorkerLocation::Relative) = &self.location {
             if let Ok(program) = get_program_path(self.get_program().as_ref().unwrap()) {
                 self.program(program);
             }
@@ -331,7 +331,7 @@ pub enum DescriberError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::supervisor::WorkerLocation::RELATIVE;
+    use crate::services::supervisor::WorkerLocation::Relative;
     use std::fs::create_dir_all;
     use std::path::PathBuf;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
@@ -349,7 +349,7 @@ mod tests {
         let describer = TabsDataWorkerDescriberBuilder::default()
             .class(REGULAR)
             .name(get_current_exe_name().unwrap())
-            .location(RELATIVE)
+            .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)
             .get_states(vec![])
@@ -368,7 +368,7 @@ mod tests {
         let describer = TabsDataWorkerDescriberBuilder::default()
             .class(REGULAR)
             .name(" ".to_string())
-            .location(RELATIVE)
+            .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)
             .get_states(vec![])
@@ -387,7 +387,7 @@ mod tests {
         let describer = TabsDataWorkerDescriberBuilder::default()
             .class(REGULAR)
             .name("non_existing_program".to_string())
-            .location(RELATIVE)
+            .location(Relative)
             .program(PathBuf::from("/non/existing/program"))
             .set_state(None)
             .get_states(vec![])
@@ -411,7 +411,7 @@ mod tests {
         let describer = TabsDataWorkerDescriberBuilder::default()
             .class(REGULAR)
             .name(get_current_exe_name().unwrap())
-            .location(RELATIVE)
+            .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)
             .get_states(vec![])

@@ -46,14 +46,14 @@ struct CopyTask {
     source_store: Box<dyn ObjectStore>,
     source_path: Path,
     target: Location<Url>,
-    size: usize,
-    ranges: Vec<(Range<usize>, bool)>,
+    size: u64,
+    ranges: Vec<(Range<u64>, bool)>,
     parallelism: usize,
 }
 
 #[derive(Debug)]
 pub struct Message {
-    range: Range<usize>,
+    range: Range<u64>,
     data: Bytes,
     last: bool,
 }
@@ -66,6 +66,7 @@ impl CopyTask {
         buffer_size: usize,
         parallelism: usize,
     ) -> Result<Self, TransporterError> {
+        let buffer_size_u64 = buffer_size as u64;
         let (source_store, source_path) = create_store(&source)?;
 
         let source_meta = source_store.head(&source_path).await.map_err(|err| {
@@ -78,16 +79,16 @@ impl CopyTask {
             // empty range for empty file
             vec![(0..0, true)]
         } else {
-            let full_ranges = size / buffer_size;
-            let remainder_size = size % buffer_size;
+            let full_ranges = size / buffer_size_u64;
+            let remainder_size = size % buffer_size_u64;
             let number_of_ranges = full_ranges + if remainder_size > 0 { 1 } else { 0 };
-            let mut ranges = Vec::with_capacity(number_of_ranges);
+            let mut ranges = Vec::with_capacity(number_of_ranges as usize);
             for i in 0..full_ranges {
-                ranges.push((i * buffer_size..(i + 1) * buffer_size, false));
+                ranges.push((i * buffer_size_u64..(i + 1) * buffer_size_u64, false));
             }
             if remainder_size > 0 {
                 ranges.push((
-                    full_ranges * buffer_size..full_ranges * buffer_size + remainder_size,
+                    full_ranges * buffer_size_u64..full_ranges * buffer_size_u64 + remainder_size,
                     false,
                 ));
             }
@@ -147,17 +148,29 @@ impl CopyTask {
                 self.source.url(),
                 range_to_string(range)
             );
-            let data = self
-                .source_store
-                .get_range(&self.source_path, range.clone())
-                .await
-                .map_err(|err| {
-                    TransporterError::CouldNotGetFileRange(
-                        self.source_path.to_string(),
-                        range_to_string(range),
-                        Box::new(err),
-                    )
-                })?;
+            eprintln!(
+                "Reading {} range {}",
+                self.source.url(),
+                range_to_string(range)
+            );
+            // Since this commit:
+            // https://github.com/apache/arrow-rs-object-store/commit/6c3de451a7931bff1c561632c31e3cb9f01faf8b
+            // (Fix LocalFileSystem with range request that ends beyond end of file)
+            // using 0 for start and end raises an error. We just send and empty Bytes in this case.
+            let data = if range.start == 0 && range.end == 0 {
+                Bytes::new()
+            } else {
+                self.source_store
+                    .get_range(&self.source_path, range.clone())
+                    .await
+                    .map_err(|err| {
+                        TransporterError::CouldNotGetFileRange(
+                            self.source_path.to_string(),
+                            range_to_string(range),
+                            Box::new(err),
+                        )
+                    })?
+            };
             sender
                 .send(Message {
                     range: range.clone(),
@@ -275,7 +288,7 @@ mod tests {
         assert_eq!(report.idx, 0);
         assert_eq!(report.from, source.url());
         assert_eq!(report.to, target.url());
-        assert_eq!(report.size, input.len());
+        assert_eq!(report.size, input.len() as u64);
         assert!(report.started_at > before);
         assert!(report.ended_at < after);
         assert!(report.ended_at > report.started_at);

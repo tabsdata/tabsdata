@@ -9,3 +9,4 @@ profiles:
     level: debug
     directives:
       - tower::buffer::worker=info
+      - opentelemetry_sdk=error

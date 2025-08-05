@@ -31,10 +31,11 @@ const END_TAG: &str = "<message><f>";
     Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, AsRefStr,
 )]
 #[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum StateDataKind {
-    BLOB,
+    Blob,
     #[default]
-    MAP,
+    Map,
 }
 
 #[derive(Debug, Clone)]
@@ -214,8 +215,8 @@ pub fn extract_state_data_from_string(
     let raw = content[start_index..end_index].trim();
 
     match kind {
-        StateDataKind::BLOB => Ok(StateDataValue::Blob(raw.to_string().into())),
-        StateDataKind::MAP => {
+        StateDataKind::Blob => Ok(StateDataValue::Blob(raw.to_string().into())),
+        StateDataKind::Map => {
             let yaml: Value = serde_yaml::from_str(raw).map_err(InvalidYaml)?;
             if let Value::Mapping(mapping) = yaml {
                 let mut map = HashMap::new();
@@ -289,7 +290,7 @@ mod tests {
         let content =
             "something before<message><i>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω<message><f>something after";
         let result =
-            extract_state_data_from_string(content.to_string(), StateDataKind::BLOB).unwrap();
+            extract_state_data_from_string(content.to_string(), StateDataKind::Blob).unwrap();
         match result {
             StateDataValue::Blob(s) => {
                 assert_eq!(s.decode().unwrap(), "δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω")
@@ -302,7 +303,7 @@ mod tests {
     fn test_map_success() {
         let content = "<message><i>\nkey1: value1\nkey2: value2\n<message><f>";
         let result =
-            extract_state_data_from_string(content.to_string(), StateDataKind::MAP).unwrap();
+            extract_state_data_from_string(content.to_string(), StateDataKind::Map).unwrap();
         match result {
             StateDataValue::Map(map) => {
                 let mapping = map.decode().unwrap();
@@ -317,7 +318,7 @@ mod tests {
     fn test_missing_start_tag() {
         let content = "<message><f>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω";
         let err =
-            extract_state_data_from_string(content.to_string(), StateDataKind::BLOB).unwrap_err();
+            extract_state_data_from_string(content.to_string(), StateDataKind::Blob).unwrap_err();
         let err = err.domain_err::<StateError>();
         assert!(
             matches!(err, MissingStartTag),
@@ -329,7 +330,7 @@ mod tests {
     fn test_missing_end_tag() {
         let content = "<message><i>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω";
         let err =
-            extract_state_data_from_string(content.to_string(), StateDataKind::BLOB).unwrap_err();
+            extract_state_data_from_string(content.to_string(), StateDataKind::Blob).unwrap_err();
         let err = err.domain_err::<StateError>();
         assert!(
             matches!(err, MissingEndTag),
@@ -341,7 +342,7 @@ mod tests {
     fn test_misplaced_tags() {
         let content = "<message><f>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω<message><i>";
         let err =
-            extract_state_data_from_string(content.to_string(), StateDataKind::BLOB).unwrap_err();
+            extract_state_data_from_string(content.to_string(), StateDataKind::Blob).unwrap_err();
         let err = err.domain_err::<StateError>();
         assert!(
             matches!(err, MisplacedEndTag),
@@ -353,7 +354,7 @@ mod tests {
     fn test_invalid_yaml_structure() {
         let content = "<message><i>- not: a map<message><f>";
         let err =
-            extract_state_data_from_string(content.to_string(), StateDataKind::MAP).unwrap_err();
+            extract_state_data_from_string(content.to_string(), StateDataKind::Map).unwrap_err();
         let err = err.domain_err::<StateError>();
         assert!(
             matches!(err, InvalidYamlStructure),
@@ -365,7 +366,7 @@ mod tests {
     fn test_invalid_yaml_entry_type() {
         let content = "<message><i>\n123:\n   abc: def <message><f>";
         let err =
-            extract_state_data_from_string(content.to_string(), StateDataKind::MAP).unwrap_err();
+            extract_state_data_from_string(content.to_string(), StateDataKind::Map).unwrap_err();
         let err = err.domain_err::<StateError>();
         assert!(
             matches!(err, InvalidYamlStructure),

@@ -15,7 +15,7 @@ use crate::services::bootloader::{
     BOOTLOADER, BOOTLOADER_ARGUMENT_INSTANCE, BOOTLOADER_ARGUMENT_PROFILE,
     BOOTLOADER_ARGUMENT_REPOSITORY, BOOTLOADER_ARGUMENT_WORKSPACE,
 };
-use crate::services::supervisor::WorkerLocation::RELATIVE;
+use crate::services::supervisor::WorkerLocation::Relative;
 use crate::services::supervisor::TD_ARGUMENT_KEY;
 use clap::{command, Parser};
 use clap_derive::{Args, Subcommand};
@@ -1110,12 +1110,12 @@ fn command_status(arguments: StatusArguments) {
 
             table
                 .with((theme.clone(), Alignment::left()))
-                .with(Modify::new(Columns::single(0)).with(Alignment::right()))
-                .with(Modify::new(Columns::single(1)).with(Alignment::right()))
-                .with(Modify::new(Columns::single(6)).with(Alignment::right()))
-                .with(Modify::new(Columns::single(7)).with(Alignment::right()))
-                .with(Modify::new(Columns::single(8)).with(Alignment::right()))
-                .with(Modify::new(Columns::single(9)).with(Alignment::right()));
+                .with(Modify::new(Columns::one(0)).with(Alignment::right()))
+                .with(Modify::new(Columns::one(1)).with(Alignment::right()))
+                .with(Modify::new(Columns::one(6)).with(Alignment::right()))
+                .with(Modify::new(Columns::one(7)).with(Alignment::right()))
+                .with(Modify::new(Columns::one(8)).with(Alignment::right()))
+                .with(Modify::new(Columns::one(9)).with(Alignment::right()));
 
             status.push_str(&format!(
                 "Workers and its sub-workers of instance '{}' - '{}':\n{}",
@@ -1147,7 +1147,7 @@ fn command_status(arguments: StatusArguments) {
             let mut table = Table::new(tabled_space);
             table
                 .with((theme.clone(), Alignment::left()))
-                .with(Modify::new(Columns::single(1)).with(Alignment::right()));
+                .with(Modify::new(Columns::one(1)).with(Alignment::right()));
 
             status.push_str(&format!("\nRelevant folders disk usage:\n{table}"));
         }
@@ -1468,7 +1468,7 @@ fn build_instance_describer(
     let describer = TabsDataWorkerDescriberBuilder::default()
         .class(REGULAR)
         .name(SUPERVISOR.to_string())
-        .location(RELATIVE)
+        .location(Relative)
         .program(PathBuf::from(SUPERVISOR))
         .set_state(None)
         .get_states(vec![])

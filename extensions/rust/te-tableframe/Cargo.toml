@@ -40,7 +40,6 @@ ignored = ["openssl", "td-common"]
 # Internal dependencies
 
 ta-tableframe = { workspace = true }
-td-common = { workspace = true }
 
 # External dependencies
 

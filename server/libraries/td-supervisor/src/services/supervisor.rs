@@ -115,14 +115,16 @@ enum ControllerState {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, EnumString, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum WorkerLocation {
     #[default]
-    RELATIVE,
-    SYSTEM,
+    Relative,
+    System,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, EnumString, AsRefStr)]
-#[strum(serialize_all = "snake_case")]
+#[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum WorkerKind {
     SUPERVISOR,
     #[default]

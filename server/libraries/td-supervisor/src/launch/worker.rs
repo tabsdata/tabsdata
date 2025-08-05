@@ -156,7 +156,7 @@ pub enum WorkerError {
 mod tests {
     use super::*;
     use crate::component::describer::TabsDataWorkerDescriberBuilder;
-    use crate::services::supervisor::WorkerLocation::RELATIVE;
+    use crate::services::supervisor::WorkerLocation::Relative;
     use std::fs::create_dir_all;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
     use td_common::server::WorkerClass::REGULAR;
@@ -173,7 +173,7 @@ mod tests {
         let describer = TabsDataWorkerDescriberBuilder::default()
             .class(REGULAR)
             .name(get_current_exe_name().unwrap())
-            .location(RELATIVE)
+            .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)
             .get_states(vec![])
@@ -204,7 +204,7 @@ mod tests {
         let describer = TabsDataWorkerDescriberBuilder::default()
             .class(REGULAR)
             .name(get_current_exe_name().unwrap())
-            .location(RELATIVE)
+            .location(Relative)
             .program(get_current_exe_path().expect("Error getting current running program"))
             .set_state(None)
             .get_states(vec![])

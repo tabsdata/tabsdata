@@ -8,7 +8,7 @@ use crate::manifest::Inf;
 use crate::manifest::WORKER_INF_FILE;
 use crate::settings::{LOG_WITH_ANSI, MANAGER, TRUE};
 use once_cell::sync::OnceCell;
-use opentelemetry_sdk::logs::LoggerProvider;
+use opentelemetry_sdk::logs::SdkLoggerProvider;
 use opentelemetry_stdout::LogExporter;
 use pico_args::Arguments;
 use serde::Deserialize;
@@ -21,6 +21,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::field::Field;
 use tracing::{debug, error, info, trace, warn, Event, Level, Subscriber};
+use tracing_subscriber::filter::Directive;
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
@@ -70,7 +71,7 @@ pub enum LogOutput {
 
 // Struct to hold the logger provider and ensure proper shutdown.
 struct LoggerGuard {
-    provider: LoggerProvider,
+    provider: SdkLoggerProvider,
 }
 
 // Destructor for the log provider.
@@ -108,6 +109,7 @@ where
 fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     max_level: Level,
     writer: W,
+    directives: Vec<String>,
     with_tokio_console: bool,
 ) -> LoggerGuard {
     let log_with_ansi = MANAGER.get(LOG_WITH_ANSI).as_deref() == Some(TRUE);
@@ -146,7 +148,18 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
                 None => EnvFilter::from_default_env().add_directive(max_level.into()),
             }
         }
-        None => EnvFilter::from_default_env().add_directive(max_level.into()),
+        None => {
+            let env_filter =
+                directives.iter().fold(
+                    EnvFilter::from_default_env().add_directive(Directive::from(max_level)),
+                    |filter, directive| {
+                        filter.add_directive(directive.parse().unwrap_or_else(|_| {
+                            panic!("Unable to parse log directive `{directive}`")
+                        }))
+                    },
+                );
+            env_filter
+        }
     };
 
     let (reload_filter, handle) = ReloadLayer::new(env_filter);
@@ -166,7 +179,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     registry.init();
 
     let exporter = LogExporter::default();
-    let provider = LoggerProvider::builder()
+    let provider = SdkLoggerProvider::builder()
         .with_simple_exporter(exporter)
         .build();
 
@@ -232,7 +245,7 @@ fn obtain_log_path(max_level: Level, output_type: LogOutput, with_tokio_console:
             }
         }
     };
-    LOGGER_PROVIDER.get_or_init(|| init(max_level, writer, with_tokio_console));
+    LOGGER_PROVIDER.get_or_init(|| init(max_level, writer, vec![], with_tokio_console));
 }
 
 fn obtain_log_location(path: PathBuf) -> Option<PathBuf> {
@@ -596,7 +609,7 @@ mod tests {
         static ref SHARED_LOGGER: Mutex<(Sender<String>, Receiver<String>, LoggerGuard)> = {
             let (sender, receiver) = channel();
             let writer = TestWriter { sender: sender.clone() };
-            let logger_provider = init(Level::DEBUG, writer, false);
+            let logger_provider = init(Level::DEBUG, writer, vec!["opentelemetry_sdk=error".to_string()], false);
             Mutex::new((sender, receiver, logger_provider))
         };
     }
