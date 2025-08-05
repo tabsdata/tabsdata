@@ -184,6 +184,17 @@ def enrich_sys_path():
                 "extensions",
                 "python",
                 "td-lib",
+                "te_examples",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
+                "extensions",
+                "python",
+                "td-lib",
                 "te_tableframe",
             )
         ),

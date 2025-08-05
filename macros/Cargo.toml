@@ -147,7 +147,7 @@ version = "1.0.219"
 features = ["derive"]
 
 [workspace.dependencies.serde_json]
-version = "1.0.141"
+version = "1.0.142"
 
 [workspace.dependencies.sqlx]
 version = "0.8.6"

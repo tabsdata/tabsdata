@@ -9,6 +9,7 @@ run_task = [
     { name = [
         "lock_py_ta_features",
         "lock_py_ta_tableframe",
+        "lock_py_te_examples",
         "lock_py_te_tableframe",
         "lock_py_tabsdata",
         "lock_py_tabsdata_databricks",
@@ -23,6 +24,10 @@ category = "02 - Tidy"
 private = true
 
 [tasks.lock_py_ta_tableframe]
+category = "02 - Tidy"
+private = true
+
+[tasks.lock_py_te_examples]
 category = "02 - Tidy"
 private = true
 

@@ -9,6 +9,7 @@ run_task = [
     { name = [
         "build_py_ta_features",
         "build_py_ta_tableframe",
+        "build_py_te_examples",
         "build_py_te_tableframe",
         "build_py_tabsdata",
         "build_py_tabsdata_databricks",
@@ -23,6 +24,10 @@ category = "03 - Build"
 private = true
 
 [tasks.build_py_ta_tableframe]
+category = "03 - Build"
+private = true
+
+[tasks.build_py_te_examples]
 category = "03 - Build"
 private = true
 

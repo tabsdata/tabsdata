@@ -50,5 +50,6 @@ known_first_party = [
     "tests_tabsdata_snowflake",
     "tests_ta_features",
     "tests_ta_tableframe",
+    "tests_te_examples",
     "tests_te_tableframe",
 ]

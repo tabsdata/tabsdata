@@ -663,6 +663,16 @@ setup(
             ),
             include=["tabsdata.extensions._tableframe.api*"],
         ),
+        # tabsdata.extensions._examples
+        *find_packages(
+            where=os.path.join(
+                "extensions",
+                "python",
+                "td-lib",
+                "te_examples",
+            ),
+            include=["tabsdata.extensions._examples*"],
+        ),
         # tabsdata.extensions._tableframe
         *find_packages(
             where=os.path.join(
@@ -708,6 +718,15 @@ setup(
             "extensions",
             "_tableframe",
             "api",
+        ),
+        "tabsdata.extensions._examples": os.path.join(
+            "extensions",
+            "python",
+            "td-lib",
+            "te_examples",
+            "tabsdata",
+            "extensions",
+            "_examples",
         ),
         "tabsdata.extensions._tableframe": os.path.join(
             "extensions",

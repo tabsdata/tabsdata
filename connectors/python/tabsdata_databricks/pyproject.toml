@@ -31,6 +31,7 @@ known_first_party = [
     "tabsdata_snowflake",
     "td_features",
     "ta_tableframe",
+    "te_examples",
     "te_tableframe",
     "td_sdk",
     "tests",
