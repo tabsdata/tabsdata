@@ -110,7 +110,7 @@ pub fn provider(attr: TokenStream, item: TokenStream) -> TokenStream {
         None => (None, None, vec![]),
         Some(prov) => (
             Some(quote! { db: td_database::sql::DbPool, }),
-            Some(quote! { db, }),
+            Some(quote! { db.clone(), }),
             vec![quote! { #prov::new(db), }],
         ),
     };
@@ -119,9 +119,9 @@ pub fn provider(attr: TokenStream, item: TokenStream) -> TokenStream {
         .iter()
         .map(|ty| {
             (
-                quote! { #ty: std::sync::Arc<#ty>, },
-                quote! { #ty, },
-                quote! { td_tower::default_services::SrvCtxProvider::new(#ty), },
+                quote! { #ty: std::sync::Arc<#ty> },
+                quote! { #ty },
+                quote! { td_tower::default_services::SrvCtxProvider::new(#ty) },
             )
         })
         .collect();
@@ -159,14 +159,36 @@ pub fn provider(attr: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(quote! {
         pub struct #name {
             provider: td_tower::service_provider::ServiceProvider<#req_ty, #res_ty, td_error::TdError>,
+            #[cfg(feature = "test_tower_metadata")]
+            metadata: td_tower::service_provider::ServiceProvider<(), td_tower::metadata::MetadataMutex, td_error::TdError>,
         }
 
         #[allow(non_snake_case)]
         impl #name {
-            pub fn new(#db_input #(#ctx_input)*) -> Self {
+            pub fn new(#db_input #(#ctx_input),*) -> Self {
                 Self {
-                    provider: Self::#func_name(#db_arg #(#ctx_arg)*),
+                    provider: Self::#func_name(#db_arg #(#ctx_arg.clone()),*),
+                    #[cfg(feature = "test_tower_metadata")]
+                    metadata: Self::#func_name(#db_arg #(#ctx_arg.clone()),*),
                 }
+            }
+
+            #[cfg(test)]
+            pub async fn with_defaults(#db_input) -> Self {
+                use crate::service_default::ServiceDefault;
+                Self {
+                    provider: Self::#func_name(#db_arg #(#ctx_arg::service_default().await),*),
+                    #[cfg(feature = "test_tower_metadata")]
+                    metadata: Self::#func_name(#db_arg #(#ctx_arg::service_default().await),*),
+                }
+            }
+
+            #[cfg(feature = "test_tower_metadata")]
+            pub async fn metadata(&self) -> td_tower::metadata::Metadata {
+                use td_tower::ctx_service::RawOneshot;
+                let service = self.metadata.make().await;
+                let metadata_mutex = service.raw_oneshot(()).await.unwrap();
+                metadata_mutex.get()
             }
 
             pub async fn service(

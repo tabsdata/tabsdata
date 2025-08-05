@@ -45,8 +45,8 @@ impl Hash for MetadataType {
 /// in this struct. This is the only way of getting specific information from the service after
 /// it has been converted to a ServiceBox (which makes the inner types opaque).
 ///
-/// Tests using this should be marked with the `test_tower_metadata` feature (and tests names should
-/// also start with test_tower_metadata).
+/// IMPORTANT: Tests using this should be marked with the `test_tower_metadata` feature, and
+/// tests names should also start with test_tower_metadata.
 ///
 /// Example:
 /// ```
@@ -54,7 +54,7 @@ impl Hash for MetadataType {
 /// {
 ///     use tower::{ServiceBuilder, ServiceExt};
 ///     use tabsdatalib::common::tower_service::default_services::{ServiceEntry, ServiceReturn};
-///     use tabsdatalib::common::tower_service::extractors::{type_of_val, FromHandlerError, Metadata};
+///     use tabsdatalib::common::tower_service::extractors::{type_of_val, FromHandlerError, MetadataMutex};
 ///     use tabsdatalib::common::tower_service::from_fn::from_fn;
 ///
 ///     async fn test_layer_fn() -> Result<(), FromHandlerError> {
@@ -66,14 +66,14 @@ impl Hash for MetadataType {
 ///         .layer(from_fn(test_layer_fn))
 ///         .service(ServiceReturn);
 ///
-///     let response: Metadata = service.raw_oneshot(()).await.unwrap();
+///     let response: MetadataMutex = service.raw_oneshot(()).await.unwrap();
 ///     let metadata = response.get();
 ///
 ///     assert_eq!(metadata.fn_names(), &vec![type_of_val(&test_layer_fn)]);
 /// }
 /// ```
 #[derive(Debug)]
-pub struct MetadataFields {
+pub struct Metadata {
     /// Function names that have been called.
     fn_types: Vec<String>,
     /// Created types by the service.
@@ -88,7 +88,7 @@ pub struct MetadataFields {
     unused_types: HashSet<MetadataType>,
 }
 
-impl MetadataFields {
+impl Metadata {
     fn with_initial_types(created: &[String]) -> Self {
         let created_types = created
             .iter()
@@ -174,27 +174,27 @@ impl MetadataFields {
 }
 
 #[derive(Debug)]
-pub struct Metadata(Mutex<MetadataFields>);
+pub struct MetadataMutex(Mutex<Metadata>);
 
-impl Default for Metadata {
+impl Default for MetadataMutex {
     fn default() -> Self {
-        Metadata::with_initial_types(&[])
+        MetadataMutex::with_initial_types(&[])
     }
 }
 
-impl Metadata {
+impl MetadataMutex {
     pub fn with_initial_types(created: &[String]) -> Self {
-        Metadata(Mutex::new(MetadataFields::with_initial_types(created)))
+        MetadataMutex(Mutex::new(Metadata::with_initial_types(created)))
     }
 
     // This is different from the other FromHandler implementations because it's not sync, as we
     // do not allow random fns to get it. It's only used for testing.
-    pub async fn from_handler(handler: &Handler) -> Result<Input<Metadata>, FromHandlerError> {
-        Input::<Metadata>::from_handler(handler).await
+    pub async fn from_handler(handler: &Handler) -> Result<Input<MetadataMutex>, FromHandlerError> {
+        Input::<MetadataMutex>::from_handler(handler).await
     }
 
     /// Consumes the `Metadata` instance and returns the inner `MetadataFields`.
-    pub fn get(self) -> MetadataFields {
+    pub fn get(self) -> Metadata {
         self.0.into_inner()
     }
 
@@ -266,11 +266,11 @@ pub fn type_of<T>() -> String {
 #[cfg(test)]
 mod tests {
     use crate::extractors::Input;
-    use crate::metadata::{type_of, type_of_val, Metadata};
+    use crate::metadata::{type_of, type_of_val, MetadataMutex};
 
     #[tokio::test]
     async fn test_tower_metadata_add_fn_name() {
-        let metadata = Metadata::default();
+        let metadata = MetadataMutex::default();
         metadata.add_fn_name("test_fn".to_string()).await;
         let fields = metadata.get();
         assert_eq!(&fields.fn_types, &vec!["test_fn".to_string()]);
@@ -281,7 +281,7 @@ mod tests {
         struct InputType;
         struct OutputType;
 
-        let metadata = Metadata::default();
+        let metadata = MetadataMutex::default();
         metadata.add_fn_name("test_fn".to_string()).await;
         metadata
             .created_type("fn1", type_of::<Input<OutputType>>())
