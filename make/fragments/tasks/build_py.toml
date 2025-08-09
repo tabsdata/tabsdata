@@ -12,10 +12,7 @@ run_task = [
         "build_py_te_examples",
         "build_py_te_tableframe",
         "build_py_tabsdata",
-        "build_py_tabsdata_databricks",
-        "build_py_tabsdata_mongodb",
-        "build_py_tabsdata_salesforce",
-        "build_py_tabsdata_snowflake",
+        "build_py_connectors",
     ] }
 ]
 
@@ -49,18 +46,19 @@ private = true
 category = "03 - Build"
 private = true
 
-[tasks.build_py_tabsdata_databricks]
+[tasks.build_py_connectors]
 category = "03 - Build"
 private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
 
-[tasks.build_py_tabsdata_mongodb]
-category = "03 - Build"
-private = true
+    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
 
-[tasks.build_py_tabsdata_salesforce]
-category = "03 - Build"
-private = true
-
-[tasks.build_py_tabsdata_snowflake]
-category = "03 - Build"
-private = true
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+        end
+    end
+    ''']

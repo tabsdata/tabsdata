@@ -53,5 +53,11 @@ script = [
 [tasks.clean_rs_all]
 category = "01 - Clean"
 private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_TABSDATA_ROOT_FOLDER}", "rs"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_PY} ${connector} py"
+    exec --fail-on-error python ${CLEAN_PY} ${PROJECT_TABSDATA_ROOT_FOLDER} rs
+    ''']

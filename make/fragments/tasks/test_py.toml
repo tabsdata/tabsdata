@@ -15,10 +15,7 @@ run_task = [
         "test_py_te_examples",
         "test_py_te_tableframe",
         "test_py_tabsdata",
-        "test_py_tabsdata_databricks",
-        "test_py_tabsdata_mongodb",
-        "test_py_tabsdata_salesforce",
-        "test_py_tabsdata_snowflake",
+        "test_py_connectors",
         "post-test_py",
         "cleanup-test_py",
     ] }
@@ -250,7 +247,7 @@ script = [
     end
     ''']
 
-[tasks.test_py_tabsdata_databricks]
+[tasks.test_py_connectors]
 category = "05 - Test"
 private = true
 dependencies = ["set_mode_test_py"]
@@ -262,154 +259,42 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd ${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}
+    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
 
-    td_temp = temp_dir
-    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            cd ${connector}
 
-    if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_DATABRICKS_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_DATABRICKS_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
-    else
-        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_DATABRICKS_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_DATABRICKS_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
-    end
-    is_zero = eq ${exit_code} "0"
-    is_five = eq ${exit_code} "5"
-    if ${is_zero} or ${is_five}
-        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
-    else
-        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
-        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
-        if not ${TD_FAIL_FAST_PY}
-            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
-            set_env TD_TESTS_CODE_PY ${exit_code}
-        else
-            info "⌛️ Failing fast..."
-            code = exit ${exit_code}
-        end
-    end
-    ''']
+            td_temp = temp_dir
+            set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
-[tasks.test_py_tabsdata_mongodb]
-category = "05 - Test"
-private = true
-dependencies = ["set_mode_test_py"]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
+            connector_name = basename ${connector}
+            tests_folder_name = set tests_${connector_name}
+            tests_folder_path = join_path ${connector} ${tests_folder_name}
 
-    verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
-
-    cd ${PROJECT_PY_TABSDATA_MONGODB_FOLDER}
-
-    td_temp = temp_dir
-    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
-
-    if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
-    else
-        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_MONGODB_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
-    end
-    is_zero = eq ${exit_code} "0"
-    is_five = eq ${exit_code} "5"
-    if ${is_zero} or ${is_five}
-        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
-    else
-        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
-        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
-        if not ${TD_FAIL_FAST_PY}
-            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
-            set_env TD_TESTS_CODE_PY ${exit_code}
-        else
-            info "⌛️ Failing fast..."
-            code = exit ${exit_code}
-        end
-    end
-    ''']
-
-[tasks.test_py_tabsdata_salesforce]
-category = "05 - Test"
-private = true
-dependencies = ["set_mode_test_py"]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
-
-    cd ${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}
-
-    td_temp = temp_dir
-    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
-
-    if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
-    else
-        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SALESFORCE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
-    end
-    is_zero = eq ${exit_code} "0"
-    is_five = eq ${exit_code} "5"
-    if ${is_zero} or ${is_five}
-        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
-    else
-        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
-        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
-        if not ${TD_FAIL_FAST_PY}
-            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
-            set_env TD_TESTS_CODE_PY ${exit_code}
-        else
-            info "⌛️ Failing fast..."
-            code = exit ${exit_code}
-        end
-    end
-    ''']
-
-[tasks.test_py_tabsdata_snowflake]
-category = "05 - Test"
-private = true
-dependencies = ["set_mode_test_py"]
-script_runner = "@duckscript"
-script = [
-    '''
-    !include_files ./make/libraries/log.ds
-
-    verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
-
-    cd ${PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER}
-
-    td_temp = temp_dir
-    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
-
-    if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
-    else
-        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_SNOWFLAKE_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
-    end
-    is_zero = eq ${exit_code} "0"
-    is_five = eq ${exit_code} "5"
-    if ${is_zero} or ${is_five}
-        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
-    else
-        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
-        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
-        if not ${TD_FAIL_FAST_PY}
-            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
-            set_env TD_TESTS_CODE_PY ${exit_code}
-        else
-            info "⌛️ Failing fast..."
-            code = exit ${exit_code}
+            if eq ${verbose} "false"
+                debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${tests_folder_path} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+                exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${tests_folder_path} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+            else
+                debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${tests_folder_path} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+                exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${tests_folder_path} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+            end
+            is_zero = eq ${exit_code} "0"
+            is_five = eq ${exit_code} "5"
+            if ${is_zero} or ${is_five}
+                info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+            else
+                info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+                TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+                if not ${TD_FAIL_FAST_PY}
+                    info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+                    set_env TD_TESTS_CODE_PY ${exit_code}
+                else
+                    info "⌛️ Failing fast..."
+                    code = exit ${exit_code}
+                end
+            end
         end
     end
     ''']
@@ -483,8 +368,15 @@ script = [
 [tasks.copy_assets]
 category = "05 - Test"
 private = true
-command = "python"
-args = ["${COPY_ASSETS_PY}"]
+dependencies = ["set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${COPY_ASSETS_PY}"
+    exec --fail-on-error python ${COPY_ASSETS_PY}
+    ''']
 
 [tasks.setup_pytest_tabsdata]
 category = "05 - Test"
@@ -509,69 +401,29 @@ script = [
     rm target/pytest/build/wheel
     rm target/pytest/build/wheel.exe
 
-    debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata_databricks)..."
-    cd connectors/python/tabsdata_databricks
-    debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
-    set_env PYTHONWARNINGS ignore
-    exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build
+    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
 
-    # Prevent make from using the local system scripts generated by setup.py
-    rm target/pytest/build/pip
-    rm target/pytest/build/pip.exe
-    rm target/pytest/build/pip3
-    rm target/pytest/build/pip3.exe
-    rm target/pytest/build/wheel
-    rm target/pytest/build/wheel.exe
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            connector_name = basename ${connector}
+            debug "🔷 🔷 _____ Setting up tabsdata pytest context (${connector_name})..."
+            cd ${connector}
+            debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
+            set_env PYTHONWARNINGS ignore
+            exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build
 
-    cd ../../..
+            # Prevent make from using the local system scripts generated by setup.py
+            rm target/pytest/build/pip
+            rm target/pytest/build/pip.exe
+            rm target/pytest/build/pip3
+            rm target/pytest/build/pip3.exe
+            rm target/pytest/build/wheel
+            rm target/pytest/build/wheel.exe
 
-    debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata_mongodb)..."
-    cd connectors/python/tabsdata_mongodb
-    debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
-    set_env PYTHONWARNINGS ignore
-    exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build
-
-    # Prevent make from using the local system scripts generated by setup.py
-    rm target/pytest/build/pip
-    rm target/pytest/build/pip.exe
-    rm target/pytest/build/pip3
-    rm target/pytest/build/pip3.exe
-    rm target/pytest/build/wheel
-    rm target/pytest/build/wheel.exe
-
-    cd ../../..
-
-    debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata_salesforce)..."
-    cd connectors/python/tabsdata_salesforce
-    debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
-    set_env PYTHONWARNINGS ignore
-    exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build
-
-    # Prevent make from using the local system scripts generated by setup.py
-    rm target/pytest/build/pip
-    rm target/pytest/build/pip.exe
-    rm target/pytest/build/pip3
-    rm target/pytest/build/pip3.exe
-    rm target/pytest/build/wheel
-    rm target/pytest/build/wheel.exe
-
-    cd ../../..
-
-    debug "🔷 🔷 _____ Setting up tabsdata pytest context (tabsdata_snowflake)..."
-    cd connectors/python/tabsdata_snowflake
-    debug "🚀 python setup.py --quiet develop --script-dir target/pytest/build"
-    set_env PYTHONWARNINGS ignore
-    exec --fail-on-error python setup.py --quiet develop --script-dir target/pytest/build
-
-    # Prevent make from using the local system scripts generated by setup.py
-    rm target/pytest/build/pip
-    rm target/pytest/build/pip.exe
-    rm target/pytest/build/pip3
-    rm target/pytest/build/pip3.exe
-    rm target/pytest/build/wheel
-    rm target/pytest/build/wheel.exe
-
-    cd ../../..
+            cd ../../..
+        end
+    end
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
     debug "🚀 python ${PROJECT_PY_TD_SDK_FOLDER}/tests_tabsdata/bootest.py"
@@ -599,25 +451,20 @@ script = [
     set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
     debug "🔅 tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
 
-    debug "🔷 _____ Setting up tabsdata_databricks development package mode..."
-    set_env TD_TABSDATA_DATABRICKS_DEV_PKG ${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}
-    set_td_tabsdata_databricks_dev_pkg = get_env TD_TABSDATA_DATABRICKS_DEV_PKG
-    debug "🔅 tabsdata_databricks development python package location set to: ${set_td_tabsdata_databricks_dev_pkg}"
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            connector_name = basename ${connector}
 
-    debug "🔷 _____ Setting up tabsdata_mongodb development package mode..."
-    set_env TD_TABSDATA_MONGODB_DEV_PKG ${PROJECT_PY_TABSDATA_MONGODB_FOLDER}
-    set_td_tabsdata_mongodb_dev_pkg = get_env TD_TABSDATA_MONGODB_DEV_PKG
-    debug "🔅 tabsdata_mongodb development python package location set to: ${set_td_tabsdata_mongodb_dev_pkg}"
+            connector_name_upper = uppercase ${connector_name}
+            connector_name_env = set TD_${connector_name_upper}_DEV_PKG
 
-    debug "🔷 _____ Setting up tabsdata_salesforce development package mode..."
-    set_env TD_TABSDATA_SALESFORCE_DEV_PKG ${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}
-    set_td_tabsdata_salesforce_dev_pkg = get_env TD_TABSDATA_SALESFORCE_DEV_PKG
-    debug "🔅 tabsdata_salesforce development python package location set to: ${set_td_tabsdata_salesforce_dev_pkg}"
-
-    debug "🔷 _____ Setting up tabsdata_snowflake development package mode..."
-    set_env TD_TABSDATA_SNOWFLAKE_DEV_PKG ${PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER}
-    set_td_tabsdata_snowflake_dev_pkg = get_env TD_TABSDATA_SNOWFLAKE_DEV_PKG
-    debug "🔅 tabsdata_snowflake development python package location set to: ${set_td_tabsdata_snowflake_dev_pkg}"
+            debug "🔷 _____ Setting up ${connector} development package mode..."
+            set_env ${connector_name_env} ${connector}
+            set_td_connector_dev_pkg_env = get_env ${connector_name_env}
+            debug "🔅 ${connector} development python package location set to: ${set_td_connector_dev_pkg_env}"
+        end
+    end
     ''']
 
 [tasks.start_pytest_tabsdata]

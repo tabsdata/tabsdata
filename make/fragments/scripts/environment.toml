@@ -72,10 +72,6 @@ env_scripts = [
 
     root_folder = get_env ROOT_PROJECT_TABSDATA_FOLDER
     root_tabsdata_folder = set ${root_folder}
-    root_tabsdata_databricks_folder = set ${root_folder}/connectors/python/tabsdata_databricks
-    root_tabsdata_mongodb_folder = set ${root_folder}/connectors/python/tabsdata_mongodb
-    root_tabsdata_salesforce_folder = set ${root_folder}/connectors/python/tabsdata_salesforce
-    root_tabsdata_snowflake_folder = set ${root_folder}/connectors/python/tabsdata_snowflake
 
     if not is_empty ${td-target}
         set_env td-target ${td-target}
@@ -145,11 +141,17 @@ env_scripts = [
     debug "✅ RUSTFLAGS environment variable is: '${rustflags}'"
 
     old_path = get_env PATH
-    new_path = concat ${root_tabsdata_databricks_folder}/target/${build-folder} ${separator} ${root_tabsdata_databricks_folder}/target/pytest/build ${separator} ${old_path}
-    new_path = concat ${root_tabsdata_mongodb_folder}/target/${build-folder} ${separator} ${root_tabsdata_mongodb_folder}/target/pytest/build ${separator} ${old_path}
-    new_path = concat ${root_tabsdata_salesforce_folder}/target/${build-folder} ${separator} ${root_tabsdata_salesforce_folder}/target/pytest/build ${separator} ${old_path}
-    new_path = concat ${root_tabsdata_snowflake_folder}/target/${build-folder} ${separator} ${root_tabsdata_snowflake_folder}/target/pytest/build ${separator} ${old_path}
-    new_path = concat ${root_tabsdata_folder}/target/${build-folder} ${separator} ${root_tabsdata_folder}/target/pytest/build ${separator} ${old_path}
+    new_path = set ${old_path}
+    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            new_path_item = concat ${connector}/target/${build-folder} ${separator} ${connector}/target/pytest/build
+            new_path = concat ${new_path_item} ${separator} ${new_path}
+        end
+    end
+    new_path_item = concat ${root_tabsdata_folder}/target/${build-folder} ${separator} ${root_tabsdata_folder}/target/pytest/build
+    new_path = concat ${new_path_item} ${separator} ${new_path}
     set_env PATH ${new_path}
     set_path = get_env PATH
     debug "✅ System PATH: ${set_path}"
@@ -163,8 +165,8 @@ env_scripts = [
     end
     PROJECT_RS_TABSDATA_CARGO_TOML = get_env PROJECT_RS_TABSDATA_CARGO_TOML
     PROJECT_RS_TD_MACROS_CARGO_TOML = get_env PROJECT_RS_TD_MACROS_CARGO_TOML
-    debug "✅ Materialized PROJECT_RS_TABSDATA_CARGO_TOML: '${PROJECT_RS_TABSDATA_CARGO_TOML}'"
-    debug "✅ Materialized PROJECT_RS_TD_MACROS_CARGO_TOML: '${PROJECT_RS_TD_MACROS_CARGO_TOML}'"
+    debug "✅ Materialized PROJECT_RS_TABSDATA_CARGO_TOML: ${PROJECT_RS_TABSDATA_CARGO_TOML}"
+    debug "✅ Materialized PROJECT_RS_TD_MACROS_CARGO_TOML: ${PROJECT_RS_TD_MACROS_CARGO_TOML}"
 
     if not is_empty ${macros-features}
         macros-test-features = concat "dummy" "," ${macros-features}

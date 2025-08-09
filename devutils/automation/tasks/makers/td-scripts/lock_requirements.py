@@ -4,13 +4,31 @@
 
 import argparse
 import importlib.util
+import io
 import os
+import shutil
 from datetime import datetime
+from os import getcwd
 from pathlib import Path
 from types import ModuleType
 
 # noinspection PyPackageRequirements
 from tomlkit import array, dumps, parse, table
+
+
+def read(*paths, **kwargs):
+    with io.open(
+        os.path.join(
+            getcwd(),
+            *paths,
+        ),
+        encoding=kwargs.get("encoding", "utf8"),
+    ) as open_file:
+        content = open_file.read().strip()
+    return content
+
+
+TABSDATA_VERSION = read(os.path.join("assets", "manifest", "VERSION"))
 
 
 # noinspection DuplicatedCode
@@ -49,11 +67,12 @@ def gather_connectors(root: str) -> list[tuple[str, str]]:
                     len(connector_name_parts) != 2
                     or connector_name_parts[0] != "tabsdata"
                 ):
-                    raise ValueError(f"⛔️ Invalid connector folder name: {entry.name}")
-                connectors.append((connectors_root, entry.name))
-                logger.info(
-                    f"📦️ Inserting connector {entry.name} from {connectors_root}"
-                )
+                    logger.debug(f"⛔️ Invalid connector folder name: {entry.name}")
+                else:
+                    connectors.append((connectors_root, entry.name))
+                    logger.debug(
+                        f"📦️ Inserting connector {entry.name} from {connectors_root}"
+                    )
     return sorted(connectors)
 
 
@@ -75,14 +94,14 @@ def gather_polars_modules(root: str) -> list[tuple[str, str]]:
                         f"⛔️ Invalid polars module folder name: {entry.name}"
                     )
                 polars_modules.append((polars_modules_root, entry.name))
-                logger.info(
+                logger.debug(
                     f"📦️ Inserting polars module {entry.name} from"
                     f" {polars_modules_root}"
                 )
     return sorted(polars_modules)
 
 
-def lock_dev_requirements(root: str, connectors: list[tuple[str, str]], year: int):
+def lock_requirements_dev(root: str, connectors: list[tuple[str, str]], year: int):
     dev_lines = [
         "#\n",
         f"# Copyright {year} Tabs Data Inc.\n",
@@ -123,7 +142,7 @@ def lock_dev_requirements(root: str, connectors: list[tuple[str, str]], year: in
     logger.info("🔐️ File requirements-dev.txt locked!")
 
 
-def lock_test_requirements(root: str, connectors: list[tuple[str, str]], year: int):
+def lock_requirements_test(root: str, connectors: list[tuple[str, str]], year: int):
     test_lines = [
         "#\n",
         f"# Copyright {year} Tabs Data Inc.\n",
@@ -157,6 +176,72 @@ def lock_test_requirements(root: str, connectors: list[tuple[str, str]], year: i
         f.write("".join(test_lines))
 
     logger.info("🔐️ File requirements-test.txt locked!")
+
+
+def lock_requirements_dev_first_party(
+    root: str, connectors: list[tuple[str, str]], year: int
+):
+    dev_lines = [
+        "#\n",
+        f"# Copyright {year} Tabs Data Inc.\n",
+        "#\n",
+        "\n",
+    ]
+
+    for c_r, c_n in sorted(connectors):
+        dev_lines.append(f"{c_n}[deps]=={TABSDATA_VERSION}\n")
+
+    with open(
+        os.path.join(root, "requirements", "requirements-dev-first-party.txt"), "w"
+    ) as f:
+        f.write("".join(dev_lines))
+
+    logger.info("🔐️ File requirements/requirements-dev-first-party.txt locked!")
+
+
+def lock_requirements_first_party(
+    root: str, connectors: list[tuple[str, str]], year: int
+):
+    dev_lines = [
+        "#\n",
+        f"# Copyright {year} Tabs Data Inc.\n",
+        "#\n",
+        "\n",
+    ]
+
+    for c_r, c_n in sorted(connectors):
+        dev_lines.append(f"{c_n}=={TABSDATA_VERSION}\n")
+
+    with open(
+        os.path.join(root, "requirements", "requirements-first-party.txt"), "w"
+    ) as f:
+        f.write("".join(dev_lines))
+
+    logger.info("🔐️ File requirements/requirements-first-party.txt locked!")
+
+
+def lock_requirements_third_party_all(
+    root: str, connectors: list[tuple[str, str]], year: int
+):
+    test_lines = [
+        "#\n",
+        f"# Copyright {year} Tabs Data Inc.\n",
+        "#\n",
+        "\n",
+        "-r requirements-third-party.txt\n",
+    ]
+
+    for c_r, c_n in sorted(connectors):
+        test_lines.append(
+            f"-r ../connectors/python/{c_n}/requirements/requirements-third-party.txt\n"
+        )
+
+    with open(
+        os.path.join(root, "requirements", "requirements-third-party-all.txt"), "w"
+    ) as f:
+        f.write("".join(test_lines))
+
+    logger.info("🔐️ File requirements/requirements-third-party-all.txt locked!")
 
 
 def lock_pyprojects(
@@ -220,15 +305,33 @@ def lock_pyprojects(
         lock_pyproject(polars_module_folder, connector_names)
 
 
+def lock_pytest_ini(root: str) -> None:
+    tabsdata_pytest_ini_file = os.path.join(root, "client", "td-sdk", "pytest.ini")
+    tabsdata_pytest_ini_path = Path(tabsdata_pytest_ini_file).resolve()
+    if not tabsdata_pytest_ini_path.is_file():
+        raise FileNotFoundError(
+            f"Base tabsdata pytest.ini not found: {tabsdata_pytest_ini_path}"
+        )
+    pytest_ini_name = tabsdata_pytest_ini_path.name
+    for path in Path(root).rglob(pytest_ini_name):
+        if path.is_file() and path.resolve() != tabsdata_pytest_ini_path:
+            logger.info(f"🔏 Locking pytest.ini file: {path}")
+            shutil.copy2(tabsdata_pytest_ini_path, path)
+
+
 def lock(root: str):
     year = datetime.now().year
     connectors = gather_connectors(root)
     polars_modules = gather_polars_modules(root)
-    lock_test_requirements(root, connectors, year)
-    lock_dev_requirements(root, connectors, year)
+    lock_requirements_dev(root, connectors, year)
+    lock_requirements_test(root, connectors, year)
+    lock_requirements_dev_first_party(root, connectors, year)
+    lock_requirements_first_party(root, connectors, year)
+    lock_requirements_third_party_all(root, connectors, year)
     lock_pyprojects(Path(root), connectors, polars_modules)
+    lock_pytest_ini(root)
 
-    print("🔑 Python connectors, dependencies and requirements locked!")
+    logger.info("🔑 Python connectors, dependencies and requirements locked!")
 
 
 def main():

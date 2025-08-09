@@ -12,10 +12,7 @@ run_task = [
         "clean_py_te_examples",
         "clean_py_te_tableframe",
         "clean_py_tabsdata",
-        "clean_py_tabsdata_databricks",
-        "clean_py_tabsdata_mongodb",
-        "clean_py_tabsdata_salesforce",
-        "clean_py_tabsdata_snowflake",
+        "clean_py_connectors",
         "clean_py_all",
     ] }
 ]
@@ -23,59 +20,92 @@ run_task = [
 [tasks.clean_py_all]
 category = "01 - Clean"
 private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_TABSDATA_ROOT_FOLDER}", "py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_PY} ${PROJECT_TABSDATA_ROOT_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_PY} ${PROJECT_TABSDATA_ROOT_FOLDER} py
+    ''']
+
 
 [tasks.clean_py_ta_features]
 category = "01 - Clean"
 private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_PY_TA_FEATURES_FOLDER}", "py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_PY} ${PROJECT_PY_TA_FEATURES_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_PY} ${PROJECT_PY_TA_FEATURES_FOLDER} py
+    ''']
 
 [tasks.clean_py_ta_tableframe]
 category = "01 - Clean"
 private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_PY_TA_TABLEFRAME_FOLDER}", "py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_PY} ${PROJECT_PY_TA_TABLEFRAME_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_PY} ${PROJECT_PY_TA_TABLEFRAME_FOLDER} py
+    ''']
+
 
 [tasks.clean_py_te_examples]
 category = "01 - Clean"
 private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_PY_TE_EXAMPLES_FOLDER}", "py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_PY} ${PROJECT_PY_TE_EXAMPLES_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_PY} ${PROJECT_PY_TE_EXAMPLES_FOLDER} py
+    ''']
 
 [tasks.clean_py_te_tableframe]
 category = "01 - Clean"
 private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_PY_TE_TABLEFRAME_FOLDER}", "py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_PY} ${PROJECT_PY_TE_TABLEFRAME_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_PY} ${PROJECT_PY_TE_TABLEFRAME_FOLDER} py
+    ''']
 
 [tasks.clean_py_tabsdata]
 category = "01 - Clean"
 private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_PY_TD_SDK_FOLDER}", "py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
 
-[tasks.clean_py_tabsdata_databricks]
+    debug "🚀 python ${CLEAN_PY} ${PROJECT_PY_TD_SDK_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_PY} ${PROJECT_PY_TD_SDK_FOLDER} py
+    ''']
+
+[tasks.clean_py_connectors]
 category = "01 - Clean"
 private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_PY_TABSDATA_DATABRICKS_FOLDER}", "py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
 
-[tasks.clean_py_tabsdata_mongodb]
-category = "01 - Clean"
-private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_PY_TABSDATA_MONGODB_FOLDER}", "py"]
+    connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
 
-[tasks.clean_py_tabsdata_salesforce]
-category = "01 - Clean"
-private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_PY_TABSDATA_SALESFORCE_FOLDER}", "py"]
-
-[tasks.clean_py_tabsdata_snowflake]
-category = "01 - Clean"
-private = true
-command = "python"
-args = ["${CLEAN_PY}", "${PROJECT_PY_TABSDATA_SNOWFLAKE_FOLDER}", "py"]
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            debug "🚀 python ${CLEAN_PY} ${connector} py"
+            exec --fail-on-error python ${CLEAN_PY} ${connector} py
+        end
+    end
+    ''']

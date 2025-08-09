@@ -585,17 +585,18 @@ def build_extras_require(root: str) -> dict[str, list[str]]:
             if entry.is_dir():
                 connector_name = entry.name.split("_", 1)
                 if len(connector_name) != 2 or connector_name[0] != "tabsdata":
-                    raise ValueError(f"⛔️ Invalid connector folder name: {entry.name}")
-                connector = connector_name[1]
-                logger.info(
-                    "📦️ Adding requirements of connector requirements of "
-                    f"{connector}: {entry.name}"
-                )
-                connector_requirement = requirement_template.format(
-                    connector=connector, version=TABSDATA_VERSION
-                )
-                extras[connector] = [connector_requirement]
-                all_connectors_requirements.append(connector_requirement)
+                    logger.debug(f"⛔️ Invalid connector folder name: {entry.name}")
+                else:
+                    connector = connector_name[1]
+                    logger.info(
+                        "📦️ Adding requirements of connector requirements of "
+                        f"{connector}: {entry.name}"
+                    )
+                    connector_requirement = requirement_template.format(
+                        connector=connector, version=TABSDATA_VERSION
+                    )
+                    extras[connector] = [connector_requirement]
+                    all_connectors_requirements.append(connector_requirement)
 
     extras["all"] = sorted(all_connectors_requirements)
     return extras

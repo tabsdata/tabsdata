@@ -82,11 +82,10 @@ def clean_py(project_folder):
                         len(connector_name_parts) != 2
                         or connector_name_parts[0] != "tabsdata"
                     ):
-                        raise ValueError(
-                            f"⛔️ Invalid connector folder name: {entry.name}"
-                        )
-                    tabsdata_connectors.append(entry.name)
-                    logger.info(f"📦️ Inserting connector {entry}")
+                        logger.debug(f"⛔️ Invalid connector folder name: {entry.name}")
+                    else:
+                        tabsdata_connectors.append(entry.name)
+                        logger.debug(f"📦️ Inserting connector {entry}")
         return sorted(tabsdata_connectors)
 
     inclusion_patterns = [
