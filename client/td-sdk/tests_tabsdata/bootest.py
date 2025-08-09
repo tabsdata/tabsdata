@@ -84,6 +84,32 @@ TDLOCAL_FOLDER = _get_tdlocal_folder()
 def enrich_sys_path():
     root = ROOT_FOLDER
 
+    def gather_connectors() -> list[str]:
+        connectors_folders = [
+            os.path.join(root, "connectors", "python"),
+            # os.path.join(root, "connectors.ee", "python"),
+        ]
+
+        tabsdata_connectors: list[str] = []
+
+        for connectors_folder in connectors_folders:
+            if not os.path.isdir(connectors_folder):
+                continue
+
+            for entry in os.scandir(connectors_folder):
+                if entry.is_dir():
+                    connector_name_parts = entry.name.split("_", 1)
+                    if (
+                        len(connector_name_parts) != 2
+                        or connector_name_parts[0] != "tabsdata"
+                    ):
+                        raise ValueError(
+                            f"⛔️ Invalid connector folder name: {entry.name}"
+                        )
+                    tabsdata_connectors.append(entry.name)
+                    logger.info(f"📦️ Inserting connector {entry}")
+        return sorted(tabsdata_connectors)
+
     sys.path.append(
         os.path.abspath(
             os.path.join(
@@ -209,46 +235,18 @@ def enrich_sys_path():
             )
         ),
     )
-    sys.path.append(
-        os.path.abspath(
-            os.path.join(
-                root,
-                "connectors",
-                "python",
-                "tabsdata_databricks",
-            )
-        ),
-    )
-    sys.path.append(
-        os.path.abspath(
-            os.path.join(
-                root,
-                "connectors",
-                "python",
-                "tabsdata_mongodb",
-            )
-        ),
-    )
-    sys.path.append(
-        os.path.abspath(
-            os.path.join(
-                root,
-                "connectors",
-                "python",
-                "tabsdata_salesforce",
-            )
-        ),
-    )
-    sys.path.append(
-        os.path.abspath(
-            os.path.join(
-                root,
-                "connectors",
-                "python",
-                "tabsdata_snowflake",
-            )
-        ),
-    )
+    connectors = gather_connectors()
+    for connector in connectors:
+        sys.path.append(
+            os.path.abspath(
+                os.path.join(
+                    root,
+                    "connectors",
+                    "python",
+                    connector,
+                )
+            ),
+        )
 
     visited_entries = set()
     shiny_entries = []

@@ -1,8 +1,8 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
-# Required packages to test and build the project. They should not be installed by the client.
+# Required packages to develop, test and build the project. They should not be installed by the client.
 
 # Third-party dev dependencies
 
@@ -19,4 +19,3 @@
 -r connectors/python/tabsdata_mongodb/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata_salesforce/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata_snowflake/requirements/requirements-third-party.txt
-

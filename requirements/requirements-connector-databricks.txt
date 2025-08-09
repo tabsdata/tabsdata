@@ -1,5 +1,0 @@
-#
-# Copyright 2025 Tabs Data Inc.
-#
-
-tabsdata_databricks[deps]==1.2.0

@@ -124,33 +124,39 @@ HASHICORP_TESTING_URL = "http://127.0.0.1:8200"
 ROOT_PROJECT_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(ABSOLUTE_TEST_FOLDER_LOCATION))
 )
-LOCAL_PACKAGES_LIST = [
-    ROOT_PROJECT_DIR,
-    os.path.join(
-        ROOT_PROJECT_DIR,
-        "connectors",
-        "python",
-        "tabsdata_databricks",
-    ),
-    os.path.join(
-        ROOT_PROJECT_DIR,
-        "connectors",
-        "python",
-        "tabsdata_mongodb",
-    ),
-    os.path.join(
-        ROOT_PROJECT_DIR,
-        "connectors",
-        "python",
-        "tabsdata_salesforce",
-    ),
-    os.path.join(
-        ROOT_PROJECT_DIR,
-        "connectors",
-        "python",
-        "tabsdata_snowflake",
-    ),
-]
+
+
+def gather_connectors() -> list[str]:
+    connectors_folders = [
+        os.path.join(ROOT_PROJECT_DIR, "connectors", "python"),
+        # os.path.join(root, "connectors.ee", "python"),
+    ]
+
+    tabsdata_connectors: list[str] = []
+
+    for connectors_folder in connectors_folders:
+        if not os.path.isdir(connectors_folder):
+            continue
+
+        for entry in os.scandir(connectors_folder):
+            if entry.is_dir():
+                connector_name_parts = entry.name.split("_", 1)
+                if (
+                    len(connector_name_parts) != 2
+                    or connector_name_parts[0] != "tabsdata"
+                ):
+                    raise ValueError(f"⛔️ Invalid connector folder name: {entry.name}")
+                tabsdata_connectors.append(entry.name)
+                logger.info(f"📦️ Inserting connector {entry}")
+    return sorted(tabsdata_connectors)
+
+
+LOCAL_PACKAGES_LIST = [ROOT_PROJECT_DIR]
+
+for connector in gather_connectors():
+    LOCAL_PACKAGES_LIST.append(
+        os.path.join(ROOT_PROJECT_DIR, "connectors", "python", connector)
+    )
 
 TESTING_AWS_ACCESS_KEY_ID = "TRANSPORTER_AWS_ACCESS_KEY_ID"
 TESTING_AWS_SECRET_ACCESS_KEY = "TRANSPORTER_AWS_SECRET_ACCESS_KEY"

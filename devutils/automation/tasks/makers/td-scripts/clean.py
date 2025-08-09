@@ -62,6 +62,33 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
 
 
 def clean_py(project_folder):
+    def gather_connectors() -> list[str]:
+        root = project_folder
+        connectors_folders = [
+            os.path.join(root, "connectors", "python"),
+            # os.path.join(root, "connectors.ee", "python"),
+        ]
+
+        tabsdata_connectors: list[str] = []
+
+        for connectors_folder in connectors_folders:
+            if not os.path.isdir(connectors_folder):
+                continue
+
+            for entry in os.scandir(connectors_folder):
+                if entry.is_dir():
+                    connector_name_parts = entry.name.split("_", 1)
+                    if (
+                        len(connector_name_parts) != 2
+                        or connector_name_parts[0] != "tabsdata"
+                    ):
+                        raise ValueError(
+                            f"⛔️ Invalid connector folder name: {entry.name}"
+                        )
+                    tabsdata_connectors.append(entry.name)
+                    logger.info(f"📦️ Inserting connector {entry}")
+        return sorted(tabsdata_connectors)
+
     inclusion_patterns = [
         "__pycache__",
         ".cache",
@@ -85,79 +112,32 @@ def clean_py(project_folder):
         "client/td-sdk/tabsdata/assets",
         "SOURCETRACK.yaml",
         EXAMPLES_GUIDES_BOOK_PATH,
-        os.path.join(
-            "connectors",
-            "python",
-            "tabsdata_databricks",
-            "tabsdata_databricks",
-            "assets",
-            "manifest",
-            "BANNER",
-        ),
-        os.path.join(
-            "connectors",
-            "python",
-            "tabsdata_databricks",
-            "tabsdata_databricks",
-            "assets",
-            "manifest",
-            "LICENSE",
-        ),
-        os.path.join(
-            "connectors",
-            "python",
-            "tabsdata_mongodb",
-            "tabsdata_mongodb",
-            "assets",
-            "manifest",
-            "BANNER",
-        ),
-        os.path.join(
-            "connectors",
-            "python",
-            "tabsdata_mongodb",
-            "tabsdata_mongodb",
-            "assets",
-            "manifest",
-            "LICENSE",
-        ),
-        os.path.join(
-            "connectors",
-            "python",
-            "tabsdata_salesforce",
-            "tabsdata_salesforce",
-            "assets",
-            "manifest",
-            "BANNER",
-        ),
-        os.path.join(
-            "connectors",
-            "python",
-            "tabsdata_salesforce",
-            "tabsdata_salesforce",
-            "assets",
-            "manifest",
-            "LICENSE",
-        ),
-        os.path.join(
-            "connectors",
-            "python",
-            "tabsdata_snowflake",
-            "tabsdata_snowflake",
-            "assets",
-            "manifest",
-            "BANNER",
-        ),
-        os.path.join(
-            "connectors",
-            "python",
-            "tabsdata_snowflake",
-            "tabsdata_snowflake",
-            "assets",
-            "manifest",
-            "LICENSE",
-        ),
     ]
+
+    connectors = gather_connectors()
+    for connector in connectors:
+        inclusion_patterns.append(
+            os.path.join(
+                "connectors",
+                "python",
+                connector,
+                connector,
+                "assets",
+                "manifest",
+                "BANNER",
+            ),
+        )
+        inclusion_patterns.append(
+            os.path.join(
+                "connectors",
+                "python",
+                connector,
+                connector,
+                "assets",
+                "manifest",
+                "LICENSE",
+            ),
+        )
 
     exclusion_patterns = [
         ".coveragerc",

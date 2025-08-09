@@ -68,25 +68,71 @@ def get_old_version(root_folder) -> str:
     return version
 
 
-def get_bump_files(root_folder) -> set:
+def expand_single_level_wildcards(root_folder: str, pattern: str) -> set[str]:
+    parts = pattern.split("/")
+    paths = [""]  # relative to root_folder
+
+    for part in parts:
+        new_paths = []
+        for relative_base in paths:
+            absolute_base = (
+                os.path.join(root_folder, relative_base)
+                if relative_base
+                else root_folder
+            )
+            if part == "*":
+                try:
+                    entries = os.listdir(absolute_base)
+                except FileNotFoundError:
+                    continue
+                for entry in entries:
+                    entry_relative_path = (
+                        f"{relative_base}/{entry}" if relative_base else entry
+                    )
+                    entry_absolute_path = os.path.join(root_folder, entry_relative_path)
+                    if os.path.isdir(entry_absolute_path):
+                        new_paths.append(entry_relative_path)
+            else:
+                next_relative_path = (
+                    f"{relative_base}/{part}" if relative_base else part
+                )
+                new_paths.append(next_relative_path)
+        paths = new_paths
+
+    result = set()
+    for relative_path in paths:
+        absolute_path = os.path.join(root_folder, relative_path)
+        if os.path.isfile(absolute_path):
+            result.add(os.path.abspath(absolute_path))
+    return result
+
+
+def get_bump_files(root_folder) -> list[str]:
     bump_files_file = os.path.join(
         root_folder,
         ".custom",
         "bump.cfg",
     )
-    logger.info(f"🔖 Using bump.cgf file {os.path.realpath(bump_files_file)}")
+    logger.info(f"🔖 Using bump.cfg file {os.path.realpath(bump_files_file)}")
     if not os.path.exists(bump_files_file):
-        logger.error(f"❌ Error: bump.cgf file not found at {bump_files_file}")
+        logger.error(f"❌ Error: bump.cfg file not found at {bump_files_file}")
         exit(1)
+    bump_files = set()
     with open(bump_files_file, "r", encoding="utf-8") as file:
-        bump_files = {
-            os.path.abspath(os.path.join(root_folder, line.strip()))
-            for line in file
-            if line.strip()
-        }
+        for line in file:
+            pattern = line.strip()
+            if not pattern or pattern.startswith("#"):
+                continue
+            matches = expand_single_level_wildcards(root_folder, pattern)
+            if not matches:
+                logger.warning(f"⚠️ No match for bump pattern: {pattern}")
+            else:
+                bump_files.update(matches)
+
     if not bump_files:
-        logger.warning("⚠️ Warning: bump.cgf file is empty")
-    return bump_files
+        logger.warning("⚠️ Warning: bump.cfg is empty or has no matching files")
+
+    return sorted(bump_files)
 
 
 def bump_version_in_file(path, old_version, new_version, bump_files, warnings):

@@ -1,8 +1,8 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
-# Required packages to test and build the project. They should not be installed by the client.
+# Required packages to develop, test and build the project. They should not be installed by the client.
 
 -r requirements.txt
 -r connectors/python/tabsdata_databricks/requirements.txt

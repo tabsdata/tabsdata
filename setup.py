@@ -374,6 +374,9 @@ def load_console_scripts() -> list[str]:
     return scripts
 
 
+TABSDATA_VERSION = read(os.path.join("assets", "manifest", "VERSION"))
+
+
 # noinspection DuplicatedCode
 if platform.python_implementation() != "CPython":
     raise RuntimeError("The Tabsdata package requires CPython to function correctly.")
@@ -559,15 +562,48 @@ console_scripts: list[str] = [
 ]
 console_scripts.extend(load_console_scripts())
 
+
+def build_extras_require(root: str) -> dict[str, list[str]]:
+    connectors_folders = [
+        os.path.join(root, "connectors", "python"),
+        # os.path.join(root, "connectors.ee", "python"),
+    ]
+
+    extras: dict[str, list[str]] = {
+        "test": read_requirements(os.path.join(root, "requirements-test.txt")),
+    }
+
+    all_connectors_requirements: list[str] = []
+
+    requirement_template = "tabsdata_{connector}[deps]=={version}"
+
+    for folder in connectors_folders:
+        if not os.path.isdir(folder):
+            continue
+
+        for entry in os.scandir(folder):
+            if entry.is_dir():
+                connector_name = entry.name.split("_", 1)
+                if len(connector_name) != 2 or connector_name[0] != "tabsdata":
+                    raise ValueError(f"⛔️ Invalid connector folder name: {entry.name}")
+                connector = connector_name[1]
+                logger.info(
+                    "📦️ Adding requirements of connector requirements of "
+                    f"{connector}: {entry.name}"
+                )
+                connector_requirement = requirement_template.format(
+                    connector=connector, version=TABSDATA_VERSION
+                )
+                extras[connector] = [connector_requirement]
+                all_connectors_requirements.append(connector_requirement)
+
+    extras["all"] = sorted(all_connectors_requirements)
+    return extras
+
+
 setup(
     name="tabsdata",
-    version=read(
-        os.path.join(
-            "assets",
-            "manifest",
-            "VERSION",
-        )
-    ),
+    version=TABSDATA_VERSION,
     description="Tabsdata is a publish-subscribe (pub/sub) server for tables.",
     long_description=read(
         os.path.join(
@@ -597,39 +633,7 @@ setup(
     },
     python_requires=python_version_spec,
     install_requires=read_requirements("requirements.txt"),
-    extras_require={
-        "all": read_requirements(
-            os.path.join(
-                "requirements",
-                "requirements-connector-all.txt",
-            )
-        ),
-        "databricks": read_requirements(
-            os.path.join(
-                "requirements",
-                "requirements-connector-databricks.txt",
-            )
-        ),
-        "mongodb": read_requirements(
-            os.path.join(
-                "requirements",
-                "requirements-connector-mongodb.txt",
-            ),
-        ),
-        "salesforce": read_requirements(
-            os.path.join(
-                "requirements",
-                "requirements-connector-salesforce.txt",
-            )
-        ),
-        "snowflake": read_requirements(
-            os.path.join(
-                "requirements",
-                "requirements-connector-snowflake.txt",
-            )
-        ),
-        "test": read_requirements("requirements-test.txt"),
-    },
+    extras_require=build_extras_require(os.getcwd()),
     cmdclass={
         "build": CustomBuild,
         "sdist": CustomSDist,

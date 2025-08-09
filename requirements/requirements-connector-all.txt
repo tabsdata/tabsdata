@@ -1,8 +1,0 @@
-#
-# Copyright 2025 Tabs Data Inc.
-#
-
-tabsdata_databricks[deps]==1.2.0
-tabsdata_mongodb[deps]==1.2.0
-tabsdata_salesforce[deps]==1.2.0
-tabsdata_snowflake[deps]==1.2.0

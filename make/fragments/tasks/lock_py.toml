@@ -38,6 +38,16 @@ private = true
 [tasks.lock_py_tabsdata]
 category = "02 - Tidy"
 private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+    info "🚀 python ${LOCK_REQUIREMENTS_PY} ${PROJECT_TABSDATA_ROOT_FOLDER}"
+    exec --fail-on-error python ${LOCK_REQUIREMENTS_PY} ${PROJECT_TABSDATA_ROOT_FOLDER}
+    ''']
 
 [tasks.lock_py_tabsdata_databricks]
 category = "02 - Tidy"

@@ -40,6 +40,8 @@ from tabsdata._tabsserver.server.instance import (
     WORKSPACE_FOLDER,
 )
 from tabsdata._tabsserver.utils import TimeBlock
+
+# noinspection PyProtectedMember
 from tabsdata._utils.bundle_utils import (
     LOCAL_PACKAGES_FOLDER,
     PYTHON_DEVELOPMENT_PACKAGES_KEY,
@@ -48,14 +50,17 @@ from tabsdata._utils.bundle_utils import (
     PYTHON_PUBLIC_PACKAGES_KEY,
     PYTHON_VERSION_KEY,
 )
+
+# noinspection PyProtectedMember
 from tabsdata._utils.constants import (
-    TABSDATA_CONNECTOR_DATABRICKS_MODULE_NAME,
-    TABSDATA_CONNECTOR_MONGODB_MODULE_NAME,
-    TABSDATA_CONNECTOR_SALESFORCE_MODULE_NAME,
-    TABSDATA_CONNECTOR_SNOWFLAKE_MODULE_NAME,
+    TABSDATA_CONNECTORS,
     TABSDATA_MODULE_NAME,
+    TABSDATA_PACKAGES,
+    TD_TABSDATA_DEV_PKG,
     TRUE_VALUES,
 )
+
+# noinspection PyProtectedMember
 from tabsdata._utils.debug import debug_enabled
 
 # noinspection PyProtectedMember
@@ -90,25 +95,12 @@ TARGET_FOLDER = "target"
 
 PYTHON_BASE_VERSION = MIN_PYTHON_VERSION
 
-TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
-TD_TABSDATA_DATABRICKS_DEV_PKG = "TD_TABSDATA_DATABRICKS_DEV_PKG"
-TD_TABSDATA_MONGODB_DEV_PKG = "TD_TABSDATA_MONGODB_DEV_PKG"
-TD_TABSDATA_SALESFORCE_DEV_PKG = "TD_TABSDATA_SALESFORCE_DEV_PKG"
-TD_TABSDATA_SNOWFLAKE_DEV_PKG = "TD_TABSDATA_SNOWFLAKE_DEV_PKG"
-
 UV_EXECUTABLE = "uv"
 
 ENVIRONMENT_LOCK_TIMEOUT = 5  # 5 seconds
 MAXIMUM_LOCK_TIME = 60 * 30  # 30 minutes
 PYTHON_VERSION_LOCK_TIMEOUT = 10  # 10 seconds
 
-TABSDATA_PACKAGES = [
-    TABSDATA_MODULE_NAME,
-    TABSDATA_CONNECTOR_DATABRICKS_MODULE_NAME,
-    TABSDATA_CONNECTOR_MONGODB_MODULE_NAME,
-    TABSDATA_CONNECTOR_SALESFORCE_MODULE_NAME,
-    TABSDATA_CONNECTOR_SNOWFLAKE_MODULE_NAME,
-]
 TD_INHERIT_TABSDATA_PACKAGES = "TD_INHERIT_TABSDATA_PACKAGES"
 
 DEBUG_PACKAGES = [
@@ -432,7 +424,7 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:
     """Inject the tabsdata version into the list of required modules"""
     try:
         tabsdata_version = get_current_tabsdata_version()
-    except ValueError as e:
+    except ValueError:
         # Package tabsdata can be injected as a local package when running
         # pytest tests; in this case, current version is not available as
         # usual. We will use the version in the required modules' specification.
@@ -1183,105 +1175,27 @@ def main():
     ) as requirements_file:
         development_packages = []
 
-        # tabsdata-databricks connector (start)
+        # tabsdata connectors
 
-        tabsdata_databricks_provider, tabsdata_databricks_location = (
-            get_tabsdata_package_metadata(
-                TABSDATA_CONNECTOR_DATABRICKS_MODULE_NAME,
-                TD_TABSDATA_DATABRICKS_DEV_PKG,
+        for module_name, metadata in TABSDATA_CONNECTORS.items():
+            provider, location = get_tabsdata_package_metadata(
+                module_name,
+                metadata["is_dev_env"],
             )
-        )
-        logger.info(
-            "Module tabsdata_databricks classified as: "
-            f"provider: {tabsdata_databricks_provider} - "
-            f"location: {tabsdata_databricks_location}"
-        )
-
-        if tabsdata_databricks_provider in (
-            "Archive (Project)",
-            "Archive (Folder)",
-            "Archive (Wheel)",
-            "Folder (Editable)",
-            "Folder (Frozen)",
-        ):
-            development_packages.append(str(tabsdata_databricks_location))
-
-        # tabsdata-databricks connector (end)
-
-        # tabsdata-mongodb connector (start)
-
-        tabsdata_mongodb_provider, tabsdata_mongodb_location = (
-            get_tabsdata_package_metadata(
-                TABSDATA_CONNECTOR_MONGODB_MODULE_NAME,
-                TD_TABSDATA_MONGODB_DEV_PKG,
+            logger.info(
+                f"Module {module_name} classified as: "
+                f"provider: {provider} - "
+                f"location: {location}"
             )
-        )
-        logger.info(
-            "Module tabsdata_mongodb classified as: "
-            f"provider: {tabsdata_mongodb_provider} - "
-            f"location: {tabsdata_mongodb_location}"
-        )
 
-        if tabsdata_mongodb_provider in (
-            "Archive (Project)",
-            "Archive (Folder)",
-            "Archive (Wheel)",
-            "Folder (Editable)",
-            "Folder (Frozen)",
-        ):
-            development_packages.append(str(tabsdata_mongodb_location))
-
-        # tabsdata-mongodb connector (end)
-
-        # tabsdata-salesforce connector (start)
-
-        tabsdata_salesforce_provider, tabsdata_salesforce_location = (
-            get_tabsdata_package_metadata(
-                TABSDATA_CONNECTOR_SALESFORCE_MODULE_NAME,
-                TD_TABSDATA_SALESFORCE_DEV_PKG,
-            )
-        )
-        logger.info(
-            "Module tabsdata_salesforce classified as: "
-            f"provider: {tabsdata_salesforce_provider} - "
-            f"location: {tabsdata_salesforce_location}"
-        )
-
-        if tabsdata_salesforce_provider in (
-            "Archive (Project)",
-            "Archive (Folder)",
-            "Archive (Wheel)",
-            "Folder (Editable)",
-            "Folder (Frozen)",
-        ):
-            development_packages.append(str(tabsdata_salesforce_location))
-
-        # tabsdata-salesforce connector (end)
-
-        # tabsdata-snowflake connector (start)
-
-        tabsdata_snowflake_provider, tabsdata_snowflake_location = (
-            get_tabsdata_package_metadata(
-                TABSDATA_CONNECTOR_SNOWFLAKE_MODULE_NAME,
-                TD_TABSDATA_SNOWFLAKE_DEV_PKG,
-            )
-        )
-        logger.info(
-            "Module tabsdata_snowflake classified as: "
-            f"provider: {tabsdata_snowflake_provider} - "
-            f"location: {tabsdata_snowflake_location}"
-        )
-
-        if tabsdata_snowflake_provider in (
-            "Archive (Project)",
-            "Archive (Folder)",
-            "Archive (Wheel)",
-            "Folder (Editable)",
-            "Folder (Frozen)",
-        ):
-            development_packages.append(str(tabsdata_snowflake_location))
-
-        # tabsdata-snowflake connector (end)
+            if provider in (
+                "Archive (Project)",
+                "Archive (Folder)",
+                "Archive (Wheel)",
+                "Folder (Editable)",
+                "Folder (Frozen)",
+            ):
+                development_packages.append(str(location))
 
         # Note: tabsdata added the last one as then dependencies to other tabsdata
         # packages do not need to be accessible through PyPI during development stages.

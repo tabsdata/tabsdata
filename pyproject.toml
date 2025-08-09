@@ -29,12 +29,18 @@ known_first_party = [
     "tabsdata_mongodb",
     "tabsdata_salesforce",
     "tabsdata_snowflake",
-    "td_features",
+    "ta_features",
     "ta_tableframe",
+    "td_sdk",
     "te_examples",
     "te_tableframe",
-    "td_sdk",
-    "tests",
+    "tests_ta_features",
+    "tests_ta_tableframe",
+    "tests_tabsdata",
+    "tests_te_examples",
+    "tests_te_tableframe",
+    "tests_ty_tableframe",
+    "ty_tableframe",
 ]
 known_third_party = ["docker"]
 skip = ["docker/"]
