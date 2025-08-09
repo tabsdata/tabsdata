@@ -36,7 +36,7 @@ class FeaturesManager:
         """Enable a feature."""
         if self.validate_feature(feature):
             self._features[feature] = True
-            logger.info(f"Feature '{feature.value}' enabled.")
+            logger.debug(f"Feature '{feature.value}' enabled.")
         else:
             logger.debug(f"Feature '{feature}' not enabled: unrecognized.")
 
