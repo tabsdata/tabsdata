@@ -15,15 +15,6 @@ import pymongo
 
 # noinspection PyPackageRequirements
 import pytest
-from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
-from tests_tabsdata.conftest import (
-    FUNCTION_DATA_FOLDER,
-    LOCAL_PACKAGES_LIST,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-    get_lf,
-    read_json_and_clean,
-    write_v2_yaml_file,
-)
 from tests_tabsdata_mongodb.conftest import (
     DB_PASSWORD,
     DB_USER,
@@ -50,6 +41,15 @@ from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from tests_tabsdata.conftest import (
+    FUNCTION_DATA_FOLDER,
+    LOCAL_PACKAGES_LIST,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    get_lf,
+    read_json_and_clean,
+    write_v2_yaml_file,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

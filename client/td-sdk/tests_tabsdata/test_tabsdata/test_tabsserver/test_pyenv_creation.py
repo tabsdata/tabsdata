@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-from tests_tabsdata.conftest import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 
 from tabsdata.__spec import MIN_PYTHON_VERSION
 from tabsdata._tabsserver.function.global_utils import (
@@ -32,6 +31,7 @@ from tabsdata._utils.bundle_utils import (
     PYTHON_VERSION_KEY,
     TABSDATA_MODULE_NAME,
 )
+from tests_tabsdata.conftest import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

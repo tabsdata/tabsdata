@@ -6,6 +6,12 @@ import os
 import pathlib
 import platform
 
+from tabsdata._tabsserver.function.yaml_parsing import (
+    V2,
+    Table,
+    TableVersions,
+    parse_request_yaml,
+)
 from tests_tabsdata.conftest import (
     FAKE_EXECUTION_ID,
     FAKE_FUNCTION_RUN_ID,
@@ -15,13 +21,6 @@ from tests_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     TESTING_RESOURCES_FOLDER,
     write_v2_yaml_file,
-)
-
-from tabsdata._tabsserver.function.yaml_parsing import (
-    V2,
-    Table,
-    TableVersions,
-    parse_request_yaml,
 )
 
 # noinspection PyUnresolvedReferences

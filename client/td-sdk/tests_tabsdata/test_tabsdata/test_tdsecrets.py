@@ -6,11 +6,6 @@ import os
 
 import pytest
 from pytest import MonkeyPatch
-from tests_tabsdata.conftest import (
-    HASHICORP_TESTING_SECRET_NAME,
-    HASHICORP_TESTING_SECRET_PATH,
-    HASHICORP_TESTING_SECRET_VALUE,
-)
 
 from tabsdata import (
     EnvironmentSecret,
@@ -23,6 +18,11 @@ from tabsdata._secret import (
     build_secret,
 )
 from tabsdata.exceptions import ErrorCode, SecretConfigurationError
+from tests_tabsdata.conftest import (
+    HASHICORP_TESTING_SECRET_NAME,
+    HASHICORP_TESTING_SECRET_PATH,
+    HASHICORP_TESTING_SECRET_VALUE,
+)
 
 
 def test_direct_secret_initialization():

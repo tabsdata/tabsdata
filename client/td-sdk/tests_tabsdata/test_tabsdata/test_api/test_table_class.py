@@ -8,12 +8,12 @@ from datetime import datetime, timedelta, timezone
 
 import polars as pl
 import pytest
+
+from tabsdata.api.tabsdata_server import Collection, DataVersion, Table
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     LOCAL_PACKAGES_LIST,
 )
-
-from tabsdata.api.tabsdata_server import Collection, DataVersion, Table
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

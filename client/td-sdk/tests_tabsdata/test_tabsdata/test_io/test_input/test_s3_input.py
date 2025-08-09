@@ -7,7 +7,6 @@ import datetime
 from urllib.parse import urlparse
 
 import pytest
-from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, ParquetFormat
 from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
@@ -18,6 +17,7 @@ from tabsdata.exceptions import (
     FormatConfigurationError,
     SourceConfigurationError,
 )
+from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 TEST_ACCESS_KEY_ID = "test_access_key_id"
 TEST_SECRET_ACCESS_KEY = "test_secret_access_key"

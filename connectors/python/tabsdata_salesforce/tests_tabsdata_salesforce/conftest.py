@@ -4,10 +4,10 @@
 
 import logging
 
-from tests_tabsdata.bootest import enrich_sys_path
 from tests_tabsdata_salesforce.bootest import TESTING_RESOURCES_PATH
 
 from tabsdata._utils.logging import setup_tests_logging
+from tests_tabsdata.bootest import enrich_sys_path
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()

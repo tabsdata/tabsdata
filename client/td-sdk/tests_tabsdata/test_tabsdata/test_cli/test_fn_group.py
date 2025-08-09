@@ -8,9 +8,9 @@ import uuid
 
 import pytest
 from click.testing import CliRunner
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
 from tabsdata._cli.cli import cli
+from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

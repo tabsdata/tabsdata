@@ -4,10 +4,9 @@
 
 import os
 
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-
 import tabsdata as td
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from tests_tabsdata.bootest import TDLOCAL_FOLDER
 
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 ROOT_PROJECT_DIR = os.path.dirname(

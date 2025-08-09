@@ -5,7 +5,6 @@
 import copy
 
 import pytest
-from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, NDJSONFormat, ParquetFormat
 from tabsdata._io.outputs.file_outputs import (
@@ -18,6 +17,7 @@ from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
 )
+from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 
 def test_all_correct_single_parameter():

@@ -16,16 +16,6 @@ import pytest
 
 # noinspection PyPackageRequirements
 from databricks.sql import ServerOperationError
-from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
-from tests_tabsdata.conftest import (
-    FUNCTION_DATA_FOLDER,
-    LOCAL_PACKAGES_LIST,
-    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
-    clean_polars_df,
-    get_lf,
-    read_json_and_clean,
-    write_v2_yaml_file,
-)
 from tests_tabsdata_databricks.conftest import (
     DATABRICKS_CATALOG,
     DATABRICKS_HOST,
@@ -57,6 +47,16 @@ from tabsdata._utils.bundle_utils import create_bundle_archive
 
 # noinspection PyProtectedMember
 from tabsdata_databricks._connector import _table_fqn_4sql
+from tests_tabsdata.bootest import ROOT_FOLDER, TDLOCAL_FOLDER
+from tests_tabsdata.conftest import (
+    FUNCTION_DATA_FOLDER,
+    LOCAL_PACKAGES_LIST,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+    clean_polars_df,
+    get_lf,
+    read_json_and_clean,
+    write_v2_yaml_file,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

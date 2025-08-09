@@ -8,7 +8,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
 from tabsdata.api.tabsdata_server import (
     Collection,
@@ -16,6 +15,7 @@ from tabsdata.api.tabsdata_server import (
     Table,
     _convert_timestamp_to_string,
 )
+from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

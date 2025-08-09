@@ -6,7 +6,6 @@ import copy
 from urllib.parse import urlparse
 
 import pytest
-from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, ParquetFormat
 from tabsdata._credentials import AzureAccountKeyCredentials, UserPasswordCredentials
@@ -20,6 +19,7 @@ from tabsdata.exceptions import (
     ErrorCode,
     FormatConfigurationError,
 )
+from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 TEST_ACCOUNT_NAME = "test_account_name"
 TEST_ACCOUNT_KEY = "test_account_key"

@@ -6,7 +6,6 @@ import copy
 import datetime
 
 import pytest
-from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 from tabsdata import CSVFormat, NDJSONFormat, ParquetFormat
 from tabsdata._io.inputs.file_inputs import LocalFileSource
@@ -16,6 +15,7 @@ from tabsdata.exceptions import (
     FormatConfigurationError,
     SourceConfigurationError,
 )
+from tests_tabsdata.conftest import FORMAT_TYPE_TO_CONFIG
 
 
 def test_all_correct_single_parameter():

@@ -7,13 +7,13 @@ from unittest import mock
 
 import pytest
 import yaml
+
+from tabsdata._tabsserver.tools.config_resolver import ConfigResolver
 from tests_tabsdata.conftest import (
     HASHICORP_TESTING_TOKEN,
     HASHICORP_TESTING_URL,
     TESTING_RESOURCES_FOLDER,
 )
-
-from tabsdata._tabsserver.tools.config_resolver import ConfigResolver
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

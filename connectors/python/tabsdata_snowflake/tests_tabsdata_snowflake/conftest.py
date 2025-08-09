@@ -1,12 +1,12 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-from tests_tabsdata.bootest import enrich_sys_path
 from tests_tabsdata_snowflake.bootest import TESTING_RESOURCES_PATH
 
 import tabsdata as td
 from tabsdata._secret import _recursively_evaluate_secret
 from tabsdata._utils.logging import setup_tests_logging
+from tests_tabsdata.bootest import enrich_sys_path
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
@@ -15,6 +15,7 @@ import logging
 
 import pytest
 from snowflake.connector import connect
+
 from tests_tabsdata.conftest import (
     clean_python_virtual_environments,
 )

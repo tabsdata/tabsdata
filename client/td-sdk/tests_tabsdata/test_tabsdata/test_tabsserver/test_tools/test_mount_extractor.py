@@ -5,11 +5,11 @@
 import os
 
 import pytest
+
+from tabsdata._tabsserver.tools.mount_extractor import resolve
 from tests_tabsdata.conftest import (
     TESTING_RESOURCES_FOLDER,
 )
-
-from tabsdata._tabsserver.tools.mount_extractor import resolve
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401

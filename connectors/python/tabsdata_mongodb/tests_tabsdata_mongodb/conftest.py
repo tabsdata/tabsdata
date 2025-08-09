@@ -1,10 +1,10 @@
 #
 # Copyright 2025 Tabs Data Inc.
 #
-from tests_tabsdata.bootest import enrich_sys_path
 from tests_tabsdata_mongodb.bootest import TESTING_RESOURCES_PATH
 
 from tabsdata._utils.logging import setup_tests_logging
+from tests_tabsdata.bootest import enrich_sys_path
 
 TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
@@ -19,6 +19,7 @@ import docker
 import pymongo
 import pytest
 from filelock import FileLock
+
 from tests_tabsdata.conftest import (
     DB_HOST,
     DB_PASSWORD,

@@ -6,7 +6,6 @@ import os
 import time
 
 import pytest
-from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
 from tabsdata.api.tabsdata_server import (
     Collection,
@@ -16,6 +15,7 @@ from tabsdata.api.tabsdata_server import (
     Transaction,
     Worker,
 )
+from tests_tabsdata.conftest import ABSOLUTE_TEST_FOLDER_LOCATION, LOCAL_PACKAGES_LIST
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

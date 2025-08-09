@@ -5,11 +5,11 @@
 import os
 
 from custom_importer import Importer
-from tests_tabsdata.bootest import TDLOCAL_FOLDER
-from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 import tabsdata as td
 from tabsdata._utils.bundle_utils import create_bundle_archive
+from tests_tabsdata.bootest import TDLOCAL_FOLDER
+from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST
 
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 ROOT_PROJECT_DIR = os.path.dirname(

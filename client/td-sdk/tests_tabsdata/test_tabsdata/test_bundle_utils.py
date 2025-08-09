@@ -9,14 +9,6 @@ from unittest.mock import patch
 
 import pytest
 import yaml
-from tests_tabsdata.conftest import (
-    ABSOLUTE_TEST_FOLDER_LOCATION,
-    CORRECT_DESTINATION,
-    CORRECT_SOURCE,
-)
-from tests_tabsdata.testing_resources.test_custom_requirements.example import (
-    custom_requirements,
-)
 
 import tabsdata as td
 from tabsdata._utils.bundle_utils import (
@@ -44,6 +36,14 @@ from tabsdata._utils.bundle_utils import (
     store_function_codebase,
 )
 from tabsdata.exceptions import ErrorCode, RegistrationError
+from tests_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    CORRECT_DESTINATION,
+    CORRECT_SOURCE,
+)
+from tests_tabsdata.testing_resources.test_custom_requirements.example import (
+    custom_requirements,
+)
 
 
 class BaseDummyFunction:

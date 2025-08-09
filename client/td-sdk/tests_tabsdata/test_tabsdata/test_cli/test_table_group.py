@@ -10,13 +10,13 @@ from datetime import datetime, timedelta, timezone
 import polars as pl
 import pytest
 from click.testing import CliRunner
+
+from tabsdata._cli.cli import cli
+from tabsdata.api.tabsdata_server import Table
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     LOCAL_PACKAGES_LIST,
 )
-
-from tabsdata._cli.cli import cli
-from tabsdata.api.tabsdata_server import Table
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

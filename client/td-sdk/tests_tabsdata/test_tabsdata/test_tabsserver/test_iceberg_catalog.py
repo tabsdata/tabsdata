@@ -16,6 +16,12 @@ import polars as pl
 import pytest
 from pyiceberg.catalog import load_catalog
 from pyiceberg.transforms import YearTransform
+
+from tabsdata._secret import _recursively_evaluate_secret
+from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
+from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
+from tabsdata._tabsserver.invoker import invoke as tabsserver_main
+from tabsdata._utils.bundle_utils import create_bundle_archive
 from tests_tabsdata.bootest import TDLOCAL_FOLDER
 from tests_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
@@ -45,12 +51,6 @@ from tests_tabsdata.testing_resources.test_output_s3_catalog_replace.example imp
 from tests_tabsdata.testing_resources.test_output_s3_catalog_schema_strategy.example import (
     output_s3_catalog_schema_strategy,
 )
-
-from tabsdata._secret import _recursively_evaluate_secret
-from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
-from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
-from tabsdata._tabsserver.invoker import invoke as tabsserver_main
-from tabsdata._utils.bundle_utils import create_bundle_archive
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401

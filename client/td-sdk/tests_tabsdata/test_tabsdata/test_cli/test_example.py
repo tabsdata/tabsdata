@@ -11,11 +11,11 @@ from time import sleep
 
 import pytest
 from click.testing import CliRunner
-from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
 
 from tabsdata._cli.cli import cli
 from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata.extensions._tableframe.extension_test import instance as checker
+from tests_tabsdata.conftest import LOCAL_PACKAGES_LIST, MAXIMUM_RETRY_COUNT
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
