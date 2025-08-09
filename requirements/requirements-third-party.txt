@@ -30,4 +30,4 @@ sqlalchemy==2.0.42
 typing_extensions==4.14.1
 uuid6==2025.0.1
 uuid-v7==1.0.0
-uv==0.8.4
+uv==0.8.5

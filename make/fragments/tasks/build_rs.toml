@@ -54,6 +54,16 @@ script = [
 [tasks.build_all_rs_expansions]
 category = "03 - Build"
 private = true
+run_task = [
+    { name = [
+        "compile_all_rs_expansions",
+        "link_all_rs_expansions"
+    ] }
+]
+
+[tasks.compile_all_rs_expansions]
+category = "03 - Build"
+private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
@@ -62,6 +72,30 @@ script = [
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples
+    ''']
+
+[tasks.link_all_rs_expansions]
+category = "03 - Build"
+private = true
+run_task = [
+    { name = [
+        "link_all_ty-tableframe"
+    ] }
+]
+
+[tasks.link_all_ty-tableframe]
+category = "03 - Build"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+
+    debug "🚀 maturin develop --skip-install --features extension-module"
+    exec --fail-on-error maturin develop --skip-install --features extension-module
     ''']
 
 [tasks.build_none_rs]
@@ -104,6 +138,16 @@ script = [
 [tasks.build_none_rs_expansions]
 category = "03 - Build"
 private = true
+run_task = [
+    { name = [
+        "compile_none_rs_expansions",
+        "link_none_rs_expansions"
+    ] }
+]
+
+[tasks.compile_none_rs_expansions]
+category = "03 - Build"
+private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
@@ -112,4 +156,28 @@ script = [
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins
+    ''']
+
+[tasks.link_none_rs_expansions]
+category = "03 - Build"
+private = true
+run_task = [
+    { name = [
+        "link_none_ty-tableframe"
+    ] }
+]
+
+[tasks.link_none_ty-tableframe]
+category = "03 - Build"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+
+    debug "🚀 maturin develop --skip-install --features extension-module"
+    exec --fail-on-error maturin develop --skip-install --features extension-module
     ''']

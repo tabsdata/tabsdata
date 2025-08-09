@@ -31,7 +31,7 @@ dummy = []
 extension-module = ["pyo3/extension-module"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "td-common", "td-error", "ta-tableframe", "te-tableframe", "thiserror", "toml", "polars-arrow"]
+ignored = ["openssl", "td-build", "td-common", "td-error", "ta-tableframe", "te-tableframe", "thiserror", "toml", "serde", "arrow", "polars-arrow", "polars-mem-engine", "polars-plan", "rayon"]
 
 # Build dependencies
 
@@ -55,10 +55,14 @@ ta-tableframe = { workspace = true }
 
 # External dependencies
 
-polars = { workspace = true, default-features = false }
-polars-arrow = { workspace = true, default-features = false }
-pyo3 = { workspace = true, features = ["abi3-py311", "macros", "multiple-pymethods", "anyhow", "chrono", "chrono-tz", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"] }
+arrow = { workspace = true }
+polars = { workspace = true, features = ["default", "fmt", "dtype-date", "timezones"] }
+polars-plan = { workspace = true, features = ["python"] }
+polars-mem-engine = { workspace = true, features = ["python"] }
+pyo3 = { workspace = true, features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"] }
 pyo3-polars = { workspace = true, features = ["derive"] }
+rayon = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

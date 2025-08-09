@@ -9,9 +9,10 @@
 # Global
 
 black==25.1.0
-boto3==1.40.2
+boto3==1.40.3
 build
 colorlog==6.9.0
+cookiecutter==2.6.0
 csvkit==2.1.0
 devpi-client==7.2.0
 devpi-server==6.16.0

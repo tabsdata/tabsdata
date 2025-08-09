@@ -96,28 +96,44 @@ path = "../../extensions/rust/te-tableframe"
 
 # External dependencies
 
-[workspace.dependencies.polars]
-version = "0.50.0"
-default-features = false
+# As the links below show, this is a necessary workaround until the aliasing of polars-arrow is
+# better encapsulated in polars.
+# https://github.com/pola-rs/polars/issues/23902
+# https://github.com/pola-rs/polars/pull/23918
 
-[workspace.dependencies.polars-arrow]
+[workspace.dependencies.arrow]
+package = "polars-arrow"
 version = "0.50.0"
-default-features = false
-
-# Note: Each pyo3-polars is tightly tied to a specific version of pyo3.
-# Pay attention to these any time you intend to upgrade pyo3 dependency version.
 
 [workspace.dependencies.openssl]
 version = "0.10.73"
 features = ["vendored"]
 
+[workspace.dependencies.polars]
+version = "0.50.0"
+features = ["default", "fmt", "dtype-date", "timezones"]
+
+[workspace.dependencies.polars-plan]
+version = "0.50.0"
+features = ["python"]
+
+[workspace.dependencies.polars-mem-engine]
+version = "0.50.0"
+features = ["python"]
+
+# Note: Each pyo3-polars is tightly tied to a specific version of pyo3.
+# Pay attention to these any time you intend to upgrade pyo3 dependency version.
+
 [workspace.dependencies.pyo3]
 version = "0.25.1"
-features = ["abi3-py311", "macros", "multiple-pymethods", "anyhow", "chrono", "chrono-tz", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"]
+features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"]
 
 [workspace.dependencies.pyo3-polars]
 version = "0.23.0"
 features = ["derive"]
+
+[workspace.dependencies.rayon]
+version = "1.10.0"
 
 [workspace.dependencies.serde]
 version = "1.0.219"

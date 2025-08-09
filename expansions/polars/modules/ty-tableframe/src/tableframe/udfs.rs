@@ -12,7 +12,6 @@ fn dummy(inputs: &[Series]) -> PolarsResult<Series> {
     Ok(Series::new("dummy_col".into(), result))
 }
 
-
 #[cfg(test)]
 mod tests {
 
