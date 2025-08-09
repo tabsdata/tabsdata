@@ -867,8 +867,8 @@ fn command_start(arguments: StartArguments) {
 
     if needs_upgrade(supervisor_instance_absolute.clone()) {
         warn!("The instance is not up to date. An upgrade is required before starting.");
-        warn!("To upgrade, run: 'tdserver upgrade --instance <instance> --execute'.");
-        warn!("(or just 'tdserver upgrade --execute' to upgrade the default instance.)");
+        warn!("To upgrade, run: 'tdserver upgrade --instance <instance>'.");
+        warn!("(or just 'tdserver upgrade' to upgrade the default instance.)");
         warn!("For a dry run before upgrading, use: 'tdserver upgrade --instance <instance>'.");
         warn!("(or just 'tdserver upgrade' for the default instance.)");
         warn!("It is strongly recommended to back up your instance before proceeding with the upgrade.");
