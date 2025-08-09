@@ -23,7 +23,7 @@ const ACK: &str = ".ack";
 
 const BANNER: &str = include_str!(concat!(
     workspace_root!(),
-    "/variant/assets/manifest/BANNER"
+    "/variant/assets/manifest/TDSERVER-BOX"
 ));
 
 const COMPATIBILITY_PY: &str = include_str!(concat!(
