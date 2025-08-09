@@ -2,7 +2,6 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use colored::*;
 use std::io::Write;
 use std::process::{exit, Command, Stdio};
 use std::{env, fs};
@@ -14,17 +13,11 @@ use td_common::logging::LogOutput;
 use td_common::server::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
 use td_supervisor::services::tdserver;
-use terminal_size::{terminal_size, Width};
-use textwrap::fill;
+use td_supervisor::services::tdserver::show_banner;
 use tm_workspace::workspace_root;
 use tracing::Level;
 
 const ACK: &str = ".ack";
-
-const BANNER: &str = include_str!(concat!(
-    workspace_root!(),
-    "/variant/assets/manifest/TDSERVER-BOX"
-));
 
 const COMPATIBILITY_PY: &str = include_str!(concat!(
     workspace_root!(),
@@ -43,51 +36,6 @@ fn check_banner() -> std::io::Result<()> {
     }
     let mut file = fs::File::create(&ack)?;
     file.write_all(TABSDATA_VERSION.trim().as_bytes())?;
-    Ok(())
-}
-
-fn show_banner() -> Result<(), std::io::Error> {
-    #[cfg(not(windows))]
-    let use_colors = supports_color::on(supports_color::Stream::Stdout).is_some();
-    #[cfg(windows)]
-    let use_colors = false;
-
-    let width = terminal_size()
-        .map(|(Width(w), _)| w as usize - 6)
-        .unwrap_or(50)
-        .min(80);
-    let wrapped_text = fill(BANNER, width);
-    let top_border = if use_colors {
-        format!("╭{}╮", "─".repeat(width + 2))
-            .blue()
-            .bold()
-            .to_string()
-    } else {
-        format!("╭{}╮", "─".repeat(width + 2))
-    };
-    let bottom_border = if use_colors {
-        format!("╰{}╯", "─".repeat(width + 2))
-            .blue()
-            .bold()
-            .to_string()
-    } else {
-        format!("╰{}╯", "─".repeat(width + 2))
-    };
-    println!("\n{top_border}");
-    for line in wrapped_text.lines() {
-        let padded_line = format!("{line:^width$}");
-        if use_colors {
-            println!(
-                "{} {} {}",
-                "│".blue().bold(),
-                padded_line.truecolor(251, 175, 79).bold(),
-                "│".blue().bold()
-            );
-        } else {
-            println!("│ {padded_line} │");
-        }
-    }
-    println!("{bottom_border}");
     Ok(())
 }
 

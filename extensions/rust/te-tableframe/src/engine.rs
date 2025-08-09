@@ -9,10 +9,10 @@ pub struct TableFrameExtension;
 
 impl Extension for TableFrameExtension {
     fn edition(&self) -> String {
-        "standard".to_string()
+        "Open Source".to_string()
     }
 
     fn summary(&self) -> Result<String, Error> {
-        Ok("te-tableframe-standard".to_string())
+        Ok("te-tableframe-opens-source".to_string())
     }
 }

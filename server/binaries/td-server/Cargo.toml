@@ -129,16 +129,12 @@ td-tower = { workspace = true }
 axum = { workspace = true, features = ["macros"] }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
-colored = { workspace = true }
 getset = { workspace = true }
 http = { workspace = true }
 paste = { workspace = true }
 path-slash = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-supports-color = { workspace = true }
-textwrap = { workspace = true }
-terminal_size = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tower = { workspace = true, features = ["buffer", "limit", "make", "timeout", "util"] }

@@ -376,7 +376,6 @@ def load_console_scripts() -> list[str]:
 
 TABSDATA_VERSION = read(os.path.join("assets", "manifest", "VERSION"))
 
-
 # noinspection DuplicatedCode
 if platform.python_implementation() != "CPython":
     raise RuntimeError("The Tabsdata package requires CPython to function correctly.")
@@ -602,6 +601,8 @@ def build_extras_require(root: str) -> dict[str, list[str]]:
     return extras
 
 
+TABSDATA_LICENSE = read(os.path.join(variant_manifest_folder, "LICENSE.setup"))
+
 setup(
     name="tabsdata",
     version=TABSDATA_VERSION,
@@ -619,6 +620,7 @@ setup(
     # and backslashes (\) are treated as escape characters, which may cause
     # unexpected parsing errors or “invalid character” complaints. Because of
     # this, back-slashes are replaced with forward-slashes.
+    license=TABSDATA_LICENSE,
     license_files=(
         os.path.join(
             "variant",

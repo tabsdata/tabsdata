@@ -16,7 +16,7 @@ fn main() {
 
 #[cfg(not(feature = "enterprise"))]
 fn edition() -> String {
-    "Standard".to_string()
+    "Open Source".to_string()
 }
 
 #[cfg(feature = "enterprise")]

@@ -19,12 +19,13 @@ use crate::services::supervisor::WorkerLocation::Relative;
 use crate::services::supervisor::TD_ARGUMENT_KEY;
 use clap::{command, Parser};
 use clap_derive::{Args, Subcommand};
+use colored::Colorize;
 use getset::Getters;
 use humantime::format_duration;
 use indexmap::IndexMap;
 use linemux::MuxedLines;
 use num_format::{Locale, ToFormattedString};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env::set_current_dir;
 use std::fs::create_dir_all;
 use std::io::Write;
@@ -43,6 +44,7 @@ use tabled::{
     Table, Tabled,
 };
 use td_apiserver::config::DbSchema;
+use td_build::version::TABSDATA_VERSION;
 use td_common::env::{check_flag_env, get_home_dir, to_absolute, TABSDATA_HOME_DIR};
 use td_common::logging::set_log_level;
 use td_common::os::{name_program, terminate_process};
@@ -63,7 +65,10 @@ use td_process::monitor::space::instance_space;
 use td_python::upgrade::{get_source_version, get_target_version, upgrade};
 use td_python::venv::prepare;
 use te_tableframe::engine::TableFrameExtension;
+use terminal_size::{terminal_size, Width};
+use textwrap::{fill, Options, WordSeparator};
 use thiserror::Error;
+use tm_workspace::workspace_root;
 use tokio::time::{Duration, Instant};
 use tracing::{error, info, warn, Level};
 use url::Url;
@@ -83,6 +88,18 @@ const START_WAIT: Duration = Duration::from_secs(5);
 
 const STOP_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const STOP_WAIT: Duration = Duration::from_secs(2);
+
+const VERSION: &str = TABSDATA_VERSION;
+
+const BANNER: &str = include_str!(concat!(
+    workspace_root!(),
+    "/variant/assets/manifest/BANNER"
+));
+
+const LICENSE: &str = include_str!(concat!(
+    workspace_root!(),
+    "/variant/assets/manifest/LICENSE"
+));
 
 #[derive(Debug, Error)]
 pub enum TabsCliError {
@@ -118,6 +135,15 @@ enum Commands {
     #[command(about = "Create a Tabsdata profile based on the product defaults")]
     Profile(ProfileArguments),
      */
+    #[command(about = "Show Tabsdata banner")]
+    Banner(BannerArguments),
+
+    #[command(about = "Show Tabsdata license")]
+    License(LicenseArguments),
+
+    #[command(about = "Show Tabsdata installation information", name = "info")]
+    Information(InformationArguments),
+
     #[command(about = "Create a Tabsdata instance")]
     Create(CreateArguments),
 
@@ -152,6 +178,18 @@ enum Commands {
     Instances,
      */
 }
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct BannerArguments {}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct LicenseArguments {}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct InformationArguments {}
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
@@ -423,6 +461,15 @@ impl TabsDataCli {
                 command_profile(arguments);
             }
              */
+            Commands::Banner(arguments) => {
+                command_banner(arguments);
+            }
+            Commands::License(arguments) => {
+                command_license(arguments);
+            }
+            Commands::Information(arguments) => {
+                command_information(arguments);
+            }
             Commands::Create(arguments) => {
                 command_create(arguments);
             }
@@ -456,6 +503,100 @@ impl TabsDataCli {
                */
         }
     }
+}
+
+pub fn show_box(text: &str, min: usize) -> Result<(), io::Error> {
+    #[cfg(not(windows))]
+    let use_colors = supports_color::on(supports_color::Stream::Stdout).is_some();
+    #[cfg(windows)]
+    let use_colors = false;
+
+    let width = terminal_size()
+        .map(|(Width(w), _)| w as usize - 6)
+        .unwrap_or(50)
+        .min(min);
+    let trimmed_text: String = text
+        .lines()
+        .map(|line| line.trim())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let wrap_options = Options::new(width)
+        .break_words(false)
+        .word_splitter(textwrap::WordSplitter::NoHyphenation)
+        .word_separator(WordSeparator::AsciiSpace);
+    let wrapped_text = fill(trimmed_text.trim(), wrap_options);
+    let top_border = if use_colors {
+        format!("╭{}╮", "─".repeat(width + 2))
+            .blue()
+            .bold()
+            .to_string()
+    } else {
+        format!("╭{}╮", "─".repeat(width + 2))
+    };
+    let bottom_border = if use_colors {
+        format!("╰{}╯", "─".repeat(width + 2))
+            .blue()
+            .bold()
+            .to_string()
+    } else {
+        format!("╰{}╯", "─".repeat(width + 2))
+    };
+    println!("\n{top_border}");
+    for line in wrapped_text.lines() {
+        let padded_line = format!("{line:^width$}");
+        if use_colors {
+            println!(
+                "{} {} {}",
+                "│".blue().bold(),
+                padded_line.truecolor(251, 175, 79).bold(),
+                "│".blue().bold()
+            );
+        } else {
+            println!("│ {padded_line} │");
+        }
+    }
+    println!("{bottom_border}");
+    Ok(())
+}
+
+pub fn show_banner() {
+    show_box(BANNER, 80).unwrap()
+}
+
+pub fn show_license() {
+    show_box(LICENSE, 80).unwrap()
+}
+
+pub fn show_information() {
+    let mut information = vec![];
+
+    information.push(format!("Version: {VERSION}"));
+
+    let edition = TableFrameExtension.edition();
+    information.push(format!("Edition: {edition}"));
+
+    let run_mode = run_mode();
+    information.push(format!("Mode: {run_mode}"));
+
+    let pip_uv_repository_envs = get_pip_uv_repository_envs();
+    if !pip_uv_repository_envs.is_empty() {
+        information.push("".to_string());
+        information.push(
+            "Found environment variables overriding standard pip/uv repository settings:"
+                .to_string(),
+        );
+        information.push("".to_string());
+        information.extend(
+            pip_uv_repository_envs
+                .iter()
+                .map(|(k, v)| format!("{k}: {v}")),
+        );
+    }
+
+    let information = information.join("\n");
+
+    let width = if pip_uv_repository_envs.is_empty() { 40 } else { 80 };
+    show_box(&information, width).unwrap()
 }
 
 /*
@@ -508,6 +649,18 @@ fn command_profile(arguments: ProfileArguments) {
     };
 }
  */
+
+fn command_banner(_arguments: BannerArguments) {
+    show_banner()
+}
+
+fn command_license(_arguments: LicenseArguments) {
+    show_license()
+}
+
+fn command_information(_arguments: InformationArguments) {
+    show_information()
+}
 
 fn command_create(arguments: CreateArguments) {
     let supervisor_instance = get_instance_path_for_instance(arguments.instance());
@@ -858,8 +1011,6 @@ fn command_delete(arguments: DeleteArguments) {
 }
 
 fn command_start(arguments: StartArguments) {
-    show_mode();
-    show_pip_uv_repository_mode();
     show_setup_and_launch();
 
     let supervisor_instance = get_instance_path_for_instance(arguments.instance());
@@ -1054,8 +1205,6 @@ fn command_stop(arguments: StopArguments) {
 }
 
 fn command_status(arguments: StatusArguments) {
-    show_mode();
-    show_pip_uv_repository_mode();
     let supervisor_instance = get_instance_path_for_instance(&arguments.control.instance().clone());
     let supervisor_workspace =
         get_workspace_path_for_instance(&arguments.control.instance().clone());
@@ -1791,37 +1940,43 @@ struct InstanceRow {
  */
 
 #[cfg(not(any(test, feature = "mock-env")))]
-pub fn show_mode() {
-    warn!(
-        "Activated tabsdata {} in production mode",
-        TableFrameExtension.edition()
-    );
+pub fn run_mode() -> String {
+    "Production".to_string()
 }
 
 #[cfg(any(test, feature = "mock-env"))]
-pub fn show_mode() {
-    info!(
-        "Activated tabsdata {} in development mode",
-        TableFrameExtension.edition()
-    );
+pub fn run_mode() -> String {
+    "Development (mock-env feature enabled)".to_string()
 }
 
-pub fn show_pip_uv_repository_mode() {
-    const PIP_ENV_VARS: [&str; 5] = [
+#[cfg(not(any(test, feature = "mock-env")))]
+pub fn is_dev_mode() -> bool {
+    false
+}
+
+pub fn get_pip_uv_repository_envs() -> BTreeMap<String, String> {
+    const PIP_UV_ENV_VARS: [&str; 11] = [
         "PIP_INDEX_URL",
+        "PIP_PYPI_URL",
         "PIP_EXTRA_INDEX_URL",
+        "PIP_NO_INDEX",
+        "PIP_FIND_LINKS",
         "UV_DEFAULT_INDEX",
+        "UV_INDEX",
+        "UV_INDEX_STRATEGY",
         "UV_INDEX_URL",
         "UV_EXTRA_INDEX_URL",
+        "UV_FIND_LINKS",
     ];
-    for env_var in PIP_ENV_VARS {
-        if let Ok(env_value) = env::var(env_var) {
-            warn!(
-                "You are using a non-standard pip/uv setup: '{}' = '{}'",
-                env_var, env_value
-            );
+
+    let mut repository_envs = BTreeMap::new();
+    for pip_uv_env_var in PIP_UV_ENV_VARS {
+        if let Ok(pip_uv_env_value) = env::var(pip_uv_env_var) {
+            repository_envs.insert(pip_uv_env_var.to_string(), pip_uv_env_value);
         }
     }
+
+    repository_envs
 }
 
 pub fn show_setup_and_launch() {

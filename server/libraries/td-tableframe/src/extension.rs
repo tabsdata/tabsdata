@@ -12,7 +12,7 @@ pub mod tests {
     fn test_summary_annotation() {
         assert_eq!(
             TableFrameExtension.summary().unwrap(),
-            "te-tableframe-standard".to_string()
+            "te-tableframe-open-source".to_string()
         )
     }
 
@@ -29,7 +29,7 @@ pub mod tests {
     fn test_summary_condition() {
         let summary = TableFrameExtension.summary().unwrap();
         if !cfg!(feature = "enterprise") {
-            assert_eq!(summary, "te-tableframe-standard".to_string())
+            assert_eq!(summary, "te-tableframe-open-source".to_string())
         } else {
             assert_eq!(summary, "te-tableframe-enterprise".to_string())
         }
