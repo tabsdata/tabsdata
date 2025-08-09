@@ -489,7 +489,7 @@ mod tests {
         let file_r = format!("{id_r}.parquet");
         let path_r = folder.clone().join(file_r.clone());
         let path_r_normalized = path_r.to_string_lossy().replace("\\", "/");
-        let url_r = Url::parse(&format!("file:///{}", path_r_normalized)).unwrap();
+        let url_r = Url::parse(&format!("file:///{path_r_normalized}")).unwrap();
 
         lf.sink_parquet(
             SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
@@ -509,7 +509,7 @@ mod tests {
         let file_w = format!("{id_w}.parquet");
         let path_w = folder.clone().join(file_w.clone());
         let path_w_normalized = path_w.to_string_lossy().replace("\\", "/");
-        let url_w = Url::parse(&format!("file:///{}", path_w_normalized)).unwrap();
+        let url_w = Url::parse(&format!("file:///{path_w_normalized}")).unwrap();
 
         let request = ImportRequestBuilder::default()
             .source(

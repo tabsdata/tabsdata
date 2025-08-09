@@ -30,7 +30,7 @@ fn check_banner() -> std::io::Result<()> {
     if ack_version.trim() == TABSDATA_VERSION.trim() {
         return Ok(());
     }
-    let _ = show_banner();
+    show_banner();
     if let Some(parent) = ack.parent() {
         fs::create_dir_all(parent)?;
     }
