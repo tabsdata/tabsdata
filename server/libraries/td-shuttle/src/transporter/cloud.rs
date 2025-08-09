@@ -100,7 +100,26 @@ pub fn create_sink_target(
 }
 
 fn create_local_sink_target(url: &Url) -> PolarsResult<SinkTarget> {
-    let target = SinkTarget::Path(PlPath::new(url.to_string().as_str()));
+    let target = if url.scheme() == "file" {
+        #[cfg(not(windows))]
+        {
+            SinkTarget::Path(PlPath::new(url.path().to_string().as_str()))
+        }
+        #[cfg(windows)]
+        {
+            let mut path_str = url.path().to_string();
+            if path_str.starts_with('/')
+                && path_str.len() > 1
+                && path_str.chars().nth(2) == Some(':')
+            {
+                path_str.remove(0);
+            }
+            path_str = path_str.replace("/", "\\");
+            SinkTarget::Path(PlPath::new(path_str.as_str()))
+        }
+    } else {
+        SinkTarget::Path(PlPath::new(url.as_str()))
+    };
     Ok(target)
 }
 

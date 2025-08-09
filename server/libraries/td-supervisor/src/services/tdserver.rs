@@ -595,7 +595,11 @@ pub fn show_information() {
 
     let information = information.join("\n");
 
-    let width = if pip_uv_repository_envs.is_empty() { 40 } else { 80 };
+    let width = if pip_uv_repository_envs.is_empty() {
+        40
+    } else {
+        80
+    };
     show_box(&information, width).unwrap()
 }
 

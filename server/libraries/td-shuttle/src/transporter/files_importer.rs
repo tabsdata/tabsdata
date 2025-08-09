@@ -488,7 +488,8 @@ mod tests {
         let id_r = id();
         let file_r = format!("{id_r}.parquet");
         let path_r = folder.clone().join(file_r.clone());
-        let url_r = Url::from_file_path(path_r.clone()).unwrap();
+        let path_r_normalized = path_r.to_string_lossy().replace("\\", "/");
+        let url_r = Url::parse(&format!("file:///{}", path_r_normalized)).unwrap();
 
         lf.sink_parquet(
             SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
@@ -507,7 +508,8 @@ mod tests {
         let id_w = id();
         let file_w = format!("{id_w}.parquet");
         let path_w = folder.clone().join(file_w.clone());
-        let url_w = Url::from_file_path(path_w.clone()).unwrap();
+        let path_w_normalized = path_w.to_string_lossy().replace("\\", "/");
+        let url_w = Url::parse(&format!("file:///{}", path_w_normalized)).unwrap();
 
         let request = ImportRequestBuilder::default()
             .source(
@@ -534,13 +536,13 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(path_r.clone().to_string_lossy().as_ref()),
+            location: ObjectStorePath::from(path_r_normalized.as_str()),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id_r.to_string()),
             version: Some("v1".to_string()),
         };
-        let files: Vec<(Url, ObjectMeta)> = vec![(url_w.clone(), meta)];
+        let files: Vec<(Url, ObjectMeta)> = vec![(url_r.clone(), meta)];
 
         let response = FilesImporter::import(&request, files).await.unwrap();
 
@@ -549,8 +551,28 @@ mod tests {
 
         let url_tf = response.first().unwrap().to.clone();
 
+        let path_tf = if url_tf.scheme() == "file" {
+            #[cfg(not(windows))]
+            {
+                url_tf.path().to_string()
+            }
+            #[cfg(windows)]
+            {
+                let mut path_str_lf = url_tf.path().to_string();
+                if path_str_lf.starts_with('/')
+                    && path_str_lf.len() > 1
+                    && path_str_lf.chars().nth(2) == Some(':')
+                {
+                    path_str_lf.remove(0);
+                }
+                path_str_lf.replace("/", "\\")
+            }
+        } else {
+            url_tf.to_string()
+        };
+
         let lf = LazyFrame::scan_parquet(
-            PlPath::new(url_tf.to_string().as_str()),
+            PlPath::new(path_tf.as_str()),
             ScanArgsParquet {
                 ..Default::default()
             },
