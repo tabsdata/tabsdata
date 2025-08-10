@@ -251,7 +251,22 @@ mod tests {
                     let a = Int64Chunked::new(format!("i{i}").into(), &[1, 2]).into_column();
                     let b = StringChunked::new("s".into(), &["a", "b"]).into_column();
                     let lf = DataFrame::new(vec![a, b]).unwrap().lazy();
-                    let sink_target = SinkTarget::Path(PlPath::new(url.to_string().as_str()));
+                    let sink_target = if url.scheme() == "file" {
+                        #[cfg(not(windows))]
+                        {
+                            SinkTarget::Path(PlPath::new(url.path().to_string().as_str()))
+                        }
+                        #[cfg(windows)]
+                        {
+                            let mut url_path = url.path().to_string();
+                            if url_path.starts_with('/') || url_path.starts_with('\\') {
+                                url_path.remove(0);
+                            }
+                            SinkTarget::Path(PlPath::new(url_path.as_str()))
+                        }
+                    } else {
+                        SinkTarget::Path(PlPath::new(url.as_str()))
+                    };
                     lf.sink_parquet(
                         sink_target,
                         ParquetWriteOptions::default(),

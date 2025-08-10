@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use std::io;
 use std::io::{Error, Result as IoResult, Write};
 use std::sync::{Arc, Mutex};
-use tokio::runtime::Handle;
 use url::Url;
 
 pub struct ObjectStoreWriter {
@@ -41,11 +40,18 @@ impl ObjectStoreWriter {
         let store = Arc::clone(&self.store);
         let path = self.path.clone();
 
-        tokio::task::block_in_place(|| {
-            Handle::current()
-                .block_on(async move { store.put(&path, PutPayload::from_bytes(data)).await })
-        })
-        .map_err(Error::other)?;
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let result =
+                rt.block_on(async move { store.put(&path, PutPayload::from_bytes(data)).await });
+            let _ = tx.send(result);
+        });
+
+        rx.recv()
+            .map_err(|_| Error::other("Channel receive failed"))?
+            .map_err(Error::other)?;
 
         Ok(())
     }
