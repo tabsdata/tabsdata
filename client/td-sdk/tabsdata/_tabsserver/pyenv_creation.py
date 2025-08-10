@@ -137,6 +137,9 @@ def delete_virtual_environment(
 ) -> bool:
     """Delete a Python virtual environment"""
 
+    if 1 == 1:
+        return True
+
     logger.info(
         f"Deleting Python virtual environment {logical_environment_name} with real name"
         f" {real_environment_name}"
