@@ -12,7 +12,7 @@ use crate::types::function::FunctionDB;
 #[td_type::Dao]
 #[dao(
     sql_table = "triggers",
-    partition_by = "function_id",
+    partition_by = "trigger_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "trigger_by_function_id", down = "function_id")
 )]

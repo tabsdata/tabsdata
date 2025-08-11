@@ -2,4 +2,5 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-pub mod update;
+pub(crate) mod delete;
+pub(crate) mod update;

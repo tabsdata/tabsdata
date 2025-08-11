@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use ta_execution::graphs::{ExecutionGraph, GraphBuilder};
-use td_error::TdError;
+use td_error::{api_error, ApiError, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::recursive::RecursiveQueries;
@@ -21,6 +21,20 @@ use td_objects::types::table_ref::Versions;
 use td_objects::types::trigger::TriggerDBWithNames;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use te_execution::transaction::TransactionBy;
+
+pub async fn assert_active_status(
+    Input(function): Input<FunctionDBWithNames>,
+) -> Result<(), TdError> {
+    if !matches!(function.status(), FunctionStatus::Active) {
+        Err(api_error!(
+            ApiError::InputError,
+            "Function '{}' is not active: {}",
+            function.name(),
+            function.status()
+        ))?
+    }
+    Ok(())
+}
 
 pub async fn find_trigger_graph(
     SrvCtx(queries): SrvCtx<DaoQueries>,
@@ -198,7 +212,7 @@ pub async fn build_execution_template(
     let dep_functions: Vec<FunctionDBWithNames> = queries
         .find_versions_at::<FunctionDBWithNames>(
             Some(&at_time),
-            Some(&[&FunctionStatus::Active, &FunctionStatus::Frozen]),
+            Some(&[&FunctionStatus::Active]),
             &unique_dep_function_ids,
         )?
         .build_query_as()
@@ -207,7 +221,7 @@ pub async fn build_execution_template(
         .map_err(handle_sql_err)?;
     let dep_functions: HashMap<_, _> = dep_functions.iter().map(|t| (t.function_id(), t)).collect();
 
-    // Recompute the trigger graph with table-function pairs
+    // Recompute the dependency graph with table-function pairs
     let dep_graph = dep_graph
         .iter()
         .filter_map(|dep| {

@@ -190,14 +190,24 @@ where
         r#"
             SELECT
                 d.*,
-                CAST(d.{recurse_down} AS TEXT) AS path
+                CAST(d.{recurse_up} AS TEXT) AS path
             FROM
                 {LATEST_RECURSION_VERSIONS_CTE} d
             INNER JOIN
-                {LATEST_REFERENCE_VERSIONS_CTE} fv ON fv.{recursion_ref} = d.{recurse_up}
+                {LATEST_REFERENCE_VERSIONS_CTE} f ON f.{recursion_ref} = d.{recurse_up}
+            WHERE
+            EXISTS (
+                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
+                WHERE f.{recursion_ref} = d.{recurse_down}
+            )
+            AND
+            EXISTS (
+                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
+                WHERE f.{recursion_ref} = d.{recurse_up}
+            )
         "#
     ));
-    query_builder.push(format!("WHERE fv.{starting_at} = "));
+    query_builder.push(format!("AND f.{starting_at} = "));
     direct_reference_entity.push_bind(query_builder);
 
     query_builder.push(" UNION ALL ");
@@ -211,25 +221,46 @@ where
             FROM
                 {LATEST_RECURSION_VERSIONS_CTE} d
             INNER JOIN
-                {LATEST_REFERENCE_VERSIONS_CTE} fv ON fv.{recursion_ref} = d.{recurse_down}
+                {LATEST_REFERENCE_VERSIONS_CTE} f ON f.{recursion_ref} = d.{recurse_down}
+            WHERE
+            EXISTS (
+                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
+                WHERE f.{recursion_ref} = d.{recurse_down}
+            )
+            AND
+            EXISTS (
+                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
+                WHERE f.{recursion_ref} = d.{recurse_up}
+            )
         "#
     ));
-    query_builder.push(format!("WHERE fv.{starting_at} = "));
+    query_builder.push(format!("AND f.{starting_at} = "));
     direct_reference_entity.push_bind(query_builder);
 
     query_builder.push(" UNION ALL ");
 
-    // And then all downstream recursive (preventing cycles)
+    // And then all downstream recursive (preventing cycles).
+    // We also prevent advancing the recursion if the path already contains the current downstream.
+    // We also prevent advancing the recursion if the status is not valid (by checking against
+    // LATEST_REFERENCE_VERSIONS_CTE).
     query_builder.push(format!(
         r#"
             SELECT
                 d.*,
-                rd.path || ',' || d.{recurse_down} AS path
+                r.path || ',' || d.{recurse_down} AS path
             FROM
                 {LATEST_RECURSION_VERSIONS_CTE} d
             INNER JOIN
-                {RECURSIVE_VERSIONS_CTE} rd ON rd.{recurse_down} = d.{recurse_up}
-            WHERE instr(rd.path, d.{recurse_down}) = 0
+                {RECURSIVE_VERSIONS_CTE} r ON r.{recurse_down} = d.{recurse_up}
+            WHERE instr(r.path, d.{recurse_down}) = 0
+            AND EXISTS (
+                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
+                WHERE f.{recursion_ref} = d.{recurse_down}
+            )
+            AND EXISTS (
+                SELECT 1 FROM {LATEST_REFERENCE_VERSIONS_CTE} f
+                WHERE f.{recursion_ref} = d.{recurse_up}
+            )
         "#
     ));
 
@@ -277,7 +308,6 @@ mod tests {
     )]
     struct TestDao {
         id: TestId,
-        partition_id: TestPartition,
         status: TestStatus,
         current: TestRecursion,
         downstream: TestRecursion,
@@ -287,12 +317,11 @@ mod tests {
     #[Dao]
     #[dao(
         sql_table = "test_table_reference",
-        partition_by = "partition_id",
+        partition_by = "reference_id",
         versioned_at(order_by = "defined_on", condition_by = "status")
     )]
     struct RecursionReference {
         id: TestId,
-        partition_id: TestPartition,
         reference_id: TestRecursion,
         status: TestStatus,
         defined_on: AtTime,
@@ -315,7 +344,6 @@ mod tests {
         static ref FIXTURE_TEST_DAOS: Vec<TestDao> = vec![
             TestDao {
                 id: TestId::try_from("AAA").unwrap(),
-                partition_id: TestPartition::try_from("p_10").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursion::try_from("ref_0").unwrap(),
                 downstream: TestRecursion::try_from("ref_1").unwrap(),
@@ -323,7 +351,6 @@ mod tests {
             },
             TestDao {
                 id: TestId::try_from("BBB").unwrap(),
-                partition_id: TestPartition::try_from("p_11").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursion::try_from("ref_1").unwrap(),
                 downstream: TestRecursion::try_from("ref_2").unwrap(),
@@ -331,7 +358,6 @@ mod tests {
             },
             TestDao {
                 id: TestId::try_from("CCC").unwrap(),
-                partition_id: TestPartition::try_from("p_11").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursion::try_from("ref_1").unwrap(),
                 downstream: TestRecursion::try_from("ref_3").unwrap(),
@@ -339,7 +365,6 @@ mod tests {
             },
             TestDao {
                 id: TestId::try_from("DDD").unwrap(),
-                partition_id: TestPartition::try_from("p_12").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursion::try_from("ref_1").unwrap(),
                 downstream: TestRecursion::try_from("ref_4").unwrap(),
@@ -347,7 +372,6 @@ mod tests {
             },
             TestDao {
                 id: TestId::try_from("EEE").unwrap(),
-                partition_id: TestPartition::try_from("p_13").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 current: TestRecursion::try_from("ref_4").unwrap(),
                 downstream: TestRecursion::try_from("ref_5").unwrap(),
@@ -360,42 +384,42 @@ mod tests {
         static ref FIXTURE_RECURSION_REF: Vec<RecursionReference> = vec![
             RecursionReference {
                 id: TestId::try_from("MMM").unwrap(),
-                partition_id: TestPartition::try_from("p_0").unwrap(),
                 reference_id: TestRecursion::try_from("ref_0").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 defined_on: time(0),
             },
             RecursionReference {
                 id: TestId::try_from("NNN").unwrap(),
-                partition_id: TestPartition::try_from("p_1").unwrap(),
                 reference_id: TestRecursion::try_from("ref_1").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 defined_on: time(0),
             },
             RecursionReference {
                 id: TestId::try_from("OOO").unwrap(),
-                partition_id: TestPartition::try_from("p_2").unwrap(),
                 reference_id: TestRecursion::try_from("ref_2").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 defined_on: time(0),
             },
             RecursionReference {
-                id: TestId::try_from("PPP").unwrap(),
-                partition_id: TestPartition::try_from("p_2").unwrap(),
+                id: TestId::try_from("QQQ").unwrap(),
                 reference_id: TestRecursion::try_from("ref_3").unwrap(),
-                status: TestStatus::try_from("D").unwrap(),
+                status: TestStatus::try_from("A").unwrap(),
                 defined_on: time(1),
             },
             RecursionReference {
-                id: TestId::try_from("QQQ").unwrap(),
-                partition_id: TestPartition::try_from("p_3").unwrap(),
-                reference_id: TestRecursion::try_from("ref_4").unwrap(),
-                status: TestStatus::try_from("A").unwrap(),
+                id: TestId::try_from("PPP").unwrap(),
+                reference_id: TestRecursion::try_from("ref_2").unwrap(),
+                status: TestStatus::try_from("D").unwrap(),
                 defined_on: time(2),
             },
             RecursionReference {
-                id: TestId::try_from("RQQQ").unwrap(),
-                partition_id: TestPartition::try_from("p_4").unwrap(),
+                id: TestId::try_from("RRR").unwrap(),
+                reference_id: TestRecursion::try_from("ref_4").unwrap(),
+                status: TestStatus::try_from("A").unwrap(),
+                defined_on: time(3),
+            },
+            RecursionReference {
+                id: TestId::try_from("SSS").unwrap(),
                 reference_id: TestRecursion::try_from("ref_5").unwrap(),
                 status: TestStatus::try_from("A").unwrap(),
                 defined_on: time(3),
@@ -414,28 +438,56 @@ mod tests {
         let expected = "recursive_versions AS (\
         \n            SELECT\
         \n                d.*,\
-        \n                CAST(d.downstream AS TEXT) AS path\
+        \n                CAST(d.current AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
-        \n                latest_reference_versions fv ON fv.reference_id = d.current\
-        \n        WHERE fv.id = ? UNION ALL \
+        \n                latest_reference_versions f ON f.reference_id = d.current\
+        \n            WHERE\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.downstream\
+        \n            )\
+        \n            AND\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.current\
+        \n            )\
+        \n        AND f.id = ? UNION ALL \
         \n        SELECT\
         \n                d.*,\
         \n                CAST(d.downstream AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
-        \n                latest_reference_versions fv ON fv.reference_id = d.downstream\
-        \n        WHERE fv.id = ? UNION ALL \
+        \n                latest_reference_versions f ON f.reference_id = d.downstream\
+        \n            WHERE\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.downstream\
+        \n            )\
+        \n            AND\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.current\
+        \n            )\
+        \n        AND f.id = ? UNION ALL \
         \n            SELECT\
         \n                d.*,\
-        \n                rd.path || ',' || d.downstream AS path\
+        \n                r.path || ',' || d.downstream AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
-        \n                recursive_versions rd ON rd.downstream = d.current\
-        \n            WHERE instr(rd.path, d.downstream) = 0\
+        \n                recursive_versions r ON r.downstream = d.current\
+        \n            WHERE instr(r.path, d.downstream) = 0\
+        \n            AND EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.downstream\
+        \n            )\
+        \n            AND EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.current\
+        \n            )\
         \n        )";
         assert_eq!(query.sql(), expected);
     }
@@ -453,7 +505,7 @@ mod tests {
         let expected = "WITH latest_reference_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.reference_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
         \n            FROM\
         \n                test_table_reference v\
         \n         ),latest_reference_versions AS (\
@@ -466,7 +518,7 @@ mod tests {
         \n        ),latest_recursion_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
         \n            FROM\
         \n                test_table v\
         \n         ),latest_recursion_versions AS (\
@@ -479,29 +531,57 @@ mod tests {
         \n        ),recursive_versions AS (\
         \n            SELECT\
         \n                d.*,\
-        \n                CAST(d.downstream AS TEXT) AS path\
+        \n                CAST(d.current AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
-        \n                latest_reference_versions fv ON fv.reference_id = d.current\
-        \n        WHERE fv.id = ? UNION ALL \
+        \n                latest_reference_versions f ON f.reference_id = d.current\
+        \n            WHERE\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.downstream\
+        \n            )\
+        \n            AND\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.current\
+        \n            )\
+        \n        AND f.id = ? UNION ALL \
         \n        SELECT\
         \n                d.*,\
         \n                CAST(d.downstream AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
-        \n                latest_reference_versions fv ON fv.reference_id = d.downstream\
-        \n        WHERE fv.id = ? UNION ALL \
+        \n                latest_reference_versions f ON f.reference_id = d.downstream\
+        \n            WHERE\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.downstream\
+        \n            )\
+        \n            AND\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.current\
+        \n            )\
+        \n        AND f.id = ? UNION ALL \
         \n            SELECT\
         \n                d.*,\
-        \n                rd.path || ',' || d.downstream AS path\
+        \n                r.path || ',' || d.downstream AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
-        \n                recursive_versions rd ON rd.downstream = d.current\
-        \n            WHERE instr(rd.path, d.downstream) = 0\
-        \n        ) SELECT DISTINCT id, partition_id, status, current, downstream, defined_on FROM recursive_versions ORDER BY 1 DESC";
+        \n                recursive_versions r ON r.downstream = d.current\
+        \n            WHERE instr(r.path, d.downstream) = 0\
+        \n            AND EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.downstream\
+        \n            )\
+        \n            AND EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.current\
+        \n            )\
+        \n        ) SELECT DISTINCT id, status, current, downstream, defined_on FROM recursive_versions ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
 
@@ -523,7 +603,7 @@ mod tests {
         let expected = "WITH latest_reference_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.reference_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
         \n            FROM\
         \n                test_table_reference v\
         \n        WHERE v.defined_on <= ? ),latest_reference_versions AS (\
@@ -536,7 +616,7 @@ mod tests {
         \n        ),latest_recursion_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
         \n            FROM\
         \n                test_table v\
         \n        WHERE v.defined_on <= ? ),latest_recursion_versions AS (\
@@ -549,29 +629,57 @@ mod tests {
         \n        ),recursive_versions AS (\
         \n            SELECT\
         \n                d.*,\
-        \n                CAST(d.downstream AS TEXT) AS path\
+        \n                CAST(d.current AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
-        \n                latest_reference_versions fv ON fv.reference_id = d.current\
-        \n        WHERE fv.reference_id = ? UNION ALL \
+        \n                latest_reference_versions f ON f.reference_id = d.current\
+        \n            WHERE\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.downstream\
+        \n            )\
+        \n            AND\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.current\
+        \n            )\
+        \n        AND f.reference_id = ? UNION ALL \
         \n        SELECT\
         \n                d.*,\
         \n                CAST(d.downstream AS TEXT) AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
-        \n                latest_reference_versions fv ON fv.reference_id = d.downstream\
-        \n        WHERE fv.reference_id = ? UNION ALL \
+        \n                latest_reference_versions f ON f.reference_id = d.downstream\
+        \n            WHERE\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.downstream\
+        \n            )\
+        \n            AND\
+        \n            EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.current\
+        \n            )\
+        \n        AND f.reference_id = ? UNION ALL \
         \n            SELECT\
         \n                d.*,\
-        \n                rd.path || ',' || d.downstream AS path\
+        \n                r.path || ',' || d.downstream AS path\
         \n            FROM\
         \n                latest_recursion_versions d\
         \n            INNER JOIN\
-        \n                recursive_versions rd ON rd.downstream = d.current\
-        \n            WHERE instr(rd.path, d.downstream) = 0\
-        \n        ) SELECT DISTINCT id, partition_id, status, current, downstream, defined_on FROM recursive_versions ORDER BY 1 DESC";
+        \n                recursive_versions r ON r.downstream = d.current\
+        \n            WHERE instr(r.path, d.downstream) = 0\
+        \n            AND EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.downstream\
+        \n            )\
+        \n            AND EXISTS (\
+        \n                SELECT 1 FROM latest_reference_versions f\
+        \n                WHERE f.reference_id = d.current\
+        \n            )\
+        \n        ) SELECT DISTINCT id, status, current, downstream, defined_on FROM recursive_versions ORDER BY 1 DESC";
         assert_eq!(query.sql(), expected);
     }
 
@@ -640,15 +748,38 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_recursive"))]
+    async fn test_select_active_versions_break_downstream_by_status_ref(db: DbPool) {
+        let at = time(2);
+        let id = TestId::try_from("MMM").unwrap();
+        // PPP is D at time 2, so it will stop the recursion
+        let status = &[&TestStatus::try_from("A").unwrap()];
+        let mut query_builder = TEST_QUERIES
+            .select_recursive_versions_at::<TestDao, RecursionReference, _>(
+                Some(&at),
+                Some(status),
+                Some(&at),
+                Some(status),
+                &id,
+            )
+            .unwrap();
+        let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
+        // MMM: AAA -> CCC (as PPP is D, which should be pointing to BBB)
+        assert_eq!(result.len(), 2);
+        // (order by ID DESC)
+        assert_eq!(result[0], FIXTURE_TEST_DAOS[2]);
+        assert_eq!(result[1], FIXTURE_TEST_DAOS[0]);
+    }
+
+    #[td_test::test(sqlx(fixture = "test_recursive"))]
     async fn test_select_active_versions_none_last_in_stream(db: DbPool) {
-        let id = TestId::try_from("RRR").unwrap();
+        let id = TestId::try_from("SSS").unwrap();
         let mut query_builder = TEST_QUERIES
             .select_recursive_versions_at::<TestDao, RecursionReference, _>(
                 None, None, None, None, &id,
             )
             .unwrap();
         let result: Vec<TestDao> = query_builder.build_query_as().fetch_all(&db).await.unwrap();
-        // RRR: EEE (direct upstream)
+        // SSS: EEE (direct upstream)
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], FIXTURE_TEST_DAOS[4]);
     }
@@ -671,10 +802,10 @@ mod tests {
         let size: usize = 1000;
 
         let mut daos = vec![];
-        for i in 0..size {
+        // we need size+1 so the recursion ref of 1000 is valid
+        for i in 0..size + 1 {
             let reference = RecursionReference {
                 id: TestId::try_from(format!("YYY{i:04}"))?,
-                partition_id: TestPartition::try_from(format!("x_p_{i:04}"))?,
                 reference_id: TestRecursion::try_from(format!("x_ref_{i:04}"))?,
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
@@ -687,7 +818,6 @@ mod tests {
                 .unwrap();
             let dao = TestDao {
                 id: TestId::try_from(format!("ZZZ{i:04}"))?,
-                partition_id: TestPartition::try_from(format!("x_p_{i:04}"))?,
                 status: TestStatus::try_from("A")?,
                 current: TestRecursion::try_from(format!("x_ref_{i:04}"))?,
                 downstream: TestRecursion::try_from(format!("x_ref_{:04}", i + 1))?,

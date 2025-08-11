@@ -4,18 +4,16 @@
 
 use std::ops::Deref;
 use td_error::{td_error, TdError};
-use td_objects::crudl::{handle_sql_err, RequestContext};
-use td_objects::sql::cte::CteQueries;
-use td_objects::sql::DaoQueries;
+use td_objects::crudl::RequestContext;
 use td_objects::types::basic::{
-    CollectionName, FunctionStatus, FunctionVersionId, TableName, TableStatus, TableVersionId,
-    TriggerStatus, TriggerVersionId,
+    CollectionName, DependencyStatus, DependencyVersionId, FunctionStatus, FunctionVersionId,
+    TableName, TableStatus, TableVersionId, TriggerStatus, TriggerVersionId,
 };
-use td_objects::types::dependency::DependencyDB;
+use td_objects::types::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::types::function::{FunctionDB, FunctionDBBuilder};
 use td_objects::types::table::{TableDB, TableDBBuilder};
 use td_objects::types::trigger::{TriggerDB, TriggerDBBuilder};
-use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+use td_tower::extractors::Input;
 
 #[td_error]
 enum DeleteTableError {
@@ -23,37 +21,10 @@ enum DeleteTableError {
     TableNotFrozen(TableName, CollectionName, String) = 0,
 }
 
-pub async fn build_frozen_function_versions_dependencies(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
+pub async fn build_frozen_functions(
     Input(request_context): Input<RequestContext>,
-    Input(dependencies): Input<Vec<DependencyDB>>,
+    Input(dependant_versions_found): Input<Vec<FunctionDB>>,
 ) -> Result<Vec<FunctionDB>, TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
-
-    // Dependant function versions
-    // TODO We can avoid this query by creating a view with dependency versions and dependency functions.
-    let dependant_versions_found = if dependencies.is_empty() {
-        Vec::new()
-    } else {
-        // TODO this is not getting chunked. If there are too many we can have issues.
-        let function_status = [&FunctionStatus::Active];
-        let function_versions_lookup: Vec<_> =
-            dependencies.iter().map(|d| d.function_id()).collect();
-        let function_versions_found: Vec<FunctionDB> = queries
-            .find_versions_at::<FunctionDB>(
-                None,
-                Some(&function_status),
-                &function_versions_lookup,
-            )?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
-        function_versions_found
-    };
-
     let frozen_versions = dependant_versions_found
         .iter()
         .map(|v| {
@@ -66,7 +37,7 @@ pub async fn build_frozen_function_versions_dependencies(
     Ok(frozen_versions)
 }
 
-pub async fn build_deleted_trigger_versions(
+pub async fn build_deleted_triggers(
     Input(triggers): Input<Vec<TriggerDB>>,
     Input(request_context): Input<RequestContext>,
 ) -> Result<Vec<TriggerDB>, TdError> {
@@ -82,7 +53,23 @@ pub async fn build_deleted_trigger_versions(
     Ok(deleted_versions)
 }
 
-pub async fn build_deleted_table_version(
+pub async fn build_deleted_dependencies(
+    Input(deps): Input<Vec<DependencyDB>>,
+    Input(request_context): Input<RequestContext>,
+) -> Result<Vec<DependencyDB>, TdError> {
+    let deleted_versions = deps
+        .iter()
+        .map(|d| {
+            DependencyDBBuilder::try_from((request_context.deref(), d.to_builder()))?
+                .id(DependencyVersionId::default())
+                .status(DependencyStatus::Deleted)
+                .build()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(deleted_versions)
+}
+
+pub async fn build_deleted_table(
     Input(collection_name): Input<CollectionName>,
     Input(existing_table_version): Input<TableDB>,
     Input(builder): Input<TableDBBuilder>,
@@ -99,8 +86,6 @@ pub async fn build_deleted_table_version(
         .deref()
         .clone()
         .id(TableVersionId::default())
-        // We use the function version id of the function that was generated when deleting the table
-        // for all deleted tables.
         .status(TableStatus::Deleted)
         .build()?;
     Ok(deleted_version)

@@ -56,19 +56,19 @@ fn generate_deleted_name() -> CollectionName {
 #[td_type::Dao]
 #[dao(sql_table = "collections")]
 #[td_type(
+    builder(try_from = CollectionDB, skip_all),
     updater(try_from = RequestContext, skip_all),
-    updater(try_from = CollectionDB, skip_all)
 )]
 pub struct CollectionDeleteDB {
     #[builder(default = "generate_deleted_name()")]
     name: CollectionName,
 
-    #[td_type(updater(try_from = RequestContext, include, field = "time"))]
+    #[td_type(updater(include, field = "time"))]
     modified_on: AtTime,
-    #[td_type(updater(try_from = RequestContext, include, field = "user_id"))]
+    #[td_type(updater(include, field = "user_id"))]
     modified_by_id: UserId,
 
-    #[td_type(updater(try_from = CollectionDB, include, field="name"))]
+    #[td_type(builder(include, field = "name"))]
     name_when_deleted: CollectionName,
 }
 

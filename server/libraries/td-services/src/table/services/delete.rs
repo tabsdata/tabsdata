@@ -3,8 +3,7 @@
 //
 
 use crate::table::layers::delete::{
-    build_deleted_table_version, build_deleted_trigger_versions,
-    build_frozen_function_versions_dependencies,
+    build_deleted_table, build_deleted_triggers, build_frozen_functions,
 };
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
@@ -13,14 +12,15 @@ use td_objects::rest_urls::TableParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
-    combine, ExtractNameService, ExtractService, TryIntoService, UpdateService, With,
+    combine, ExtractNameService, ExtractService, ExtractVecService, TryIntoService, UpdateService,
+    With,
 };
 use td_objects::tower_service::sql::{
-    insert, insert_vec, By, SqlSelectAllService, SqlSelectService,
+    insert, insert_vec, By, SqlFindService, SqlSelectAllService, SqlSelectService,
 };
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, DependencyStatus, TableId, TableIdName,
-    TableStatus, TableVersionId, TriggerStatus,
+    AtTime, CollectionId, CollectionIdName, CollectionName, DependencyStatus, FunctionId,
+    FunctionStatus, TableId, TableIdName, TableStatus, TableVersionId, TriggerStatus,
 };
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::dependency::DependencyDB;
@@ -54,7 +54,7 @@ fn provider() {
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollDev>::check),
-        // Get table. Extract table id, table version id, function id and function version id.
+        // Get table. Extract table id, table version id
         from_fn(combine::<CollectionIdName, TableIdName>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(TableStatus::frozen),
@@ -66,20 +66,23 @@ fn provider() {
         // at the current time.
         from_fn(DependencyStatus::active),
         from_fn(By::<TableId>::select_all_versions::<DependencyDB>),
-        from_fn(build_frozen_function_versions_dependencies),
+        from_fn(With::<DependencyDB>::extract_vec::<FunctionId>),
+        from_fn(FunctionStatus::active),
+        from_fn(By::<FunctionId>::find_versions::<FunctionDB>),
+        from_fn(build_frozen_functions),
         from_fn(insert_vec::<FunctionDB>),
         // Insert into trigger_versions(sql) entries with status=Deleted,
         // for all triggers that have the table as dependency
         // at the current time.
         from_fn(TriggerStatus::active_or_frozen),
         from_fn(By::<TableId>::select_all_versions::<TriggerDB>),
-        from_fn(build_deleted_trigger_versions),
+        from_fn(build_deleted_triggers),
         from_fn(insert_vec::<TriggerDB>),
         // Insert into table_versions(sql) status=Deleted.
         from_fn(By::<TableVersionId>::select::<TableDB>),
         from_fn(With::<TableDB>::convert_to::<TableDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<TableDBBuilder, _>),
-        from_fn(build_deleted_table_version),
+        from_fn(build_deleted_table),
         from_fn(insert::<TableDB>),
     )
 }
@@ -123,7 +126,7 @@ mod tests {
                 // check requester has collection permissions
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollDev>::check),
-                // Get table. Extract table id, table version id, function id and function version id.
+                // Get table. Extract table id, table version id
                 type_of_val(&combine::<CollectionIdName, TableIdName>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(&TableStatus::frozen),
@@ -137,20 +140,23 @@ mod tests {
                 // at the current time.
                 type_of_val(&DependencyStatus::active),
                 type_of_val(&By::<TableId>::select_all_versions::<DependencyDB>),
-                type_of_val(&build_frozen_function_versions_dependencies),
+                type_of_val(&With::<DependencyDB>::extract_vec::<FunctionId>),
+                type_of_val(&FunctionStatus::active),
+                type_of_val(&By::<FunctionId>::find_versions::<FunctionDB>),
+                type_of_val(&build_frozen_functions),
                 type_of_val(&insert_vec::<FunctionDB>),
                 // Insert into trigger_versions(sql) entries with status=Deleted,
                 // for all triggers that have the table as dependency
                 // at the current time.
                 type_of_val(&TriggerStatus::active_or_frozen),
                 type_of_val(&By::<TableId>::select_all_versions::<TriggerDB>),
-                type_of_val(&build_deleted_trigger_versions),
+                type_of_val(&build_deleted_triggers),
                 type_of_val(&insert_vec::<TriggerDB>),
                 // Insert into table_versions(sql) status=Deleted.
                 type_of_val(&By::<TableVersionId>::select::<TableDB>),
                 type_of_val(&With::<TableDB>::convert_to::<TableDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<TableDBBuilder, _>),
-                type_of_val(&build_deleted_table_version),
+                type_of_val(&build_deleted_table),
                 type_of_val(&insert::<TableDB>),
             ]);
     }

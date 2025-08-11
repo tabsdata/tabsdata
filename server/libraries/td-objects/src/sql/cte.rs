@@ -138,13 +138,14 @@ pub(crate) fn ranked_versions_at<'a, D>(
     let partition_field = D::partition_by();
     let natural_order_field = <D as VersionedAt>::order_by();
 
-    // Build CTEs containing ranked versions ordered by defined_on DESC
+    // Build CTEs containing ranked versions ordered by defined_on DESC and
+    // first field DESC (in case of ties, knowing that ids are sortable too).
     query_builder.push(format!("{cte_table_prefix}_ranked AS ("));
     query_builder.push(format!(
         r#"
             SELECT
                 v.*,
-                ROW_NUMBER() OVER (PARTITION BY v.{partition_field} ORDER BY v.{natural_order_field} DESC) AS rn
+                ROW_NUMBER() OVER (PARTITION BY v.{partition_field} ORDER BY v.{natural_order_field} DESC, v.id DESC) AS rn
             FROM
                 {table} v
         "#
@@ -374,13 +375,15 @@ fn status_where<'a, D: DataAccessObject + VersionedAt>(
 ) {
     let status_field = D::condition_by();
     if let Some(status) = status {
-        query_builder.push(" AND (");
-        let mut separated = query_builder.separated(" OR ");
-        for status in status {
-            separated.push(format!("rv.{status_field} = "));
-            status.push_bind_unseparated(&mut separated);
+        if !status.is_empty() {
+            query_builder.push(" AND (");
+            let mut separated = query_builder.separated(" OR ");
+            for status in status {
+                separated.push(format!("rv.{status_field} = "));
+                status.push_bind_unseparated(&mut separated);
+            }
+            query_builder.push(")");
         }
-        query_builder.push(")");
     }
 }
 
@@ -482,7 +485,7 @@ mod tests {
         let expected = "test_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
         \n            FROM\
         \n                test_table v\
         \n         ),test AS (\
@@ -508,7 +511,7 @@ mod tests {
         let expected = "test_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
         \n            FROM\
         \n                test_table v\
         \n        WHERE v.defined_on <= ? ),test AS (\
@@ -603,7 +606,7 @@ mod tests {
         let expected = "WITH latest_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
         \n            FROM\
         \n                test_table v\
         \n         ),latest_versions AS (\
@@ -628,7 +631,7 @@ mod tests {
         let expected = "WITH latest_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
         \n            FROM\
         \n                test_table v\
         \n        WHERE v.defined_on <= ? ),latest_versions AS (\
@@ -654,7 +657,7 @@ mod tests {
         let expected = "WITH latest_versions_ranked AS (\
         \n            SELECT\
         \n                v.*,\
-        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC) AS rn\
+        \n                ROW_NUMBER() OVER (PARTITION BY v.partition_id ORDER BY v.defined_on DESC, v.id DESC) AS rn\
         \n            FROM\
         \n                test_table v\
         \n        WHERE v.defined_on <= ? ),latest_versions AS (\

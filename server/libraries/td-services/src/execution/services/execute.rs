@@ -6,6 +6,7 @@ use crate::execution::layers::plan::{
     build_execution_plan, build_function_requirements, build_function_runs, build_response,
     build_table_data_versions, build_transaction_map, build_transactions,
 };
+use crate::execution::layers::template::assert_active_status;
 use crate::execution::layers::template::{
     build_execution_template, find_all_input_tables, find_trigger_graph,
 };
@@ -61,8 +62,9 @@ fn provider() {
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
         from_fn(combine::<CollectionIdName, FunctionIdName>),
         // Select trigger function.
-        from_fn(FunctionStatus::active),
+        from_fn(FunctionStatus::none),
         from_fn(By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
+        from_fn(assert_active_status),
         // check requester is coll_admin or coll_exec for the function's collection
         from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
         from_fn(AuthzOn::<CollectionId>::set),
@@ -155,32 +157,21 @@ pub(crate) mod tests {
             .assert_service::<CreateRequest<FunctionParam, ExecutionRequest>, ExecutionResponse>(
                 &[
                     // Extract from request.
-                    type_of_val(
-                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract::<
-                            RequestContext,
-                        >,
+                    type_of_val(&With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract::<RequestContext>),
+                    type_of_val(&
+                        With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_name::<FunctionParam>
                     ),
-                    type_of_val(
-                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_name::<
-                            FunctionParam,
-                        >,
-                    ),
-                    type_of_val(
-                        &With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_data::<
-                            ExecutionRequest,
-                        >,
+                    type_of_val(&
+                        With::<CreateRequest<FunctionParam, ExecutionRequest>>::extract_data::<ExecutionRequest>
                     ),
                     type_of_val(&With::<RequestContext>::extract::<AtTime>),
                     type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
                     type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
                     type_of_val(&combine::<CollectionIdName, FunctionIdName>),
                     // Select trigger function.
-                    type_of_val(&FunctionStatus::active),
-                    type_of_val(
-                        &By::<(CollectionIdName, FunctionIdName)>::select_version::<
-                            FunctionDBWithNames,
-                        >,
-                    ),
+                    type_of_val(&FunctionStatus::none),
+                    type_of_val(&By::<(CollectionIdName, FunctionIdName)>::select_version::<FunctionDBWithNames>),
+                    type_of_val(&assert_active_status),
                     // check requester is coll_admin or coll_exec for the function's collection
                     type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
                     type_of_val(&AuthzOn::<CollectionId>::set),
@@ -190,19 +181,16 @@ pub(crate) mod tests {
                     type_of_val(&find_trigger_graph),
                     // Find all input tables
                     type_of_val(&find_all_input_tables),
-                    // inter collections check for dependencies
+                    // inter collection authz check
                     type_of_val(&With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
                     type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
                     type_of_val(&Authz::<InterColl>::check_inter_collection),
-
                     // Create execution template
                     type_of_val(&build_execution_template),
-
-                    // inter collections check for trigger
+                    // inter collection authz check
                     type_of_val(&With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>),
                     type_of_val(&With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
                     type_of_val(&Authz::<InterColl>::check_inter_collection),
-
                     // Create execution plan.
                     // Build execution
                     type_of_val(&With::<FunctionDBWithNames>::convert_to::<ExecutionDBBuilder, _>),

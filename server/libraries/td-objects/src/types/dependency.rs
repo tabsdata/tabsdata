@@ -27,8 +27,10 @@ pub struct DependencyDB {
     #[td_type(builder(include))]
     collection_id: CollectionId,
     #[builder(default)]
+    #[td_type(extractor)]
     dependency_id: DependencyId,
     #[td_type(builder(include, field = "function_id"))]
+    #[td_type(extractor)]
     function_id: FunctionId,
     table_collection_id: CollectionId,
     table_function_id: FunctionId,
