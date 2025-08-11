@@ -32,7 +32,7 @@ pub fn td_error_impl(input: TokenStream) -> TokenStream {
         }
 
         impl td_error::TdDomainError for #name {
-            fn domain(&self) -> &'static str {
+            fn domain(&self) -> &str {
                 stringify!(#name)
             }
 

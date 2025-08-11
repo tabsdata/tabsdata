@@ -134,7 +134,7 @@ fn gen_error(type_: &Ident) -> proc_macro2::TokenStream {
         }
 
         impl td_error::TdDomainError for #builder_error_type {
-            fn domain(&self) -> &'static str {
+            fn domain(&self) -> &str {
                 stringify!(#builder_error_type)
             }
 

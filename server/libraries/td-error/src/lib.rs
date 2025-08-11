@@ -56,7 +56,7 @@ impl Display for ApiError {
 /// error enums annotated with the [`#td_error`] macro.
 pub trait TdDomainError: Error + Send + Sync {
     /// Returns the domain of the error. The name of the enum type is the domain error.
-    fn domain(&self) -> &'static str;
+    fn domain(&self) -> &str;
 
     /// Returns the error code, the [`Self::domain()`] concatenated with the variant discriminant.
     fn code(&self) -> String;
@@ -130,6 +130,72 @@ impl Display for TdError {
 impl Error for TdError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(self.td_error.as_ref())
+    }
+}
+
+/// Macro to create an inline error with a specific API error code. This macro is used to create
+/// errors without the need to define a specific error type.
+#[macro_export]
+macro_rules! api_error {
+    ($api_error:expr, $($arg:tt)*) => {{
+        $crate::TdError::new($crate::InlineError::new(
+            format!($($arg)*),
+            format!(
+                "{}:{}[{}]",
+                module_path!(),
+                file!(),
+                line!(),
+            ),
+            format!("Error::{:04}", $api_error as u16),
+            $api_error,
+        ))
+    }};
+}
+
+pub struct InlineError {
+    msg: String,
+    domain: String,
+    code: String,
+    api_error: ApiError,
+}
+
+impl InlineError {
+    /// Creates a new inline error with the given message, domain, code, and API error.
+    pub fn new(msg: String, domain: String, code: String, api_error: ApiError) -> Self {
+        Self {
+            msg,
+            domain,
+            code,
+            api_error,
+        }
+    }
+}
+
+impl Display for InlineError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
+impl Debug for InlineError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "InlineError({})", self.msg)
+    }
+}
+
+impl Error for InlineError {}
+
+impl TdDomainError for InlineError {
+    fn domain(&self) -> &str {
+        &self.domain
+    }
+
+    fn code(&self) -> String {
+        self.code.clone()
+    }
+
+    fn api_error(&self) -> ApiError {
+        self.api_error
     }
 }
 
