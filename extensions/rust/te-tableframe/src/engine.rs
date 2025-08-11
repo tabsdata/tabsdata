@@ -13,6 +13,6 @@ impl Extension for TableFrameExtension {
     }
 
     fn summary(&self) -> Result<String, Error> {
-        Ok("te-tableframe-opens-source".to_string())
+        Ok("te-tableframe-open-source".to_string())
     }
 }
