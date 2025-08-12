@@ -7,6 +7,7 @@
 -r requirements.txt
 -r connectors/python/tabsdata_databricks/requirements.txt
 -r connectors/python/tabsdata_mongodb/requirements.txt
+-r connectors/python/tabsdata_mssql/requirements.txt
 -r connectors/python/tabsdata_salesforce/requirements.txt
 -r connectors/python/tabsdata_snowflake/requirements.txt
 

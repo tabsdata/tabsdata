@@ -4,5 +4,6 @@
 
 tabsdata_databricks==1.2.0
 tabsdata_mongodb==1.2.0
+tabsdata_mssql==1.2.0
 tabsdata_salesforce==1.2.0
 tabsdata_snowflake==1.2.0

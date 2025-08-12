@@ -41,6 +41,7 @@ known_first_party = [
     "tabsdata",
     "tabsdata_databricks",
     "tabsdata_mongodb",
+    "tabsdata_mssql",
     "tabsdata_salesforce",
     "tabsdata_snowflake",
     "ta_features",

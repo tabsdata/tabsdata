@@ -1,0 +1,86 @@
+<!--
+Copyright 2025 Tabs Data Inc.
+-->
+
+# Setting up Snowflake for Tests
+
+Create an account on Snowflake, then create a user, database, schema and necessary policies and permissions.
+
+The following script does all the necessary setup for testing:
+
+Drop existing tests entities:
+
+```sql
+-- To drops everything if existed
+USE DEV_CI_DB;
+DROP USER IF EXISTS DEV_CI_USER;
+DROP AUTHENTICATION POLICY IF EXISTS DEV_CI_AUTH_POLICY;  
+DROP NETWORK POLICY IF EXISTS DEV_CI_NETWORK_POLICY;
+DROP NETWORK RULE IF EXISTS DEV_CI_NETWORK_RULE;
+DROP DATABASE IF EXISTS DEV_CI_DB;
+DROP ROLE IF EXISTS DEV_CI_ROLE;
+```
+
+Create a user, database, role, grants, authentication policy, network rule, 
+network policy and assign the user to the role:
+
+```sql
+CREATE USER DEV_CI_USER 
+  TYPE = PERSON 
+  PASSWORD = 'VLUs7XpEzWk2Atig73QW' 
+  MUST_CHANGE_PASSWORD = FALSE
+  DEFAULT_WAREHOUSE = 'COMPUTE_WH'  
+  ;
+
+CREATE DATABASE DEV_CI_DB;
+USE DEV_CI_DB;
+
+CREATE ROLE DEV_CI_ROLE;
+GRANT ALL ON DATABASE DEV_CI_DB TO DEV_CI_ROLE;
+
+GRANT ROLE DEV_CI_ROLE TO USER DEV_CI_USER;
+
+CREATE OR ALTER AUTHENTICATION POLICY DEV_CI_AUTH_POLICY
+  AUTHENTICATION_METHODS = ('PASSWORD', 'PROGRAMMATIC_ACCESS_TOKEN')
+  PAT_POLICY = (
+    default_expiry_in_days = 365,
+    max_expiry_in_days=365,
+    network_policy_evaluation = ENFORCED_NOT_REQUIRED
+  );
+  
+CREATE OR REPLACE NETWORK RULE DEV_CI_NETWORK_RULE
+  TYPE = IPV4
+  VALUE_LIST = ('0.0.0.0/0')
+  MODE = INGRESS;
+
+CREATE OR REPLACE NETWORK POLICY DEV_CI_NETWORK_POLICY
+  ALLOWED_NETWORK_RULE_LIST = (DEV_CI_NETWORK_RULE)
+  COMMENT = 'Network policy allowing all IPs';
+
+ALTER USER DEV_CI_USER SET NETWORK_POLICY = DEV_CI_NETWORK_POLICY;
+
+GRANT ALL ON SCHEMA DEV_CI_DB.PUBLIC TO ROLE DEV_CI_ROLE;
+
+GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE DEV_CI_ROLE;
+
+CREATE STAGE DEV_CI_DB.PUBLIC.PREEXISTING_STAGE;
+GRANT READ, WRITE ON STAGE DEV_CI_DB.PUBLIC.PREEXISTING_STAGE TO ROLE DEV_CI_ROLE;
+```
+
+Create a PAT (Personal Access Token) for the user and copy the token.
+
+```sql
+ALTER USER DEV_CI_USER ADD PAT DEV_CI_USER_PAT;
+```
+
+# Define the following environment variables in your `~/tabsdata-dev/test.env` file
+
+```plaintext
+    TD_SNOWFLAKE_ACCOUNT=<SNOWFLAKE ACCOUNT>
+    TD_SNOWFLAKE_USER=DEV_CI_USER
+    TD_SNOWFLAKE_PAT=<PAT GENERATED IN THE PREVIOUS STEP>
+    TD_SNOWFLAKE_ROLE=DEV_CI_ROLE
+    TD_SNOWFLAKE_DATABASE=DEV_CI_DB
+    TD_SNOWFLAKE_SCHEMA=PUBLIC
+    TD_SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+```

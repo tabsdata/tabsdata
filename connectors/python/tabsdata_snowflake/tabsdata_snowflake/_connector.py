@@ -9,6 +9,7 @@ from typing import List, Literal
 
 import polars as pl
 
+from tabsdata._io.outputs.shared_enums import IfTableExistsStrategy
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._secret import _recursively_evaluate_secret
 from tabsdata._tabsserver.function.global_utils import convert_path_to_uri
@@ -75,22 +76,7 @@ class SnowflakeDestination(DestinationPlugin):
         finally:
             restore_snowflake_logger_levels()
         self.connection_parameters = connection_parameters
-        if isinstance(destination_table, str):
-            self.destination_table = [destination_table]
-        elif isinstance(destination_table, list) and all(
-            isinstance(t, str) for t in destination_table
-        ):
-            self.destination_table = destination_table
-        else:
-            raise TypeError(
-                "The 'destination_table' parameter must be a string or a list of "
-                f"strings, got {destination_table} instead."
-            )
-        if if_table_exists not in ["append", "replace"]:
-            raise ValueError(
-                "The if_table_exists parameter must be either 'append' or 'replace', "
-                f"got {if_table_exists} instead."
-            )
+        self.destination_table = destination_table
         self.if_table_exists = if_table_exists
         self.warehouse = connection_parameters.get("warehouse")
         self.database = connection_parameters.get("database")
@@ -104,6 +90,62 @@ class SnowflakeDestination(DestinationPlugin):
             "support_match_by_column_name", "CASE_INSENSITIVE"
         )
         self._support_purge = self.kwargs.get("support_purge", "TRUE")
+        self._support_connect = self.kwargs.get("support_connect", {})
+
+    @property
+    def destination_table(self) -> list[str]:
+        """
+        Get the destination table(s) where the data will be stored.
+
+        Returns:
+            str | list[str]: The destination table(s).
+        """
+        return self._destination_table
+
+    @destination_table.setter
+    def destination_table(self, value: str | list[str]):
+        """
+        Set the destination table(s) where the data will be stored.
+
+        Args:
+            value (str | list[str]): The destination table(s).
+        """
+        if isinstance(value, str):
+            self._destination_table = [value]
+        elif isinstance(value, list) and all(isinstance(q, str) for q in value):
+            self._destination_table = value
+        else:
+            raise TypeError(
+                "The 'destination_table' parameter must be a string or a list of "
+                f"strings, got a parameter '{value}' of type '{type(value)}' "
+                "instead."
+            )
+
+    @property
+    def if_table_exists(self) -> Literal["append", "replace"]:
+        """
+        Returns the value of the if_table_exists property.
+        This property determines what to do if the table already exists.
+        """
+        return self._if_table_exists
+
+    @if_table_exists.setter
+    def if_table_exists(self, value: Literal["append", "replace"]):
+        valid_values = [
+            IfTableExistsStrategy.APPEND.value,
+            IfTableExistsStrategy.REPLACE.value,
+        ]
+        if not isinstance(value, str):
+            raise TypeError(
+                "The 'if_table_exists' parameter must be a string, got a parameter of "
+                f"type '{type(value)}' instead."
+            )
+        if value not in valid_values:
+            raise ValueError(
+                f"The 'if_table_exists' parameter must one of '{valid_values}', "
+                f"got '{value}' instead."
+            )
+        self._if_table_exists = value
 
     def write(self, files):
         """
@@ -124,7 +166,7 @@ class SnowflakeDestination(DestinationPlugin):
         self.warehouse = connection_parameters.get("warehouse")
         self.database = connection_parameters.get("database")
         self.schema = connection_parameters.get("schema")
-        conn = connect(**connection_parameters)
+        conn = connect(**connection_parameters, **self._support_connect)
         for file_path, table in zip(files, self.destination_table):
             if file_path is None:
                 logger.warning(f"Received None for table '{table}'. No data loaded.")

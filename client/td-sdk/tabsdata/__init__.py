@@ -83,6 +83,7 @@ from tabsdata._io.outputs.sql_outputs import (
 from tabsdata._io.outputs.table_outputs import TableOutput
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import EnvironmentSecret, HashiCorpSecret
+from tabsdata._tabsdatafunction import TabsdataFunction
 from tabsdata._tabsserver.function.execution_exceptions import CustomException
 from tabsdata.tableframe.functions.col import col as col
 from tabsdata.tableframe.functions.eager import concat
@@ -90,6 +91,7 @@ from tabsdata.tableframe.functions.lit import lit
 from tabsdata.tableframe.lazyframe.frame import TableFrame
 from tabsdata_databricks._connector import DatabricksDestination
 from tabsdata_mongodb._connector import MongoDBDestination
+from tabsdata_mssql._connector import MSSQLDestination, MSSQLSource
 from tabsdata_salesforce._connector import SalesforceSource
 from tabsdata_snowflake._connector import SnowflakeDestination
 
@@ -193,10 +195,15 @@ __all__ = [
     "DatabricksDestination",
     # From tabsdata_mongodb.connector
     "MongoDBDestination",
+    # From tabsdata_mssql.connector
+    "MSSQLDestination",
+    "MSSQLSource",
     # From tabsdata_salesforce.connector
     "SalesforceSource",
     # From tabsdata_snowflake.connector
     "SnowflakeDestination",
+    # From tabsdata._tabsdatafunction
+    "TabsdataFunction",
 ]
 
 

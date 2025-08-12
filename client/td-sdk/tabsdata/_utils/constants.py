@@ -8,6 +8,7 @@ TD_TABSDATA_DEV_PKG = "TD_TABSDATA_DEV_PKG"
 TABSDATA_CONNECTORS_NAMES = [
     "databricks",
     "mongodb",
+    "mssql",
     "salesforce",
     "snowflake",
 ]

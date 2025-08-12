@@ -51,7 +51,6 @@ RESPONSE_FOLDER = "response_folder"
 LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 
 
-@pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
@@ -103,7 +102,6 @@ def test_input_salesforce(tmp_path):
     assert not os.path.isfile(path_to_output_initial_values)
 
 
-@pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
@@ -502,7 +500,6 @@ def test_login_fails():
         source._log_into_salesforce()
 
 
-@pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow
@@ -545,7 +542,6 @@ def test_input_salesforce_with_none(tmp_path):
     assert not os.path.isfile(output_file)
 
 
-@pytest.mark.integration
 @pytest.mark.requires_internet
 @pytest.mark.salesforce
 @pytest.mark.slow

@@ -52,6 +52,7 @@ logger.setLevel(logging.INFO)
 
 def pytest_configure():
     setup_tests_logging()
+    clean_everything()
 
 
 TABSDATA_OS = "tabsdata-os"
@@ -328,8 +329,6 @@ def testing_mysql(tmp_path_factory, worker_id):
 
 
 def create_docker_postgres_database():
-    mydb = None
-    remove_docker_containers(DEFAULT_PYTEST_POSTGRES_DOCKER_CONTAINER_NAME)
     logger.info("Starting Postgres container")
     client = docker.from_env()
     if client.containers.list(
@@ -462,8 +461,6 @@ def azure_client():
 
 
 def create_docker_mysql_database():
-    mydb = None
-    remove_docker_containers(DEFAULT_PYTEST_MYSQL_DOCKER_CONTAINER_NAME)
     logger.info("Starting MySQL container")
     client = docker.from_env()
     if client.containers.list(
@@ -548,7 +545,6 @@ def create_docker_mysql_database():
 
 
 def create_docker_hashicorp_vault():
-    remove_docker_containers(DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME)
     logger.info("Starting HashiCorp vault container")
     client = docker.from_env()
     if client.containers.list(
@@ -627,8 +623,6 @@ def create_docker_hashicorp_vault():
 
 
 def create_docker_mariadb_database():
-    mydb = None
-    remove_docker_containers(DEFAULT_PYTEST_MARIADB_DOCKER_CONTAINER_NAME)
     logger.info("Starting MariaDB container")
     client = docker.from_env()
     if client.containers.list(
@@ -715,8 +709,6 @@ def create_docker_mariadb_database():
 
 
 def create_docker_oracle_database():
-    mydb = None
-    remove_docker_containers(DEFAULT_PYTEST_ORACLE_DOCKER_CONTAINER_NAME)
     logger.info("Starting Oracle container")
     client = docker.from_env()
     if client.containers.list(
@@ -803,6 +795,10 @@ def pytest_sessionfinish(session, exitstatus):
     if getattr(session.config, "workerinput", None) is not None:
         # No need to download, the master process has already done that.
         return
+    clean_everything()
+
+
+def clean_everything():
     clean_python_virtual_environments()
     try:
         name_pattern = (

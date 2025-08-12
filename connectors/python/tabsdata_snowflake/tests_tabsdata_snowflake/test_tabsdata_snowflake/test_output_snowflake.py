@@ -473,9 +473,9 @@ def test_multiple_outputs_snowflake(tmp_path, snowflake_connection):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_snowflake_with_none(tmp_path, snowflake_connection):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    table_name = f"output_snowflake_table_{uuid.uuid4()}".replace("-", "_")
+    table_name = f"output_snowflake_table_with_none_{uuid.uuid4()}".replace("-", "_")
     destination = td.SnowflakeDestination(REAL_CONNECTION_PARAMETERS, table_name)
-    output_snowflake.output = destination
+    output_snowflake_none.output = destination
     context_archive = create_bundle_archive(
         output_snowflake_none,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -486,7 +486,7 @@ def test_output_snowflake_with_none(tmp_path, snowflake_connection):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_snowflake", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_snowflake_none", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
@@ -532,12 +532,16 @@ def test_output_snowflake_with_none(tmp_path, snowflake_connection):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_snowflake_with_list_none(tmp_path, snowflake_connection):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    table_name_0 = f"output_snowflake_table_0_{uuid.uuid4()}".replace("-", "_")
-    table_name_1 = f"output_snowflake_table_0_{uuid.uuid4()}".replace("-", "_")
+    table_name_0 = f"output_snowflake_list_none_table_0_{uuid.uuid4()}".replace(
+        "-", "_"
+    )
+    table_name_1 = f"output_snowflake_list_none_table_1_{uuid.uuid4()}".replace(
+        "-", "_"
+    )
     destination = td.SnowflakeDestination(
         REAL_CONNECTION_PARAMETERS, [table_name_0, table_name_1]
     )
-    multiple_outputs_snowflake.output = destination
+    output_snowflake_list_none.output = destination
     context_archive = create_bundle_archive(
         output_snowflake_list_none,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -549,7 +553,7 @@ def test_output_snowflake_with_list_none(tmp_path, snowflake_connection):
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_multiple_outputs_snowflake",
+        "test_output_snowflake_list_none",
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)

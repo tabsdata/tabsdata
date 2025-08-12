@@ -697,8 +697,8 @@ def test_multiple_outputs_databricks(tmp_path, databricks_client, sql_conn):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_databricks_with_none(tmp_path, databricks_client, sql_conn):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    table_name = f"test_output_databricks_table_{uuid.uuid4()}"
-    output_databricks.output.tables = table_name
+    table_name = f"test_output_databricks_none_table_{uuid.uuid4()}"
+    output_databricks_none.output.tables = table_name
     context_archive = create_bundle_archive(
         output_databricks_none,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -713,7 +713,7 @@ def test_output_databricks_with_none(tmp_path, databricks_client, sql_conn):
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
-        TESTING_RESOURCES_FOLDER, "test_output_databricks", "mock_table.parquet"
+        TESTING_RESOURCES_FOLDER, "test_output_databricks_none", "mock_table.parquet"
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)
     write_v2_yaml_file(
@@ -763,15 +763,15 @@ def test_output_databricks_with_list_none(tmp_path, databricks_client, sql_conn)
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
     table_name_1 = (
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
-        "test_multiple_outputs_databricks_table_1"
+        "test_output_databricks_list_none_table_1"
         f"_{uuid.uuid4()}"
     )
     table_name_2 = (
         f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}."
-        "test_multiple_outputs_databricks_table_2"
+        "test_output_databricks_list_none_table_2"
         f"_{uuid.uuid4()}"
     )
-    multiple_outputs_databricks.output.tables = [table_name_1, table_name_2]
+    output_databricks_list_none.output.tables = [table_name_1, table_name_2]
     context_archive = create_bundle_archive(
         output_databricks_list_none,
         local_packages=LOCAL_PACKAGES_LIST,
@@ -783,7 +783,7 @@ def test_output_databricks_with_list_none(tmp_path, databricks_client, sql_conn)
     os.makedirs(response_folder, exist_ok=True)
     mock_parquet_table = os.path.join(
         TESTING_RESOURCES_FOLDER,
-        "test_multiple_outputs_databricks",
+        "test_output_databricks_list_none",
         "mock_table.parquet",
     )
     function_data_folder = os.path.join(tmp_path, FUNCTION_DATA_FOLDER)

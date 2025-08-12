@@ -417,6 +417,13 @@ class ErrorCode(Enum):
             "The 'region' parameter in an AWSGlue must be a 'str', got '{}' instead"
         ),
     }
+    DECE49 = {
+        "code": "DECE-049",
+        "message": (
+            "The 'credentials' parameter in a MSSQLDestination must be a 'dict', a "
+            "'UserPasswordCredentials' object or None, got '{}' instead"
+        ),
+    }
     FCE1 = {
         "code": "FCE-001",
         "message": (
@@ -942,6 +949,13 @@ class ErrorCode(Enum):
             " string in ISO 8601 format or a datetime object with timezone "
             "information. Got '{}', which does not have timezone information. "
             "Ensure that it does by checking that 'last_modified.tzinfo' is not None."
+        ),
+    }
+    SOCE42 = {
+        "code": "SOCE-042",
+        "message": (
+            "The 'credentials' parameter in a MSSQLSource must be a 'dict', a "
+            "'UserPasswordCredentials' object or None, got '{}' instead"
         ),
     }
     TF1 = {
