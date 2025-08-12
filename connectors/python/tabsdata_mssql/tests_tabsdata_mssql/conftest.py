@@ -14,7 +14,6 @@ import logging
 from time import sleep
 
 import docker
-import pyodbc
 import pytest
 from filelock import FileLock
 
@@ -112,6 +111,8 @@ def create_docker_mssql_database(name: str, port: int, version: int):
             f"Database={DB_NAME};TrustServerCertificate=yes;"
         )
     else:
+        import pyodbc
+
         client.containers.run(
             f"mcr.microsoft.com/mssql/server:{version}-latest",
             name=name,
