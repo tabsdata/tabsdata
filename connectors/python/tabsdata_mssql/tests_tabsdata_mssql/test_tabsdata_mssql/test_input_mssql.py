@@ -22,10 +22,6 @@ from tests_tabsdata_mssql.conftest import (
     MSSQL_USER,
     TESTING_RESOURCES_FOLDER,
 )
-from tests_tabsdata_mssql.testing_resources.test_input_mssql.example import input_mssql
-from tests_tabsdata_mssql.testing_resources.test_input_mssql_initial_values.example import (
-    input_mssql_initial_values,
-)
 
 import tabsdata as td
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
@@ -189,6 +185,10 @@ def test_chunk_initial_values_no_result(tmp_path, mssql_connection):
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_mssql(mssql_connection, tmp_path, mssql_version):
+    from tests_tabsdata_mssql.testing_resources.test_input_mssql.example import (
+        input_mssql,
+    )
+
     logs_folder = os.path.join(
         LOCAL_DEV_FOLDER, f"{inspect.currentframe().f_code.co_name}_{mssql_version}"
     )
@@ -263,6 +263,10 @@ def test_input_mssql(mssql_connection, tmp_path, mssql_version):
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_mssql_initial_values(mssql_connection, tmp_path, mssql_version):
+    from tests_tabsdata_mssql.testing_resources.test_input_mssql_initial_values.example import (
+        input_mssql_initial_values,
+    )
+
     logs_folder = os.path.join(
         LOCAL_DEV_FOLDER, f"{inspect.currentframe().f_code.co_name}_{mssql_version}"
     )
@@ -346,6 +350,10 @@ def test_input_mssql_initial_values(mssql_connection, tmp_path, mssql_version):
 def test_input_mssql_initial_values_stored_number_0(
     mssql_connection, tmp_path, mssql_version
 ):
+    from tests_tabsdata_mssql.testing_resources.test_input_mssql_initial_values.example import (
+        input_mssql_initial_values,
+    )
+
     logs_folder = os.path.join(
         LOCAL_DEV_FOLDER, f"{inspect.currentframe().f_code.co_name}_{mssql_version}"
     )
@@ -433,6 +441,10 @@ def test_input_mssql_initial_values_stored_number_0(
 def test_input_mssql_initial_values_stored_number_2(
     mssql_connection, tmp_path, mssql_version
 ):
+    from tests_tabsdata_mssql.testing_resources.test_input_mssql_initial_values.example import (
+        input_mssql_initial_values,
+    )
+
     logs_folder = os.path.join(
         LOCAL_DEV_FOLDER, f"{inspect.currentframe().f_code.co_name}_{mssql_version}"
     )

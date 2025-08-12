@@ -24,15 +24,6 @@ from tests_tabsdata_mssql.conftest import (
     MSSQL_USER,
     TESTING_RESOURCES_FOLDER,
 )
-from tests_tabsdata_mssql.testing_resources.test_multiple_outputs_mssql.example import (
-    multiple_outputs_mssql,
-)
-from tests_tabsdata_mssql.testing_resources.test_output_mssql.example import (
-    output_mssql,
-)
-from tests_tabsdata_mssql.testing_resources.test_output_mssql_none.example import (
-    output_mssql_none,
-)
 
 import tabsdata as td
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
@@ -348,6 +339,10 @@ def test_single_element_table_list(tmp_path, size, mssql_connection):
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mssql(tmp_path, mssql_connection, mssql_version):
+    from tests_tabsdata_mssql.testing_resources.test_output_mssql.example import (
+        output_mssql,
+    )
+
     logs_folder = os.path.join(
         LOCAL_DEV_FOLDER, f"{inspect.currentframe().f_code.co_name}_{mssql_version}"
     )
@@ -407,6 +402,10 @@ def test_output_mssql(tmp_path, mssql_connection, mssql_version):
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_multiple_outputs_mssql(tmp_path, mssql_connection, mssql_version):
+    from tests_tabsdata_mssql.testing_resources.test_multiple_outputs_mssql.example import (
+        multiple_outputs_mssql,
+    )
+
     logs_folder = os.path.join(
         LOCAL_DEV_FOLDER, f"{inspect.currentframe().f_code.co_name}_{mssql_version}"
     )
@@ -486,6 +485,10 @@ def test_multiple_outputs_mssql(tmp_path, mssql_connection, mssql_version):
 @pytest.mark.tabsserver
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_output_mssql_with_none(tmp_path, mssql_connection, mssql_version):
+    from tests_tabsdata_mssql.testing_resources.test_output_mssql_none.example import (
+        output_mssql_none,
+    )
+
     logs_folder = os.path.join(
         LOCAL_DEV_FOLDER, f"{inspect.currentframe().f_code.co_name}_{mssql_version}"
     )
