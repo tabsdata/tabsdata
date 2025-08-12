@@ -2934,7 +2934,8 @@ class TabsdataServer:
         Raises:
             APIServerError: If the function could not be obtained.
         """
-        return Function(self.connection, collection_name, function_name)
+        collection = self.get_collection(collection_name)
+        return collection.get_function(function_name)
 
     def list_function_history(self, collection_name, function_name) -> List[Function]:
         """
