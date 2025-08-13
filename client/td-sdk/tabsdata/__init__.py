@@ -59,7 +59,13 @@ from tabsdata._credentials import (
     UserPasswordCredentials,
 )
 from tabsdata._decorators import ALL_DEPS, publisher, subscriber, transformer
-from tabsdata._format import CSVFormat, LogFormat, NDJSONFormat, ParquetFormat
+from tabsdata._format import (
+    AVROFormat,
+    CSVFormat,
+    LogFormat,
+    NDJSONFormat,
+    ParquetFormat,
+)
 from tabsdata._io.inputs.file_inputs import AzureSource, LocalFileSource, S3Source
 from tabsdata._io.inputs.sql_inputs import (
     MariaDBSource,
@@ -129,6 +135,7 @@ __all__ = [
     "subscriber",
     "transformer",
     # from format.py
+    "AVROFormat",
     "CSVFormat",
     "LogFormat",
     "NDJSONFormat",

@@ -57,7 +57,6 @@ class MSSQLSource(SourcePlugin):
         """
 
         try:
-            import fastparquet  # noqa: F401
             import pyodbc  # noqa: F401
         except ImportError:
             raise ImportError(

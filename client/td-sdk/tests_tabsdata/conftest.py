@@ -184,6 +184,7 @@ FAKE_TRIGGERED_TIME = 1234567890123
 EXPECTED_FOO1_OUTPUT = ("o1", "o2")
 
 FORMAT_TYPE_TO_CONFIG = {
+    "avro": {"chunk_size": 50000},
     "csv": {
         "separator": ",",
         "quote_char": '"',

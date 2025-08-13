@@ -8,11 +8,13 @@ from pathlib import Path
 
 from tabsdata.exceptions import ErrorCode, FormatConfigurationError
 
+AVRO_EXTENSION = "avro"
 CSV_EXTENSION = "csv"
 JSON_LINES_EXTENSION = "jsonl"
 LOG_EXTENSION = "log"
 NDJSON_EXTENSION = "ndjson"
 PARQUET_EXTENSION = "parquet"
+TABSDATA_EXTENSION = "t"
 
 
 class FileFormat(ABC):
@@ -58,10 +60,60 @@ class FileFormatIdentifier(Enum):
     Enum for the identifiers of the different types of data outputs.
     """
 
+    AVRO = "avro-format"
     CSV = "csv-format"
     LOG = "log-format"
     NDJSON = "ndjson-format"
     PARQUET = "parquet-format"
+
+
+class AVROFormat(FileFormat):
+    """The class of the Parquet file format."""
+
+    IDENTIFIER = FileFormatIdentifier.AVRO.value
+
+    def __init__(self, chunk_size: int = 50000):
+        """
+        Initializes the AVRO format object.
+
+        Args:
+            chunk_size (int, optional): The chunk size for reading/writing AVRO files.
+                Defaults to 1000.
+        """
+        self.chunk_size = _verify_type_or_raise_exception(
+            chunk_size, (int,), "chunk_size", self.__class__.__name__
+        )
+
+    @property
+    def chunk_size(self) -> int:
+        """
+        Returns the chunk size for reading/writing AVRO files.
+
+        Returns:
+            int: The chunk size.
+        """
+        return self._chunk_size
+
+    @chunk_size.setter
+    def chunk_size(self, value: int):
+        """
+        Sets the chunk size for reading/writing AVRO files.
+
+        Args:
+            value (int): The chunk size to set.
+        """
+        self._chunk_size = _verify_type_or_raise_exception(
+            value, (int,), "chunk_size", self.__class__.__name__
+        )
+
+    def _to_dict(self) -> dict:
+        """
+        Returns the dictionary representation of the object.
+
+        Returns:
+            dict: A dictionary with the object's attributes.
+        """
+        return {self.IDENTIFIER: {"chunk_size": self.chunk_size}}
 
 
 class CSVFormat(FileFormat):
@@ -475,6 +527,7 @@ def _verify_type_or_raise_exception(value, tuple_of_types, variable_name, class_
 
 
 STR_TO_FILE_FORMAT = {
+    AVRO_EXTENSION: AVROFormat,
     CSV_EXTENSION: CSVFormat,
     JSON_LINES_EXTENSION: NDJSONFormat,
     LOG_EXTENSION: LogFormat,
@@ -523,6 +576,8 @@ def build_file_format_from_dict(configuration: dict) -> FileFormat:
         raise FormatConfigurationError(
             ErrorCode.FOCE2, identifier, type(format_configuration)
         )
+    if identifier == FileFormatIdentifier.AVRO.value:
+        return AVROFormat(**format_configuration)
     if identifier == FileFormatIdentifier.CSV.value:
         return CSVFormat(**format_configuration)
     elif identifier == FileFormatIdentifier.LOG.value:

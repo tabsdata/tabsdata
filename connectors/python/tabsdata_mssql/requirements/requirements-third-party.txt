@@ -2,5 +2,4 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-fastparquet==2024.11.0
 pyodbc==5.2.0

@@ -17,6 +17,7 @@ from tabsdata._credentials import (
     build_credentials,
 )
 from tabsdata._format import (
+    AVROFormat,
     CSVFormat,
     FileFormat,
     LogFormat,
@@ -91,6 +92,7 @@ class AzureSource(SourcePlugin):
         Enum for the supported formats for the AzureSource.
         """
 
+        avro = AVROFormat
         csv = CSVFormat
         ndjson = NDJSONFormat
         log = LogFormat
@@ -341,6 +343,7 @@ class LocalFileSource(SourcePlugin):
         Enum for the supported formats for the LocalFileSource.
         """
 
+        avro = AVROFormat
         csv = CSVFormat
         ndjson = NDJSONFormat
         log = LogFormat
@@ -575,6 +578,7 @@ class S3Source(SourcePlugin):
         Enum for the supported formats for the S3Source.
         """
 
+        avro = AVROFormat
         csv = CSVFormat
         ndjson = NDJSONFormat
         log = LogFormat
@@ -985,6 +989,19 @@ def _execute_single_file_import(
             for dictionary in files:
                 source_list.append(dictionary.get("to"))
             logger.info(f"Imported files to: '{source_list}'")
+            if isinstance(file_format, AVROFormat):
+                logger.debug("Converting AVRO files to Parquet format")
+                new_source_list = []
+                for source in source_list:
+                    new_source_list.append(
+                        _convert_avro_to_parquet(
+                            source, destination_folder, file_format
+                        )
+                    )
+                logger.debug(
+                    f"Converted AVRO files to Parquet format: '{new_source_list}'"
+                )
+                source_list = new_source_list
         else:
             logger.info("No files imported")
     else:
@@ -994,8 +1011,59 @@ def _execute_single_file_import(
         # If the data is not a wildcard pattern, the result is a single file
         else:
             logger.info(f"Imported file to: '{source_list}'")
+            if isinstance(file_format, AVROFormat):
+                logger.debug("Converting AVRO file to Parquet format")
+                source_list = _convert_avro_to_parquet(
+                    source_list, destination_folder, file_format
+                )
+                logger.debug(f"Converted AVRO file to Parquet format: '{source_list}'")
     logger.debug(f"New lastmod_info: '{result.lastmod_info}'")
     return source_list, result.lastmod_info
+
+
+def _convert_avro_to_parquet(
+    avro_file: str, destination_folder: str, file_format: AVROFormat
+) -> str:
+    import pandas as pd
+
+    chunk_size = file_format.chunk_size
+    logger.debug(
+        f"Converting AVRO file '{avro_file}' to Parquet format with "
+        f"chunk size {chunk_size}"
+    )
+    first_chunk = True
+    uuid_string = uuid.uuid4().hex[:16]
+    intermediate_file_name = f"from_avro_{uuid_string}.parquet"
+    intermediate_file = os.path.join(destination_folder, intermediate_file_name)
+    for chunk in _read_avro_in_chunks(avro_file, chunk_size):
+        df = pd.DataFrame(chunk)
+        df.to_parquet(
+            intermediate_file,
+            engine="fastparquet",
+            index=False,
+            append=(not first_chunk),
+        )
+        first_chunk = False
+    logger.debug(
+        f"AVRO file '{avro_file}' converted to Parquet file '"
+        f"{intermediate_file}' successfully."
+    )
+    return intermediate_file
+
+
+def _read_avro_in_chunks(avro_path, chunk_size):
+    from fastavro import reader
+
+    with open(avro_path, "rb") as f:
+        reader = reader(f)
+        batch = []
+        for record in reader:
+            batch.append(record)
+            if len(batch) == chunk_size:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
 
 def _obtain_transporter_import(
@@ -1038,6 +1106,10 @@ def _obtain_transporter_import(
         transporter_format = TransporterJsonFormat()
     elif isinstance(file_format, ParquetFormat):
         transporter_format = TransporterParquetFormat()
+    elif isinstance(file_format, AVROFormat):
+        pass
+        # transporter_format = TransporterAvroFormat() # TODO: Implement
+        # TransporterAvroFormat
     else:
         logger.error(f"Invalid file format: {type(file_format)}. No data imported.")
         raise TypeError(f"Invalid file format: {type(file_format)}. No data imported.")

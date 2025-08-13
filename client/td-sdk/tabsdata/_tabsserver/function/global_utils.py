@@ -25,10 +25,6 @@ logger.setLevel(logging.INFO)
 
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 
-CSV_EXTENSION = "csv"
-NDJSON_EXTENSION = "ndjson"
-PARQUET_EXTENSION = "parquet"
-TABSDATA_EXTENSION = "t"
 
 TABSDATA_IDENTIFIER_COLUMN = td_constants.StandardSystemColumns.TD_IDENTIFIER.value
 
