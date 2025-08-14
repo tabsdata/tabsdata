@@ -75,7 +75,7 @@ def test_mssql_class_parameters():
     assert mssql_destination.connection_string == FAKE_CONNECTION_PARAMETERS + ";"
     assert mssql_destination.destination_table == ["table"]
     assert mssql_destination.if_table_exists == "append"
-    assert mssql_destination.chunk_size == 1000
+    assert mssql_destination.chunk_size == 50000
     assert mssql_destination.credentials is None
     assert mssql_destination.server is None
     assert mssql_destination.driver is None

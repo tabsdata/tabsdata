@@ -38,7 +38,7 @@ class MSSQLSource(SourcePlugin):
         self,
         connection_string: str,
         query: str | list[str],
-        chunk_size: int = 1000,
+        chunk_size: int = 50000,
         credentials: dict | UserPasswordCredentials | None = None,
         server: str | Secret = None,
         database: str | Secret = None,
@@ -53,7 +53,7 @@ class MSSQLSource(SourcePlugin):
             connection_string (str): The connection string to connect to the database.
             query (str | list[str]): The SQL query or queries to execute.
             chunk_size (int): The number of rows to fetch in each chunk.
-                Defaults to 1000.
+                Defaults to 50000.
         """
 
         try:
@@ -289,7 +289,7 @@ class MSSQLDestination(DestinationPlugin):
         database: str | Secret = None,
         driver: str | Secret = None,
         if_table_exists: Literal["append", "replace"] = "append",
-        chunk_size: int = 1000,
+        chunk_size: int = 50000,
         **kwargs,
     ):
         """

@@ -54,7 +54,7 @@ def test_mssql_class_parameters():
     source = td.MSSQLSource(FAKE_CONNECTION_PARAMETERS, "fake query")
     assert source.connection_string == FAKE_CONNECTION_PARAMETERS + ";"
     assert source.query == ["fake query"]
-    assert source.chunk_size == 1000
+    assert source.chunk_size == 50000
     assert source.credentials is None
     assert source.server is None
     assert source.driver is None
