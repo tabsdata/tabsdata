@@ -324,9 +324,9 @@ SELECT CASE
            -- All function_runs have status in ('C', 'X', 'Y') => 'F'
            WHEN COUNT(CASE WHEN fr.status IN ('C', 'X', 'Y') THEN 1 END) =
                 COUNT(fr.status) THEN 'F'
-           -- All function_runs in ('D', 'F', 'H') and at least one in ('F', 'H') => 'L'
+           -- All function_runs in ('C', 'D', 'F', 'H') and at least one in ('F', 'H') => 'L'
            WHEN
-               COUNT(CASE WHEN fr.status IN ('D', 'F', 'H') THEN 1 END) = COUNT(fr.status)
+               COUNT(CASE WHEN fr.status IN ('C', 'D', 'F', 'H') THEN 1 END) = COUNT(fr.status)
                    AND COUNT(CASE WHEN fr.status IN ('F', 'H') THEN 1 END) > 0 THEN 'L'
            -- At least one function_run in ('S', 'RR', 'RS', 'R', 'D', 'E') => 'R'
            WHEN
@@ -351,9 +351,9 @@ SELECT e.id                                                                AS ex
            -- All function_runs have status in ('C', 'X', 'Y') => 'F'
            WHEN COUNT(CASE WHEN fr.status IN ('C', 'X', 'Y') THEN 1 END) =
                 COUNT(fr.status) THEN 'F'
-           -- All function_runs in ('D', 'F', 'H') and at least one in ('F', 'H') => 'L'
+           -- All function_runs in ('C', 'D', 'F', 'H') and at least one in ('F', 'H') => 'L'
            WHEN
-               COUNT(CASE WHEN fr.status IN ('D', 'F', 'H') THEN 1 END) = COUNT(fr.status)
+               COUNT(CASE WHEN fr.status IN ('C', 'D', 'F', 'H') THEN 1 END) = COUNT(fr.status)
                    AND COUNT(CASE WHEN fr.status IN ('F', 'H') THEN 1 END) > 0 THEN 'L'
            -- At least one function_run in ('S', 'RR', 'RS', 'R', 'D', 'E') => 'R'
            WHEN
