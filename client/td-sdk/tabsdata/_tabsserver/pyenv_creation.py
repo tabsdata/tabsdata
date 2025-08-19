@@ -64,6 +64,9 @@ from tabsdata._utils.constants import (
 from tabsdata._utils.debug import debug_enabled
 
 # noinspection PyProtectedMember
+from tabsdata._utils.id import encode_id
+
+# noinspection PyProtectedMember
 from tabsdata._utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
 
 logger = logging.getLogger(__name__)
@@ -119,26 +122,46 @@ def extract_package_name(requirement):
         raise ValueError(f"Invalid requirement format: {requirement}")
 
 
-def remove_path(path: str):
-    if os.path.islink(path):
-        origin = os.readlink(path)
-        os.unlink(path)
-        if os.path.exists(origin):
-            if os.path.isdir(origin):
-                shutil.rmtree(origin)
-            else:
-                os.remove(origin)
-    else:
-        shutil.rmtree(path)
+def remove_path(folder: str) -> None:
+    original = Path(folder)
+    if not original.exists():
+        logger.warning(f"Path not found; nothing to delete: '{original}'")
+        return
+    if not original.is_dir():
+        raise NotADirectoryError(f"Expected a directory, but got: '{original}'")
+    parent = original.parent
+    _, code = encode_id()
+    quarantine = parent / f"_{code}"
+
+    try:
+        os.replace(original, quarantine)
+    except FileNotFoundError:
+        logger.warning(
+            f"Original path vanished before renaming; nothing to rename: '{original}'"
+        )
+        return
+    except Exception as e:
+        logger.exception(f"Could not rename '{original}' to '{quarantine}': {e}")
+        raise
+
+    try:
+        shutil.rmtree(quarantine)
+        logger.info(f"Deleted quarantine path: '{quarantine}'")
+    except FileNotFoundError:
+        logger.warning(
+            "Quarantine path vanished before deletion; nothing to delete: "
+            f"'{quarantine}'"
+        )
+        return
+    except Exception as e:
+        logger.warning(f"Failed to delete quarantine path '{quarantine}': {e}")
+        return
 
 
 def delete_virtual_environment(
     logical_environment_name: str, real_environment_name: str, log_error_on_fail=True
 ) -> bool:
     """Delete a Python virtual environment"""
-
-    if 1 == 1:
-        return True
 
     logger.info(
         f"Deleting Python virtual environment {logical_environment_name} with real name"
@@ -175,7 +198,7 @@ def delete_virtual_environment(
             )
         else:
             logger.info(
-                "The environment could be totally deleted dur to an internal error:"
+                "The environment could not be totally deleted due to an internal error:"
                 f" {logical_environment_name} with real name {real_environment_name} - "
                 "{e}"
             )
@@ -345,12 +368,12 @@ def read_yaml_file(yaml_file: str) -> dict:
     # as a float
     class Loader(yaml.SafeLoader):
         def construct_mapping(self, node, deep=False):
+            # noinspection PyUnreachableCode
             if not isinstance(node, MappingNode):
                 raise ConstructorError(
                     None,
                     None,
-                    "expected a mapping node, but found %s" % node.id,
-                    node.start_mark,
+                    "expected a mapping node, but found %s" % node,
                 )
             mapping = {}
             for key_node, value_node in node.value:
@@ -769,6 +792,7 @@ def atomic_environment_creation(
             shell=True,
         )
         logger.info(f"Result: {result}")
+        # noinspection PyUnreachableCode
         if result.returncode != 0:
             logger.error(
                 "Failed to upgrade pip version for the virtual environment"
@@ -1263,7 +1287,7 @@ def main():
         elif os.sep not in args.instance and (
             os.altsep is None or os.altsep not in args.instance
         ):
-            instance_path = Path(os.path.join(DEFAULT_INSTANCES_FOLDER, instance))
+            instance_path = Path(os.path.join(DEFAULT_INSTANCES_FOLDER, str(instance)))
             if instance_path.exists() and not instance_path.is_dir():
                 message = (
                     f"Invalid instance: '{instance_path}'. An instance relative path"

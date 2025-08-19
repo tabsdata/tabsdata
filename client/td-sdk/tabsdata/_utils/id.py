@@ -15,7 +15,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 
-def encode_id(debug: bool | None = False) -> (uuid.UUID, str):
+def encode_id(debug: bool | None = False) -> tuple[UUID, str]:
     id_uuid = uuid7()
     id_code = base64.b32hexencode(id_uuid.bytes).decode("ascii")[:26]
     if debug:
@@ -24,11 +24,11 @@ def encode_id(debug: bool | None = False) -> (uuid.UUID, str):
     return id_uuid, id_code
 
 
-def decode_id(id_code: str, debug: bool | None = False) -> (
+def decode_id(id_code: str, debug: bool | None = False) -> tuple[
     UUID,
     int,
     datetime.datetime,
-):
+]:
     id_uuid = UUID(
         bytes=base64.b32hexdecode(id_code + "=" * ((8 - len(id_code) % 8) % 8)),
     )
@@ -41,7 +41,7 @@ def decode_id(id_code: str, debug: bool | None = False) -> (
     return id_uuid, id_timestamp, id_datetime
 
 
-def extract_time_from_uuidv7(uuid_v7: uuid.UUID) -> (int, datetime.datetime):
+def extract_time_from_uuidv7(uuid_v7: uuid.UUID) -> tuple[int, datetime.datetime]:
     timestamp_ms = int.from_bytes(uuid_v7.bytes[:6], byteorder="big")
     datetime_ms = datetime.datetime.fromtimestamp(
         timestamp_ms / 1000,
