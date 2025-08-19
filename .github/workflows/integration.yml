@@ -29,49 +29,49 @@ on:
         description: "Dump all instances contents"
         required: false
         type: choice
-        options: [ 'true', 'false' ]
+        options: ['true', 'false']
         default: 'false'
       runner_action:
         description: "Action"
         required: true
         type: choice
-        options: [ 'build', 'lock', 'wheels4whl', 'wheels4repo' ]
+        options: ['build', 'lock', 'wheels4whl', 'wheels4repo']
         default: 'build'
       run_on_linux_x86_64:
         description: "Run on Ubuntu (x86_64)"
         required: false
         type: choice
-        options: [ 'true', 'false' ]
+        options: ['true', 'false']
         default: 'true'
       run_on_linux_arm_64:
         description: "Run on Ubuntu (arm_64)"
         required: false
         type: choice
-        options: [ 'true', 'false' ]
+        options: ['true', 'false']
         default: 'false'
       run_on_macos_x86_64:
         description: "Run on macOS (x86_64)"
         required: false
         type: choice
-        options: [ 'true', 'false' ]
+        options: ['true', 'false']
         default: 'false'
       run_on_macos_arm_64:
         description: "Run on macOS (arm_64)"
         required: false
         type: choice
-        options: [ 'true', 'false' ]
+        options: ['true', 'false']
         default: 'false'
       run_on_windows_x86_64:
         description: "Run on Windows (x86_64)"
         required: false
         type: choice
-        options: [ 'true', 'false' ]
+        options: ['true', 'false']
         default: 'false'
       run_on_windows_arm_64:
         description: "Run on Windows (arm_64)"
         required: false
         type: choice
-        options: [ 'true', 'false' ]
+        options: ['true', 'false']
         default: 'false'
 
 jobs:
@@ -107,7 +107,7 @@ jobs:
         run: |
           PR_LABEL_LIST='${{ toJson(github.event.pull_request.labels.*.name) }}'
           echo "Pull rquest labels: ${PR_LABEL_LIST}"      
-          
+
           if echo "${PR_LABEL_LIST}" | jq -e '.[] | select(. == "skip-ci")' > /dev/null; then
             echo "⚠️ Not ready. ☹️ PR contains label 'skip-ci'. Skipping workflow."
             echo "permit_workflow=false" >> $GITHUB_ENV          
@@ -169,27 +169,27 @@ jobs:
               *) echo "$2" ;; # Default value if invalid
             esac
           }
-      
+
           expr_run_on_linux_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_linux_x86_64 }}" "false")"
           echo "run_on_linux_x86_64=$expr_run_on_linux_x86_64" >> $GITHUB_ENV
           echo "run_on_linux_x86_64=$expr_run_on_linux_x86_64" >> $GITHUB_OUTPUT
-      
+
           expr_run_on_linux_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_linux_arm_64 }}" "false")"
           echo "run_on_linux_arm_64=$expr_run_on_linux_arm_64" >> $GITHUB_ENV
           echo "run_on_linux_arm_64=$expr_run_on_linux_arm_64" >> $GITHUB_OUTPUT
-      
+
           expr_run_on_macos_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_macos_x86_64 }}" "false")"
           echo "run_on_macos_x86_64=$expr_run_on_macos_x86_64" >> $GITHUB_ENV
           echo "run_on_macos_x86_64=$expr_run_on_macos_x86_64" >> $GITHUB_OUTPUT
-      
+
           expr_run_on_macos_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_macos_arm_64 }}" "false")"
           echo "run_on_macos_arm_64=$expr_run_on_macos_arm_64" >> $GITHUB_ENV
           echo "run_on_macos_arm_64=$expr_run_on_macos_arm_64" >> $GITHUB_OUTPUT
-      
+
           expr_run_on_windows_x86_64="$(normalize_boolean "${{ github.event.inputs.run_on_windows_x86_64 }}" "false")"
           echo "run_on_windows_x86_64=$expr_run_on_windows_x86_64" >> $GITHUB_ENV
           echo "run_on_windows_x86_64=$expr_run_on_windows_x86_64" >> $GITHUB_OUTPUT
-      
+
           expr_run_on_windows_arm_64="$(normalize_boolean "${{ github.event.inputs.run_on_windows_arm_64 }}" "false")"
           echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_ENV
           echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_OUTPUT   
@@ -218,19 +218,36 @@ jobs:
     secrets:
       PAT_AOINOKIMI: ${{ secrets.PAT_AOINOKIMI }}
       TRANSPORTER_AWS_ACCESS_KEY_ID: ${{ secrets.TRANSPORTER_AWS_ACCESS_KEY_ID }}
+      TRANSPORTER_AWS_REGION: ${{ secrets.TRANSPORTER_AWS_REGION }}
       TRANSPORTER_AWS_SECRET_ACCESS_KEY: ${{ secrets.TRANSPORTER_AWS_SECRET_ACCESS_KEY }}
+      TRANSPORTER_AWS_URI: ${{ secrets.TRANSPORTER_AWS_URI }}
+      COPY_AWS_AWS_ACCESS_KEY_ID: ${{ secrets.COPY_AWS_AWS_ACCESS_KEY_ID }}
+      COPY_AWS_AWS_REGION: ${{ secrets.COPY_AWS_AWS_REGION }}
+      COPY_AWS_AWS_SECRET_ACCESS_KEY: ${{ secrets.COPY_AWS_AWS_SECRET_ACCESS_KEY }}
+      COPY_AWS_BASE_URL: ${{ secrets.COPY_AWS_BASE_URL }}
+      IMPORT_AWS_ACCESS_KEY: ${{ secrets.IMPORT_AWS_ACCESS_KEY }}
+      IMPORT_AWS_REGION: ${{ secrets.IMPORT_AWS_REGION }}
+      IMPORT_AWS_SECRET_KEY: ${{ secrets.IMPORT_AWS_SECRET_KEY }}
+      IMPORT_AWS_BASE_URL: ${{ secrets.IMPORT_AWS_BASE_URL }}
       TRANSPORTER_AZURE_ACCOUNT_KEY: ${{ secrets.TRANSPORTER_AZURE_ACCOUNT_KEY }}
       TRANSPORTER_AZURE_ACCOUNT_NAME: ${{ secrets.TRANSPORTER_AZURE_ACCOUNT_NAME }}
-      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
-      SALESFORCE_PASSWORD: ${{ secrets.SALESFORCE_PASSWORD }}
-      SALESFORCE_SECURITY_TOKEN: ${{ secrets.SALESFORCE_SECURITY_TOKEN }}
-      SALESFORCE_USERNAME: ${{ secrets.SALESFORCE_USERNAME }}
+      COPY_AZURE_ACCOUNT_KEY: ${{ secrets.COPY_AZURE_ACCOUNT_KEY }}
+      COPY_AZURE_ACCOUNT_NAME: ${{ secrets.COPY_AZURE_ACCOUNT_NAME }}
+      COPY_AZURE_BASE_URL: ${{ secrets.COPY_AZURE_BASE_URL }}
+      IMPORT_AZURE_ACCOUNT_KEY: ${{ secrets.IMPORT_AZURE_ACCOUNT_KEY }}
+      IMPORT_AZURE_ACCOUNT_NAME: ${{ secrets.IMPORT_AZURE_ACCOUNT_NAME }}
+      IMPORT_AZURE_BASE_URL: ${{ secrets.IMPORT_AZURE_BASE_URL }}
       TD_DATABRICKS_CATALOG: ${{ secrets.TD_DATABRICKS_CATALOG }}
       TD_DATABRICKS_HOST: ${{ secrets.TD_DATABRICKS_HOST }}
       TD_DATABRICKS_SCHEMA: ${{ secrets.TD_DATABRICKS_SCHEMA }}
       TD_DATABRICKS_TOKEN: ${{ secrets.TD_DATABRICKS_TOKEN }}
       TD_DATABRICKS_VOLUME: ${{ secrets.TD_DATABRICKS_VOLUME }}
       TD_DATABRICKS_WAREHOUSE_NAME: ${{ secrets.TD_DATABRICKS_WAREHOUSE_NAME }}
+      TD_DATABRICKS_WAREHOUSE_ID: ${{ secrets.TD_DATABRICKS_WAREHOUSE_ID }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+      SALESFORCE_PASSWORD: ${{ secrets.SALESFORCE_PASSWORD }}
+      SALESFORCE_SECURITY_TOKEN: ${{ secrets.SALESFORCE_SECURITY_TOKEN }}
+      SALESFORCE_USERNAME: ${{ secrets.SALESFORCE_USERNAME }}
       TD_SNOWFLAKE_ACCOUNT: ${{ secrets.TD_SNOWFLAKE_ACCOUNT }}
       TD_SNOWFLAKE_DATABASE: ${{ secrets.TD_SNOWFLAKE_DATABASE }}
       TD_SNOWFLAKE_PAT: ${{ secrets.TD_SNOWFLAKE_PAT }}
