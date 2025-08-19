@@ -22,6 +22,8 @@ from tabsdata._utils.tableframe._translator import (
     _wrap_polars_frame,
 )
 from tabsdata.exceptions import TableFrameError
+
+# noinspection PyProtectedMember
 from tabsdata.extensions._tableframe.extension import SystemColumns
 
 # noinspection PyProtectedMember
@@ -70,6 +72,7 @@ class TestTableFrame(unittest.TestCase):
         )
         tf = _wrap_polars_frame(lf)
         with self.assertRaises(TypeError):
+            # noinspection PyTypeChecker
             _ = tf.rename(None)
 
     def test_rename_no_dict(self):
@@ -82,6 +85,7 @@ class TestTableFrame(unittest.TestCase):
         )
         tf = _wrap_polars_frame(lf)
         with self.assertRaises(TypeError):
+            # noinspection PyTypeChecker
             _ = tf.rename(("c1", "cc1"))
 
     def test_rename_empty_dict(self):
@@ -105,6 +109,7 @@ class TestTableFrame(unittest.TestCase):
         )
         tf = _wrap_polars_frame(lf)
         with self.assertRaises(TypeError):
+            # noinspection PyTypeChecker
             _ = tf.rename({1: "id"})
 
     def test_rename_no_string_new(self):
@@ -117,6 +122,7 @@ class TestTableFrame(unittest.TestCase):
         )
         tf = _wrap_polars_frame(lf)
         with self.assertRaises(TypeError):
+            # noinspection PyTypeChecker
             _ = tf.rename({"id": 1})
 
     def test_rename_old_name_system(self):

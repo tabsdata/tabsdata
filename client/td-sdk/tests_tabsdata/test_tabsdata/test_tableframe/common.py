@@ -10,10 +10,10 @@ import polars as pl
 
 import tabsdata as td
 
-# noinspection PyProtectedMember
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+POLARS_FILE_CACHE_TTL = 60 * 60 * 24
 
 
 def pretty_polars():
@@ -32,6 +32,7 @@ def pretty_pandas():
     pd.set_option("display.expand_frame_repr", False)
 
 
+# noinspection PyUnusedLocal
 def load_simple_dataframe(
     token: Optional[str] = None,
 ) -> Tuple[pl.LazyFrame, pl.DataFrame, td.TableFrame]:
@@ -50,6 +51,7 @@ def load_simple_dataframe(
     return lazy_frame, data_frame, table_frame
 
 
+# noinspection PyUnusedLocal
 def load_complex_dataframe(
     token: Optional[str] = None,
 ) -> Tuple[pl.LazyFrame, pl.DataFrame, td.TableFrame]:
@@ -58,7 +60,10 @@ def load_complex_dataframe(
         "python-polars-the-definitive-guide/main/data/penguins.csv"
     )
 
-    lazy_frame = pl.scan_csv(data)
+    lazy_frame = pl.scan_csv(
+        source=data,
+        file_cache_ttl=POLARS_FILE_CACHE_TTL,
+    )
     data_frame = pl.DataFrame(lazy_frame.collect())
     table_frame = td.TableFrame.__build__(
         df=lazy_frame,
