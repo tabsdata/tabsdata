@@ -10,7 +10,7 @@ colorama==0.4.6
 connectorx==0.4.3
 fastavro==1.12.0
 fastparquet==2024.11.0
-filelock==3.18.0
+filelock==3.19.1
 humanize==4.12.3
 hvac==2.3.0
 importlib_metadata==8.7.0
@@ -20,7 +20,7 @@ pandas==2.2.3
 pillow==11.3.0
 pip-tools==7.5.0
 platformdirs==4.3.8
-polars==1.32.0
+polars==1.32.3
 PyYAML==6.0.2
 pyarrow==21.0.0
 pyiceberg[glue]==0.9.1
@@ -28,8 +28,8 @@ pywin32==308; platform_system == "Windows"
 requests==2.32.4
 rich==13.9.4
 rich-click==1.8.9
-sqlalchemy==2.0.42
+sqlalchemy==2.0.43
 typing_extensions==4.14.1
 uuid6==2025.0.1
 uuid-v7==1.0.0
-uv==0.8.5
+uv==0.8.11

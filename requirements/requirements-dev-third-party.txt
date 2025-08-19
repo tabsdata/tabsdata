@@ -9,7 +9,7 @@
 # Global
 
 black==25.1.0
-boto3==1.40.3
+boto3==1.40.11
 build
 colorlog==6.9.0
 cookiecutter==2.6.0

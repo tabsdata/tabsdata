@@ -3,7 +3,7 @@
 #
 
 [build-system]
-requires = ["psutil>=7.0", "setuptools==78.0.2", "maturin>=1.0,<2.0", "polars>=1.32.0"]
+requires = ["psutil>=7.0", "setuptools==78.0.2", "maturin>=1.0,<2.0", "polars>=1.32.3"]
 build-backend = "maturin"
 
 [project]
