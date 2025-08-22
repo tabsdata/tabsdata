@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+from http import HTTPStatus
 from typing import List
 from urllib.parse import urlparse
 
@@ -355,7 +356,7 @@ class APIServer:
         )
         time_of_request = time.time()
         response = self.post(endpoint, json=data, refresh_if_needed=False)
-        if response.status_code == 200:
+        if HTTPStatus(response.status_code).is_success:
             self.bearer_token = response.json()["access_token"]
             self.refresh_token = response.json()["refresh_token"]
             self.token_type = response.json()["token_type"]
@@ -370,7 +371,7 @@ class APIServer:
     def authentication_logout(self, raise_for_status: bool = True):
         endpoint = "/auth/logout"
         response = self.post(endpoint, json={})
-        if response.status_code == 200:
+        if HTTPStatus(response.status_code).is_success:
             self.bearer_token = None
             self.refresh_token = None
             self.token_type = None
@@ -409,7 +410,7 @@ class APIServer:
             refresh_if_needed=False,
             content_type="application/x-www-form-urlencoded",
         )
-        if response.status_code == 200:
+        if HTTPStatus(response.status_code).is_success:
             self.bearer_token = response.json()["access_token"]
             self.refresh_token = response.json()["refresh_token"]
             self.token_type = response.json()["token_type"]
@@ -426,7 +427,7 @@ class APIServer:
         data = {"role": role}
         time_of_request = time.time()
         response = self.post(endpoint, json=data)
-        if response.status_code == 200:
+        if HTTPStatus(response.status_code).is_success:
             self.bearer_token = response.json()["access_token"]
             self.refresh_token = response.json()["refresh_token"]
             self.token_type = response.json()["token_type"]

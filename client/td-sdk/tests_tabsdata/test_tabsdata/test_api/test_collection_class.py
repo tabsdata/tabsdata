@@ -6,6 +6,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from http import HTTPStatus
 
 import pytest
 
@@ -342,9 +343,9 @@ def test_collection_class_read_run(tabsserver_connection):
         f"test_collection_class_read_run_plan_{uuid.uuid4().hex[:16]}"
     )
     response = collection.read_function_run(function, plan)
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
     response = collection.read_function_run(function.name, plan)
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration

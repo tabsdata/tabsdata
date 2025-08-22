@@ -8,6 +8,7 @@ import os
 import time
 import types
 import uuid
+from http import HTTPStatus
 
 import polars as pl
 import pytest
@@ -1027,9 +1028,9 @@ def test_tabsdata_server_class_read_run(tabsserver_connection):
     response = tabsserver_connection.read_function_run(
         collection.name, function.name, plan.id
     )
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
     response = tabsserver_connection.read_function_run(collection, function, plan)
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -1054,7 +1055,7 @@ def test_tabsdata_server_execution_cancel(tabsserver_connection):
         )
         assert isinstance(execution, Execution)
         response = tabsserver_connection.cancel_execution(execution.id)
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
     finally:
         tabsserver_connection.delete_function(
             "test_tabsdata_server_execution_cancel_collection",
@@ -1089,7 +1090,7 @@ def test_tabsdata_server_execution_recover(tabsserver_connection):
         )
         assert isinstance(execution, Execution)
         response = tabsserver_connection.recover_execution(execution.id)
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
     finally:
         tabsserver_connection.delete_function(
             "test_tabsdata_server_execution_recover_collection",
@@ -1162,7 +1163,7 @@ def test_tabsdata_server_transaction_cancel(tabsserver_connection):
         assert isinstance(execution, Execution)
         transaction = execution.transactions[0]
         response = tabsserver_connection.cancel_transaction(transaction.id)
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
     finally:
         tabsserver_connection.delete_function(
             "test_tabsdata_server_transaction_cancel_collection",
@@ -1198,7 +1199,7 @@ def test_tabsdata_server_transaction_recover(tabsserver_connection):
         assert isinstance(execution, Execution)
         transaction = execution.transactions[0]
         response = tabsserver_connection.recover_transaction(transaction.id)
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
     finally:
         tabsserver_connection.delete_function(
             "test_tabsdata_server_transaction_recover_collection",

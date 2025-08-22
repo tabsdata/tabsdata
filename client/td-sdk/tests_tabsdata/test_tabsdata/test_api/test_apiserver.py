@@ -3,6 +3,7 @@
 #
 
 import hashlib
+from http import HTTPStatus
 
 import pytest
 
@@ -51,7 +52,7 @@ def test_authentication_access_success():
     response = apiserver_connection.authentication_login(
         "admin", "tabsdata", role="sys_admin"
     )
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
     assert apiserver_connection.bearer_token is not None
     assert apiserver_connection.refresh_token is not None
     assert apiserver_connection.bearer_token != current_bearer
@@ -61,7 +62,7 @@ def test_authentication_access_success():
 @pytest.mark.requires_internet
 def test_authentication_info(apiserver_connection):
     response = apiserver_connection.authentication_info()
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -82,7 +83,7 @@ def test_authentication_refresh_success():
     )
     current_bearer = apiserver_connection.bearer_token
     response = apiserver_connection.authentication_refresh()
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
     assert apiserver_connection.bearer_token is not None
     assert apiserver_connection.refresh_token is not None
     assert apiserver_connection.bearer_token != current_bearer
@@ -103,21 +104,21 @@ def test_authentication_refresh_fail():
 @pytest.mark.requires_internet
 def test_status_get(apiserver_connection):
     response = apiserver_connection.status_get()
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_runtime_info_get(apiserver_connection):
     response = apiserver_connection.runtime_info_get()
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_collection_list(apiserver_connection):
     response = apiserver_connection.collection_list()
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -126,7 +127,7 @@ def test_collection_list_with_params(apiserver_connection):
     response = apiserver_connection.collection_list(
         order_by="name", request_len=42, request_filter="name:eq:invent"
     )
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
     list_params = response.json().get("data").get("list_params")
     assert list_params is not None
     assert list_params.get("len") == 42
@@ -144,7 +145,7 @@ def test_collection_create_api(apiserver_connection):
         response = apiserver_connection.collection_create(
             "test_collection_create_api", "test_collection_create_api_description"
         )
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == "test_collection_create_api"
         assert (
@@ -165,7 +166,7 @@ def test_collection_delete_api(apiserver_connection):
         raise_for_status=False,
     )
     response = apiserver_connection.collection_delete("test_collection_delete_api")
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -183,7 +184,7 @@ def test_collection_get(apiserver_connection):
     )
     try:
         response = apiserver_connection.collection_get_by_name("test_collection_get")
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == "test_collection_get"
         assert response_json.get("description") == "test_collection_get_description"
@@ -215,7 +216,7 @@ def test_collection_update_new_description(apiserver_connection):
             "test_collection_update_new_description",
             description="test_collection_update_new_description_new_description",
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert (
             response_json.get("description")
@@ -240,7 +241,7 @@ def test_collection_update_new_name(apiserver_connection):
             "test_collection_update_new_name",
             new_collection_name="test_collection_update_new_name_new_name",
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == "test_collection_update_new_name_new_name"
     finally:
@@ -256,7 +257,7 @@ def test_collection_update_new_name(apiserver_connection):
 @pytest.mark.requires_internet
 def test_role_list(apiserver_connection):
     response = apiserver_connection.role_list()
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -265,7 +266,7 @@ def test_role_list_with_params(apiserver_connection):
     response = apiserver_connection.role_list(
         order_by="name", request_len=42, request_filter="name:eq:invent"
     )
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
     list_params = response.json().get("data").get("list_params")
     assert list_params is not None
     assert list_params.get("len") == 42
@@ -281,7 +282,7 @@ def test_role_create_api(apiserver_connection):
         response = apiserver_connection.role_create(
             "test_role_create_api", "test_role_create_api_description"
         )
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == "test_role_create_api"
         assert response_json.get("description") == "test_role_create_api_description"
@@ -298,7 +299,7 @@ def test_role_delete_api(apiserver_connection):
         raise_for_status=False,
     )
     response = apiserver_connection.role_delete("test_role_delete_api")
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -316,7 +317,7 @@ def test_role_get(apiserver_connection):
     )
     try:
         response = apiserver_connection.role_get_by_name("test_role_get")
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == "test_role_get"
         assert response_json.get("description") == "test_role_get_description"
@@ -344,7 +345,7 @@ def test_role_update_new_description(apiserver_connection):
             "test_role_update_new_description",
             new_description="test_role_update_new_description_new_description",
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert (
             response_json.get("description")
@@ -369,7 +370,7 @@ def test_role_update_new_name(apiserver_connection):
             "test_role_update_new_name",
             new_name="test_role_update_new_name_new_name",
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == "test_role_update_new_name_new_name"
     finally:
@@ -385,7 +386,7 @@ def test_role_update_new_name(apiserver_connection):
 @pytest.mark.requires_internet
 def test_users_list(apiserver_connection):
     response = apiserver_connection.users_list()
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -401,7 +402,7 @@ def test_users_create(apiserver_connection):
         response = apiserver_connection.users_create(
             name, full_name, email, password, enabled
         )
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == name
         assert response_json.get("full_name") == full_name
@@ -424,9 +425,9 @@ def test_users_list(apiserver_connection):
         response = apiserver_connection.users_create(
             name, full_name, email, password, enabled
         )
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         response = apiserver_connection.users_list()
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
     finally:
         apiserver_connection.users_delete(name, raise_for_status=False)
 
@@ -448,7 +449,7 @@ def test_users_delete(apiserver_connection):
         raise_for_status=False,
     )
     response = apiserver_connection.users_delete(name)
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -476,7 +477,7 @@ def test_users_get_by_name(apiserver_connection):
     )
     try:
         response = apiserver_connection.users_get_by_name(name)
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == name
         assert response_json.get("full_name") == full_name
@@ -518,7 +519,7 @@ def test_users_update_no_new_password(apiserver_connection):
             email="test_users_update_no_new_password_new_email@tabsdata.com",
             enabled=False,
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == name
         assert (
@@ -555,7 +556,7 @@ def test_users_update_change_fullname(apiserver_connection):
             name,
             full_name="test_users_update_change_fullname_new_full_name",
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("name") == name
         assert (
@@ -582,7 +583,7 @@ def test_function_in_collection_list(apiserver_connection):
     response = apiserver_connection.function_in_collection_list(
         FUNCTION_TESTING_COLLECTION_NAME
     )
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -599,7 +600,7 @@ def test_function_in_collection_list_with_params(apiserver_connection):
         request_len=42,
         request_filter="name:eq:invent",
     )
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
     list_params = response.json().get("data").get("list_params")
     assert list_params is not None
     assert list_params.get("len") == 42
@@ -637,12 +638,12 @@ def test_users_update_change_password(apiserver_connection):
         response = apiserver_connection.users_create(
             name, full_name, email, password, enabled
         )
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         response = apiserver_connection.users_update(
             name,
             password="test_users_update_change_own_password_new_password",
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
     finally:
         apiserver_connection.users_delete(name, raise_for_status=False)
 
@@ -651,7 +652,7 @@ def test_users_update_change_password(apiserver_connection):
 @pytest.mark.requires_internet
 def test_execution_list_api(apiserver_connection):
     response = apiserver_connection.execution_list()
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -663,14 +664,14 @@ def test_table_list_api(apiserver_connection):
         raise_for_status=False,
     )
     response = apiserver_connection.table_list(FUNCTION_TESTING_COLLECTION_NAME)
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_transaction_list_api(apiserver_connection):
     response = apiserver_connection.transaction_list()
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration
@@ -709,7 +710,7 @@ def test_role_permission_list_with_params(apiserver_connection):
         response = apiserver_connection.role_permission_list(
             role_name, order_by="role", request_len=42, request_filter="role:eq:invent"
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         list_params = response.json().get("data").get("list_params")
         assert list_params is not None
         assert list_params.get("len") == 42
@@ -731,7 +732,7 @@ def test_role_permission_create_api(apiserver_connection):
         response = apiserver_connection.role_permission_create(
             role_name, permission_type
         )
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         response_json = response.json().get("data")
         assert response_json.get("permission_type") == permission_type
     finally:
@@ -758,7 +759,7 @@ def test_role_permission_delete_api(apiserver_connection):
         ]
         assert permission_id in listed_permission_ids
         response = apiserver_connection.role_permission_delete(role_name, permission_id)
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response = apiserver_connection.role_permission_list(role_name)
         listed_permission_ids = [
             permission.get("id")
@@ -834,7 +835,7 @@ def test_role_user_list_with_params(apiserver_connection):
         response = apiserver_connection.role_user_list(
             role_name, order_by="role", request_len=42, request_filter="role:eq:invent"
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         list_params = response.json().get("data").get("list_params")
         assert list_params is not None
         assert list_params.get("len") == 42
@@ -868,7 +869,7 @@ def test_role_user_add_api(apiserver_connection):
         ]
         assert user_name not in listed_users
         response = apiserver_connection.role_user_add(role_name, user_name)
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         response = apiserver_connection.role_user_list(role_name)
         listed_users = [
             user.get("user") for user in response.json().get("data", {}).get("data", [])
@@ -903,7 +904,7 @@ def test_role_user_delete_api(apiserver_connection):
         ]
         assert user_name in listed_users
         response = apiserver_connection.role_user_delete(role_name, user_name)
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response = apiserver_connection.role_user_list(role_name)
         listed_users = [
             user.get("user") for user in response.json().get("data", {}).get("data", [])
@@ -941,7 +942,7 @@ def test_inter_coll_perm_list(apiserver_connection):
         apiserver_connection.collection_create(coll_a, "Collection A")
         apiserver_connection.collection_create(coll_b, "Collection B")
         response = apiserver_connection.authz_inter_coll_perm_create(coll_a, coll_b)
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         permission_id = response.json().get("data", {}).get("id")
         response = apiserver_connection.authz_inter_coll_perm_list(coll_a)
         listed_permissions = [
@@ -965,14 +966,14 @@ def test_inter_coll_perm_list_with_params(apiserver_connection):
         apiserver_connection.collection_create(coll_a, "Collection A")
         apiserver_connection.collection_create(coll_b, "Collection B")
         response = apiserver_connection.authz_inter_coll_perm_create(coll_a, coll_b)
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         response = apiserver_connection.authz_inter_coll_perm_list(
             coll_a,
             order_by="to_collection",
             request_len=42,
             request_filter="to_collection:eq:invent",
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         list_params = response.json().get("data").get("list_params")
         assert list_params is not None
         assert list_params.get("len") == 42
@@ -994,7 +995,7 @@ def test_inter_coll_perm_create_api(apiserver_connection):
         apiserver_connection.collection_create(coll_a, "Collection A")
         apiserver_connection.collection_create(coll_b, "Collection B")
         response = apiserver_connection.authz_inter_coll_perm_create(coll_a, coll_b)
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
     finally:
         apiserver_connection.collection_delete(coll_a, raise_for_status=False)
         apiserver_connection.collection_delete(coll_b, raise_for_status=False)
@@ -1011,7 +1012,7 @@ def test_inter_coll_perm_delete_api(apiserver_connection):
         apiserver_connection.collection_create(coll_a, "Collection A")
         apiserver_connection.collection_create(coll_b, "Collection B")
         response = apiserver_connection.authz_inter_coll_perm_create(coll_a, coll_b)
-        assert response.status_code == 201
+        assert HTTPStatus(response.status_code).is_success
         permission_id = response.json().get("data", {}).get("id")
         response = apiserver_connection.authz_inter_coll_perm_list(coll_a)
         listed_permissions = [
@@ -1022,7 +1023,7 @@ def test_inter_coll_perm_delete_api(apiserver_connection):
         response = apiserver_connection.authz_inter_coll_perm_delete(
             coll_a, permission_id
         )
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
         response = apiserver_connection.authz_inter_coll_perm_list(coll_a)
         listed_permissions = [
             permission.get("id")

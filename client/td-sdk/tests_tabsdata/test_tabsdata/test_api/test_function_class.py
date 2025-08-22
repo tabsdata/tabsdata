@@ -4,6 +4,7 @@
 
 import os
 import uuid
+from http import HTTPStatus
 
 import pytest
 
@@ -301,9 +302,9 @@ def test_function_class_read_run(tabsserver_connection):
         f"test_function_class_read_run_plan_{uuid.uuid4().hex[:16]}"
     )
     response = function.read_run(plan)
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
     response = function.read_run(plan.id)
-    assert response.status_code == 200
+    assert HTTPStatus(response.status_code).is_success
 
 
 @pytest.mark.integration

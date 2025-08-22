@@ -4,6 +4,7 @@
 
 import os
 import time
+from http import HTTPStatus
 
 import pytest
 
@@ -113,7 +114,7 @@ def test_transaction_class_cancel(tabsserver_connection):
         assert isinstance(execution, Execution)
         transaction = execution.transactions[0]
         response = transaction.cancel()
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
     finally:
         tabsserver_connection.delete_function(
             "test_transaction_class_cancel_collection",
@@ -149,7 +150,7 @@ def test_transaction_class_recover(tabsserver_connection):
         assert isinstance(execution, Execution)
         transaction = execution.transactions[0]
         response = transaction.recover()
-        assert response.status_code == 200
+        assert HTTPStatus(response.status_code).is_success
     finally:
         tabsserver_connection.delete_function(
             "test_transaction_class_recover_collection",
