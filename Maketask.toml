@@ -1145,12 +1145,15 @@ script = [
     ''']
 
 [tasks.assembly]
-dependencies = ["build", "sourcetrack"]
 run_task = [
     { name = [
         "assembly_rs",
-        "assembly_py",
-    ] }
+        "assembly_py"], condition = { env = { "TD_ON_GA" = "true" } } },
+    { name = [
+        "build",
+        "sourcetrack",
+        "assembly_rs",
+        "assembly_py"] }
 ]
 
 [tasks.assembly_rs]
@@ -1419,12 +1422,14 @@ script = [
     ''']
 
 [tasks.install]
-dependencies = ["assembly"]
 run_task = [
     { name = [
         "install_rs",
-        "install_py",
-    ] }
+        "install_py"], condition = { env = { "TD_ON_GA" = "true" } } },
+    { name = [
+        "assembly",
+        "install_rs",
+        "install_py"] }
 ]
 
 [tasks.install_rs]

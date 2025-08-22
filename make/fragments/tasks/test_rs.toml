@@ -10,7 +10,7 @@ run_task = [
         "setup-test_rs",
         "test_rs_macros",
         "test_rs_modules",
-        # "test_rs_expansions",
+        "test_rs_expansions",
         "cleanup-test_rs",
     ] }
 ]
@@ -48,8 +48,8 @@ script = [
         debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features}"
         exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features}
     else
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features} --all-targets"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features} --all-targets
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features} --all-targets"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --features ${macros-test-features} --all-targets
     end
 
     is_zero = eq ${exit_code} "0"
@@ -92,8 +92,8 @@ script = [
         debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features}"
         exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features}
     else
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets
     end
 
     is_zero = eq ${exit_code} "0"
@@ -125,11 +125,11 @@ script = [
         debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging"
         exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logginge
     else
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging
     end
 
-        is_zero = eq ${exit_code} "0"
+    is_zero = eq ${exit_code} "0"
     if ${is_zero}
         info "⌛️ Tests finished with zero exit code: '${exit_code}'"
     else
@@ -158,8 +158,8 @@ script = [
         debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadatae"
         exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} -- test_tower_metadata
     else
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets -- test_tower_metadata"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets -- test_tower_metadata
+        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets -- test_tower_metadata"
+        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets -- test_tower_metadata
     end
 
     is_zero = eq ${exit_code} "0"
@@ -187,13 +187,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    if eq ${td-cargo} "cross"
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features}"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs 8 --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features}
-    else
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast  %{td-target-token} %{td-target} --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets
-    end
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets"
+    exit_code = exec --get-exit-code cargo %{td-toolchain-token}%{td-toolchain} nextest run --locked --no-fail-fast --test-threads 8 --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --features ${expansions-test-features} --all-targets
 
     is_zero = eq ${exit_code} "0"
     if ${is_zero}

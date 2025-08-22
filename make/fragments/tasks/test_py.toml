@@ -136,7 +136,7 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd ${PROJECT_PY_TE_EXAMPLES_FOLDER}
+    cd "${PROJECT_PY_TE_EXAMPLES_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
@@ -177,7 +177,7 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd ${PROJECT_PY_TE_TABLEFRAME_FOLDER}
+    cd "${PROJECT_PY_TE_TABLEFRAME_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
@@ -218,7 +218,7 @@ script = [
     verbose = get_env TD_VERBOSE
     compile = get_env TD_COMPILE
 
-    cd ${PROJECT_PY_TD_SDK_FOLDER}
+    cd "${PROJECT_PY_TD_SDK_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
@@ -311,10 +311,10 @@ script = [
         set_env TD_VERBOSE "false"
     end
     debug "🔅 Using td verbose: '${TD_VERBOSE}'"
-    _compile_empty = is_empty ${compile}
-    _compile_true = eq ${compile} "true"
-    _compile = set ${_compile_empty} or ${_compile_true}
-    if ${_compile}
+    compile_empty = is_empty ${compile}
+    compile_true = eq ${compile} "true"
+    compile = set ${compile_empty} or ${compile_true}
+    if ${compile}
         set_env TD_COMPILE "true"
     else
         set_env TD_COMPILE "false"
@@ -334,6 +334,7 @@ script = [
     debug "🔷 _____ Copying assets..."
     cm_run_task copy_assets
 
+    compile = get_env TD_COMPILE
     if eq ${compile} "true"
         debug "🔷 _____ Compiling..."
         cm_run_task build

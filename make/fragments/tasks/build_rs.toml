@@ -21,7 +21,7 @@ run_task = [
     { name = [
         "build_all_rs_macros",
         "build_all_rs_modules",
-        # "build_all_rs_expansions"
+        "build_all_rs_expansions"
     ] }
 ]
 
@@ -56,6 +56,7 @@ category = "03 - Build"
 private = true
 run_task = [
     { name = [
+        "clean_rs_expansions",
         "compile_all_rs_expansions",
         "link_all_rs_expansions"
     ] }
@@ -70,8 +71,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples
     ''']
 
 [tasks.link_all_rs_expansions]
@@ -94,8 +95,61 @@ script = [
 
     cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
 
-    debug "🚀 maturin develop --skip-install --features extension-module"
-    exec --fail-on-error maturin develop --skip-install --features extension-module
+    td_target = get_env TD_TARGET
+    is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
+    if ${is_x86_64-unknown-linux-musl}
+        info "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
+        cd ${PROJECT_TABSDATA_ROOT_FOLDER}
+
+        info "🚀 docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main ."
+        exec --fail-on-error docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main .
+
+        info "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
+        exec --fail-on-error docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module
+
+        info "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target"
+        exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target
+
+        info "🚀 cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+        cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+    else
+        info "🚀 maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
+        exec --fail-on-error maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
+    end
+
+    debug "⏳ Extracting maturin wheel to python source folder..."
+    wheels = glob_array ../../target/wheels/*.whl
+    q_wheels = array_length ${wheels}
+    if eq ${q_wheels} 0
+        error "⚠️ No maturin wheels found in ../../target/wheels/"
+        exit 1
+    else
+        if eq ${q_wheels} 1
+            for wheel in ${wheels}
+                debug "📦 Found wheel: ${wheel}"
+                if is_directory ../../target/wheels/wheel.tmp
+                    debug "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
+                    rm -r ../../target/wheels/wheel.tmp
+                end
+                exec --fail-on-error python -m zipfile -e ${wheel} ../../target/wheels/wheel.tmp
+                if is_directory "../../target/wheels/wheel.tmp/tabsdata"
+                    debug "📁 Copying tabsdata module to python/"
+                    exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata python/
+                else
+                    error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
+                    exit 1
+                end
+                rm -r ../../target/wheels/wheel.tmp
+                debug "🐍 Successfully extracted wheel contents!"
+            end
+        else
+            error "⚠️ More than one maturin wheel found in ../../target/wheels/"
+            for wheel in ${wheels}
+                error "⚠️ 📦 Found wheel: ${wheel}"
+            end
+            exit 1
+        end
+    end
     ''']
 
 [tasks.build_none_rs]
@@ -105,7 +159,7 @@ run_task = [
     { name = [
         "build_none_rs_macros",
         "build_none_rs_modules",
-        # "build_none_rs_expansions"
+        "build_none_rs_expansions"
     ] }
 ]
 
@@ -140,6 +194,7 @@ category = "03 - Build"
 private = true
 run_task = [
     { name = [
+        "clean_rs_expansions",
         "compile_none_rs_expansions",
         "link_none_rs_expansions"
     ] }
@@ -154,8 +209,8 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins
     ''']
 
 [tasks.link_none_rs_expansions]
@@ -178,6 +233,59 @@ script = [
 
     cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
 
-    debug "🚀 maturin develop --skip-install --features extension-module"
-    exec --fail-on-error maturin develop --skip-install --features extension-module
+    td_target = get_env TD_TARGET
+    is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
+    if ${is_x86_64-unknown-linux-musl}
+        info "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
+        cd ${PROJECT_TABSDATA_ROOT_FOLDER}
+
+        info "🚀 docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main ."
+        exec --fail-on-error docker build -f expansions/docker/linux_x86_64/Dockerfile -t tabsdata/x86_64-unknown-linux-musl:main .
+
+        info "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
+        exec --fail-on-error docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata tabsdata/x86_64-unknown-linux-musl:main maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module
+
+        info "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target"
+        exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/polars/target
+
+        info "🚀 cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+        cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe"
+    else
+        info "🚀 maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
+        exec --fail-on-error maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
+    end
+
+    debug "⏳ Extracting maturin wheel to python source folder..."
+    wheels = glob_array ../../target/wheels/*.whl
+    q_wheels = array_length ${wheels}
+    if eq ${q_wheels} 0
+        error "⚠️ No maturin wheels found in ../../target/wheels/"
+        exit 1
+    else
+        if eq ${q_wheels} 1
+            for wheel in ${wheels}
+                debug "📦 Found wheel: ${wheel}"
+                if is_directory ../../target/wheels/wheel.tmp
+                    debug "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
+                    rm -r ../../target/wheels/wheel.tmp
+                end
+                exec --fail-on-error python -m zipfile -e ${wheel} ../../target/wheels/wheel.tmp
+                if is_directory "../../target/wheels/wheel.tmp/tabsdata"
+                    debug "📁 Copying tabsdata module to python/"
+                    exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata python/
+                else
+                    error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
+                    exit 1
+                end
+                rm -r ../../target/wheels/wheel.tmp
+                debug "🐍 Successfully extracted wheel contents!"
+            end
+        else
+            error "⚠️ More than one maturin wheel found in ../../target/wheels/"
+            for wheel in ${wheels}
+                error "⚠️ 📦 Found wheel: ${wheel}"
+            end
+            exit 1
+        end
+    end
     ''']

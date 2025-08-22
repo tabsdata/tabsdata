@@ -2,6 +2,8 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+# docker run -it --rm --platform linux/amd64 ghcr.io/cross-rs/x86_64-unknown-linux-musl:main bash
+
 [target.x86_64-unknown-linux-musl]
 pre-build = [
     "echo Showing cross docker container context for polars...",
@@ -16,7 +18,43 @@ pre-build = [
     "echo _____ pwd contents",
     "ls -lah .",
     "echo _____",
+    "echo Configuring regional settings...",
+    "export DEBIAN_FRONTEND=noninteractive",
+    "export TZ=Etc/UTC",
+    "ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone",
+    "echo Updating package manager...",
+    "apt-get update",
+    "apt-get install -y software-properties-common",
+    "add-apt-repository ppa:deadsnakes/ppa -y",
+    "apt-get update",
+    "echo Installing dependencies...",
+    "apt-get install -y curl",
+    "echo Installing python...",
+    "apt-get install -y python3.12",
+    "apt-get install -y python3.12-dev",
+    "apt-get install -y python3.12-venv",
+    "echo Configuring python...",
+    "update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1",
+    "update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1",
+    "echo Installing pip...",
+    "curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12",
+    "python -m pip install --upgrade pip",
+    "echo Checking python and pip...",
+    "python --version",
+    "python3 --version",
+    "pip --version",
+    "pip3 --version",
+    "echo Installing maturin...",
+    "pip install maturin[patchelf]==1.9.3",
+    "echo Checking maturin...",
+    "rustc --version",
+    "cargo --version",
+    "maturin --version",
+    "patchelf --version",
+    "echo Done!",
 ]
 
 [target.x86_64-unknown-linux-musl.env]
-passthrough = ["TD_CROSS_BUILD=true"]
+passthrough = [
+    "TD_CROSS_BUILD=true",
+]

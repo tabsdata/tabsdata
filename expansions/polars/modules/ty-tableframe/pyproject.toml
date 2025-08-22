@@ -19,6 +19,7 @@ dynamic = ["version"]
 [tool.maturin]
 python-source = "python"
 module-name = "tabsdata.expansions.tableframe._td"
+compatibility = "musllinux_1_1"
 
 [tool.black]
 line-length = 88

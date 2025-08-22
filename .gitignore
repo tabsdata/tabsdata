@@ -43,6 +43,8 @@ __pypackages__/
 .webassets-cache
 *_context
 *.cover
+*.dll
+*.dylib
 *.egg
 *.egg-info/
 *.ipynb
@@ -74,6 +76,7 @@ connectors.ee/python/**/assets/manifest/SOURCETRACK.yaml
 *.pot
 *.py,cover
 *.py[cod]
+*.pyd
 *.sage.py
 *.sln
 *.so

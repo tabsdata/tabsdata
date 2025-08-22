@@ -9,7 +9,7 @@ run_task = [
     { name = [
         "clean_rs_macros",
         "clean_rs_modules",
-        # "clean_rs_expansions",
+        "clean_rs_expansions",
         "clean_rs_all",
     ] }
 ]
@@ -46,8 +46,19 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} clean --locked %{td-target-token} %{td-target} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} clean --locked --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML}
+
+    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules"
+    extensions = array .so .dll .dylib .pyd
+    for extension in ${extensions}
+        debug "Cleaning extension: ${extension}"
+        glob_files = glob_array ./**/*${extension}*
+        for file in ${glob_files}
+            info "Cleaning file: ${file}"
+            rm --force "${file}"
+        end
+    end
     ''']
 
 [tasks.clean_rs_all]

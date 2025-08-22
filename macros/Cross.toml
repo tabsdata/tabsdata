@@ -2,6 +2,8 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+# docker run -it --rm --platform linux/amd64 ghcr.io/cross-rs/x86_64-unknown-linux-musl:main bash
+
 [target.x86_64-unknown-linux-musl]
 pre-build = [
     "echo Showing cross docker container context for macros...",
@@ -19,4 +21,6 @@ pre-build = [
 ]
 
 [target.x86_64-unknown-linux-musl.env]
-passthrough = ["TD_CROSS_BUILD=true"]
+passthrough = [
+    "TD_CROSS_BUILD=true",
+]
