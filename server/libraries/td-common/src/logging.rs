@@ -226,23 +226,17 @@ fn obtain_log_path(max_level: Level, output_type: LogOutput, with_tokio_console:
         LogOutput::StdOut => BoxMakeWriter::new(stdout),
         File(path) => {
             let location = obtain_log_location(path);
-            if location.is_none() {
-                BoxMakeWriter::new(stdout)
-            } else {
-                create_dir_all(
-                    location
-                        .clone()
-                        .unwrap()
-                        .parent()
-                        .expect("Failed to resolve log directory {}"),
-                )
-                .expect("Failed to create log directory {}");
+            if let Some(path) = location {
+                create_dir_all(path.parent().expect("Failed to resolve log directory {}"))
+                    .expect("Failed to create log directory {}");
                 let file = OpenOptions::new()
                     .append(true)
                     .create(true)
-                    .open(location.unwrap())
+                    .open(path)
                     .unwrap();
                 BoxMakeWriter::new(file)
+            } else {
+                BoxMakeWriter::new(stdout)
             }
         }
     };

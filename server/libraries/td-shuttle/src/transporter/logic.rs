@@ -691,7 +691,7 @@ mod tests {
         assert!(info.last_reported - info.start >= chrono::Duration::milliseconds(2));
     }
 
-    fn normalize_path(path: &str) -> Cow<str> {
+    fn normalize_path(path: &str) -> Cow<'_, str> {
         #[cfg(windows)]
         {
             Cow::Owned(path.replace("\\", "/"))

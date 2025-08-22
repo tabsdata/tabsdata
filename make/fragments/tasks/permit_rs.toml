@@ -10,7 +10,7 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    tabsdata_rust_version = set 1.88.0
+    tabsdata_rust_version = set 1.89.0
     set_env TABSDATA_RUST_VERSION ${tabsdata_rust_version}
 
     info "♻️️ Checking if the required Rust version is installed..."
