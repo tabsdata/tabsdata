@@ -68,7 +68,7 @@ pub struct PermissionDBWithNames {
 #[dto(list(on = PermissionDBWithNames))]
 #[td_type(builder(try_from = PermissionDBWithNames))]
 pub struct Permission {
-    #[dto(list(pagination_by = "+"))]
+    #[dto(list(pagination_by = "+", filter))]
     id: PermissionId,
     role_id: RoleId,
     #[dto(list(filter, order_by))]
@@ -128,7 +128,7 @@ pub struct InterCollectionPermissionDBWithNames {
 #[dto(list(on = InterCollectionPermissionDBWithNames))]
 #[td_type(builder(try_from = InterCollectionPermissionDBWithNames))]
 pub struct InterCollectionPermission {
-    #[dto(list(pagination_by = "+"))]
+    #[dto(list(pagination_by = "+", filter))]
     id: InterCollectionPermissionId,
     to_collection_id: ToCollectionId,
     #[dto(list(filter, filter_like, order_by))]

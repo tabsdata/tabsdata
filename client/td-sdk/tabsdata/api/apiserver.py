@@ -35,6 +35,14 @@ MIN_CONNECTIONS = 2
 MAX_CONNECTIONS = 8
 REFRESH_BUFFER_IN_SECONDS = 300  # 5 minutes
 
+DEFAULT_LIST_ENDPOINT_PARAMETERS = [
+    "len",
+    "filter",
+    "order_by",
+    "pagination_id",
+    "next",
+]
+
 logger = logging.getLogger(__name__)
 
 
@@ -430,6 +438,44 @@ class APIServer:
         else:
             raise APIServerError(response.json())
 
+    def authz_inter_coll_perm_create(
+        self, collection: str, to_collection: str, raise_for_status: bool = True
+    ):
+        endpoint = f"/collections/{collection}/inter-collection-permissions"
+
+        data = {"to_collection": to_collection}
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def authz_inter_coll_perm_delete(
+        self, collection: str, permission: str, raise_for_status: bool = True
+    ):
+        endpoint = (
+            f"/collections/{collection}/inter-collection-permissions/{permission}"
+        )
+
+        response = self.delete(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def authz_inter_coll_perm_list(
+        self,
+        collection: str,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/collections/{collection}/inter-collection-permissions"
+
+        params = self.get_params_dict(
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def collection_create(
         self, name: str, description: str, raise_for_status: bool = True
     ):
@@ -462,7 +508,7 @@ class APIServer:
         endpoint = "/collections"
 
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
@@ -496,7 +542,7 @@ class APIServer:
         endpoint = f"/collections/{collection_name}/tables/{table_name}/data-versions"
 
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
@@ -519,7 +565,7 @@ class APIServer:
         endpoint = "/executions"
 
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
@@ -628,7 +674,7 @@ class APIServer:
         endpoint = f"/collections/{collection_name}/functions"
 
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
@@ -648,7 +694,7 @@ class APIServer:
         endpoint = f"/collections/{collection_name}/functions/{function_name}/history"
 
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
@@ -666,7 +712,7 @@ class APIServer:
         endpoint = "/function_runs"
 
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
@@ -758,7 +804,7 @@ class APIServer:
     ):
         endpoint = "/roles"
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
@@ -776,6 +822,94 @@ class APIServer:
             ["name", "description"], [new_name, new_description]
         )
         response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def role_permission_create(
+        self,
+        role: str,
+        permission_type: str,
+        entity_name: str | None = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/roles/{role}/permissions"
+
+        data = self.get_params_dict(
+            ["permission_type", "entity_name"], [permission_type, entity_name]
+        )
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def role_permission_delete(
+        self,
+        role: str,
+        permission: str,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/roles/{role}/permissions/{permission}"
+
+        response = self.delete(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def role_permission_list(
+        self,
+        role: str,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/roles/{role}/permissions"
+        params = self.get_params_dict(
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def role_user_add(self, role: str, user: str, raise_for_status: bool = True):
+
+        endpoint = f"/roles/{role}/users"
+
+        data = {"user": user}
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def role_user_delete(self, role: str, user: str, raise_for_status: bool = True):
+        """
+        Delete a user from a specific role.
+        """
+        endpoint = f"/roles/{role}/users/{user}"
+
+        response = self.delete(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def role_user_list(
+        self,
+        role: str,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
+        raise_for_status: bool = True,
+    ):
+        """
+        List users associated with a specific role.
+        """
+        endpoint = f"/roles/{role}/users"
+        params = self.get_params_dict(
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def role_user_read(self, role: str, user: str, raise_for_status: bool = True):
+        endpoint = f"/roles/{role}/users/{user}"
+
+        response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def runtime_info_get(self, raise_for_status: bool = True):
@@ -861,14 +995,7 @@ class APIServer:
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}/tables"
-        names = [
-            "at",
-            "len",
-            "filter",
-            "order_by",
-            "pagination_id",
-            "next",
-        ]
+        names = ["at"] + DEFAULT_LIST_ENDPOINT_PARAMETERS
         values = [at, request_len, request_filter, order_by, pagination_id, next_step]
         params = self.get_params_dict(names, values)
         response = self.get(endpoint, params)
@@ -891,7 +1018,7 @@ class APIServer:
         endpoint = "/transactions"
 
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
@@ -941,7 +1068,7 @@ class APIServer:
     ):
         endpoint = "/users"
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)
@@ -983,7 +1110,7 @@ class APIServer:
         endpoint = "/workers"
 
         params = self.get_params_dict(
-            ["len", "filter", "order_by", "pagination_id", "next"],
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
         response = self.get(endpoint, params)

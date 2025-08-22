@@ -671,3 +671,377 @@ def test_table_list_api(apiserver_connection):
 def test_transaction_list_api(apiserver_connection):
     response = apiserver_connection.transaction_list()
     assert response.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_permission_list(apiserver_connection):
+    role_name = "test_role_permission_list_api"
+    role_description = "test_role_permission_list_api_description"
+    permission_type = "sa"
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        response = apiserver_connection.role_permission_create(
+            role_name, permission_type
+        )
+        permission_id = response.json().get("data", {}).get("id")
+        response = apiserver_connection.role_permission_list(role_name)
+        listed_permission_ids = [
+            permission.get("id")
+            for permission in response.json().get("data", {}).get("data", [])
+        ]
+        assert permission_id in listed_permission_ids
+    finally:
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_permission_list_with_params(apiserver_connection):
+    role_name = "test_role_permission_list_with_params_api"
+    role_description = "test_role_permission_list_with_params_api_description"
+    permission_type = "sa"
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        apiserver_connection.role_permission_create(role_name, permission_type)
+        response = apiserver_connection.role_permission_list(
+            role_name, order_by="role", request_len=42, request_filter="role:eq:invent"
+        )
+        assert response.status_code == 200
+        list_params = response.json().get("data").get("list_params")
+        assert list_params is not None
+        assert list_params.get("len") == 42
+        assert list_params.get("filter") == ["role:eq:invent"]
+        assert list_params.get("order_by") == "role"
+    finally:
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_permission_create_api(apiserver_connection):
+    role_name = "test_role_permission_create_api"
+    role_description = "test_role_permission_create_api_description"
+    permission_type = "sa"
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        response = apiserver_connection.role_permission_create(
+            role_name, permission_type
+        )
+        assert response.status_code == 201
+        response_json = response.json().get("data")
+        assert response_json.get("permission_type") == permission_type
+    finally:
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_permission_delete_api(apiserver_connection):
+    role_name = "test_role_permission_delete_api"
+    role_description = "test_role_permission_delete_api_description"
+    permission_type = "sa"
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        response = apiserver_connection.role_permission_create(
+            role_name, permission_type
+        )
+        permission_id = response.json().get("data", {}).get("id")
+        response = apiserver_connection.role_permission_list(role_name)
+        listed_permission_ids = [
+            permission.get("id")
+            for permission in response.json().get("data", {}).get("data", [])
+        ]
+        assert permission_id in listed_permission_ids
+        response = apiserver_connection.role_permission_delete(role_name, permission_id)
+        assert response.status_code == 200
+        response = apiserver_connection.role_permission_list(role_name)
+        listed_permission_ids = [
+            permission.get("id")
+            for permission in response.json().get("data", {}).get("data", [])
+        ]
+        assert permission_id not in listed_permission_ids
+    finally:
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_permission_delete_no_exists_raises_error(apiserver_connection):
+    role_name = "test_role_permission_delete_no_exists_api"
+    role_description = "test_role_permission_delete_no_exists_api"
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        with pytest.raises(Exception):
+            apiserver_connection.role_permission_delete(
+                role_name, "test_role_delete_no_exists"
+            )
+    finally:
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_user_list(apiserver_connection):
+    role_name = "test_role_user_list_api"
+    role_description = "test_role_user_list_api_description"
+    user_name = "test_role_user_list_api_user"
+    apiserver_connection.users_delete(user_name, raise_for_status=False)
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        apiserver_connection.users_create(
+            user_name,
+            "test_role_user_list_api_user_full_name",
+            "fake@email.com",
+            "fakepassword",
+            True,
+        )
+        apiserver_connection.role_user_add(role_name, user_name)
+        response = apiserver_connection.role_user_list(role_name)
+        listed_users = [
+            user.get("user") for user in response.json().get("data", {}).get("data", [])
+        ]
+        assert user_name in listed_users
+    finally:
+        apiserver_connection.users_delete(user_name, raise_for_status=False)
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_user_list_with_params(apiserver_connection):
+    role_name = "test_role_user_list_with_params_api"
+    role_description = "test_role_user_list_with_params_api_description"
+    user_name = "test_role_user_list_with_params_api_user"
+    apiserver_connection.users_delete(user_name, raise_for_status=False)
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        apiserver_connection.users_create(
+            user_name,
+            "test_role_user_list_with_params_api_user_full_name",
+            "fake@email.com",
+            "fakepassword",
+            True,
+        )
+        apiserver_connection.role_user_add(role_name, user_name)
+        response = apiserver_connection.role_user_list(
+            role_name, order_by="role", request_len=42, request_filter="role:eq:invent"
+        )
+        assert response.status_code == 200
+        list_params = response.json().get("data").get("list_params")
+        assert list_params is not None
+        assert list_params.get("len") == 42
+        assert list_params.get("filter") == ["role:eq:invent"]
+        assert list_params.get("order_by") == "role"
+    finally:
+        apiserver_connection.users_delete(user_name, raise_for_status=False)
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_user_add_api(apiserver_connection):
+    role_name = "test_role_user_create_api"
+    role_description = "test_role_user_create_api_description"
+    user_name = "test_role_user_add_api_user"
+    apiserver_connection.users_delete(user_name, raise_for_status=False)
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        apiserver_connection.users_create(
+            user_name,
+            "test_role_user_list_with_params_api_user_full_name",
+            "fake@email.com",
+            "fakepassword",
+            True,
+        )
+        response = apiserver_connection.role_user_list(role_name)
+        listed_users = [
+            user.get("user") for user in response.json().get("data", {}).get("data", [])
+        ]
+        assert user_name not in listed_users
+        response = apiserver_connection.role_user_add(role_name, user_name)
+        assert response.status_code == 201
+        response = apiserver_connection.role_user_list(role_name)
+        listed_users = [
+            user.get("user") for user in response.json().get("data", {}).get("data", [])
+        ]
+        assert user_name in listed_users
+    finally:
+        apiserver_connection.users_delete(user_name, raise_for_status=False)
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_user_delete_api(apiserver_connection):
+    role_name = "test_role_user_delete_api"
+    role_description = "test_role_user_delete_api_description"
+    user_name = "test_role_user_delete_api_user"
+    apiserver_connection.users_delete(user_name, raise_for_status=False)
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        apiserver_connection.users_create(
+            user_name,
+            "test_role_user_list_with_params_api_user_full_name",
+            "fake@email.com",
+            "fakepassword",
+            True,
+        )
+        apiserver_connection.role_user_add(role_name, user_name)
+        response = apiserver_connection.role_user_list(role_name)
+        listed_users = [
+            user.get("user") for user in response.json().get("data", {}).get("data", [])
+        ]
+        assert user_name in listed_users
+        response = apiserver_connection.role_user_delete(role_name, user_name)
+        assert response.status_code == 200
+        response = apiserver_connection.role_user_list(role_name)
+        listed_users = [
+            user.get("user") for user in response.json().get("data", {}).get("data", [])
+        ]
+        assert user_name not in listed_users
+    finally:
+        apiserver_connection.users_delete(user_name, raise_for_status=False)
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_role_user_delete_no_exists_raises_error(apiserver_connection):
+    role_name = "test_role_user_delete_no_exists_api"
+    role_description = "test_role_user_delete_no_exists_api"
+    user_name = "test_role_user_delete_no_exists_api_user"
+    apiserver_connection.users_delete(user_name, raise_for_status=False)
+    apiserver_connection.role_delete(role_name, raise_for_status=False)
+    try:
+        apiserver_connection.role_create(role_name, role_description)
+        with pytest.raises(Exception):
+            apiserver_connection.role_user_delete(role_name, user_name)
+    finally:
+        apiserver_connection.role_delete(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_inter_coll_perm_list(apiserver_connection):
+    coll_a = "test_inter_coll_perm_list_api_coll_a"
+    coll_b = "test_inter_coll_perm_list_api_coll_b"
+    apiserver_connection.collection_delete(coll_a, raise_for_status=False)
+    apiserver_connection.collection_delete(coll_b, raise_for_status=False)
+    try:
+        apiserver_connection.collection_create(coll_a, "Collection A")
+        apiserver_connection.collection_create(coll_b, "Collection B")
+        response = apiserver_connection.authz_inter_coll_perm_create(coll_a, coll_b)
+        assert response.status_code == 201
+        permission_id = response.json().get("data", {}).get("id")
+        response = apiserver_connection.authz_inter_coll_perm_list(coll_a)
+        listed_permissions = [
+            permission.get("id")
+            for permission in response.json().get("data", {}).get("data", [])
+        ]
+        assert permission_id in listed_permissions
+    finally:
+        apiserver_connection.collection_delete(coll_a, raise_for_status=False)
+        apiserver_connection.collection_delete(coll_b, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_inter_coll_perm_list_with_params(apiserver_connection):
+    coll_a = "test_inter_coll_perm_list_with_params_api_coll_a"
+    coll_b = "test_inter_coll_perm_list_with_params_api_coll_b"
+    apiserver_connection.collection_delete(coll_a, raise_for_status=False)
+    apiserver_connection.collection_delete(coll_b, raise_for_status=False)
+    try:
+        apiserver_connection.collection_create(coll_a, "Collection A")
+        apiserver_connection.collection_create(coll_b, "Collection B")
+        response = apiserver_connection.authz_inter_coll_perm_create(coll_a, coll_b)
+        assert response.status_code == 201
+        response = apiserver_connection.authz_inter_coll_perm_list(
+            coll_a,
+            order_by="to_collection",
+            request_len=42,
+            request_filter="to_collection:eq:invent",
+        )
+        assert response.status_code == 200
+        list_params = response.json().get("data").get("list_params")
+        assert list_params is not None
+        assert list_params.get("len") == 42
+        assert list_params.get("filter") == ["to_collection:eq:invent"]
+        assert list_params.get("order_by") == "to_collection"
+    finally:
+        apiserver_connection.collection_delete(coll_a, raise_for_status=False)
+        apiserver_connection.collection_delete(coll_b, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_inter_coll_perm_create_api(apiserver_connection):
+    coll_a = "test_inter_coll_perm_create_api_coll_a"
+    coll_b = "test_inter_coll_perm_create_api_coll_b"
+    apiserver_connection.collection_delete(coll_a, raise_for_status=False)
+    apiserver_connection.collection_delete(coll_b, raise_for_status=False)
+    try:
+        apiserver_connection.collection_create(coll_a, "Collection A")
+        apiserver_connection.collection_create(coll_b, "Collection B")
+        response = apiserver_connection.authz_inter_coll_perm_create(coll_a, coll_b)
+        assert response.status_code == 201
+    finally:
+        apiserver_connection.collection_delete(coll_a, raise_for_status=False)
+        apiserver_connection.collection_delete(coll_b, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_inter_coll_perm_delete_api(apiserver_connection):
+    coll_a = "test_inter_coll_perm_delete_api_coll_a"
+    coll_b = "test_inter_coll_perm_delete_api_coll_b"
+    apiserver_connection.collection_delete(coll_a, raise_for_status=False)
+    apiserver_connection.collection_delete(coll_b, raise_for_status=False)
+    try:
+        apiserver_connection.collection_create(coll_a, "Collection A")
+        apiserver_connection.collection_create(coll_b, "Collection B")
+        response = apiserver_connection.authz_inter_coll_perm_create(coll_a, coll_b)
+        assert response.status_code == 201
+        permission_id = response.json().get("data", {}).get("id")
+        response = apiserver_connection.authz_inter_coll_perm_list(coll_a)
+        listed_permissions = [
+            permission.get("id")
+            for permission in response.json().get("data", {}).get("data", [])
+        ]
+        assert permission_id in listed_permissions
+        response = apiserver_connection.authz_inter_coll_perm_delete(
+            coll_a, permission_id
+        )
+        assert response.status_code == 200
+        response = apiserver_connection.authz_inter_coll_perm_list(coll_a)
+        listed_permissions = [
+            permission.get("id")
+            for permission in response.json().get("data", {}).get("data", [])
+        ]
+        assert permission_id not in listed_permissions
+    finally:
+        apiserver_connection.collection_delete(coll_a, raise_for_status=False)
+        apiserver_connection.collection_delete(coll_b, raise_for_status=False)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_inter_coll_perm_delete_no_exists_raises_error(apiserver_connection):
+    coll_a = "test_inter_coll_perm_delete_no_exists_api_coll_a"
+    apiserver_connection.collection_delete(coll_a, raise_for_status=False)
+    try:
+        apiserver_connection.collection_create(coll_a, "Collection A")
+        with pytest.raises(Exception):
+            apiserver_connection.authz_inter_coll_perm_delete(coll_a, "does_not_exist")
+    finally:
+        apiserver_connection.collection_delete(coll_a, raise_for_status=False)

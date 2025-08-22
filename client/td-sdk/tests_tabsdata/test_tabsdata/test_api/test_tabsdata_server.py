@@ -1359,3 +1359,234 @@ def test_tabsserver_class_table_delete(tabsserver_connection):
         tabsserver_connection.delete_collection(
             "test_tabsserver_class_table_delete_collection", raise_for_status=False
         )
+
+
+@pytest.mark.integration
+def test_role_permission_list(tabsserver_connection):
+    role_name = "test_role_permission_list_tabsdata_server_class"
+    role_description = "test_role_permission_list_tabsdata_server_class_description"
+    permission_type = "sa"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        tabsserver_connection.create_role(role_name, role_description)
+        permission = tabsserver_connection.create_role_permission(
+            role_name, permission_type
+        )
+        permissions = tabsserver_connection.list_role_permissions(role_name)
+        assert permission in permissions
+    finally:
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_permission_create_tabsdata_server_class(tabsserver_connection):
+    role_name = "test_role_permission_create_tabsdata_server_class"
+    role_description = "test_role_permission_create_tabsdata_server_class_description"
+    permission_type = "sa"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        tabsserver_connection.create_role(role_name, role_description)
+        permission = tabsserver_connection.create_role_permission(
+            role_name, permission_type
+        )
+        permissions = tabsserver_connection.list_role_permissions(role_name)
+        assert permission in permissions
+        assert permission.permission_type == permission_type
+    finally:
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_permission_delete_tabsdata_server_class(tabsserver_connection):
+    role_name = "test_role_permission_delete_tabsdata_server_class"
+    role_description = "test_role_permission_delete_tabsdata_server_class_description"
+    permission_type = "sa"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        tabsserver_connection.create_role(role_name, role_description)
+        permission = tabsserver_connection.create_role_permission(
+            role_name, permission_type
+        )
+        permissions = tabsserver_connection.list_role_permissions(role_name)
+        assert permission in permissions
+        tabsserver_connection.delete_role_permission(role_name, permission.id)
+        permissions = tabsserver_connection.list_role_permissions(role_name)
+        assert permission not in permissions
+    finally:
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_permission_delete_no_exists_raises_error(tabsserver_connection):
+    role_name = "test_role_permission_delete_no_exists_tabsdata_server_class"
+    role_description = "test_role_permission_delete_no_exists_tabsdata_server_class"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        tabsserver_connection.create_role(role_name, role_description)
+        with pytest.raises(Exception):
+            tabsserver_connection.delete_role_permission(
+                role_name, "test_role_delete_no_exists"
+            )
+    finally:
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_user_list(tabsserver_connection):
+    role_name = "test_role_user_list_tabsdata_server_class"
+    role_description = "test_role_user_list_tabsdata_server_class_description"
+    user_name = "test_role_user_list_tabsdata_server_class_user"
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        tabsserver_connection.create_role(role_name, role_description)
+        user = tabsserver_connection.create_user(
+            user_name,
+            "fakepassword",
+            "test_role_user_list_tabsdata_server_class_user_full_name",
+            "fake@email.com",
+            True,
+        )
+        tabsserver_connection.add_user_to_role(user_name, role_name)
+        listed_users = tabsserver_connection.list_role_users(role_name)
+        assert user in listed_users
+    finally:
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_user_add_tabsdata_server_class(tabsserver_connection):
+    role_name = "test_role_user_create_tabsdata_server_class"
+    role_description = "test_role_user_create_tabsdata_server_class_description"
+    user_name = "test_role_user_add_tabsdata_server_class_user"
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        tabsserver_connection.create_role(role_name, role_description)
+        user = tabsserver_connection.create_user(
+            user_name,
+            "fakepassword",
+            "test_role_user_add_server_class_user_full_name",
+            "fake@email.com",
+            True,
+        )
+        listed_users = tabsserver_connection.list_role_users(role_name)
+        assert user not in listed_users
+        tabsserver_connection.add_user_to_role(user_name, role_name)
+        listed_users = tabsserver_connection.list_role_users(role_name)
+        assert user in listed_users
+    finally:
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_user_delete_tabsdata_server_class(tabsserver_connection):
+    role_name = "test_role_user_delete_tabsdata_server_class"
+    role_description = "test_role_user_delete_tabsdata_server_class_description"
+    user_name = "test_role_user_delete_tabsdata_server_class_user"
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        tabsserver_connection.create_role(role_name, role_description)
+        user = tabsserver_connection.create_user(
+            user_name,
+            "fakepassword",
+            "test_role_user_delete_server_class_user_full_name",
+            "fake@email.com",
+            True,
+        )
+        listed_users = tabsserver_connection.list_role_users(role_name)
+        assert user not in listed_users
+        tabsserver_connection.add_user_to_role(user_name, role_name)
+        listed_users = tabsserver_connection.list_role_users(role_name)
+        assert user in listed_users
+        tabsserver_connection.delete_user_from_role(user_name, role_name)
+        listed_users = tabsserver_connection.list_role_users(role_name)
+        assert user not in listed_users
+    finally:
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_user_delete_no_exists_raises_error(tabsserver_connection):
+    role_name = "test_role_user_delete_no_exists_tabsdata_server_class"
+    role_description = "test_role_user_delete_no_exists_tabsdata_server_class"
+    user_name = "test_role_user_delete_no_exists_tabsdata_server_class_user"
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        tabsserver_connection.create_role(role_name, role_description)
+        with pytest.raises(Exception):
+            tabsserver_connection.delete_user_from_role(user_name, role_name)
+    finally:
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_inter_coll_perm_list(tabsserver_connection):
+    coll_a = "test_inter_coll_perm_list_tabsdata_server_class_coll_a"
+    coll_b = "test_inter_coll_perm_list_tabsdata_server_class_coll_b"
+    tabsserver_connection.delete_collection(coll_a, raise_for_status=False)
+    tabsserver_connection.delete_collection(coll_b, raise_for_status=False)
+    try:
+        tabsserver_connection.create_collection(coll_a, "Collection A")
+        tabsserver_connection.create_collection(coll_b, "Collection B")
+        perm = tabsserver_connection.create_inter_coll_perm(coll_a, coll_b)
+        listed_permissions = tabsserver_connection.list_inter_coll_perm(coll_a)
+        assert perm in listed_permissions
+    finally:
+        tabsserver_connection.delete_collection(coll_a, raise_for_status=False)
+        tabsserver_connection.delete_collection(coll_b, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_inter_coll_perm_create_tabsdata_server_class(tabsserver_connection):
+    coll_a = "test_inter_coll_perm_create_tabsdata_server_class_coll_a"
+    coll_b = "test_inter_coll_perm_create_tabsdata_server_class_coll_b"
+    tabsserver_connection.delete_collection(coll_a, raise_for_status=False)
+    tabsserver_connection.delete_collection(coll_b, raise_for_status=False)
+    try:
+        tabsserver_connection.create_collection(coll_a, "Collection A")
+        tabsserver_connection.create_collection(coll_b, "Collection B")
+        perm = tabsserver_connection.create_inter_coll_perm(coll_a, coll_b)
+        listed_permissions = tabsserver_connection.list_inter_coll_perm(coll_a)
+        assert perm in listed_permissions
+        assert perm.to_collection.name == coll_b
+    finally:
+        tabsserver_connection.delete_collection(coll_a, raise_for_status=False)
+        tabsserver_connection.delete_collection(coll_b, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_inter_coll_perm_delete_tabsdata_server_class(tabsserver_connection):
+    coll_a = "test_inter_coll_perm_delete_tabsdata_server_class_coll_a"
+    coll_b = "test_inter_coll_perm_delete_tabsdata_server_class_coll_b"
+    tabsserver_connection.delete_collection(coll_a, raise_for_status=False)
+    tabsserver_connection.delete_collection(coll_b, raise_for_status=False)
+    try:
+        tabsserver_connection.create_collection(coll_a, "Collection A")
+        tabsserver_connection.create_collection(coll_b, "Collection B")
+        perm = tabsserver_connection.create_inter_coll_perm(coll_a, coll_b)
+        listed_permissions = tabsserver_connection.list_inter_coll_perm(coll_a)
+        assert perm in listed_permissions
+        tabsserver_connection.delete_inter_coll_perm(coll_a, perm.id)
+        listed_permissions = tabsserver_connection.list_inter_coll_perm(coll_a)
+        assert perm not in listed_permissions
+    finally:
+        tabsserver_connection.delete_collection(coll_a, raise_for_status=False)
+        tabsserver_connection.delete_collection(coll_b, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_inter_coll_perm_delete_no_exists_raises_error(tabsserver_connection):
+    coll_a = "test_inter_coll_perm_delete_no_exists_tabsdata_server_class_coll_a"
+    tabsserver_connection.delete_collection(coll_a, raise_for_status=False)
+    try:
+        tabsserver_connection.create_collection(coll_a, "Collection A")
+        with pytest.raises(Exception):
+            tabsserver_connection.delete_inter_coll_perm(coll_a, "does_not_exist")
+    finally:
+        tabsserver_connection.delete_collection(coll_a, raise_for_status=False)

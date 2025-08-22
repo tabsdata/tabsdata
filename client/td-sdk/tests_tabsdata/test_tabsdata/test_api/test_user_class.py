@@ -4,7 +4,7 @@
 
 import pytest
 
-from tabsdata.api.tabsdata_server import User
+from tabsdata.api.tabsdata_server import Role, User
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
@@ -174,3 +174,84 @@ def test_user_class_refresh(tabsserver_connection):
         tabsserver_connection.delete_user(
             "test_user_class_refresh", raise_for_status=False
         )
+
+
+@pytest.mark.integration
+def test_user_class_user_add(tabsserver_connection):
+    role_name = "test_user_class_user_add_role"
+    user_name = "test_user_class_user_add_user"
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        role = Role(tabsserver_connection.connection, role_name)
+        role.create()
+        user = User(tabsserver_connection.connection, user_name)
+        user.create("fakepassword")
+        assert user not in role.users
+        added_role = user.add_role(role.name)
+        assert added_role == role
+        assert user in role.users
+    finally:
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_user_class_user_delete(tabsserver_connection):
+    role_name = "test_user_class_user_delete_role"
+    user_name = "test_user_class_user_delete_user"
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        role = Role(tabsserver_connection.connection, role_name)
+        role.create()
+        user = User(tabsserver_connection.connection, user_name)
+        user.create("fakepassword")
+        assert user not in role.users
+        user.add_role(role)
+        assert user in role.users
+        deleted_role = user.delete_role(role.name)
+        assert deleted_role == role
+        assert user not in role.users
+    finally:
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_user_class_read_role(tabsserver_connection):
+    role_name = "test_user_class_read_role_role"
+    user_name = "test_user_class_read_role_user"
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        role = Role(tabsserver_connection.connection, role_name)
+        role.create()
+        user = User(tabsserver_connection.connection, user_name)
+        user.create("fakepassword")
+        user.add_role(role)
+        read_role = user.read_role(role.name)
+        assert read_role.get("user") == user.name
+        assert read_role.get("role") == role.name
+    finally:
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_user_class_user_delete_no_exists_raises_error(tabsserver_connection):
+    role_name = "test_user_class_user_delete_no_exists_raises_error_role"
+    user_name = "test_user_class_user_delete_no_exists_raises_error_user"
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    try:
+        role = Role(tabsserver_connection.connection, role_name)
+        role.create()
+        user = User(tabsserver_connection.connection, user_name)
+        user.create("fakepassword")
+        assert user not in role.users
+        with pytest.raises(Exception):
+            user.delete_role(role)
+    finally:
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)

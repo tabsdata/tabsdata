@@ -403,3 +403,80 @@ def test_collection_get_tables_all_options_fails(
     with pytest.raises(ValueError):
         # Cannot use both at and at_trx
         collection.list_tables(at=next_day, at_trx=trx)
+
+
+@pytest.mark.integration
+def test_coll_class_inter_coll_perm_list(tabsserver_connection):
+    coll_a_name = "test_coll_class_inter_coll_perm_list_coll_a"
+    coll_b_name = "test_coll_class_inter_coll_perm_list_coll_b"
+    tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
+    tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+    try:
+        coll_a = Collection(tabsserver_connection.connection, coll_a_name)
+        coll_a.create()
+        coll_b = Collection(tabsserver_connection.connection, coll_b_name)
+        coll_b.create()
+        perm = coll_a.create_permission(coll_b)
+        listed_permissions = coll_a.permissions
+        assert perm in listed_permissions
+    finally:
+        tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
+        tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_coll_class_inter_coll_perm_create(tabsserver_connection):
+    coll_a_name = "test_coll_class_inter_coll_perm_create_coll_a"
+    coll_b_name = "test_coll_class_inter_coll_perm_create_coll_b"
+    tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
+    tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+    try:
+        coll_a = Collection(tabsserver_connection.connection, coll_a_name)
+        coll_a.create()
+        coll_b = Collection(tabsserver_connection.connection, coll_b_name)
+        coll_b.create()
+        perm = coll_a.create_permission(coll_b)
+        listed_permissions = coll_a.permissions
+        assert perm in listed_permissions
+        assert perm.collection == coll_a
+        assert perm.to_collection == coll_b
+    finally:
+        tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
+        tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_coll_class_inter_coll_perm_delete(tabsserver_connection):
+    coll_a_name = "test_coll_class_inter_coll_perm_delete_coll_a"
+    coll_b_name = "test_coll_class_inter_coll_perm_delete_coll_b"
+    tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
+    tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+    try:
+        coll_a = Collection(tabsserver_connection.connection, coll_a_name)
+        coll_a.create()
+        coll_b = Collection(tabsserver_connection.connection, coll_b_name)
+        coll_b.create()
+        perm = coll_a.create_permission(coll_b)
+        listed_permissions = coll_a.permissions
+        assert perm in listed_permissions
+        deleted_perm = coll_a.delete_permission(perm.id)
+        assert deleted_perm == perm
+        assert perm not in coll_a.permissions
+    finally:
+        tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
+        tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_coll_class_inter_coll_perm_delete_no_exists_raises_error(
+    tabsserver_connection,
+):
+    coll_a_name = "test_coll_class_inter_coll_perm_delete_no_exists_raises_error_coll_a"
+    tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
+    try:
+        coll_a = Collection(tabsserver_connection.connection, coll_a_name)
+        coll_a.create()
+        with pytest.raises(Exception):
+            coll_a.delete_permission("does_not_exist")
+    finally:
+        tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)

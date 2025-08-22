@@ -140,6 +140,10 @@ class Collection:
         return self.list_functions()
 
     @property
+    def permissions(self) -> List[InterCollectionPermission]:
+        return self.list_inter_coll_perm()
+
+    @property
     def tables(self) -> List[Table]:
         return self.list_tables()
 
@@ -152,8 +156,48 @@ class Collection:
         self._data = response.json().get("data")
         return self
 
+    def create_permission(
+        self, to_collection: str | Collection, raise_for_status: bool = True
+    ) -> InterCollectionPermission:
+        if isinstance(to_collection, str):
+            pass
+        elif isinstance(to_collection, Collection):
+            to_collection = to_collection.name
+        else:
+            raise TypeError(
+                "The 'to_collection' parameter must be a string or a Collection "
+                f"object; got {type(to_collection)} instead."
+            )
+        response = self.connection.authz_inter_coll_perm_create(
+            self.name, to_collection, raise_for_status=raise_for_status
+        )
+        return InterCollectionPermission(
+            self.connection, **response.json().get("data"), collection=self
+        )
+
     def delete(self, raise_for_status: bool = True) -> None:
         self.connection.collection_delete(self.name, raise_for_status=raise_for_status)
+
+    def delete_permission(
+        self, permission: str | InterCollectionPermission, raise_for_status: bool = True
+    ) -> InterCollectionPermission:
+        """
+        Delete an inter-collection permission by its ID.
+
+        Args:
+            permission (str | InterCollectionPermission): The ID of the
+                inter-collection permission to delete or a InterCollectionPermission
+                object.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+        """
+        perm = (
+            InterCollectionPermission(self.connection, permission, self)
+            if isinstance(permission, str)
+            else permission
+        )
+        perm.delete(raise_for_status=raise_for_status)
+        return perm
 
     def get_function(self, function_name: str) -> Function:
         function_definition = (
@@ -207,6 +251,49 @@ class Collection:
             for raw_function in raw_functions:
                 raw_function = Function(self.connection, **raw_function)
                 yield raw_function
+            first_page = False
+
+    def list_inter_coll_perm(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[InterCollectionPermission]:
+        return list(
+            self.list_inter_coll_perm_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_inter_coll_perm_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[InterCollectionPermission]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.authz_inter_coll_perm_list(
+                self.name,
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_permissions = data.get("data")
+            for raw_permission in raw_permissions:
+                built_permission = InterCollectionPermission(
+                    self.connection, **raw_permission, collection=self
+                )
+                yield built_permission
             first_page = False
 
     def list_tables(
@@ -1482,6 +1569,140 @@ class FunctionRun:
         return f"ID: {self.id!s}"
 
 
+class InterCollectionPermission:
+
+    granted_by = _LazyProperty("granted_by")
+    granted_on = _LazyProperty("granted_on")
+    granted_on_str = _LazyProperty("granted_on_str", subordinate_time_string=True)
+
+    def __init__(
+        self, connection: APIServer, id: str, collection: str | Collection, **kwargs
+    ):
+        """
+        Initialize the InterCollectionPermission object.
+
+        Args:
+            connection (APIServer): The connection to the API server.
+            id (str): The ID of the inter-collection permission.
+            collection (str | Collection): The collection associated with the
+                permission.
+            **kwargs: Additional keyword arguments.
+        """
+        self.connection = connection
+        self.id = id
+        self.collection = collection
+        self.to_collection = kwargs.get("to_collection")
+        self.granted_by = kwargs.get("granted_by")
+        self.granted_on = kwargs.get("granted_on")
+        self.granted_on_str = None
+
+        self.kwargs = kwargs
+        self._data = None
+
+    @property
+    def _data(self) -> dict:
+        if self._data_dict is None:
+            try:
+                inter_coll_perm = self.collection.list_inter_coll_perm(
+                    filter=f"id:eq:{self.id}"
+                )[0]
+            except IndexError:
+                raise ValueError(
+                    f"Inter collection permission with ID {self.id} "
+                    f"for collection {self.collection.name} not found."
+                )
+            self._data = inter_coll_perm.kwargs
+        return self._data_dict
+
+    @_data.setter
+    def _data(self, data_dict: dict | None):
+        self._data_dict = data_dict
+
+    @property
+    def collection(self) -> Collection:
+        return self._collection
+
+    @collection.setter
+    def collection(self, collection: str | Collection):
+        if isinstance(collection, str):
+            self._collection = Collection(self.connection, collection)
+        elif isinstance(collection, Collection):
+            self._collection = collection
+        else:
+            raise TypeError(
+                "The 'collection' parameter must be a string or a Collection object; "
+                f"got {type(collection)} instead."
+            )
+
+    @property
+    def to_collection(self) -> Collection:
+        """
+        Get the collection to which this permission applies.
+
+        Returns:
+            Collection: The collection to which this permission applies.
+        """
+        if self._to_collection is None:
+            self.to_collection = self._data.get("to_collection")
+        return self._to_collection
+
+    @to_collection.setter
+    def to_collection(self, to_collection: str | Collection | None):
+        if isinstance(to_collection, str):
+            self._to_collection = Collection(self.connection, to_collection)
+        elif isinstance(to_collection, Collection):
+            self._to_collection = to_collection
+        elif to_collection is None:
+            self._to_collection = None
+        else:
+            raise TypeError(
+                "The 'to_collection' parameter must be a string, a Collection object, "
+                f"or None; got {type(to_collection)} instead."
+            )
+
+    def delete(self, raise_for_status: bool = True) -> None:
+        """
+        Delete the inter-collection permission.
+
+        Args:
+            raise_for_status (bool): Whether to raise an exception if the request
+                was not successful.
+        """
+        self.connection.authz_inter_coll_perm_delete(
+            self.collection.name, self.id, raise_for_status=raise_for_status
+        )
+
+    def refresh(self) -> InterCollectionPermission:
+        """
+        Refresh the inter-collection permission data.
+
+        Returns:
+            InterCollectionPermission: The refreshed inter-collection permission object.
+        """
+        self.to_collection = None
+        self.granted_by = None
+        self.granted_on = None
+        self.granted_on_str = None
+        self.kwargs = None
+        self._data = None
+        return self
+
+    def __eq__(self, other):
+        if not isinstance(other, InterCollectionPermission):
+            return False
+        return self.id == other.id
+
+    def __repr__(self) -> str:
+        representation = (
+            f"{self.__class__.__name__}(id={self.id!r}, collection={self.collection!r})"
+        )
+        return representation
+
+    def __str__(self) -> str:
+        string_representation = f"ID: {self.id!s}, collection: {self.collection.name!s}"
+        return string_representation
+
+
 class Role:
 
     created_by = _LazyProperty("created_by")
@@ -1537,6 +1758,27 @@ class Role:
     def _data(self, data_dict: dict | None):
         self._data_dict = data_dict
 
+    @property
+    def permissions(self) -> list[RolePermission]:
+        return self.list_permissions()
+
+    @property
+    def users(self) -> list[User]:
+        return self.list_users()
+
+    def add_user(self, user: str | User, raise_for_status: bool = True) -> User:
+        """
+        Add a user to the role.
+
+        Args:
+            user (str | User): The name of the user to delete or a User object.
+            raise_for_status (bool): Whether to raise an exception if the request
+                was not successful.
+        """
+        user = User(self.connection, user) if isinstance(user, str) else user
+        user.add_role(self, raise_for_status=raise_for_status)
+        return user
+
     def create(self, raise_for_status=True) -> Role:
         name = self.name
         description = self._description
@@ -1549,8 +1791,183 @@ class Role:
         self._data = response.json().get("data")
         return self
 
+    def create_permission(
+        self,
+        permission_type: str,
+        entity: str | None = None,
+        raise_for_status: bool = True,
+    ) -> RolePermission:
+        """
+        Create a new permission.
+
+        Args:
+            permission_type (str): The type of the permission.
+            entity (str | None): The entity associated with the permission.
+            raise_for_status (bool): Whether to raise an exception if the request
+                was not successful.
+        Returns:
+            RolePermission: The created permission object.
+        """
+        valid_permission_types = [
+            (e.name.lower(), e.value.lower()) for e in RolePermissionTypes
+        ]
+        for name, value in valid_permission_types:
+            if permission_type.lower() == name or permission_type.lower() == value:
+                permission_type = value
+                break
+        else:
+            raise ValueError(
+                "Received an invalid value for the parameter 'permission_type':"
+                f" {permission_type}. "
+                f"The valid values are: {valid_permission_types}."
+            )
+        response = self.connection.role_permission_create(
+            self.name,
+            permission_type,
+            entity_name=entity,
+            raise_for_status=raise_for_status,
+        )
+        return RolePermission(self.connection, **response.json().get("data"))
+
     def delete(self, raise_for_status: bool = True) -> None:
         self.connection.role_delete(self.name, raise_for_status=raise_for_status)
+
+    def delete_permission(
+        self, permission: str | RolePermission, raise_for_status: bool = True
+    ) -> None:
+        """
+        Delete a permission by its ID.
+
+        Args:
+            permission (str | RolePermission): The ID of the permission to delete or a
+                RolePermission object.
+            raise_for_status (bool): Whether to raise an exception if the request
+                was not successful.
+        """
+        permission = (
+            RolePermission(self.connection, permission, self)
+            if isinstance(permission, str)
+            else permission
+        )
+        permission.delete(raise_for_status=raise_for_status)
+
+    def delete_user(self, user: str, raise_for_status: bool = True) -> User:
+        """
+        Delete a user from the role.
+
+        Args:
+            user (str | User): The name of the user to delete or a User object.
+            raise_for_status (bool): Whether to raise an exception if the request
+                was not successful.
+        """
+        user = User(self.connection, user) if isinstance(user, str) else user
+        user.delete_role(self, raise_for_status=raise_for_status)
+        return user
+
+    def get_permission(self, permission_id: str) -> RolePermission:
+        """
+        Get a permission by its ID.
+
+        Args:
+            permission_id (str): The ID of the permission to get.
+
+        Returns:
+            RolePermission: The permission object.
+        """
+        permissions = self.list_permissions(filter=f"id:eq:{permission_id}")
+        if not permissions:
+            raise ValueError(f"Permission with ID {permission_id} not found.")
+        return permissions[0]
+
+    def list_permissions(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[RolePermission]:
+        return list(
+            self.list_permissions_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_permissions_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[RolePermission]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.role_permission_list(
+                self.name,
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_permissions = data.get("data")
+            for raw_permission in raw_permissions:
+                built_permission = RolePermission(
+                    self.connection,
+                    **raw_permission,
+                )
+                yield built_permission
+            first_page = False
+
+    def list_users(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[User]:
+        return list(
+            self.list_users_generator(
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_users_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[User]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.role_user_list(
+                self.name,
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_users = data.get("data")
+            for raw_user in raw_users:
+                if "name" not in raw_user:
+                    raw_user["name"] = raw_user.get("user")
+                built_user = User(
+                    self.connection,
+                    **raw_user,
+                )
+                yield built_user
+            first_page = False
 
     def refresh(self) -> Role:
         self.created_by = None
@@ -1594,6 +2011,118 @@ class Role:
 
     def __str__(self) -> str:
         string_representation = f"Name: {self.name!s}"
+        return string_representation
+
+
+class RolePermissionTypes(Enum):
+    """
+    Enum for permission types.
+    """
+
+    COLLECTIONADMIN = "ca"
+    COLLECTIONDEV = "cd"
+    COLLECTIONEXEC = "cx"
+    COLLECTIONREAD = "cr"
+    SECADMIN = "ss"
+    SYSADMIN = "sa"
+
+
+class RolePermission:
+
+    entity = _LazyProperty("entity")
+    entity_id = _LazyProperty("entity_id")
+    entity_type = _LazyProperty("entity_type")
+    fixed = _LazyProperty("fixed")
+    granted_by = _LazyProperty("granted_by")
+    granted_on = _LazyProperty("granted_on")
+    granted_on_str = _LazyProperty("granted_on_str", subordinate_time_string=True)
+    permission_type = _LazyProperty("permission_type")
+
+    def __init__(self, connection: APIServer, id: str, role: Role | str, **kwargs):
+        """
+        Initialize the Permission object.
+
+        Args:
+            connection (APIServer): The connection to the TabsdataServer.
+            id (str): The ID of the permission.
+            role (Role | str): The role associated with the permission.
+            **kwargs: Additional keyword arguments.
+        """
+        self.connection = connection
+        self.id = id
+        self.role = role
+        self.entity = kwargs.get("entity")
+        self.entity_id = kwargs.get("entity_id")
+        self.entity_type = kwargs.get("entity_type")
+        self.fixed = kwargs.get("fixed")
+        self.granted_by = kwargs.get("granted_by")
+        self.granted_on = kwargs.get("granted_on")
+        self.granted_on_str = None
+        self.permission_type = kwargs.get("permission_type")
+
+        self.kwargs = kwargs
+        self._data = None
+
+    @property
+    def _data(self) -> dict:
+        if self._data_dict is None:
+            try:
+                run = self.role.list_permissions(filter=f"id:eq:{self.id}")[0]
+            except IndexError:
+                raise ValueError(f"Role permission with ID {self.id} not found.")
+            self._data = run.kwargs
+        return self._data_dict
+
+    @_data.setter
+    def _data(self, data_dict: dict | None):
+        self._data_dict = data_dict
+
+    @property
+    def role(self) -> Role:
+        return self._role
+
+    @role.setter
+    def role(self, role: str | Role):
+        if isinstance(role, str):
+            self._role = Role(self.connection, role)
+        elif isinstance(role, Role):
+            self._role = role
+        else:
+            raise TypeError(
+                f"Role must be a string or a Role object; got{type(role)} instead."
+            )
+
+    def delete(self, raise_for_status: bool = True) -> None:
+        self.connection.role_permission_delete(
+            self.role.name, self.id, raise_for_status=raise_for_status
+        )
+
+    def refresh(self) -> RolePermission:
+        self.entity = None
+        self.entity_id = None
+        self.entity_type = None
+        self.fixed = None
+        self.granted_by = None
+        self.granted_on = None
+        self.granted_on_str = None
+        self.permission_type = None
+        self.kwargs = None
+        self._data = None
+        return self
+
+    def __eq__(self, other):
+        if not isinstance(other, RolePermission):
+            return False
+        return self.id == other.id
+
+    def __repr__(self) -> str:
+        representation = (
+            f"{self.__class__.__name__}(id={self.id!r}, role={self.role!r})"
+        )
+        return representation
+
+    def __str__(self) -> str:
+        string_representation = f"ID: {self.id!s}, role: {self.role.name!s}"
         return string_representation
 
 
@@ -2226,6 +2755,29 @@ class User:
     def _data(self, data_dict: dict | None):
         self._data_dict = data_dict
 
+    def add_role(self, role: str | Role, raise_for_status: bool = True) -> Role:
+        """
+        Add a role to the user.
+
+        Args:
+            role (str | Role): The role to add to the user.
+            raise_for_status (bool): Whether to raise an exception if the request
+                was not successful.
+        """
+        if isinstance(role, str):
+            pass
+        elif isinstance(role, Role):
+            role = role.name
+        else:
+            raise TypeError(
+                "The 'role' parameter must be a string or a Role object; got"
+                f"{type(role)} instead."
+            )
+        self.connection.role_user_add(
+            role, self.name, raise_for_status=raise_for_status
+        )
+        return Role(self.connection, role)
+
     def create(self, password: str, raise_for_status=True) -> User:
         full_name = self._full_name or self.name
         email = self._email
@@ -2249,6 +2801,44 @@ class User:
 
     def delete(self, raise_for_status: bool = True) -> None:
         self.connection.users_delete(self.name, raise_for_status=raise_for_status)
+
+    def delete_role(self, role: str | Role, raise_for_status: bool = True) -> Role:
+        """
+        Delete a role from the user.
+
+        Args:
+            role (str | Role): The role to remove from the user.
+            raise_for_status (bool): Whether to raise an exception if the request
+                was not successful.
+        """
+        if isinstance(role, str):
+            pass
+        elif isinstance(role, Role):
+            role = role.name
+        else:
+            raise TypeError(
+                "The 'role' parameter must be a string or a Role object; got"
+                f"{type(role)} instead."
+            )
+        self.connection.role_user_delete(
+            role, self.name, raise_for_status=raise_for_status
+        )
+        return Role(self.connection, role)
+
+    def read_role(self, role: str | Role, raise_for_status: bool = True) -> dict:
+        if isinstance(role, str):
+            pass
+        elif isinstance(role, Role):
+            role = role.name
+        else:
+            raise TypeError(
+                "The 'role' parameter must be a string or a Role object; got"
+                f"{type(role)} instead."
+            )
+        response = self.connection.role_user_read(
+            role, self.name, raise_for_status=raise_for_status
+        )
+        return response.json().get("data")
 
     def refresh(self) -> User:
         self.full_name = None
@@ -3108,6 +3698,76 @@ class TabsdataServer:
             raise_for_status=raise_for_status,
         )
 
+    def create_inter_coll_perm(
+        self,
+        collection: str | Collection,
+        to_collection: str | Collection,
+        raise_for_status: bool = True,
+    ) -> InterCollectionPermission:
+        """
+        Create an inter-collection permission in the server.
+
+        Args:
+            collection (str | Collection): The name of the collection or a Collection
+                object.
+            to_collection (str | Collection): The name of the target collection or a
+                Collection object.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Returns:
+            InterCollectionPermission: The created inter-collection permission.
+        """
+        collection = (
+            collection
+            if isinstance(collection, Collection)
+            else (self.get_collection(collection))
+        )
+        return collection.create_permission(
+            to_collection, raise_for_status=raise_for_status
+        )
+
+    def delete_inter_coll_perm(
+        self, collection: str, permission: str, raise_for_status: bool = True
+    ):
+        """
+        Delete an inter-collection permission in the server.
+
+        Args:
+            collection (str): The name of the collection.
+            permission (str): The id of the
+                inter-collection permission.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Returns:
+            InterCollectionPermission: The created inter-collection permission.
+        """
+        collection = self.get_collection(collection)
+        collection.delete_permission(permission, raise_for_status=raise_for_status)
+
+    def list_inter_coll_perm(
+        self,
+        collection: str | Collection,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> list[InterCollectionPermission]:
+        """
+        List the inter-collection permissions in the server.
+
+        Returns:
+            List[InterCollectionPermission]: The list of inter-collection permissions.
+        """
+        collection = (
+            collection
+            if isinstance(collection, Collection)
+            else (self.get_collection(collection))
+        )
+        return collection.list_inter_coll_perm(
+            filter=filter, order_by=order_by, raise_for_status=raise_for_status
+        )
+
     def login(self, username: str, password: str, role: str = None):
         self.connection.authentication_login(
             username,
@@ -3272,6 +3932,65 @@ class TabsdataServer:
             name=new_name,
             description=new_description,
             raise_for_status=raise_for_status,
+        )
+
+    def create_role_permission(
+        self,
+        role_name: str,
+        permission_type: str,
+        entity: str | None = None,
+        raise_for_status: bool = True,
+    ) -> RolePermission:
+        """
+        Create a permission for a role in the server.
+
+        Args:
+            role_name (str): The name of the role.
+            permission_type (str): The permission type.
+            entity (str | None): The entity to which the permission applies. If None,
+                the permission applies to all entities.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the permission could not be created.
+        """
+        role = self.get_role(role_name)
+        return role.create_permission(
+            permission_type, entity=entity, raise_for_status=raise_for_status
+        )
+
+    def delete_role_permission(
+        self, role_name: str, permission_id: str, raise_for_status: bool = True
+    ) -> None:
+        """
+        Delete a permission for a role in the server.
+        """
+        role = self.get_role(role_name)
+        role.delete_permission(permission_id, raise_for_status=raise_for_status)
+
+    def list_role_permissions(
+        self,
+        role_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> list[RolePermission]:
+        role = self.get_role(role_name)
+        return role.list_permissions(
+            filter=filter, order_by=order_by, raise_for_status=raise_for_status
+        )
+
+    def list_role_users(
+        self,
+        role_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> list[User]:
+        role = self.get_role(role_name)
+        return role.list_users(
+            filter=filter, order_by=order_by, raise_for_status=raise_for_status
         )
 
     def delete_table(
@@ -3498,6 +4217,25 @@ class TabsdataServer:
         transaction = Transaction(self.connection, transaction_id)
         return transaction.recover()
 
+    def add_user_to_role(
+        self, name: str, role_name: str, raise_for_status: bool = True
+    ) -> None:
+        """
+        Add a user to a role in the server.
+
+        Args:
+            name (str): The name of the user.
+            role_name (str): The name of the role.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the user could not be added to the role.
+        """
+        user = self.get_user(name)
+        role = self.get_role(role_name)
+        user.add_role(role, raise_for_status=raise_for_status)
+
     def create_user(
         self,
         name: str,
@@ -3542,6 +4280,25 @@ class TabsdataServer:
         """
         user = User(self.connection, name)
         user.delete(raise_for_status=raise_for_status)
+
+    def delete_user_from_role(
+        self, name: str, role_name: str, raise_for_status: bool = True
+    ) -> None:
+        """
+        Delete a user from a role in the server.
+
+        Args:
+            name (str): The name of the user.
+            role_name (str): The name of the role.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the user could not be added to the role.
+        """
+        user = self.get_user(name)
+        role = self.get_role(role_name)
+        user.delete_role(role, raise_for_status=raise_for_status)
 
     def get_user(self, name: str) -> User:
         """
