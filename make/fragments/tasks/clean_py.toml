@@ -11,6 +11,7 @@ run_task = [
         "clean_py_ta_tableframe",
         "clean_py_te_examples",
         "clean_py_te_tableframe",
+        "clean_py_ty_tableframe",
         "clean_py_tabsdata",
         "clean_py_connectors",
         "clean_py_all",
@@ -77,6 +78,18 @@ script = [
 
     debug "🚀 python ${CLEAN_PY} ${PROJECT_PY_TE_TABLEFRAME_FOLDER} py"
     exec --fail-on-error python ${CLEAN_PY} ${PROJECT_PY_TE_TABLEFRAME_FOLDER} py
+    ''']
+
+[tasks.clean_py_ty_tableframe]
+category = "01 - Clean"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    debug "🚀 python ${CLEAN_PY} ${PROJECT_PY_TY_TABLEFRAME_FOLDER} py"
+    exec --fail-on-error python ${CLEAN_PY} ${PROJECT_PY_TY_TABLEFRAME_FOLDER} py
     ''']
 
 [tasks.clean_py_tabsdata]

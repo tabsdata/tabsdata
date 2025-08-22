@@ -14,6 +14,7 @@ run_task = [
         "test_py_ta_tableframe",
         "test_py_te_examples",
         "test_py_te_tableframe",
+        "test_py_ty_tableframe",
         "test_py_tabsdata",
         "test_py_connectors",
         "post-test_py",
@@ -188,6 +189,47 @@ script = [
     else
         debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
         exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+    end
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+        if not ${TD_FAIL_FAST_PY}
+            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+            set_env TD_TESTS_CODE_PY ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+    ''']
+
+[tasks.test_py_ty_tableframe]
+category = "05 - Test"
+private = true
+dependencies = ["set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+    compile = get_env TD_COMPILE
+
+    cd "${PROJECT_PY_TY_TABLEFRAME_FOLDER}"
+
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16  --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+    else
+        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"

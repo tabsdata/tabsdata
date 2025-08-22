@@ -1,9 +1,10 @@
 #
-#  Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
 import logging
 
+# noinspection PyProtectedMember
 from tabsdata._utils.logging import setup_tests_logging
 from tests_tabsdata.bootest import TESTING_RESOURCES_PATH, enrich_sys_path
 
