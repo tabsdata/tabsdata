@@ -29,6 +29,7 @@ from tabsdata._cli.cli_utils import (
 from tabsdata._cli.collection_group import collection
 from tabsdata._cli.exe_group import exe
 from tabsdata._cli.fn_group import fn
+from tabsdata._cli.role_group import role
 from tabsdata._cli.table_group import table
 from tabsdata._cli.user_group import user
 from tabsdata.api.apiserver import DEFAULT_TABSDATA_DIRECTORY
@@ -74,10 +75,11 @@ def cli(ctx: click.Context, no_prompt: bool):
         raise click.ClickException(f"Failed to initialize CLI: {e}")
 
 
+cli.add_command(auth)
 cli.add_command(collection)
 cli.add_command(exe)
 cli.add_command(fn)
-cli.add_command(auth)
+cli.add_command(role)
 cli.add_command(table)
 cli.add_command(user)
 

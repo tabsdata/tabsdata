@@ -1,5 +1,5 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2025 Tabs Data Inc.
 #
 
 import logging
@@ -20,19 +20,19 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.requires_internet
 def test_wrong_command_raises_exception(login):
     runner = CliRunner()
-    result = runner.invoke(cli, ["--no-prompt", "collection", "potato"])
+    result = runner.invoke(cli, ["--no-prompt", "role", "potato"])
     assert result.exit_code == 2
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_collection_create_prompt(login):
+def test_role_create_prompt(login):
     runner = CliRunner()
     try:
         result = runner.invoke(
             cli,
-            ["collection", "create", "--name", "test_collection_create_prompt"],
-            input="the_decription\n",
+            ["role", "create", "--name", "test_role_create_prompt"],
+            input="the_description\n",
         )
         logger.debug(result.output)
         assert result.exit_code == 0
@@ -40,10 +40,10 @@ def test_collection_create_prompt(login):
         runner.invoke(
             cli,
             [
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_create_prompt",
+                "test_role_create_prompt",
                 "--confirm",
                 "delete",
             ],
@@ -52,17 +52,17 @@ def test_collection_create_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_collection_create_no_prompt(login):
+def test_role_create_no_prompt(login):
     runner = CliRunner()
     try:
         result = runner.invoke(
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "create",
                 "--name",
-                "test_collection_create_no_prompt",
+                "test_role_create_no_prompt",
             ],
         )
         logger.debug(result.output)
@@ -72,10 +72,10 @@ def test_collection_create_no_prompt(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_create_no_prompt",
+                "test_role_create_no_prompt",
                 "--confirm",
                 "delete",
             ],
@@ -84,60 +84,26 @@ def test_collection_create_no_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_collection_create(login):
+def test_role_delete_cli(login):
     runner = CliRunner()
     try:
         result = runner.invoke(
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "create",
                 "--name",
-                "test_collection_create",
+                "test_role_delete_cli",
                 "--description",
-                "test_collection_create_description",
-            ],
-        )
-        logger.debug(result.output)
-        assert result.exit_code == 0
-    finally:
-        runner.invoke(
-            cli,
-            [
-                "--no-prompt",
-                "collection",
-                "delete",
-                "--name",
-                "test_collection_create",
-                "--confirm",
-                "delete",
-            ],
-        )
-
-
-@pytest.mark.integration
-@pytest.mark.requires_internet
-def test_collection_delete_cli(login):
-    runner = CliRunner()
-    try:
-        result = runner.invoke(
-            cli,
-            [
-                "--no-prompt",
-                "collection",
-                "create",
-                "--name",
-                "test_collection_delete_cli",
-                "--description",
-                "test_collection_delete_description",
+                "test_role_delete_description",
             ],
         )
         logger.debug(result.output)
         assert result.exit_code == 0
         result = runner.invoke(
             cli,
-            ["collection", "delete", "--name", "test_collection_delete_cli"],
+            ["role", "delete", "--name", "test_role_delete_cli"],
             input="delete\n",
         )
         logger.debug(result.output)
@@ -147,10 +113,10 @@ def test_collection_delete_cli(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_delete_cli",
+                "test_role_delete_cli",
                 "--confirm",
                 "delete",
             ],
@@ -159,19 +125,19 @@ def test_collection_delete_cli(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_collection_delete_no_prompt(login):
+def test_role_delete_no_prompt(login):
     runner = CliRunner()
     try:
         result = runner.invoke(
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "create",
                 "--name",
-                "test_collection_delete_no_prompt",
+                "test_role_delete_no_prompt",
                 "--description",
-                "test_collection_delete_description",
+                "test_role_delete_description",
             ],
         )
         logger.debug(result.output)
@@ -180,10 +146,10 @@ def test_collection_delete_no_prompt(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_delete_no_prompt",
+                "test_role_delete_no_prompt",
                 "--confirm",
                 "delete",
             ],
@@ -195,10 +161,10 @@ def test_collection_delete_no_prompt(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_delete_no_prompt",
+                "test_role_delete_no_prompt",
                 "--confirm",
                 "delete",
             ],
@@ -207,16 +173,16 @@ def test_collection_delete_no_prompt(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_collection_delete_wrong_options_raises_error(login):
+def test_role_delete_wrong_options_raises_error(login):
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [
             "--no-prompt",
-            "collection",
+            "role",
             "delete",
             "--name",
-            "test_collection_delete_no_exists_raises_error",
+            "test_role_delete_no_exists_raises_error",
             "--confirm",
             "delete",
         ],
@@ -227,12 +193,12 @@ def test_collection_delete_wrong_options_raises_error(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "create",
                 "--name",
-                "test_collection_delete_raises_error",
+                "test_role_delete_raises_error",
                 "--description",
-                "test_collection_delete_raises_error_description",
+                "test_role_delete_raises_error_description",
             ],
         )
         logger.debug(result.output)
@@ -241,10 +207,10 @@ def test_collection_delete_wrong_options_raises_error(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_delete_raises_error",
+                "test_role_delete_raises_error",
                 "--confirm",
                 "yes",
             ],
@@ -252,7 +218,7 @@ def test_collection_delete_wrong_options_raises_error(login):
         assert result.exit_code != 0
         result = runner.invoke(
             cli,
-            ["collection", "delete", "--name", "test_collection_delete_raises_error"],
+            ["role", "delete", "--name", "test_role_delete_raises_error"],
             input="yes\n",
         )
         assert result.exit_code != 0
@@ -260,10 +226,10 @@ def test_collection_delete_wrong_options_raises_error(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_delete_raises_error",
+                "test_role_delete_raises_error",
             ],
             input="delete\n",
         )
@@ -273,10 +239,10 @@ def test_collection_delete_wrong_options_raises_error(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_delete_raises_error",
+                "test_role_delete_raises_error",
                 "--confirm",
                 "delete",
             ],
@@ -285,28 +251,28 @@ def test_collection_delete_wrong_options_raises_error(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_collection_list(login):
+def test_role_list(login):
     runner = CliRunner()
-    result = runner.invoke(cli, ["--no-prompt", "collection", "list"])
+    result = runner.invoke(cli, ["--no-prompt", "role", "list"])
     logger.debug(result.output)
     assert result.exit_code == 0
 
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_collection_update(login):
+def test_role_update(login):
     runner = CliRunner()
     try:
         result = runner.invoke(
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "create",
                 "--name",
-                "test_collection_update",
+                "test_role_update",
                 "--description",
-                "test_collection_update_description",
+                "test_role_update_description",
             ],
         )
         logger.debug(result.output)
@@ -315,10 +281,10 @@ def test_collection_update(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "update",
                 "--name",
-                "test_collection_update",
+                "test_role_update",
                 "--description",
                 "new_description",
             ],
@@ -330,10 +296,10 @@ def test_collection_update(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_update",
+                "test_role_update",
                 "--confirm",
                 "delete",
             ],
@@ -342,19 +308,19 @@ def test_collection_update(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_collection_info(login):
+def test_role_info(login):
     runner = CliRunner()
     try:
         result = runner.invoke(
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "create",
                 "--name",
-                "test_collection_info",
+                "test_role_info",
                 "--description",
-                "test_collection_info_description",
+                "test_role_info_description",
             ],
         )
         logger.debug(result.output)
@@ -363,10 +329,10 @@ def test_collection_info(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "info",
                 "--name",
-                "test_collection_info",
+                "test_role_info",
             ],
         )
         logger.debug(result.output)
@@ -376,10 +342,10 @@ def test_collection_info(login):
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete",
                 "--name",
-                "test_collection_info",
+                "test_role_info",
                 "--confirm",
                 "delete",
             ],
@@ -388,142 +354,192 @@ def test_collection_info(login):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_collection_info_error(login):
+def test_role_info_error(login):
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [
             "--no-prompt",
-            "collection",
+            "role",
             "info",
             "--name",
-            "test_collection_info_error",
+            "test_role_info_error",
         ],
     )
     assert result.exit_code != 0
 
 
 @pytest.mark.integration
-def test_coll_cli_inter_coll_perm_list(tabsserver_connection, login):
-    coll_a_name = "test_coll_cli_inter_coll_perm_list_coll_a"
-    coll_b_name = "test_coll_cli_inter_coll_perm_list_coll_b"
-    tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
-    tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+def test_role_cli_perm_list(tabsserver_connection, login):
+    role_name = "test_role_cli_perm_list"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
     try:
-        coll_a = tabsserver_connection.create_collection(coll_a_name)
-        tabsserver_connection.create_collection(coll_b_name)
-        coll_a.create_permission(coll_b_name)
+        role = tabsserver_connection.create_role(role_name)
+        role.create_permission("sa")
         runner = CliRunner()
         result = runner.invoke(
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "list-perm",
                 "--name",
-                coll_a_name,
+                role_name,
             ],
         )
         logger.debug(result.output)
         assert result.exit_code == 0
     finally:
-        tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
-        tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
 
 
 @pytest.mark.integration
-def test_coll_cli_inter_coll_perm_create(tabsserver_connection, login):
-    coll_a_name = "test_coll_cli_inter_coll_perm_create_coll_a"
-    coll_b_name = "test_coll_cli_inter_coll_perm_create_coll_b"
-    tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
-    tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+def test_role_cli_perm_add(tabsserver_connection, login):
+    role_name = "test_role_cli_perm_add"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
     try:
-        coll_a = tabsserver_connection.create_collection(coll_a_name)
-        tabsserver_connection.create_collection(coll_b_name)
+        role = tabsserver_connection.create_role(role_name)
+        assert not role.permissions
         runner = CliRunner()
         result = runner.invoke(
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "add-perm",
                 "--name",
-                coll_a_name,
-                "--to-coll",
-                coll_b_name,
+                role_name,
+                "--perm",
+                "sa",
             ],
         )
         logger.debug(result.output)
         assert result.exit_code == 0
-        listed_permissions = coll_a.permissions
-        assert listed_permissions
-        assert listed_permissions[0].to_collection.name == coll_b_name
+        assert role.permissions
     finally:
-        tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
-        tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
 
 
 @pytest.mark.integration
-def test_coll_cli_inter_coll_perm_delete(tabsserver_connection, login):
-    coll_a_name = "test_coll_cli_inter_coll_perm_delete_coll_a"
-    coll_b_name = "test_coll_cli_inter_coll_perm_delete_coll_b"
-    tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
-    tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+def test_role_cli_perm_delete(tabsserver_connection, login):
+    role_name = "test_role_cli_perm_delete"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
     try:
-        coll_a = tabsserver_connection.create_collection(coll_a_name)
-        coll_b = tabsserver_connection.create_collection(coll_b_name)
-        perm = coll_a.create_permission(coll_b)
-        listed_permissions = coll_a.permissions
+        role = tabsserver_connection.create_role(role_name)
+        perm = role.create_permission("sa")
+        listed_permissions = role.permissions
         assert perm in listed_permissions
         runner = CliRunner()
         result = runner.invoke(
             cli,
             [
                 "--no-prompt",
-                "collection",
+                "role",
                 "delete-perm",
                 "--name",
-                coll_a_name,
-                "--to-coll",
-                coll_b_name,
-            ],
-        )
-        logger.debug(result.output)
-        assert result.exit_code == 0
-        assert perm not in coll_a.permissions
-    finally:
-        tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
-        tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
-
-
-@pytest.mark.integration
-def test_coll_cli_inter_coll_perm_delete_with_id(tabsserver_connection, login):
-    coll_a_name = "test_coll_cli_inter_coll_perm_delete_with_id_coll_a"
-    coll_b_name = "test_coll_cli_inter_coll_perm_delete_with_id_coll_b"
-    tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
-    tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
-    try:
-        coll_a = tabsserver_connection.create_collection(coll_a_name)
-        coll_b = tabsserver_connection.create_collection(coll_b_name)
-        perm = coll_a.create_permission(coll_b)
-        listed_permissions = coll_a.permissions
-        assert perm in listed_permissions
-        runner = CliRunner()
-        result = runner.invoke(
-            cli,
-            [
-                "--no-prompt",
-                "collection",
-                "delete-perm",
-                "--name",
-                coll_a_name,
+                role_name,
                 "--id",
                 perm.id,
             ],
         )
         logger.debug(result.output)
         assert result.exit_code == 0
-        assert perm not in coll_a.permissions
+        assert perm not in role.permissions
     finally:
-        tabsserver_connection.delete_collection(coll_a_name, raise_for_status=False)
-        tabsserver_connection.delete_collection(coll_b_name, raise_for_status=False)
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_cli_user_list(tabsserver_connection, login):
+    role_name = "test_role_cli_user_list"
+    user_name = "test_role_cli_user_list_user"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    try:
+        role = tabsserver_connection.create_role(role_name)
+        user = tabsserver_connection.create_user(
+            user_name, "test_role_cli_user_list_password"
+        )
+        role.add_user(user)
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--no-prompt",
+                "role",
+                "list-user",
+                "--name",
+                role_name,
+            ],
+        )
+        logger.debug(result.output)
+        assert result.exit_code == 0
+    finally:
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_cli_user_add(tabsserver_connection, login):
+    role_name = "test_role_cli_user_add"
+    user_name = "test_role_cli_user_add_user"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    try:
+        role = tabsserver_connection.create_role(role_name)
+        tabsserver_connection.create_user(user_name, "test_role_cli_user_add_password")
+        assert not role.users
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--no-prompt",
+                "role",
+                "add-user",
+                "--name",
+                role_name,
+                "--user",
+                user_name,
+            ],
+        )
+        logger.debug(result.output)
+        assert result.exit_code == 0
+        assert role.users
+    finally:
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_role_cli_user_delete(tabsserver_connection, login):
+    role_name = "test_role_cli_user_delete"
+    user_name = "test_role_cli_user_delete_user"
+    tabsserver_connection.delete_role(role_name, raise_for_status=False)
+    tabsserver_connection.delete_user(user_name, raise_for_status=False)
+    try:
+        role = tabsserver_connection.create_role(role_name)
+        user = tabsserver_connection.create_user(
+            user_name, "test_role_cli_user_delete_password"
+        )
+        role.add_user(user)
+        listed_users = role.users
+        assert user in listed_users
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--no-prompt",
+                "role",
+                "delete-user",
+                "--name",
+                role_name,
+                "--user",
+                user_name,
+            ],
+        )
+        logger.debug(result.output)
+        assert result.exit_code == 0
+        assert user not in role.users
+    finally:
+        tabsserver_connection.delete_role(role_name, raise_for_status=False)
+        tabsserver_connection.delete_user(user_name, raise_for_status=False)

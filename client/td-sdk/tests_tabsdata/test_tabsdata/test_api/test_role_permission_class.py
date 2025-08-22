@@ -80,7 +80,7 @@ def test_role_permission_class_permission_type_long_format(tabsserver_connection
         role = tabsserver_connection.create_role(
             name=role_name,
         )
-        permission_type = "sysadmin"
+        permission_type = "sys_admin"
         permission = role.create_permission(permission_type)
         lazy_permission = RolePermission(
             tabsserver_connection.connection, permission.id, role.name

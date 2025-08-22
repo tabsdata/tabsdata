@@ -141,7 +141,7 @@ class Collection:
 
     @property
     def permissions(self) -> List[InterCollectionPermission]:
-        return self.list_inter_coll_perm()
+        return self.list_permissions()
 
     @property
     def tables(self) -> List[Table]:
@@ -253,21 +253,21 @@ class Collection:
                 yield raw_function
             first_page = False
 
-    def list_inter_coll_perm(
+    def list_permissions(
         self,
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
     ) -> List[InterCollectionPermission]:
         return list(
-            self.list_inter_coll_perm_generator(
+            self.list_permissions_generator(
                 filter=filter,
                 order_by=order_by,
                 raise_for_status=raise_for_status,
             )
         )
 
-    def list_inter_coll_perm_generator(
+    def list_permissions_generator(
         self,
         filter: List[str] | str = None,
         order_by: str = None,
@@ -1603,7 +1603,7 @@ class InterCollectionPermission:
     def _data(self) -> dict:
         if self._data_dict is None:
             try:
-                inter_coll_perm = self.collection.list_inter_coll_perm(
+                inter_coll_perm = self.collection.list_permissions(
                     filter=f"id:eq:{self.id}"
                 )[0]
             except IndexError:
@@ -1808,10 +1808,7 @@ class Role:
         Returns:
             RolePermission: The created permission object.
         """
-        valid_permission_types = [
-            (e.name.lower(), e.value.lower()) for e in RolePermissionTypes
-        ]
-        for name, value in valid_permission_types:
+        for name, value in VALID_PERMISSION_TYPES:
             if permission_type.lower() == name or permission_type.lower() == value:
                 permission_type = value
                 break
@@ -1819,7 +1816,8 @@ class Role:
             raise ValueError(
                 "Received an invalid value for the parameter 'permission_type':"
                 f" {permission_type}. "
-                f"The valid values are: {valid_permission_types}."
+                "The valid values are: "
+                f"{', '.join(str(p) for p in VALID_PERMISSION_TYPES)}."
             )
         response = self.connection.role_permission_create(
             self.name,
@@ -1851,7 +1849,7 @@ class Role:
         )
         permission.delete(raise_for_status=raise_for_status)
 
-    def delete_user(self, user: str, raise_for_status: bool = True) -> User:
+    def delete_user(self, user: str | User, raise_for_status: bool = True) -> User:
         """
         Delete a user from the role.
 
@@ -2019,12 +2017,36 @@ class RolePermissionTypes(Enum):
     Enum for permission types.
     """
 
-    COLLECTIONADMIN = "ca"
-    COLLECTIONDEV = "cd"
-    COLLECTIONEXEC = "cx"
-    COLLECTIONREAD = "cr"
-    SECADMIN = "ss"
-    SYSADMIN = "sa"
+    COLL_ADMIN = "ca"
+    COLL_DEV = "cd"
+    COLL_EXE = "cx"
+    COLL_READ = "cr"
+    SEC_ADMIN = "ss"
+    SYS_ADMIN = "sa"
+
+
+VALID_PERMISSION_TYPES = [
+    (e.name.lower(), e.value.lower()) for e in RolePermissionTypes
+]
+
+PERMISSION_TYPES_WITH_ENTITY = [
+    (
+        RolePermissionTypes.COLL_ADMIN.name.lower(),
+        RolePermissionTypes.COLL_ADMIN.value.lower(),
+    ),
+    (
+        RolePermissionTypes.COLL_DEV.name.lower(),
+        RolePermissionTypes.COLL_DEV.value.lower(),
+    ),
+    (
+        RolePermissionTypes.COLL_EXE.name.lower(),
+        RolePermissionTypes.COLL_EXE.value.lower(),
+    ),
+    (
+        RolePermissionTypes.COLL_READ.name.lower(),
+        RolePermissionTypes.COLL_READ.value.lower(),
+    ),
+]
 
 
 class RolePermission:
@@ -2080,6 +2102,21 @@ class RolePermission:
     @property
     def role(self) -> Role:
         return self._role
+
+    @property
+    def type(self) -> str:
+        """
+        Get the type of the permission.
+
+        Returns:
+            str: The type of the permission.
+        """
+        type = self.permission_type
+        for name, value in VALID_PERMISSION_TYPES:
+            if type.lower() == name or type.lower() == value:
+                type = name
+                break
+        return type
 
     @role.setter
     def role(self, role: str | Role):
@@ -3764,7 +3801,7 @@ class TabsdataServer:
             if isinstance(collection, Collection)
             else (self.get_collection(collection))
         )
-        return collection.list_inter_coll_perm(
+        return collection.list_permissions(
             filter=filter, order_by=order_by, raise_for_status=raise_for_status
         )
 

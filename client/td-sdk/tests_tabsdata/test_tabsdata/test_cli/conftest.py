@@ -56,7 +56,10 @@ def atomic_login():
     )
     logger.debug(result.output)
     # Avoid issues with pinned collections by the user before running tests
-    result = runner.invoke(cli, ["collection", "unpin"])
+    result = runner.invoke(cli, ["--no-prompt", "collection", "unpin"])
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    result = runner.invoke(cli, ["--no-prompt", "role", "unpin"])
     logger.debug(result.output)
     assert result.exit_code == 0
 
