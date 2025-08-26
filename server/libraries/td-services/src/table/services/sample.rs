@@ -105,8 +105,8 @@ mod tests {
     #[td_test::test(sqlx)]
     async fn test_tower_metadata_sample_service(db: DbPool) {
         use crate::table::layers::storage::resolve_table_location;
-        use td_objects::tower_service::from::combine;
         use td_objects::tower_service::from::TryIntoService;
+        use td_objects::tower_service::from::combine;
         use td_objects::types::basic::{Sql, TableId, TableIdName, TableStatus, TriggeredOn};
         use td_objects::types::execution::TableDataVersionDBWithNames;
         use td_objects::types::table::TableDBWithNames;
@@ -182,11 +182,9 @@ mod tests {
         let db = td_database::test_utils::db().await?;
         let test_dir = testdir!();
         let url = Url::from_directory_path(test_dir).unwrap();
-        let storage = Storage::from(vec![MountDef::builder()
-            .id("id")
-            .uri(url)
-            .path("/")
-            .build()?])
+        let storage = Storage::from(vec![
+            MountDef::builder().id("id").uri(url).path("/").build()?,
+        ])
         .await?;
         let storage = Arc::new(storage);
 

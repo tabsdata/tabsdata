@@ -113,7 +113,7 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of, MetadataMutex};
+                use crate::metadata::{MetadataMutex, type_of};
 
                 // Add metadata to handler
                 let res_type_name = type_of::<ReqCtx>();
@@ -233,7 +233,7 @@ where
         Box::pin(async move {
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of, MetadataMutex};
+                use crate::metadata::{MetadataMutex, type_of};
 
                 // Add types to metadata
                 let Input(metadata) = MetadataMutex::from_handler(&handler).await.unwrap();
@@ -317,7 +317,7 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of_val, MetadataMutex};
+                use crate::metadata::{MetadataMutex, type_of_val};
 
                 // Add types to metadata
                 let Input(metadata) = MetadataMutex::from_handler(&handler).await.unwrap();
@@ -401,7 +401,7 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of_val, MetadataMutex};
+                use crate::metadata::{MetadataMutex, type_of_val};
 
                 // Add types to metadata
                 let Input(metadata) = MetadataMutex::from_handler(&handler).await.unwrap();
@@ -419,7 +419,7 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of_val, MetadataMutex};
+                use crate::metadata::{MetadataMutex, type_of_val};
 
                 // Add types to metadata
                 let handler = result.as_ref().unwrap();
@@ -689,7 +689,7 @@ where
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{type_of, MetadataMutex};
+                use crate::metadata::{MetadataMutex, type_of};
 
                 // This services uses the Condition
                 let Input(metadata) = MetadataMutex::from_handler(&handler).await?;
@@ -825,7 +825,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_service_conditional() {
-        use crate::metadata::{type_of_val, MetadataMutex};
+        use crate::metadata::{MetadataMutex, type_of_val};
 
         async fn if_fn() -> Result<Condition, FromHandlerError> {
             Ok(Condition(true))

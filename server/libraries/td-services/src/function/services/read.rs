@@ -10,8 +10,8 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{
-    builder, combine, BuildService, ConvertIntoMapService, ExtractNameService, ExtractService,
-    ExtractVecService, SetService, TryIntoService, With,
+    BuildService, ConvertIntoMapService, ExtractNameService, ExtractService, ExtractVecService,
+    SetService, TryIntoService, With, builder, combine,
 };
 use td_objects::tower_service::sql::{By, SqlFindService, SqlSelectAllService, SqlSelectService};
 use td_objects::types::basic::{

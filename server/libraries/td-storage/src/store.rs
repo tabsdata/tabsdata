@@ -202,14 +202,18 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(store
-            .exists(&SPath::parse("/a.txt").unwrap())
-            .await
-            .unwrap());
-        assert!(store
-            .exists(&SPath::parse("/foo/b.txt").unwrap())
-            .await
-            .unwrap());
+        assert!(
+            store
+                .exists(&SPath::parse("/a.txt").unwrap())
+                .await
+                .unwrap()
+        );
+        assert!(
+            store
+                .exists(&SPath::parse("/foo/b.txt").unwrap())
+                .await
+                .unwrap()
+        );
 
         assert_eq!(
             vec![1],
@@ -234,16 +238,20 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(got, vec![bytes::Bytes::from(vec![2])]);
 
-        assert!(store
-            .list(&SPath::parse("/").unwrap())
-            .await
-            .unwrap()
-            .contains(&SPath::parse("/a.txt").unwrap()));
-        assert!(store
-            .list(&SPath::parse("/foo").unwrap())
-            .await
-            .unwrap()
-            .contains(&SPath::parse("/foo/b.txt").unwrap()));
+        assert!(
+            store
+                .list(&SPath::parse("/").unwrap())
+                .await
+                .unwrap()
+                .contains(&SPath::parse("/a.txt").unwrap())
+        );
+        assert!(
+            store
+                .list(&SPath::parse("/foo").unwrap())
+                .await
+                .unwrap()
+                .contains(&SPath::parse("/foo/b.txt").unwrap())
+        );
 
         assert!(mount1_dir.join("a.txt").exists());
         assert!(mount2_dir.join("b.txt").exists());

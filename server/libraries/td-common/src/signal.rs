@@ -12,7 +12,7 @@ pub async fn terminate() -> Option<Signal> {
     #[cfg(not(windows))]
     // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
     {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
 
         let mut signal_interrupt_handle = signal(SignalKind::interrupt()).unwrap();
         let mut signal_terminate_handle = signal(SignalKind::terminate()).unwrap();

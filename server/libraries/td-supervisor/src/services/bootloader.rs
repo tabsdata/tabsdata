@@ -4,8 +4,8 @@
 
 use crate::component::describer::DescriberError;
 use crate::resource::instance::{
-    create_instance_tree, get_instance_path_for_instance, get_repository_path_for_instance,
-    get_workspace_path_for_instance, InstanceError,
+    InstanceError, create_instance_tree, get_instance_path_for_instance,
+    get_repository_path_for_instance, get_workspace_path_for_instance,
 };
 use crate::runtime::error::RuntimeError;
 use crate::services::bootloader::BootloaderError::*;

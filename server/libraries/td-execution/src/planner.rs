@@ -218,7 +218,7 @@ mod tests {
     use ta_execution::test_utils::graph::test_graph;
     use td_error::TdError;
     use td_objects::types::test_utils::execution::{
-        function_node, table_node, FUNCTIONS, FUNCTION_NAMES, TABLE_NAMES,
+        FUNCTION_NAMES, FUNCTIONS, TABLE_NAMES, function_node, table_node,
     };
 
     #[tokio::test]

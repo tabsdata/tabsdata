@@ -2,9 +2,9 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::SaltString;
 use argon2::PasswordHasher;
+use argon2::password_hash::SaltString;
+use argon2::password_hash::rand_core::OsRng;
 use std::ops::Deref;
 use td_error::TdError;
 use td_objects::types::basic::PasswordHash;

@@ -5,13 +5,13 @@
 //! Module that provides all the properties that describe a worker run under the Tabsdata system.
 
 use crate::component::describer::DescriberError::*;
-use crate::resource::instance::{get_program_path, InstanceError};
+use crate::resource::instance::{InstanceError, get_program_path};
 use crate::services::supervisor::{GetState, SetState, WorkerLocation};
 use derive_builder::{Builder, UninitializedFieldError};
 use getset::{Getters, Setters};
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
-use td_common::env::{to_absolute, EnvironmentError};
+use td_common::env::{EnvironmentError, to_absolute};
 use td_common::server::{SupervisorMessage, WorkerClass};
 use thiserror::Error;
 
@@ -91,19 +91,19 @@ impl TabsDataWorkerDescriberBuilder {
         if self.name.as_ref().is_none_or(|n| n.trim().is_empty()) {
             return Err(MissingWorkerName);
         }
-        if let Some(program) = &self.program {
-            if let Some(WorkerLocation::Relative) = &self.location {
-                if program
-                    .as_os_str()
-                    .to_string_lossy()
-                    .to_string()
-                    .trim()
-                    .is_empty()
-                {
-                    return Err(MissingProgram);
-                }
-                get_program_path(program)?;
+        if let Some(program) = &self.program
+            && let Some(WorkerLocation::Relative) = &self.location
+        {
+            if program
+                .as_os_str()
+                .to_string_lossy()
+                .to_string()
+                .trim()
+                .is_empty()
+            {
+                return Err(MissingProgram);
             }
+            get_program_path(program)?;
         }
         if let Some(config) = &self.config {
             if config
@@ -183,10 +183,10 @@ impl TabsDataWorkerDescriberBuilder {
     }
 
     pub fn build(&mut self) -> Result<TabsDataWorkerDescriber, DescriberError> {
-        if let Some(WorkerLocation::Relative) = &self.location {
-            if let Ok(program) = get_program_path(self.get_program().as_ref().unwrap()) {
-                self.program(program);
-            }
+        if let Some(WorkerLocation::Relative) = &self.location
+            && let Ok(program) = get_program_path(self.get_program().as_ref().unwrap())
+        {
+            self.program(program);
         }
         if let Ok(config) = to_absolute(self.get_config().as_ref().unwrap()) {
             self.config(config);

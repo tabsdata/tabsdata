@@ -2,12 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{handle_sql_err, ReadRequest, RequestContext};
+use crate::crudl::{ReadRequest, RequestContext, handle_sql_err};
 use crate::sql::{DaoQueries, Insert, SelectBy};
+use crate::types::SqlEntity;
 use crate::types::basic::{AccessTokenId, EntityId, EntityName, PermissionType, RoleId, UserId};
 use crate::types::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
 use crate::types::role::RoleDB;
-use crate::types::SqlEntity;
 use td_database::sql::DbPool;
 use td_error::TdError;
 

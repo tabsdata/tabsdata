@@ -3,7 +3,7 @@
 //
 
 use crate::inter_coll_permission::layers::assert_collection_in_permission;
-use td_authz::{refresh_authz_context, Authz, AuthzContext};
+use td_authz::{Authz, AuthzContext, refresh_authz_context};
 use td_error::TdError;
 use td_objects::crudl::{DeleteRequest, RequestContext};
 use td_objects::rest_urls::InterCollectionPermissionParam;
@@ -67,7 +67,7 @@ fn provider() {
 mod tests {
     use super::*;
     use td_database::sql::DbPool;
-    use td_error::{assert_service_error, TdError};
+    use td_error::{TdError, assert_service_error};
     use td_objects::crudl::RequestContext;
     use td_objects::rest_urls::InterCollectionPermissionParam;
     use td_objects::test_utils::seed_collection::seed_collection;
@@ -75,11 +75,11 @@ mod tests {
         get_inter_collection_permissions, seed_inter_collection_permission,
     };
     use td_objects::tower_service::authz::AuthzError;
+    use td_objects::types::IdOrName;
     use td_objects::types::basic::{
         AccessTokenId, CollectionIdName, CollectionName, InterCollectionPermissionIdName, RoleId,
         UserId,
     };
-    use td_objects::types::IdOrName;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

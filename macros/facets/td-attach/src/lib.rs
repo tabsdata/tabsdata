@@ -7,7 +7,7 @@ extern crate proc_macro;
 use darling::ast::NestedMeta;
 use darling::{Error, FromMeta};
 use proc_macro::TokenStream;
-use proc_macro_crate::{crate_name, FoundCrate};
+use proc_macro_crate::{FoundCrate, crate_name};
 use quote::quote;
 use syn::ItemFn;
 

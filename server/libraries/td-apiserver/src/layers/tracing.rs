@@ -4,13 +4,13 @@
 
 use http::{HeaderName, HeaderValue, Request};
 use std::fmt::Debug;
-use td_common::id::{id, Id};
+use td_common::id::{Id, id};
+use tower_http::LatencyUnit;
 use tower_http::trace::{
     DefaultOnEos, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, HttpMakeClassifier,
     MakeSpan, TraceLayer,
 };
-use tower_http::LatencyUnit;
-use tracing::{span, Level, Span};
+use tracing::{Level, Span, span};
 
 #[derive(Default)]
 pub struct TraceService;
@@ -76,7 +76,7 @@ mod tests {
     use std::io::{self, Write};
     use std::sync::{Arc, Mutex};
     use tracing::subscriber::set_default;
-    use tracing::{info, Instrument};
+    use tracing::{Instrument, info};
     use tracing_subscriber::{fmt, layer::SubscriberExt, registry};
 
     struct WriterGuard {

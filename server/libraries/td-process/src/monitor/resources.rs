@@ -9,8 +9,8 @@ use indexmap::IndexMap;
 use std::path::{Path, PathBuf};
 use std::process;
 
-use crate::monitor::memory::{instance_memory, MemoryStats};
-use crate::monitor::space::{instance_space, SpaceStats};
+use crate::monitor::memory::{MemoryStats, instance_memory};
+use crate::monitor::space::{SpaceStats, instance_space};
 use sysinfo::System;
 use tracing::debug;
 

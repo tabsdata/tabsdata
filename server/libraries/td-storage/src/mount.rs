@@ -132,7 +132,7 @@ impl MountDefBuilder {
                     return Err(StorageError::ConfigurationError(format!(
                         "Unsupported schema {}",
                         uri.scheme()
-                    )))
+                    )));
                 }
             }
         }
@@ -330,7 +330,7 @@ impl Mount {
             Ok(_) => Ok(()),
             Err(object_store::Error::NotFound { .. }) => {
                 Ok(()) // S3 impl does not return NotFound when deleting a non existing file.
-                       //                Err(StorageError::NotFound(path.to_string()))
+                //                Err(StorageError::NotFound(path.to_string()))
             }
             Err(e) => Err(StorageError::CouldNotDeleteFromObjectStore(
                 path.to_string(),
@@ -798,13 +798,15 @@ mod tests {
         impl Config for C {}
 
         let _c = C {
-            mounts: vec![MountDef::builder()
-                .id("id")
-                .path("/foo")
-                .uri(bar_file())
-                .options(HashMap::from([("key".to_string(), "value".to_string())]))
-                .build()
-                .unwrap()],
+            mounts: vec![
+                MountDef::builder()
+                    .id("id")
+                    .path("/foo")
+                    .uri(bar_file())
+                    .options(HashMap::from([("key".to_string(), "value".to_string())]))
+                    .build()
+                    .unwrap(),
+            ],
         };
         println!("{}", C::default().as_yaml());
     }

@@ -3,7 +3,7 @@
 //
 
 use crate::sql::SqliteConfigBuilder;
-use crate::{db_with_schema, sql, DbPool, SqliteConfig};
+use crate::{DbPool, SqliteConfig, db_with_schema, sql};
 
 /// Creates a connection pool for the `tabsdata` database.
 pub async fn db() -> Result<DbPool, sql::DbError> {

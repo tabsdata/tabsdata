@@ -7,8 +7,8 @@ use crate::resource::state::StateError::{
     MissingEndTag, MissingStartTag,
 };
 use crate::services::supervisor::SetState;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use getset::{Getters, MutGetters};
 use serde::{Deserialize, Serialize};
 use serde_yaml;
@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use std::string::FromUtf8Error;
 use std::sync::Arc;
 use strum::{AsRefStr, EnumString};
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use tokio::sync::RwLock;
 
 const START_TAG: &str = "<message><i>";
@@ -233,7 +233,7 @@ pub fn extract_state_data_from_string(
                         Value::Bool(ref b) => b.to_string(),
                         Value::Null => "".to_string(),
                         Value::Mapping(_) | Value::Sequence(_) => {
-                            return Err(InvalidYamlStructure.into())
+                            return Err(InvalidYamlStructure.into());
                         }
                         _ => return Err(InvalidYamlEntry.into()),
                     };
@@ -287,8 +287,7 @@ mod tests {
 
     #[test]
     fn test_blob_success() {
-        let content =
-            "something before<message><i>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω<message><f>something after";
+        let content = "something before<message><i>δῶς μοι πᾶ στῶ καὶ τὰν γᾶν κινάσω<message><f>something after";
         let result =
             extract_state_data_from_string(content.to_string(), StateDataKind::Blob).unwrap();
         match result {

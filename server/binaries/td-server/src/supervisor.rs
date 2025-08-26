@@ -12,8 +12,8 @@ use td_common::env::check_flag_env;
 use td_common::logging;
 use td_common::server::{INSTANCE_PATH_ENV, INSTANCE_URI_ENV, TD_DETACHED_SUBPROCESSES};
 use td_supervisor::services::supervisor;
-use td_supervisor::services::supervisor::{prepend_slash, Arguments};
-use tracing::{info, Level};
+use td_supervisor::services::supervisor::{Arguments, prepend_slash};
+use tracing::{Level, info};
 
 #[attach(signal = "supervisor")]
 pub fn main() {

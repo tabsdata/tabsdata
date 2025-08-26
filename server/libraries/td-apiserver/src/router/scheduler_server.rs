@@ -14,7 +14,7 @@ use td_storage::Storage;
 use td_tower::service_provider::{IntoServiceProvider, ServiceProvider};
 use tokio::select;
 use tower::{BoxError, ServiceBuilder, ServiceExt};
-use tracing::{error, span, trace, Instrument, Level};
+use tracing::{Instrument, Level, error, span, trace};
 
 pub struct Scheduler {
     request_service: ServiceProvider<(), (), BoxError>,

@@ -15,7 +15,7 @@ use td_objects::tower_service::from::{
     BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
     SetService, TryIntoService, With,
 };
-use td_objects::tower_service::sql::{insert, By, SqlSelectService};
+use td_objects::tower_service::sql::{By, SqlSelectService, insert};
 use td_objects::types::basic::{
     BundleHash, BundleId, CollectionId, CollectionIdName, StorageVersion,
 };

@@ -90,7 +90,7 @@ impl From<&ImportFormat> for Format {
 
 impl From<&ImportRequest> for ImporterOptions {
     fn from(req: &ImportRequest) -> Self {
-        let options = ImporterOptionsBuilder::default()
+        ImporterOptionsBuilder::default()
             .base_url(base_url(req.source())) // not used, for ref only
             .base_path(base_path(req.source())) // not used, for ref only
             .file_pattern(file_pattern(req.source())) // not used, for ref only
@@ -106,8 +106,7 @@ impl From<&ImportRequest> for ImporterOptions {
             .parallel(req.parallelism().unwrap_or(4)) // not used, for ref only
             .out(None) // not used, for ref only
             .build()
-            .expect("Could not build ImporterOptions");
-        options
+            .expect("Could not build ImporterOptions")
     }
 }
 

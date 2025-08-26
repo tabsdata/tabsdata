@@ -11,12 +11,12 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt as UnixMetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use td_common::env::{check_flag_env, get_home_dir, TABSDATA_HOME_DIR};
+use td_common::env::{TABSDATA_HOME_DIR, check_flag_env, get_home_dir};
 use td_common::logging::LOG_EXTENSION;
 use td_common::server::{
     DATABASE_FOLDER, ENVIRONMENTS_FOLDER, EPHEMERAL_FOLDER, INIT_FOLDER, LOG_FOLDER, PROC_FOLDER,
-    REGULAR_FOLDER, REPOSITORY_FOLDER, STORAGE_FOLDER, TD_DETACHED_SUBPROCESSES, WORKSPACE_FOLDER,
-    WORK_FOLDER,
+    REGULAR_FOLDER, REPOSITORY_FOLDER, STORAGE_FOLDER, TD_DETACHED_SUBPROCESSES, WORK_FOLDER,
+    WORKSPACE_FOLDER,
 };
 
 pub type SpaceStats = (PathBuf, u64, String);
@@ -191,13 +191,12 @@ fn get_nlink(_path: &Path, _metadata: &Metadata) -> u64 {
     {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
-        use windows::core::PCWSTR;
         use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
         use windows::Win32::Storage::FileSystem::{
-            CreateFileW, GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
-            FILE_FLAG_BACKUP_SEMANTICS, FILE_GENERIC_READ, FILE_SHARE_READ, FILE_SHARE_WRITE,
-            OPEN_EXISTING,
+            BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_GENERIC_READ,
+            FILE_SHARE_READ, FILE_SHARE_WRITE, GetFileInformationByHandle, OPEN_EXISTING,
         };
+        use windows::core::PCWSTR;
 
         let wide_path: Vec<u16> = OsStr::new(_path)
             .encode_wide()

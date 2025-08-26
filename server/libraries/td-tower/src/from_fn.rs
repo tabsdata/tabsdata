@@ -12,7 +12,7 @@ use crate::handler::{Handler, IntoHandler};
 use futures::future::BoxFuture;
 use std::fmt::{Debug, Formatter};
 use std::{any::type_name, fmt, future::Future, marker::PhantomData, pin::Pin, task};
-use tower::{util::BoxCloneService, Service, ServiceBuilder};
+use tower::{Service, ServiceBuilder, util::BoxCloneService};
 use tower_layer::Layer;
 
 /// Creates a new `FromFnLayer` with the given function.
@@ -270,7 +270,7 @@ mod tests {
     use crate::default_services::{ServiceEntry, ServiceReturn};
     use crate::extractors::Input;
     #[cfg(feature = "test_tower_metadata")]
-    use crate::metadata::{type_of_val, MetadataMutex};
+    use crate::metadata::{MetadataMutex, type_of_val};
 
     #[derive(Debug, thiserror::Error)]
     enum TestError {

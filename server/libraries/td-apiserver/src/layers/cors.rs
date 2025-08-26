@@ -2,8 +2,8 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use http::Method;
+use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use tower_http::cors::CorsLayer;
 
 #[derive(Default)]

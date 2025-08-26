@@ -4,7 +4,7 @@
 
 use crate::error::PythonError::WrongEnvPath;
 use rand::distr::Alphanumeric;
-use rand::{rng, Rng};
+use rand::{Rng, rng};
 use std::env;
 use std::ffi::OsString;
 use std::path::MAIN_SEPARATOR;

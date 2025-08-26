@@ -13,13 +13,13 @@ use crate::status::extractors::Json;
 use crate::status::ok_status::{
     CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
 };
-use axum::extract::{Path, State};
 use axum::Extension;
+use axum::extract::{Path, State};
 use axum_extra::extract::Query;
 use td_apiforge::{apiserver_path, apiserver_tag};
 use td_objects::crudl::{ListParams, RequestContext};
 use td_objects::rest_urls::{
-    CollectionParam, CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
+    CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
     UPDATE_COLLECTION,
 };
 use td_objects::types::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
@@ -116,9 +116,9 @@ pub async fn delete_collection(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::{to_bytes, Body};
-    use axum::http::{Request, StatusCode};
     use axum::Router;
+    use axum::body::{Body, to_bytes};
+    use axum::http::{Request, StatusCode};
     use http::method::Method;
     use serde_json::json;
     use std::sync::Arc;

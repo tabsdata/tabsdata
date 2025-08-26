@@ -5,11 +5,11 @@
 //! Wrapper for axum::extract::Json to control error handling.
 
 use crate::status::error_status::ErrorStatus;
-use axum::extract::rejection::JsonRejection;
 use axum::extract::FromRequest;
+use axum::extract::rejection::JsonRejection;
 use axum::response::{IntoResponse, Response};
-use td_error::td_error;
 use td_error::TdError;
+use td_error::td_error;
 use tracing::error;
 
 #[td_error]
@@ -42,10 +42,10 @@ impl IntoResponse for JsonError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::Router;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use axum::routing::post;
-    use axum::Router;
     use serde::Deserialize;
     use tower::ServiceExt;
 

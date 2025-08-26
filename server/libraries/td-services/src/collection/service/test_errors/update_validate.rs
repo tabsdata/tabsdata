@@ -2,8 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::collection::service::update::UpdateCollectionService;
 use crate::collection::CollectionError;
+use crate::collection::service::update::UpdateCollectionService;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;

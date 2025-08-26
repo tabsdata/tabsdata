@@ -48,7 +48,7 @@ fn provider() {
 mod tests {
     use super::*;
     use td_database::sql::DbPool;
-    use td_error::{assert_service_error, TdError};
+    use td_error::{TdError, assert_service_error};
     use td_objects::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::CollectionParam;
     use td_objects::test_utils::seed_collection::seed_collection;

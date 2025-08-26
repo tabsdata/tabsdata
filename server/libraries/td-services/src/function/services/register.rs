@@ -4,7 +4,7 @@
 
 use crate::function::layers::register::{data_location, validate_tables_do_not_exist};
 use crate::function::layers::{
-    check_private_tables, register_dependencies, register_tables, register_triggers, DO_AUTHZ,
+    DO_AUTHZ, check_private_tables, register_dependencies, register_tables, register_triggers,
 };
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
@@ -13,11 +13,11 @@ use td_objects::rest_urls::CollectionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
-    combine, BuildService, DefaultService, EmptyVecService, ExtractDataService, ExtractNameService,
-    ExtractService, SetService, TryIntoService, UpdateService, With,
+    BuildService, DefaultService, EmptyVecService, ExtractDataService, ExtractNameService,
+    ExtractService, SetService, TryIntoService, UpdateService, With, combine,
 };
 use td_objects::tower_service::sql::SqlAssertNotExistsService;
-use td_objects::tower_service::sql::{insert, By, SqlDeleteService, SqlSelectService};
+use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService, insert};
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
     FunctionName, FunctionStatus, ReuseFrozen, StorageVersion, TableDependencyDto, TableNameDto,

@@ -13,8 +13,8 @@ use crate::status::extractors::Json;
 use crate::status::ok_status::{
     CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
 };
-use axum::extract::{Path, State};
 use axum::Extension;
+use axum::extract::{Path, State};
 use axum_extra::extract::Query;
 use td_apiforge::{apiserver_path, apiserver_tag};
 use td_objects::crudl::{ListParams, RequestContext};
@@ -101,9 +101,9 @@ pub async fn delete_user(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::{to_bytes, Body};
-    use axum::http::{Request, StatusCode};
     use axum::Router;
+    use axum::body::{Body, to_bytes};
+    use axum::http::{Request, StatusCode};
     use http::method::Method;
     use serde_json::json;
     use std::sync::Arc;

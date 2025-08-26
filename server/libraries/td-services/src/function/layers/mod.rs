@@ -11,7 +11,7 @@ use crate::function::layers::register::{
 use itertools::Itertools;
 use std::ops::Deref;
 use td_authz::Authz;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::crudl::RequestContext;
 use td_objects::tower_service::authz::InterColl;
 use td_objects::tower_service::from::{

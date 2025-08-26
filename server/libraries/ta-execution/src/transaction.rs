@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::types::basic::{CollectionId, TransactionByStr, TransactionId, TransactionKey};
 use td_objects::types::execution::FunctionVersionNode;
 
@@ -86,7 +86,7 @@ impl<T: TransactionMapper> TransactionMap<T> {
 mod tests {
     use super::*;
     use crate::test_utils::transaction::TestTransactionBy;
-    use td_objects::types::test_utils::execution::{function_node, FUNCTION_NAMES};
+    use td_objects::types::test_utils::execution::{FUNCTION_NAMES, function_node};
 
     #[test]
     fn test_add() -> Result<(), TdError> {

@@ -6,7 +6,7 @@
 
 use getset::{Getters, Setters};
 use std::fmt::Debug;
-use std::fs::{remove_file, File, OpenOptions};
+use std::fs::{File, OpenOptions, remove_file};
 use std::io::{Read, Write};
 use std::num::ParseIntError;
 use std::path::PathBuf;

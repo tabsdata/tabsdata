@@ -10,7 +10,7 @@ use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
 use td_objects::tower_service::from::{
     BuildService, ExtractDataService, ExtractService, TryIntoService, UpdateService, With,
 };
-use td_objects::tower_service::sql::{insert, By, SqlSelectService};
+use td_objects::tower_service::sql::{By, SqlSelectService, insert};
 use td_objects::types::basic::CollectionId;
 use td_objects::types::collection::{
     CollectionCreate, CollectionCreateDB, CollectionCreateDBBuilder, CollectionDBWithNames,

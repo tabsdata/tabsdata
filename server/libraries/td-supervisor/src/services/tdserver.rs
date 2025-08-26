@@ -15,9 +15,9 @@ use crate::services::bootloader::{
     BOOTLOADER, BOOTLOADER_ARGUMENT_INSTANCE, BOOTLOADER_ARGUMENT_PROFILE,
     BOOTLOADER_ARGUMENT_REPOSITORY, BOOTLOADER_ARGUMENT_WORKSPACE,
 };
-use crate::services::supervisor::WorkerLocation::Relative;
 use crate::services::supervisor::TD_ARGUMENT_KEY;
-use clap::{command, Parser};
+use crate::services::supervisor::WorkerLocation::Relative;
+use clap::{Parser, command};
 use clap_derive::{Args, Subcommand};
 use colored::Colorize;
 use getset::Getters;
@@ -30,22 +30,22 @@ use std::env::set_current_dir;
 use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{exit, Command, Output};
+use std::process::{Command, Output, exit};
 use std::thread::sleep;
 use std::{env, fs, io};
 use sysinfo::Signal;
 use ta_tableframe::api::Extension;
 use tabled::{
+    Table, Tabled,
     settings::{
+        Alignment, Modify,
         object::Columns,
         style::{HorizontalLine, Style, VerticalLine},
-        Alignment, Modify,
     },
-    Table, Tabled,
 };
 use td_apiserver::config::DbSchema;
 use td_build::version::TABSDATA_VERSION;
-use td_common::env::{check_flag_env, get_home_dir, to_absolute, TABSDATA_HOME_DIR};
+use td_common::env::{TABSDATA_HOME_DIR, check_flag_env, get_home_dir, to_absolute};
 use td_common::logging::set_log_level;
 use td_common::os::{name_program, terminate_process};
 use td_common::server::WorkerClass::REGULAR;
@@ -58,19 +58,19 @@ use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
 use td_process::launcher::arg::InheritedArgumentKey;
 use td_process::launcher::arg::InheritedArgumentKey::*;
 use td_process::launcher::cli::{
-    parse_extra_arguments, ARGUMENT_PREFIX, TRAILING_ARGUMENTS_PREFIX,
+    ARGUMENT_PREFIX, TRAILING_ARGUMENTS_PREFIX, parse_extra_arguments,
 };
-use td_process::monitor::processes::{get_process_tree, ProcessDistilled};
+use td_process::monitor::processes::{ProcessDistilled, get_process_tree};
 use td_process::monitor::space::instance_space;
 use td_python::upgrade::{get_source_version, get_target_version, upgrade};
 use td_python::venv::prepare;
 use te_tableframe::engine::TableFrameExtension;
-use terminal_size::{terminal_size, Width};
-use textwrap::{fill, Options, WordSeparator};
+use terminal_size::{Width, terminal_size};
+use textwrap::{Options, WordSeparator, fill};
 use thiserror::Error;
 use tm_workspace::workspace_root;
 use tokio::time::{Duration, Instant};
-use tracing::{error, info, warn, Level};
+use tracing::{Level, error, info, warn};
 use url::Url;
 use walkdir::WalkDir;
 
@@ -917,15 +917,15 @@ fn command_upgrade(arguments: UpgradeArguments) {
             match result {
                 Ok(output) => {
                     if !output.status.success() {
-                        if let Some(code) = output.status.code() {
-                            if code == NoAction.code() {
-                                set_log_level(Level::INFO);
-                                info!(
-                                    "The database '{}' is already up to date. No need to upgrade.",
-                                    supervisor_database_absolute.clone().display()
-                                );
-                                exit(Success.code())
-                            }
+                        if let Some(code) = output.status.code()
+                            && code == NoAction.code()
+                        {
+                            set_log_level(Level::INFO);
+                            info!(
+                                "The database '{}' is already up to date. No need to upgrade.",
+                                supervisor_database_absolute.clone().display()
+                            );
+                            exit(Success.code())
                         }
                         show_std_out_and_err(&output);
                         error!(
@@ -1026,7 +1026,9 @@ fn command_start(arguments: StartArguments) {
         warn!("(or just 'tdserver upgrade' to upgrade the default instance.)");
         warn!("For a dry run before upgrading, use: 'tdserver upgrade --instance <instance>'.");
         warn!("(or just 'tdserver upgrade' for the default instance.)");
-        warn!("It is strongly recommended to back up your instance before proceeding with the upgrade.");
+        warn!(
+            "It is strongly recommended to back up your instance before proceeding with the upgrade."
+        );
 
         exit(GeneralError.code())
     }
@@ -1326,15 +1328,13 @@ fn wait(supervisor_work: PathBuf) -> bool {
     let start_time = Instant::now();
     loop {
         let (status, tree) = status_processes(supervisor_work.clone());
-        if let WorkerStatus::Running { .. } = status {
-            if let Some(children) = &tree {
-                if children
-                    .iter()
-                    .any(|(_, _, name, ..)| name.trim().trim_matches('"').contains(APISERVER))
-                {
-                    return true;
-                }
-            }
+        if let WorkerStatus::Running { .. } = status
+            && let Some(children) = &tree
+            && children
+                .iter()
+                .any(|(_, _, name, ..)| name.trim().trim_matches('"').contains(APISERVER))
+        {
+            return true;
         }
         if Instant::now().duration_since(start_time) >= START_TIMEOUT {
             info!(

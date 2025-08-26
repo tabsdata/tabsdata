@@ -11,8 +11,8 @@ use crate::component::tracker::{TrackerError, UNKNOWN_WORKER_PID};
 use crate::launch::worker::Worker;
 use crate::resource::instance::InstanceError;
 use crate::resource::state::StateError;
-use http::header::{InvalidHeaderName, InvalidHeaderValue};
 use http::StatusCode;
+use http::header::{InvalidHeaderName, InvalidHeaderValue};
 use reqwest::Error;
 use std::fmt::{Debug, Formatter};
 use std::fs::OpenOptions;
@@ -23,7 +23,7 @@ use td_common::env::{check_flag_env, get_current_dir};
 use td_common::logging::LOG_LOCATION;
 use td_common::server::WorkerName::FUNCTION;
 use td_common::server::{
-    ResponseMessagePayloadBuilderError, WorkerClass, WORKER_ERR_FILE, WORKER_OUT_FILE,
+    ResponseMessagePayloadBuilderError, WORKER_ERR_FILE, WORKER_OUT_FILE, WorkerClass,
 };
 use td_python::venv::{
     ENV_CONDA_PREFIX, ENV_PYENV_VERSION, ENV_PYTHONHOME, ENV_PYTHONPATH, ENV_UV_VENV,
@@ -150,7 +150,7 @@ impl WorkerRunner for TabsDataWorkerRunner {
                 return Err(LaunchError {
                     describer: worker.describer().to_string(),
                     cause: e,
-                })
+                });
             }
         };
 
@@ -187,19 +187,18 @@ impl WorkerRunner for TabsDataWorkerRunner {
 // - PATH is enriched with directory of current running program.
 fn obtain_env_vars(worker: &str) -> Vec<(String, String)> {
     let mut env_vars: Vec<(String, String)> = env::vars().collect();
-    if let Ok(program_path) = env::current_exe() {
-        if let Some(program_folder) = program_path.parent() {
-            if let Ok(former_env_var_path) = env::var("PATH") {
-                let separator = if cfg!(windows) { ";" } else { ":" };
-                let current_env_var_path = format!(
-                    "{}{}{}",
-                    former_env_var_path,
-                    separator,
-                    program_folder.display()
-                );
-                env_vars.push(("PATH".to_string(), current_env_var_path));
-            }
-        }
+    if let Ok(program_path) = env::current_exe()
+        && let Some(program_folder) = program_path.parent()
+        && let Ok(former_env_var_path) = env::var("PATH")
+    {
+        let separator = if cfg!(windows) { ";" } else { ":" };
+        let current_env_var_path = format!(
+            "{}{}{}",
+            former_env_var_path,
+            separator,
+            program_folder.display()
+        );
+        env_vars.push(("PATH".to_string(), current_env_var_path));
     }
 
     if worker == FUNCTION.as_ref() {

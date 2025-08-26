@@ -103,12 +103,11 @@ pub trait IntoMutSqlConnection {
 
 impl IntoMutSqlConnection for MutexGuard<'_, Option<ConnectionType>> {
     fn get_mut_connection(&mut self) -> Result<&mut SqliteConnection, ConnectionError> {
-        let conn = if let Some(conn) = self.deref_mut() {
+        if let Some(conn) = self.deref_mut() {
             Ok(conn.deref_mut())
         } else {
             Err(ConnectionError::ConnectionLost)
-        };
-        conn
+        }
     }
 }
 

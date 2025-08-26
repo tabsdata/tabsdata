@@ -8,7 +8,7 @@ use std::ops::Deref;
 
 #[macro_export]
 macro_rules! display_vec {
-    ($($item:expr),* $(,)?) => {
+    ($($item:expr_2021),* $(,)?) => {
         DisplayVec::new(vec![$($item),*])
     };
 }

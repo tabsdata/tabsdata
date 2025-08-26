@@ -4,8 +4,8 @@
 
 use getset::Getters;
 use serde::de::DeserializeOwned;
-use td_common::server::{etc_service, EtcContent};
-use td_error::{td_error, TdError};
+use td_common::server::{EtcContent, etc_service};
+use td_error::{TdError, td_error};
 use td_objects::types::basic::{BuildManifest, TabsdataVersion};
 use td_objects::types::runtime_info::{PythonVersions, RuntimeInfo, ServerVersion};
 use tracing::error;

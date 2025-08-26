@@ -4,7 +4,7 @@
 
 #[macro_export]
 macro_rules! layers {
-    ($($layer:expr),* $(,)?) => {
+    ($($layer:expr_2021),* $(,)?) => {
         $crate::box_sync_clone_layer::BoxedSyncCloneServiceLayer::boxed_layer(
             tower::builder::ServiceBuilder::new()
                 $(
@@ -16,7 +16,7 @@ macro_rules! layers {
 
 #[macro_export]
 macro_rules! service {
-    ($($layers:expr),* $(,)?) => {
+    ($($layers:expr_2021),* $(,)?) => {
         tower::builder::ServiceBuilder::new()
             $(.layer($layers))*
             .map_err(td_error::TdError::from)

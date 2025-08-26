@@ -15,15 +15,15 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
 use std::fmt::Debug;
-use std::fs::{create_dir_all, read_to_string, OpenOptions};
-use std::io::{stdout, ErrorKind};
+use std::fs::{OpenOptions, create_dir_all, read_to_string};
+use std::io::{ErrorKind, stdout};
 use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::field::Field;
-use tracing::{debug, error, info, trace, warn, Event, Level, Subscriber};
+use tracing::{Event, Level, Subscriber, debug, error, info, trace, warn};
 use tracing_subscriber::filter::Directive;
-use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
@@ -129,38 +129,33 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
                 None => log_config.profile,
             };
             match log_config.profiles.get(&profile) {
-                Some(log_filter) => {
-                    let env_filter = log_filter.directives.iter().fold(
-                        EnvFilter::from_default_env().add_directive(
-                            Level::from_str(&log_filter.level)
-                                .unwrap_or_else(|_| {
-                                    panic!("Unable to parse log level `{}`", log_filter.level)
-                                })
-                                .into(),
-                        ),
-                        |filter, directive| {
-                            filter.add_directive(directive.parse().unwrap_or_else(|_| {
-                                panic!("Unable to parse log directive `{directive}`")
-                            }))
-                        },
-                    );
-                    env_filter
-                }
-                None => EnvFilter::from_default_env().add_directive(max_level.into()),
-            }
-        }
-        None => {
-            let env_filter =
-                directives.iter().fold(
-                    EnvFilter::from_default_env().add_directive(Directive::from(max_level)),
+                Some(log_filter) => log_filter.directives.iter().fold(
+                    EnvFilter::from_default_env().add_directive(
+                        Level::from_str(&log_filter.level)
+                            .unwrap_or_else(|_| {
+                                panic!("Unable to parse log level `{}`", log_filter.level)
+                            })
+                            .into(),
+                    ),
                     |filter, directive| {
                         filter.add_directive(directive.parse().unwrap_or_else(|_| {
                             panic!("Unable to parse log directive `{directive}`")
                         }))
                     },
-                );
-            env_filter
+                ),
+                None => EnvFilter::from_default_env().add_directive(max_level.into()),
+            }
         }
+        None => directives.iter().fold(
+            EnvFilter::from_default_env().add_directive(Directive::from(max_level)),
+            |filter, directive| {
+                filter.add_directive(
+                    directive
+                        .parse()
+                        .unwrap_or_else(|_| panic!("Unable to parse log directive `{directive}`")),
+                )
+            },
+        ),
     };
 
     let (reload_filter, handle) = ReloadLayer::new(env_filter);
@@ -261,12 +256,11 @@ fn obtain_log_location(path: PathBuf) -> Option<PathBuf> {
 
 fn obtain_log_location_from_info_file(path: PathBuf) -> Option<PathBuf> {
     let inf_path = get_current_dir().join(WORKER_INF_FILE);
-    if inf_path.exists() {
-        if let Ok(inf_file) = std::fs::File::open(&inf_path) {
-            if let Ok(inf) = serde_yaml::from_reader::<_, Inf>(inf_file) {
-                return Some(inf.work.join(path));
-            }
-        }
+    if inf_path.exists()
+        && let Ok(inf_file) = std::fs::File::open(&inf_path)
+        && let Ok(inf) = serde_yaml::from_reader::<_, Inf>(inf_file)
+    {
+        return Some(inf.work.join(path));
     }
     None
 }
@@ -599,7 +593,7 @@ pub use td_log_monad;
 mod tests {
     use std::io;
     use std::io::Write;
-    use std::sync::mpsc::{channel, Receiver, Sender};
+    use std::sync::mpsc::{Receiver, Sender, channel};
     use std::time::Duration;
 
     use super::*;
@@ -797,7 +791,9 @@ mod tests {
                 let _ = Option::<String>::Some("SOME".to_string()).log::<DEBUG>(option("MSG"));
                 let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
                 if let Some(message) = received {
-                    assert!(message.contains("logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"));
+                    assert!(message.contains(
+                        "logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"
+                    ));
                     assert!(message.contains("MSG - Some: \"SOME\""));
                     assert!(!message.contains("MSG - None"));
                 } else {
@@ -807,7 +803,9 @@ mod tests {
                 let _ = Option::<String>::None.log::<DEBUG>(option("MSG"));
                 let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
                 if let Some(message) = received {
-                    assert!(message.contains("logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"));
+                    assert!(message.contains(
+                        "logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"
+                    ));
                     assert!(message.contains("MSG - None"));
                     assert!(!message.contains("Some"));
                 } else {
@@ -825,7 +823,9 @@ mod tests {
                     .log::<DEBUG>(none("MSG_NONE"));
                 let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
                 if let Some(message) = received {
-                    assert!(message.contains("logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"));
+                    assert!(message.contains(
+                        "logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"
+                    ));
                     assert!(message.contains("MSG_SOME - Some: \"SOME\""));
                     assert!(!message.contains("MSG_NONE"));
                 } else {
@@ -843,7 +843,9 @@ mod tests {
                     .log::<DEBUG>(none("MSG_NONE"));
                 let received = receiver.recv_timeout(Duration::from_secs(60)).ok();
                 if let Some(message) = received {
-                    assert!(message.contains("logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"));
+                    assert!(message.contains(
+                        "logging::tests::test_res_opt_logging_module1::test_res_opt_logging_module2"
+                    ));
                     assert!(message.contains("MSG_NONE - None"));
                     assert!(!message.contains("MSG_SOME"));
                 } else {

@@ -3,7 +3,7 @@
 //
 
 use td_common::logging;
-use tracing::{info, span, Level};
+use tracing::{Level, info, span};
 use tracing_futures::Instrument;
 
 // MDC (Mapped Diagnostic Context) simple examples.

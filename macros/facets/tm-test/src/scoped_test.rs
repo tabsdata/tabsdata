@@ -9,8 +9,8 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use std::path::PathBuf;
-use syn::{parse_macro_input, FnArg, ItemFn, LitStr, Signature, Type, TypePath};
-use td_shared::meta_parser::{some_or_none, OptionWrapper, SynMetaOrLit};
+use syn::{FnArg, ItemFn, LitStr, Signature, Type, TypePath, parse_macro_input};
+use td_shared::meta_parser::{OptionWrapper, SynMetaOrLit, some_or_none};
 use td_shared::parse_meta;
 
 #[derive(Debug, FromMeta)]
@@ -165,19 +165,16 @@ fn get_fn_args(func_sig: &Signature, kind: &Ident) -> (Ident, TypePath) {
         .inputs
         .iter()
         .find_map(|arg| {
-            if let FnArg::Typed(pat_type) = arg {
-                if let Type::Path(type_path) = &*pat_type.ty {
-                    if type_path
-                        .path
-                        .segments
-                        .iter()
-                        .any(|segment| segment.ident == *kind)
-                    {
-                        if let syn::Pat::Ident(pat_ident) = &*pat_type.pat {
-                            return Some((pat_ident.ident.clone(), type_path.clone()));
-                        }
-                    }
-                }
+            if let FnArg::Typed(pat_type) = arg
+                && let Type::Path(type_path) = &*pat_type.ty
+                && type_path
+                    .path
+                    .segments
+                    .iter()
+                    .any(|segment| segment.ident == *kind)
+                && let syn::Pat::Ident(pat_ident) = &*pat_type.pat
+            {
+                return Some((pat_ident.ident.clone(), type_path.clone()));
             }
             None
         })

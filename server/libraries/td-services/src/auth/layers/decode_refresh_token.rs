@@ -3,7 +3,7 @@
 //
 
 use crate::auth::services::JwtConfig;
-use crate::auth::{decode_token, AuthError};
+use crate::auth::{AuthError, decode_token};
 use td_error::TdError;
 use td_objects::types::basic::{RefreshToken, RefreshTokenId};
 use td_tower::extractors::{Input, SrvCtx};

@@ -9,7 +9,7 @@ use td_objects::rest_urls::UserRoleParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_objects::tower_service::from::{
-    combine, BuildService, ExtractNameService, ExtractService, TryIntoService, With,
+    BuildService, ExtractNameService, ExtractService, TryIntoService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService};
 use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserIdName};

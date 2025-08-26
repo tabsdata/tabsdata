@@ -197,20 +197,21 @@ fn process_tree(
     children.sort_by_key(|pid| pid.as_u32());
 
     for child in children.iter() {
-        if let Some(process) = system.process(*child) {
-            if process.parent() == Some(pid) && process.thread_kind().is_none() {
-                subprocesses.extend(process_tree(
-                    system,
-                    *child,
-                    level + 1,
-                    (
-                        collection.clone(),
-                        function.clone(),
-                        worker.clone(),
-                        attempt.clone(),
-                    ),
-                ));
-            }
+        if let Some(process) = system.process(*child)
+            && process.parent() == Some(pid)
+            && process.thread_kind().is_none()
+        {
+            subprocesses.extend(process_tree(
+                system,
+                *child,
+                level + 1,
+                (
+                    collection.clone(),
+                    function.clone(),
+                    worker.clone(),
+                    attempt.clone(),
+                ),
+            ));
         }
     }
     subprocesses

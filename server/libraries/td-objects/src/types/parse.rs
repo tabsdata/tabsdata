@@ -8,7 +8,7 @@ use constcat::concat;
 use lazy_static::lazy_static;
 use regex::Regex;
 use td_common::id::Id;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 
 const IDENTIFIER_LEN: &str = "99";
 pub const IDENTIFIER_PATTERN: &str = concat!("[a-zA-Z][a-zA-Z0-9_]{0,", IDENTIFIER_LEN, "}");
@@ -190,7 +190,7 @@ pub fn parse_versions(s: impl Into<String>) -> Result<Versions, TdError> {
         )
     })?;
 
-    let result = if let Some(version) = captures.name("single") {
+    if let Some(version) = captures.name("single") {
         Ok(Versions::Single(parse_version(version.as_str())?))
     } else if let Some(list) = captures.name("list") {
         let parsed_list = list
@@ -214,8 +214,7 @@ pub fn parse_versions(s: impl Into<String>) -> Result<Versions, TdError> {
             "<VERSIONS> being a single version, a range of versions or a list of versions"
                 .to_string(),
         ))?
-    };
-    result
+    }
 }
 
 const NAME_PATTERN: &str = concat!("^", IDENTIFIER_PATTERN, "$");
@@ -346,14 +345,14 @@ mod tests {
         assert!(parse_versioned_table_ref::<TableNameDto, _>(" abc/abc".to_string()).is_err());
         assert!(parse_versioned_table_ref::<TableNameDto, _>("abc/abc@".to_string()).is_err());
         assert!(parse_versioned_table_ref::<TableNameDto, _>("@abc".to_string()).is_err());
-        assert!(parse_versioned_table_ref::<TableNameDto, _>(
-            "abc/abc@HEAD..HEAD,HEAD".to_string()
-        )
-        .is_err());
-        assert!(parse_versioned_table_ref::<TableNameDto, _>(
-            "abc/abc@HEAD..HEAD..HEAD".to_string()
-        )
-        .is_err());
+        assert!(
+            parse_versioned_table_ref::<TableNameDto, _>("abc/abc@HEAD..HEAD,HEAD".to_string())
+                .is_err()
+        );
+        assert!(
+            parse_versioned_table_ref::<TableNameDto, _>("abc/abc@HEAD..HEAD..HEAD".to_string())
+                .is_err()
+        );
         assert!(parse_versioned_table_ref::<TableNameDto, _>("abc/abc@HEAD~".to_string()).is_err());
 
         assert!(parse_versioned_table_ref::<TableNameDto, _>("abc".to_string()).is_ok());

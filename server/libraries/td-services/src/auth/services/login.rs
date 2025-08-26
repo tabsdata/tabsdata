@@ -11,9 +11,9 @@ use crate::auth::services::JwtConfig;
 use td_error::TdError;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
-    builder, combine, BuildService, ExtractService, SetService, With,
+    BuildService, ExtractService, SetService, With, builder, combine,
 };
-use td_objects::tower_service::sql::{insert, By, SqlSelectService};
+use td_objects::tower_service::sql::{By, SqlSelectService, insert};
 use td_objects::types::auth::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
 use td_objects::types::basic::{
     AtTime, Password, PasswordHash, RoleId, RoleName, UserId, UserName,
@@ -26,9 +26,9 @@ use td_tower::service_provider::IntoServiceProvider;
 use td_tower::{layers, provider};
 use tower::util::MapErrLayer;
 
+use crate::auth::AuthError;
 use crate::auth::layers::assert_no_password_change_required::assert_no_password_change_required;
 use crate::auth::session::Sessions;
-use crate::auth::AuthError;
 use td_objects::tower_service::from::DefaultService;
 
 #[provider(
@@ -85,9 +85,9 @@ fn provider() {
 
 #[cfg(test)]
 mod tests {
-    use crate::auth::services::tests::assert_session;
     use crate::auth::services::AuthServices;
-    use crate::auth::{decode_token, AuthError};
+    use crate::auth::services::tests::assert_session;
+    use crate::auth::{AuthError, decode_token};
     use std::ops::Deref;
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
@@ -106,9 +106,9 @@ mod tests {
         use crate::auth::layers::set_session_expiration::set_session_expiration;
         use crate::auth::services::login::LoginService;
         use td_objects::tower_service::from::{
-            builder, combine, BuildService, DefaultService, ExtractService, SetService, With,
+            BuildService, DefaultService, ExtractService, SetService, With, builder, combine,
         };
-        use td_objects::tower_service::sql::{insert, By, SqlSelectService};
+        use td_objects::tower_service::sql::{By, SqlSelectService, insert};
         use td_objects::types::auth::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
         use td_objects::types::basic::{
             AtTime, Password, PasswordHash, RoleId, RoleName, UserId, UserName,

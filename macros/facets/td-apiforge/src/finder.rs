@@ -4,12 +4,12 @@
 
 extern crate proc_macro;
 
-use crate::attributes::{response_alias_struct_name, UtoipaTagArguments};
+use crate::attributes::{UtoipaTagArguments, response_alias_struct_name};
 use darling::FromMeta;
 use proc_macro::{Span, TokenStream};
 use quote::quote;
 use std::path::Path;
-use syn::{parse_macro_input, Expr, File, Ident, Item};
+use syn::{Expr, File, Ident, Item, parse_macro_input};
 use td_shared::meta_parser::SynMetaOrLit;
 use td_shared::parse_meta;
 use td_shared::project::get_project_root;
@@ -230,17 +230,17 @@ fn find_in_file(
     let mut found_schemas = Vec::new();
     for item in &syntax.items {
         // First, look for tags in macros
-        if let Item::Macro(item) = item {
-            if is_last_segment_path(&item.mac.path, tags_attribute) {
-                let input = item.mac.tokens.clone();
-                let tag = parse_meta!(UtoipaTagArguments, input).unwrap();
-                let name = tag.name();
-                let description = tag.description();
-                let syn_tag = quote! {
-                    (name = #name, description = #description)
-                };
-                found_tags.push(syn_tag);
-            }
+        if let Item::Macro(item) = item
+            && is_last_segment_path(&item.mac.path, tags_attribute)
+        {
+            let input = item.mac.tokens.clone();
+            let tag = parse_meta!(UtoipaTagArguments, input).unwrap();
+            let name = tag.name();
+            let description = tag.description();
+            let syn_tag = quote! {
+                (name = #name, description = #description)
+            };
+            found_tags.push(syn_tag);
         }
 
         // And then, look for regular attributes

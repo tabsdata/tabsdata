@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::env::{get_home_dir, TABSDATA_HOME_DIR};
+use crate::env::{TABSDATA_HOME_DIR, get_home_dir};
 use crate::server::INSTANCE_PATH_ENV;
 use config::{Config, File};
 use once_cell::sync::Lazy;
@@ -86,25 +86,25 @@ impl SettingsManager {
         if let Some(folder) = instance {
             let file = Path::new(&folder).join(SETTINGS_FILE);
             if file.exists() {
-                if let Ok(modified) = fs::metadata(&file).and_then(|metadata| metadata.modified()) {
-                    if self.settings.read().unwrap().modified < modified {
-                        if let Some(settings) = load(&folder) {
-                            let mut data_guard = self.settings.write().unwrap();
-                            *data_guard = SettingsData { settings, modified };
-                            debug!(
-                                "Loaded new instance settings. Current settings:\n{}",
-                                self.table()
-                            );
-                        } else {
-                            warn!(
-                                "Failed loading new instance settings. Keeping the current ones. Current settings:\n{}",
-                                self.table()
-                            );
-                        }
-                        let mut path_guard = self.instance.write().unwrap();
-                        if path_guard.is_none() {
-                            *path_guard = Some(folder);
-                        }
+                if let Ok(modified) = fs::metadata(&file).and_then(|metadata| metadata.modified())
+                    && self.settings.read().unwrap().modified < modified
+                {
+                    if let Some(settings) = load(&folder) {
+                        let mut data_guard = self.settings.write().unwrap();
+                        *data_guard = SettingsData { settings, modified };
+                        debug!(
+                            "Loaded new instance settings. Current settings:\n{}",
+                            self.table()
+                        );
+                    } else {
+                        warn!(
+                            "Failed loading new instance settings. Keeping the current ones. Current settings:\n{}",
+                            self.table()
+                        );
+                    }
+                    let mut path_guard = self.instance.write().unwrap();
+                    if path_guard.is_none() {
+                        *path_guard = Some(folder);
                     }
                 }
             } else {
@@ -133,14 +133,14 @@ impl SettingsManager {
             var_os(INSTANCE_PATH_ENV).map(|value| value.to_string_lossy().into_owned())
         {
             let path = PathBuf::from(&value);
-            if let Some(instance) = path.file_name() {
-                if let Ok(value) = env::var(format!(
+            if let Some(instance) = path.file_name()
+                && let Ok(value) = env::var(format!(
                     "TD__{}_{}",
                     instance.to_string_lossy().to_uppercase(),
                     key.to_uppercase()
-                )) {
-                    return Some(value);
-                }
+                ))
+            {
+                return Some(value);
             }
         }
 
@@ -230,7 +230,7 @@ fn move_file(source: &Path, target: &Path) -> io::Result<()> {
 mod tests {
     use super::*;
     use rand::distr::Alphanumeric;
-    use rand::{rng, Rng};
+    use rand::{Rng, rng};
     use serde_yaml::to_string;
     use std::collections::HashMap;
     use std::fs::File;

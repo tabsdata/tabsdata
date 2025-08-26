@@ -34,7 +34,9 @@ pub enum StorageError {
     InvalidPath(String, String) = 2,
     #[error("Path {0} not in mount {0}")]
     PathNotInMount(String, String) = 3,
-    #[error("Path element name {0} must be an ASCII alphanumeric plus . - _ and not more than 100 characters long")]
+    #[error(
+        "Path element name {0} must be an ASCII alphanumeric plus . - _ and not more than 100 characters long"
+    )]
     InvalidPathElement(String) = 4,
     #[error("Could not write {0}: {1}")]
     CouldNotWriteToObjectStore(String, #[source] object_store::Error) = 5,

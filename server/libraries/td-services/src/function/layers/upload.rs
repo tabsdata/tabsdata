@@ -4,7 +4,7 @@
 
 use futures::TryStreamExt;
 use sha2::{Digest, Sha256};
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::types::basic::{BundleHash, BundleId, CollectionId, DataLocation, StorageVersion};
 use td_objects::types::function::FunctionUpload;
 use td_storage::location::StorageLocation;

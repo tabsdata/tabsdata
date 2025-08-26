@@ -42,7 +42,7 @@ impl Default for PasswordHashingConfig {
 }
 
 impl PasswordHashingConfig {
-    pub fn password_hasher(&self) -> impl PasswordHasher {
+    pub fn password_hasher(&self) -> impl PasswordHasher + use<> {
         Argon2::new(
             Algorithm::from_str(&self.algorithm)
                 .expect("Invalid configuration: unknown password hashing algorithm. Valid values: argon2d, argon2i, argon2id (default)"),

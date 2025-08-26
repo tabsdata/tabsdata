@@ -66,7 +66,7 @@ fn provider() {
 mod tests {
     use super::*;
     use crate::execution::layers::update_status::tests::{
-        test_status_update, TestExecution, TestFunction, TestTransaction,
+        TestExecution, TestFunction, TestTransaction, test_status_update,
     };
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::server::ResponseMessagePayloadBuilder;
@@ -74,7 +74,7 @@ mod tests {
     use td_common::status::ExitStatus;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{handle_sql_err, RequestContext};
+    use td_objects::crudl::{RequestContext, handle_sql_err};
     use td_objects::sql::SelectBy;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
@@ -84,8 +84,8 @@ mod tests {
     use td_objects::types::basic::{RoleId, TableDependencyDto};
     use td_objects::types::execution::TableDataVersionDBWithNames;
     use td_objects::types::execution::{FunctionRunDB, FunctionRunDBWithNames};
-    use td_objects::types::worker::v2::{FunctionOutputV2, TableInfo, WrittenTableV2};
     use td_objects::types::worker::FunctionOutput;
+    use td_objects::types::worker::v2::{FunctionOutputV2, TableInfo, WrittenTableV2};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

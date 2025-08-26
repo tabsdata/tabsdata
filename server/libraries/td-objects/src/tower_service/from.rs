@@ -7,7 +7,7 @@ use crate::types::Extractor;
 use async_trait::async_trait;
 use std::marker::PhantomData;
 use std::ops::Deref;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_tower::extractors::Input;
 
 pub struct With<T> {

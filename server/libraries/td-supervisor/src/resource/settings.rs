@@ -3,8 +3,8 @@
 //
 
 use crate::services::tdserver::TD_KEEP;
-use include_dir::{include_dir, Dir, DirEntry};
-use std::fs::{create_dir_all, write, File};
+use include_dir::{Dir, DirEntry, include_dir};
+use std::fs::{File, create_dir_all, write};
 use std::io::Result;
 use std::io::Write;
 use std::path::{Path, PathBuf};

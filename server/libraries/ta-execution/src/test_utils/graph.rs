@@ -6,7 +6,7 @@ use crate::graphs::{ExecutionGraph, GraphBuilder};
 use td_objects::types::execution::FunctionVersionNode;
 use td_objects::types::table_ref::Versions;
 use td_objects::types::test_utils::execution::{
-    dependency, function_node, table, trigger, FUNCTION_NAMES, TABLE_NAMES,
+    FUNCTION_NAMES, TABLE_NAMES, dependency, function_node, table, trigger,
 };
 
 pub async fn test_graph() -> (ExecutionGraph<Versions>, FunctionVersionNode) {

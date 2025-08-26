@@ -5,10 +5,10 @@
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::{debug, error, info, trace, warn, Level};
+use tracing::{Level, debug, error, info, trace, warn};
 
 use td_common::logging;
-use td_common::logging::{LogOutput, CURRENT_DIR};
+use td_common::logging::{CURRENT_DIR, LogOutput};
 
 pub fn main() {
     logging::start(

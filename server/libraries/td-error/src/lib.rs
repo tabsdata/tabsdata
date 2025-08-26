@@ -137,7 +137,7 @@ impl Error for TdError {
 /// errors without the need to define a specific error type.
 #[macro_export]
 macro_rules! api_error {
-    ($api_error:expr, $($arg:tt)*) => {{
+    ($api_error:expr_2021, $($arg:tt)*) => {{
         $crate::TdError::new($crate::InlineError::new(
             format!($($arg)*),
             format!(

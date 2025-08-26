@@ -66,8 +66,8 @@ fn test_path(vars: &HashMap<String, String>) -> PathBuf {
     let user = user(vars);
     let timestamp = timestamp(vars);
     let test_name = &test_dir(vars)[1..];
-    let path = Path::new(&user).join(timestamp).join(test_name);
-    path
+
+    Path::new(&user).join(timestamp).join(test_name)
 }
 
 fn test_identifier(vars: &HashMap<String, String>, prefix: Option<u8>) -> String {
@@ -213,12 +213,13 @@ impl TestRequirementsInEnv {
             let envs = envs.lines();
             for env in envs {
                 let env = env.trim();
-                if !env.is_empty() && !env.starts_with("#") {
-                    if let Some((name, value)) = env.split_once('=') {
-                        let name = name.trim().to_string();
-                        let value = value.trim().to_string();
-                        vars.entry(name).or_insert(value);
-                    }
+                if !env.is_empty()
+                    && !env.starts_with("#")
+                    && let Some((name, value)) = env.split_once('=')
+                {
+                    let name = name.trim().to_string();
+                    let value = value.trim().to_string();
+                    vars.entry(name).or_insert(value);
                 }
             }
         }
@@ -294,7 +295,7 @@ impl TestRequirementsInEnv {
 
 #[cfg(test)]
 mod tests {
-    use super::{test_dir, timestamp, user, TestRequirements, TestRequirementsInEnv, TEST_DIR_KEY};
+    use super::{TEST_DIR_KEY, TestRequirements, TestRequirementsInEnv, test_dir, timestamp, user};
     use path_slash::PathBufExt;
     use sha2::Digest;
     use std::collections::HashMap;
@@ -402,14 +403,16 @@ mod tests {
 
         let vars: HashMap<String, String> =
             HashMap::from([("NS__KEYX".to_string(), "value".to_string())]);
-        assert!(TestRequirementsInEnv::resolve_test_run_variables::<MyReqs>(
-            "test_get",
-            &testdir!(),
-            "MyReqs",
-            "NS",
-            &vars
-        )
-        .is_none());
+        assert!(
+            TestRequirementsInEnv::resolve_test_run_variables::<MyReqs>(
+                "test_get",
+                &testdir!(),
+                "MyReqs",
+                "NS",
+                &vars
+            )
+            .is_none()
+        );
     }
 
     #[test]

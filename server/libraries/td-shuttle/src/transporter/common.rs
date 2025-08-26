@@ -5,7 +5,7 @@
 use crate::transporter::api::{AsUrl, Location};
 use crate::transporter::error::TransporterError;
 use object_store::path::Path;
-use object_store::{parse_url_opts, ObjectStore};
+use object_store::{ObjectStore, parse_url_opts};
 use std::collections::HashMap;
 use url::Url;
 

@@ -33,11 +33,11 @@ macro_rules! routers {
         $(config => { $config:ident },)?
         $(state => { $( $state:ident ),* $(,)? },)?
         $(router => { $($router_file:ident => {
-            $(config ($($router_config:expr ),*))?
+            $(config ($($router_config:expr_2021 ),*))?
             $(,)?
-            $(state ($($router_state:expr ),*))?
+            $(state ($($router_state:expr_2021 ),*))?
         }),* $(,)? }
-        $(.layer => $layer:expr)*),* $(,)?
+        $(.layer => $layer:expr_2021)*),* $(,)?
     ) => {
         #[allow(non_snake_case)]
         pub fn router(
@@ -60,9 +60,9 @@ macro_rules! routers {
 
 #[cfg(test)]
 mod tests {
-    use axum::body::{to_bytes, Body};
     use axum::Router;
-    use http::{request, StatusCode};
+    use axum::body::{Body, to_bytes};
+    use http::{StatusCode, request};
     use tower::ServiceExt;
 
     mod test {

@@ -9,12 +9,12 @@ use td_error::TdError;
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::tower_service::from::With;
+use td_objects::types::IdOrName;
 use td_objects::types::basic::{CollectionName, EntityId, PermissionEntityType, RoleIdName};
 use td_objects::types::collection::CollectionDB;
 use td_objects::types::permission::{
     PermissionCreate, PermissionDB, PermissionDBBuilder, PermissionDBWithNames,
 };
-use td_objects::types::IdOrName;
 use td_tower::default_services::Condition;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
@@ -51,8 +51,8 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
                 .fetch_one(&mut *conn)
                 .await
                 .map_err(handle_sql_err)?;
-            let entity_id = EntityId::try_from(collection.id())?;
-            entity_id
+
+            EntityId::try_from(collection.id())?
         } else {
             EntityId::all_entities()
         };
@@ -98,15 +98,15 @@ pub async fn assert_role_in_permission(
     Input(role_id_name): Input<RoleIdName>,
     Input(permission): Input<PermissionDBWithNames>,
 ) -> Result<(), TdError> {
-    if let Some(role_id) = role_id_name.id() {
-        if role_id != permission.role_id() {
-            Err(PermissionError::RolePermissionMismatch)?
-        }
+    if let Some(role_id) = role_id_name.id()
+        && role_id != permission.role_id()
+    {
+        Err(PermissionError::RolePermissionMismatch)?
     }
-    if let Some(role_name) = role_id_name.name() {
-        if role_name != permission.role() {
-            Err(PermissionError::RolePermissionMismatch)?
-        }
+    if let Some(role_name) = role_id_name.name()
+        && role_name != permission.role()
+    {
+        Err(PermissionError::RolePermissionMismatch)?
     }
     Ok(())
 }

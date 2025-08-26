@@ -5,7 +5,7 @@
 use crate::type_builder::{parse_input_item_struct, td_type};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, DeriveInput, ItemStruct};
+use syn::{DeriveInput, ItemStruct, parse_macro_input};
 
 pub fn dlo(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);

@@ -4,7 +4,7 @@
 
 use crate::function::layers::delete::build_deleted_function_version;
 use crate::function::layers::{
-    register_dependencies, register_tables, register_triggers, SKIP_AUTHZ,
+    SKIP_AUTHZ, register_dependencies, register_tables, register_triggers,
 };
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
@@ -13,10 +13,10 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
-    combine, DefaultService, ExtractNameService, ExtractService, TryIntoService, UpdateService,
-    With,
+    DefaultService, ExtractNameService, ExtractService, TryIntoService, UpdateService, With,
+    combine,
 };
-use td_objects::tower_service::sql::{insert, By, SqlSelectAllService, SqlSelectService};
+use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService, insert};
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, DependencyStatus, FunctionId,
     FunctionIdName, FunctionStatus, FunctionVersionId, ReuseFrozen, TableDependencyDto,
@@ -94,7 +94,7 @@ mod tests {
     use crate::function::services::register::RegisterFunctionService;
     use crate::function::services::tests::{assert_delete, assert_register};
     use td_database::sql::DbPool;
-    use td_objects::crudl::{handle_sql_err, RequestContext};
+    use td_objects::crudl::{RequestContext, handle_sql_err};
     use td_objects::rest_urls::CollectionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;

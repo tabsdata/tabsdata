@@ -45,7 +45,7 @@ pub fn router() -> Router {
 #[cfg(test)]
 mod tests {
     use super::router;
-    use axum::body::{to_bytes, Body};
+    use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
     use td_objects::rest_urls::{DOCS_URL, OPENAPI_JSON_URL};
     use tower::ServiceExt;
@@ -105,14 +105,18 @@ mod tests {
 
         // Assert paths
         assert!(json["paths"].as_object().unwrap().contains_key("/users"));
-        assert!(json["paths"]
-            .as_object()
-            .unwrap()
-            .contains_key("/collections"));
-        assert!(json["paths"]
-            .as_object()
-            .unwrap()
-            .contains_key("/collections/{collection}/functions"));
+        assert!(
+            json["paths"]
+                .as_object()
+                .unwrap()
+                .contains_key("/collections")
+        );
+        assert!(
+            json["paths"]
+                .as_object()
+                .unwrap()
+                .contains_key("/collections/{collection}/functions")
+        );
 
         // Assert tags
         let tags = json["tags"].as_array().unwrap();

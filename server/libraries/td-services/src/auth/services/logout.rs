@@ -46,8 +46,8 @@ fn provider() {
 mod tests {
     use super::*;
     use crate::auth::decode_token;
-    use crate::auth::services::tests::get_session;
     use crate::auth::services::AuthServices;
+    use crate::auth::services::tests::get_session;
     use td_database::sql::DbPool;
     use td_objects::types::auth::Login;
     use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};

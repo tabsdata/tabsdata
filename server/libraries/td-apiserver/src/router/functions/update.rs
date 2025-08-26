@@ -8,11 +8,11 @@ use crate::router::state::Functions;
 use crate::status::error_status::ErrorStatus;
 use crate::status::extractors::Json;
 use crate::status::ok_status::UpdateStatus;
-use axum::extract::{Path, State};
 use axum::Extension;
+use axum::extract::{Path, State};
 use td_apiforge::apiserver_path;
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{FunctionParam, FUNCTION_UPDATE};
+use td_objects::rest_urls::{FUNCTION_UPDATE, FunctionParam};
 use td_objects::types::function::{Function, FunctionUpdate};
 use tower::ServiceExt;
 

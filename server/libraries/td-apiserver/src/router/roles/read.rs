@@ -7,11 +7,11 @@ use crate::router::roles::AUTHZ_TAG;
 use crate::router::state::Roles;
 use crate::status::error_status::ErrorStatus;
 use crate::status::ok_status::GetStatus;
-use axum::extract::{Path, State};
 use axum::Extension;
+use axum::extract::{Path, State};
 use td_apiforge::apiserver_path;
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{RoleParam, GET_ROLE};
+use td_objects::rest_urls::{GET_ROLE, RoleParam};
 use td_objects::types::role::Role;
 use tower::ServiceExt;
 

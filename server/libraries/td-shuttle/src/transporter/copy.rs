@@ -4,15 +4,15 @@
 
 use crate::transporter::api::{CopyReport, CopyRequest, FileCopyReport, Location};
 use crate::transporter::common::create_store;
-use crate::transporter::error::{range_to_string, TransporterError};
+use crate::transporter::error::{TransporterError, range_to_string};
 use bytes::Bytes;
-use futures_util::stream::FuturesOrdered;
 use futures_util::StreamExt;
+use futures_util::stream::FuturesOrdered;
 use object_store::path::Path;
 use object_store::{MultipartUpload, ObjectStore, PutPayload};
 use std::ops::Range;
 use td_common::time::UniqueUtc;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 use tracing::{debug, trace};
 use url::Url;
 

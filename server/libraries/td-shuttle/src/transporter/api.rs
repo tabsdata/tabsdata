@@ -4,16 +4,16 @@
 
 use crate::transporter::args::ImporterCsvReadOptions;
 use crate::transporter::error::TransporterError;
-use base64::prelude::BASE64_STANDARD_NO_PAD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD_NO_PAD;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use getset::Getters;
 use polars::prelude::CsvParseOptions;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
+use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::fmt::Display;
 use url::Url;
 
@@ -1089,11 +1089,11 @@ impl TransporterRequest {
 #[cfg(test)]
 mod tests {
     use crate::transporter::api::{
-        split_base_path_and_name, LastModifiedInfo, LastModifiedInfoAccessor,
-        LastModifiedInfoState, LastModifiedInfoV1,
+        LastModifiedInfo, LastModifiedInfoAccessor, LastModifiedInfoState, LastModifiedInfoV1,
+        split_base_path_and_name,
     };
-    use base64::prelude::BASE64_STANDARD_NO_PAD;
     use base64::Engine;
+    use base64::prelude::BASE64_STANDARD_NO_PAD;
     use chrono::{DateTime, Utc};
     use td_common::time::UniqueUtc;
 

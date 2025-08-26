@@ -139,7 +139,9 @@ pub enum DbError {
     DatabaseSchemaDoesNotExist = 5000,
     #[error("Tabsdata database version is '{0}', it should be an integer")]
     DatabaseNeedsUpgrade(String, String) = 5001,
-    #[error("Tabsdata database version is '{0}', binary database version is '{1}'. Binary must be upgraded")]
+    #[error(
+        "Tabsdata database version is '{0}', binary database version is '{1}'. Binary must be upgraded"
+    )]
     DatabaseIsNewer(String, String) = 5002,
     #[error("Tabsdata database corrupted. {0}")]
     DatabaseCorrupted(String) = 5003,
@@ -351,7 +353,9 @@ impl DbPool {
     }
 
     /// Delegates to the read-only pool's [`Pool::acquire`] method.
-    pub fn acquire(&self) -> impl Future<Output = Result<PoolConnection<Sqlite>, Error>> + 'static {
+    pub fn acquire(
+        &self,
+    ) -> impl Future<Output = Result<PoolConnection<Sqlite>, Error>> + 'static + use<> {
         self.ro_pool.acquire()
     }
 
@@ -514,7 +518,7 @@ fn remove_leading_slash(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use crate::sql;
-    use crate::sql::{remove_leading_file_protocol, remove_leading_slash, Db, DbError, DbPool};
+    use crate::sql::{Db, DbError, DbPool, remove_leading_file_protocol, remove_leading_slash};
     use std::time::Duration;
     use testdir::testdir;
     use url::Url;

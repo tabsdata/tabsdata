@@ -25,15 +25,15 @@ pub fn get_files_in_folder_sorted_by_name<P: AsRef<Path>>(
             let entry = entry.ok()?;
             let path = entry.path();
             if path.is_file() {
-                if let Some(token) = extension {
-                    if path.extension().and_then(|e| e.to_str()) != Some(token) {
-                        return None;
-                    }
+                if let Some(token) = extension
+                    && path.extension().and_then(|e| e.to_str()) != Some(token)
+                {
+                    return None;
                 }
-                if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
-                    if !file_name.starts_with(EXCLUSION_PREFIX) {
-                        return Some(path);
-                    }
+                if let Some(file_name) = path.file_name().and_then(|name| name.to_str())
+                    && !file_name.starts_with(EXCLUSION_PREFIX)
+                {
+                    return Some(path);
                 }
             }
             None
@@ -53,14 +53,14 @@ pub fn get_files_in_subfolders_sorted_by_name<P: AsRef<Path>>(
         for entry in entries.flatten() {
             if entry.path().is_dir() {
                 let subentry = entry.path().join(&subfolder);
-                if subentry.is_dir() {
-                    if let Ok(subfiles) = fs::read_dir(&subentry) {
-                        for subfile in subfiles.flatten() {
-                            if let Some(filetype) = subfile.path().extension() {
-                                if filetype.to_string_lossy() == extension {
-                                    files.push(subfile.path());
-                                }
-                            }
+                if subentry.is_dir()
+                    && let Ok(subfiles) = fs::read_dir(&subentry)
+                {
+                    for subfile in subfiles.flatten() {
+                        if let Some(filetype) = subfile.path().extension()
+                            && filetype.to_string_lossy() == extension
+                        {
+                            files.push(subfile.path());
                         }
                     }
                 }

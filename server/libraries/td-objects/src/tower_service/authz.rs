@@ -117,7 +117,7 @@
 //!   ...
 //! ```
 
-use crate::crudl::{handle_sql_err, RequestContext};
+use crate::crudl::{RequestContext, handle_sql_err};
 use crate::sql::{DaoQueries, FindBy};
 use crate::types::basic::{CollectionId, RoleId, ToCollectionId, UserId, VisibleCollections};
 use crate::types::collection::CollectionDB;
@@ -533,7 +533,9 @@ impl AuthzRequirements for InterColl {
         _conn: &mut SqliteConnection,
         _scope: &AuthzScope,
     ) -> Result<Option<HashSet<Permission>>, TdError> {
-        panic!("InterColl should not be used as a permission requirement, it is only used for inter collection access checks");
+        panic!(
+            "InterColl should not be used as a permission requirement, it is only used for inter collection access checks"
+        );
     }
 }
 
@@ -830,15 +832,15 @@ pub struct Authz<
 }
 
 impl<
-        AC: AuthzContextT,
-        C1: AuthzRequirements,
-        C2: AuthzRequirements,
-        C3: AuthzRequirements,
-        C4: AuthzRequirements,
-        C5: AuthzRequirements,
-        C6: AuthzRequirements,
-        C7: AuthzRequirements,
-    > Authz<AC, C1, C2, C3, C4, C5, C6, C7>
+    AC: AuthzContextT,
+    C1: AuthzRequirements,
+    C2: AuthzRequirements,
+    C3: AuthzRequirements,
+    C4: AuthzRequirements,
+    C5: AuthzRequirements,
+    C6: AuthzRequirements,
+    C7: AuthzRequirements,
+> Authz<AC, C1, C2, C3, C4, C5, C6, C7>
 {
     /// Perform authorization check for the given [`AuthScope`]
     /// (set via [`AuthzOn<System>::set`] or [`AuthzOn<CollectionId>::set`].
@@ -1253,14 +1255,14 @@ mod tests {
     > = super::Authz<AuthzContextForTest, C1, C2, C3, C4, C5, C6, C7>;
 
     impl<
-            C1: AuthzRequirements,
-            C2: AuthzRequirements,
-            C3: AuthzRequirements,
-            C4: AuthzRequirements,
-            C5: AuthzRequirements,
-            C6: AuthzRequirements,
-            C7: AuthzRequirements,
-        > Authz<C1, C2, C3, C4, C5, C6, C7>
+        C1: AuthzRequirements,
+        C2: AuthzRequirements,
+        C3: AuthzRequirements,
+        C4: AuthzRequirements,
+        C5: AuthzRequirements,
+        C6: AuthzRequirements,
+        C7: AuthzRequirements,
+    > Authz<C1, C2, C3, C4, C5, C6, C7>
     {
         fn new() -> Self {
             Self {
@@ -2396,11 +2398,13 @@ mod tests {
         .await;
         assert!(matches!(res, Ok(())));
 
-        let list = Arc::new(vec![InterCollectionAccess::builder()
-            .source(source)
-            .target(ToCollectionId::try_from(&source).unwrap())
-            .build()
-            .unwrap()]);
+        let list = Arc::new(vec![
+            InterCollectionAccess::builder()
+                .source(source)
+                .target(ToCollectionId::try_from(&source).unwrap())
+                .build()
+                .unwrap(),
+        ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
             SrvCtx(authz_context.clone()),
@@ -2410,11 +2414,13 @@ mod tests {
         .await;
         assert!(matches!(res, Ok(())));
 
-        let list = Arc::new(vec![InterCollectionAccess::builder()
-            .source(source)
-            .target(target)
-            .build()
-            .unwrap()]);
+        let list = Arc::new(vec![
+            InterCollectionAccess::builder()
+                .source(source)
+                .target(target)
+                .build()
+                .unwrap(),
+        ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
             SrvCtx(authz_context.clone()),
@@ -2438,11 +2444,13 @@ mod tests {
         let conn = ConnectionType::PoolConnection(conn).into();
         let conn = Connection::new(conn);
 
-        let list = Arc::new(vec![InterCollectionAccess::builder()
-            .source(CollectionId::default())
-            .target(ToCollectionId::default())
-            .build()
-            .unwrap()]);
+        let list = Arc::new(vec![
+            InterCollectionAccess::builder()
+                .source(CollectionId::default())
+                .target(ToCollectionId::default())
+                .build()
+                .unwrap(),
+        ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
             SrvCtx(authz_context.clone()),
@@ -2456,11 +2464,13 @@ mod tests {
             std::mem::discriminant(err.domain_err()),
         );
 
-        let list = Arc::new(vec![InterCollectionAccess::builder()
-            .source(source)
-            .target(ToCollectionId::default())
-            .build()
-            .unwrap()]);
+        let list = Arc::new(vec![
+            InterCollectionAccess::builder()
+                .source(source)
+                .target(ToCollectionId::default())
+                .build()
+                .unwrap(),
+        ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
             SrvCtx(authz_context.clone()),
@@ -2474,11 +2484,13 @@ mod tests {
             std::mem::discriminant(err.domain_err()),
         );
 
-        let list = Arc::new(vec![InterCollectionAccess::builder()
-            .source(CollectionId::default())
-            .target(target)
-            .build()
-            .unwrap()]);
+        let list = Arc::new(vec![
+            InterCollectionAccess::builder()
+                .source(CollectionId::default())
+                .target(target)
+                .build()
+                .unwrap(),
+        ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
             SrvCtx(authz_context.clone()),

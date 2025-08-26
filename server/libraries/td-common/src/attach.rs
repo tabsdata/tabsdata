@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::env::{check_flag_env, TABSDATA_DEV_HOME_DIR};
+use crate::env::{TABSDATA_DEV_HOME_DIR, check_flag_env};
 use crate::files::ROOT;
 use config::{Config, File, FileFormat};
 use serde::Deserialize;

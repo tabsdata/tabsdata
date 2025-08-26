@@ -7,7 +7,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, ItemEnum};
+use syn::{ItemEnum, parse_macro_input};
 
 pub fn td_error_impl(input: TokenStream) -> TokenStream {
     // Parse the input as a type alias

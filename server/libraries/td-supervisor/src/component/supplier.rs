@@ -7,7 +7,7 @@
 use crate::component::supplier::SupplierError::*;
 use crate::launch::worker::Worker;
 use std::fmt::{Debug, Formatter};
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::{fmt, io};
 use td_common::logging::LOG_LOCATION;

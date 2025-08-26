@@ -2,8 +2,8 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::user::service::delete::DeleteUserService;
 use crate::user::UserError;
+use crate::user::service::delete::DeleteUserService;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;
 use td_objects::rest_urls::UserParam;

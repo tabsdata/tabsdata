@@ -2,8 +2,8 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::user::service::update::UpdateUserService;
 use crate::user::UserError;
+use crate::user::service::update::UpdateUserService;
 use td_database::sql::DbPool;
 use td_error::assert_service_error;
 use td_objects::crudl::RequestContext;

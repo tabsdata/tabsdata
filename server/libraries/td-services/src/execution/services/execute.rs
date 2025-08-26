@@ -17,10 +17,10 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec, InterColl};
 use td_objects::tower_service::from::{
-    combine, BuildService, ConvertIntoMapService, ExtractDataService, ExtractNameService,
-    ExtractService, TryIntoService, UpdateService, VecBuildService, With,
+    BuildService, ConvertIntoMapService, ExtractDataService, ExtractNameService, ExtractService,
+    TryIntoService, UpdateService, VecBuildService, With, combine,
 };
-use td_objects::tower_service::sql::{insert, insert_vec, By, SqlSelectService};
+use td_objects::tower_service::sql::{By, SqlSelectService, insert, insert_vec};
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, FunctionStatus,
 };
@@ -119,7 +119,7 @@ pub(crate) mod tests {
     use std::collections::HashSet;
     use td_database::sql::DbPool;
     use td_error::TdError;
-    use td_objects::crudl::{handle_sql_err, RequestContext};
+    use td_objects::crudl::{RequestContext, handle_sql_err};
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
@@ -394,7 +394,8 @@ pub(crate) mod tests {
             .service()
             .await;
         let response = service.raw_oneshot(request).await;
-        let response = if with_permission {
+
+        if with_permission {
             let response = response?;
 
             // Check the response
@@ -565,10 +566,12 @@ pub(crate) mod tests {
 
                 if let Some(dependency_pos) = function_condition.requirement_dependency_pos() {
                     // In the test, table order matches table name
-                    assert!(function_condition
-                        .requirement_table()
-                        .as_str()
-                        .contains(&(**dependency_pos + 1).to_string()));
+                    assert!(
+                        function_condition
+                            .requirement_table()
+                            .as_str()
+                            .contains(&(**dependency_pos + 1).to_string())
+                    );
                 }
 
                 if let Some(input_idx) = function_condition.requirement_input_idx() {
@@ -592,7 +595,6 @@ pub(crate) mod tests {
                 std::mem::discriminant(err.domain_err())
             );
             Err(err)
-        };
-        response
+        }
     }
 }

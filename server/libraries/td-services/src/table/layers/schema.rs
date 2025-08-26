@@ -5,7 +5,7 @@
 use crate::table::layers::storage::StorageServiceError;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{Field, LazyFrame, PlPath, PolarsError, ScanArgsParquet, SchemaExt};
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::types::table::{SchemaField, TableSchema};
 use td_storage::{SPath, Storage};
 use td_tableframe::common::drop_system_columns;

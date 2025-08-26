@@ -9,7 +9,7 @@ use td_objects::rest_urls::FunctionRunParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_objects::tower_service::from::{
-    combine, BuildService, ExtractNameService, ExtractService, TryIntoService, With,
+    BuildService, ExtractNameService, ExtractService, TryIntoService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlSelectService};
 use td_objects::types::basic::{

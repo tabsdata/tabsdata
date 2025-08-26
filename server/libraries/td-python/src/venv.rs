@@ -11,7 +11,7 @@ use crate::error::PythonError::{
 use crate::io::log_std_out_and_err;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::{exit, Command, Output};
+use std::process::{Command, Output, exit};
 use td_common::env::check_flag_env;
 use td_common::os::name_program;
 use td_common::server::TD_DETACHED_SUBPROCESSES;
@@ -211,12 +211,11 @@ pub fn deactivate(venv: &PathBuf) -> Result<(), TdError> {
 }
 
 fn extract(string: &str, start: &str, end: &str) -> Option<String> {
-    if let Some(start_i) = string.find(start) {
-        if let Some(end_i) = string.find(end) {
-            if start_i + start.len() < end_i {
-                return Some(string[start_i + start.len()..end_i].trim().to_string());
-            }
-        }
+    if let Some(start_i) = string.find(start)
+        && let Some(end_i) = string.find(end)
+        && start_i + start.len() < end_i
+    {
+        return Some(string[start_i + start.len()..end_i].trim().to_string());
     }
     None
 }

@@ -266,7 +266,7 @@ pub fn type_of<T>() -> String {
 #[cfg(test)]
 mod tests {
     use crate::extractors::Input;
-    use crate::metadata::{type_of, type_of_val, MetadataMutex};
+    use crate::metadata::{MetadataMutex, type_of, type_of_val};
 
     #[tokio::test]
     async fn test_tower_metadata_add_fn_name() {

@@ -3,14 +3,14 @@
 //
 
 use crate::table::layers::storage::resolve_table_location;
-use td_objects::tower_service::from::{combine, ExtractService, TryIntoService, With};
+use td_objects::tower_service::from::{ExtractService, TryIntoService, With, combine};
 use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::types::Extractor;
 use td_objects::types::basic::{
     AtTime, CollectionIdName, FunctionRunStatus, TableId, TableIdName, TableStatus, TriggeredOn,
 };
 use td_objects::types::execution::TableDataVersionDBWithNames;
 use td_objects::types::table::TableDBWithNames;
-use td_objects::types::Extractor;
 use td_tower::default_services::Share;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};

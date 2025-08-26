@@ -14,7 +14,7 @@ use td_common::server::{
     RequestMessagePayloadBuilder, SupervisorMessage, SupervisorMessagePayload, WorkerClass,
     WorkerMessageQueue,
 };
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::crudl::handle_sql_err;
 use td_objects::rest_urls::{BASE_URL, UPDATE_FUNCTION_RUN};
 use td_objects::sql::{DaoQueries, FindBy, SelectBy, UpdateBy};
@@ -28,8 +28,8 @@ use td_objects::types::worker::v2::{
     FunctionInfoV2, FunctionInputV2, InputTable, InputTableVersion, OutputTable, OutputTableVersion,
 };
 use td_objects::types::worker::{EnvPrefix, FunctionInput, Location};
-use td_storage::location::StorageLocation;
 use td_storage::Storage;
+use td_storage::location::StorageLocation;
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 use tracing::{error, trace};
 use url::Url;
@@ -345,19 +345,19 @@ pub async fn unlock_workers<T: WorkerMessageQueue>(
     let function_run_ids = messages
         .iter()
         .filter_map(|m| {
-            let message =
-                if let SupervisorMessagePayload::SupervisorRequestMessagePayload(message) =
-                    m.payload()
-                {
-                    Some(message)
-                } else {
-                    error!(
+            let message = if let SupervisorMessagePayload::SupervisorRequestMessagePayload(
+                message,
+            ) = m.payload()
+            {
+                Some(message)
+            } else {
+                error!(
                     "Scheduled locked message [{}] is not a SupervisorRequestMessagePayload: {:?}",
                     m.id(),
                     m.payload()
                 );
-                    None
-                }?;
+                None
+            }?;
 
             let function_input = message.context().as_ref().or_else(|| {
                 error!(

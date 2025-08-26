@@ -12,7 +12,7 @@ use std::fs::{canonicalize, copy, create_dir_all};
 use std::io;
 use std::path::{PathBuf, StripPrefixError};
 use std::string::ToString;
-use td_common::env::{get_current_exe_dir, EnvironmentError, TABSDATA_HOME_DIR};
+use td_common::env::{EnvironmentError, TABSDATA_HOME_DIR, get_current_exe_dir};
 use td_common::files::ROOT;
 use td_common::os::{is_executable, name_program};
 use td_common::server::{

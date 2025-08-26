@@ -5,12 +5,12 @@
 use darling::FromMeta;
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
-use quote::{format_ident, quote, ToTokens};
+use quote::{ToTokens, format_ident, quote};
 use std::any::type_name;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use syn::{parse_macro_input, ItemEnum, ItemStruct, Type};
-use td_shared::meta_parser::{some_or_none, OptionWrapper, SynMetaOrLit};
+use syn::{ItemEnum, ItemStruct, Type, parse_macro_input};
+use td_shared::meta_parser::{OptionWrapper, SynMetaOrLit, some_or_none};
 use td_shared::{downcast_option, parse_meta};
 
 #[derive(Debug, FromMeta)]
@@ -1362,21 +1362,20 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
                         }),
                     ..
                 }) = attr.parse_args()
+                    && path.is_ident("rename")
                 {
-                    if path.is_ident("rename") {
-                        let rename = lit_str.value();
+                    let rename = lit_str.value();
 
-                        // Add #[strum(to_string = "...")] and #[serde(rename = "...")]
-                        let strum_attr: syn::Attribute = syn::parse_quote!(
-                            #[strum(to_string = #rename)]
-                        );
-                        let serde_attr: syn::Attribute = syn::parse_quote!(
-                            #[serde(rename = #rename)]
-                        );
+                    // Add #[strum(to_string = "...")] and #[serde(rename = "...")]
+                    let strum_attr: syn::Attribute = syn::parse_quote!(
+                        #[strum(to_string = #rename)]
+                    );
+                    let serde_attr: syn::Attribute = syn::parse_quote!(
+                        #[serde(rename = #rename)]
+                    );
 
-                        variant.attrs.push(strum_attr);
-                        variant.attrs.push(serde_attr);
-                    }
+                    variant.attrs.push(strum_attr);
+                    variant.attrs.push(serde_attr);
                 }
             }
         }

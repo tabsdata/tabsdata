@@ -12,11 +12,11 @@ use td_objects::rest_urls::TableParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
-    combine, ExtractNameService, ExtractService, ExtractVecService, TryIntoService, UpdateService,
-    With,
+    ExtractNameService, ExtractService, ExtractVecService, TryIntoService, UpdateService, With,
+    combine,
 };
 use td_objects::tower_service::sql::{
-    insert, insert_vec, By, SqlFindService, SqlSelectAllService, SqlSelectService,
+    By, SqlFindService, SqlSelectAllService, SqlSelectService, insert, insert_vec,
 };
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, DependencyStatus, FunctionId,

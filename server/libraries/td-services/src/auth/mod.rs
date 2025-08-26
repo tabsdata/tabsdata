@@ -8,7 +8,7 @@ pub mod session;
 
 use crate::auth::services::JwtConfig;
 use getset::Getters;
-use jsonwebtoken::{decode, encode, Algorithm, Validation};
+use jsonwebtoken::{Algorithm, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use td_common::id::Id;
 use td_error::td_error;

@@ -5,7 +5,7 @@
 use crate::box_sync_clone_service::BoxSyncCloneService;
 use std::fmt;
 use std::sync::Arc;
-use tower_layer::{layer_fn, Layer};
+use tower_layer::{Layer, layer_fn};
 use tower_service::Service;
 
 /// As its name says, a Box Layer which is Clone and Sync (and Send).

@@ -5,7 +5,7 @@
 use crate::launcher::config;
 use crate::launcher::config::Config;
 use crate::monitor::resources::{
-    ResourcesMonitor, RESOURCES_MONITOR_CHECK_FREQUENCY, TD_RESOURCES_MONITOR_CHECK_FREQUENCY,
+    RESOURCES_MONITOR_CHECK_FREQUENCY, ResourcesMonitor, TD_RESOURCES_MONITOR_CHECK_FREQUENCY,
 };
 use clap::Parser;
 use clap_derive::{Args, ValueEnum};
@@ -250,12 +250,11 @@ pub fn obtain_current_dir() -> Option<PathBuf> {
 
 pub fn obtain_config_dir() -> Option<PathBuf> {
     let inf_path = get_current_dir().join(WORKER_INF_FILE);
-    if inf_path.exists() {
-        if let Ok(inf_file) = std::fs::File::open(&inf_path) {
-            if let Ok(inf) = serde_yaml::from_reader::<_, Inf>(inf_file) {
-                return Some(inf.config);
-            }
-        }
+    if inf_path.exists()
+        && let Ok(inf_file) = std::fs::File::open(&inf_path)
+        && let Ok(inf) = serde_yaml::from_reader::<_, Inf>(inf_file)
+    {
+        return Some(inf.config);
     }
     None
 }
@@ -323,8 +322,8 @@ mod tests {
     use crate::launcher::cli::parse_extra_arguments;
     use crate::launcher::cli::{Cli, CliParser, NoConfig, NoParams, Params};
     use crate::launcher::config::Config;
-    use clap::error::Error;
     use clap::Parser;
+    use clap::error::Error;
     use clap_derive::Args;
     use getset::Getters;
     use serde::{Deserialize, Serialize};

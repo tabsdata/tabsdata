@@ -6,8 +6,8 @@ use crate::type_builder::{parse_input_item_struct, td_type};
 use darling::{FromDeriveInput, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
-use quote::{format_ident, quote, ToTokens};
-use syn::{parse_macro_input, DeriveInput, Fields, ItemStruct, Type};
+use quote::{ToTokens, format_ident, quote};
+use syn::{DeriveInput, Fields, ItemStruct, Type, parse_macro_input};
 
 pub fn dao(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
@@ -248,16 +248,13 @@ fn type_for_field<'a>(fields: &'a Fields, field_name: &str) -> &'a Type {
         })
         .unwrap_or_else(|| panic!("Field {field_name} not found in struct"));
 
-    if let Type::Path(type_path) = field_type {
-        if let Some(segment) = type_path.path.segments.last() {
-            if segment.ident == "Option" {
-                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                    if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
-                        return inner_type;
-                    }
-                }
-            }
-        }
+    if let Type::Path(type_path) = field_type
+        && let Some(segment) = type_path.path.segments.last()
+        && segment.ident == "Option"
+        && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+        && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+    {
+        return inner_type;
     }
 
     field_type

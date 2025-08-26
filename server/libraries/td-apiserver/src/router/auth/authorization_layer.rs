@@ -14,8 +14,8 @@ use td_objects::crudl::RequestContext;
 use td_objects::types::basic::AccessTokenId;
 use td_services::auth::services::AuthServices;
 use td_services::auth::session::{Session, SessionError, SessionProvider};
-use td_services::auth::{decode_token, AuthError};
-use tracing::{span, Instrument, Level, Span};
+use td_services::auth::{AuthError, decode_token};
+use tracing::{Instrument, Level, Span, span};
 
 pub async fn authorization_layer(
     State(auth_services): State<Arc<AuthServices>>,

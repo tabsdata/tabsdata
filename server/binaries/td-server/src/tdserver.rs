@@ -3,11 +3,11 @@
 //
 
 use std::io::Write;
-use std::process::{exit, Command, Stdio};
+use std::process::{Command, Stdio, exit};
 use std::{env, fs};
 use td_build::version::TABSDATA_VERSION;
 use td_common::attach::attach;
-use td_common::env::{get_home_dir, TABSDATA_HOME_DIR};
+use td_common::env::{TABSDATA_HOME_DIR, get_home_dir};
 use td_common::logging;
 use td_common::logging::LogOutput;
 use td_common::server::TD_DETACHED_SUBPROCESSES;

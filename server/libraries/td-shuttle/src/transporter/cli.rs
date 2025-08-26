@@ -75,12 +75,12 @@ fn non_existing_file(s: &str) -> Result<PathBuf, TransporterError> {
     if path.exists() {
         return Err(TransporterError::ReportFileMustNotExist(s.to_string()));
     }
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            return Err(TransporterError::ReportFileDirNotFound(
-                parent.to_string_lossy().to_string(),
-            ));
-        }
+    if let Some(parent) = path.parent()
+        && !parent.exists()
+    {
+        return Err(TransporterError::ReportFileDirNotFound(
+            parent.to_string_lossy().to_string(),
+        ));
     }
     Ok(path)
 }
@@ -160,7 +160,7 @@ pub(crate) mod tests {
         AwsConfigs, AzureConfigs, CopyRequest, Location, TransporterReport, TransporterRequest,
         Value,
     };
-    use crate::transporter::cli::{run_impl, run_impl_report_to_file, TransporterParams};
+    use crate::transporter::cli::{TransporterParams, run_impl, run_impl_report_to_file};
     use crate::transporter::common::create_store;
     use clap::Parser;
     use itertools::Itertools;

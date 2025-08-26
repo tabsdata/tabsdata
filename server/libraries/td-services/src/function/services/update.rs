@@ -5,7 +5,7 @@
 use crate::function::layers::register::{data_location, validate_tables_do_not_exist};
 use crate::function::layers::update::assert_function_name_not_exists;
 use crate::function::layers::{
-    check_private_tables, register_dependencies, register_tables, register_triggers, DO_AUTHZ,
+    DO_AUTHZ, check_private_tables, register_dependencies, register_tables, register_triggers,
 };
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;
@@ -14,11 +14,11 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
 use td_objects::tower_service::from::{
-    combine, BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
-    SetService, TryIntoService, UpdateService, With,
+    BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
+    SetService, TryIntoService, UpdateService, With, combine,
 };
 use td_objects::tower_service::sql::{
-    insert, By, SqlDeleteService, SqlSelectAllService, SqlSelectService,
+    By, SqlDeleteService, SqlSelectAllService, SqlSelectService, insert,
 };
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation,
@@ -135,9 +135,9 @@ mod tests {
     use td_database::sql::DbPool;
     use td_objects::crudl::handle_sql_err;
     use td_objects::rest_urls::CollectionParam;
+    use td_objects::sql::SelectBy;
     use td_objects::sql::cte::CteQueries;
     use td_objects::sql::recursive::RecursiveQueries;
-    use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::test_utils::seed_function::seed_function;
     use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;

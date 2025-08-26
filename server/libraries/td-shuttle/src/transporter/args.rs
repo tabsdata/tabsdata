@@ -201,7 +201,9 @@ enum ParamsError {
     ConfigFileNotFound(String),
     #[error("Could not load config file {0}: {1}")]
     CouldNotLoad(String, String),
-    #[error("Invalid modified_since datetime {0}, expected format is '<YY>-<MM>-<DD>T<hh>:<mm>:<ss>[.<mmm>]'")]
+    #[error(
+        "Invalid modified_since datetime {0}, expected format is '<YY>-<MM>-<DD>T<hh>:<mm>:<ss>[.<mmm>]'"
+    )]
     InvalidDateTime(String),
 }
 
@@ -667,7 +669,7 @@ impl ToFormat {
 
 #[cfg(test)]
 mod tests {
-    use crate::transporter::args::{root_folder, slashed_tmp_file, tmp_file, tmp_path, ToFormat};
+    use crate::transporter::args::{ToFormat, root_folder, slashed_tmp_file, tmp_file, tmp_path};
     use polars::prelude::{
         ChildFieldOverwrites, KeyValueMetadata, MetadataKeyValue, ParquetCompression,
         ParquetFieldOverwrites, ParquetWriteOptions, PlSmallStr, StatisticsOptions,

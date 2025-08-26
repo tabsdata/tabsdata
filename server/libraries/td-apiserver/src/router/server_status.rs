@@ -35,7 +35,7 @@ async fn status(State(status_state): State<System>) -> Result<GetStatus<ApiStatu
 mod tests {
     use super::*;
     use crate::router::server_status::ApiStatus;
-    use axum::body::{to_bytes, Body};
+    use axum::body::{Body, to_bytes};
     use axum::extract::Request;
     use axum::{Extension, Router};
     use http::{Method, StatusCode};

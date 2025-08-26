@@ -3,7 +3,7 @@
 //
 
 use crate::collection::service::layer::update::{
-    update_collection_validate, UpdateCollectionDBBuilderUpdate,
+    UpdateCollectionDBBuilderUpdate, update_collection_validate,
 };
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;

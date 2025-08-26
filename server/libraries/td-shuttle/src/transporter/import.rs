@@ -10,8 +10,8 @@ use crate::transporter::common::create_store;
 use crate::transporter::error::TransporterError;
 use crate::transporter::files_importer::{FilesImporter, Importer};
 use async_trait::async_trait;
-use object_store::path::Path;
 use object_store::Error::NotFound;
+use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStore};
 use url::Url;
 use wildmatch::WildMatch;
@@ -308,8 +308,8 @@ mod tests {
     use crate::transporter::error::TransporterError;
     use crate::transporter::files_importer::Importer;
     use crate::transporter::import::{
-        find_and_import, FileFinder, PatternFileFinder, PatternLastModFileFinder, SingleFileFinder,
-        SingleFileLastModFinder,
+        FileFinder, PatternFileFinder, PatternLastModFileFinder, SingleFileFinder,
+        SingleFileLastModFinder, find_and_import,
     };
     use async_trait::async_trait;
     use chrono::{DateTime, Utc};

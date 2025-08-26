@@ -7,11 +7,11 @@ use crate::router::state::Tables;
 use crate::router::tables::TABLES_TAG;
 use crate::status::error_status::ErrorStatus;
 use crate::status::ok_status::{DeleteStatus, NoContent};
-use axum::extract::{Path, State};
 use axum::Extension;
+use axum::extract::{Path, State};
 use td_apiforge::apiserver_path;
 use td_objects::crudl::RequestContext;
-use td_objects::rest_urls::{TableParam, TABLE_DELETE};
+use td_objects::rest_urls::{TABLE_DELETE, TableParam};
 use tower::ServiceExt;
 
 router! {

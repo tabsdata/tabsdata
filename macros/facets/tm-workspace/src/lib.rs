@@ -4,8 +4,8 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use rand::distr::Alphanumeric;
 use rand::Rng;
+use rand::distr::Alphanumeric;
 use std::path::PathBuf;
 use std::{env, fs};
 

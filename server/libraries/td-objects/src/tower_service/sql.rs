@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::crudl::{handle_sql_err, ListParams, ListRequest, ListResponse, ListResponseBuilder};
+use crate::crudl::{ListParams, ListRequest, ListResponse, ListResponseBuilder, handle_sql_err};
 use crate::sql::cte::CteQueries;
 use crate::sql::list::ListQueryParams;
 use crate::sql::{
@@ -13,7 +13,7 @@ use crate::types::{DataAccessObject, ListQuery, PartitionBy, SqlEntity, Versione
 use async_trait::async_trait;
 use std::marker::PhantomData;
 use std::ops::Deref;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
 
 #[td_error]

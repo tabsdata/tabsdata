@@ -8,7 +8,7 @@ use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
 use td_error::TdError;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{ExtractVecService, With};
-use td_objects::tower_service::sql::{insert_vec, By, SqlSelectAllService, SqlUpdateService};
+use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlUpdateService, insert_vec};
 use td_objects::types::basic::FunctionRunId;
 use td_objects::types::execution::{
     FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB, WorkerDB,
@@ -68,7 +68,7 @@ mod tests {
     use td_authz::AuthzContext;
     use td_common::server::{FileWorkerMessageQueue, SupervisorMessagePayload};
     use td_database::sql::DbPool;
-    use td_objects::crudl::{handle_sql_err, RequestContext};
+    use td_objects::crudl::{RequestContext, handle_sql_err};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::sql::SelectBy;
     use td_objects::test_utils::seed_collection::seed_collection;

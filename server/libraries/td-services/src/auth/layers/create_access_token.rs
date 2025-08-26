@@ -3,7 +3,7 @@
 //
 
 use crate::auth::services::JwtConfig;
-use crate::auth::{encode_token, TokenClaims};
+use crate::auth::{TokenClaims, encode_token};
 use td_common::id::Id;
 use td_error::TdError;
 use td_objects::types::auth::{SessionDB, TokenResponseX};

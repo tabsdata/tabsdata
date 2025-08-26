@@ -23,8 +23,8 @@ use td_common::server::SupervisorMessagePayload::{
     SupervisorResponseMessagePayload,
 };
 use td_common::server::{
-    Callback, ExceptionMessagePayload, PayloadType, ResponseMessagePayload, SupervisorMessage,
-    EXCEPTION_FILE, REQUEST_MESSAGE_FILE_PATTERN, RESPONSE_FILE, RESPONSE_FOLDER, UNKNOWN_RUN,
+    Callback, EXCEPTION_FILE, ExceptionMessagePayload, PayloadType, REQUEST_MESSAGE_FILE_PATTERN,
+    RESPONSE_FILE, RESPONSE_FOLDER, ResponseMessagePayload, SupervisorMessage, UNKNOWN_RUN,
 };
 use td_common::status::ExitStatus;
 use tracing::{debug, info};
@@ -74,7 +74,8 @@ impl WorkerNotifier for Callback {
         // ToDo: temporarily, we omit sending notifications for errors, and we wait either for final failure (Fail) or
         //       eventual success (Done). Thus, we currently do not notify to the API Server error statuses (Error).
         if matches!(status, WorkerCallbackStatus::Error) {
-            info!("Omitting notification of finalization for state {:?} of worker:: name: '{}' - id: '{}'",
+            info!(
+                "Omitting notification of finalization for state {:?} of worker:: name: '{}' - id: '{}'",
                 WorkerCallbackStatus::Error,
                 match &worker {
                     Some(worker) => worker.describer().name().to_string(),
@@ -222,11 +223,16 @@ impl WorkerNotifier for Callback {
                             let body = response.text().await;
                             match body {
                                 Ok(content) => {
-                                    debug!("Received a successful http response fine body content:\n'{}'",
-                                        serde_json::to_string_pretty(&content)?)
+                                    debug!(
+                                        "Received a successful http response fine body content:\n'{}'",
+                                        serde_json::to_string_pretty(&content)?
+                                    )
                                 }
                                 Err(cause) => {
-                                    debug!("Received an successful http response bad body content: '{:?}'", cause);
+                                    debug!(
+                                        "Received an successful http response bad body content: '{:?}'",
+                                        cause
+                                    );
                                     return Err(BrokenContent { cause });
                                 }
                             }
@@ -253,14 +259,12 @@ pub fn execution(message: &SupervisorMessage) -> u16 {
         Ok(re) => re,
         Err(_) => return UNKNOWN_RUN,
     };
-    if let Some(file_name) = message.file().file_name().and_then(|f| f.to_str()) {
-        if let Some(captures) = regex.captures(file_name) {
-            if let Some(run_str) = captures.get(2).map(|m| m.as_str()) {
-                if let Ok(run) = run_str.parse::<u16>() {
-                    return run;
-                }
-            }
-        }
+    if let Some(file_name) = message.file().file_name().and_then(|f| f.to_str())
+        && let Some(captures) = regex.captures(file_name)
+        && let Some(run_str) = captures.get(2).map(|m| m.as_str())
+        && let Ok(run) = run_str.parse::<u16>()
+    {
+        return run;
     }
     UNKNOWN_RUN
 }

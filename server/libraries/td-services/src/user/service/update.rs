@@ -3,8 +3,8 @@
 //
 
 use crate::user::layers::update::{
-    update_user_validate, update_user_validate_enabled, update_user_validate_password_change,
-    UpdateUserDBBuilderUpdate,
+    UpdateUserDBBuilderUpdate, update_user_validate, update_user_validate_enabled,
+    update_user_validate_password_change,
 };
 use td_authz::{Authz, AuthzContext};
 use td_error::TdError;

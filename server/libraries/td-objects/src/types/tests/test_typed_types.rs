@@ -5,12 +5,12 @@
 #[cfg(test)]
 mod tests {
     use crate::types::SqlEntity;
-    use td_common::id::{id, Id};
+    use td_common::id::{Id, id};
     use td_common::time::UniqueUtc;
     use td_error::td_error;
 
     macro_rules! typed_test {
-        ($type_:ty, $value:expr) => {
+        ($type_:ty, $value:expr_2021) => {
             paste::paste! {
                 #[test]
                 fn [< test_ $type_:lower >]() -> Result<(), td_error::TdError> {
@@ -400,7 +400,7 @@ mod tests {
 
     // Numeric tests
     macro_rules! min_max_typed_numeric_test {
-        ($type_:ty, $default:expr) => {
+        ($type_:ty, $default:expr_2021) => {
             paste::paste! {
                 #[test]
                 fn [< test_ $type_:lower _default_numeric >]() -> Result<(), td_error::TdError> {

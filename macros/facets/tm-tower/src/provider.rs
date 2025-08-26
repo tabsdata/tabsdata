@@ -9,7 +9,7 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
-use syn::{parse_macro_input, parse_quote, FnArg, Ident, ItemFn, ReturnType, Token, Type};
+use syn::{FnArg, Ident, ItemFn, ReturnType, Token, Type, parse_macro_input, parse_quote};
 
 struct ProviderArgs {
     name: Ident,

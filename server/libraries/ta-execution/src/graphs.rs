@@ -4,15 +4,15 @@
 
 use crate::transaction::TransactionMapper;
 use getset::Getters;
+use petgraph::Graph;
 use petgraph::algo::toposort;
 use petgraph::dot::{Config, Dot};
 use petgraph::prelude::{DiGraph, EdgeRef, NodeIndex};
-use petgraph::Graph;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::types::basic::{FunctionName, TransactionByStr, TransactionKey};
 use td_objects::types::dependency::DependencyDBWithNames;
 use td_objects::types::execution::{
@@ -27,7 +27,8 @@ use td_objects::types::trigger::TriggerDBWithNames;
 enum GraphError {
     #[error("Graph is not a Direct Acyclic Graph. Cycle found in: {0:?}")]
     Cyclic(FunctionName) = 0,
-    #[error("Graph is not a transactional Direct Acyclic Graph with transaction mode: {0:?}. Cycle found in: {1:?}"
+    #[error(
+        "Graph is not a transactional Direct Acyclic Graph with transaction mode: {0:?}. Cycle found in: {1:?}"
     )]
     CyclicTransaction(TransactionByStr, TransactionKey) = 1,
 }
@@ -329,7 +330,7 @@ mod tests {
     use petgraph::visit::EdgeRef;
     use std::collections::HashSet;
     use td_objects::types::test_utils::execution::{
-        dependency, function_node, table, table_node, trigger, FUNCTION_NAMES, TABLE_NAMES,
+        FUNCTION_NAMES, TABLE_NAMES, dependency, function_node, table, table_node, trigger,
     };
 
     #[tokio::test]
@@ -570,9 +571,11 @@ mod tests {
         // Valid transaction graph, both function and single transaction
         let (graph, _) = test_graph().await;
         assert!(graph.validate_transaction(&TestTransactionBy::Name).is_ok());
-        assert!(graph
-            .validate_transaction(&TestTransactionBy::Single)
-            .is_ok());
+        assert!(
+            graph
+                .validate_transaction(&TestTransactionBy::Single)
+                .is_ok()
+        );
 
         let output_tables = vec![
             table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]).await,
@@ -589,11 +592,15 @@ mod tests {
         let builder = GraphBuilder::new(&output_tables, &trigger_graph, &input_tables);
         let trigger_function = function_node(&FUNCTION_NAMES[0]);
         let graph = builder.build(trigger_function.clone()).unwrap();
-        assert!(graph
-            .validate_transaction(&TestTransactionBy::Name)
-            .is_err());
-        assert!(graph
-            .validate_transaction(&TestTransactionBy::Single)
-            .is_ok());
+        assert!(
+            graph
+                .validate_transaction(&TestTransactionBy::Name)
+                .is_err()
+        );
+        assert!(
+            graph
+                .validate_transaction(&TestTransactionBy::Single)
+                .is_ok()
+        );
     }
 }

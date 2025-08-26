@@ -2,13 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::type_builder::{parse_input_item_struct, td_type, TdTypeFields};
+use crate::type_builder::{TdTypeFields, parse_input_item_struct, td_type};
 use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
-use syn::{parse_macro_input, DeriveInput, ItemStruct};
+use syn::{DeriveInput, ItemStruct, parse_macro_input};
 
 pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
@@ -152,10 +152,10 @@ pub fn dto_type(input: TokenStream) -> TokenStream {
                 // Given that try_from Dao Builder is required for list(on) DTOs,
                 // we need to do the inverse builder mapping for query fields.
                 for builder_arg in &td_type_args.builder {
-                    if builder_arg.try_from.as_ref().is_none_or(|t| t == list_on) {
-                        if let Some(name) = &builder_arg.field {
-                            field_dao_mapping.insert(f.ident.as_ref().unwrap(), name.to_string());
-                        }
+                    if builder_arg.try_from.as_ref().is_none_or(|t| t == list_on)
+                        && let Some(name) = &builder_arg.field
+                    {
+                        field_dao_mapping.insert(f.ident.as_ref().unwrap(), name.to_string());
                     }
                 }
 

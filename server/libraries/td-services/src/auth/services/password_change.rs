@@ -2,12 +2,12 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
+use crate::auth::AuthError;
 use crate::auth::layers::assert_current_password::assert_current_password;
 use crate::auth::layers::assert_user_enabled::assert_user_enabled;
 use crate::auth::layers::create_password_hash::create_password_hash;
 use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::session::Sessions;
-use crate::auth::AuthError;
 use td_error::TdError;
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
@@ -86,9 +86,9 @@ fn provider() {
 
 #[cfg(test)]
 mod tests {
-    use crate::auth::services::tests::get_session;
     use crate::auth::services::AuthServices;
-    use crate::auth::{decode_token, AuthError};
+    use crate::auth::services::tests::get_session;
+    use crate::auth::{AuthError, decode_token};
     use td_database::sql::DbPool;
     use td_error::assert_service_error;
     use td_objects::types::auth::{Login, PasswordChange};

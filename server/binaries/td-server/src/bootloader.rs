@@ -6,7 +6,7 @@ use std::env;
 use td_common::attach::attach;
 use td_common::logging;
 use td_supervisor::services::bootloader;
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 #[attach(signal = "bootloader")]
 pub fn main() {

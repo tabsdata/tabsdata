@@ -10,7 +10,7 @@ use td_objects::tower_service::authz::{
     AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
 };
 use td_objects::tower_service::from::{
-    combine, ExtractNameService, ExtractService, TryIntoService, With,
+    ExtractNameService, ExtractService, TryIntoService, With, combine,
 };
 use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
 use td_objects::types::basic::{

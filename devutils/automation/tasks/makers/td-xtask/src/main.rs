@@ -2,7 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use clap::{command, Parser};
+use clap::{Parser, command};
 use clap_derive::Subcommand;
 use std::fs::remove_file;
 use std::io::Error;

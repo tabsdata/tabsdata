@@ -2,9 +2,9 @@
 // Copyright 202∞ Tabs Data Inc.
 //
 
+use crate::types::ComposedString;
 use crate::types::basic::{CollectionName, TableDataVersionId};
 use crate::types::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};
-use crate::types::ComposedString;
 use derive_new::new;
 use getset::Getters;
 use std::fmt::{Display, Formatter};

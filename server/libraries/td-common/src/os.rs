@@ -235,12 +235,12 @@ mod tests {
 
                     command.creation_flags(CREATE_NO_WINDOW);
                 }
-                let command = command
+
+                command
                     .arg("-Command")
                     .arg("Start-Sleep -Seconds 600")
                     .spawn()
-                    .expect("Failed to start the dummy process");
-                command
+                    .expect("Failed to start the dummy process")
             } else {
                 Command::new("sleep")
                     .arg("600")
@@ -312,59 +312,71 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_without_extension() {
-        assert!(name_program(&PathBuf::from("program"))
-            .to_string_lossy()
-            .to_string()
-            .eq("program"));
+        assert!(
+            name_program(&PathBuf::from("program"))
+                .to_string_lossy()
+                .to_string()
+                .eq("program")
+        );
     }
 
     // Test program extension with no previous extension.
     #[test]
     #[cfg(target_os = "windows")]
     fn test_without_extension() {
-        assert!(name_program(&PathBuf::from("program"))
-            .to_string_lossy()
-            .to_string()
-            .eq("program.exe"));
+        assert!(
+            name_program(&PathBuf::from("program"))
+                .to_string_lossy()
+                .to_string()
+                .eq("program.exe")
+        );
     }
 
     // Test program extension with no previous extension.
     #[test]
     #[cfg(target_os = "macos")]
     fn test_without_extension() {
-        assert!(name_program(&PathBuf::from("program"))
-            .to_string_lossy()
-            .to_string()
-            .eq("program"));
+        assert!(
+            name_program(&PathBuf::from("program"))
+                .to_string_lossy()
+                .to_string()
+                .eq("program")
+        );
     }
 
     // Test program extension with previous extension.
     #[test]
     #[cfg(target_os = "linux")]
     fn test_with_extension() {
-        assert!(name_program(&PathBuf::from("program.bin"))
-            .to_string_lossy()
-            .to_string()
-            .eq("program.bin"));
+        assert!(
+            name_program(&PathBuf::from("program.bin"))
+                .to_string_lossy()
+                .to_string()
+                .eq("program.bin")
+        );
     }
 
     // Test program extension with previous extension.
     #[test]
     #[cfg(target_os = "macos")]
     fn test_with_extension() {
-        assert!(name_program(&PathBuf::from("program.bin"))
-            .to_string_lossy()
-            .to_string()
-            .eq("program.bin"));
+        assert!(
+            name_program(&PathBuf::from("program.bin"))
+                .to_string_lossy()
+                .to_string()
+                .eq("program.bin")
+        );
     }
 
     // Test program extension with previous extension.
     #[test]
     #[cfg(target_os = "windows")]
     fn test_with_extension() {
-        assert!(name_program(&PathBuf::from("program.bin"))
-            .to_string_lossy()
-            .to_string()
-            .eq("program.bin"));
+        assert!(
+            name_program(&PathBuf::from("program.bin"))
+                .to_string_lossy()
+                .to_string()
+                .eq("program.bin")
+        );
     }
 }

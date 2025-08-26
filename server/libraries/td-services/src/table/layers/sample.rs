@@ -13,7 +13,7 @@ use polars::prelude::{
 use polars::sql::SQLContext;
 use std::io::Cursor;
 use std::ops::Deref;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::rest_urls::FileFormat;
 use td_objects::types::basic::{SampleLen, SampleOffset, Sql, TableName};
 use td_objects::types::stream::BoxedSyncStream;
@@ -114,7 +114,7 @@ pub async fn get_table_sample(
 
 #[cfg(test)]
 mod tests {
-    use crate::table::layers::sample::{get_table_sample, SampleError};
+    use crate::table::layers::sample::{SampleError, get_table_sample};
     use futures_util::TryStreamExt;
     use polars::df;
     use polars::prelude::*;

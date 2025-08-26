@@ -10,8 +10,8 @@ use crate::component::runner::RunnerError::{
     DescriberFailure, IOError, InvalidMessageType, MissingStartDate, MissingStdOutError,
     ReadStdOutError, StartNotificationError, VoidEphemeralMessage, WorkerExited,
 };
-use crate::component::tracker::{check_status, get_pid_path, WorkerStatus};
-use crate::launch::worker::{notify, TabsDataWorker, Worker};
+use crate::component::tracker::{WorkerStatus, check_status, get_pid_path};
+use crate::launch::worker::{TabsDataWorker, Worker, notify};
 use crate::resource::instance::{
     copy_mold_tree, get_instance_path_for_instance, get_repository_path_for_instance,
     get_workspace_path_for_instance,
@@ -20,8 +20,8 @@ use crate::resource::messaging::SupervisorMessageQueue;
 use crate::resource::scripting::{ArgumentPrefix, CommandBuilder, ScriptBuilder};
 use crate::resource::settings::extract_profile_config;
 use crate::resource::state::{
-    extract_state_data_from_string, EncodedMap, State, StateDataKind, StateDataValue, StateError,
-    SupervisorState,
+    EncodedMap, State, StateDataKind, StateDataValue, StateError, SupervisorState,
+    extract_state_data_from_string,
 };
 use crate::runtime::error::RuntimeError;
 use crate::services::supervisor::ControllerState::{KO, NA, OK};
@@ -29,8 +29,8 @@ use crate::services::supervisor::WorkerKind::SUPERVISOR;
 use atomic_enum::atomic_enum;
 use chrono::Utc;
 use clap::Parser;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use getset::Getters;
 use indexmap::IndexMap;
 use path_slash::PathBufExt;
@@ -45,9 +45,9 @@ use std::fs::{create_dir_all, read_dir};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::exit;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
-use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, panic, process};
 use strum::{AsRefStr, EnumString};
@@ -63,17 +63,17 @@ use td_common::server::SupervisorMessagePayload::{
 };
 use td_common::server::WorkerClass::{EPHEMERAL, INIT, REGULAR};
 use td_common::server::{
-    SupervisorMessage, WorkerClass, CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE,
-    CONFIG_PATH_ENV, CONFIG_URI_ENV, ETC_FOLDER, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER,
-    MSG_FOLDER, PARENT_FOLDER, PROC_FOLDER, REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV,
-    REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, WORKSPACE_FOLDER, WORKSPACE_PATH_ENV,
-    WORKSPACE_URI_ENV, WORK_FOLDER, WORK_PATH_ENV, WORK_URI_ENV,
+    CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE, CONFIG_PATH_ENV, CONFIG_URI_ENV,
+    ETC_FOLDER, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER, MSG_FOLDER, PARENT_FOLDER,
+    PROC_FOLDER, REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN,
+    RETRIES_DELIMITER, SupervisorMessage, WORK_FOLDER, WORK_PATH_ENV, WORK_URI_ENV,
+    WORKSPACE_FOLDER, WORKSPACE_PATH_ENV, WORKSPACE_URI_ENV, WorkerClass,
 };
 use td_common::signal::terminate;
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataError};
 use td_process::launcher::arg::InheritedArgumentKey::*;
 use td_process::launcher::arg::{ArgumentKey, InheritedArgumentKey, MarkerKey};
-use td_process::launcher::cli::{parse_extra_arguments, Cli, TRAILING_ARGUMENTS_PREFIX};
+use td_process::launcher::cli::{Cli, TRAILING_ARGUMENTS_PREFIX, parse_extra_arguments};
 use td_process::launcher::config::Config;
 use td_python::venv::prepare;
 use tempfile::tempdir;
@@ -81,8 +81,8 @@ use tokio::io::AsyncReadExt;
 use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{mpsc, Mutex};
-use tokio::task::{block_in_place, JoinHandle};
+use tokio::sync::{Mutex, mpsc};
+use tokio::task::{JoinHandle, block_in_place};
 use tokio::time::sleep;
 use tracing::{debug, error, info, trace, warn};
 
@@ -412,14 +412,17 @@ type WorkerCommandLine = (String, Vec<String>, Vec<String>);
 impl Drop for Supervisor {
     fn drop(&mut self) {
         let mut dropping: bool = false;
-        if let Ok(_lock) = self.mutex.lock() {
-            if !self.dropping.load(SeqCst) {
-                self.dropping.store(true, SeqCst);
-                dropping = true;
+        match self.mutex.lock() {
+            Ok(_lock) => {
+                if !self.dropping.load(SeqCst) {
+                    self.dropping.store(true, SeqCst);
+                    dropping = true;
+                }
             }
-        } else {
-            error!("Supervisor already dropped or dropping. Skipping drop lock acquisition.");
-            return;
+            _ => {
+                error!("Supervisor already dropped or dropping. Skipping drop lock acquisition.");
+                return;
+            }
         }
         if dropping {
             info!("Supervisor is being dropped...");
@@ -445,7 +448,10 @@ impl Supervisor {
                 self.drop_worker(worker.pid().as_u32() as i32, Kill);
             }
         } else {
-            warn!("Current process does not have a positive pid ({}). Skipping process termination request.", pid);
+            warn!(
+                "Current process does not have a positive pid ({}). Skipping process termination request.",
+                pid
+            );
         }
     }
 
@@ -589,43 +595,40 @@ impl Supervisor {
 
     fn retry(&self, message: SupervisorMessage) -> Result<(), RuntimeError> {
         let regex = Regex::new(REQUEST_MESSAGE_FILE_PATTERN).unwrap();
-        if let Some(file_name) = message.file().file_name().and_then(|f| f.to_str()) {
-            if let Some(captures) = regex.captures(file_name) {
-                let id = captures.get(1).map(|m| m.as_str()).unwrap();
-                let run = captures.get(2).map(|m| m.as_str()).unwrap();
-                let ext = captures.get(3).map(|m| m.as_str()).unwrap();
-                if let Ok(retry) = run.parse::<u16>() {
-                    let payload = match message.payload() {
-                        SupervisorRequestMessagePayload(payload) => payload,
-                        SupervisorResponseMessagePayload(_)
-                        | SupervisorExceptionMessagePayload(_) => {
-                            return Err(RuntimeError::new(
-                                "Unexpected response message received".to_string(),
-                            ));
-                        }
-                    };
-                    let worker = self
-                        .config
-                        .controllers
-                        .ephemeral
-                        .workers
-                        .get(payload.worker());
-                    if let Some(worker) = worker {
-                        if retry <= *worker.retries() {
-                            let retry = retry + 1;
-                            let name = format!("{id}{RETRIES_DELIMITER}{retry}{ext}");
-                            return if let Err(e) =
-                                SupervisorMessageQueue::planned(message.clone(), name)
-                            {
-                                let error = format!("Error retrying message '{message:?}': {e}");
-                                error!("{}", error);
-                                Err(RuntimeError::new(error))
-                            } else {
-                                info!("Sent retry message to planned queue: {:?}", message);
-                                Ok(())
-                            };
-                        }
+        if let Some(file_name) = message.file().file_name().and_then(|f| f.to_str())
+            && let Some(captures) = regex.captures(file_name)
+        {
+            let id = captures.get(1).map(|m| m.as_str()).unwrap();
+            let run = captures.get(2).map(|m| m.as_str()).unwrap();
+            let ext = captures.get(3).map(|m| m.as_str()).unwrap();
+            if let Ok(retry) = run.parse::<u16>() {
+                let payload = match message.payload() {
+                    SupervisorRequestMessagePayload(payload) => payload,
+                    SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
+                        return Err(RuntimeError::new(
+                            "Unexpected response message received".to_string(),
+                        ));
                     }
+                };
+                let worker = self
+                    .config
+                    .controllers
+                    .ephemeral
+                    .workers
+                    .get(payload.worker());
+                if let Some(worker) = worker
+                    && retry <= *worker.retries()
+                {
+                    let retry = retry + 1;
+                    let name = format!("{id}{RETRIES_DELIMITER}{retry}{ext}");
+                    return if let Err(e) = SupervisorMessageQueue::planned(message.clone(), name) {
+                        let error = format!("Error retrying message '{message:?}': {e}");
+                        error!("{}", error);
+                        Err(RuntimeError::new(error))
+                    } else {
+                        info!("Sent retry message to planned queue: {:?}", message);
+                        Ok(())
+                    };
                 }
             }
         }
@@ -1375,7 +1378,7 @@ impl Supervisor {
                     return (
                         None,
                         Err(StateError::MissingStateKey { key: set_state }.into()),
-                    )
+                    );
                 }
             };
 
@@ -1450,12 +1453,16 @@ impl Supervisor {
                                 );
                                 if let Some(set_state) = worker.set_state().as_ref().cloned() {
                                     let mut output = String::new();
-                                    if let Some(mut stdout) = child.stdout.take() {
-                                        if let Err(e) = stdout.read_to_string(&mut output).await {
-                                            return (Some(td_worker), Err(ReadStdOutError(e)));
+                                    match child.stdout.take() {
+                                        Some(mut stdout) => {
+                                            if let Err(e) = stdout.read_to_string(&mut output).await
+                                            {
+                                                return (Some(td_worker), Err(ReadStdOutError(e)));
+                                            }
                                         }
-                                    } else {
-                                        return (Some(td_worker), Err(MissingStdOutError));
+                                        _ => {
+                                            return (Some(td_worker), Err(MissingStdOutError));
+                                        }
                                     }
                                     let state = extract_state_data_from_string(
                                         output,
@@ -1737,13 +1744,23 @@ impl Supervisor {
                             }
                         }
                         Err(ref e) => {
-                            warn!("Folder '{:?}' for ephemeral worker '{}' instance cannot be processed. Skipping processes termination request: '{}'", node, worker.name(), e);
+                            warn!(
+                                "Folder '{:?}' for ephemeral worker '{}' instance cannot be processed. Skipping processes termination request: '{}'",
+                                node,
+                                worker.name(),
+                                e
+                            );
                         }
                     }
                 }
             }
             Err(e) => {
-                warn!("Folder '{:?}' for ephemeral worker '{}' cannot be traversed. Skipping process termination request: {}", cast_path, worker.name(), e);
+                warn!(
+                    "Folder '{:?}' for ephemeral worker '{}' cannot be traversed. Skipping process termination request: {}",
+                    cast_path,
+                    worker.name(),
+                    e
+                );
             }
         }
         Ok(())
@@ -1820,7 +1837,10 @@ impl Supervisor {
                     .await?;
             }
         } else {
-            warn!("Current process does not have a positive pid ({}). Skipping processes termination request.", pid);
+            warn!(
+                "Current process does not have a positive pid ({}). Skipping processes termination request.",
+                pid
+            );
         }
         Ok(())
     }
@@ -1853,7 +1873,10 @@ impl Supervisor {
                 ),
             }
         } else {
-            warn!("Process does not have a positive pid ({}). Skipping processes termination request.", pid);
+            warn!(
+                "Process does not have a positive pid ({}). Skipping processes termination request.",
+                pid
+            );
         };
         Ok(())
     }

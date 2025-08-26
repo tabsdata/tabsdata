@@ -12,7 +12,7 @@ use td_common::logging::LOG_EXTENSION;
 use td_common::server::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
 
 macro_rules! url {
-    ($( $path:expr $(,)? )*) => {
+    ($( $path:expr_2021 $(,)? )*) => {
         concat!($( $path, )*)
     };
 }

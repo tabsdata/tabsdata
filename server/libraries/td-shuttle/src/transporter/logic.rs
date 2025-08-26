@@ -9,11 +9,11 @@ use derive_builder::Builder;
 use getset::Getters;
 use itertools::Itertools;
 use object_store::path::Path;
-use object_store::{parse_url_opts, ObjectMeta, ObjectStore};
+use object_store::{ObjectMeta, ObjectStore, parse_url_opts};
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
-    lit, nth, IntoLazy, LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader, PlPath,
-    PolarsError, SinkOptions,
+    IntoLazy, LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader, PlPath,
+    PolarsError, SinkOptions, lit, nth,
 };
 use polars_io::utils::sync_on_close::SyncOnCloseType;
 use serde::{Deserialize, Serialize};
@@ -56,7 +56,7 @@ pub async fn create_object_store(
 async fn get_files_from_object_store(
     object_store: Box<dyn ObjectStore>,
     importer_options: &ImporterOptions,
-) -> Result<impl Iterator<Item = ObjectMeta>, ImportError> {
+) -> Result<impl Iterator<Item = ObjectMeta> + use<>, ImportError> {
     Ok(object_store
         .list_with_delimiter(Some(&Path::parse(importer_options.base_path()).unwrap()))
         .await?
@@ -65,7 +65,9 @@ async fn get_files_from_object_store(
 }
 
 /// [`ObjectMeta`] Iterator filter for files that match the importer options.
-fn filter_matching_files(importer_options: &ImporterOptions) -> impl Fn(&ObjectMeta) -> bool {
+fn filter_matching_files(
+    importer_options: &ImporterOptions,
+) -> impl Fn(&ObjectMeta) -> bool + use<> {
     let matcher = WildMatch::new(importer_options.file_pattern());
 
     let last_modified_check = importer_options.modified_since().is_some();
@@ -109,7 +111,7 @@ pub fn file_last_modified_comparator() -> impl Fn(
 pub fn to_file_to_import_instructions(
     importer_options: &Arc<ImporterOptions>,
 ) -> impl Fn(Result<(usize, ObjectMeta), ImportError>) -> Result<FileImportInstructions, ImportError>
-{
++ use<> {
     let base_url = importer_options.base_url().clone();
     let importer_options = importer_options.clone();
     move |res| {
@@ -449,8 +451,8 @@ fn write_imported_lazy_frame(
 mod tests {
     use crate::transporter::args::Params;
     use crate::transporter::logic::{
-        file_last_modified_comparator, get_files_from_object_store, take_files_limit,
-        to_file_to_import_instructions, MAX_FILE_LIMIT,
+        MAX_FILE_LIMIT, file_last_modified_comparator, get_files_from_object_store,
+        take_files_limit, to_file_to_import_instructions,
     };
     use object_store::path::Path;
     use std::borrow::Cow;

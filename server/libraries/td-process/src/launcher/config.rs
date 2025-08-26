@@ -7,7 +7,7 @@ use config::{File, FileFormat};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::path::PathBuf;
-use td_common::env::{get_current_dir, get_home_dir, get_user_name, TABSDATA_HOME_DIR};
+use td_common::env::{TABSDATA_HOME_DIR, get_current_dir, get_home_dir, get_user_name};
 use tracing::{error, info};
 
 /// Marker trait to define a configuration.
@@ -130,7 +130,7 @@ pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>,
 
 #[cfg(test)]
 mod tests {
-    use crate::launcher::config::{load_config, Config};
+    use crate::launcher::config::{Config, load_config};
     use getset::Getters;
     use serde::{Deserialize, Serialize};
     use std::path::PathBuf;

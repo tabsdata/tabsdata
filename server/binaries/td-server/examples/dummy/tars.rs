@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::{process, thread};
 use td_common::attach::attach;
 use td_common::logging;
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 #[attach(signal = "tars")]
 pub fn main() {

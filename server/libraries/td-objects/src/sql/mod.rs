@@ -99,11 +99,11 @@ where
 #[macro_export]
 macro_rules! gen_where_clause {
     // Cases for when there's no condition to add (empty input).
-    ($query_builder:expr, $D:ty, ) => { true };
-    ($query_builder:expr, $D:ty, $vect:ident: []) => { true };
+    ($query_builder:expr_2021, $D:ty, ) => { true };
+    ($query_builder:expr_2021, $D:ty, $vect:ident: []) => { true };
 
     // Case for when there's at least one condition.
-    ($query_builder:expr, $D:ty, $($rest:tt)+) => {{
+    ($query_builder:expr_2021, $D:ty, $($rest:tt)+) => {{
         $query_builder.push(" WHERE ");
         let mut first = true;
         gen_where_clause!(@munch $query_builder, $D, first, $($rest)+);
@@ -111,7 +111,7 @@ macro_rules! gen_where_clause {
     }};
 
     // Binding
-    (@bind $query_builder:expr, $D:ty, $E:ident) => {{
+    (@bind $query_builder:expr_2021, $D:ty, $E:ident) => {{
         let column = <$D>::sql_field_for_type($E.type_name())
             .ok_or(QueryError::TypeNotFound(
                 std::any::type_name::<$E>().to_string(),
@@ -121,10 +121,10 @@ macro_rules! gen_where_clause {
     }};
 
     // Base case: nothing to do here
-    (@munch $query_builder:expr, $D:ty, $first:ident) => {};
+    (@munch $query_builder:expr_2021, $D:ty, $first:ident) => {};
 
     // Single identifier (normal case). AND group.
-    (@munch $query_builder:expr, $D:ty, $first:ident, $E:ident $(, $($rest:tt)*)?) => {{
+    (@munch $query_builder:expr_2021, $D:ty, $first:ident, $E:ident $(, $($rest:tt)*)?) => {{
         if !$first { $query_builder.push(" AND "); }
         $first = false;
         gen_where_clause!(@bind $query_builder, $D, $E);
@@ -132,10 +132,10 @@ macro_rules! gen_where_clause {
     }};
 
     // Case for an empty array (no expansion needed)
-    (@munch $query_builder:expr, $first:ident, []) => {};
+    (@munch $query_builder:expr_2021, $first:ident, []) => {};
 
     // AND/OR group. Joining arrays.
-    (@munch $query_builder:expr, $D:ty, $first:ident, $vect:ident: [ $($inner:ident),* ] $(, $($rest:tt)*)?) => {{
+    (@munch $query_builder:expr_2021, $D:ty, $first:ident, $vect:ident: [ $($inner:ident),* ] $(, $($rest:tt)*)?) => {{
         if !$first { $query_builder.push(" AND "); }
         $first = false;
 
@@ -1856,10 +1856,10 @@ mod tests {
 
             let query_str = query.sql();
             assert!(
-                query_str ==
-                "SELECT id, name, modified_on FROM test_table WHERE (name = ? OR name >= ?) AND (id > ?) ORDER BY id ASC LIMIT ?"
-                || query_str ==
-                "SELECT id, name, modified_on FROM test_table WHERE (id > ?) AND (name = ? OR name >= ?) ORDER BY id ASC LIMIT ?"
+                query_str
+                    == "SELECT id, name, modified_on FROM test_table WHERE (name = ? OR name >= ?) AND (id > ?) ORDER BY id ASC LIMIT ?"
+                    || query_str
+                        == "SELECT id, name, modified_on FROM test_table WHERE (id > ?) AND (name = ? OR name >= ?) ORDER BY id ASC LIMIT ?"
             );
 
             let result: Vec<TestDao> = query.fetch_all(&db).await.unwrap();

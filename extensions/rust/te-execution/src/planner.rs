@@ -29,7 +29,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::types::execution::{GraphDependency, GraphEdge, GraphNode, GraphOutput};
     use td_objects::types::test_utils::execution::{
-        function_node, table_node, FUNCTION_NAMES, TABLE_NAMES,
+        FUNCTION_NAMES, TABLE_NAMES, function_node, table_node,
     };
 
     #[test]

@@ -12,10 +12,10 @@ use td_error::TdError;
 use td_objects::crudl::{RequestContext, UpdateRequest};
 use td_objects::sql::DaoQueries;
 use td_objects::tower_service::from::{
-    builder, combine, BuildService, DefaultService, ExtractDataService, ExtractService, SetService,
-    With,
+    BuildService, DefaultService, ExtractDataService, ExtractService, SetService, With, builder,
+    combine,
 };
-use td_objects::tower_service::sql::{insert, By, SqlSelectService, SqlUpdateService};
+use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService, insert};
 use td_objects::types::auth::{
     SessionDB, SessionDBBuilder, SessionNewTokenDB, SessionNewTokenDBBuilder, TokenResponseX,
 };
@@ -74,8 +74,8 @@ fn provider() {
 mod tests {
     use super::*;
     use crate::auth::decode_token;
-    use crate::auth::services::tests::{assert_session, get_session};
     use crate::auth::services::AuthServices;
+    use crate::auth::services::tests::{assert_session, get_session};
     use td_database::sql::DbPool;
     use td_objects::types::auth::Login;
     use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};

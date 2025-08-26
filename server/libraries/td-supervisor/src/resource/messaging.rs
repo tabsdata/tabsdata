@@ -5,11 +5,11 @@
 use std::fs;
 use std::path::PathBuf;
 use td_common::files::{
-    get_files_in_folder_sorted_by_name, get_files_in_subfolders_sorted_by_name, YAML_EXTENSION,
+    YAML_EXTENSION, get_files_in_folder_sorted_by_name, get_files_in_subfolders_sorted_by_name,
 };
 use td_common::server::{
-    PayloadType, SupervisorMessage, COMPLETE_FOLDER, ERROR_FOLDER, FAIL_FOLDER, ONGOING_FOLDER,
-    PLANNED_FOLDER, QUEUED_FOLDER,
+    COMPLETE_FOLDER, ERROR_FOLDER, FAIL_FOLDER, ONGOING_FOLDER, PLANNED_FOLDER, PayloadType,
+    QUEUED_FOLDER, SupervisorMessage,
 };
 use tracing::{debug, error};
 
@@ -223,15 +223,15 @@ impl SupervisorMessageQueue {
     }
 
     fn at_error(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
-        if let Some(folder) = message.file().parent() {
-            if let Some(file) = message.file().file_name() {
-                let mut path = PathBuf::from(folder);
-                path.push(ERROR_FOLDER);
-                path.push(file);
-                let mut message = message.clone();
-                message.set_file(path);
-                return Ok(message);
-            }
+        if let Some(folder) = message.file().parent()
+            && let Some(file) = message.file().file_name()
+        {
+            let mut path = PathBuf::from(folder);
+            path.push(ERROR_FOLDER);
+            path.push(file);
+            let mut message = message.clone();
+            message.set_file(path);
+            return Ok(message);
         }
         Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,

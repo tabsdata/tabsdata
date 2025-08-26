@@ -9,8 +9,8 @@ use getset::Getters;
 use quote::quote;
 use syn::__private::TokenStream2;
 use syn::{
-    parse_macro_input, FnArg, GenericArgument, Ident, Item, ItemFn, LitStr, PathArguments,
-    ReturnType, Type,
+    FnArg, GenericArgument, Ident, Item, ItemFn, LitStr, PathArguments, ReturnType, Type,
+    parse_macro_input,
 };
 
 use td_shared::parse_meta;
@@ -173,14 +173,14 @@ fn more_than_one(a: bool, b: bool, c: bool) -> bool {
 
 fn has_type(input: &ItemFn, method_type: &str) -> bool {
     input.sig.inputs.iter().any(|arg| {
-        if let FnArg::Typed(pat_type) = arg {
-            if let Type::Path(type_path) = &*pat_type.ty {
-                return type_path
-                    .path
-                    .segments
-                    .iter()
-                    .any(|seg| seg.ident == method_type);
-            }
+        if let FnArg::Typed(pat_type) = arg
+            && let Type::Path(type_path) = &*pat_type.ty
+        {
+            return type_path
+                .path
+                .segments
+                .iter()
+                .any(|seg| seg.ident == method_type);
         }
         false
     })
@@ -189,14 +189,13 @@ fn has_type(input: &ItemFn, method_type: &str) -> bool {
 fn extract_type_in_generic_argument(input: &ItemFn, generic_attribute: &str) -> Vec<Ident> {
     let mut vec = Vec::new();
     input.sig.inputs.iter().for_each(|arg| {
-        if let FnArg::Typed(pat_type) = arg {
-            if let Type::Path(type_path) = &*pat_type.ty {
-                if has_generic_attribute(&type_path.path, generic_attribute) {
-                    let type_ = extract_first_generic_argument(&type_path.path);
-                    if let Some(type_) = type_ {
-                        vec.push(type_);
-                    }
-                }
+        if let FnArg::Typed(pat_type) = arg
+            && let Type::Path(type_path) = &*pat_type.ty
+            && has_generic_attribute(&type_path.path, generic_attribute)
+        {
+            let type_ = extract_first_generic_argument(&type_path.path);
+            if let Some(type_) = type_ {
+                vec.push(type_);
             }
         }
     });
@@ -214,10 +213,10 @@ fn has_generic_attribute(path: &syn::Path, generic_attribute: &str) -> bool {
 /// only have one generic argument, because in API calls we will have everything in a single
 /// final struct.
 fn extract_first_generic_argument(path: &syn::Path) -> Option<Ident> {
-    if let PathArguments::AngleBracketed(args) = &path.segments.last().unwrap().arguments {
-        if let Some(GenericArgument::Type(Type::Path(type_path))) = args.args.first() {
-            return Some(type_path.path.segments.last().unwrap().ident.clone());
-        }
+    if let PathArguments::AngleBracketed(args) = &path.segments.last().unwrap().arguments
+        && let Some(GenericArgument::Type(Type::Path(type_path))) = args.args.first()
+    {
+        return Some(type_path.path.segments.last().unwrap().ident.clone());
     }
     None
 }

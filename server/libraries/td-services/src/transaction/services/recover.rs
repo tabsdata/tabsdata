@@ -52,7 +52,7 @@ fn provider() {
 mod tests {
     use super::*;
     use crate::execution::layers::update_status::tests::{
-        test_status_update, TestExecution, TestFunction, TestTransaction,
+        TestExecution, TestFunction, TestTransaction, test_status_update,
     };
     use td_database::sql::DbPool;
     use td_error::TdError;
@@ -371,21 +371,31 @@ mod tests {
                 .await
             };
 
-        assert!(recover_transition_for(FunctionRunStatus::Failed)
-            .await
-            .is_ok());
-        assert!(recover_transition_for(FunctionRunStatus::OnHold)
-            .await
-            .is_ok());
-        assert!(recover_transition_for(FunctionRunStatus::Canceled)
-            .await
-            .is_err());
-        assert!(recover_transition_for(FunctionRunStatus::Committed)
-            .await
-            .is_err());
-        assert!(recover_transition_for(FunctionRunStatus::Yanked)
-            .await
-            .is_err());
+        assert!(
+            recover_transition_for(FunctionRunStatus::Failed)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(FunctionRunStatus::OnHold)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(FunctionRunStatus::Canceled)
+                .await
+                .is_err()
+        );
+        assert!(
+            recover_transition_for(FunctionRunStatus::Committed)
+                .await
+                .is_err()
+        );
+        assert!(
+            recover_transition_for(FunctionRunStatus::Yanked)
+                .await
+                .is_err()
+        );
 
         Ok(())
     }
@@ -426,24 +436,36 @@ mod tests {
                 .await
             };
 
-        assert!(recover_transition_for(FunctionRunStatus::Scheduled)
-            .await
-            .is_ok());
-        assert!(recover_transition_for(FunctionRunStatus::RunRequested)
-            .await
-            .is_ok());
-        assert!(recover_transition_for(FunctionRunStatus::ReScheduled)
-            .await
-            .is_ok());
-        assert!(recover_transition_for(FunctionRunStatus::Running)
-            .await
-            .is_ok());
-        assert!(recover_transition_for(FunctionRunStatus::Done)
-            .await
-            .is_ok());
-        assert!(recover_transition_for(FunctionRunStatus::Error)
-            .await
-            .is_ok());
+        assert!(
+            recover_transition_for(FunctionRunStatus::Scheduled)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(FunctionRunStatus::RunRequested)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(FunctionRunStatus::ReScheduled)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(FunctionRunStatus::Running)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(FunctionRunStatus::Done)
+                .await
+                .is_ok()
+        );
+        assert!(
+            recover_transition_for(FunctionRunStatus::Error)
+                .await
+                .is_ok()
+        );
 
         Ok(())
     }

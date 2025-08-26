@@ -17,7 +17,7 @@ use td_objects::tower_service::from::{
     UpdateService, With,
 };
 use td_objects::tower_service::sql::{
-    insert_vec, By, SqlFindService, SqlSelectAllService, SqlSelectService, SqlUpdateService,
+    By, SqlFindService, SqlSelectAllService, SqlSelectService, SqlUpdateService, insert_vec,
 };
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, DependencyStatus, FunctionId, FunctionStatus, TableId,

@@ -14,7 +14,7 @@ use td_common::status::ExitStatus;
 use td_database::sql::DbError;
 use td_process::launcher::cli::Cli;
 use td_storage::Storage;
-use tracing::{error, info, Level};
+use tracing::{Level, error, info};
 
 const CONFIG_NAME: &str = "apiserver";
 
@@ -88,7 +88,10 @@ fn main() {
                                         return ExitStatus::NoAction;
                                     }
                                     Err(error) => {
-                                        error!("Unexpected error occurred during the database upgrade check: {}", error);
+                                        error!(
+                                            "Unexpected error occurred during the database upgrade check: {}",
+                                            error
+                                        );
                                         return ExitStatus::GeneralError;
                                     }
                                 }
@@ -117,7 +120,10 @@ fn main() {
                                         info!("Database upgraded");
                                     }
                                     Err(err) => {
-                                        error!("Error checking database for creating or upgrading it: {}", err);
+                                        error!(
+                                            "Error checking database for creating or upgrading it: {}",
+                                            err
+                                        );
                                         return ExitStatus::GeneralError;
                                     }
                                 }

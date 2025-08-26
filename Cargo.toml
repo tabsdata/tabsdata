@@ -5,7 +5,7 @@
 [package]
 description = "Tabsdata is a publish-subscribe (pub/sub) server for tables."
 name = "tabsdata"
-edition = "2021"
+edition = "2024"
 version = "1.3.0"
 license = "Apache 2.0"
 build = "build.rs"
@@ -19,7 +19,7 @@ authors = [
     "Dimas Cabré i Chacón (aoinokimi)  <dragon@tabsdata.com>",
     "Joaquín Bo Díaz      (joaquin041) <joaquin@tabsdata.com>"
 ]
-edition = "2021"
+edition = "2024"
 homepage = "https://www.tabsdata.com"
 license = "Apache 2.0"
 publish = false

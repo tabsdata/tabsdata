@@ -1065,7 +1065,7 @@ impl GraphNode {
 mod tests {
     use super::*;
     use crate::types::test_utils::execution::{
-        dependency, table, trigger, FUNCTION_NAMES, TABLE_NAMES,
+        FUNCTION_NAMES, TABLE_NAMES, dependency, table, trigger,
     };
 
     #[tokio::test]

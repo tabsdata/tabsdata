@@ -12,15 +12,13 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 
 #[td_error]
 pub enum ListError {
     #[error("Invalid order-by value, it must be <NAME>+/-: {0}")]
     InvalidOrderBy(String) = 0,
-    #[error(
-        "Invalid condition value, it must be <NAME><OPERATOR><VALUE> (operators are {0}): {1}"
-    )]
+    #[error("Invalid condition value, it must be <NAME><OPERATOR><VALUE> (operators are {0}): {1}")]
     InvalidCondition(String, String) = 1,
     #[error("Undefined field: {0}")]
     UndefinedField(String) = 2,
@@ -169,8 +167,9 @@ impl<D: ListQuery> Condition<D> {
         const LK: &str = ":lk:";
         const BTW: &str = ":btw:";
 
-        const OPERATORS: &str =
-            constcat::concat!(EQ, "|", NE, "|", GT, "|", GE, "|", LT, "|", LE, "|", LK, "|", BTW);
+        const OPERATORS: &str = constcat::concat!(
+            EQ, "|", NE, "|", GT, "|", GE, "|", LT, "|", LE, "|", LK, "|", BTW
+        );
         const CONDITION_PATTERN: &str = constcat::concat!(
             "^(?<field>",
             IDENTIFIER_PATTERN,

@@ -5,9 +5,9 @@
 use crate::types::basic::{AccessTokenId, AtTime, RoleId, UserId};
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
+use sqlx::Error;
 use sqlx::error::ErrorKind::{ForeignKeyViolation, UniqueViolation};
 use sqlx::sqlite::SqliteQueryResult;
-use sqlx::Error;
 use std::fmt::Debug;
 use td_database::sql::DbError;
 use td_error::td_error;

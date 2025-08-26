@@ -6,7 +6,7 @@ use crate::box_sync_clone_service::BoxSyncCloneService;
 use crate::ctx_service::CtxResponse;
 use std::convert::Infallible;
 use tower::util::BoxService;
-use tower::{service_fn, MakeService, ServiceExt};
+use tower::{MakeService, ServiceExt, service_fn};
 use tower_service::Service;
 
 /// A boxed service type that can be used in multiple generic contexts. It will always

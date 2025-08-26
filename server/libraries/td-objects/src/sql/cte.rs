@@ -374,16 +374,16 @@ fn status_where<'a, D: DataAccessObject + VersionedAt>(
     status: Option<&'a [&'a <D as VersionedAt>::Condition]>,
 ) {
     let status_field = D::condition_by();
-    if let Some(status) = status {
-        if !status.is_empty() {
-            query_builder.push(" AND (");
-            let mut separated = query_builder.separated(" OR ");
-            for status in status {
-                separated.push(format!("rv.{status_field} = "));
-                status.push_bind_unseparated(&mut separated);
-            }
-            query_builder.push(")");
+    if let Some(status) = status
+        && !status.is_empty()
+    {
+        query_builder.push(" AND (");
+        let mut separated = query_builder.separated(" OR ");
+        for status in status {
+            separated.push(format!("rv.{status_field} = "));
+            status.push_bind_unseparated(&mut separated);
         }
+        query_builder.push(")");
     }
 }
 

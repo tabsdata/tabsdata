@@ -8,7 +8,7 @@ use sqlx::SqliteConnection;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use td_common::provider::{CachedProvider, Provider};
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::crudl::{handle_delete_error, handle_select_error};
 use td_objects::sql::{DaoQueries, DeleteBy, SelectBy};
 use td_objects::types::auth::{SessionDB, SessionDBWithNames};

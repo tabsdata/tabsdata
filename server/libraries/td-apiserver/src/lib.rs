@@ -11,8 +11,8 @@ mod status;
 
 use async_trait::async_trait;
 use axum::Router;
-use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
+use axum_server::tls_rustls::RustlsConfig;
 use http::uri::Scheme;
 use rustls::crypto::{aws_lc_rs, ring};
 use std::error::Error;
@@ -136,17 +136,16 @@ impl ServerBuilder {
 
     pub async fn build(self) -> Result<Box<dyn Server>, ServerError> {
         let listeners = self.bind_listeners().await?;
-        if let Some(tls_config) = self.load_tls().await {
-            Ok(Box::new(TlsServer {
+        match self.load_tls().await {
+            Some(tls_config) => Ok(Box::new(TlsServer {
                 listeners,
                 tls_config,
                 router: self.router,
-            }))
-        } else {
-            Ok(Box::new(PlainServer {
+            })),
+            _ => Ok(Box::new(PlainServer {
                 listeners,
                 router: self.router,
-            }))
+            })),
         }
     }
 }

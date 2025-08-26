@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::display_vec::DisplayVec;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::{DaoQueries, FindBy};
