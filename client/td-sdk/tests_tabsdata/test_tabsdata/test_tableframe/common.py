@@ -3,10 +3,12 @@
 #
 
 import logging
+import tempfile
 from typing import Optional, Tuple
 
 import pandas as pd
 import polars as pl
+import requests
 
 import tabsdata as td
 
@@ -59,9 +61,14 @@ def load_complex_dataframe(
         "https://raw.githubusercontent.com/jeroenjanssens/"
         "python-polars-the-definitive-guide/main/data/penguins.csv"
     )
-
+    with tempfile.NamedTemporaryFile(
+        mode="w+b", suffix=".csv", delete=False
+    ) as penguins:
+        response = requests.get(data)
+        response.raise_for_status()
+        penguins.write(response.content)
     lazy_frame = pl.scan_csv(
-        source=data,
+        source=penguins.name,
         file_cache_ttl=POLARS_FILE_CACHE_TTL,
     )
     data_frame = pl.DataFrame(lazy_frame.collect())
