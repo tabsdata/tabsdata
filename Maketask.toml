@@ -9,6 +9,9 @@ extend = [
     { path = "./make/fragments/tasks/clean_rs.toml" },
     { path = "./make/fragments/tasks/clean_py.toml" },
 
+    { path = "./make/fragments/tasks/license_rs.toml" },
+    { path = "./make/fragments/tasks/license_py.toml" },
+
     { path = "./make/fragments/tasks/lock_rs.toml" },
     { path = "./make/fragments/tasks/lock_py.toml" },
 
@@ -45,6 +48,17 @@ run_task = [
         "clean_py",
     ] }
 ]
+
+[tasks.license]
+category = "06 - Compliance"
+description = "Generate the dependencies' license files"
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+dependencies = ["license_rs", "license_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/report_licenses.py
+    ''']
 
 [tasks.lock]
 category = "02 - Tidy"
@@ -601,142 +615,6 @@ script = [
     exec --fail-on-error ${ENV_PREFIX}isort . --extend-skip .tabsdata --extend-skip .venv --extend-skip dist --extend-skip build --extend-skip tabsdata-ui --extend-skip venv --extend-skip-glob test_* --extend-skip-glob tests_*
     ''']
 
-[tasks.license]
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-dependencies = ["license_rs", "license_py"]
-script_runner = "@duckscript"
-script = [
-    '''
-    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/report_licenses.py
-    ''']
-
-[tasks.license_rs]
-run_task = [
-    { name = [
-        "license_check_rs",
-        "license_report_rs"
-    ] }
-]
-
-[tasks.license_check_rs]
-private = true
-run_task = [
-    { name = [
-        "license_check_rs_macros",
-        "license_check_rs_modules"
-    ] }
-]
-
-[tasks.license_check_rs_macros]
-private = true
-run_task = [
-    { name = [
-        # "license_check_list_rs_macros",
-        "license_check_deny_rs_macros"
-    ] }
-]
-
-[tasks.license_check_rs_modules]
-private = true
-run_task = [
-    { name = [
-        # "license_check_list_rs_modules",
-        "license_check_deny_rs_modules"
-    ] }
-]
-
-[tasks.license_check_list_rs_macros]
-private = true
-command = "cargo"
-args = ["license", "--manifest-path", "${PROJECT_RS_TD_MACROS_CARGO_TOML}", "--all-features"]
-
-[tasks.license_check_deny_rs_macros]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
-        else
-            exec --fail-on-error cargo +${td-toolchain} deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
-        else
-            exec --fail-on-error cargo +${td-toolchain} deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
-        end
-    end
-    ''']
-
-[tasks.license_check_list_rs_modules]
-private = true
-command = "cargo"
-args = ["license", "--manifest-path", "${PROJECT_RS_TABSDATA_CARGO_TOML}", "--all-features"]
-
-[tasks.license_check_deny_rs_modules]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    if is_empty ${td-target}
-        if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
-        else
-            exec --fail-on-error cargo +${td-toolchain} deny --locked --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
-       end
-    else
-        if is_empty ${td-toolchain}
-            exec --fail-on-error cargo deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
-        else
-            exec --fail-on-error cargo +${td-toolchain} deny --locked --target ${td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} --hide-inclusion-graph license
-        end
-    end
-    ''']
-
-[tasks.license_report_rs]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/report_licenses_rs.py
-    ''']
-
-[tasks.license_py]
-run_task = [
-    { name = [
-        #"license_check_py",
-        "license_report_py"
-    ] }
-]
-
-[tasks.license_report_py]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    exec --fail-on-error pip-compile --no-strip-extras --quiet ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt
-    cd target
-    exec --fail-on-error python ../devutils/automation/tasks/makers/td-scripts/report_licenses_py.py
-    ''']
-
-[tasks.license_check_py]
-private = true
-cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-script_runner = "@duckscript"
-script = [
-    '''
-    exec --fail-on-error pip-compile ./requirements/requirements-third-party-all.txt --output-file ./target/requirements.txt
-    cd target
-    exec --fail-on-error licensecheck -r requirements.txt
-    cd ..
-    ''']
-
 [tasks.sourcetrack]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
@@ -744,9 +622,9 @@ script = [
     '''
     !include_files ./make/libraries/log.ds
 
-    exists = is_path_exists ./variant/devutils/automation/tasks/makers/td-scripts/repositories_sourcetrack.py
+    exists = is_path_exists ./variant/devutils/automation/tasks/makers/td-scripts/sourcetrack.py
     if eq ${exists} true
-        exec --fail-on-error python ./variant/devutils/automation/tasks/makers/td-scripts/repositories_sourcetrack.py
+        exec --fail-on-error python ./variant/devutils/automation/tasks/makers/td-scripts/sourcetrack.py
     else
         warn "Generating the source track metadata file does not apply for this project"
     end

@@ -30,6 +30,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 LICENSES_RS = "./target/audit/licenses_rs.txt"
 LICENSES_PY = "./target/audit/licenses_py.txt"
+LICENSES_TS = "./target/audit/licenses_ts.txt"
 
 LICENSES_FILE = "./target/audit/licenses.txt"
 THIRD_PARTY_FILE = "./variant/assets/manifest/THIRD-PARTY"
@@ -45,6 +46,9 @@ def read_file(filepath):
 content_rs = read_file(LICENSES_RS)
 content_py = read_file(LICENSES_PY)
 content = f"{content_rs}\n\n{content_py}\n"
+if os.path.exists(LICENSES_TS):
+    content_ts = read_file(LICENSES_TS)
+    content += f"\n{content_ts}\n"
 
 for output in [LICENSES_FILE, THIRD_PARTY_FILE]:
     os.makedirs(os.path.dirname(output), exist_ok=True)

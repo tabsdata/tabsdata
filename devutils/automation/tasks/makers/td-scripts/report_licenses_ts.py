@@ -2,10 +2,8 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-import csv
 import importlib
 import importlib.util
-import io
 import json
 import os
 import subprocess
@@ -30,10 +28,12 @@ def load(module_name) -> ModuleType:
 
 
 logger = load("log").get_logger()
+
+
 sys.stdout.reconfigure(encoding="utf-8")
 
-TARGET_DIR = os.path.join(".", "target", "audit")
-TARGET_FILE = os.path.join(TARGET_DIR, "licenses_rs.txt")
+TARGET_DIR = os.path.join("target", "audit")
+TARGET_FILE = os.path.join(TARGET_DIR, "licenses_ts.txt")
 
 # fmt: off
 normalized_licenses = {
@@ -105,23 +105,27 @@ normalized_licenses = {
 # fmt: on
 
 
-def get_custom_license(_c_name, c_license):
-    key = c_license.strip()
+def get_custom_license(_m_name, m_license):
+    key = m_license.strip()
     if key in normalized_licenses:
         return normalized_licenses[key]
-    logger.error(f"No label for crate license '{c_license}'")
+    logger.error(f"No label for module license '{m_license}'")
     exit(1)
 
 
-def ignore_dependency(dependency):
-    return (
-        dependency.startswith("ta-")
-        or dependency.startswith("td-")
-        or dependency.startswith("te-")
-        or dependency.startswith("tm-")
-        or dependency.startswith("ty-")
-        or dependency == "tabsdata"
-    )
+def ignore_package(name):
+    return name == "tdui"
+
+
+def parse_package_name_version(package_key):
+    if "@" in package_key and not package_key.startswith("@"):
+        parts = package_key.rsplit("@", 1)
+        return parts[0], parts[1] if len(parts) > 1 else "Unknown"
+    elif package_key.startswith("@"):
+        parts = package_key.rsplit("@", 1)
+        return parts[0], parts[1] if len(parts) > 1 else "Unknown"
+    else:
+        return package_key, "Unknown"
 
 
 os.makedirs(TARGET_DIR, exist_ok=True)
@@ -129,88 +133,44 @@ os.makedirs(TARGET_DIR, exist_ok=True)
 if os.path.exists(TARGET_FILE):
     os.remove(TARGET_FILE)
 
-cargo_tomls = []
-skip = {"node_modules", "target", "tabsdata-ui", "venv"}
-for root, dirs, files in os.walk(".", topdown=True, followlinks=True):
-    dirs[:] = [d for d in dirs if d not in skip]
-    if "Cargo.toml" in files:
-        logger.debug(f"🍅 Found manifest at {root}")
-        cargo_tomls.append(os.path.join(root, "Cargo.toml"))
+try:
+    result = subprocess.run(
+        [
+            "npx",
+            "--yes",
+            "license-checker-rseidelsohn",
+            "--json",
+            "--relativeLicensePath",
+        ],
+        cwd="../tabsdata-ui",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    data = json.loads(result.stdout)
+except subprocess.CalledProcessError as e:
+    logger.error(f"❌ Error running license-checker-rseidelsohn: {e}")
+    exit(1)
+except Exception as e:
+    logger.error(f"❌ Error parsing json output from license-checker-rseidelsohn: {e}")
+    exit(1)
 
-aggregated = {}
-for cargo_toml in cargo_tomls:
-    cargo_output = None
-    try:
-        logger.debug(f"🍅 Processing manifest: {cargo_toml}")
-        result = subprocess.run(
-            [
-                "cargo",
-                "license",
-                "--manifest-path",
-                cargo_toml,
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        cargo_output = result.stdout
-    except subprocess.CalledProcessError as e:
-        logger.error(f"❌ Error running cargo license for manifest {cargo_toml}: {e}")
-        exit(1)
-    except Exception as e:
-        logger.error(
-            "❌ Error processing response from cargo license for manifest"
-            f" {cargo_toml}: {e}"
-        )
-        exit(1)
-
-    try:
-        packages = json.loads(cargo_output)
-    except json.JSONDecodeError as e:
-        logger.error(
-            "❌ Error parsing json output from cargo license for manifest"
-            f" {cargo_toml}: {e}"
-        )
+table_data = []
+for package_key, package_info in data.items():
+    package_name, package_version = parse_package_name_version(package_key)
+    package_license = package_info.get("licenses")
+    if ignore_package(package_name):
         continue
-
-    for pkg in packages:
-        name = pkg.get("name", "")
-        if not name:
-            logger.error(f"❌ Found packages with ho name in manifest {cargo_toml}")
-            exit(1)
-        if name in aggregated:
-            continue
-        aggregated[name] = {
-            "name": name,
-            "version": pkg.get("version", ""),
-            "license": pkg.get("license", ""),
-        }
-
-licenses_csv_data = [
-    f"\"{pkg['name']}\",\"{pkg['version']}\",\"{pkg['license']}\""
-    for pkg in aggregated.values()
-]
-csv_output = "\n".join(licenses_csv_data)
-
-csv_file = io.StringIO(csv_output)
-reader = csv.reader(csv_file)
-data = list(reader)  #
-
-data = [row for row in data if not ignore_dependency(row[0])]
-for row in data:
-    dependency_name_tag = row[0]
-    dependency_license_tag = row[2]
-    custom_license = get_custom_license(dependency_name_tag, dependency_license_tag)
-    row[2] = custom_license
-data.sort(key=lambda x: (x[2], x[0]))
+    custom_license = get_custom_license(package_name, package_license)
+    table_data.append([package_name, package_version, custom_license])
+table_data.sort(key=lambda x: (x[2], x[0]))
 
 headers = ["Name", "Version", "License"]
 content = (
-    "This project includes code from the following Rust crates and versions (grouped by"
+    "This project uses the following Node modules and versions (grouped by"
     " license):\n\n"
 )
-content += tabulate(data, headers=headers, tablefmt="fancy_grid")
+content += tabulate(table_data, headers=headers, tablefmt="fancy_grid")
 
 with open(TARGET_FILE, "w", encoding="utf-8") as f:
     f.write(content + "\n")
