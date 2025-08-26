@@ -15,7 +15,7 @@ use td_objects::types::basic::AccessTokenId;
 use td_services::auth::services::AuthServices;
 use td_services::auth::session::{Session, SessionError, SessionProvider};
 use td_services::auth::{AuthError, decode_token};
-use tracing::{Instrument, Level, Span, span};
+use tracing::{Instrument, Level, Span, error, span};
 
 pub async fn authorization_layer(
     State(auth_services): State<Arc<AuthServices>>,
@@ -32,7 +32,8 @@ pub async fn authorization_layer(
     // .log_err_warn(|err| "Request does not have authorization header".to_string())?;
 
     // Check if the Authorization header is valid
-    let auth_header = auth_header.to_str().map_err(|_| {
+    let auth_header = auth_header.to_str().map_err(|e| {
+        error!("Invalid authorization header: {}", e);
         TdError::from(AuthError::InvalidAuthorizationHeaderValue(
             "It must be a string".to_string(),
         ))
@@ -41,12 +42,20 @@ pub async fn authorization_layer(
     // Check if the Authorization header is a Bearer token
     let auth_header: Vec<_> = auth_header.split_whitespace().collect();
     if auth_header.len() != 2 {
+        error!(
+            "Invalid authorization header, not 2 words: {:?}",
+            auth_header
+        );
         Err(TdError::from(AuthError::InvalidAuthorizationHeaderValue(
             "It should be 2 words: Bearer <ACCESS_TOKEN>".to_string(),
         )))?;
         //        .log_err_warn(|e| e.to_string())?;
     }
     if auth_header[0] != "Bearer" {
+        error!(
+            "Invalid authorization header, not a Bearer token: {:?}",
+            auth_header
+        );
         Err(TdError::from(AuthError::InvalidAuthorizationHeaderValue(
             "Not a Bearer token".to_string(),
         )))?;
@@ -57,7 +66,10 @@ pub async fn authorization_layer(
     // Check if the token is valid
     let token = decode_token(auth_services.jwt_settings(), token)
         //        .log_err_warn(|e| e.to_string())
-        .map_err(|_| TdError::from(AuthError::AuthenticationFailed))?;
+        .map_err(|e| {
+            error!("Could not decode token: {}", e);
+            TdError::from(AuthError::AuthenticationFailed)
+        })?;
     let access_token_id: AccessTokenId = token.jti().into();
 
     // Get user_id/role_id from session
@@ -71,7 +83,10 @@ pub async fn authorization_layer(
         .get_session(&mut conn, &access_token_id)
         .await
         //        .log_err_warn(ToString::to_string)
-        .map_err(|_| TdError::from(AuthError::AuthenticationFailed))?;
+        .map_err(|e| {
+            error!("Could not get session: {}", e);
+            TdError::from(AuthError::AuthenticationFailed)
+        })?;
 
     // Insert the context into the request extensions
     let request_context = RequestContext::with(

@@ -546,14 +546,14 @@ script = [
         tdserver = set "tdserver"
     end
     debug "🔅 Using tdserver binary: '${os_family}' - '${tdserver}'"
-    debug "🚀 ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access_jwt_expiration 36288000 --refresh_jwt_expiration: 36288000"
+    debug "🚀 ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000"
 
     # Necessary until we figure out how to cleanly start the supervisor detached from tdserver.
     os = os_family
     if eq ${os} "windows"
-        exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access_jwt_expiration 36288000 --refresh_jwt_expiration: 36288000
+        exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
     else
-        output = exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access_jwt_expiration 36288000 --refresh_jwt_expiration: 36288000
+        output = exec --fail-on-error ${ROOT_PROJECT_TABSDATA_FOLDER}/target/${build-folder}/${tdserver} start --instance pytest -- -- apiserver --address 127.0.0.1:2467 --internal-address 127.0.0.1:2468 --access-jwt-expiration 36288000
     end
     ''']
 
