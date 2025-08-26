@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-name: Release Workflow (Standard) - (${{ inputs.runner_action }})
+name: Release Workflow (Standard)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'schedule' && 'weekly' || (inputs.runner_action == 'build' && 'build' || format('run-{0}', github.run_id))}}
