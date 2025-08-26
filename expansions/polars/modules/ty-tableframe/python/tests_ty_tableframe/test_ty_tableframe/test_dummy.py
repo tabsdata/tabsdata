@@ -23,8 +23,8 @@ def test_udf_dummy():
 
     df = lf.collect()
     assert df.shape == (25, 1)
-    logger.error(f"Before udf: {df}")
+    logger.debug(f"Before udf: {df}")
     lf = lf.with_columns(dummy("a"))
     df = lf.collect()
     assert df.shape == (25, 1)
-    logger.error(f"After udf: {df}")
+    logger.debug(f"After udf: {df}")
