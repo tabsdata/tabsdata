@@ -214,6 +214,8 @@ def main():
             cwd=os.path.join(parent, TABSDATA_UI),
             capture_output=False,
             text=True,
+            encoding="utf-8",
+            errors="strict",
         )
     else:
         logger.info(f"✂️ No need to upgrade additional root: {root}")

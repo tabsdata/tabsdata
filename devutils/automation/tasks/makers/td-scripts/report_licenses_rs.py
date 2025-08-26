@@ -153,6 +153,8 @@ for cargo_toml in cargo_tomls:
             capture_output=True,
             text=True,
             check=True,
+            encoding="utf-8",
+            errors="strict",
         )
         cargo_output = result.stdout
     except subprocess.CalledProcessError as e:

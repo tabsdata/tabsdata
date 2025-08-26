@@ -966,7 +966,11 @@ def _execute_single_file_import(
     arguments = f"--request {yaml_request_file} --report {report_file}"
     logger.debug(f"Importing files with command: {binary} {arguments}")
     subprocess_result = subprocess.run(
-        [binary] + arguments.split(), capture_output=True, text=True
+        [binary] + arguments.split(),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="strict",
     )
     if subprocess_result.returncode != 0:
         logger.error(

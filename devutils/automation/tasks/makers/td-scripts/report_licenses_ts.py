@@ -146,6 +146,8 @@ try:
         capture_output=True,
         text=True,
         check=True,
+        encoding="utf-8",
+        errors="strict",
     )
     data = json.loads(result.stdout)
 except subprocess.CalledProcessError as e:
