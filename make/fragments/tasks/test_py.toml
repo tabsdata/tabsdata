@@ -355,13 +355,19 @@ script = [
     debug "🔅 Using td verbose: '${TD_VERBOSE}'"
     compile_empty = is_empty ${compile}
     compile_true = eq ${compile} "true"
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
     compile = set ${compile_empty} or ${compile_true}
-    if ${compile}
-        set_env TD_COMPILE "true"
-    else
+    if ${on_ga_true}
         set_env TD_COMPILE "false"
+    else
+        if ${compile}
+            set_env TD_COMPILE "true"
+        else
+            set_env TD_COMPILE "false"
+        end
     end
-        debug "🔅 Using td compile: '${TD_COMPILE}'"
+    debug "🔅 Using td compile: '${TD_COMPILE}'"
     ''']
 
 [tasks.pre-test_py]
