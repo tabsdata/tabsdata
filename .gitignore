@@ -132,6 +132,7 @@ SOURCETRACK.yaml
 /src/e2e/playwright/.cache/
 src/tests/coverage/
 storybook-static/
+tabsdata.libs
 tests/bundle*
 target/
 Thumbs.db

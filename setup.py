@@ -171,6 +171,24 @@ class CustomBuild(_build):
         )
         os.makedirs(self.build_base, exist_ok=True)
 
+    def run(self):
+        super().run()
+        # tabsdata.expansions.tableframe -> tabsdata.libs
+        tabsdata_libs_path = os.path.join(
+            "expansions",
+            "polars",
+            "modules",
+            "ty-tableframe",
+            "python",
+            "tabsdata.libs",
+        )
+        if os.path.exists(tabsdata_libs_path):
+            tabsdata_libs_folder = os.path.join(self.build_lib, "tabsdata.libs")
+            logger.info(f"Copying {tabsdata_libs_path} to {tabsdata_libs_folder}")
+            if os.path.exists(tabsdata_libs_folder):
+                shutil.rmtree(tabsdata_libs_folder)
+            shutil.copytree(tabsdata_libs_path, tabsdata_libs_folder)
+
 
 class CustomSDist(_sdist):
     def __init__(self, dist):

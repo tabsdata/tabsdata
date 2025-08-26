@@ -110,6 +110,7 @@ def clean_py(project_folder):
         "local_development_artifacts",
         "client/td-sdk/tabsdata/assets",
         "SOURCETRACK.yaml",
+        "tabsdata.libs",
         EXAMPLES_GUIDES_BOOK_PATH,
     ]
 

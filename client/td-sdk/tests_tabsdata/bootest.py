@@ -228,6 +228,18 @@ def enrich_sys_path():
         os.path.abspath(
             os.path.join(
                 root,
+                "expansions",
+                "polars",
+                "modules",
+                "ty-tableframe",
+                "python",
+            )
+        ),
+    )
+    sys.path.append(
+        os.path.abspath(
+            os.path.join(
+                root,
                 "target",
                 "python",
                 "pytest",

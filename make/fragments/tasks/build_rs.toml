@@ -117,7 +117,7 @@ script = [
         exec --fail-on-error maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
     end
 
-    debug "⏳ Extracting maturin wheel to python source folder..."
+    info "⏳ Extracting maturin wheel to python source folder..."
     wheels = glob_array ../../target/wheels/*.whl
     q_wheels = array_length ${wheels}
     if eq ${q_wheels} 0
@@ -126,21 +126,52 @@ script = [
     else
         if eq ${q_wheels} 1
             for wheel in ${wheels}
-                debug "📦 Found wheel: ${wheel}"
+                info "📦 Found wheel: ${wheel}"
+                exec --fail-on-error wheel2json ${wheel}
                 if is_directory ../../target/wheels/wheel.tmp
-                    debug "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
+                    info "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
                     rm -r ../../target/wheels/wheel.tmp
                 end
                 exec --fail-on-error python -m zipfile -e ${wheel} ../../target/wheels/wheel.tmp
+
+                info "📂 Listing of wheel.tmp:"
+                wheel_items = glob_array ../../target/wheels/wheel.tmp/**/*
+                for wheel_item in ${wheel_items}
+                    info "   - ${wheel_item}"
+                end
+                for wheel_item in ${wheel_items}
+                    if is_directory ${wheel_item}
+                        if ends_with ${wheel_item} ".dist-info"
+                            wheel_files = glob_array ${wheel_item}/**/*
+                            for wheel_file in ${wheel_files}
+                                if is_file ${wheel_file}
+                                    info "📝 Contents of .dist-info file ${wheel_file}..."
+                                    info ">>>>> >>>>> >>>>> >>>>> >>>>>"
+                                    cat ${wheel_file}
+                                    info "<<<<< <<<<< <<<<< <<<<< <<<<<"
+                                end
+                            end
+                        end
+                    end
+                end
+
                 if is_directory "../../target/wheels/wheel.tmp/tabsdata"
-                    debug "📁 Copying tabsdata module to python/"
+                    info "📁 Copying tabsdata module to python/"
                     exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata python/
                 else
                     error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
                     exit 1
                 end
+
+                if is_directory "../../target/wheels/wheel.tmp/tabsdata.libs"
+                    info "📁 Copying tabsdata.libs folder to python/"
+                    exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata.libs python/
+                else
+                    warn "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
+                end
+
                 rm -r ../../target/wheels/wheel.tmp
-                debug "🐍 Successfully extracted wheel contents!"
+                info "🐍 Successfully extracted wheel contents!"
             end
         else
             error "⚠️ More than one maturin wheel found in ../../target/wheels/"
@@ -255,7 +286,7 @@ script = [
         exec --fail-on-error maturin build --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
     end
 
-    debug "⏳ Extracting maturin wheel to python source folder..."
+    info "⏳ Extracting maturin wheel to python source folder..."
     wheels = glob_array ../../target/wheels/*.whl
     q_wheels = array_length ${wheels}
     if eq ${q_wheels} 0
@@ -264,21 +295,52 @@ script = [
     else
         if eq ${q_wheels} 1
             for wheel in ${wheels}
-                debug "📦 Found wheel: ${wheel}"
+                info "📦 Found wheel: ${wheel}"
+                exec --fail-on-error wheel2json ${wheel}
                 if is_directory ../../target/wheels/wheel.tmp
-                    debug "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
+                    info "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
                     rm -r ../../target/wheels/wheel.tmp
                 end
                 exec --fail-on-error python -m zipfile -e ${wheel} ../../target/wheels/wheel.tmp
+
+                info "📂 Listing of wheel.tmp:"
+                wheel_items = glob_array ../../target/wheels/wheel.tmp/**/*
+                for wheel_item in ${wheel_items}
+                    info "   - ${wheel_item}"
+                end
+                for wheel_item in ${wheel_items}
+                    if is_directory ${wheel_item}
+                        if ends_with ${wheel_item} ".dist-info"
+                            wheel_files = glob_array ${wheel_item}/**/*
+                            for wheel_file in ${wheel_files}
+                                if is_file ${wheel_file}
+                                    info "📝 Contents of wheel.tmp .dist-info folder file ${wheel_file}..."
+                                    info ">>>>> >>>>> >>>>> >>>>> >>>>>"
+                                    cat ${wheel_file}
+                                    info "<<<<< <<<<< <<<<< <<<<< <<<<<"
+                                end
+                            end
+                        end
+                    end
+                end
+
                 if is_directory "../../target/wheels/wheel.tmp/tabsdata"
-                    debug "📁 Copying tabsdata module to python/"
+                    info "📁 Copying tabsdata module to python/"
                     exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata python/
                 else
                     error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
                     exit 1
                 end
+
+                if is_directory "../../target/wheels/wheel.tmp/tabsdata.libs"
+                    info "📁 Copying tabsdata.libs folder to python/"
+                    exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata.libs python/
+                else
+                    warn "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
+                end
+
                 rm -r ../../target/wheels/wheel.tmp
-                debug "🐍 Successfully extracted wheel contents!"
+                info "🐍 Successfully extracted wheel contents!"
             end
         else
             error "⚠️ More than one maturin wheel found in ../../target/wheels/"
