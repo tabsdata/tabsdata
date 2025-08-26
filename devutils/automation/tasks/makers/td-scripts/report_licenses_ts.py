@@ -6,6 +6,7 @@ import importlib
 import importlib.util
 import json
 import os
+import platform
 import subprocess
 import sys
 from types import ModuleType
@@ -42,15 +43,16 @@ normalized_licenses = {
     "(Apache-2.0 OR ISC) AND ISC": "Apache License Version 2.0 or Internet Systems Consortium License, and Internet Systems Consortium License",                                               # noqa: E231,E241,E501
     "(Apache-2.0 OR MIT) AND BSD-3-Clause": "Apache License Version 2.0 or MIT License, and BSD Revised License (BSD-3-Clause)",                                                               # noqa: E231,E241,E501
     "(Apache-2.0 OR MIT) AND Unicode-3.0": "Apache License Version 2.0 or MIT License, and Unicode License Version 3.0",                                                                       # noqa: E231,E241,E501
-    "(MIT OR CC0-1.0)": "MIT License and Creative Commons Zero Version 1.0 Universal",                                                                                                         # noqa: E231,E241,E501
+    "(MIT OR Apache-2.0) AND Unicode-3.0": "MIT License or Apache License Version 2.0, and Unicode License Version 3.0",                                                                       # noqa: E231,E241,E501
+    "(MIT OR CC0-1.0)": "MIT License, and Creative Commons Zero Version 1.0 Universal",                                                                                                        # noqa: E231,E241,E501
     "0BSD OR Apache-2.0 OR MIT": "BSD Zero-Clause License or Apache License Version 2.0 or MIT License",                                                                                       # noqa: E231,E241,E501
     "0BSD": "BSD Zero-Clause License",                                                                                                                                                         # noqa: E231,E241,E501
     "APACHE LICENSE 2.0": "Apache License Version 2.0",                                                                                                                                        # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE;; BSD LICENSE": "Apache License Version 2.0 or BSD License",                                                                                                      # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE;; MIT LICENSE": "Apache License Version 2.0 or MIT License",                                                                                                      # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE": "Apache License Version 2.0",                                                                                                                                   # noqa: E231,E241,E501
-    "Apache-2.0 AND ISC": "Apache License Version 2.0 and Internet Systems Consortium License",                                                                                                # noqa: E231,E241,E501
-    "Apache-2.0 AND MIT": "Apache License Version 2.0 and MIT License",                                                                                                                        # noqa: E231,E241,E501
+    "Apache-2.0 AND ISC": "Apache License Version 2.0, and Internet Systems Consortium License",                                                                                               # noqa: E231,E241,E501
+    "Apache-2.0 AND MIT": "Apache License Version 2.0, and MIT License",                                                                                                                       # noqa: E231,E241,E501
     "Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR CC0-1.0": "Apache License Version 2.0 or Apache License Version 2.0 with LLVM Exception or Creative Commons Zero Version 1.0 Universal",  # noqa: E231,E241,E501
     "Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT": "Apache License Version 2.0 or Apache License Version 2.0 with LLVM Exception or MIT License",                                      # noqa: E231,E241,E501
     "Apache-2.0 OR BSD-2-Clause OR MIT": "Apache License Version 2.0 or BSD Simplified License (BSD-2-Clause) or MIT License",                                                                 # noqa: E231,E241,E501
@@ -79,8 +81,12 @@ normalized_licenses = {
     "CC0-1.0": "Creative Commons Zero Version 1.0 Universal",                                                                                                                                  # noqa: E231,E241,E501
     "CDLA-Permissive-2.0": "Community Data License Agreement Permissive Version 2.0",                                                                                                          # noqa: E231,E241,E501
     "CMU LICENSE (MIT-CMU)": "MIT License (CMU Variant)",                                                                                                                                      # noqa: E231,E241,E501
+    "ISC AND (Apache-2.0 OR ISC) AND OpenSSL": "Internet Systems Consortium License, and Apache License Version 2.0 or Internet Systems Consortium License, and OpenSSL License",              # noqa: E231,E241,E501
+    "ISC AND (Apache-2.0 OR ISC)": "Internet Systems Consortium License, and Apache License Version 2.0 or Internet Systems Consortium License",                                               # noqa: E231,E241,E501
     "ISC LICENSE _ISCL_": "Internet Systems Consortium License",                                                                                                                               # noqa: E231,E241,E501
     "ISC": "Internet Systems Consortium License",                                                                                                                                              # noqa: E231,E241,E501
+    "MIT AND Apache-2.0": "MiT License, and Apache License Version 2.0",                                                                                                                       # noqa: E231,E241,E501
+    "MIT AND BSD-3-Clause": "MIT License, and BSD Revised License (BSD-3-Clause)",                                                                                                             # noqa: E231,E241,E501
     "MIT LICENSE;; APACHE SOFTWARE LICENSE": "MIT License or Apache Software License Version 2.0",                                                                                             # noqa: E231,E241,E501
     "MIT LICENSE": "MIT License",                                                                                                                                                              # noqa: E231,E241,E501
     "MIT NO ATTRIBUTION LICENSE _MIT-0_": "MIT No Attribution License",                                                                                                                        # noqa: E231,E241,E501
@@ -133,10 +139,12 @@ os.makedirs(TARGET_DIR, exist_ok=True)
 if os.path.exists(TARGET_FILE):
     os.remove(TARGET_FILE)
 
+npx = "npx.cmd" if platform.system() == "Windows" else "npx"
+
 try:
     result = subprocess.run(
         [
-            "npx",
+            npx,
             "--yes",
             "license-checker-rseidelsohn",
             "--json",
