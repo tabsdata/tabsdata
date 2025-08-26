@@ -217,6 +217,10 @@ jobs:
     uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@main
     secrets:
       PAT_AOINOKIMI: ${{ secrets.PAT_AOINOKIMI }}
+      S30__S3_ACCESS_KEY: ${{ secrets.S30__S3_ACCESS_KEY }}
+      S30__S3_SECRET_KEY: ${{ secrets.S30__S3_SECRET_KEY }}
+      S30__S3_URI: ${{ secrets.S30__S3_URI }}
+      S30__S3_REGION: ${{ secrets.S30__S3_REGION }}
       TRANSPORTER_AWS_ACCESS_KEY_ID: ${{ secrets.TRANSPORTER_AWS_ACCESS_KEY_ID }}
       TRANSPORTER_AWS_REGION: ${{ secrets.TRANSPORTER_AWS_REGION }}
       TRANSPORTER_AWS_SECRET_ACCESS_KEY: ${{ secrets.TRANSPORTER_AWS_SECRET_ACCESS_KEY }}
@@ -229,6 +233,9 @@ jobs:
       IMPORT_AWS_REGION: ${{ secrets.IMPORT_AWS_REGION }}
       IMPORT_AWS_SECRET_KEY: ${{ secrets.IMPORT_AWS_SECRET_KEY }}
       IMPORT_AWS_BASE_URL: ${{ secrets.IMPORT_AWS_BASE_URL }}
+      AZ0__AZ_ACCOUNT_NAME: ${{ secrets.AZ0__AZ_ACCOUNT_NAME }}
+      AZ0__AZ_ACCOUNT_KEY: ${{ secrets.AZ0__AZ_ACCOUNT_KEY }}
+      AZ0__AZ_URI: ${{ secrets.AZ0__AZ_URI }}
       TRANSPORTER_AZURE_ACCOUNT_KEY: ${{ secrets.TRANSPORTER_AZURE_ACCOUNT_KEY }}
       TRANSPORTER_AZURE_ACCOUNT_NAME: ${{ secrets.TRANSPORTER_AZURE_ACCOUNT_NAME }}
       COPY_AZURE_ACCOUNT_KEY: ${{ secrets.COPY_AZURE_ACCOUNT_KEY }}
