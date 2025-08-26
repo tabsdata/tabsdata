@@ -3,7 +3,6 @@
 #
 
 import os
-from unittest import mock
 
 import pytest
 import yaml
@@ -42,51 +41,51 @@ def test_class_attributes():
 
 
 @pytest.mark.config_resolver
-@mock.patch.dict(os.environ, {"ENV_VAR_NAME": "env_var_value"}, clear=True)
-def test_resolve_env_token_single_value():
+def test_resolve_env_token_single_value(monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    assert os.getenv("ENV_VAR_NAME") == "env_var_value"
     leaf = "${env:ENV_VAR_NAME}"
     resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
     assert resolved_leaf == "env_var_value"
 
 
 @pytest.mark.config_resolver
-@mock.patch.dict(
-    os.environ,
-    {"ENV_VAR_NAME": "env_var_value", "ANOTHER_ENV_VAR_NAME": "another_env_var_value"},
-    clear=True,
-)
-def test_resolve_env_token_multiple_values():
+def test_resolve_env_token_multiple_values(monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
+    assert os.getenv("ENV_VAR_NAME") == "env_var_value"
+    assert os.getenv("ANOTHER_ENV_VAR_NAME") == "another_env_var_value"
     leaf = "prefix_${env:ENV_VAR_NAME}_suffix_${env:ANOTHER_ENV_VAR_NAME}"
     resolved_leaf = BASE_RESOLVER.resolve_env_token(leaf)
     assert resolved_leaf == "prefix_env_var_value_suffix_another_env_var_value"
 
 
 @pytest.mark.config_resolver
-@mock.patch.dict(
-    os.environ,
-    {"ENV_VAR_NAME": "env_var_value", "ANOTHER_ENV_VAR_NAME": "another_env_var_value"},
-    clear=True,
-)
-def test_resolve_env_token_no_env_var():
+def test_resolve_env_token_no_env_var(monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
+    assert os.getenv("ENV_VAR_NAME") == "env_var_value"
+    assert os.getenv("ANOTHER_ENV_VAR_NAME") == "another_env_var_value"
+    monkeypatch.delenv("NON_EXISTING_ENV_VAR", raising=False)
     leaf = "${env:NON_EXISTING_ENV_VAR}"
     with pytest.raises(ValueError):
         BASE_RESOLVER.resolve_env_token(leaf)
 
 
 @pytest.mark.config_resolver
-@mock.patch.dict(
-    os.environ,
-    {"ENV_VAR_NAME": "env_var_value", "ANOTHER_ENV_VAR_NAME": "another_env_var_value"},
-    clear=True,
-)
-def test_resolve_env_other_token():
+def test_resolve_env_other_token(monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
+    assert os.getenv("ENV_VAR_NAME") == "env_var_value"
+    assert os.getenv("ANOTHER_ENV_VAR_NAME") == "another_env_var_value"
     leaf = "${other:NON_EXISTING_TOKEN}_${hashicorp:;}"
     assert BASE_RESOLVER.resolve_env_token(leaf) == leaf
 
 
 @pytest.mark.config_resolver
-@mock.patch.dict(os.environ, {"ENV_VAR_NAME": "env_var_value"}, clear=True)
-def test_resolve_leaf_env_strategy():
+def test_resolve_leaf_env_strategy(monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    assert os.getenv("ENV_VAR_NAME") == "env_var_value"
     leaf = "${env:ENV_VAR_NAME}"
     resolved_leaf = BASE_RESOLVER.resolve_leaf(leaf, "env")
     assert resolved_leaf == "env_var_value"
@@ -143,16 +142,17 @@ def test_resolve_leaf_hashicorp_strategy(testing_hashicorp_vault):
 
 @pytest.mark.config_resolver
 @pytest.mark.hashicorp
-@mock.patch.dict(
-    os.environ,
-    {
-        "ENV_VAR_NAME": "env_var_value",
-        "ANOTHER_ENV_VAR_NAME": "another_env_var_value",
-        "HASHICORP_ENV_VAR_NAME": "${hashicorp:/tabsdata/dev/s3a;region}",
-    },
-    clear=True,
-)
-def test_resolve_collection_env(testing_hashicorp_vault):
+def test_resolve_collection_env(testing_hashicorp_vault, monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
+    monkeypatch.setenv(
+        "HASHICORP_ENV_VAR_NAME", "${hashicorp:/tabsdata/dev/s3a;region}"
+    )
+    assert os.getenv("ENV_VAR_NAME") == "env_var_value"
+    assert os.getenv("ANOTHER_ENV_VAR_NAME") == "another_env_var_value"
+    assert (
+        os.getenv("HASHICORP_ENV_VAR_NAME") == "${hashicorp:/tabsdata/dev/s3a;region}"
+    )
     collection = {
         "region": "the_region_${hashicorp:/tabsdata/dev/s3a;region}",
         "bucket": "${hashicorp:/tabsdata/dev/s3a;bucket}",
@@ -183,16 +183,21 @@ def test_resolve_collection_env(testing_hashicorp_vault):
 
 @pytest.mark.config_resolver
 @pytest.mark.hashicorp
-@mock.patch.dict(
-    os.environ,
-    {
-        "ENV_VAR_NAME": "env_var_value",
-        "ANOTHER_ENV_VAR_NAME": "another_env_var_value",
-        "HASHICORP_ENV_VAR_NAME": "${hashicorp:/tabsdata/dev/s3a;region}",
-    },
-    clear=True,
-)
-def test_resolve_collection_hashicorp(testing_hashicorp_vault):
+def test_resolve_collection_hashicorp(testing_hashicorp_vault, monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
+    monkeypatch.setenv(
+        "HASHICORP_ENV_VAR_NAME", "${hashicorp:/tabsdata/dev/s3a;region}"
+    )
+    assert os.getenv("ENV_VAR_NAME") == "env_var_value"
+    assert os.getenv("ANOTHER_ENV_VAR_NAME") == "another_env_var_value"
+    assert (
+        os.getenv("HASHICORP_ENV_VAR_NAME") == "${hashicorp:/tabsdata/dev/s3a;region}"
+    )
+    resolver = ConfigResolver(
+        hashicorp_url=HASHICORP_TESTING_URL,
+        hashicorp_token=HASHICORP_TESTING_TOKEN,
+    )
     collection = {
         "region": "the_region_${hashicorp:/tabsdata/dev/s3a;region}",
         "bucket": "${hashicorp:/tabsdata/dev/s3a;bucket}",
@@ -217,22 +222,23 @@ def test_resolve_collection_hashicorp(testing_hashicorp_vault):
         ],
         "hashicorp_env_var": "${env:HASHICORP_ENV_VAR_NAME}",
     }
-    resolved_collection = HASHICORP_RESOLVER.resolve_collection(collection, "hashicorp")
+    resolved_collection = resolver.resolve_collection(collection, "hashicorp")
     assert resolved_collection == expected_result
 
 
 @pytest.mark.config_resolver
 @pytest.mark.hashicorp
-@mock.patch.dict(
-    os.environ,
-    {
-        "ENV_VAR_NAME": "env_var_value",
-        "ANOTHER_ENV_VAR_NAME": "another_env_var_value",
-        "HASHICORP_ENV_VAR_NAME": "${hashicorp:/tabsdata/dev/s3a;region}",
-    },
-    clear=True,
-)
-def test_resolve_yaml_env_hashicorp(testing_hashicorp_vault, tmp_path):
+def test_resolve_yaml_env_hashicorp(testing_hashicorp_vault, tmp_path, monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
+    monkeypatch.setenv(
+        "HASHICORP_ENV_VAR_NAME", "${hashicorp:/tabsdata/dev/s3a;region}"
+    )
+    assert os.getenv("ENV_VAR_NAME") == "env_var_value"
+    assert os.getenv("ANOTHER_ENV_VAR_NAME") == "another_env_var_value"
+    assert (
+        os.getenv("HASHICORP_ENV_VAR_NAME") == "${hashicorp:/tabsdata/dev/s3a;region}"
+    )
     collection = {
         "region": "the_region_${hashicorp:/tabsdata/dev/s3a;region}",
         "bucket": "${hashicorp:/tabsdata/dev/s3a;bucket}",
@@ -268,16 +274,17 @@ def test_resolve_yaml_env_hashicorp(testing_hashicorp_vault, tmp_path):
 
 @pytest.mark.config_resolver
 @pytest.mark.hashicorp
-@mock.patch.dict(
-    os.environ,
-    {
-        "ENV_VAR_NAME": "env_var_value",
-        "ANOTHER_ENV_VAR_NAME": "another_env_var_value",
-        "HASHICORP_ENV_VAR_NAME": "${hashicorp:/tabsdata/dev/s3a;region}",
-    },
-    clear=True,
-)
-def test_resolve_yaml_hashicorp_env(testing_hashicorp_vault, tmp_path):
+def test_resolve_yaml_hashicorp_env(testing_hashicorp_vault, tmp_path, monkeypatch):
+    monkeypatch.setenv("ENV_VAR_NAME", "env_var_value")
+    monkeypatch.setenv("ANOTHER_ENV_VAR_NAME", "another_env_var_value")
+    monkeypatch.setenv(
+        "HASHICORP_ENV_VAR_NAME", "${hashicorp:/tabsdata/dev/s3a;region}"
+    )
+    assert os.getenv("ENV_VAR_NAME") == "env_var_value"
+    assert os.getenv("ANOTHER_ENV_VAR_NAME") == "another_env_var_value"
+    assert (
+        os.getenv("HASHICORP_ENV_VAR_NAME") == "${hashicorp:/tabsdata/dev/s3a;region}"
+    )
     collection = {
         "region": "the_region_${hashicorp:/tabsdata/dev/s3a;region}",
         "bucket": "${hashicorp:/tabsdata/dev/s3a;bucket}",
@@ -313,14 +320,9 @@ def test_resolve_yaml_hashicorp_env(testing_hashicorp_vault, tmp_path):
 
 @pytest.mark.config_resolver
 @pytest.mark.hashicorp
-@mock.patch.dict(
-    os.environ,
-    {
-        "TD_URI_REPOSITORY": "td_repository_value",
-    },
-    clear=True,
-)
-def test_resolve_example_yaml(testing_hashicorp_vault):
+def test_resolve_example_yaml(testing_hashicorp_vault, monkeypatch):
+    monkeypatch.setenv("TD_URI_REPOSITORY", "td_repository_value")
+    assert os.getenv("TD_URI_REPOSITORY") == "td_repository_value"
     destination_path = os.path.join(
         TESTING_RESOURCES_FOLDER,
         "config_resolver_resources",
