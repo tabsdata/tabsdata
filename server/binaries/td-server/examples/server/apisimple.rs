@@ -5,12 +5,15 @@
 use crate::counter::Counter;
 use std::net::{Ipv4Addr, SocketAddr};
 use td_apiserver::{Server, ServerBuilder};
+use td_process::launcher::hooks;
 
 /// This example just demonstrate how to create a simple server with a thread safe counter
 /// incremented on each request to the `/count` endpoint.
 
 #[tokio::main]
 async fn main() {
+    hooks::panic();
+
     let server = init_server().await;
     server.run().await.unwrap();
 }

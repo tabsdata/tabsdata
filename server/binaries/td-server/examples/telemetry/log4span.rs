@@ -3,13 +3,15 @@
 //
 
 use td_common::logging;
+use td_process::launcher::hooks;
 use tracing::{Level, info, span};
 use tracing_futures::Instrument;
-
 // MDC (Mapped Diagnostic Context) simple examples.
 
 #[tokio::main]
 async fn main() {
+    hooks::panic();
+
     logging::start(Level::DEBUG, None, true);
 
     // Basic sync example.

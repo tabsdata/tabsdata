@@ -541,6 +541,9 @@ version = "0.1.41"
 [workspace.dependencies.tracing-futures]
 version = "0.2.5"
 
+[workspace.dependencies.tracing-panic]
+version = "0.1.2"
+
 [workspace.dependencies.tracing-subscriber]
 version = "0.3.19"
 features = ["env-filter"]

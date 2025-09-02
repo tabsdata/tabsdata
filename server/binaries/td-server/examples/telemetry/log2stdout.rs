@@ -6,8 +6,11 @@ use tracing::{Level, debug, error, info, trace, warn};
 
 use td_common::logging;
 use td_common::logging::LogOutput;
+use td_process::launcher::hooks;
 
 pub fn main() {
+    hooks::panic();
+
     logging::start(Level::TRACE, Some(LogOutput::StdOut), false);
 
     trace!("Simple trace message");

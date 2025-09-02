@@ -4,10 +4,12 @@
 
 use clap_derive::Args;
 use getset::Getters;
-
+use td_common::logging;
 use td_common::status::ExitStatus;
 use td_process::launcher::cli::Cli;
 use td_process::launcher::config::Config;
+use td_process::launcher::hooks;
+use tracing::Level;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Getters)]
 #[getset(get = "pub")]
@@ -37,8 +39,11 @@ impl HelloParams {
     }
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    hooks::panic();
+
+    logging::start(Level::INFO, None, true);
+
     Cli::<HelloConfig, HelloParams>::exec_async(
         "helloworld",
         |config, params| async move {

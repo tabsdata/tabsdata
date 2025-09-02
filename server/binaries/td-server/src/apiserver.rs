@@ -13,6 +13,7 @@ use td_common::server::FileWorkerMessageQueue;
 use td_common::status::ExitStatus;
 use td_database::sql::DbError;
 use td_process::launcher::cli::Cli;
+use td_process::launcher::hooks;
 use td_storage::Storage;
 use tracing::{Level, error, info};
 
@@ -20,6 +21,8 @@ const CONFIG_NAME: &str = "apiserver";
 
 #[attach(signal = "apiserver")]
 fn main() {
+    hooks::panic();
+
     logging::start(Level::INFO, None, false);
 
     let arguments: Vec<String> = env::args().collect();

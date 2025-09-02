@@ -9,8 +9,11 @@ use tracing::{Level, debug, error, info, trace, warn};
 
 use td_common::logging;
 use td_common::logging::{CURRENT_DIR, LogOutput};
+use td_process::launcher::hooks;
 
 pub fn main() {
+    hooks::panic();
+
     logging::start(
         Level::TRACE,
         Some(LogOutput::File(PathBuf::from(CURRENT_DIR))),

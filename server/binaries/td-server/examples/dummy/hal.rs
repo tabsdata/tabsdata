@@ -6,10 +6,13 @@ use std::time::Duration;
 use std::{process, thread};
 use td_common::attach::attach;
 use td_common::logging;
+use td_process::launcher::hooks;
 use tracing::{Level, info};
 
 #[attach(signal = "hal")]
 pub fn main() {
+    hooks::panic();
+
     logging::start(Level::DEBUG, None, false);
 
     let pid = process::id();

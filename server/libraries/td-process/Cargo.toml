@@ -59,6 +59,7 @@ getset = { workspace = true }
 ignore = { workspace = true }
 indexmap = { workspace = true }
 num-format = { workspace = true }
+tracing-panic = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
 strum = { workspace = true, features = ["derive"] }

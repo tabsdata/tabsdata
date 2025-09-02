@@ -11,12 +11,15 @@ use td_common::attach::attach;
 use td_common::env::check_flag_env;
 use td_common::logging;
 use td_common::server::{INSTANCE_PATH_ENV, INSTANCE_URI_ENV, TD_DETACHED_SUBPROCESSES};
+use td_process::launcher::hooks;
 use td_supervisor::services::supervisor;
 use td_supervisor::services::supervisor::{Arguments, prepend_slash};
 use tracing::{Level, info};
 
 #[attach(signal = "supervisor")]
 pub fn main() {
+    hooks::panic();
+
     let instance_path = Arguments::parse().instance_path();
     // Setting env vars is not thread-safe; use with care.
     unsafe {
