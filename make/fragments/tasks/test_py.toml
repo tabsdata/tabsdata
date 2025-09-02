@@ -447,6 +447,7 @@ script = [
             set_env TD_COMPILE "false"
         end
     end
+    TD_COMPILE = get_env TD_COMPILE
     debug "🔅 Using td compile: '${TD_COMPILE}'"
     ''']
 

@@ -53,11 +53,37 @@ run_task = [
 category = "06 - Compliance"
 description = "Generate the dependencies' license files"
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-dependencies = ["license_rs", "license_py"]
+dependencies = ["set_mode_license"]
 script_runner = "@duckscript"
 script = [
     '''
+    license = get_env TD_LICENSE
+    if eq ${license} "true"
+        cm_run_task license_rs
+        cm_run_task license_py
+    end
+
     exec --fail-on-error python ./devutils/automation/tasks/makers/td-scripts/report_licenses.py
+    ''']
+
+[tasks.set_mode_license]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    license = get_env TD_LICENSE
+    license_empty = is_empty ${license}
+    license_true = eq ${license} "true"
+    license = set ${license_empty} or ${license_true}
+    if ${license}
+        set_env TD_LICENSE "true"
+    else
+        set_env TD_LICENSE "false"
+    end
+    TD_LICENSE = get_env TD_LICENSE
+    debug "🔅 Using td license: '${TD_LICENSE}'"
     ''']
 
 [tasks.lock]
@@ -1025,14 +1051,55 @@ script = [
 [tasks.assembly]
 run_task = [
     { name = [
+        "set_mode_assembly",
         "assembly_rs",
         "assembly_py"], condition = { env = { "TD_ON_GA" = "true" } } },
     { name = [
-        "build",
+        "set_mode_assembly",
+        "assembly_build",
         "sourcetrack",
         "assembly_rs",
         "assembly_py"] }
 ]
+
+[tasks.set_mode_assembly]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    compile = get_env TD_COMPILE
+    compile_empty = is_empty ${compile}
+    compile_true = eq ${compile} "true"
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    compile = set ${compile_empty} or ${compile_true}
+    if ${on_ga_true}
+        set_env TD_COMPILE "false"
+    else
+        if ${compile}
+            set_env TD_COMPILE "true"
+        else
+            set_env TD_COMPILE "false"
+        end
+    end
+    TD_COMPILE = get_env TD_COMPILE
+    debug "🔅 Using td compile: '${TD_COMPILE}'"
+    ''']
+
+[tasks.assembly_build]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    compile = get_env TD_COMPILE
+    if eq ${compile} "true"
+        cm_run_task build
+    end
+    ''']
 
 [tasks.assembly_rs]
 
@@ -1302,13 +1369,41 @@ script = [
 [tasks.install]
 run_task = [
     { name = [
+        "set_mode_install",
         "install_rs",
         "install_py"], condition = { env = { "TD_ON_GA" = "true" } } },
     { name = [
+        "set_mode_install",
         "assembly",
         "install_rs",
         "install_py"] }
 ]
+
+[tasks.set_mode_install]
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    compile = get_env TD_COMPILE
+    compile_empty = is_empty ${compile}
+    compile_true = eq ${compile} "true"
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    compile = set ${compile_empty} or ${compile_true}
+    if ${on_ga_true}
+        set_env TD_COMPILE "false"
+    else
+        if ${compile}
+            set_env TD_COMPILE "true"
+        else
+            set_env TD_COMPILE "false"
+        end
+    end
+    TD_COMPILE = get_env TD_COMPILE
+    debug "🔅 Using td compile: '${TD_COMPILE}'"
+    ''']
 
 [tasks.install_rs]
 
