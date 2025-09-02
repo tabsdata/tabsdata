@@ -163,11 +163,10 @@ pub(crate) mod tests {
     use crate::transporter::cli::{TransporterParams, run_impl, run_impl_report_to_file};
     use crate::transporter::common::create_store;
     use clap::Parser;
-    use itertools::Itertools;
-    use std::collections::HashSet;
     use std::fs::File;
     use std::io::Write;
     use td_common::id::id;
+    use td_test::reqs::{AzureStorageWithAccountKeyReqs, S3WithAccessKeySecretKeyReqs};
     use testdir::testdir;
     use url::Url;
 
@@ -220,29 +219,6 @@ pub(crate) mod tests {
         assert!(matches!(report, Some(TransporterReport::CopyV1(_))));
     }
 
-    pub(crate) fn check_envs(test_name: &str, required_envs: Vec<&str>) -> bool {
-        let required_envs = required_envs
-            .into_iter()
-            .map(ToString::to_string)
-            .collect::<HashSet<_>>();
-        let defined_envs = std::env::vars()
-            .filter(|(name, _value)| required_envs.contains(name))
-            .map(|(name, _value)| name)
-            .collect::<HashSet<_>>();
-
-        let diff = required_envs.difference(&defined_envs).collect::<Vec<_>>();
-        if !diff.is_empty() {
-            println!(
-                ">>>>>>>> !!!!Skipping test {} because the following ENVs are not set: {:?}",
-                test_name,
-                diff.into_iter().cloned().join(",")
-            );
-            false
-        } else {
-            true
-        }
-    }
-
     async fn test_run_impl_copy(target: Location<Url>) {
         let str = "Hello, World!".repeat(1024 * 1024);
         let data = str.as_bytes();
@@ -287,55 +263,33 @@ pub(crate) mod tests {
         test_run_impl_copy(target).await;
     }
 
+    #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
     #[tokio::test]
-    async fn test_copy_local_to_aws() {
-        const BASE_URL_ENV: &str = "COPY_AWS_BASE_URL";
-        const AWS_REGION_ENV: &str = "COPY_AWS_AWS_REGION";
-        const AWS_ACCESS_KEY_ID_ENV: &str = "COPY_AWS_AWS_ACCESS_KEY_ID";
-        const AWS_SECRET_ACCESS_KEY_ENV: &str = "COPY_AWS_AWS_SECRET_ACCESS_KEY";
-
-        if check_envs(
-            "test_copy_local_to_aws",
-            vec![
-                BASE_URL_ENV,
-                AWS_REGION_ENV,
-                AWS_ACCESS_KEY_ID_ENV,
-                AWS_SECRET_ACCESS_KEY_ENV,
-            ],
-        ) {
-            let target = Location::S3 {
-                url: build_uuid_v7_url(std::env::var(BASE_URL_ENV).unwrap()),
-                configs: AwsConfigs {
-                    region: Some(Value::Env(AWS_REGION_ENV.to_string())),
-                    access_key: Value::Env(AWS_ACCESS_KEY_ID_ENV.to_string()),
-                    secret_key: Value::Env(AWS_SECRET_ACCESS_KEY_ENV.to_string()),
-                    extra_configs: None,
-                },
-            };
-            test_run_impl_copy(target).await;
-        }
+    async fn test_copy_local_to_aws(s3: S3WithAccessKeySecretKeyReqs) {
+        let target = Location::S3 {
+            url: build_uuid_v7_url(s3.uri.to_string()),
+            configs: AwsConfigs {
+                region: Some(Value::Literal(s3.region.to_string())),
+                access_key: Value::Literal(s3.access_key.to_string()),
+                secret_key: Value::Literal(s3.secret_key.to_string()),
+                extra_configs: None,
+            },
+        };
+        test_run_impl_copy(target).await;
     }
 
+    #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
     #[tokio::test]
-    async fn test_copy_local_to_azure() {
-        const BASE_URL_ENV: &str = "COPY_AZURE_BASE_URL";
-        const AZURE_ACCOUNT_NAME_ENV: &str = "COPY_AZURE_ACCOUNT_NAME";
-        const AZURE_ACCOUNT_KEY_ENV: &str = "COPY_AZURE_ACCOUNT_KEY";
-
-        if check_envs(
-            "test_copy_local_to_azure",
-            vec![BASE_URL_ENV, AZURE_ACCOUNT_NAME_ENV, AZURE_ACCOUNT_KEY_ENV],
-        ) {
-            let target = Location::Azure {
-                url: build_uuid_v7_url(std::env::var(BASE_URL_ENV).unwrap()),
-                configs: AzureConfigs {
-                    account_name: Value::Env(AZURE_ACCOUNT_NAME_ENV.to_string()),
-                    account_key: Value::Env(AZURE_ACCOUNT_KEY_ENV.to_string()),
-                    extra_configs: None,
-                },
-            };
-            test_run_impl_copy(target).await;
-        }
+    async fn test_copy_local_to_azure(az: AzureStorageWithAccountKeyReqs) {
+        let target = Location::Azure {
+            url: build_uuid_v7_url(az.uri.to_string()),
+            configs: AzureConfigs {
+                account_name: Value::Literal(az.account_name.to_string()),
+                account_key: Value::Literal(az.account_key.to_string()),
+                extra_configs: None,
+            },
+        };
+        test_run_impl_copy(target).await;
     }
 
     pub(crate) fn build_uuid_v7_url(url: String) -> Url {
