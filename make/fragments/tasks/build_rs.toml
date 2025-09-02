@@ -73,6 +73,11 @@ script = [
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins --examples
+
+    cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe/Cargo.toml --features without-polars-alloc --bin pystubs"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe/Cargo.toml --features without-polars-alloc --bin pystubs
     ''']
 
 [tasks.link_all_rs_expansions]
@@ -127,17 +132,17 @@ script = [
         if eq ${q_wheels} 1
             for wheel in ${wheels}
                 info "📦 Found wheel: ${wheel}"
-                exec --fail-on-error wheel2json ${wheel}
+                # exec --fail-on-error wheel2json ${wheel}
                 if is_directory ../../target/wheels/wheel.tmp
-                    info "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
+                    trace "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
                     rm -r ../../target/wheels/wheel.tmp
                 end
                 exec --fail-on-error python -m zipfile -e ${wheel} ../../target/wheels/wheel.tmp
 
-                info "📂 Listing of wheel.tmp:"
+                trace "📂 Listing of wheel.tmp:"
                 wheel_items = glob_array ../../target/wheels/wheel.tmp/**/*
                 for wheel_item in ${wheel_items}
-                    info "   - ${wheel_item}"
+                    trace "   - ${wheel_item}"
                 end
                 for wheel_item in ${wheel_items}
                     if is_directory ${wheel_item}
@@ -145,10 +150,10 @@ script = [
                             wheel_files = glob_array ${wheel_item}/**/*
                             for wheel_file in ${wheel_files}
                                 if is_file ${wheel_file}
-                                    info "📝 Contents of .dist-info file ${wheel_file}..."
-                                    info ">>>>> >>>>> >>>>> >>>>> >>>>>"
-                                    cat ${wheel_file}
-                                    info "<<<<< <<<<< <<<<< <<<<< <<<<<"
+                                    trace "📝 Contents of .dist-info file ${wheel_file}..."
+                                    trace ">>>>> >>>>> >>>>> >>>>> >>>>>"
+                                    # cat ${wheel_file}
+                                    trace "<<<<< <<<<< <<<<< <<<<< <<<<<"
                                 end
                             end
                         end
@@ -156,7 +161,7 @@ script = [
                 end
 
                 if is_directory "../../target/wheels/wheel.tmp/tabsdata"
-                    info "📁 Copying tabsdata module to python/"
+                    trace "📁 Copying tabsdata module to python/"
                     exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata python/
                 else
                     error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
@@ -164,14 +169,14 @@ script = [
                 end
 
                 if is_directory "../../target/wheels/wheel.tmp/tabsdata.libs"
-                    info "📁 Copying tabsdata.libs folder to python/"
+                    trace "📁 Copying tabsdata.libs folder to python/"
                     exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata.libs python/
                 else
                     warn "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
                 end
 
                 rm -r ../../target/wheels/wheel.tmp
-                info "🐍 Successfully extracted wheel contents!"
+                trace "🐍 Successfully extracted wheel contents!"
             end
         else
             error "⚠️ More than one maturin wheel found in ../../target/wheels/"
@@ -242,6 +247,11 @@ script = [
 
     debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} build --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins"
     exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} build --locked --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TY_EXPANSIONS_CARGO_TOML} --lib --bins
+
+    cd ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} ---manifest-path ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe/Cargo.toml --features without-polars-alloc --bin pystubs"
+    exec --fail-on-error cargo %{td-toolchain-token}%{td-toolchain} run --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TY_EXPANSIONS_FOLDER}/modules/ty-tableframe/Cargo.toml --features without-polars-alloc --bin pystubs
     ''']
 
 [tasks.link_none_rs_expansions]
@@ -346,17 +356,17 @@ script = [
         if eq ${q_wheels} 1
             for wheel in ${wheels}
                 info "📦 Found wheel: ${wheel}"
-                exec --fail-on-error wheel2json ${wheel}
+                # exec --fail-on-error wheel2json ${wheel}
                 if is_directory ../../target/wheels/wheel.tmp
-                    info "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
+                    trace "🧹 Removing existing ../../target/wheels/wheel.tmp directory..."
                     rm -r ../../target/wheels/wheel.tmp
                 end
                 exec --fail-on-error python -m zipfile -e ${wheel} ../../target/wheels/wheel.tmp
 
-                info "📂 Listing of wheel.tmp:"
+                trace "📂 Listing of wheel.tmp:"
                 wheel_items = glob_array ../../target/wheels/wheel.tmp/**/*
                 for wheel_item in ${wheel_items}
-                    info "   - ${wheel_item}"
+                    trace "   - ${wheel_item}"
                 end
                 for wheel_item in ${wheel_items}
                     if is_directory ${wheel_item}
@@ -364,10 +374,10 @@ script = [
                             wheel_files = glob_array ${wheel_item}/**/*
                             for wheel_file in ${wheel_files}
                                 if is_file ${wheel_file}
-                                    info "📝 Contents of wheel.tmp .dist-info folder file ${wheel_file}..."
-                                    info ">>>>> >>>>> >>>>> >>>>> >>>>>"
-                                    cat ${wheel_file}
-                                    info "<<<<< <<<<< <<<<< <<<<< <<<<<"
+                                    trace "📝 Contents of wheel.tmp .dist-info folder file ${wheel_file}..."
+                                    trace ">>>>> >>>>> >>>>> >>>>> >>>>>"
+                                    # cat ${wheel_file}
+                                    trace "<<<<< <<<<< <<<<< <<<<< <<<<<"
                                 end
                             end
                         end
@@ -375,7 +385,7 @@ script = [
                 end
 
                 if is_directory "../../target/wheels/wheel.tmp/tabsdata"
-                    info "📁 Copying tabsdata module to python/"
+                    trace "📁 Copying tabsdata module to python/"
                     exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata python/
                 else
                     error "⚠️ tabsdata module not found in wheel extraction: ${wheel}"
@@ -383,14 +393,14 @@ script = [
                 end
 
                 if is_directory "../../target/wheels/wheel.tmp/tabsdata.libs"
-                    info "📁 Copying tabsdata.libs folder to python/"
+                    trace "📁 Copying tabsdata.libs folder to python/"
                     exec --fail-on-error cp -r ../../target/wheels/wheel.tmp/tabsdata.libs python/
                 else
                     warn "📌 tabsdata.libs folder not found in wheel extraction: ${wheel}"
                 end
 
                 rm -r ../../target/wheels/wheel.tmp
-                info "🐍 Successfully extracted wheel contents!"
+                trace "🐍 Successfully extracted wheel contents!"
             end
         else
             error "⚠️ More than one maturin wheel found in ../../target/wheels/"
@@ -401,3 +411,45 @@ script = [
         end
     end
     ''']
+
+[tasks.build_expnasions_rs]
+category = "03 - Build"
+description = "Build and link the PyO3-Polars projects"
+run_task = [
+    { name = [
+        "build_all_rs_expansions",
+        "build_none_rs_expansions"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+    { name = [
+        "build_none_rs_expansions"
+    ] }
+]
+
+[tasks.link_rs]
+category = "03 - Build"
+description = "Task 'link' for Rust projects"
+run_task = [
+    { name = [
+        "link_all_rs",
+        "link_none_rs"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+    { name = [
+        "link_none_rs"
+    ] }
+]
+
+[tasks.link_all_rs]
+category = "03 - Build"
+private = true
+run_task = [
+    { name = [
+        "link_all_rs_expansions"
+    ] }
+]
+
+[tasks.link_none_rs]
+category = "03 - Build"
+private = true
+run_task = [
+    { name = [
+        "link_none_rs_expansions"
+    ] }
+]

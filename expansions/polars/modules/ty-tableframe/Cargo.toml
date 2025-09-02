@@ -16,14 +16,20 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
+[[bin]]
+name = "pystubs"
+path = "src/pystubs.rs"
+
 [lib]
 name = "ty_tableframe"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [package.metadata.maturin]
 name = "tableframe"
 
 [features]
+
+without-polars-alloc = []
 
 td-test = ["dummy"]
 dummy = []
@@ -61,6 +67,8 @@ polars-plan = { workspace = true, features = ["python"] }
 polars-mem-engine = { workspace = true, features = ["python"] }
 pyo3 = { workspace = true, features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"] }
 pyo3-polars = { workspace = true, features = ["derive"] }
+pyo3-stub-gen = { workspace = true }
+
 rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 

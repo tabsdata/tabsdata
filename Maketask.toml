@@ -563,8 +563,8 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_*"
-    exec --fail-on-error ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_*
+    echo "Running command: ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_* --force-exclude \\.pyi$"
+    exec --fail-on-error ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing --check . --extend-exclude .tabsdata,.venv,dist,build,tabsdata-ui,venv,test_*,tests_* --force-exclude \\.pyi$
     ''']
 
 [tasks.fmt_py_isort]
@@ -601,8 +601,8 @@ cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
-    echo "Running command: ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing ."
-    exec --fail-on-error ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing .
+    echo "Running command: ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$"
+    exec --fail-on-error ${ENV_PREFIX}black --preview --enable-unstable-feature string_processing . --force-exclude \\.pyi$
     ''']
 
 [tasks.format_py_isort]

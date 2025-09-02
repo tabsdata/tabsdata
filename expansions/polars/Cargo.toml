@@ -132,6 +132,12 @@ features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint"
 version = "0.23.1"
 features = ["derive"]
 
+[workspace.dependencies.pyo3-stub-gen]
+version = "0.13.1"
+
+[workspace.dependencies.pyo3-stub-gen-derive]
+version = "0.13.1"
+
 [workspace.dependencies.rayon]
 version = "1.11.0"
 

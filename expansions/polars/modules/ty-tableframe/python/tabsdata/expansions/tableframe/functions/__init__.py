@@ -9,7 +9,3 @@ __path__ = pkgutil.extend_path(__path__, __name__)
 #
 # Copyright 2025 Tabs Data Inc.
 #
-
-# Required import to ensure dynamic library with native components is loaded.
-# noinspection PyProtectedMember
-import tabsdata.expansions.tableframe._expressions  # noqa: F401

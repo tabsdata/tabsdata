@@ -6,9 +6,13 @@
 requires = ["psutil>=7.0", "setuptools>=64.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.flake8]
+exclude = ["*.pyi"]
+
 [tool.black]
 line-length = 88
 preview = true
+extend-exclude = '\.pyi$'
 enable-unstable-feature = ["string_processing"]
 
 [tool.coverage.html]
@@ -23,6 +27,7 @@ exclude_also = [
 
 [tool.isort]
 profile = "black"
+skip_glob = ["*.pyi"]
 known_first_party = [
     "tabsdata",
     "tabsdata_databricks",

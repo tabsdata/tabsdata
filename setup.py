@@ -802,7 +802,7 @@ setup(
         ],
         "tabsdata.expansions.tableframe": [
             os.path.join(
-                "_td*",
+                "_*",
             ),
         ],
     },
