@@ -42,7 +42,7 @@ mod tests {
     use std::collections::HashMap;
     use testdir::testdir;
 
-    #[crate::test(when(reqs = OracleReqs, env_prefix= "oracle_test_not_defined"))]
+    #[crate::test(when(reqs = OracleReqs, env_prefix= "oracle_test_not_defined", do_not_fail_reqs= true))]
     async fn test_signature_oracle_reqs(_s3: OracleReqs) {
         panic!()
     }
@@ -68,6 +68,7 @@ mod tests {
             "OracleReqs",
             "ns",
             &vars,
+            false,
         );
         assert_eq!(reqs.as_ref().unwrap().uri, "uri");
         assert_eq!(reqs.as_ref().unwrap().user, "user");

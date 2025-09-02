@@ -207,6 +207,7 @@ fn convert_copy_report_to_import_reports(
     files_to_import: &[(Url, ObjectMeta)],
     copy_report: CopyReport,
 ) -> Vec<FileImportReport> {
+    #[allow(clippy::let_and_return)]
     let file_import_reports = copy_report
         .files()
         .iter()

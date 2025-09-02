@@ -42,7 +42,7 @@ mod tests {
     use std::collections::HashMap;
     use testdir::testdir;
 
-    #[crate::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az_test_not_defined"))]
+    #[crate::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az_test_not_defined", do_not_fail_reqs= true))]
     async fn test_signature_azure_storage_with_account_key_reqs(
         _az: AzureStorageWithAccountKeyReqs,
     ) {
@@ -63,6 +63,7 @@ mod tests {
                 "AzureStorageWithAccountKeyReqs",
                 "ns",
                 &vars,
+                false,
             );
         assert_eq!(reqs.as_ref().unwrap().uri, "u");
         assert_eq!(reqs.as_ref().unwrap().account_name, "an");

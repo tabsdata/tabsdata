@@ -27,6 +27,8 @@ pub use mysql::MySqlReqs;
 pub use oracle::OracleReqs;
 pub use postgres::PostgresReqs;
 
+const TEST_SKIP_IF_NO_REQS: &str = "TD_TEST_SKIP_IF_NO_REQS";
+
 /// Directory where to look for the the [`TEST_ENV_FILE`] file.
 const DEV_DIR: &str = ".tabsdata-dev";
 
@@ -84,15 +86,17 @@ fn test_identifier(vars: &HashMap<String, String>, prefix: Option<u8>) -> String
 pub struct ReqsTestSetup<'a, R> {
     test_name: &'a str,
     env_prefix: &'a str,
+    do_not_fail: bool, // This is only used for unit tests of Requirements implementations.
     _phantom: PhantomData<R>,
 }
 
 impl<'a, R> ReqsTestSetup<'a, R> {
     #[allow(dead_code)]
-    pub fn new(test_name: &'a str, env_prefix: &'a str) -> Self {
+    pub fn new(test_name: &'a str, env_prefix: &'a str, do_not_fail: bool) -> Self {
         Self {
             test_name,
             env_prefix,
+            do_not_fail,
             _phantom: PhantomData,
         }
     }
@@ -110,6 +114,7 @@ where
             &testdir!(),
             type_name::<R>(),
             self.env_prefix,
+            self.do_not_fail,
         ) {
             None => TestSetupExecution::Skip,
             Some(t) => TestSetupExecution::Run(t),
@@ -251,6 +256,7 @@ impl TestRequirementsInEnv {
         requirements_name: &str,
         namespace: &str,
         vars: &HashMap<String, String>,
+        do_not_fail: bool,
     ) -> Option<R> {
         let mut vars = Self::_merge_vars_with_file_vars(vars, &Self::get_build_env_file());
         vars.insert(
@@ -260,10 +266,22 @@ impl TestRequirementsInEnv {
         match Self::requirements::<R>(namespace, &vars) {
             Ok(reqs) => Some(reqs),
             Err(msg) => {
-                println!(
-                    "SKIPPING {test_name}. Requirements for {requirements_name}({namespace}) not met: {msg}"
-                );
-                None
+                let msg =
+                    format!("Requirements for {requirements_name}({namespace}) not met: {msg}");
+                match vars.get(TEST_SKIP_IF_NO_REQS) {
+                    None if !do_not_fail => {
+                        panic!("Missing requirements, test: {test_name}. {msg}");
+                    }
+                    Some(skip) if skip != "true" && !do_not_fail => {
+                        panic!("Missing requirements, test: {test_name}. {msg}");
+                    }
+                    _ => {
+                        println!(
+                            "Missing requirements, skipping test because env var {TEST_SKIP_IF_NO_REQS}=true, test: {test_name}. {msg}"
+                        );
+                        None
+                    }
+                }
             }
         }
     }
@@ -281,6 +299,7 @@ impl TestRequirementsInEnv {
         test_dir: &Path,
         requirements_name: &str,
         namespace: &str,
+        do_not_fail: bool,
     ) -> Option<R> {
         let envs: HashMap<String, String> = std::env::vars().collect();
         Self::resolve_test_run_variables::<R>(
@@ -289,13 +308,17 @@ impl TestRequirementsInEnv {
             requirements_name,
             namespace,
             &envs,
+            do_not_fail,
         )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{TEST_DIR_KEY, TestRequirements, TestRequirementsInEnv, test_dir, timestamp, user};
+    use super::{
+        TEST_DIR_KEY, TEST_SKIP_IF_NO_REQS, TestRequirements, TestRequirementsInEnv, test_dir,
+        timestamp, user,
+    };
     use path_slash::PathBufExt;
     use sha2::Digest;
     use std::collections::HashMap;
@@ -402,16 +425,37 @@ mod tests {
         assert_eq!(result.unwrap().key, "value");
 
         let vars: HashMap<String, String> =
-            HashMap::from([("NS__KEYX".to_string(), "value".to_string())]);
+            HashMap::from([(TEST_SKIP_IF_NO_REQS.to_string(), "true".to_string())]);
         assert!(
             TestRequirementsInEnv::resolve_test_run_variables::<MyReqs>(
                 "test_get",
                 &testdir!(),
                 "MyReqs",
                 "NS",
-                &vars
+                &vars,
+                true
             )
             .is_none()
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fail_on_skip() {
+        let vars: HashMap<String, String> =
+            HashMap::from([(TEST_SKIP_IF_NO_REQS.to_string(), "true".to_string())]);
+        let result = TestRequirementsInEnv::requirements::<MyReqs>("NS", &vars);
+        assert_eq!(result.unwrap().key, "value");
+
+        let vars: HashMap<String, String> =
+            HashMap::from([("NS__KEYX".to_string(), "value".to_string())]);
+        let _ = TestRequirementsInEnv::resolve_test_run_variables::<MyReqs>(
+            "test_get",
+            &testdir!(),
+            "MyReqs",
+            "NS",
+            &vars,
+            false,
         );
     }
 

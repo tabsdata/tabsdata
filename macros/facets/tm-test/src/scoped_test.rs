@@ -140,18 +140,21 @@ fn sqlx_test(func_sig: &Signature, args: Option<SqlxArguments>) -> InnerFnSetup 
 pub struct ReqsArguments {
     reqs: Ident,
     env_prefix: SynMetaOrLit,
+    #[darling(default)]
+    do_not_fail_reqs: bool, // only used for unit testing of the skip functionality
 }
 
 fn reqs_test(func_sig: &Signature, args: ReqsArguments) -> InnerFnSetup {
     let reqs = &args.reqs;
     let env_prefix = &args.env_prefix;
+    let do_not_fail = args.do_not_fail_reqs;
     let test_name = &func_sig.ident.to_string();
 
     // Get fn arg and its type
     let (name, ty) = get_fn_args(func_sig, reqs);
 
     let setup = quote! {
-        td_test::reqs::ReqsTestSetup::<#reqs>::new(#test_name, #env_prefix).setup().await
+        td_test::reqs::ReqsTestSetup::<#reqs>::new(#test_name, #env_prefix, #do_not_fail).setup().await
     };
 
     InnerFnSetup {

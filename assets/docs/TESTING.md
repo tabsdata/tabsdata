@@ -2,14 +2,23 @@
 Copyright 2025 Tabs Data Inc.
 -->
 
-# Tests using external resources
+# Tests Using External Resources
 
 Tests using external resources are activated by setting environment variables 
 providing the details on how to access the corresponding external resource.
 
 These tests will run only when the requirements for the test are met. 
 
-Otherwise the tests will be 'skipped'.
+Otherwise the tests will fail.
+
+## Forcing a Skip for Tests with Requirements Not Met
+
+If the environment variable `TD_TEST_SKIP_IF_NO_REQS` is set to `true`, then tests with missing requirements 
+will be skipped.
+
+CI builds should not set this variable to ensure tests are not skipped.
+
+Developers can set this variable to `true` in their local environment to skip the tests if requirements are not met.
 
 ## Rust
 
@@ -19,7 +28,6 @@ is an async function.
 
 *NOTE:* The Rust test-framework does not allow runtime test skipping, the tests
 will be invoked but will print a message that the test was skipped).
-
 
 # External Resource Types
 

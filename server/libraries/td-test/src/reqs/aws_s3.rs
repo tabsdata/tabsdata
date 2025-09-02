@@ -44,7 +44,7 @@ mod tests {
     use std::collections::HashMap;
     use testdir::testdir;
 
-    #[crate::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s3_test_not_defined"))]
+    #[crate::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s3_test_not_defined", do_not_fail_reqs=true))]
     async fn test_signature_s3_with_access_key_secret_key_reqs(_s3: S3WithAccessKeySecretKeyReqs) {
         panic!()
     }
@@ -71,6 +71,7 @@ mod tests {
             "S3WithAccessKeySecretKeyReqs",
             "ns",
             &vars,
+            false,
         );
         assert_eq!(reqs.as_ref().unwrap().uri, "u");
         assert_eq!(reqs.as_ref().unwrap().region, "r");
