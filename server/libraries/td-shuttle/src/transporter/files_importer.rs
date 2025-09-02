@@ -3,12 +3,14 @@
 //
 
 use crate::transporter::api::{
-    FileImportReport, FileImportReportBuilder, ImportFormat, ImportRequest, ImportSource,
+    CopyReport, CopyRequest, FileImportReport, FileImportReportBuilder, ImportFormat,
+    ImportRequest, ImportSource,
 };
 use crate::transporter::args::{
     Format, ImporterLogReadOptions, ImporterNdJsonReadOptions, ImporterOptions,
     ImporterOptionsBuilder, ImporterParquetReadOptions, ToFormat,
 };
+use crate::transporter::copy::copy;
 use crate::transporter::error::TransporterError;
 use crate::transporter::logic::to_file_to_import_instructions;
 use async_trait::async_trait;
@@ -84,6 +86,7 @@ impl From<&ImportFormat> for Format {
             ImportFormat::Json => Format::NdJson(ImporterNdJsonReadOptions::default()),
             ImportFormat::Log => Format::Log(ImporterLogReadOptions::default()),
             ImportFormat::Parquet => Format::Parquet(ImporterParquetReadOptions::default()),
+            ImportFormat::Binary => Format::Binary,
         }
     }
 }
@@ -153,45 +156,102 @@ impl Importer for FilesImporter {
         import_request: &ImportRequest,
         files_to_import: Vec<(Url, ObjectMeta)>,
     ) -> Result<Vec<FileImportReport>, TransporterError> {
-        let import_instructions = create_file_import_instructions(import_request, files_to_import)?;
-
-        let import_reports: Vec<_> = tokio::task::spawn_blocking(move || {
-            import_instructions
-                .into_iter()
-                .map(crate::transporter::logic::run_import)
-                .collect::<Vec<_>>()
-        })
-        .await
-        .expect("Could not run import files")
-        .into_iter()
-        .collect::<Result<_, crate::transporter::logic::ImportError>>()
-        .expect("Could not import files");
-
-        let import_reports = import_reports
+        let import_reports = if import_request.format().using_polars() {
+            let import_instructions =
+                create_file_import_instructions(import_request, files_to_import)?;
+            let import_reports: Vec<_> = tokio::task::spawn_blocking(move || {
+                import_instructions
+                    .into_iter()
+                    .map(crate::transporter::logic::run_polars_import)
+                    .collect::<Vec<_>>()
+            })
+            .await
+            .expect("Could not run import files")
             .into_iter()
-            .map(FileImportReport::from)
-            .collect::<Vec<_>>();
+            .collect::<Result<_, crate::transporter::logic::ImportError>>()
+            .expect("Could not import files");
+
+            import_reports
+                .into_iter()
+                .map(FileImportReport::from)
+                .collect::<Vec<_>>()
+        } else if files_to_import.is_empty() {
+            return Ok(vec![]);
+        } else {
+            let copy_request =
+                convert_import_instructions_to_copy_request(import_request, &files_to_import);
+            let copy_report = copy(copy_request).await?;
+            convert_copy_report_to_import_reports(&files_to_import, copy_report)
+        };
         Ok(import_reports)
     }
+}
+
+fn convert_import_instructions_to_copy_request(
+    import_request: &ImportRequest,
+    files_to_import: &[(Url, ObjectMeta)],
+) -> CopyRequest {
+    let source_target_pairs = files_to_import
+        .iter()
+        .map(|(url, _)| {
+            (
+                import_request.source().source_location(url),
+                import_request.target().target_location(url),
+            )
+        })
+        .collect::<Vec<_>>();
+    CopyRequest::new(source_target_pairs, None)
+}
+
+fn convert_copy_report_to_import_reports(
+    files_to_import: &[(Url, ObjectMeta)],
+    copy_report: CopyReport,
+) -> Vec<FileImportReport> {
+    let file_import_reports = copy_report
+        .files()
+        .iter()
+        .zip(files_to_import.iter().map(|(_, meta)| meta))
+        .map(|(file_report, meta)| {
+            let file_import_report = FileImportReportBuilder::default()
+                .idx(file_report.idx)
+                .from(file_report.from.clone())
+                .size(file_report.size as usize)
+                .rows(0usize) // Polars will calculate rows, so we set it to 0
+                .last_modified(meta.last_modified)
+                .to(file_report.to.clone())
+                .imported_at(file_report.started_at)
+                .import_millis(
+                    (file_report.ended_at - file_report.started_at).num_milliseconds() as usize,
+                )
+                .build()
+                .expect("Could not build FileImportReport");
+            file_import_report
+        })
+        .collect::<Vec<_>>();
+    file_import_reports
 }
 
 #[cfg(test)]
 mod tests {
     use crate::transporter::api::{
-        AwsConfigs, AzureConfigs, BaseImportUrl, ImportFormat, ImportRequestBuilder,
-        ImportSourceBuilder, ImportTargetBuilder, Location, Value, WildcardUrl,
+        AwsConfigs, AzureConfigs, BaseImportUrl, ImportCsvOptions, ImportFormat,
+        ImportRequestBuilder, ImportSourceBuilder, ImportTargetBuilder, Location, Value,
+        WildcardUrl,
     };
     use crate::transporter::cli::tests::check_envs;
+    use crate::transporter::cloud::create_sink_target;
     use crate::transporter::files_importer::{FilesImporter, Importer};
     use chrono::Utc;
     use object_store::ObjectMeta;
     use polars::datatypes::{Float64Chunked, Int64Chunked, PlSmallStr, StringChunked};
     use polars::frame::DataFrame;
     use polars::prelude::{
-        Column, IntoLazy, IntoSeries, LazyFrame, PlPath, ScanArgsParquet, SinkOptions, SinkTarget,
+        Column, IntoLazy, IntoSeries, LazyCsvReader, LazyFileListReader, LazyFrame, PlPath,
+        ScanArgsParquet, SinkOptions, SinkTarget,
     };
     use polars_io::cloud::{CloudOptions, ObjectStorePath};
-    use polars_io::prelude::ParquetWriteOptions;
+    use polars_io::json::JsonWriterOptions;
+    use polars_io::prelude::{CsvWriterOptions, ParquetWriteOptions};
     use polars_io::utils::sync_on_close::SyncOnCloseType;
     use std::collections::HashMap;
     use std::env::var;
@@ -584,5 +644,306 @@ mod tests {
             .unwrap();
 
         assert!(df_out.equals(&df_in));
+    }
+
+    //noinspection DuplicatedCode
+    async fn test_import(
+        from_base: &Location<Url>,
+        to_base: &Location<BaseImportUrl>,
+        format: &ImportFormat,
+    ) {
+        let sink_options = SinkOptions {
+            sync_on_close: SyncOnCloseType::All,
+            maintain_order: true,
+            mkdir: true,
+        };
+
+        let from_file = from_base.join(&id().to_string()).unwrap();
+
+        let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
+            .into_series()
+            .with_name(PlSmallStr::from("col_int"));
+        let col_string = StringChunked::from_iter((0..1000).map(|i| Some(format!("str_{}", i))))
+            .into_series()
+            .with_name(PlSmallStr::from("col_string"));
+        let df = DataFrame::new(vec![Column::from(col_int), Column::from(col_string)]).unwrap();
+        let lf = df.clone().lazy();
+
+        let _df = match format {
+            ImportFormat::Csv(_) => lf
+                .sink_csv(
+                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
+                    CsvWriterOptions::default(),
+                    None,
+                    sink_options.clone(),
+                )
+                .unwrap()
+                .collect()
+                .unwrap(),
+            ImportFormat::Json => lf
+                .sink_json(
+                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
+                    JsonWriterOptions::default(),
+                    None,
+                    sink_options.clone(),
+                )
+                .unwrap()
+                .collect()
+                .unwrap(),
+            ImportFormat::Log => lf
+                .sink_csv(
+                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
+                    CsvWriterOptions::default(),
+                    None,
+                    sink_options.clone(),
+                )
+                .unwrap()
+                .collect()
+                .unwrap(),
+            ImportFormat::Parquet => lf
+                .sink_parquet(
+                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
+                    ParquetWriteOptions::default(),
+                    None,
+                    sink_options.clone(),
+                )
+                .unwrap()
+                .collect()
+                .unwrap(),
+            ImportFormat::Binary => lf
+                .sink_csv(
+                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
+                    CsvWriterOptions::default(),
+                    Some(
+                        CloudOptions::from_untyped_config(
+                            from_file.url().as_str(),
+                            from_file.cloud_configs(),
+                        )
+                        .unwrap(),
+                    ),
+                    sink_options.clone(),
+                )
+                .unwrap()
+                .collect()
+                .unwrap(),
+        };
+
+        let request = ImportRequestBuilder::default()
+            .source(
+                ImportSourceBuilder::default()
+                    .location(&from_file)
+                    .initial_lastmod(None)
+                    .lastmod_info(None)
+                    .build()
+                    .unwrap(),
+            )
+            .format(format.clone())
+            .target(
+                ImportTargetBuilder::default()
+                    .location(to_base.clone())
+                    .build()
+                    .unwrap(),
+            )
+            .parallelism(None)
+            .build()
+            .unwrap();
+
+        let meta = ObjectMeta {
+            location: ObjectStorePath::from(from_file.url().path()),
+            last_modified: Utc::now(),
+            size: 1024,
+            e_tag: Some("e_tag".to_string()),
+            version: Some("v1".to_string()),
+        };
+        let files: Vec<(Url, ObjectMeta)> = vec![(from_file.url().clone(), meta)];
+
+        let response = FilesImporter::import(&request, files).await.unwrap();
+
+        assert!(!response.is_empty());
+        assert_eq!(response.len(), 1);
+
+        let url_to = response.first().unwrap().to.clone();
+        let cloud_options = Some(
+            CloudOptions::from_untyped_config(url_to.as_str(), to_base.cloud_configs()).unwrap(),
+        );
+        let lf = match format {
+            ImportFormat::Binary => {
+                let reader =
+                    LazyCsvReader::new(PlPath::new(url_to.as_str())).with_infer_schema_length(None);
+                reader.with_cloud_options(cloud_options).finish().unwrap()
+            }
+            _ => {
+                let parquet_config = ScanArgsParquet {
+                    cloud_options,
+                    ..Default::default()
+                };
+                LazyFrame::scan_parquet(PlPath::new(url_to.as_str()), parquet_config).unwrap()
+            }
+        };
+
+        let df_out = tokio::task::spawn_blocking(move || lf.collect())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match format {
+            ImportFormat::Log => {
+                assert_eq!(df_out.shape().0, df.shape().0 + 1); // Log format adds an extra row for the header
+            }
+            _ => {
+                assert!(df_out.equals(&df));
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_local_csv() {
+        let test_dir = testdir!();
+        let base_url = Url::from_directory_path(&test_dir).unwrap();
+        test_import(
+            &Location::LocalFile {
+                url: base_url.clone(),
+            },
+            &Location::LocalFile {
+                url: BaseImportUrl(base_url.clone()),
+            },
+            &ImportFormat::Csv(ImportCsvOptions::default()),
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_local_json() {
+        let test_dir = testdir!();
+        let base_url = Url::from_directory_path(&test_dir).unwrap();
+        test_import(
+            &Location::LocalFile {
+                url: base_url.clone(),
+            },
+            &Location::LocalFile {
+                url: BaseImportUrl(base_url.clone()),
+            },
+            &ImportFormat::Json,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_local_log() {
+        let test_dir = testdir!();
+        let base_url = Url::from_directory_path(&test_dir).unwrap();
+        test_import(
+            &Location::LocalFile {
+                url: base_url.clone(),
+            },
+            &Location::LocalFile {
+                url: BaseImportUrl(base_url.clone()),
+            },
+            &ImportFormat::Log,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_local_parquet() {
+        let test_dir = testdir!();
+        let base_url = Url::from_directory_path(&test_dir).unwrap();
+        test_import(
+            &Location::LocalFile {
+                url: base_url.clone(),
+            },
+            &Location::LocalFile {
+                url: BaseImportUrl(base_url.clone()),
+            },
+            &ImportFormat::Parquet,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_local_binary() {
+        let test_dir = testdir!();
+        let base_url = Url::from_directory_path(&test_dir).unwrap();
+        test_import(
+            &Location::LocalFile {
+                url: base_url.clone(),
+            },
+            &Location::LocalFile {
+                url: BaseImportUrl(base_url.clone()),
+            },
+            &ImportFormat::Binary,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_s3_binary() {
+        const AWS_ACCESS_KEY_ID_ENV: &str = "IMPORT_AWS_ACCESS_KEY";
+        const AWS_REGION_ENV: &str = "IMPORT_AWS_REGION";
+        const AWS_SECRET_ACCESS_KEY_ENV: &str = "IMPORT_AWS_SECRET_KEY";
+        const BASE_URL_ENV: &str = "IMPORT_AWS_BASE_URL";
+
+        if check_envs(
+            "test_import_s3_binary",
+            vec![
+                AWS_ACCESS_KEY_ID_ENV,
+                AWS_REGION_ENV,
+                AWS_SECRET_ACCESS_KEY_ENV,
+                BASE_URL_ENV,
+            ],
+        ) {
+            let from_base = Location::S3 {
+                url: Url::parse(&format!("{}/{}", var(BASE_URL_ENV).unwrap(), id())).unwrap(),
+                configs: AwsConfigs {
+                    access_key: Value::Env(AWS_ACCESS_KEY_ID_ENV.into()),
+                    secret_key: Value::Env(AWS_SECRET_ACCESS_KEY_ENV.into()),
+                    region: Some(Value::Env(AWS_REGION_ENV.into())),
+                    extra_configs: None,
+                },
+            };
+
+            let test_dir = testdir!();
+            let base_url = Url::from_directory_path(&test_dir).unwrap();
+            test_import(
+                &from_base,
+                &Location::LocalFile {
+                    url: BaseImportUrl(base_url.clone()),
+                },
+                &ImportFormat::Binary,
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_azure_binary() {
+        const AZURE_ACCOUNT_KEY_ENV: &str = "IMPORT_AZURE_ACCOUNT_KEY";
+        const AZURE_ACCOUNT_NAME_ENV: &str = "IMPORT_AZURE_ACCOUNT_NAME";
+        const BASE_URL_ENV: &str = "IMPORT_AZURE_BASE_URL";
+
+        if check_envs(
+            "test_import_azure_binary",
+            vec![AZURE_ACCOUNT_KEY_ENV, AZURE_ACCOUNT_NAME_ENV, BASE_URL_ENV],
+        ) {
+            let from_base = Location::Azure {
+                url: Url::parse(&format!("{}/{}", var(BASE_URL_ENV).unwrap(), id())).unwrap(),
+                configs: AzureConfigs {
+                    account_name: Value::Env(AZURE_ACCOUNT_NAME_ENV.into()),
+                    account_key: Value::Env(AZURE_ACCOUNT_KEY_ENV.into()),
+                    extra_configs: None,
+                },
+            };
+
+            let test_dir = testdir!();
+            let base_url = Url::from_directory_path(&test_dir).unwrap();
+            test_import(
+                &from_base,
+                &Location::LocalFile {
+                    url: BaseImportUrl(base_url.clone()),
+                },
+                &ImportFormat::Binary,
+            )
+            .await;
+        }
     }
 }

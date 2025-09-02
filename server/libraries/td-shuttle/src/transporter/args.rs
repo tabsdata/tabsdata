@@ -481,6 +481,7 @@ pub enum Format {
     Csv(ImporterCsvReadOptions),
     NdJson(ImporterNdJsonReadOptions),
     Log(ImporterLogReadOptions),
+    Binary,
 }
 
 /// Load a format configuration from a JSON string into the specified generic type.

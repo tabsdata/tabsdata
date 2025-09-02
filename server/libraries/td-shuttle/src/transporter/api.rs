@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::fmt::Display;
+use std::mem::discriminant;
 use url::Url;
 
 #[allow(clippy::large_enum_variant)]
@@ -67,6 +68,22 @@ impl ImportSource {
                 };
                 Some(lastmod_info)
             }
+        }
+    }
+
+    pub fn source_location(&self, source_url: &Url) -> Location<Url> {
+        match &self.location {
+            Location::LocalFile { url: _ } => Location::LocalFile {
+                url: source_url.clone(),
+            },
+            Location::S3 { url: _, configs } => Location::S3 {
+                url: source_url.clone(),
+                configs: configs.clone(),
+            },
+            Location::Azure { url: _, configs } => Location::Azure {
+                url: source_url.clone(),
+                configs: configs.clone(),
+            },
         }
     }
 }
@@ -337,6 +354,34 @@ pub struct ImportTarget {
     location: Location<BaseImportUrl>,
 }
 
+impl ImportTarget {
+    pub fn target_location(&self, source_url: &Url) -> Location<Url> {
+        // URL functions cannot fail here, file_name will always return a valid file name
+        // and join will always succeed because we are joining a file name to a base URL.
+        let file_name = source_url.file_name().unwrap();
+        match &self.location {
+            Location::LocalFile {
+                url: BaseImportUrl(url),
+            } => Location::LocalFile {
+                url: url.join(file_name.as_str()).unwrap(),
+            },
+            Location::S3 {
+                url: BaseImportUrl(url),
+                configs,
+            } => Location::S3 {
+                url: url.join(file_name.as_str()).unwrap(),
+                configs: configs.clone(),
+            },
+            Location::Azure {
+                url: BaseImportUrl(url),
+                configs,
+            } => Location::Azure {
+                url: url.join(file_name.as_str()).unwrap(),
+                configs: configs.clone(),
+            },
+        }
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
 pub struct CopyRequest {
@@ -369,6 +414,54 @@ impl<L> Location<L> {
             Location::LocalFile { .. } => 1024 * 1024,
             Location::S3 { .. } => 1024 * 1024 * 5,
             Location::Azure { .. } => 1024 * 1024 * 4,
+        }
+    }
+}
+
+impl Location<Url> {
+    /// Joins a file name to the URL of the location.
+    /// It has the same behavior as [`Url::join`], but it returns a `Location<Url>` instead of a `Url`.
+    ///
+    /// If the URL does not have a trailing slash, the last path element of the URL is considered
+    /// to be a file name and it will be removed before joining the new file name.
+    ///
+    pub fn join(&self, file_name: &str) -> Result<Location<Url>, TransporterError> {
+        let url = self.url();
+        let joined_url = url.join(file_name).map_err(|_| {
+            TransporterError::InvalidImporterFileUrl(format!(
+                "Could not join file name '{file_name}' to URL '{}'",
+                url
+            ))
+        })?;
+        let joined_url = match self {
+            Location::LocalFile { .. } => Location::LocalFile { url: joined_url },
+            Location::S3 { configs, .. } => Location::S3 {
+                url: joined_url,
+                configs: configs.clone(),
+            },
+            Location::Azure { configs, .. } => Location::Azure {
+                url: joined_url,
+                configs: configs.clone(),
+            },
+        };
+        Ok(joined_url)
+    }
+}
+
+impl From<&Location<Url>> for Location<WildcardUrl> {
+    fn from(location: &Location<Url>) -> Self {
+        match location {
+            Location::LocalFile { url } => Location::LocalFile {
+                url: WildcardUrl(url.clone()),
+            },
+            Location::S3 { url, configs } => Location::S3 {
+                url: WildcardUrl(url.clone()),
+                configs: configs.clone(),
+            },
+            Location::Azure { url, configs } => Location::Azure {
+                url: WildcardUrl(url.clone()),
+                configs: configs.clone(),
+            },
         }
     }
 }
@@ -552,6 +645,14 @@ pub enum ImportFormat {
     Json,
     Log,
     Parquet,
+    Binary,
+}
+
+impl ImportFormat {
+    /// Returns [`false`] if the import format is [`ImportFormat::Binary`], [`true`] otherwise.CSV, JSON, or Log.
+    pub fn using_polars(&self) -> bool {
+        discriminant(self) != discriminant(&ImportFormat::Binary)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1096,6 +1197,76 @@ mod tests {
     use base64::prelude::BASE64_STANDARD_NO_PAD;
     use chrono::{DateTime, Utc};
     use td_common::time::UniqueUtc;
+    use url::Url;
+
+    #[test]
+    fn test_import_format_using_polars() {
+        let csv_format = super::ImportFormat::Csv(super::ImportCsvOptions::default());
+        assert!(csv_format.using_polars());
+
+        let json_format = super::ImportFormat::Json;
+        assert!(json_format.using_polars());
+
+        let log_format = super::ImportFormat::Log;
+        assert!(log_format.using_polars());
+
+        let parquet_format = super::ImportFormat::Parquet;
+        assert!(parquet_format.using_polars());
+
+        let binary_format = super::ImportFormat::Binary;
+        assert!(!binary_format.using_polars());
+    }
+
+    #[test]
+    fn test_location_join() {
+        #[cfg(not(target_os = "windows"))]
+        let local_base_url = "file:///import-dir/";
+        #[cfg(not(target_os = "windows"))]
+        let expected_url = "file:///import-dir/file1.csv";
+
+        #[cfg(target_os = "windows")]
+        let local_base_url = "file:///c:/import-dir/";
+        #[cfg(target_os = "windows")]
+        let expected_url = "file:///c:/import-dir/file1.csv";
+
+        let location = super::Location::LocalFile {
+            url: Url::parse(local_base_url).unwrap(),
+        };
+        let joined_location = location.join("file1.csv").unwrap();
+        assert_eq!(joined_location.url().as_str(), expected_url);
+        assert_eq!(location.cloud_configs(), joined_location.cloud_configs());
+
+        let location = super::Location::S3 {
+            url: Url::parse("s3://bucket/import-dir/").unwrap(),
+            configs: super::AwsConfigs {
+                access_key: super::Value::Literal("access_key".into()),
+                secret_key: super::Value::Literal("secret_key".into()),
+                region: Some(super::Value::Literal("region".into())),
+                extra_configs: None,
+            },
+        };
+        let joined_location = location.join("file1.csv").unwrap();
+        assert_eq!(
+            joined_location.url().as_str(),
+            "s3://bucket/import-dir/file1.csv"
+        );
+        assert_eq!(location.cloud_configs(), joined_location.cloud_configs());
+
+        let location = super::Location::Azure {
+            url: Url::parse("az://container/import-dir/").unwrap(),
+            configs: super::AzureConfigs {
+                account_name: super::Value::Literal("account_name".into()),
+                account_key: super::Value::Literal("account_key".into()),
+                extra_configs: None,
+            },
+        };
+        let joined_location = location.join("file1.csv").unwrap();
+        assert_eq!(
+            joined_location.url().as_str(),
+            "az://container/import-dir/file1.csv"
+        );
+        assert_eq!(location.cloud_configs(), joined_location.cloud_configs());
+    }
 
     #[test]
     fn test_value() {

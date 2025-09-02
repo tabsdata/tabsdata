@@ -237,7 +237,7 @@ impl ProgressMeter {
     }
 }
 
-pub fn run_import(import: FileImportInstructions) -> Result<FileImportReport, ImportError> {
+pub fn run_polars_import(import: FileImportInstructions) -> Result<FileImportReport, ImportError> {
     let import = Arc::new(import);
     let progress_meter = Arc::new(ProgressMeter::new(import.idx, import.from_url.as_str()));
 
@@ -356,6 +356,7 @@ fn importer_lazy_frame(
                     nth(0).as_expr().alias("message"),
                 ])
         }
+        Format::Binary => unimplemented!("This choice should not be used for imports using polars"),
     };
     Ok(lazy_frame)
 }
