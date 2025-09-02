@@ -98,6 +98,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_role_change(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -142,6 +143,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_role_change_ok(db: DbPool) -> Result<(), TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;
@@ -189,6 +191,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_role_change_user_not_in_given_role(db: DbPool) -> Result<(), TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;

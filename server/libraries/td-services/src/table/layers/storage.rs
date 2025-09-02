@@ -98,11 +98,13 @@ mod tests {
     use td_tower::extractors::ConnectionType;
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_table_location_non_existing(db: DbPool) -> Result<(), TdError> {
         _run_test(db, None, None).await
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_table_location_existing_with_data(db: DbPool) -> Result<(), TdError> {
         let (collection, execution, transaction, function_run, table) =
             _setup_table(db.clone()).await?;
@@ -120,6 +122,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_table_location_existing_without_data(db: DbPool) -> Result<(), TdError> {
         let (collection, execution, transaction, function_run, table) =
             _setup_table(db.clone()).await?;
@@ -137,6 +140,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_table_location_existing_previous_with_data(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -165,6 +169,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_table_location_existing_previous_with_data_different_table_version(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -199,6 +204,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_table_location_existing_previous_without_data(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -227,6 +233,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_table_location_existing_previous_without_data_different_table_version(
         db: DbPool,
     ) -> Result<(), TdError> {

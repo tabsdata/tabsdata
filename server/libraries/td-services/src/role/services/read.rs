@@ -53,6 +53,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_read_role(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -73,6 +74,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_read_role_with_id(db: DbPool) -> Result<(), TdError> {
         let role = seed_role(
             &db,
@@ -111,6 +113,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_read_role_with_name(db: DbPool) -> Result<(), TdError> {
         let _role = seed_role(
             &db,

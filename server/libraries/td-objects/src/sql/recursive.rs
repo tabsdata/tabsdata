@@ -684,6 +684,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_recursive"))]
+    #[tokio::test]
     async fn test_select_active_versions_none_fetch_all(db: DbPool) {
         let id = TestId::try_from("MMM").unwrap();
         let mut query_builder = TEST_QUERIES
@@ -704,6 +705,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_recursive"))]
+    #[tokio::test]
     async fn test_select_active_versions_none_fetch_all_upstream(db: DbPool) {
         let id = TestId::try_from("NNN").unwrap();
         let mut query_builder = TEST_QUERIES
@@ -726,6 +728,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_recursive"))]
+    #[tokio::test]
     async fn test_select_active_versions_at_time_fetch_all(db: DbPool) {
         let at = time(1);
         let id = TestId::try_from("MMM").unwrap();
@@ -748,6 +751,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_recursive"))]
+    #[tokio::test]
     async fn test_select_active_versions_break_downstream_by_status_ref(db: DbPool) {
         let at = time(2);
         let id = TestId::try_from("MMM").unwrap();
@@ -771,6 +775,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_recursive"))]
+    #[tokio::test]
     async fn test_select_active_versions_none_last_in_stream(db: DbPool) {
         let id = TestId::try_from("SSS").unwrap();
         let mut query_builder = TEST_QUERIES
@@ -785,6 +790,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_recursive"))]
+    #[tokio::test]
     async fn test_select_active_versions_none_deleted(db: DbPool) {
         // OOO is active, but PPP has the same partition_id and is deleted
         let id = TestId::try_from("OOO").unwrap();
@@ -798,6 +804,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_recursive"))]
+    #[tokio::test]
     async fn test_select_active_versions_heavy(db: DbPool) -> Result<(), TdError> {
         let size: usize = 1000;
 
@@ -846,6 +853,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_select_active_versions_at_types(db: DbPool) -> Result<(), TdError> {
         async fn test_query<D, R, E>(db: &DbPool, recursion_ref: &E) -> Result<(), TdError>
         where

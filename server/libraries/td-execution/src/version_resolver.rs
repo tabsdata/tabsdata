@@ -415,6 +415,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_none(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -438,6 +439,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_none_multiple_tables(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let extra_table_name_1 = TableNameDto::try_from("should_not_be_found_1")?;
@@ -470,6 +472,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_none_triggered_on(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -521,6 +524,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_single_head(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -606,6 +610,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_single_fixed(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -674,6 +679,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_list_head(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -714,6 +720,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_list_fixed(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -755,6 +762,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_list_mixed(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -801,6 +809,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_list_fixed_not_found(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -850,6 +859,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_head(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -897,6 +907,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_head_incomplete(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -937,6 +948,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_inverse_head(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -978,6 +990,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_fixed(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -1028,6 +1041,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_inverse_fixed(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -1077,6 +1091,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_same_head(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -1110,6 +1125,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_same_head_not_found(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -1141,6 +1157,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_same_fixed(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -1177,6 +1194,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_mixed(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -1215,6 +1233,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_mixed_same(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -1249,6 +1268,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_resolve_range_mixed_head_bound(db: DbPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =

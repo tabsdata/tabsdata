@@ -69,7 +69,6 @@ pub fn scoped_test(args: TokenStream, item: TokenStream) -> TokenStream {
 
     let test_name = &func_sig.ident;
     let expanded = quote! {
-        #[tokio::test]
         #(#func_attrs)*
         #func_vis #func_sig {
             use td_test::TestSetup;

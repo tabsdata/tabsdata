@@ -686,6 +686,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_insert(db: DbPool) -> Result<(), TdError> {
             let dao = TestDao::builder()
                 .id(TestId::try_from("")?)
@@ -716,6 +717,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_select_by(db: DbPool) -> Result<(), TdError> {
             let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&())?;
             let query = query_builder.build_query_as();
@@ -735,6 +737,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_select_by_order_by(db: DbPool) -> Result<(), TdError> {
             #[Dao]
             #[dao(sql_table = "test_table", order_by = "modified_on")]
@@ -761,6 +764,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_select_by_where(db: DbPool) -> Result<(), TdError> {
             let by = &(TestName::try_from("mario")?);
             let mut query_builder = TEST_QUERIES.select_by::<TestDao>(&by)?;
@@ -779,6 +783,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_select_by_where_tuple(db: DbPool) -> Result<(), TdError> {
             let by = (
                 &TestId::try_from("00000000000000000000000004")?,
@@ -800,6 +805,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_find_by(db: DbPool) -> Result<(), TdError> {
             let find_by: [&TestId; 0] = [];
             let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&find_by)?;
@@ -817,6 +823,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_find_by_where(db: DbPool) -> Result<(), TdError> {
             let by = [&TestName::try_from("mario")?];
             let mut query_builder = TEST_QUERIES.find_by::<TestDao>(&by)?;
@@ -835,6 +842,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_find_by_where_tuple(db: DbPool) -> Result<(), TdError> {
             let by = [(
                 &TestId::try_from("00000000000000000000000004")?,
@@ -856,6 +864,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_find_by_where_multiple_tuple(db: DbPool) -> Result<(), TdError> {
             let by = [
                 (
@@ -890,6 +899,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_update_by(db: DbPool) -> Result<(), TdError> {
             let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
             let mut query_builder = TEST_QUERIES.update_by::<_, TestDao>(&update_dao, &())?;
@@ -919,6 +929,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_update_by_where(db: DbPool) -> Result<(), TdError> {
             let by = &(TestName::try_from("mario")?);
             let update_dao = UpdateDao::builder().try_name("peach")?.build()?;
@@ -952,6 +963,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_update_by_where_tuple(db: DbPool) -> Result<(), TdError> {
             let by = (
                 &TestId::try_from("00000000000000000000000004")?,
@@ -988,6 +1000,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_delete_by(db: DbPool) -> Result<(), TdError> {
             let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&())?;
             let query = query_builder.build();
@@ -1008,6 +1021,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_delete_by_where(db: DbPool) -> Result<(), TdError> {
             let by = &(TestName::try_from("mario")?);
             let mut query_builder = TEST_QUERIES.delete_by::<TestDao>(&by)?;
@@ -1037,6 +1051,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_queries"))]
+        #[tokio::test]
         async fn test_dao_delete_by_where_tuple(db: DbPool) -> Result<(), TdError> {
             let by = (
                 &TestId::try_from("00000000000000000000000004")?,
@@ -1103,6 +1118,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1149,6 +1165,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_default(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1179,6 +1196,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_natural_order_by(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1211,6 +1229,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_order_by(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1247,6 +1266,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_order_by_mapping(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1284,6 +1304,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_filter(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1319,6 +1340,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_filter_like(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1355,6 +1377,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_filter_like_wildcard(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1389,6 +1412,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_filter_between(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1425,6 +1449,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_len(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1456,6 +1481,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_previous_asc_natural_order(
             db: DbPool,
         ) -> Result<(), TdError> {
@@ -1493,6 +1519,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_next_asc(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1528,6 +1555,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_next_desc(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1563,6 +1591,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_previous_desc(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1597,6 +1626,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_order_by_next_asc(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1636,6 +1666,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_order_by_previous_asc_natural_order(
             db: DbPool,
         ) -> Result<(), TdError> {
@@ -1674,6 +1705,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_order_by_previous_asc_order(
             db: DbPool,
         ) -> Result<(), TdError> {
@@ -1712,6 +1744,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_order_by_next_desc(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1750,6 +1783,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_order_by_previous_desc_natural_order(
             db: DbPool,
         ) -> Result<(), TdError> {
@@ -1789,6 +1823,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_pagination_order_by_previous_desc_order(
             db: DbPool,
         ) -> Result<(), TdError> {
@@ -1828,6 +1863,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_filters(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]
@@ -1869,6 +1905,7 @@ mod tests {
         }
 
         #[td_test::test(sqlx(fixture = "test_list_queries"))]
+        #[tokio::test]
         async fn test_dao_list_filter_order_by(db: DbPool) -> Result<(), TdError> {
             #[Dto]
             #[dto(list(on = TestDao))]

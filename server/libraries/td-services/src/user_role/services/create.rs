@@ -70,6 +70,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_create_user_role(db: DbPool) {
         use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
         use td_tower::metadata::type_of_val;
@@ -111,6 +112,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_create_user_role(db: DbPool) -> Result<(), TdError> {
         let _user = seed_user(
             &db,

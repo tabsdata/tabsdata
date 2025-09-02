@@ -139,6 +139,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_collections_lifecycle(db: DbPool) {
         let collections_state = Arc::new(CollectionServices::new(
             db.clone(),

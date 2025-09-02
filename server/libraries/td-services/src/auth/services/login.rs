@@ -97,6 +97,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_login(db: DbPool) {
         use crate::auth::layers::assert_current_password::assert_current_password;
         use crate::auth::layers::assert_no_password_change_required::assert_no_password_change_required;
@@ -148,6 +149,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_login_ok(db: DbPool) -> Result<(), td_error::TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;
@@ -174,6 +176,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_login_wrong_user_unauthz(db: DbPool) -> Result<(), td_error::TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;
@@ -195,6 +198,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_login_wrong_password_unauthz(db: DbPool) -> Result<(), td_error::TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;
@@ -214,6 +218,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_login_wrong_role_unauthz(db: DbPool) -> Result<(), td_error::TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;

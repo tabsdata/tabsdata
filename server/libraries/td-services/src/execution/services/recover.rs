@@ -65,6 +65,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_recover_execution(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -127,6 +128,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_recover_execution_unique(db: DbPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -150,6 +152,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_recover_execution_multiple_function(db: DbPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -183,6 +186,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_recover_execution_multiple_transaction(db: DbPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -219,6 +223,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_recover_execution_multiple_execution(db: DbPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -258,6 +263,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_recover_execution_downstream(db: DbPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -297,6 +303,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_recover_execution_different_collection(db: DbPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -330,6 +337,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_recover_execution_status_transitions(db: DbPool) -> Result<(), TdError> {
         let recover_transition_for =
             async move |initial: FunctionRunStatus| -> Result<(), TdError> {
@@ -395,6 +403,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_recover_execution_status_transitions_no_op(db: DbPool) -> Result<(), TdError> {
         let recover_transition_for =
             async move |initial: FunctionRunStatus| -> Result<(), TdError> {

@@ -140,6 +140,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_register_function(db: DbPool) {
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
@@ -269,6 +270,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_empty(db: DbPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
@@ -310,6 +312,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_empty_vec(db: DbPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
@@ -351,6 +354,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_table_output(db: DbPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
@@ -392,6 +396,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_table_dependency(db: DbPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
@@ -433,17 +438,20 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_implicit_trigger_none(db: DbPool) -> Result<(), TdError> {
         test_register_trigger(db, None).await
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_implicit_trigger_some_empty(db: DbPool) -> Result<(), TdError> {
         let test_triggers = Some(vec![]);
         test_register_trigger(db, test_triggers).await
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_implicit_trigger_some(db: DbPool) -> Result<(), TdError> {
         let test_triggers = Some(vec![
             TableTriggerDto::try_from("table_1")?,
@@ -537,6 +545,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_tables_dependencies_triggers(db: DbPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
@@ -623,6 +632,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_tables_dependencies_different_collections_permissions_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -631,6 +641,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_tables_dependencies_different_collections_permissions_forbidden(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -639,6 +650,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_tables_triggers_different_collections_with_tr_permissions_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -647,6 +659,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_tables_triggers_different_collections_with_tr_permissions_forbidden(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -813,6 +826,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_same_name(db: DbPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let _ = seed_collection(&db, &collection_name, &UserId::admin()).await;
@@ -865,16 +879,19 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_private_tables_all_same_collection(db: DbPool) -> Result<(), TdError> {
         test_private_tables(db, false, false).await
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_private_tables_deps_diff_collection(db: DbPool) -> Result<(), TdError> {
         test_private_tables(db, true, false).await
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_register_private_tables_triggers_diff_collection(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -983,6 +1000,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_private_table_flag(db: DbPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         seed_collection(&db, &collection_name_1, &UserId::admin()).await;

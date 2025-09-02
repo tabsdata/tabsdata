@@ -12,6 +12,7 @@ use td_objects::tower_service::authz::AuthzError;
 use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
 
 #[td_test::test(sqlx)]
+#[tokio::test]
 async fn test_not_allowed_to_delete_collection(db: DbPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = seed_collection(&db, &name, &UserId::admin()).await;

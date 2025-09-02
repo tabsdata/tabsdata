@@ -103,6 +103,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_sample_service(db: DbPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::tower_service::from::TryIntoService;

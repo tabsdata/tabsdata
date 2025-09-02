@@ -99,6 +99,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_password_change(db: DbPool) {
         use crate::auth::layers::assert_current_password::assert_current_password;
         use crate::auth::layers::assert_user_enabled::assert_user_enabled;
@@ -154,6 +155,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_password_change_ok(db: DbPool) -> Result<(), td_error::TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
 
@@ -195,6 +197,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_password_change_wrong_user_unauthz(db: DbPool) -> Result<(), td_error::TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.password_change_service().await;
@@ -213,6 +216,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_password_change_wrong_old_password_unauthz(
         db: DbPool,
     ) -> Result<(), td_error::TdError> {

@@ -10,6 +10,7 @@ use td_objects::types::basic::{AccessTokenId, CollectionName, Description, RoleI
 use td_objects::types::collection::CollectionCreate;
 
 #[td_test::test(sqlx)]
+#[tokio::test]
 async fn test_not_allowed_to_create_collection(db: DbPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let description = Description::try_from("DS0").unwrap();

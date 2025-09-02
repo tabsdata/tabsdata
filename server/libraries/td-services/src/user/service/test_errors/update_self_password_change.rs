@@ -15,6 +15,7 @@ use td_objects::types::basic::{
 use td_objects::types::user::UserUpdate;
 
 #[td_test::test(sqlx)]
+#[tokio::test]
 async fn test_update_user_self(db: DbPool) {
     let user = seed_user(
         &db,

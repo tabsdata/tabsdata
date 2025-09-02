@@ -58,6 +58,7 @@ pub mod tests {
     use crate::types::basic::{Description, RoleName, UserEnabled, UserName};
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_seed_user_role(db: DbPool) {
         let user = seed_user(
             &db,

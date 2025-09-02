@@ -124,6 +124,7 @@ mod tests {
     use td_objects::types::basic::{CollectionName, RoleId, ToCollectionId, UserId};
 
     #[td_test::test(sqlx(migrator = td_schema::schema()))]
+    #[tokio::test]
     async fn test_get_permissions(db: DbPool) -> Result<(), TdError> {
         let provider = SqlAuthzDataProvider;
         let permissions = provider
@@ -137,6 +138,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(migrator = td_schema::schema()))]
+    #[tokio::test]
     async fn test_get_inter_collection_permissions(db: DbPool) -> Result<(), TdError> {
         let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
@@ -157,6 +159,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(migrator = td_schema::schema()))]
+    #[tokio::test]
     async fn test_provider_get(db: DbPool) -> Result<(), TdError> {
         let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
         let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;

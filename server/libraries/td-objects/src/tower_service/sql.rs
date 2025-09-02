@@ -1077,6 +1077,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_insert(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1101,6 +1102,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_select_by(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1119,6 +1121,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_select_by_not_found(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1135,6 +1138,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_select_by_tuple(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1153,6 +1157,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_select_by_tuple_not_found(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1172,6 +1177,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_select_all_by(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1192,6 +1198,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_select_all_by_multiple(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1211,6 +1218,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_assert_exists(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1238,6 +1246,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_assert_not_exists(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1265,6 +1274,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_select_id_or_name(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1298,6 +1308,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_update(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1335,6 +1346,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_list(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1365,6 +1377,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_tower"))]
+    #[tokio::test]
     async fn test_delete(db: DbPool) -> Result<(), TdError> {
         let transaction = db.begin().await.unwrap();
         let transaction = ConnectionType::Transaction(transaction).into();
@@ -1609,6 +1622,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_pagination"))]
+    #[tokio::test]
     async fn test_list_pagination_asc(db: DbPool) -> Result<(), TdError> {
         fn request(params: ListParams) -> ListRequest<()> {
             RequestContext::with(
@@ -1731,6 +1745,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_pagination"))]
+    #[tokio::test]
     async fn test_list_pagination_desc(db: DbPool) -> Result<(), TdError> {
         fn request(params: ListParams) -> ListRequest<()> {
             RequestContext::with(

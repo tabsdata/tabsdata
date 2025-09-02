@@ -742,11 +742,13 @@ mod tests {
     }
 
     #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
+    #[tokio::test]
     async fn test_s3_root_mount(reqas: S3WithAccessKeySecretKeyReqs) {
         test_aws_mount("/", &reqas).await;
     }
 
     #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
+    #[tokio::test]
     async fn test_s3_non_root_mount(reqs: S3WithAccessKeySecretKeyReqs) {
         test_aws_mount("/foo", &reqs).await;
     }
@@ -780,11 +782,13 @@ mod tests {
     }
 
     #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
+    #[tokio::test]
     async fn test_azure_root_mount(reqs: AzureStorageWithAccountKeyReqs) {
         test_azure_mount("/", &reqs).await;
     }
 
     #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
+    #[tokio::test]
     async fn test_azure_non_root_mount(reqs: AzureStorageWithAccountKeyReqs) {
         test_azure_mount("/foo", &reqs).await;
     }

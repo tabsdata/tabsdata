@@ -55,6 +55,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_status(db: DbPool) {
         let router = super::router(Arc::new(SystemServices::new(db)));
 

@@ -17,19 +17,52 @@ run_task = [
 category = "02 - Tidy"
 private = true
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
-command = "cargo"
-args = ["generate-lockfile"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+    debug "🚀 cargo generate-lockfile"
+    exec --fail-on-error cargo generate-lockfile
+
+    debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
+    exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
+    ''']
+
 
 [tasks.lock_rs_modules]
 category = "02 - Tidy"
 private = true
-cwd = "${PROJECT_RS_TD_MACROS_FOLDER}"
-command = "cargo"
-args = ["generate-lockfile"]
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_RS_TD_MACROS_FOLDER}"
+
+    debug "🚀 cargo generate-lockfile"
+    exec --fail-on-error cargo generate-lockfile
+
+    debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
+    exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
+    ''']
 
 [tasks.lock_rs_expansions]
 category = "02 - Tidy"
 private = true
-cwd = "${PROJECT_RS_TY_EXPANSIONS_FOLDER}"
-command = "cargo"
-args = ["generate-lockfile"]
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/libraries/log.ds
+
+    cd "${PROJECT_RS_TY_EXPANSIONS_FOLDER}"
+
+    debug "🚀 cargo generate-lockfile"
+    exec --fail-on-error cargo generate-lockfile
+
+    debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
+    exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
+    ''']

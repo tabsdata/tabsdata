@@ -93,6 +93,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_create_permission(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -137,6 +138,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_create_permission(db: DbPool) -> Result<(), TdError> {
         let create = PermissionCreate::builder()
             .permission_type(PermissionType::SecAdmin)
@@ -179,6 +181,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_create_permission_on_collection_by_coll_admin_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -231,6 +234,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_create_permission_on_collection_by_coll_admin_unauthz(
         db: DbPool,
     ) -> Result<(), TdError> {

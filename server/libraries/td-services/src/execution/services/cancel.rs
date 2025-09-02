@@ -66,6 +66,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_cancel_execution(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -128,6 +129,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_cancel_execution_unique(db: DbPool) -> Result<(), TdError> {
         test_cancel_execution(
             db,
@@ -151,6 +153,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_cancel_execution_multiple_function(db: DbPool) -> Result<(), TdError> {
         test_cancel_execution(
             db,
@@ -184,6 +187,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_cancel_execution_multiple_transaction(db: DbPool) -> Result<(), TdError> {
         test_cancel_execution(
             db,
@@ -220,6 +224,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_cancel_execution_multiple_execution(db: DbPool) -> Result<(), TdError> {
         test_cancel_execution(
             db,
@@ -259,6 +264,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_cancel_execution_downstream(db: DbPool) -> Result<(), TdError> {
         test_cancel_execution(
             db,
@@ -298,6 +304,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_cancel_execution_different_collection(db: DbPool) -> Result<(), TdError> {
         test_cancel_execution(
             db,
@@ -331,6 +338,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_cancel_execution_status_transitions(db: DbPool) -> Result<(), TdError> {
         let cancel_transition_for = async move |initial: FunctionRunStatus| -> Result<(), TdError> {
             let db = db.clone();

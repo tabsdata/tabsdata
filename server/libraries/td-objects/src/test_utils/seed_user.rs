@@ -80,6 +80,7 @@ mod tests {
     use crate::test_utils::seed_user::seed_user;
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_seed_user(db: DbPool) {
         let user = seed_user(
             &db,

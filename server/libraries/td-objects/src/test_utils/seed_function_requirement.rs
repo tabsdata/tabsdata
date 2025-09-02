@@ -70,6 +70,7 @@ mod tests {
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_seed_function_requirement(db: DbPool) {
         let queries = DaoQueries::default();
 

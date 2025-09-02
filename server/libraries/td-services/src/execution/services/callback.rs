@@ -90,6 +90,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_callback(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -189,6 +190,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_callback_running(db: DbPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -214,6 +216,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_callback_running_multiple_function_runs(db: DbPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -249,6 +252,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_callback_running_multiple_transactions(db: DbPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -287,6 +291,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_callback_published(db: DbPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -322,6 +327,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_callback_published_downstream(db: DbPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -370,6 +376,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_callback_done(db: DbPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -405,6 +412,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_callback_failed(db: DbPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -440,6 +448,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_callback_failed_downstream(db: DbPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -475,6 +484,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_callback_table_data_version_status(db: DbPool) -> Result<(), TdError> {
         test_callback(
             db.clone(),

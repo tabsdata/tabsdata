@@ -43,6 +43,7 @@ mod tests {
     use testdir::testdir;
 
     #[crate::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az_test_not_defined", do_not_fail_reqs= true))]
+    #[tokio::test]
     async fn test_signature_azure_storage_with_account_key_reqs(
         _az: AzureStorageWithAccountKeyReqs,
     ) {

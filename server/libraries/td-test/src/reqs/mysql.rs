@@ -43,6 +43,7 @@ mod tests {
     use testdir::testdir;
 
     #[crate::test(when(reqs = MySqlReqs, env_prefix= "mysql_test_not_defined", do_not_fail_reqs= true))]
+    #[tokio::test]
     async fn test_signature_mysql_reqs(_s3: MySqlReqs) {
         panic!()
     }

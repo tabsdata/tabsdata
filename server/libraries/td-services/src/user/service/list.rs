@@ -44,6 +44,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_list_provider(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -60,6 +61,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_list_users(db: DbPool) {
         let _ = seed_user(
             &db,

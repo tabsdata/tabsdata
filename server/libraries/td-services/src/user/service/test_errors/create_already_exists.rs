@@ -12,6 +12,7 @@ use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserN
 use td_objects::types::user::UserCreate;
 
 #[td_test::test(sqlx)]
+#[tokio::test]
 async fn test_create_already_existing(db: DbPool) {
     let _ = seed_user(
         &db,

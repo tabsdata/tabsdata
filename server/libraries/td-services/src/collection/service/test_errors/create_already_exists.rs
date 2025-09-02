@@ -12,6 +12,7 @@ use td_objects::types::basic::{AccessTokenId, CollectionName, Description, RoleI
 use td_objects::types::collection::CollectionCreate;
 
 #[td_test::test(sqlx)]
+#[tokio::test]
 async fn test_create_already_existing(db: DbPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = seed_collection(&db, &name, &UserId::admin()).await;

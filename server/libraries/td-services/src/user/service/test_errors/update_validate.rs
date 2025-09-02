@@ -13,6 +13,7 @@ use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserN
 use td_objects::types::user::UserUpdate;
 
 #[td_test::test(sqlx)]
+#[tokio::test]
 async fn test_update_request_has_nothing_to_update(db: DbPool) {
     let _ = seed_user(
         &db,

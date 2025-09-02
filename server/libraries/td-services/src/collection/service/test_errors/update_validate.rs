@@ -13,6 +13,7 @@ use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
 use td_objects::types::collection::CollectionUpdate;
 
 #[td_test::test(sqlx)]
+#[tokio::test]
 async fn test_update_collection_validate(db: DbPool) {
     let name = CollectionName::try_from("c0").unwrap();
     let _ = seed_collection(&db, &name, &UserId::admin()).await;

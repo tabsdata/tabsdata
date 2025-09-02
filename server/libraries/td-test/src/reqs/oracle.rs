@@ -43,6 +43,7 @@ mod tests {
     use testdir::testdir;
 
     #[crate::test(when(reqs = OracleReqs, env_prefix= "oracle_test_not_defined", do_not_fail_reqs= true))]
+    #[tokio::test]
     async fn test_signature_oracle_reqs(_s3: OracleReqs) {
         panic!()
     }

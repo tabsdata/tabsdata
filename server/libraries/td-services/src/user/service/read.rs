@@ -53,6 +53,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_read_provider(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -74,6 +75,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_read_user(db: DbPool) {
         let user_name = UserName::try_from("u0").unwrap();
         let user = seed_user(&db, &user_name, &UserEnabled::from(true)).await;

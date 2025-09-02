@@ -143,6 +143,7 @@ pub(crate) mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_execute(db: DbPool) {
         use td_objects::tower_service::authz::InterColl;
         use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
@@ -222,6 +223,7 @@ pub(crate) mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_execute_dependencies_different_collections_permissions_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -230,6 +232,7 @@ pub(crate) mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_execute_dependencies_different_collections_permissions_forbidden(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -238,6 +241,7 @@ pub(crate) mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_execute_trigger_different_collections_permissions_ok(
         db: DbPool,
     ) -> Result<(), TdError> {
@@ -246,6 +250,7 @@ pub(crate) mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_execute_trigger_different_collections_permissions_forbidden(
         db: DbPool,
     ) -> Result<(), TdError> {

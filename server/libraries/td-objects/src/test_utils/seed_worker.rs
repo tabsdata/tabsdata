@@ -55,6 +55,7 @@ mod tests {
     use td_database::sql::DbPool;
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_seed_worker(db: DbPool) {
         let collection = seed_collection(
             &db,

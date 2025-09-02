@@ -672,6 +672,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
+    #[tokio::test]
     async fn test_select_versions_none_fetch_all(db: DbPool) {
         let status = &TestStatus::try_from("A").unwrap();
         let mut query_builder = TEST_QUERIES
@@ -683,6 +684,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
+    #[tokio::test]
     async fn test_select_versions_at_none_where_fetch_all(db: DbPool) {
         // 00, no matches
         let by = &TestId::try_from("00000000000000000000000000").unwrap();
@@ -694,6 +696,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
+    #[tokio::test]
     async fn test_select_versions_at_defined_on_before_fetch_all(db: DbPool) {
         let mut query_builder = TEST_QUERIES
             .select_versions_at::<TestDao>(Some(AT_BEFORE.deref()), None, &())
@@ -703,6 +706,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
+    #[tokio::test]
     async fn test_select_versions_at_defined_on_04_08_fetch_all(db: DbPool) {
         let mut query_builder = TEST_QUERIES
             .select_versions_at::<TestDao>(Some(AT_04_08.deref()), None, &())
@@ -715,6 +719,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
+    #[tokio::test]
     async fn test_select_versions_at_new_active(db: DbPool) -> Result<(), TdError> {
         let new = TestDaoBuilder::default()
             .id(TestId::try_from("0000000000000000000000000S")?)
@@ -757,6 +762,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx(fixture = "test_cte"))]
+    #[tokio::test]
     async fn test_select_versions_at_defined_on_04_08_fetch_one(db: DbPool) {
         let by = &TestId::try_from("00000000000000000000000004").unwrap();
         let mut query_builder = TEST_QUERIES
@@ -768,6 +774,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_select_versions_at_types(db: DbPool) -> Result<(), TdError> {
         async fn test_query<D>(db: &DbPool) -> Result<(), TdError>
         where

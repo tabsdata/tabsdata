@@ -50,6 +50,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_list_provider(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -65,6 +66,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_list_collection(db: DbPool) {
         let name = CollectionName::try_from("ds0").unwrap();
         let _ = seed_collection(&db, &name, &UserId::admin()).await;
@@ -88,6 +90,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_list_collection_unauthorized(db: DbPool) -> Result<(), TdError> {
         // Create new role without permissions
         let user = seed_user(

@@ -43,6 +43,7 @@ mod tests {
     use testdir::testdir;
 
     #[crate::test(when(reqs = PostgresReqs, env_prefix= "postgres_test_not_defined", do_not_fail_reqs= true))]
+    #[tokio::test]
     async fn test_signature_postgres_reqs(_s3: PostgresReqs) {
         panic!()
     }

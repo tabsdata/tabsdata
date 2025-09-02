@@ -55,6 +55,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_logout(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -78,6 +79,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_logout_ok(db: DbPool) -> Result<(), TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
         let service = auth_services.login_service().await;

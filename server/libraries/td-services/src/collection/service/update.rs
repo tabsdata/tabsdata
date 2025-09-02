@@ -79,6 +79,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_update_provider(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -120,6 +121,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_update_collection(db: DbPool) {
         let create_name = CollectionName::try_from("ds0").unwrap();
         let _ = seed_collection(&db, &create_name, &UserId::admin()).await;

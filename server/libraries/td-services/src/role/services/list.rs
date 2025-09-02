@@ -43,6 +43,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_list_role(db: DbPool) {
         use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
         use td_tower::metadata::type_of_val;
@@ -60,6 +61,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_list_role(db: DbPool) -> Result<(), TdError> {
         let _role = seed_role(
             &db,

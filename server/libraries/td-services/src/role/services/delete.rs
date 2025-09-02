@@ -69,6 +69,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_delete_role(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -97,12 +98,14 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_delete_role_by_id(db: DbPool) -> Result<(), TdError> {
         let (hero, _villain) = setup_roles(&db).await;
         test_delete_role(&db, RoleIdName::try_from(format!("~{}", hero.id()))?).await
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_delete_role_by_name(db: DbPool) -> Result<(), TdError> {
         let (hero, _villain) = setup_roles(&db).await;
         test_delete_role(&db, RoleIdName::try_from(format!("{}", hero.name()))?).await
@@ -233,6 +236,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_delete_fixed_role(db: DbPool) -> Result<(), TdError> {
         let request = RequestContext::with(
             AccessTokenId::default(),

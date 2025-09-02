@@ -45,6 +45,7 @@ mod tests {
     use testdir::testdir;
 
     #[crate::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s3_test_not_defined", do_not_fail_reqs=true))]
+    #[tokio::test]
     async fn test_signature_s3_with_access_key_secret_key_reqs(_s3: S3WithAccessKeySecretKeyReqs) {
         panic!()
     }

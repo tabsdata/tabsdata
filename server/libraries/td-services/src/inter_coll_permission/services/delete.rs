@@ -84,6 +84,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_delete_inter_collection_permission_service(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -142,6 +143,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_delete_permission_ok(db: DbPool) -> Result<(), TdError> {
         let service = DeleteInterCollectionPermissionService::with_defaults(db.clone())
             .await
@@ -173,6 +175,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_delete_permission_unauthz_err(db: DbPool) -> Result<(), TdError> {
         let service = DeleteInterCollectionPermissionService::with_defaults(db.clone())
             .await

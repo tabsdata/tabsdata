@@ -103,6 +103,7 @@ mod tests {
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_seed_table_data_version(db: DbPool) {
         let collection = seed_collection(
             &db,

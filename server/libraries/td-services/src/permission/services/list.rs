@@ -53,6 +53,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_list_permission(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -73,6 +74,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_list_permissions(db: DbPool) -> Result<(), TdError> {
         let role = seed_role(
             &db,

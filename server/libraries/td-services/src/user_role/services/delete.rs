@@ -60,6 +60,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_delete_user_role(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -86,6 +87,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_delete_user_role(db: DbPool) -> Result<(), TdError> {
         let user = seed_user(
             &db,
@@ -125,6 +127,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_delete_fixed_user_role(db: DbPool) -> Result<(), TdError> {
         let request = RequestContext::with(
             AccessTokenId::default(),

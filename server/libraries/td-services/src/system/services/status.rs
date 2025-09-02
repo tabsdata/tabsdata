@@ -29,6 +29,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_status_service(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -40,6 +41,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_database_status_service(db: DbPool) {
         let service = StatusService::with_defaults(db).await.service().await;
         let response = service.oneshot(()).await.unwrap();

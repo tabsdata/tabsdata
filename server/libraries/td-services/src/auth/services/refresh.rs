@@ -83,6 +83,7 @@ mod tests {
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_tower_metadata_refresh(db: DbPool) {
         use td_tower::metadata::type_of_val;
 
@@ -124,6 +125,7 @@ mod tests {
     }
 
     #[td_test::test(sqlx)]
+    #[tokio::test]
     async fn test_refresh_ok(db: DbPool) -> Result<(), TdError> {
         let auth_services = AuthServices::with_defaults(db.clone()).await;
 

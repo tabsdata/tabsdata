@@ -12,6 +12,7 @@ use td_objects::types::basic::{AccessTokenId, Password, RoleId, UserId};
 use td_objects::types::user::UserUpdate;
 
 #[td_test::test(sqlx)]
+#[tokio::test]
 async fn test_cannot_change_self_password(db: DbPool) {
     let service = UpdateUserService::with_defaults(db.clone())
         .await

@@ -22,9 +22,12 @@ Developers can set this variable to `true` in their local environment to skip th
 
 ## Rust
 
+The `#[td_test::test]` macro works only with tests using the `#[tokio::test]` macro (async tests).
+
 Use the `#[td_test::test(when(reqs = ..., env_prefix = ...))]` macro to define a test that uses 
-external resources. This macro expands to a `#[tokio::test]` macro, make sure your test function 
-is an async function.
+external resources.
+
+*IMPORTANT:* The `#[td_test::test]` macro must be specified before the `#[tokio::test]` macro.
 
 *NOTE:* The Rust test-framework does not allow runtime test skipping, the tests
 will be invoked but will print a message that the test was skipped).
@@ -47,6 +50,7 @@ Python fixture or Rust macro.
 Rust:
 ```rust
     #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "MY_S3"))]
+    #[tokio::test]
     async fn my_test(s3: S3WithAccessKeySecretKeyReqs) {
         ...
     }
@@ -65,7 +69,8 @@ TBD
 
 Rust:
 ```rust
-    #[crate::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "MY_AZ"))]
+    #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "MY_AZ"))]
+    #[tokio::test]
     async fn my_test(az: AzureStorageWithAccountKeyReqs) {
         ...
     }
@@ -89,6 +94,7 @@ TBD
 Rust:
 ```rust
     #[crate::test(when(reqs = MySqlReqs, env_prefix= "MY_MYSQL"))]
+    #[tokio::test]
     async fn my_test(mysql: MySqlReqs) {
         ...
     }
@@ -108,6 +114,7 @@ TBD
 Rust:
 ```rust
     #[crate::test(when(reqs = OracleReqs, env_prefix= "MY_ORACLE"))]
+    #[tokio::test]
     async fn my_test(oracle: OracleReqs) {
         ...
     }
@@ -126,7 +133,8 @@ TBD
 
 Rust:
 ```rust
-    #[crate::test(when(reqs = PostgresReqs, env_prefix= "MY_POSTGRES"))]
+    #[td_test::test(when(reqs = PostgresReqs, env_prefix= "MY_POSTGRES"))]
+    #[tokio::test]
     async fn my_test(postgres: PostgresReqs) {
         ...
     }
