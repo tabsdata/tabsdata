@@ -2,6 +2,43 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+# How to use othe reporting plugins:
+
+# pytest-html-reporter
+#    --html-report=?/pytest.html
+#
+#    def _ensure_legacy_sessionstarttime(config_or_tr):
+#        tr = getattr(config_or_tr, "pluginmanager", None)
+#        if tr is not None:
+#            tr = config_or_tr.pluginmanager.getplugin("terminalreporter")
+#        else:
+#            tr = config_or_tr
+#
+#        if tr is None:
+#            return
+#
+#        if not hasattr(tr, "_sessionstarttime"):
+#            start = getattr(tr, "_session_start", None)
+#            try:
+#                tr._sessionstarttime = float(start)
+#            except Exception:
+#                tr._sessionstarttime = time.time()
+#
+#    def pytest_sessionstart(session):
+#        _ensure_legacy_sessionstarttime(session.config)
+#
+#    def pytest_terminal_summary(terminalreporter, exitstatus, config):
+#        _ensure_legacy_sessionstarttime(terminalreporter)
+#
+#    def pytest_configure(config):
+#        _ensure_legacy_sessionstarttime(config)
+
+# pytest-reporter-html1
+#    --template=html1/index.html --report=?/pytest.html
+
+# pytest-html
+#    --html=?/pytest.html
+
 [tasks.test_py]
 category = "05 - Test"
 description = "Task 'test' for Python projects"
@@ -52,19 +89,23 @@ script = [
     !include_files ./make/libraries/log.ds
 
     verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
 
     cd "${PROJECT_PY_TA_FEATURES_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
+    report_folder = set "./target/reports/pytest/ta_features"
+    rm -r ${report_folder}
+    mkdir ${report_folder}
+    report_file = set ${report_folder}/pytest.html
+
     if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     else
-        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_FEATURES_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     end
 
     is_zero = eq ${exit_code} "0"
@@ -82,6 +123,8 @@ script = [
             code = exit ${exit_code}
         end
     end
+
+    exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
     ''']
 
 [tasks.test_py_ta_tableframe]
@@ -94,19 +137,23 @@ script = [
     !include_files ./make/libraries/log.ds
 
     verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
 
     cd "${PROJECT_PY_TA_TABLEFRAME_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
+    report_folder = set "./target/reports/pytest/ta_tableframe"
+    rm -r ${report_folder}
+    mkdir ${report_folder}
+    report_file = set ${report_folder}/pytest.html
+
     if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     else
-        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TA_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -123,6 +170,8 @@ script = [
             code = exit ${exit_code}
         end
     end
+
+    exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
     ''']
 
 [tasks.test_py_te_examples]
@@ -135,19 +184,23 @@ script = [
     !include_files ./make/libraries/log.ds
 
     verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
 
     cd "${PROJECT_PY_TE_EXAMPLES_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
+    report_folder = set "./target/reports/pytest/te_examples"
+    rm -r ${report_folder}
+    mkdir ${report_folder}
+    report_file = set ${report_folder}/pytest.html
+
     if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TE_EXAMPLES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16  --dist=loadfile ${TESTS_PY_TE_EXAMPLES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TE_EXAMPLES_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16  --dist=loadfile ${TESTS_PY_TE_EXAMPLES_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     else
-        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_EXAMPLES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_EXAMPLES_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_EXAMPLES_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_EXAMPLES_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -164,6 +217,8 @@ script = [
             code = exit ${exit_code}
         end
     end
+
+    exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
     ''']
 
 [tasks.test_py_te_tableframe]
@@ -176,19 +231,23 @@ script = [
     !include_files ./make/libraries/log.ds
 
     verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
 
     cd "${PROJECT_PY_TE_TABLEFRAME_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
+    report_folder = set "./target/reports/pytest/te_tableframe"
+    rm -r ${report_folder}
+    mkdir ${report_folder}
+    report_file = set ${report_folder}/pytest.html
+
     if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     else
-        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TE_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -205,6 +264,8 @@ script = [
             code = exit ${exit_code}
         end
     end
+
+    exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
     ''']
 
 [tasks.test_py_ty_tableframe]
@@ -217,19 +278,23 @@ script = [
     !include_files ./make/libraries/log.ds
 
     verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
 
     cd "${PROJECT_PY_TY_TABLEFRAME_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
+    report_folder = set "./target/reports/pytest/ty_tableframe"
+    rm -r ${report_folder}
+    mkdir ${report_folder}
+    report_file = set ${report_folder}/pytest.html
+
     if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16  --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16  --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     else
-        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16  --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -${verbose} --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TY_TABLEFRAME_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -246,6 +311,8 @@ script = [
             code = exit ${exit_code}
         end
     end
+
+    exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
     ''']
 
 [tasks.test_py_tabsdata]
@@ -258,19 +325,23 @@ script = [
     !include_files ./make/libraries/log.ds
 
     verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
 
     cd "${PROJECT_PY_TD_SDK_FOLDER}"
 
     td_temp = temp_dir
     set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
 
+    report_folder = set "./target/reports/pytest/tabsdata"
+    rm -r ${report_folder}
+    mkdir ${report_folder}
+    report_file = set ${report_folder}/pytest.html
+
     if eq ${verbose} "false"
-        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     else
-        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+        debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TABSDATA_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
@@ -287,6 +358,8 @@ script = [
             code = exit ${exit_code}
         end
     end
+
+    exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
     ''']
 
 [tasks.test_py_connectors]
@@ -299,7 +372,6 @@ script = [
     !include_files ./make/libraries/log.ds
 
     verbose = get_env TD_VERBOSE
-    compile = get_env TD_COMPILE
 
     connectors = glob_array ${CONNECTORS_PY_ROOT_FOLDER}/tabsdata_*
 
@@ -315,12 +387,17 @@ script = [
             tests_folder_name = set tests_${connector_name}
             tests_folder_path = join_path ${connector} ${tests_folder_name}
 
+            report_folder = set ${connector}/target/reports/pytest/${connector_name}
+            rm -r ${report_folder}
+            mkdir ${report_folder}
+            report_file = set ${report_folder}/pytest.html
+
             if eq ${verbose} "false"
-                debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${tests_folder_path} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-                exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${tests_folder_path} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+                debug "🚀 pytest --import-mode=importlib -n 16 --dist=loadfile ${tests_folder_path} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+                exit_code = exec --get-exit-code pytest --import-mode=importlib -n 16 --dist=loadfile ${tests_folder_path} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
             else
-                debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${tests_folder_path} --cov-config=.coveragerc --cov --cov-report= -m \"${MARKERS}\""
-                exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${tests_folder_path} --cov-config=.coveragerc --cov --cov-report= -m "${MARKERS}"
+                debug "🚀 pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${tests_folder_path} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+                exit_code = exec --get-exit-code pytest --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${tests_folder_path} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
             end
             is_zero = eq ${exit_code} "0"
             is_five = eq ${exit_code} "5"
@@ -337,6 +414,8 @@ script = [
                     code = exit ${exit_code}
                 end
             end
+
+            exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
         end
     end
     ''']
@@ -353,6 +432,7 @@ script = [
         set_env TD_VERBOSE "false"
     end
     debug "🔅 Using td verbose: '${TD_VERBOSE}'"
+    compile = get_env TD_COMPILE
     compile_empty = is_empty ${compile}
     compile_true = eq ${compile} "true"
     on_ga = get_env TD_ON_GA
