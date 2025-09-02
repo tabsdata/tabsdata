@@ -13,7 +13,7 @@ use crate::types::function::FunctionDB;
 #[dao(
     sql_table = "dependencies",
     order_by = "dep_pos",
-    partition_by = "table_id",
+    partition_by = "dependency_id",
     versioned_at(order_by = "defined_on", condition_by = "status"),
     recursive(up = "table_function_id", down = "function_id")
 )]

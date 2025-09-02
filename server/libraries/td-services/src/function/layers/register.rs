@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::display_vec::DisplayVec;
-use td_error::{TdError, td_error};
+use td_error::{td_error, TdError};
 use td_objects::crudl::handle_sql_err;
 use td_objects::sql::cte::CteQueries;
 use td_objects::sql::{DaoQueries, FindBy};
@@ -324,7 +324,12 @@ pub async fn build_dependency_versions(
         .iter()
         .map(|d| {
             (
-                (d.collection_id(), d.table_id(), d.table_versions().deref()),
+                (
+                    d.table_collection_id(),
+                    d.table_id(),
+                    d.table_versions().deref(),
+                    **d.dep_pos(),
+                ),
                 d,
             )
         })
@@ -409,6 +414,7 @@ pub async fn build_dependency_versions(
             table_db.collection_id(),
             table_db.table_id(),
             dependency_table.versions(),
+            pos,
         ));
         let dependency_id = if let Some(existing_version) = existing_version {
             existing_version.dependency_id()
@@ -434,6 +440,7 @@ pub async fn build_dependency_versions(
                 table_db.collection_id(),
                 table_db.table_id(),
                 dependency_table.versions(),
+                pos,
             ),
             dependency_version,
         );
@@ -460,6 +467,7 @@ pub async fn build_dependency_versions(
                     existing_version.table_collection_id(),
                     existing_version.table_id(),
                     existing_version.table_versions(),
+                    **existing_version.dep_pos(),
                 ),
                 dependency_version,
             );
