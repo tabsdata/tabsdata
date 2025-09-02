@@ -244,7 +244,7 @@ mod tests {
                 assert_eq!(input.collection(), collection.name());
                 assert!(input.location().is_none());
                 assert_eq!(**input.table_pos(), 0);
-                assert_eq!(**input.version_pos(), 0);
+                assert_eq!(**input.version_pos(), -1);
             }
             _ => panic!("Unexpected Input Table type"),
         }

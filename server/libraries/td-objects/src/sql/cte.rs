@@ -333,10 +333,11 @@ fn select_table_data_versions_at<'a, D>(
             });
         }
         Versions::Range(from, to) => {
-            // Ranges are always older to newer, otherwise vec will just be empty
+            // Ranges only include versions between older-newer. So doing HEAD~0..HEAD~2 gives
+            // an empty result, but HEAD~2..HEAD~0 gives the last three versions, if any.
             match from {
                 Version::Fixed(id) => {
-                    query_builder.push(" AND rv.rn >= ");
+                    query_builder.push(" AND rv.rn <= ");
                     query_builder.push(format!(
                         "(SELECT rn FROM {cte_table_prefix}_ranked WHERE id = "
                     ));
@@ -344,13 +345,13 @@ fn select_table_data_versions_at<'a, D>(
                     query_builder.push(" ) ");
                 }
                 Version::Head(back) => {
-                    query_builder.push(" AND rv.rn >= ");
+                    query_builder.push(" AND rv.rn <= ");
                     query_builder.push_bind((-back + 1) as i64);
                 }
             }
             match to {
                 Version::Fixed(id) => {
-                    query_builder.push(" AND rv.rn <= ");
+                    query_builder.push(" AND rv.rn >= ");
                     query_builder.push(format!(
                         "(SELECT rn FROM {cte_table_prefix}_ranked WHERE id = "
                     ));
@@ -358,10 +359,12 @@ fn select_table_data_versions_at<'a, D>(
                     query_builder.push(" ) ");
                 }
                 Version::Head(back) => {
-                    query_builder.push(" AND rv.rn <= ");
+                    query_builder.push(" AND rv.rn >= ");
                     query_builder.push_bind((-back + 1) as i64);
                 }
             }
+            // Order by rn DESC, so the older versions come first
+            query_builder.push(" ORDER BY rv.rn DESC ");
         }
     }
 

@@ -118,7 +118,8 @@ pub enum InputTable {
 
 impl InputTable {
     pub fn new(version: Vec<InputTableVersion>) -> InputTable {
-        if version.len() == 1 {
+        // -1 version pos marks that only a single table version is expected.
+        if version.len() == 1 && **version[0].version_pos() == -1 {
             InputTable::Table(version.into_iter().next().unwrap())
         } else {
             InputTable::TableVersions(version)

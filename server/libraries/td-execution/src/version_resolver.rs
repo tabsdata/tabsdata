@@ -19,8 +19,6 @@ use td_objects::types::table_ref::{Version, Versions};
 enum VersionResolverError {
     #[error("Could not find the following table data versions: [{0}]")]
     FixedTableDataVersionsNotFound(DisplayVec<TableDataVersionId>) = 0,
-    #[error("Relative version range [{0}] should always have the most recent version first")]
-    AscendingHeadRelativeTableDataVersions(Versions) = 1,
 }
 
 /// Struct to resolve table data versions. It will resolve relative and fixed versions, using
@@ -162,12 +160,12 @@ impl<'a> VersionResolver<'a> {
                     .into_option()
                     .map(|(min, max)| (min.clone(), max.clone()));
                 let head_versions = if let Some((min, max)) = minmax {
-                    let found = queries
+                    let mut found = queries
                         .select_table_data_versions_at::<ActiveTableDataVersionDB>(
                             Some(triggered_on),
                             None,
                             table_id,
-                            &Versions::Range(max, min), // range always newer to older
+                            &Versions::Range(min, max), // range always older to newer
                         )?
                         .build_query_as()
                         .fetch_all(&mut *conn)
@@ -176,6 +174,7 @@ impl<'a> VersionResolver<'a> {
 
                     // We know that this vec has all the versions in the range at most, so we can
                     // get the position by the index of the versions (or None if range is too short).
+                    found.reverse(); // reverse to sort newer to older
                     let absolute_versions: HashMap<_, _> = head_versions
                         .iter()
                         .map(|(i, v)| {
@@ -268,35 +267,34 @@ impl<'a> VersionResolver<'a> {
                     _ => unreachable!(),
                 };
 
-                // Check relative versions are always ASC.
-                if relative_from < relative_to {
-                    Err(
-                        VersionResolverError::AscendingHeadRelativeTableDataVersions(
-                            versions.clone(),
-                        ),
-                    )?
-                }
+                // Check relative versions are always older to newer.
+                let found = if relative_from > relative_to {
+                    vec![None; 0]
+                } else {
+                    // And fetch the versions.
+                    let mut found: Vec<_> = queries
+                        .select_table_data_versions_at::<ActiveTableDataVersionDB>(
+                            Some(triggered_on),
+                            None,
+                            table_id,
+                            versions,
+                        )?
+                        .build_query_as()
+                        .fetch_all(&mut *conn)
+                        .await
+                        .map_err(handle_sql_err)?
+                        .into_iter()
+                        .map(Some)
+                        .collect();
 
-                // And fetch the versions.
-                let mut found: Vec<_> = queries
-                    .select_table_data_versions_at::<ActiveTableDataVersionDB>(
-                        Some(triggered_on),
-                        None,
-                        table_id,
-                        versions,
-                    )?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?
-                    .into_iter()
-                    .map(Some)
-                    .collect();
+                    // In we didn't find enough versions, we fill with None the empty spots.
+                    let found_size = found.len();
+                    let range_size = (relative_to - relative_from).abs() as usize + 1;
+                    found.resize(range_size, None);
+                    found.rotate_right(range_size - found_size);
 
-                // In we didn't find enough versions, we need to fill with None if we didn't find
-                // enough versions. Note this can only happen with HEAD right versions.
-                let size = (relative_from - relative_to) as usize + 1;
-                found.resize(size, None);
+                    found
+                };
 
                 found
             }
@@ -671,7 +669,6 @@ mod tests {
         ));
         let not_found = match version_error {
             VersionResolverError::FixedTableDataVersionsNotFound(not_found) => not_found,
-            _ => unreachable!(),
         };
         assert_eq!(not_found.len(), 1);
         assert_eq!(not_found[0], not_found_id);
@@ -849,7 +846,6 @@ mod tests {
         ));
         let not_found = match version_error {
             VersionResolverError::FixedTableDataVersionsNotFound(not_found) => not_found,
-            _ => unreachable!(),
         };
         assert_eq!(not_found.len(), 2);
         let not_found_ids = [not_found_id_1, not_found_id_2];
@@ -884,25 +880,25 @@ mod tests {
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Head(0), Version::Head(-2)),
+            Versions::Range(Version::Head(-2), Version::Head(0)),
             TriggeredOn::now().await,
         );
         let versions_found = VersionResolver::new(table_id, &versions, &triggered_on)
             .resolve(&DaoQueries::default(), &mut conn)
             .await?;
         assert_eq!(versions_found.len(), 3);
-        // HEAD
+        // HEAD~2
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_3.id());
+        assert_eq!(version_found.id(), version_1.id());
         // HEAD~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
         assert_eq!(version_found.id(), version_2.id());
-        // HEAD~2
+        // HEAD
         assert!(versions_found[2].is_some());
         let version_found = versions_found[2].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id(), version_3.id());
         Ok(())
     }
 
@@ -927,23 +923,23 @@ mod tests {
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Head(0), Version::Head(-2)),
+            Versions::Range(Version::Head(-2), Version::Head(0)),
             TriggeredOn::now().await,
         );
         let versions_found = VersionResolver::new(table_id, &versions, &triggered_on)
             .resolve(&DaoQueries::default(), &mut conn)
             .await?;
         assert_eq!(versions_found.len(), 3);
-        // HEAD
-        assert!(versions_found[0].is_some());
-        let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
+        // HEAD~2
+        assert!(versions_found[0].is_none());
         // HEAD~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
         assert_eq!(version_found.id(), version_1.id());
-        // HEAD~2
-        assert!(versions_found[2].is_none());
+        // HEAD
+        assert!(versions_found[2].is_some());
+        let version_found = versions_found[2].as_ref().unwrap();
+        assert_eq!(version_found.id(), version_2.id());
         Ok(())
     }
 
@@ -968,24 +964,13 @@ mod tests {
 
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Head(-1), Version::Head(0)),
+            Versions::Range(Version::Head(0), Version::Head(-1)),
             TriggeredOn::now().await,
         );
         let versions_found = VersionResolver::new(table_id, &versions, &triggered_on)
             .resolve(&DaoQueries::default(), &mut conn)
-            .await;
-        assert!(versions_found.is_err());
-        let version_error = versions_found.unwrap_err();
-        let version_error = version_error.domain_err::<VersionResolverError>();
-        assert!(matches!(
-            version_error,
-            VersionResolverError::AscendingHeadRelativeTableDataVersions(_),
-        ));
-        let range = match version_error {
-            VersionResolverError::AscendingHeadRelativeTableDataVersions(range) => range,
-            _ => unreachable!(),
-        };
-        assert_eq!(*range, versions);
+            .await?;
+        assert!(versions_found.is_empty());
         Ok(())
     }
 
@@ -1016,8 +1001,8 @@ mod tests {
         // Check fixed versions are found with its ids.
         let (versions, triggered_on) = (
             Versions::Range(
-                Version::Fixed(*version_3.id()),
                 Version::Fixed(*version_1.id()),
+                Version::Fixed(*version_3.id()),
             ),
             TriggeredOn::now().await,
         );
@@ -1025,18 +1010,18 @@ mod tests {
             .resolve(&DaoQueries::default(), &mut conn)
             .await?;
         assert_eq!(versions_found.len(), 3);
-        // HEAD
+        // HEAD~2
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_3.id());
+        assert_eq!(version_found.id(), version_1.id());
         // HEAD~1
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
         assert_eq!(version_found.id(), version_2.id());
-        // HEAD~2
+        // HEAD
         assert!(versions_found[2].is_some());
         let version_found = versions_found[2].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id(), version_3.id());
         Ok(())
     }
 
@@ -1067,26 +1052,15 @@ mod tests {
         // Check versions found is empty: range is inverted.
         let (versions, triggered_on) = (
             Versions::Range(
-                Version::Fixed(*version_1.id()),
                 Version::Fixed(*version_3.id()),
+                Version::Fixed(*version_1.id()),
             ),
             TriggeredOn::now().await,
         );
         let versions_found = VersionResolver::new(table_id, &versions, &triggered_on)
             .resolve(&DaoQueries::default(), &mut conn)
-            .await;
-        assert!(versions_found.is_err());
-        let version_error = versions_found.unwrap_err();
-        let version_error = version_error.domain_err::<VersionResolverError>();
-        assert!(matches!(
-            version_error,
-            VersionResolverError::AscendingHeadRelativeTableDataVersions(_),
-        ));
-        let range = match version_error {
-            VersionResolverError::AscendingHeadRelativeTableDataVersions(range) => range,
-            _ => unreachable!(),
-        };
-        assert_eq!(*range, versions);
+            .await?;
+        assert!(versions_found.is_empty());
         Ok(())
     }
 
@@ -1214,21 +1188,21 @@ mod tests {
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Head(0), Version::Fixed(*version_1.id())),
+            Versions::Range(Version::Fixed(*version_1.id()), Version::Head(0)),
             TriggeredOn::now().await,
         );
         let versions_found = VersionResolver::new(table_id, &versions, &triggered_on)
             .resolve(&DaoQueries::default(), &mut conn)
             .await?;
         assert_eq!(versions_found.len(), 2);
-        // HEAD
+        // Fixed
         assert!(versions_found[0].is_some());
         let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_2.id());
-        // Fixed
+        assert_eq!(version_found.id(), version_1.id());
+        // HEAD
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
+        assert_eq!(version_found.id(), version_2.id());
         Ok(())
     }
 
@@ -1288,22 +1262,22 @@ mod tests {
 
         // Check versions are found.
         let (versions, triggered_on) = (
-            Versions::Range(Version::Fixed(*version_1.id()), Version::Head(-5)),
+            Versions::Range(Version::Head(-5), Version::Fixed(*version_1.id())),
             TriggeredOn::now().await,
         );
         let versions_found = VersionResolver::new(table_id, &versions, &triggered_on)
             .resolve(&DaoQueries::default(), &mut conn)
             .await?;
         assert_eq!(versions_found.len(), 5);
-        // Fixed
-        assert!(versions_found[0].is_some());
-        let version_found = versions_found[0].as_ref().unwrap();
-        assert_eq!(version_found.id(), version_1.id());
         // Head bound as None (nothing else found)
+        assert!(versions_found[0].is_none());
         assert!(versions_found[1].is_none());
         assert!(versions_found[2].is_none());
         assert!(versions_found[3].is_none());
-        assert!(versions_found[4].is_none());
+        // Fixed
+        assert!(versions_found[4].is_some());
+        let version_found = versions_found[4].as_ref().unwrap();
+        assert_eq!(version_found.id(), version_1.id());
         Ok(())
     }
 }

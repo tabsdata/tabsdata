@@ -4,8 +4,8 @@
 
 use crate::sql::{ListFilterGenerator, QueryError};
 use crate::types::parse::{
-    DATA_LOCATION_REGEX, parse_collection, parse_email, parse_entity, parse_execution,
-    parse_function, parse_role, parse_table, parse_user,
+    parse_collection, parse_email, parse_entity, parse_execution, parse_function,
+    parse_role, parse_table, parse_user, DATA_LOCATION_REGEX,
 };
 use crate::types::table::{TableDBRead, TableDBWithNames};
 use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use strum::IntoEnumIterator;
 use td_common::execution_status::WorkerCallbackStatus;
-use td_common::id::{ID_LENGTH, Id};
+use td_common::id::{Id, ID_LENGTH};
 use td_error::TdError;
 use td_security::{
     ADMIN_USER, ID_ALL_ENTITIES, ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN,
@@ -782,7 +782,7 @@ pub struct UserRoleId;
 #[td_type::typed(i32(min = 0, default = 0))]
 pub struct InputIdx;
 
-#[td_type::typed(i32(min = 0, default = 0))]
+#[td_type::typed(i32(default = 0))]
 pub struct VersionPos;
 
 #[derive(Debug, Clone)]

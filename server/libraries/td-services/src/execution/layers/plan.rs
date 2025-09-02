@@ -189,7 +189,17 @@ pub async fn build_function_requirements(
 
     let mut input_idx = 0;
     for (function, table, edge) in plan.function_version_requirements() {
-        for (version_pos, version) in edge.versions().inner().iter().enumerate() {
+        let versions = edge.versions().inner();
+        let single_version = versions.len() == 1;
+
+        for (version_pos, version) in versions.iter().enumerate() {
+            // If single version, we set version_pos to -1 to indicate so.
+            let version_pos = if single_version {
+                -1
+            } else {
+                version_pos as i32
+            };
+
             let (transaction_id, _) = transaction_map.get(&transaction_by.key(function)?)?;
             let mut builder = FunctionRequirementDB::builder();
             builder
@@ -202,7 +212,7 @@ pub async fn build_function_requirements(
                 .requirement_table_id(table.table_id())
                 .requirement_function_version_id(table.function_version_id())
                 .requirement_table_version_id(table.table_version_id())
-                .requirement_version_pos(VersionPos::try_from(version_pos as i32)?);
+                .requirement_version_pos(VersionPos::try_from(version_pos)?);
 
             if let Some(dependency) = edge.dependency_pos() {
                 builder
