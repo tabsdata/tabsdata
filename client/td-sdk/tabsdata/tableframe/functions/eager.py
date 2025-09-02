@@ -13,6 +13,8 @@ import polars._typing as pl_typing
 
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
+
+# noinspection PyProtectedMember
 from tabsdata._utils.annotations import pydoc
 
 
@@ -65,7 +67,23 @@ def concat(
     │ y    ┆ 20   │
     └──────┴──────┘
     """
-    unwrapped_items = (_unwrap_td_ype(item) for item in items)
+    unwrapped_items = [_unwrap_td_ype(item) for item in items]
+
+    # First, perform a no-op concatenation of empty LazyFrames built from the
+    # schemas of the original frames. This ensures that all schemas are compatible.
+    # Without this step, a mismatch might only surface later with a less clear error.
+    schemas = [lf.collect_schema() for lf in unwrapped_items]
+    empties = [
+        pl.DataFrame(schema={name: schema[name] for name in schema.names()})
+        for schema in schemas
+    ]
+    pl.concat(
+        empties,
+        how="vertical",
+        rechunk=False,
+        parallel=True,
+    )
+
     polars_type = pl.concat(
         unwrapped_items,
         how="vertical",
