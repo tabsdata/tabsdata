@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 import polars as pl
 
@@ -16,27 +17,39 @@ logger.setLevel(logging.DEBUG)
 
 class IdGenerator:
     def __init__(self, index: int):
+        self._temp_column = f"__tmp_{uuid.uuid4().hex}"
         self._index = index
 
-    def __call__(
-        self, _old_value: pl.String | None = None
-    ) -> pl.Expr | str:  # pl.String
-        return _id(_old_value)
+    def __call__(self, batch: pl.DataFrame | pl.Series, *args, **kwargs,) -> pl.DataFrame | pl.Series:
+        n = batch.len() if isinstance(batch, pl.Series) else batch.height
+
+        if n == 0:
+            empty = pl.Series(self._temp_column, [], dtype=pl.String)
+            if isinstance(batch, pl.Series):
+                return empty
+            return batch.with_columns(empty)
+
+        column = [_id() for _ in range(n)]
+        output = pl.Series(self._temp_column, column, dtype=pl.String)
+
+        if isinstance(batch, pl.Series):
+            return output
+        return batch.with_columns(output)
 
 
 def _id_default() -> pl.Expr:
     return pl.lit("", pl.String)
 
 
-def _id(_old_value: pl.String | None = None, debug: bool | None = False) -> str:
-    return encode_id(debug=debug)[1]
+def _id() -> str:
+    return encode_id(debug=False)[1]
 
 
 class IdxGenerator:
     def __init__(self):
         self._index = 0
 
-    def __call__(self) -> int:
+    def __call__(self, *args, **kwargs,) -> int:
         idx = self._index
         self._index += 1
         return idx

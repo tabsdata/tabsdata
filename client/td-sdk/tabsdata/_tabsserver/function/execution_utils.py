@@ -75,6 +75,7 @@ def update_initial_values(execution_context: ExecutionContext, result):
             new_initial_values = result
             result = (None,)
     else:
+        # noinspection PyProtectedMember
         raise ValueError(f"Invalid offset return type: {source_plugin._offset_return}")
     execution_context.status.offset.update_new_values(new_initial_values)
     return result
@@ -151,6 +152,7 @@ def load_sources_from_list(
     return sources
 
 
+# noinspection PyUnreachableCode
 def make_tableframe_context(
     source: TableFrameContext | str | None,
     working_dir: str | None = None,

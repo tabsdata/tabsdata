@@ -21,6 +21,8 @@ import tabsdata._utils.tableframe._helpers as td_helpers
 import tabsdata._utils.tableframe._translator as td_translator
 import tabsdata.tableframe.expr.expr as td_expr
 import tabsdata.tableframe.lazyframe.frame as td_frame
+
+# noinspection PyProtectedMember
 from tabsdata._utils.annotations import pydoc
 from tabsdata.exceptions import ErrorCode, TableFrameError
 
@@ -37,6 +39,7 @@ class TableFrameGroupBy:
         finally:
             setattr(self, attribute, original_value)
 
+    # noinspection PyUnreachableCode
     def __init__(self, lgb: pl_group_by.LazyGroupBy | TableFrameGroupBy) -> None:
         if isinstance(lgb, pl_group_by.LazyGroupBy):
             self._lgb = lgb
@@ -106,7 +109,10 @@ class TableFrameGroupBy:
         for column, metadata in td_helpers.REQUIRED_COLUMNS_METADATA.items():
             if metadata[td_constants.TD_COL_AGGREGATION] is not None:
                 aggregation_function = metadata[td_constants.TD_COL_AGGREGATION]
-                aggregation_function_instance = aggregation_function(self._state)
+                aggregation_function_instance = aggregation_function(
+                    column,
+                    self._state,
+                )
                 # In polars 1.31.0, map_elements internally set agg_list=True
                 #    which aggregated values into a list before calling the
                 #     map function.
@@ -122,9 +128,10 @@ class TableFrameGroupBy:
                 expr = (
                     pl.col(column)
                     .implode()
-                    .map_elements(
+                    .map_batches(
                         aggregation_function_instance,
                         return_dtype=metadata[td_constants.TD_COL_DTYPE],
+                        returns_scalar=True,
                     )
                     .alias(column)
                 )

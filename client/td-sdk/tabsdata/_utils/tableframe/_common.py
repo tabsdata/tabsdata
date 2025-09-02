@@ -117,9 +117,7 @@ def add_system_columns(
             else:
                 lf = lf.with_columns(default().alias(column))
             lf = lf.with_columns_seq(
-                pl.col(column)
-                .map_elements(generator_, return_dtype=dtype)
-                .alias(column)
+                pl.col(column).map_batches(generator_, return_dtype=dtype).alias(column)
             )
         is_void = False
     return lf

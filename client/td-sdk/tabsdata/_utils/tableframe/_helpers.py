@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 import tabsdata._utils.tableframe._constants as td_constants
 import tabsdata.extensions._tableframe.extension as te_tableframe
@@ -18,7 +18,7 @@ def extended_system_columns() -> list[str]:
     return [member.value for member in te_tableframe.ExtendedSystemColumns]
 
 
-def system_columns() -> list[str]:
+def system_columns() -> list[Callable[[], str]]:
     return [member.value for member in te_tableframe.SystemColumns]
 
 
@@ -26,7 +26,7 @@ def system_columns_metadata() -> dict[str, Any]:
     return te_tableframe.SYSTEM_COLUMNS_METADATA
 
 
-def required_columns() -> list[str]:
+def required_columns() -> list[Callable[[], str]]:
     return [member.value for member in te_tableframe.RequiredColumns]
 
 
